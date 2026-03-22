@@ -18,39 +18,20 @@ Phase 2 is done. All core functionality is implemented and tested (65 tests).
 | State persistence | `state.rs` | Done |
 | CLI (5 commands) | `bins/lab/src/main.rs` | Done |
 
-## Remaining Work
+## Active Plans
 
-### Deployer — Additional Interface Types
+| Plan | Description | Priority | Effort |
+|------|-------------|----------|--------|
+| [050](050-advanced-interface-types.md) | VRF, WireGuard, bond, VLAN, bridge VLAN ports | Medium | 2-3 days |
+| [051](051-phase3-advanced-features.md) | Runtime impairment CLI, diagnostics, capture, graph, process mgr | Medium | 3-5 days |
+| [052](052-phase4-ecosystem.md) | Example topologies, `#[lab_test]` macro, integration tests, docs | High | 5-7 days |
 
-These are parsed and validated but not yet deployed:
+### Recommended Order
 
-| Feature | Types exist | Deploy support | Priority |
-|---------|-------------|----------------|----------|
-| VRF interfaces + enslavement | `VrfConfig` | Not yet | Medium |
-| WireGuard interfaces | `WireguardConfig` | Not yet | Medium |
-| Bond interfaces | `InterfaceConfig(kind=bond)` | Not yet | Medium |
-| VLAN sub-interfaces | `InterfaceConfig(kind=vlan)` | Not yet | Low |
-| Bridge VLAN port config | `PortConfig` (pvid/tagged/untagged) | Not yet | Low |
-
-### Phase 3: Advanced Features (from NLINK_LAB.md)
-
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Runtime impairment modification | `RunningLab::set_impairment()` exists but needs CLI command `nlink-lab impair` | Medium |
-| Diagnostics | Per-lab network health checks via nlink diagnostics | Medium |
-| Packet capture | `nlink-lab capture <lab> <link>` — spawn tcpdump in namespace | Low |
-| Topology graph | `nlink-lab graph <topology.toml>` — DOT/ASCII visualization | Low |
-| Process manager | Monitor/restart background processes | Low |
-
-### Phase 4: Ecosystem (from NLINK_LAB.md)
-
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Example topologies | Spine-leaf, WAN, MPLS, VPN patterns in `examples/` | High |
-| Test harness | `#[nlink_lab::test]` proc macro for auto-deploy/destroy | High |
-| Integration tests | Real deploy/exec/destroy tests (require root/CAP_NET_ADMIN) | High |
-| CI integration | Run network tests in CI | Medium |
-| Documentation | User guide, topology cookbook | Medium |
+1. **052 — Examples + integration tests** — prove the deployer works end-to-end, most impactful
+2. **050 — VRF + WireGuard** — unlock the more complex topology examples
+3. **051 — CLI commands** — impair, diagnose, capture (polish)
+4. **052 — Test macro + docs** — ecosystem maturity
 
 ## Reference
 

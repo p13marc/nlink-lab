@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/nlink-lab",
+    "bins/lab",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/p13marc/nlink-lab"
+authors = ["Marc Pardo <p13marc@gmail.com>"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "net", "io-util", "sync"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+libc = "0.2"
+
+# Networking (git dependency during development, crates.io for release)
+nlink = { git = "https://github.com/p13marc/nlink", features = ["full"] }
+
+# Workspace crates
+nlink-lab = { path = "crates/nlink-lab" }

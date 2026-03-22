@@ -1,0 +1,20 @@
+[package]
+name = "nlink-lab-cli"
+description = "CLI for nlink-lab network lab engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "nlink-lab"
+path = "src/main.rs"
+
+[dependencies]
+nlink-lab = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

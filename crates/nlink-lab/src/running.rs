@@ -154,7 +154,17 @@ impl RunningLab {
             }
         }
 
-        // 3. Remove state file
+        // 3. Delete management namespace (bridges) if it exists
+        if !self.topology.networks.is_empty() {
+            let mgmt_ns = format!("{}-mgmt", self.topology.lab.prefix());
+            if namespace::exists(&mgmt_ns) {
+                if let Err(e) = namespace::delete(&mgmt_ns) {
+                    tracing::warn!("failed to delete management namespace '{mgmt_ns}': {e}");
+                }
+            }
+        }
+
+        // 4. Remove state file
         state::remove(&self.topology.lab.name)?;
 
         Ok(())

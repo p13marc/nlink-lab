@@ -53,6 +53,7 @@
 //! └─────────────────────────────────┘
 //! ```
 
+pub mod builder;
 pub mod deploy;
 pub mod error;
 pub mod helpers;
@@ -62,6 +63,7 @@ pub mod state;
 pub mod types;
 pub mod validator;
 
+pub use builder::Lab;
 pub use error::{Error, Result};
 pub use running::{ExecOutput, RunningLab};
 pub use types::{

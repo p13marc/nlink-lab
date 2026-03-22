@@ -271,4 +271,256 @@ name = "dc"
         assert!(EndpointRef::parse(":eth0").is_none());
         assert!(EndpointRef::parse("node:").is_none());
     }
+
+    #[test]
+    fn test_parse_datacenter_sim() {
+        // Full datacenter-sim example from NLINK_LAB.md section 4.3
+        let toml = r#"
+[lab]
+name = "datacenter-sim"
+description = "Simulated datacenter with spine-leaf topology"
+prefix = "dc"
+
+[profiles.router]
+sysctls = { "net.ipv4.ip_forward" = "1", "net.ipv6.conf.all.forwarding" = "1" }
+
+[profiles.router.firewall]
+policy = "accept"
+
+[profiles.host]
+sysctls = { "net.ipv4.ip_forward" = "0" }
+
+[nodes.spine1]
+profile = "router"
+
+[nodes.spine1.interfaces.lo]
+addresses = ["10.255.0.1/32"]
+
+[nodes.spine2]
+profile = "router"
+
+[nodes.spine2.interfaces.lo]
+addresses = ["10.255.0.2/32"]
+
+[nodes.leaf1]
+profile = "router"
+
+[nodes.leaf1.interfaces.lo]
+addresses = ["10.255.1.1/32"]
+
+[nodes.leaf1.routes]
+default = { via = "10.0.11.1" }
+"10.0.0.0/8" = { via = "10.0.11.1", metric = 100 }
+
+[nodes.leaf2]
+profile = "router"
+
+[nodes.leaf2.interfaces.lo]
+addresses = ["10.255.1.2/32"]
+
+[nodes.server1]
+profile = "host"
+
+[nodes.server1.routes]
+default = { via = "10.1.1.1" }
+
+[[nodes.server1.exec]]
+cmd = ["iperf3", "-s"]
+background = true
+
+[nodes.server2]
+profile = "host"
+
+[nodes.server2.routes]
+default = { via = "10.1.2.1" }
+
+[[nodes.server2.exec]]
+cmd = ["iperf3", "-s"]
+background = true
+
+[[links]]
+endpoints = ["spine1:eth1", "leaf1:eth1"]
+addresses = ["10.0.11.1/30", "10.0.11.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["spine1:eth2", "leaf2:eth1"]
+addresses = ["10.0.12.1/30", "10.0.12.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["spine2:eth1", "leaf1:eth2"]
+addresses = ["10.0.21.1/30", "10.0.21.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["spine2:eth2", "leaf2:eth2"]
+addresses = ["10.0.22.1/30", "10.0.22.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["leaf1:eth3", "server1:eth0"]
+addresses = ["10.1.1.1/24", "10.1.1.10/24"]
+
+[[links]]
+endpoints = ["leaf2:eth3", "server2:eth0"]
+addresses = ["10.1.2.1/24", "10.1.2.10/24"]
+
+[impairments."spine1:eth1"]
+delay = "10ms"
+jitter = "2ms"
+
+[impairments."spine1:eth2"]
+delay = "10ms"
+jitter = "2ms"
+loss = "0.1%"
+
+[impairments."leaf2:eth3"]
+delay = "50ms"
+jitter = "5ms"
+loss = "0.5%"
+rate = "100mbit"
+corrupt = "0.01%"
+reorder = "0.5%"
+
+[nodes.server1.firewall]
+policy = "drop"
+
+[[nodes.server1.firewall.rules]]
+match = "ct state established,related"
+action = "accept"
+
+[[nodes.server1.firewall.rules]]
+match = "tcp dport 5201"
+action = "accept"
+
+[[nodes.server1.firewall.rules]]
+match = "icmp"
+action = "accept"
+
+[rate_limits."server1:eth0"]
+egress = "1gbit"
+ingress = "1gbit"
+burst = "10mbit"
+
+[rate_limits."server2:eth0"]
+egress = "100mbit"
+ingress = "100mbit"
+"#;
+        let topo = parse(toml).unwrap();
+        assert_eq!(topo.lab.name, "datacenter-sim");
+        assert_eq!(topo.lab.prefix(), "dc");
+        assert_eq!(topo.profiles.len(), 2);
+        assert_eq!(topo.nodes.len(), 6);
+        assert_eq!(topo.links.len(), 6);
+        assert_eq!(topo.impairments.len(), 3);
+        assert_eq!(topo.rate_limits.len(), 2);
+        assert_eq!(topo.nodes["server1"].exec.len(), 1);
+        assert!(topo.nodes["server1"].exec[0].background);
+        assert_eq!(topo.nodes["leaf1"].routes.len(), 2);
+        assert_eq!(
+            topo.nodes["leaf1"].routes["10.0.0.0/8"].metric,
+            Some(100)
+        );
+        let fw = topo.nodes["server1"].firewall.as_ref().unwrap();
+        assert_eq!(fw.rules.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_wireguard() {
+        let toml = r#"
+[lab]
+name = "vpn-lab"
+
+[nodes.office]
+profile = "router"
+
+[nodes.office.wireguard.wg0]
+private_key = "auto"
+listen_port = 51820
+addresses = ["10.100.0.1/24"]
+peers = ["remote"]
+
+[nodes.remote]
+profile = "router"
+
+[nodes.remote.wireguard.wg0]
+private_key = "auto"
+addresses = ["10.100.0.2/24"]
+peers = ["office"]
+
+[[links]]
+endpoints = ["office:eth0", "remote:eth0"]
+addresses = ["203.0.113.1/24", "203.0.113.2/24"]
+
+[impairments."office:eth0"]
+delay = "30ms"
+jitter = "5ms"
+loss = "0.1%"
+rate = "50mbit"
+"#;
+        let topo = parse(toml).unwrap();
+        assert_eq!(topo.nodes.len(), 2);
+        let wg = &topo.nodes["office"].wireguard["wg0"];
+        assert_eq!(wg.private_key.as_deref(), Some("auto"));
+        assert_eq!(wg.listen_port, Some(51820));
+        assert_eq!(wg.addresses, vec!["10.100.0.1/24"]);
+        assert_eq!(wg.peers, vec!["remote"]);
+    }
+
+    #[test]
+    fn test_parse_vxlan_overlay() {
+        let toml = r#"
+[lab]
+name = "overlay-lab"
+
+[nodes.vtep1]
+profile = "router"
+
+[nodes.vtep1.interfaces.vxlan100]
+kind = "vxlan"
+vni = 100
+local = "10.0.0.1"
+remote = "10.0.0.2"
+port = 4789
+addresses = ["192.168.100.1/24"]
+
+[nodes.vtep2]
+profile = "router"
+
+[nodes.vtep2.interfaces.vxlan100]
+kind = "vxlan"
+vni = 100
+local = "10.0.0.2"
+remote = "10.0.0.1"
+port = 4789
+addresses = ["192.168.100.2/24"]
+
+[[links]]
+endpoints = ["vtep1:eth0", "vtep2:eth0"]
+addresses = ["10.0.0.1/24", "10.0.0.2/24"]
+"#;
+        let topo = parse(toml).unwrap();
+        assert_eq!(topo.nodes.len(), 2);
+        let vxlan = &topo.nodes["vtep1"].interfaces["vxlan100"];
+        assert_eq!(vxlan.kind.as_deref(), Some("vxlan"));
+        assert_eq!(vxlan.vni, Some(100));
+        assert_eq!(vxlan.local.as_deref(), Some("10.0.0.1"));
+        assert_eq!(vxlan.remote.as_deref(), Some("10.0.0.2"));
+        assert_eq!(vxlan.port, Some(4789));
+        assert_eq!(vxlan.addresses, vec!["192.168.100.1/24"]);
+    }
+
+    #[test]
+    fn test_parse_malformed_toml() {
+        let result = parse("this is not valid TOML {{{");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), crate::Error::TomlParse(_)));
+    }
+
+    #[test]
+    fn test_parse_missing_lab_section() {
+        let result = parse("[nodes.a]");
+        assert!(result.is_err());
+    }
 }

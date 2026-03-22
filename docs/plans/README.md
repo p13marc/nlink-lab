@@ -6,36 +6,34 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Status | Effort |
 |------|-------------|--------|--------|
-| [040](040-nlink-lab-topology-types.md) | Topology types, TOML parser, builder DSL | ~80% done | 3-4 days |
-| [041](041-nlink-lab-validator.md) | Topology validation rules | Not started | 2-3 days |
-| [042](042-nlink-lab-deployer.md) | Deployer, RunningLab, state management | Not started | 5-7 days |
-| [043](043-nlink-lab-cli.md) | CLI binary | ~30% (skeleton) | 2-3 days |
+| [040](040-nlink-lab-topology-types.md) | Topology types, TOML parser, builder DSL | Done | 3-4 days |
+| [041](041-nlink-lab-validator.md) | Topology validation rules | Done | 2-3 days |
+| [042](042-nlink-lab-deployer.md) | Deployer, RunningLab, state management | Done (MVP + bridges + nftables) | 5-7 days |
+| [043](043-nlink-lab-cli.md) | CLI binary | Done | 2-3 days |
 
-### Implementation Order
+### What's Complete
 
-1. **040** (finish) — Add `Serialize` derives, builder DSL, remaining parser tests
-2. **041** — Validator (blocks deployer: deploy calls `validate().bail()` first)
-3. **042** — Deployer (the core). Start with MVP: namespaces + veths + addresses + routes + netem. Defer bridges, firewall, advanced interface types.
-4. **043** — Wire CLI commands to library (should be fast once 042 is done)
+- **040:** Types, parser, Serialize, builder DSL (all builders + 10 tests), complex TOML test cases
+- **041:** All 14 validation rules (9 error, 5 warning) with tests
+- **042:** Full deployment pipeline:
+  - Steps 3-18: namespaces, bridges, veths, additional interfaces (dummy, vxlan), addresses, bring up, sysctls, routes, nftables firewall, netem, rate limits, process spawning, state
+  - Bridge networks with management namespace and veth pairs to members
+  - nftables: table + input/forward chains with policy, rule match parsing (tcp/udp dport, ct state)
+  - RunningLab: exec, spawn, set_impairment, destroy (incl. bridge cleanup)
+  - State: save/load/list/remove with XDG_STATE_HOME support
+  - Cleanup guard with Drop-based rollback on failure
+- **043:** All CLI commands: deploy (--dry-run, --force), destroy (--force), status, exec, validate
 
-### MVP Scope (first deployable lab)
+### Post-MVP Remaining (042)
 
-The minimum for a working `nlink-lab deploy` + `exec` + `destroy`:
-
-- **040:** Types + parser (done), `Serialize` derives (needed for state)
-- **041:** Error-level validation rules only (warnings can come later)
-- **042 MVP subset:**
-  - Steps 3, 5, 9, 10, 11, 12, 14, 16, 18 (namespaces, veths, addresses, up, sysctls, routes, netem, spawn, state)
-  - `RunningLab::exec()`, `destroy()`
-  - State save/load/list/remove
-  - Rollback on failure
-- **043:** `deploy`, `destroy`, `exec`, `validate`, `status` commands
-
-Deferred to post-MVP:
-- Builder DSL (040)
-- Bridge networks, VLANs, nftables, VRF, WireGuard, VXLAN (042)
-- Warning-level validation rules (041)
-- `--force` flags, colored output, detailed status (043)
+| Feature | Deployer Step | Priority |
+|---------|---------------|----------|
+| VRF interfaces + enslavement | Step 6e | Medium |
+| WireGuard interfaces (key gen) | Step 6d | Medium |
+| Bond interfaces | Step 6b | Medium |
+| VLAN sub-interfaces | Step 6c | Low |
+| Bridge VLAN port config (pvid/tagged/untagged) | Step 8 | Low |
+| Post-deploy connectivity checks | Step 17 | Low |
 
 ## Reference
 

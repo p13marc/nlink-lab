@@ -49,6 +49,110 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         namespace_names.insert(node_name.clone(), ns_name);
     }
 
+    // ── Step 4: Create bridge networks ───────────────────────────────
+    // Bridges live in a management namespace. For each network, create the bridge
+    // in a dedicated namespace, then create veth pairs from member nodes.
+    let mut bridge_ns_names: HashMap<String, String> = HashMap::new();
+    if !topology.networks.is_empty() {
+        let mgmt_ns = format!("{}-mgmt", topology.lab.prefix());
+        namespace::create(&mgmt_ns).map_err(|e| {
+            Error::deploy_failed(format!("failed to create management namespace '{mgmt_ns}': {e}"))
+        })?;
+        cleanup.add_namespace(mgmt_ns.clone());
+
+        let mgmt_conn: Connection<Route> =
+            namespace::connection_for(&mgmt_ns).map_err(|e| {
+                Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}"))
+            })?;
+
+        for (net_name, network) in &topology.networks {
+            let bridge_name = format!("{}-{}", topology.lab.prefix(), net_name);
+            // Truncate to 15 chars (Linux interface name limit)
+            let bridge_name = if bridge_name.len() > 15 {
+                bridge_name[..15].to_string()
+            } else {
+                bridge_name
+            };
+
+            let mut bridge = nlink::netlink::link::BridgeLink::new(&bridge_name);
+            if let Some(true) = network.vlan_filtering {
+                bridge = bridge.vlan_filtering(true);
+            }
+            if let Some(mtu) = network.mtu {
+                bridge = bridge.mtu(mtu);
+            }
+
+            mgmt_conn.add_link(bridge).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to create bridge '{bridge_name}' for network '{net_name}': {e}"
+                ))
+            })?;
+            mgmt_conn.set_link_up(&bridge_name).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up bridge '{bridge_name}': {e}"
+                ))
+            })?;
+
+            bridge_ns_names.insert(net_name.clone(), mgmt_ns.clone());
+
+            // Create veth pairs for each member: one end in node ns, other in mgmt ns attached to bridge
+            let mgmt_ns_fd = namespace::open(&mgmt_ns).map_err(|e| {
+                Error::deploy_failed(format!("failed to open mgmt namespace: {e}"))
+            })?;
+
+            for (k, member) in network.members.iter().enumerate() {
+                let ep = EndpointRef::parse(member).ok_or_else(|| Error::InvalidEndpoint {
+                    endpoint: member.clone(),
+                })?;
+                let node_ns = namespace_names.get(&ep.node).ok_or_else(|| {
+                    Error::NodeNotFound {
+                        name: ep.node.clone(),
+                    }
+                })?;
+
+                // The peer end in mgmt ns gets a generated name
+                let peer_name = format!("br{}p{}", net_name.chars().take(4).collect::<String>(), k);
+                let peer_name = if peer_name.len() > 15 {
+                    peer_name[..15].to_string()
+                } else {
+                    peer_name
+                };
+
+                let node_conn: Connection<Route> =
+                    namespace::connection_for(node_ns).map_err(|e| {
+                        Error::deploy_failed(format!("connection for '{node_ns}': {e}"))
+                    })?;
+
+                let veth = nlink::netlink::link::VethLink::new(&ep.iface, &peer_name)
+                    .peer_netns_fd(mgmt_ns_fd.as_raw_fd());
+
+                node_conn.add_link(veth).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to create veth for network '{net_name}' member '{member}': {e}"
+                    ))
+                })?;
+
+                // Step 7: Attach the peer end to the bridge in mgmt ns
+                mgmt_conn
+                    .set_link_master(&peer_name, &bridge_name)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to attach '{peer_name}' to bridge '{bridge_name}': {e}"
+                        ))
+                    })?;
+                mgmt_conn
+                    .set_link_up(&peer_name)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to bring up bridge port '{peer_name}': {e}"
+                        ))
+                    })?;
+            }
+        }
+    }
+
     // ── Step 5: Create veth pairs ──────────────────────────────────
     for (i, link) in topology.links.iter().enumerate() {
         let ep_a = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| {
@@ -292,6 +396,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 13: Apply nftables firewall rules ──────────────────────
+    for (node_name, node) in &topology.nodes {
+        if let Some(fw) = topology.effective_firewall(node) {
+            let ns_name = &namespace_names[node_name];
+            apply_firewall(ns_name, node_name, fw).await?;
+        }
+    }
+
     // ── Step 14: Apply netem impairments ───────────────────────────
     for (endpoint_str, impairment) in &topology.impairments {
         let ep = EndpointRef::parse(endpoint_str).ok_or_else(|| Error::InvalidEndpoint {
@@ -403,6 +515,128 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         namespace_names,
         pids,
     ))
+}
+
+/// Apply nftables firewall rules for a node.
+async fn apply_firewall(
+    ns_name: &str,
+    node_name: &str,
+    fw: &crate::types::FirewallConfig,
+) -> Result<()> {
+    use nlink::netlink::nftables::types::{Chain, ChainType, Family, Hook, Policy, Priority, Rule};
+    use nlink::netlink::Nftables;
+
+    // nftables needs Connection<Nftables> (NETLINK_NETFILTER socket)
+    let nft_conn: Connection<Nftables> =
+        namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to create nftables connection for '{node_name}': {e}"
+            ))
+        })?;
+
+    let table_name = "nlink-lab";
+
+    // Create table
+    nft_conn.add_table(table_name, Family::Inet).await.map_err(|e| {
+        Error::deploy_failed(format!("failed to create nftables table on '{node_name}': {e}"))
+    })?;
+
+    // Create input chain with policy
+    let policy = match fw.policy.as_deref() {
+        Some("drop") => Policy::Drop,
+        _ => Policy::Accept,
+    };
+    let chain = Chain::new(table_name, "input")
+        .family(Family::Inet)
+        .hook(Hook::Input)
+        .priority(Priority::Filter)
+        .chain_type(ChainType::Filter)
+        .policy(policy);
+    nft_conn.add_chain(chain).await.map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to create nftables input chain on '{node_name}': {e}"
+        ))
+    })?;
+
+    // Create forward chain with same policy
+    let fwd_chain = Chain::new(table_name, "forward")
+        .family(Family::Inet)
+        .hook(Hook::Forward)
+        .priority(Priority::Filter)
+        .chain_type(ChainType::Filter)
+        .policy(policy);
+    nft_conn.add_chain(fwd_chain).await.map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to create nftables forward chain on '{node_name}': {e}"
+        ))
+    })?;
+
+    // Add rules to input chain
+    for fw_rule in &fw.rules {
+        let action = fw_rule.action.as_deref().unwrap_or("accept");
+        let match_expr = fw_rule.match_expr.as_deref().unwrap_or("");
+
+        let mut rule = Rule::new(table_name, "input").family(Family::Inet);
+
+        // Parse common match expressions
+        rule = apply_match_expr(rule, match_expr);
+
+        // Apply action
+        rule = match action {
+            "accept" => rule.accept(),
+            "drop" => rule.drop(),
+            _ => rule.accept(),
+        };
+
+        nft_conn.add_rule(rule).await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to add nftables rule on '{node_name}': match='{match_expr}' action='{action}': {e}"
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Parse a match expression and apply it to an nftables rule.
+fn apply_match_expr(
+    rule: nlink::netlink::nftables::types::Rule,
+    expr: &str,
+) -> nlink::netlink::nftables::types::Rule {
+    use nlink::netlink::nftables::types::CtState;
+
+    let expr = expr.trim();
+
+    if expr.starts_with("tcp dport ") {
+        if let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>() {
+            return rule.match_tcp_dport(port);
+        }
+    }
+
+    if expr.starts_with("udp dport ") {
+        if let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>() {
+            return rule.match_udp_dport(port);
+        }
+    }
+
+    if expr.starts_with("ct state ") {
+        let states = expr.trim_start_matches("ct state ").trim();
+        let mut ct = CtState(0);
+        for state in states.split(',') {
+            match state.trim() {
+                "established" => ct = ct | CtState::ESTABLISHED,
+                "related" => ct = ct | CtState::RELATED,
+                "new" => ct = ct | CtState::NEW,
+                "invalid" => ct = ct | CtState::INVALID,
+                _ => {}
+            }
+        }
+        return rule.match_ct_state(ct);
+    }
+
+    // For unrecognized expressions, return the rule unchanged (best effort)
+    tracing::warn!("unrecognized nftables match expression: '{expr}'");
+    rule
 }
 
 /// Add a single route in a namespace.

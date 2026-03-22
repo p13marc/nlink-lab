@@ -34,6 +34,17 @@ pub struct ExecOutput {
     pub exit_code: i32,
 }
 
+/// Status of a tracked background process.
+#[derive(Debug, Clone)]
+pub struct ProcessInfo {
+    /// Node the process runs in.
+    pub node: String,
+    /// Process ID.
+    pub pid: u32,
+    /// Whether the process is still alive.
+    pub alive: bool,
+}
+
 impl RunningLab {
     /// Create a new RunningLab (called by the deployer).
     pub(crate) fn new(
@@ -183,6 +194,21 @@ impl RunningLab {
     /// List all saved labs.
     pub fn list() -> Result<Vec<LabInfo>> {
         state::list()
+    }
+
+    /// Check status of tracked background processes.
+    pub fn process_status(&self) -> Vec<ProcessInfo> {
+        self.pids
+            .iter()
+            .map(|(node, pid)| {
+                let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
+                ProcessInfo {
+                    node: node.clone(),
+                    pid: *pid,
+                    alive,
+                }
+            })
+            .collect()
     }
 }
 

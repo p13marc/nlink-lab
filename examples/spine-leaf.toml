@@ -1,0 +1,107 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+[lab]
+name = "spine-leaf"
+description = "Spine-leaf datacenter fabric"
+prefix = "dc"
+
+# ── Profiles ────────────────────────────────────────
+
+[profiles.router]
+sysctls = { "net.ipv4.ip_forward" = "1" }
+
+[profiles.host]
+sysctls = { "net.ipv4.ip_forward" = "0" }
+
+# ── Spines ──────────────────────────────────────────
+
+[nodes.spine1]
+profile = "router"
+
+[nodes.spine1.interfaces.lo]
+addresses = ["10.255.0.1/32"]
+
+[nodes.spine2]
+profile = "router"
+
+[nodes.spine2.interfaces.lo]
+addresses = ["10.255.0.2/32"]
+
+# ── Leaves ──────────────────────────────────────────
+
+[nodes.leaf1]
+profile = "router"
+
+[nodes.leaf1.interfaces.lo]
+addresses = ["10.255.1.1/32"]
+
+[nodes.leaf1.routes]
+default = { via = "10.0.11.1" }
+
+[nodes.leaf2]
+profile = "router"
+
+[nodes.leaf2.interfaces.lo]
+addresses = ["10.255.1.2/32"]
+
+[nodes.leaf2.routes]
+default = { via = "10.0.12.1" }
+
+# ── Servers ─────────────────────────────────────────
+
+[nodes.server1]
+profile = "host"
+
+[nodes.server1.routes]
+default = { via = "10.1.1.1" }
+
+[nodes.server2]
+profile = "host"
+
+[nodes.server2.routes]
+default = { via = "10.1.2.1" }
+
+# ── Fabric links (spine ↔ leaf) ────────────────────
+
+[[links]]
+endpoints = ["spine1:eth1", "leaf1:eth1"]
+addresses = ["10.0.11.1/30", "10.0.11.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["spine1:eth2", "leaf2:eth1"]
+addresses = ["10.0.12.1/30", "10.0.12.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["spine2:eth1", "leaf1:eth2"]
+addresses = ["10.0.21.1/30", "10.0.21.2/30"]
+mtu = 9000
+
+[[links]]
+endpoints = ["spine2:eth2", "leaf2:eth2"]
+addresses = ["10.0.22.1/30", "10.0.22.2/30"]
+mtu = 9000
+
+# ── Access links (leaf ↔ server) ───────────────────
+
+[[links]]
+endpoints = ["leaf1:eth3", "server1:eth0"]
+addresses = ["10.1.1.1/24", "10.1.1.10/24"]
+
+[[links]]
+endpoints = ["leaf2:eth3", "server2:eth0"]
+addresses = ["10.1.2.1/24", "10.1.2.10/24"]
+
+# ── Impairments ─────────────────────────────────────
+
+[impairments."spine1:eth1"]
+delay = "5ms"
+jitter = "1ms"
+
+[impairments."spine1:eth2"]
+delay = "5ms"
+jitter = "1ms"

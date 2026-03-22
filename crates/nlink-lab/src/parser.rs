@@ -523,4 +523,33 @@ addresses = ["10.0.0.1/24", "10.0.0.2/24"]
         let result = parse("[nodes.a]");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_all_examples_parse_and_validate() {
+        let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("examples");
+
+        let mut count = 0;
+        for entry in std::fs::read_dir(&examples_dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "toml") {
+                let topo = parse_file(&path)
+                    .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
+                let result = topo.validate();
+                assert!(
+                    !result.has_errors(),
+                    "validation errors in {}: {:?}",
+                    path.display(),
+                    result.errors().collect::<Vec<_>>()
+                );
+                count += 1;
+            }
+        }
+        assert!(count >= 6, "expected at least 6 example files, found {count}");
+    }
 }

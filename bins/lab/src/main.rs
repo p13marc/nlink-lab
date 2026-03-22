@@ -62,6 +62,47 @@ enum Commands {
         /// Path to the topology TOML file.
         topology: PathBuf,
     },
+
+    /// Modify link impairment at runtime.
+    Impair {
+        /// Lab name.
+        lab: String,
+
+        /// Endpoint (e.g., "router:eth0").
+        endpoint: String,
+
+        /// Delay (e.g., "10ms").
+        #[arg(long)]
+        delay: Option<String>,
+
+        /// Jitter (e.g., "2ms").
+        #[arg(long)]
+        jitter: Option<String>,
+
+        /// Packet loss (e.g., "0.1%").
+        #[arg(long)]
+        loss: Option<String>,
+
+        /// Rate limit (e.g., "100mbit").
+        #[arg(long)]
+        rate: Option<String>,
+
+        /// Remove impairment.
+        #[arg(long)]
+        clear: bool,
+    },
+
+    /// Print topology as DOT graph.
+    Graph {
+        /// Path to the topology TOML file.
+        topology: PathBuf,
+    },
+
+    /// List processes running in a lab.
+    Ps {
+        /// Lab name.
+        lab: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -217,6 +258,61 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             print_topology_summary(&topo);
             Ok(())
         }
+
+        Commands::Impair {
+            lab,
+            endpoint,
+            delay,
+            jitter,
+            loss,
+            rate,
+            clear,
+        } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+
+            if clear {
+                running
+                    .set_impairment(
+                        &endpoint,
+                        &nlink_lab::Impairment::default(),
+                    )
+                    .await?;
+                println!("Cleared impairment on {endpoint}");
+            } else {
+                let impairment = nlink_lab::Impairment {
+                    delay,
+                    jitter,
+                    loss,
+                    rate,
+                    ..Default::default()
+                };
+                running.set_impairment(&endpoint, &impairment).await?;
+                println!("Updated impairment on {endpoint}");
+            }
+            Ok(())
+        }
+
+        Commands::Graph { topology } => {
+            let topo = nlink_lab::parser::parse_file(&topology)?;
+            print!("{}", topology_to_dot(&topo));
+            Ok(())
+        }
+
+        Commands::Ps { lab } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let procs = running.process_status();
+            if procs.is_empty() {
+                println!("No tracked processes.");
+            } else {
+                println!("{:<12} {:<8} {}", "NODE", "PID", "STATUS");
+                for p in &procs {
+                    let status = if p.alive { "running" } else { "dead" };
+                    println!("{:<12} {:<8} {}", p.node, p.pid, status);
+                }
+            }
+            Ok(())
+        }
     }
 }
 
@@ -245,6 +341,56 @@ fn print_deploy_summary(topo: &nlink_lab::Topology) {
     if bg_count > 0 {
         println!("  Processes:   {} background", bg_count);
     }
+}
+
+fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
+    use nlink_lab::EndpointRef;
+
+    let mut out = format!("graph {:?} {{\n", topo.lab.name);
+    out += "  rankdir=LR;\n";
+    out += "  node [shape=box];\n";
+
+    for link in &topo.links {
+        let a = EndpointRef::parse(&link.endpoints[0]).unwrap();
+        let b = EndpointRef::parse(&link.endpoints[1]).unwrap();
+
+        let mut label_parts = Vec::new();
+        if let Some(addrs) = &link.addresses {
+            label_parts.push(format!("{} / {}", addrs[0], addrs[1]));
+        }
+        if let Some(mtu) = link.mtu {
+            label_parts.push(format!("MTU {mtu}"));
+        }
+        // Check for impairment
+        if let Some(imp) = topo.impairments.get(&link.endpoints[0]) {
+            let mut parts = Vec::new();
+            if let Some(d) = &imp.delay {
+                parts.push(format!("delay={d}"));
+            }
+            if let Some(l) = &imp.loss {
+                parts.push(format!("loss={l}"));
+            }
+            if !parts.is_empty() {
+                label_parts.push(parts.join(" "));
+            }
+        }
+
+        let label = label_parts.join("\\n");
+        if label.is_empty() {
+            out += &format!(
+                "  \"{}\" -- \"{}\" [taillabel=\"{}\", headlabel=\"{}\"];\n",
+                a.node, b.node, a.iface, b.iface
+            );
+        } else {
+            out += &format!(
+                "  \"{}\" -- \"{}\" [taillabel=\"{}\", headlabel=\"{}\", label=\"{}\"];\n",
+                a.node, b.node, a.iface, b.iface, label
+            );
+        }
+    }
+
+    out += "}\n";
+    out
 }
 
 fn check_root() {

@@ -1,0 +1,68 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each with a router and a host, connected
+# by a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+[lab]
+name = "wan-impairment"
+description = "Two sites connected by impaired WAN link"
+
+[profiles.router]
+sysctls = { "net.ipv4.ip_forward" = "1" }
+
+# ── Site A ──────────────────────────────────────────
+
+[nodes.router-a]
+profile = "router"
+
+[nodes.router-a.routes]
+"10.2.0.0/24" = { via = "172.16.0.2" }
+
+[nodes.host-a]
+
+[nodes.host-a.routes]
+default = { via = "10.1.0.1" }
+
+# ── Site B ──────────────────────────────────────────
+
+[nodes.router-b]
+profile = "router"
+
+[nodes.router-b.routes]
+"10.1.0.0/24" = { via = "172.16.0.1" }
+
+[nodes.host-b]
+
+[nodes.host-b.routes]
+default = { via = "10.2.0.1" }
+
+# ── LAN links ──────────────────────────────────────
+
+[[links]]
+endpoints = ["router-a:eth0", "host-a:eth0"]
+addresses = ["10.1.0.1/24", "10.1.0.10/24"]
+
+[[links]]
+endpoints = ["router-b:eth0", "host-b:eth0"]
+addresses = ["10.2.0.1/24", "10.2.0.10/24"]
+
+# ── WAN link ───────────────────────────────────────
+
+[[links]]
+endpoints = ["router-a:wan0", "router-b:wan0"]
+addresses = ["172.16.0.1/30", "172.16.0.2/30"]
+
+# ── WAN impairment (both directions) ──────────────
+
+[impairments."router-a:wan0"]
+delay = "30ms"
+jitter = "5ms"
+loss = "0.1%"
+rate = "50mbit"
+
+[impairments."router-b:wan0"]
+delay = "30ms"
+jitter = "5ms"
+loss = "0.1%"
+rate = "50mbit"

@@ -2,38 +2,55 @@
 
 Implementation plans for nlink-lab.
 
-## Active Plans — Phase 2: Core Lab Engine
+## Completed — Phase 2: Core Lab Engine
 
-| Plan | Description | Status | Effort |
-|------|-------------|--------|--------|
-| [040](040-nlink-lab-topology-types.md) | Topology types, TOML parser, builder DSL | Done | 3-4 days |
-| [041](041-nlink-lab-validator.md) | Topology validation rules | Done | 2-3 days |
-| [042](042-nlink-lab-deployer.md) | Deployer, RunningLab, state management | Done (MVP + bridges + nftables) | 5-7 days |
-| [043](043-nlink-lab-cli.md) | CLI binary | Done | 2-3 days |
+Phase 2 is done. All core functionality is implemented and tested (65 tests).
 
-### What's Complete
+| Component | Files | Status |
+|-----------|-------|--------|
+| Topology types + Serialize | `types.rs` | Done |
+| TOML parser | `parser.rs` | Done |
+| Builder DSL | `builder.rs` | Done |
+| Value helpers | `helpers.rs` | Done |
+| Validator (14 rules) | `validator.rs` | Done |
+| Deployer (steps 3-18) | `deploy.rs` | Done |
+| RunningLab | `running.rs` | Done |
+| State persistence | `state.rs` | Done |
+| CLI (5 commands) | `bins/lab/src/main.rs` | Done |
 
-- **040:** Types, parser, Serialize, builder DSL (all builders + 10 tests), complex TOML test cases
-- **041:** All 14 validation rules (9 error, 5 warning) with tests
-- **042:** Full deployment pipeline:
-  - Steps 3-18: namespaces, bridges, veths, additional interfaces (dummy, vxlan), addresses, bring up, sysctls, routes, nftables firewall, netem, rate limits, process spawning, state
-  - Bridge networks with management namespace and veth pairs to members
-  - nftables: table + input/forward chains with policy, rule match parsing (tcp/udp dport, ct state)
-  - RunningLab: exec, spawn, set_impairment, destroy (incl. bridge cleanup)
-  - State: save/load/list/remove with XDG_STATE_HOME support
-  - Cleanup guard with Drop-based rollback on failure
-- **043:** All CLI commands: deploy (--dry-run, --force), destroy (--force), status, exec, validate
+## Remaining Work
 
-### Post-MVP Remaining (042)
+### Deployer — Additional Interface Types
 
-| Feature | Deployer Step | Priority |
-|---------|---------------|----------|
-| VRF interfaces + enslavement | Step 6e | Medium |
-| WireGuard interfaces (key gen) | Step 6d | Medium |
-| Bond interfaces | Step 6b | Medium |
-| VLAN sub-interfaces | Step 6c | Low |
-| Bridge VLAN port config (pvid/tagged/untagged) | Step 8 | Low |
-| Post-deploy connectivity checks | Step 17 | Low |
+These are parsed and validated but not yet deployed:
+
+| Feature | Types exist | Deploy support | Priority |
+|---------|-------------|----------------|----------|
+| VRF interfaces + enslavement | `VrfConfig` | Not yet | Medium |
+| WireGuard interfaces | `WireguardConfig` | Not yet | Medium |
+| Bond interfaces | `InterfaceConfig(kind=bond)` | Not yet | Medium |
+| VLAN sub-interfaces | `InterfaceConfig(kind=vlan)` | Not yet | Low |
+| Bridge VLAN port config | `PortConfig` (pvid/tagged/untagged) | Not yet | Low |
+
+### Phase 3: Advanced Features (from NLINK_LAB.md)
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| Runtime impairment modification | `RunningLab::set_impairment()` exists but needs CLI command `nlink-lab impair` | Medium |
+| Diagnostics | Per-lab network health checks via nlink diagnostics | Medium |
+| Packet capture | `nlink-lab capture <lab> <link>` — spawn tcpdump in namespace | Low |
+| Topology graph | `nlink-lab graph <topology.toml>` — DOT/ASCII visualization | Low |
+| Process manager | Monitor/restart background processes | Low |
+
+### Phase 4: Ecosystem (from NLINK_LAB.md)
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| Example topologies | Spine-leaf, WAN, MPLS, VPN patterns in `examples/` | High |
+| Test harness | `#[nlink_lab::test]` proc macro for auto-deploy/destroy | High |
+| Integration tests | Real deploy/exec/destroy tests (require root/CAP_NET_ADMIN) | High |
+| CI integration | Run network tests in CI | Medium |
+| Documentation | User guide, topology cookbook | Medium |
 
 ## Reference
 

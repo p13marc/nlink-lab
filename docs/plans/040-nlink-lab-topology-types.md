@@ -2,7 +2,7 @@
 
 **Priority:** Critical (Phase 2, step 1)
 **Effort:** 3-4 days
-**Target:** New crate `crates/nlink-lab`
+**Target:** `crates/nlink-lab`
 
 ## Summary
 
@@ -13,143 +13,117 @@ The crate lives at `crates/nlink-lab/` and is a library crate that also powers t
 `bins/lab/` CLI binary (Plan 043). The types must support both TOML deserialization
 and programmatic construction via a Rust builder DSL.
 
-## Crate Setup
+## Status
 
-```
-crates/nlink-lab/
-  Cargo.toml          # depends on nlink, serde, toml
-  src/
-    lib.rs            # Public API: Lab, Profile, Node, Link, etc.
-    types.rs          # Core topology types (serde + builder)
-    parser.rs         # TOML parsing and normalization
-    error.rs          # LabError type
-```
+**~80% complete.** Crate structure, all 16 topology types, parser, and error types
+are implemented. Remaining: builder DSL, complex TOML test cases, `Serialize` derives.
 
-`Cargo.toml` dependencies:
-- `nlink` (workspace) — for networking types (IpAddr, etc.)
-- `serde` + `serde_derive` — deserialization
-- `toml` — TOML parsing
-- `thiserror` — error types
-- `tokio` (workspace) — async runtime (for deploy/destroy)
+## What's Done
 
-## Type Design
+- Workspace and crate structure (`crates/nlink-lab/` + `bins/lab/`)
+- All topology types in `types.rs` with `Deserialize + Debug + Clone`
+- `EndpointRef` parsing with `Display` impl
+- `Topology` helper methods: `namespace_name()`, `effective_sysctls()`, `effective_firewall()`
+- TOML parser (`parse()` and `parse_file()`)
+- Error enum with 10 variants
+- 11 unit tests covering core parsing scenarios
 
-The topology types mirror the TOML structure from NLINK_LAB.md section 4.3:
+## Remaining Work
 
-```rust
-// Top-level topology
-pub struct Topology {
-    pub lab: LabConfig,
-    pub profiles: HashMap<String, Profile>,
-    pub nodes: HashMap<String, Node>,
-    pub links: Vec<Link>,
-    pub networks: HashMap<String, Network>,       // L2 bridge segments
-    pub impairments: HashMap<String, Impairment>,  // keyed by "node:iface"
-    pub rate_limits: HashMap<String, RateLimit>,   // keyed by "node:iface"
-}
+### Add `Serialize` to All Types
 
-pub struct LabConfig {
-    pub name: String,
-    pub description: Option<String>,
-    pub prefix: Option<String>,
-}
+Required for state persistence (Plan 042 writes `topology.toml` and `state.json`).
 
-pub struct Profile {
-    pub sysctls: HashMap<String, String>,
-    pub firewall: Option<FirewallConfig>,
-}
+**File:** `crates/nlink-lab/src/types.rs`
 
-pub struct Node {
-    pub profile: Option<String>,
-    pub sysctls: HashMap<String, String>,          // merged with profile
-    pub interfaces: HashMap<String, InterfaceConfig>,
-    pub routes: HashMap<String, RouteConfig>,
-    pub firewall: Option<FirewallConfig>,
-    pub exec: Vec<ExecConfig>,
-    pub vrfs: HashMap<String, VrfConfig>,
-    pub wireguard: HashMap<String, WireguardConfig>,
-}
-
-pub struct Link {
-    pub endpoints: [String; 2],                    // "node:iface" format
-    pub addresses: Option<[String; 2]>,            // CIDR for each end
-    pub mtu: Option<u32>,
-}
-
-pub struct Impairment {
-    pub delay: Option<String>,
-    pub jitter: Option<String>,
-    pub loss: Option<String>,
-    pub rate: Option<String>,
-    pub corrupt: Option<String>,
-    pub reorder: Option<String>,
-}
-
-pub struct RateLimit {
-    pub egress: Option<String>,
-    pub ingress: Option<String>,
-    pub burst: Option<String>,
-}
-```
-
-## Progress
-
-### Crate Setup
-
-- [ ] Create `crates/nlink-lab/Cargo.toml` with dependencies
-- [ ] Add `crates/nlink-lab` to workspace `Cargo.toml`
-- [ ] Create `src/lib.rs` with module structure
-- [ ] Create `src/error.rs` with `LabError` type
-
-### Core Types (`types.rs`)
-
-- [ ] `Topology` — top-level container
-- [ ] `LabConfig` — lab metadata (name, description, prefix)
-- [ ] `Profile` — reusable node template (sysctls, firewall)
-- [ ] `Node` — namespace definition (profile, interfaces, routes, exec, vrfs, wireguard)
-- [ ] `InterfaceConfig` — explicit interface (kind, addresses, vni, etc.)
-- [ ] `RouteConfig` — route entry (via, metric)
-- [ ] `Link` — point-to-point veth connection (endpoints, addresses, mtu)
-- [ ] `Network` — L2 bridge segment (kind, vlan_filtering, vlans, ports)
-- [ ] `Impairment` — netem config (delay, jitter, loss, rate, corrupt, reorder)
-- [ ] `RateLimit` — per-interface shaping (egress, ingress, burst)
-- [ ] `FirewallConfig` — nftables rules (policy, rules list)
-- [ ] `FirewallRule` — single rule (match expression, action)
-- [ ] `ExecConfig` — process to spawn (cmd, background)
-- [ ] `VrfConfig` — VRF definition (table, interfaces, routes)
-- [ ] `WireguardConfig` — WG interface (private_key, listen_port, addresses, peers)
-- [ ] All types derive `serde::Deserialize` + `Debug` + `Clone`
-
-### TOML Parser (`parser.rs`)
-
-- [ ] `pub fn parse(toml_str: &str) -> Result<Topology>` — parse TOML string
-- [ ] `pub fn parse_file(path: &Path) -> Result<Topology>` — parse TOML file
-- [ ] Profile merging: node inherits sysctls/firewall from referenced profile
-- [ ] Endpoint parsing: split `"node:iface"` into (node_name, iface_name)
-- [ ] Default prefix: use lab name if prefix not specified
+- [ ] Add `serde::Serialize` derive to all types (`Topology`, `LabConfig`, `Profile`,
+      `Node`, `InterfaceConfig`, `RouteConfig`, `Link`, `Network`, `VlanConfig`,
+      `PortConfig`, `Impairment`, `RateLimit`, `FirewallConfig`, `FirewallRule`,
+      `ExecConfig`, `VrfConfig`, `WireguardConfig`)
+- [ ] Add `Serialize` to `EndpointRef` (manual impl or `serde(into/from)`)
 
 ### Rust Builder DSL (`builder.rs`)
 
-- [ ] `Lab::new(name)` — create topology programmatically
-- [ ] `.profile(name, Profile::new().sysctl(...))` — add profile
-- [ ] `.node(name, |n| n.profile(...).lo(...).route(...))` — add node
-- [ ] `.link(ep1, ep2, |l| l.addresses(...).mtu(...))` — add link
-- [ ] `.impair(endpoint, |i| i.delay(...).loss(...))` — add impairment
-- [ ] `.rate_limit(endpoint, |r| r.egress(...))` — add rate limit
-- [ ] `.build() -> Topology` — finalize
+Provides programmatic topology construction for integration tests and dynamic topologies.
+The builder produces the same `Topology` struct as TOML parsing.
 
-### Tests
+**File:** `crates/nlink-lab/src/builder.rs` (new)
 
-- [ ] Parse the datacenter-sim example from NLINK_LAB.md section 4.3
-- [ ] Parse VLAN trunk example
-- [ ] Parse WireGuard example
-- [ ] Parse VRF example
-- [ ] Parse VXLAN overlay example
-- [ ] Builder DSL produces same types as TOML parsing
-- [ ] Profile merging works correctly
-- [ ] Error on malformed TOML
+**Design:** The builder follows the fluent API from `NLINK_LAB.md` section 4.5:
 
-### Documentation
+```rust
+use nlink_lab::builder::Lab;
 
-- [ ] Doc comments on all public types
-- [ ] Module-level examples
+let topology = Lab::new("my-lab")
+    .profile("router", |p| p
+        .sysctl("net.ipv4.ip_forward", "1"))
+    .node("r1", |n| n
+        .profile("router")
+        .interface("lo", |i| i.address("10.0.0.1/32"))
+        .route("default", |r| r.via("10.0.1.1")))
+    .node("h1", |n| n
+        .route("default", |r| r.via("10.0.0.1")))
+    .link("r1:eth0", "h1:eth0", |l| l
+        .addresses("10.0.0.1/24", "10.0.0.2/24")
+        .mtu(9000))
+    .impair("r1:eth0", |i| i
+        .delay("10ms").jitter("2ms"))
+    .rate_limit("h1:eth0", |r| r
+        .egress("1gbit"))
+    .build();
+```
+
+**Implementation detail:** Each builder struct (e.g., `ProfileBuilder`, `NodeBuilder`,
+`LinkBuilder`) collects values and produces the corresponding type from `types.rs`.
+The `Lab` struct holds a `Topology` being built and returns it from `.build()`.
+
+Tasks:
+
+- [ ] `Lab::new(name: &str) -> Self` — creates `Topology` with `LabConfig`
+- [ ] `Lab::description(self, desc: &str) -> Self`
+- [ ] `Lab::prefix(self, prefix: &str) -> Self`
+- [ ] `Lab::profile(self, name: &str, f: impl FnOnce(ProfileBuilder) -> ProfileBuilder) -> Self`
+- [ ] `ProfileBuilder` — `.sysctl(key, value)`, `.firewall(|f| ...)`, returns `Profile`
+- [ ] `Lab::node(self, name: &str, f: impl FnOnce(NodeBuilder) -> NodeBuilder) -> Self`
+- [ ] `NodeBuilder` — `.profile(name)`, `.interface(name, |i| ...)`, `.route(dest, |r| ...)`,
+      `.exec(cmd, args)`, `.vrf(name, |v| ...)`, `.wireguard(name, |w| ...)`
+- [ ] `InterfaceBuilder` — `.kind(k)`, `.address(cidr)`, `.vni(n)`, `.mtu(n)`
+- [ ] `RouteBuilder` — `.via(gw)`, `.dev(name)`, `.metric(n)`
+- [ ] `Lab::link(self, ep1: &str, ep2: &str, f: impl FnOnce(LinkBuilder) -> LinkBuilder) -> Self`
+- [ ] `LinkBuilder` — `.addresses(a, b)`, `.mtu(n)`
+- [ ] `Lab::network(self, name: &str, f: impl FnOnce(NetworkBuilder) -> NetworkBuilder) -> Self`
+- [ ] `NetworkBuilder` — `.kind(k)`, `.vlan_filtering(b)`, `.member(ep)`, `.vlan(id, |v| ...)`
+- [ ] `Lab::impair(self, endpoint: &str, f: impl FnOnce(ImpairmentBuilder) -> ImpairmentBuilder) -> Self`
+- [ ] `ImpairmentBuilder` — `.delay(d)`, `.jitter(j)`, `.loss(l)`, `.rate(r)`, `.corrupt(c)`, `.reorder(r)`
+- [ ] `Lab::rate_limit(self, endpoint: &str, f: impl FnOnce(RateLimitBuilder) -> RateLimitBuilder) -> Self`
+- [ ] `RateLimitBuilder` — `.egress(r)`, `.ingress(r)`, `.burst(b)`
+- [ ] `Lab::build(self) -> Topology`
+
+### Additional Parser Tests
+
+**File:** `crates/nlink-lab/src/parser.rs`
+
+- [ ] Test: parse the full datacenter-sim example from `NLINK_LAB.md` section 4.3
+- [ ] Test: parse VLAN trunk example (section 4.4)
+- [ ] Test: parse WireGuard VPN example (section 4.4)
+- [ ] Test: parse VRF multi-tenant example (section 4.4)
+- [ ] Test: parse VXLAN overlay example (section 4.4)
+- [ ] Test: malformed TOML returns `Error::TomlParse`
+- [ ] Test: empty file returns error (missing `[lab]`)
+
+### Builder Tests
+
+**File:** `crates/nlink-lab/src/builder.rs`
+
+- [ ] Test: builder produces same `Topology` as equivalent TOML
+- [ ] Test: builder with profiles, nodes, links, impairments, rate limits
+- [ ] Test: builder with networks and VLANs
+- [ ] Test: builder with VRF configuration
+- [ ] Test: builder with WireGuard configuration
+
+### Public API Updates
+
+**File:** `crates/nlink-lab/src/lib.rs`
+
+- [ ] Add `pub mod builder;`
+- [ ] Re-export `builder::Lab` (or `builder::LabBuilder`)

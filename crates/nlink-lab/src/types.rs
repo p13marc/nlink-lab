@@ -19,10 +19,10 @@
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Complete topology definition for a network lab.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Topology {
     /// Lab metadata.
     pub lab: LabConfig,
@@ -53,7 +53,7 @@ pub struct Topology {
 }
 
 /// Lab metadata.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LabConfig {
     /// Lab name (used for namespace prefix and state tracking).
     pub name: String,
@@ -73,7 +73,7 @@ impl LabConfig {
 }
 
 /// Reusable node template.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Profile {
     /// Sysctl values to apply.
     #[serde(default)]
@@ -84,7 +84,7 @@ pub struct Profile {
 }
 
 /// Node definition — becomes a network namespace.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Node {
     /// Profile to inherit from.
     pub profile: Option<String>,
@@ -118,7 +118,7 @@ pub struct Node {
 }
 
 /// Explicit interface configuration (for interfaces not created by links).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InterfaceConfig {
     /// Interface type (vxlan, bond, vlan, dummy, etc.).
     pub kind: Option<String>,
@@ -144,7 +144,7 @@ pub struct InterfaceConfig {
 }
 
 /// Route configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RouteConfig {
     /// Next-hop gateway address.
     pub via: Option<String>,
@@ -157,7 +157,7 @@ pub struct RouteConfig {
 }
 
 /// Point-to-point link between two nodes (creates a veth pair).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Link {
     /// Endpoints in `"node:interface"` format.
     pub endpoints: [String; 2],
@@ -170,7 +170,7 @@ pub struct Link {
 }
 
 /// Shared L2 segment (bridge network).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Network {
     /// Network type (currently only "bridge").
     pub kind: Option<String>,
@@ -198,14 +198,14 @@ pub struct Network {
 }
 
 /// VLAN definition within a network.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VlanConfig {
     /// Human-readable VLAN name.
     pub name: Option<String>,
 }
 
 /// Port configuration within a bridge network.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PortConfig {
     /// Interface name on the node.
     pub interface: Option<String>,
@@ -229,7 +229,7 @@ pub struct PortConfig {
 }
 
 /// Network impairment configuration (netem).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Impairment {
     /// Delay (e.g., "10ms", "100us").
     pub delay: Option<String>,
@@ -251,7 +251,7 @@ pub struct Impairment {
 }
 
 /// Per-interface rate limiting.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RateLimit {
     /// Egress rate (e.g., "1gbit").
     pub egress: Option<String>,
@@ -264,7 +264,7 @@ pub struct RateLimit {
 }
 
 /// Firewall configuration (nftables).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FirewallConfig {
     /// Default chain policy ("accept" or "drop").
     pub policy: Option<String>,
@@ -275,7 +275,7 @@ pub struct FirewallConfig {
 }
 
 /// A single firewall rule.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FirewallRule {
     /// Match expression (e.g., "tcp dport 80", "ct state established,related").
     #[serde(rename = "match")]
@@ -286,7 +286,7 @@ pub struct FirewallRule {
 }
 
 /// Process to execute in a node.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ExecConfig {
     /// Command and arguments.
     pub cmd: Vec<String>,
@@ -297,7 +297,7 @@ pub struct ExecConfig {
 }
 
 /// VRF (Virtual Routing and Forwarding) configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VrfConfig {
     /// Routing table ID.
     pub table: u32,
@@ -312,7 +312,7 @@ pub struct VrfConfig {
 }
 
 /// WireGuard interface configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WireguardConfig {
     /// Private key ("auto" to auto-generate).
     pub private_key: Option<String>,
@@ -363,6 +363,14 @@ impl std::fmt::Display for EndpointRef {
 }
 
 impl Topology {
+    /// Deploy this topology, creating all namespaces and network configuration.
+    ///
+    /// Validates the topology first, then creates the lab. Returns a
+    /// [`RunningLab`](crate::RunningLab) handle.
+    pub async fn deploy(&self) -> crate::Result<crate::running::RunningLab> {
+        crate::deploy::deploy(self).await
+    }
+
     /// Get the effective namespace name for a node.
     pub fn namespace_name(&self, node_name: &str) -> String {
         format!("{}-{}", self.lab.prefix(), node_name)

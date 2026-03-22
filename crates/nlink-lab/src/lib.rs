@@ -53,13 +53,20 @@
 //! └─────────────────────────────────┘
 //! ```
 
+pub mod deploy;
 pub mod error;
+pub mod helpers;
 pub mod parser;
+pub mod running;
+pub mod state;
 pub mod types;
+pub mod validator;
 
 pub use error::{Error, Result};
+pub use running::{ExecOutput, RunningLab};
 pub use types::{
     EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment, InterfaceConfig, LabConfig,
     Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig, Topology, VlanConfig,
     VrfConfig, WireguardConfig,
 };
+pub use validator::{Severity, ValidationIssue, ValidationResult};

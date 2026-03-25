@@ -329,8 +329,8 @@ dependencies = [
 
 [[package]]
 name = "nlink"
-version = "0.9.0"
-source = "git+https://github.com/p13marc/nlink#01d6a5aaaf64d7dd095b87c99261e070b1262e09"
+version = "0.10.0"
+source = "git+https://github.com/p13marc/nlink#481a12e2a19e81708f4c68e7bca24971524a1233"
 dependencies = [
  "bytes",
  "inotify",

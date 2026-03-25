@@ -189,7 +189,7 @@ pub struct Network {
     pub members: Vec<String>,
 
     /// VLAN definitions.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_u16_keys")]
     pub vlans: HashMap<u16, VlanConfig>,
 
     /// Port configurations.
@@ -327,6 +327,26 @@ pub struct WireguardConfig {
     /// Peer node names (resolved during deployment).
     #[serde(default)]
     pub peers: Vec<String>,
+}
+
+// ─────────────────────────────────────────────────
+// Serde helpers
+// ─────────────────────────────────────────────────
+
+/// Deserialize a `HashMap<u16, V>` from TOML tables where keys are strings.
+fn deserialize_u16_keys<'de, V, D>(deserializer: D) -> std::result::Result<HashMap<u16, V>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    let string_map: HashMap<String, V> = HashMap::deserialize(deserializer)?;
+    string_map
+        .into_iter()
+        .map(|(k, v)| {
+            let key: u16 = k.parse().map_err(serde::de::Error::custom)?;
+            Ok((key, v))
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────

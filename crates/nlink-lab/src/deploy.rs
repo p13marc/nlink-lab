@@ -356,24 +356,11 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         let sysctls = topology.effective_sysctls(node);
         if !sysctls.is_empty() {
             let ns_name = &namespace_names[node_name];
-            // Use execute_in to write sysctls via /proc/sys
-            namespace::execute_in(ns_name, || {
-                for (key, value) in &sysctls {
-                    let path = format!("/proc/sys/{}", key.replace('.', "/"));
-                    if let Err(e) = std::fs::write(&path, value) {
-                        return Err(nlink::Error::InvalidMessage(format!(
-                            "failed to set sysctl '{key}' = '{value}': {e}"
-                        )));
-                    }
-                }
-                Ok::<(), nlink::Error>(())
-            })
-            .map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to apply sysctls for node '{node_name}': {e}"
-                ))
-            })?
-            .map_err(|e| {
+            let entries: Vec<(&str, &str)> = sysctls
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            namespace::set_sysctls(ns_name, &entries).map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to apply sysctls for node '{node_name}': {e}"
                 ))
@@ -471,9 +458,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             cmd.args(&exec_config.cmd[1..]);
 
             if exec_config.background {
-                // Spawn in namespace using pre_exec + setns
-                let ns_path = format!("/var/run/netns/{ns_name}");
-                let child = spawn_in_namespace(&ns_path, cmd).map_err(|e| {
+                let child = namespace::spawn(ns_name, cmd).map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to spawn background process on '{node_name}' exec[{i}]: {e}"
                     ))
@@ -481,8 +466,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 pids.push((node_name.clone(), child.id()));
             } else {
                 // Run and wait for completion
-                let ns_path = format!("/var/run/netns/{ns_name}");
-                let output = spawn_output_in_namespace(&ns_path, cmd).map_err(|e| {
+                let output = namespace::spawn_output(ns_name, cmd).map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to run command on '{node_name}' exec[{i}]: {e}"
                     ))
@@ -621,7 +605,7 @@ fn apply_match_expr(
 
     if expr.starts_with("ct state ") {
         let states = expr.trim_start_matches("ct state ").trim();
-        let mut ct = CtState(0);
+        let mut ct = CtState::empty();
         for state in states.split(',') {
             match state.trim() {
                 "established" => ct = ct | CtState::ESTABLISHED,
@@ -748,52 +732,6 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
     }
 
     Ok(netem)
-}
-
-/// Spawn a process in a namespace using pre_exec + setns.
-fn spawn_in_namespace(
-    ns_path: &str,
-    mut cmd: std::process::Command,
-) -> Result<std::process::Child> {
-    use std::os::unix::process::CommandExt;
-
-    let ns_path = ns_path.to_string();
-    // SAFETY: pre_exec runs between fork and exec in the child process.
-    // We open the namespace file and call setns to switch the child's network namespace.
-    unsafe {
-        cmd.pre_exec(move || {
-            let file = std::fs::File::open(&ns_path)?;
-            let ret = libc::setns(std::os::fd::AsRawFd::as_raw_fd(&file), libc::CLONE_NEWNET);
-            if ret < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-
-    cmd.spawn().map_err(|e| Error::deploy_failed(format!("spawn failed: {e}")))
-}
-
-/// Spawn a process in a namespace and wait for output.
-fn spawn_output_in_namespace(
-    ns_path: &str,
-    mut cmd: std::process::Command,
-) -> Result<std::process::Output> {
-    use std::os::unix::process::CommandExt;
-
-    let ns_path = ns_path.to_string();
-    unsafe {
-        cmd.pre_exec(move || {
-            let file = std::fs::File::open(&ns_path)?;
-            let ret = libc::setns(std::os::fd::AsRawFd::as_raw_fd(&file), libc::CLONE_NEWNET);
-            if ret < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-
-    cmd.output().map_err(|e| Error::deploy_failed(format!("spawn failed: {e}")))
 }
 
 fn now_iso8601() -> String {

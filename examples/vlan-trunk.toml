@@ -1,0 +1,79 @@
+# VLAN trunk topology.
+#
+# A central switch (bridge with VLAN filtering) connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+# The switch performs L2 forwarding with VLAN isolation.
+
+[lab]
+name = "vlan-trunk"
+description = "Bridge with VLAN trunking and access ports"
+
+# ── Profiles ────────────────────────────────────────
+
+[profiles.switch]
+sysctls = { "net.ipv4.ip_forward" = "1" }
+
+# ── Nodes ───────────────────────────────────────────
+
+[nodes.switch]
+profile = "switch"
+
+[nodes.host1]
+
+[nodes.host1.routes]
+default = { via = "10.100.0.1" }
+
+[nodes.host2]
+
+[nodes.host2.routes]
+default = { via = "10.100.0.1" }
+
+[nodes.host3]
+
+[nodes.host3.routes]
+default = { via = "10.200.0.1" }
+
+# ── Links (switch ↔ hosts) ──────────────────────────
+
+[[links]]
+endpoints = ["switch:eth1", "host1:eth0"]
+addresses = ["10.100.0.1/24", "10.100.0.10/24"]
+
+[[links]]
+endpoints = ["switch:eth2", "host2:eth0"]
+addresses = ["10.100.0.1/24", "10.100.0.20/24"]
+
+[[links]]
+endpoints = ["switch:eth3", "host3:eth0"]
+addresses = ["10.200.0.1/24", "10.200.0.10/24"]
+
+# ── Bridge network ──────────────────────────────────
+# All switch ports participate in a VLAN-aware bridge.
+# VLAN 100: host1 + host2 (access ports, untagged)
+# VLAN 200: host3 (access port, untagged)
+
+[networks.fabric]
+vlan_filtering = true
+members = ["switch:br0"]
+
+[networks.fabric.vlans]
+100 = { name = "sales" }
+200 = { name = "engineering" }
+
+[networks.fabric.ports.host1]
+interface = "eth1"
+vlans = [100]
+pvid = 100
+untagged = true
+
+[networks.fabric.ports.host2]
+interface = "eth2"
+vlans = [100]
+pvid = 100
+untagged = true
+
+[networks.fabric.ports.host3]
+interface = "eth3"
+vlans = [200]
+pvid = 200
+untagged = true

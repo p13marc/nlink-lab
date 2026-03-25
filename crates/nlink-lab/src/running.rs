@@ -92,12 +92,13 @@ impl RunningLab {
     /// Execute a command in a lab node and collect output.
     pub fn exec(&self, node: &str, cmd: &str, args: &[&str]) -> Result<ExecOutput> {
         let ns_name = self.namespace_for(node)?;
-        let ns_path = format!("/var/run/netns/{ns_name}");
 
         let mut command = std::process::Command::new(cmd);
         command.args(args);
 
-        let output = spawn_output_in_namespace(&ns_path, command)?;
+        let output = namespace::spawn_output(ns_name, command).map_err(|e| {
+            Error::deploy_failed(format!("exec in '{node}' failed: {e}"))
+        })?;
 
         Ok(ExecOutput {
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -112,12 +113,13 @@ impl RunningLab {
             return Err(Error::invalid_topology("empty command"));
         }
         let ns_name = self.namespace_for(node)?;
-        let ns_path = format!("/var/run/netns/{ns_name}");
 
         let mut command = std::process::Command::new(cmd[0]);
         command.args(&cmd[1..]);
 
-        let child = spawn_in_namespace(&ns_path, command)?;
+        let child = namespace::spawn(ns_name, command).map_err(|e| {
+            Error::deploy_failed(format!("spawn in '{node}' failed: {e}"))
+        })?;
         let pid = child.id();
         self.pids.push((node.to_string(), pid));
         Ok(pid)
@@ -210,52 +212,6 @@ impl RunningLab {
             })
             .collect()
     }
-}
-
-/// Spawn a process in a namespace using pre_exec + setns.
-fn spawn_in_namespace(
-    ns_path: &str,
-    mut cmd: std::process::Command,
-) -> Result<std::process::Child> {
-    use std::os::unix::process::CommandExt;
-
-    let ns_path = ns_path.to_string();
-    unsafe {
-        cmd.pre_exec(move || {
-            let file = std::fs::File::open(&ns_path)?;
-            let ret = libc::setns(std::os::fd::AsRawFd::as_raw_fd(&file), libc::CLONE_NEWNET);
-            if ret < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-
-    cmd.spawn()
-        .map_err(|e| Error::deploy_failed(format!("spawn failed: {e}")))
-}
-
-/// Spawn a process in a namespace and wait for output.
-fn spawn_output_in_namespace(
-    ns_path: &str,
-    mut cmd: std::process::Command,
-) -> Result<std::process::Output> {
-    use std::os::unix::process::CommandExt;
-
-    let ns_path = ns_path.to_string();
-    unsafe {
-        cmd.pre_exec(move || {
-            let file = std::fs::File::open(&ns_path)?;
-            let ret = libc::setns(std::os::fd::AsRawFd::as_raw_fd(&file), libc::CLONE_NEWNET);
-            if ret < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-
-    cmd.output()
-        .map_err(|e| Error::deploy_failed(format!("spawn failed: {e}")))
 }
 
 /// Best-effort kill of a process.

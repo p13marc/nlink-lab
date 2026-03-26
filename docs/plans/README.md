@@ -18,7 +18,7 @@ Implementation plans for nlink-lab.
 | State persistence | `state.rs` | Done |
 | CLI (8 commands) | `bins/lab/src/main.rs` | Done |
 
-### Plan 060: NLL Parser (67 tests)
+### Plan 060: NLL Parser (68 tests)
 
 | Component | Files | Status |
 |-----------|-------|--------|
@@ -31,20 +31,26 @@ Implementation plans for nlink-lab.
 | NLL example files (9) | `examples/*.nll` | Done |
 | Equivalence tests (6) | `parser/nll/lower.rs` | Done |
 
+### Plan 052: Ecosystem (12 integration tests)
+
+| Component | Files | Status |
+|-----------|-------|--------|
+| Example topologies (9 TOML + 9 NLL) | `examples/` | Done |
+| `#[lab_test]` proc macro | `crates/nlink-lab-macros/` | Done |
+| Integration tests (12) | `crates/nlink-lab/tests/integration.rs` | Done |
+| README.md | `README.md` | Done |
+
 ## Active Plans
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
 | [050](050-advanced-interface-types.md) | VRF, WireGuard, bond, VLAN, bridge VLAN ports | Medium | 2-3 days |
 | [051](051-phase3-advanced-features.md) | Runtime impairment CLI, diagnostics, capture, graph, process mgr | Medium | 3-5 days |
-| [052](052-phase4-ecosystem.md) | Example topologies, `#[lab_test]` macro, integration tests, docs | High | 5-7 days |
 
 ### Recommended Order
 
-1. **052 — Examples + integration tests** — prove the deployer works end-to-end, most impactful
-2. **050 — VRF + WireGuard** — unlock the more complex topology examples
-3. **051 — CLI commands** — impair, diagnose, capture (polish)
-4. **052 — Test macro + docs** — ecosystem maturity
+1. **050 — VRF + WireGuard** — unlock the more complex topology examples
+2. **051 — CLI commands** — impair, diagnose, capture (polish)
 
 ## Reference
 

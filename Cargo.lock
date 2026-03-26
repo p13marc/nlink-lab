@@ -490,6 +490,7 @@ dependencies = [
  "logos",
  "miette",
  "nlink",
+ "nlink-lab-macros",
  "serde",
  "serde_json",
  "tempfile",
@@ -511,6 +512,15 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "nlink-lab-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

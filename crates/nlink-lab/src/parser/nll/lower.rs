@@ -1,7 +1,7 @@
 //! Lowering pass: AST → Topology.
 //!
 //! Expands `for` loops, substitutes `let` variables, resolves profiles,
-//! and maps AST nodes to the [`Topology`] struct.
+//! and maps AST nodes to the [`crate::types::Topology`] struct.
 
 use std::collections::HashMap;
 

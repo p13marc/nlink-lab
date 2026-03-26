@@ -72,3 +72,6 @@ pub use types::{
     VrfConfig, WireguardConfig,
 };
 pub use validator::{Severity, ValidationIssue, ValidationResult};
+
+/// Proc macro for integration testing. See [`lab_test`] for details.
+pub use nlink_lab_macros::lab_test;

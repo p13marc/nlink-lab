@@ -34,15 +34,15 @@ self-contained, validated by CI, and documented with comments.
 
 ### Progress
 
-- [ ] `spine-leaf.toml` — copy from NLINK_LAB.md section 4.3 datacenter-sim
-- [ ] `wan-impairment.toml` — two routers + two hosts, WAN link with impairment
-- [ ] `vlan-trunk.toml` — from NLINK_LAB.md section 4.4 VLAN example
-- [ ] `vrf-multitenant.toml` — from NLINK_LAB.md section 4.4 VRF example
-- [ ] `wireguard-vpn.toml` — from NLINK_LAB.md section 4.4 WireGuard example
-- [ ] `vxlan-overlay.toml` — from NLINK_LAB.md section 4.4 VXLAN example
-- [ ] `firewall.toml` — server with stateful firewall
-- [ ] `iperf-benchmark.toml` — two nodes with iperf3 and shaped link
-- [ ] CI: validate all examples parse (`nlink-lab validate examples/*.toml`)
+- [x] `spine-leaf.toml` + `.nll`
+- [x] `wan-impairment.toml` + `.nll`
+- [x] `vlan-trunk.toml` + `.nll`
+- [x] `vrf-multitenant.toml` + `.nll`
+- [x] `wireguard-vpn.toml` + `.nll`
+- [x] `vxlan-overlay.toml` + `.nll`
+- [x] `firewall.toml` + `.nll`
+- [x] `iperf-benchmark.toml` + `.nll`
+- [x] CI: validate all examples parse (test in `parser/toml.rs` + `parser/nll/lower.rs`)
 
 ## 2. Test Harness Proc Macro
 
@@ -150,15 +150,15 @@ if unsafe { libc::geteuid() } != 0 {
 
 ### Progress
 
-- [ ] Create `crates/nlink-lab-macros/` crate
-- [ ] Add to workspace `Cargo.toml`
-- [ ] Implement `#[lab_test("file.toml")]` — file-based topology
-- [ ] Implement `#[lab_test(topology = "fn")]` — function-based topology
-- [ ] `LabGuard` for panic-safe cleanup
-- [ ] Root/capability check with skip
-- [ ] Re-export from `nlink-lab` crate: `pub use nlink_lab_macros::lab_test;`
-- [ ] Test: basic macro expansion works
-- [ ] Test: lab deploys and destroys around test body
+- [x] Create `crates/nlink-lab-macros/` crate
+- [x] Add to workspace `Cargo.toml`
+- [x] Implement `#[lab_test("file.toml")]` — file-based topology
+- [x] Implement `#[lab_test(topology = fn)]` — function-based topology
+- [x] `LabGuard` for panic-safe cleanup
+- [x] Root/capability check with skip
+- [x] Re-export from `nlink-lab` crate: `pub use nlink_lab_macros::lab_test;`
+- [x] Test: basic macro expansion works (12 integration tests compile and run)
+- [ ] Test: lab deploys and destroys around test body (requires root CI)
 
 ## 3. Integration Tests
 
@@ -207,17 +207,19 @@ fn unique_lab_name(base: &str) -> String {
 
 ### Progress
 
-- [ ] Test infrastructure (require_root, unique_lab_name)
-- [ ] `deploy_minimal` — namespaces exist after deploy
-- [ ] `exec_ping` — ping between two nodes
-- [ ] `deploy_with_addresses` — ip addr shows correct addresses
-- [ ] `deploy_with_routes` — ip route shows correct routes
-- [ ] `deploy_with_sysctls` — sysctl values correct
-- [ ] `deploy_with_netem` — tc qdisc shows netem
-- [ ] `destroy_cleanup` — no namespaces after destroy
-- [ ] `state_persistence` — load from state matches deploy
-- [ ] `deploy_bridge` — L2 connectivity through bridge
-- [ ] `deploy_firewall` — nftables rules exist in namespace
+- [x] Test infrastructure (root skip + unique lab names via `#[lab_test]` macro)
+- [x] `deploy_simple_toml` / `deploy_simple_nll` — deploy from both formats
+- [x] `exec_ping` — ping between two nodes
+- [x] `exec_ip_addr` — ip addr shows correct addresses
+- [x] `exec_ip_route` — ip route shows correct routes
+- [x] `sysctl_forwarding` — sysctl values correct
+- [x] `netem_applied` — tc qdisc shows netem
+- [x] `exit_code_forwarded` — failing command returns non-zero
+- [x] `state_persistence` — load from state matches deploy
+- [x] `deploy_from_builder` — builder DSL topology
+- [x] `deploy_firewall` — nftables rules exist in namespace
+- [x] `deploy_spine_leaf` — 6-node datacenter fabric
+- [ ] `deploy_bridge` — L2 connectivity through bridge (needs plan 050)
 
 ## 4. Documentation
 
@@ -234,12 +236,10 @@ The crate already has doc comments on all public types and functions. Ensure
 
 ### User Guide (README.md at repo root)
 
-Currently there's no top-level README. Create one covering:
-
-- [ ] What nlink-lab is (one paragraph)
-- [ ] Quick start: install, deploy simple lab, exec, destroy
-- [ ] Topology file format overview (link to NLINK_LAB.md for details)
-- [ ] Builder DSL example
-- [ ] Testing with `#[lab_test]`
+- [x] What nlink-lab is (one paragraph)
+- [x] Quick start: install, deploy simple lab, exec, destroy
+- [x] Topology file format overview (TOML + NLL with examples)
+- [x] Builder DSL example
+- [x] Testing with `#[lab_test]`
 - [ ] Comparison with containerlab (brief table)
-- [ ] Requirements (Linux, root/CAP_NET_ADMIN, kernel version)
+- [x] Requirements (Linux, root/CAP_NET_ADMIN, kernel version)

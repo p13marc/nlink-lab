@@ -76,7 +76,7 @@ pub struct ValidationIssue {
     pub rule: &'static str,
     /// Human-readable description.
     pub message: String,
-    /// Location in the topology (e.g., "links[2].endpoints[0]").
+    /// Location in the topology (e.g., `links.endpoints`).
     pub location: Option<String>,
 }
 

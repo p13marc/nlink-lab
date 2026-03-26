@@ -19,7 +19,9 @@ tracing = { workspace = true }
 logos = "0.15"
 winnow = "0.7"
 miette = { version = "7", features = ["fancy"] }
+nlink-lab-macros = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
+libc = { workspace = true }
 tempfile = "3"

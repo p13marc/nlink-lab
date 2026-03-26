@@ -1,6 +1,6 @@
 //! AST types for the NLL language.
 //!
-//! These types represent the parsed syntax tree before lowering to [`Topology`].
+//! These types represent the parsed syntax tree before lowering to [`crate::types::Topology`].
 //! The AST preserves `for` loops and `let` bindings for expansion during lowering.
 
 /// A complete NLL file.

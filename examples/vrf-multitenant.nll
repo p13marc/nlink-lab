@@ -1,0 +1,28 @@
+# VRF multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant traffic.
+# Tenant A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each have a host connected to the PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 10.10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10/24 }

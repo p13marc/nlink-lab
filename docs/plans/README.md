@@ -2,21 +2,34 @@
 
 Implementation plans for nlink-lab.
 
-## Completed — Phase 2: Core Lab Engine
+## Completed
 
-Phase 2 is done. All core functionality is implemented and tested (65 tests).
+### Phase 2: Core Lab Engine (65 tests)
 
 | Component | Files | Status |
 |-----------|-------|--------|
 | Topology types + Serialize | `types.rs` | Done |
-| TOML parser | `parser.rs` | Done |
+| TOML parser | `parser/toml.rs` | Done |
 | Builder DSL | `builder.rs` | Done |
 | Value helpers | `helpers.rs` | Done |
 | Validator (14 rules) | `validator.rs` | Done |
 | Deployer (steps 3-18) | `deploy.rs` | Done |
 | RunningLab | `running.rs` | Done |
 | State persistence | `state.rs` | Done |
-| CLI (5 commands) | `bins/lab/src/main.rs` | Done |
+| CLI (8 commands) | `bins/lab/src/main.rs` | Done |
+
+### Plan 060: NLL Parser (67 tests)
+
+| Component | Files | Status |
+|-----------|-------|--------|
+| Lexer (logos) | `parser/nll/lexer.rs` | Done |
+| AST types | `parser/nll/ast.rs` | Done |
+| Parser | `parser/nll/parser.rs` | Done |
+| Lowering (AST → Topology) | `parser/nll/lower.rs` | Done |
+| Format dispatch | `parser/mod.rs` | Done |
+| miette error diagnostics | `error.rs` | Done |
+| NLL example files (9) | `examples/*.nll` | Done |
+| Equivalence tests (6) | `parser/nll/lower.rs` | Done |
 
 ## Active Plans
 

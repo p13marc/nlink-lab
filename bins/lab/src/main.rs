@@ -14,9 +14,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Deploy a lab from a topology file.
+    /// Deploy a lab from a topology file (.toml or .nll).
     Deploy {
-        /// Path to the topology TOML file.
+        /// Path to the topology file (.toml or .nll).
         topology: PathBuf,
 
         /// Validate only, don't actually deploy.
@@ -59,7 +59,7 @@ enum Commands {
 
     /// Validate a topology file without deploying.
     Validate {
-        /// Path to the topology TOML file.
+        /// Path to the topology file (.toml or .nll).
         topology: PathBuf,
     },
 
@@ -94,7 +94,7 @@ enum Commands {
 
     /// Print topology as DOT graph.
     Graph {
-        /// Path to the topology TOML file.
+        /// Path to the topology file (.toml or .nll).
         topology: PathBuf,
     },
 
@@ -117,6 +117,11 @@ fn main() -> ExitCode {
     let rt = tokio::runtime::Runtime::new().unwrap();
     match rt.block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
+        Err(nlink_lab::Error::NllDiagnostic(diag)) => {
+            let report = miette::Report::new(diag);
+            eprintln!("{report:?}");
+            ExitCode::FAILURE
+        }
         Err(e) => {
             eprintln!("error: {e}");
             ExitCode::FAILURE

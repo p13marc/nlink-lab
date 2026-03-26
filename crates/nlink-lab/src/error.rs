@@ -44,6 +44,14 @@ pub enum Error {
     #[error("invalid endpoint '{endpoint}': expected 'node:interface' format")]
     InvalidEndpoint { endpoint: String },
 
+    /// NLL parse error (plain message, no source context).
+    #[error("NLL parse error: {0}")]
+    NllParse(String),
+
+    /// NLL parse error with source context for rich diagnostics.
+    #[error("{}", .0)]
+    NllDiagnostic(#[from] NllDiagnostic),
+
     /// Invalid topology file.
     #[error("invalid topology: {0}")]
     InvalidTopology(String),
@@ -55,6 +63,29 @@ pub enum Error {
     /// State file error.
     #[error("state error: {message} (path: {path})")]
     State { message: String, path: PathBuf },
+}
+
+/// Rich NLL parse error with source context for miette rendering.
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+#[error("{message}")]
+pub struct NllDiagnostic {
+    /// Error message.
+    pub message: String,
+
+    /// Source code for context.
+    #[source_code]
+    pub src: miette::NamedSource<String>,
+
+    /// Span pointing to the error location.
+    #[label("{label}")]
+    pub span: miette::SourceSpan,
+
+    /// Label for the error span.
+    pub label: String,
+
+    /// Help text.
+    #[help]
+    pub help: Option<String>,
 }
 
 impl Error {

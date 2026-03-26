@@ -1,16 +1,6 @@
 //! TOML topology parser.
 //!
-//! Parses topology files into [`Topology`] structs.
-//!
-//! # Example
-//!
-//! ```ignore
-//! use nlink_lab::parser;
-//!
-//! let topology = parser::parse_file("datacenter.toml")?;
-//! println!("Lab: {}", topology.lab.name);
-//! println!("Nodes: {}", topology.nodes.len());
-//! ```
+//! Parses topology files in TOML format into [`Topology`] structs.
 
 use std::path::Path;
 
@@ -18,26 +8,6 @@ use crate::error::Result;
 use crate::types::Topology;
 
 /// Parse a TOML string into a topology.
-///
-/// # Example
-///
-/// ```ignore
-/// use nlink_lab::parser;
-///
-/// let toml = r#"
-/// [lab]
-/// name = "test"
-///
-/// [nodes.a]
-/// [nodes.b]
-///
-/// [[links]]
-/// endpoints = ["a:eth0", "b:eth0"]
-/// "#;
-///
-/// let topology = parser::parse(toml)?;
-/// assert_eq!(topology.lab.name, "test");
-/// ```
 pub fn parse(toml_str: &str) -> Result<Topology> {
     let topology: Topology = toml::from_str(toml_str)?;
     Ok(topology)
@@ -274,7 +244,6 @@ name = "dc"
 
     #[test]
     fn test_parse_datacenter_sim() {
-        // Full datacenter-sim example from NLINK_LAB.md section 4.3
         let toml = r#"
 [lab]
 name = "datacenter-sim"

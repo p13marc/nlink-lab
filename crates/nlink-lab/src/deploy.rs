@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 use std::net::IpAddr;
+use nlink::netlink::bridge_vlan::BridgeVlanBuilder;
 use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::netlink::tc::NetemConfig;
-use nlink::{Connection, Route};
+use nlink::{Connection, Route, Wireguard};
 
 use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_duration, parse_percent, parse_rate_bps};
@@ -149,6 +150,36 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                             "failed to bring up bridge port '{peer_name}': {e}"
                         ))
                     })?;
+
+                // Apply VLAN configuration for this port if defined
+                if let Some(port_config) = network.ports.get(&ep.node) {
+                    // Apply tagged VLANs
+                    for &vid in &port_config.vlans {
+                        let mut vlan = BridgeVlanBuilder::new(vid).dev(&peer_name);
+                        if port_config.untagged == Some(true) {
+                            vlan = vlan.untagged();
+                        }
+                        if Some(vid) == port_config.pvid {
+                            vlan = vlan.pvid().untagged();
+                        }
+                        mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to add VLAN {vid} to port '{peer_name}' on bridge '{bridge_name}': {e}"
+                            ))
+                        })?;
+                    }
+                    // Apply PVID if not already covered by vlans list
+                    if let Some(pvid) = port_config.pvid {
+                        if !port_config.vlans.contains(&pvid) {
+                            let vlan = BridgeVlanBuilder::new(pvid).dev(&peer_name).pvid().untagged();
+                            mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
+                                Error::deploy_failed(format!(
+                                    "failed to add PVID {pvid} to port '{peer_name}' on bridge '{bridge_name}': {e}"
+                                ))
+                            })?;
+                        }
+                    }
+                }
             }
         }
     }
@@ -248,6 +279,34 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         ))
                     })?;
                 }
+                Some("bond") => {
+                    conn.add_link(nlink::netlink::link::BondLink::new(iface_name))
+                        .await
+                        .map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to create bond interface '{iface_name}' on node '{node_name}': {e}"
+                            ))
+                        })?;
+                }
+                Some("vlan") => {
+                    let parent = iface_config.parent.as_deref().ok_or_else(|| {
+                        Error::invalid_topology(format!(
+                            "vlan interface '{iface_name}' on node '{node_name}' missing parent"
+                        ))
+                    })?;
+                    let vid = iface_config.vni.ok_or_else(|| {
+                        Error::invalid_topology(format!(
+                            "vlan interface '{iface_name}' on node '{node_name}' missing vni (VLAN ID)"
+                        ))
+                    })? as u16;
+                    conn.add_link(nlink::netlink::link::VlanLink::new(iface_name, parent, vid))
+                        .await
+                        .map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to create vlan '{iface_name}' on node '{node_name}': {e}"
+                            ))
+                        })?;
+                }
                 // loopback or no kind — skip creation (lo exists already, addresses set in step 9)
                 None => {}
                 Some(kind) => {
@@ -268,6 +327,54 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     })?;
                 }
             }
+        }
+    }
+
+    // ── Step 6b: Create VRF interfaces ─────────────────────────────
+    for (node_name, node) in &topology.nodes {
+        if node.vrfs.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        for (vrf_name, vrf_config) in &node.vrfs {
+            conn.add_link(nlink::netlink::link::VrfLink::new(vrf_name, vrf_config.table))
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to create VRF '{vrf_name}' on node '{node_name}': {e}"
+                    ))
+                })?;
+            conn.set_link_up(vrf_name).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up VRF '{vrf_name}' on node '{node_name}': {e}"
+                ))
+            })?;
+        }
+    }
+
+    // ── Step 6c: Create WireGuard interfaces ─────────────────────
+    // Phase 1: Create the netlink interfaces (configuration happens after Step 10)
+    for (node_name, node) in &topology.nodes {
+        if node.wireguard.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        for wg_name in node.wireguard.keys() {
+            conn.add_link(nlink::netlink::link::WireguardLink::new(wg_name))
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to create WireGuard interface '{wg_name}' on node '{node_name}': {e}"
+                    ))
+                })?;
         }
     }
 
@@ -332,6 +439,36 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // From WireGuard interfaces
+    for (node_name, node) in &topology.nodes {
+        if node.wireguard.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        for (wg_name, wg_config) in &node.wireguard {
+            let iface_ref = nlink::netlink::InterfaceRef::Name(wg_name.clone());
+            let idx = conn.resolve_interface(&iface_ref).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "cannot resolve WireGuard interface '{wg_name}' on '{node_name}': {e}"
+                ))
+            })?;
+            for addr_str in &wg_config.addresses {
+                let (ip, prefix) = parse_cidr(addr_str)?;
+                conn.add_address_by_index(idx, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{ip}'/{prefix} to WireGuard '{wg_name}' on '{node_name}': {e}"
+                        ))
+                    })?;
+            }
+        }
+    }
+
     // ── Step 10: Bring interfaces up ───────────────────────────────
     for (node_name, _) in &topology.nodes {
         let ns_name = &namespace_names[node_name];
@@ -348,6 +485,186 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     link_msg.ifindex()
                 ))
             })?;
+        }
+    }
+
+    // ── Step 10b: Enslave bond members ─────────────────────────────
+    for (node_name, node) in &topology.nodes {
+        let ns_name = &namespace_names[node_name];
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        for (iface_name, iface_config) in &node.interfaces {
+            if iface_config.kind.as_deref() != Some("bond") || iface_config.members.is_empty() {
+                continue;
+            }
+            for member in &iface_config.members {
+                // Members must be down to be enslaved to a bond
+                conn.set_link_down(member).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to bring down '{member}' for bond enslavement on '{node_name}': {e}"
+                    ))
+                })?;
+                conn.set_link_master(member, iface_name).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to enslave '{member}' to bond '{iface_name}' on '{node_name}': {e}"
+                    ))
+                })?;
+                conn.set_link_up(member).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to bring up '{member}' after bond enslavement on '{node_name}': {e}"
+                    ))
+                })?;
+            }
+        }
+    }
+
+    // ── Step 10c: Enslave interfaces to VRFs ─────────────────────
+    for (node_name, node) in &topology.nodes {
+        if node.vrfs.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        for (vrf_name, vrf_config) in &node.vrfs {
+            for iface in &vrf_config.interfaces {
+                conn.set_link_master(iface, vrf_name).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to enslave '{iface}' to VRF '{vrf_name}' on '{node_name}': {e}"
+                    ))
+                })?;
+            }
+        }
+    }
+
+    // ── Step 10d: Configure WireGuard devices ────────────────────
+    // Phase 2: Generate keys and configure peers.
+    // We collect all generated public keys first, then configure peers.
+    let mut wg_public_keys: HashMap<String, HashMap<String, [u8; 32]>> = HashMap::new();
+
+    // First pass: set private keys and listen ports, collect public keys
+    for (node_name, node) in &topology.nodes {
+        if node.wireguard.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let _guard = namespace::enter(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("failed to enter namespace '{ns_name}': {e}"))
+        })?;
+        let wg_conn = Connection::<Wireguard>::new_async().await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to create WireGuard connection for '{node_name}': {e}"
+            ))
+        })?;
+
+        let mut node_keys = HashMap::new();
+        for (wg_name, wg_config) in &node.wireguard {
+            let private_key = match wg_config.private_key.as_deref() {
+                Some("auto") | None => generate_wg_private_key(),
+                Some(key_str) => decode_wg_key(key_str).map_err(|e| {
+                    Error::invalid_topology(format!(
+                        "invalid WireGuard private key for '{wg_name}' on '{node_name}': {e}"
+                    ))
+                })?,
+            };
+
+            let public_key = derive_wg_public_key(&private_key);
+            node_keys.insert(wg_name.clone(), public_key);
+
+            wg_conn
+                .set_device(wg_name.as_str(), |dev| {
+                    let mut dev = dev.private_key(private_key);
+                    if let Some(port) = wg_config.listen_port {
+                        dev = dev.listen_port(port);
+                    }
+                    dev
+                })
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to configure WireGuard '{wg_name}' on '{node_name}': {e}"
+                    ))
+                })?;
+        }
+        wg_public_keys.insert(node_name.clone(), node_keys);
+    }
+
+    // Second pass: configure peers
+    for (node_name, node) in &topology.nodes {
+        if node.wireguard.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let _guard = namespace::enter(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("failed to enter namespace '{ns_name}': {e}"))
+        })?;
+        let wg_conn = Connection::<Wireguard>::new_async().await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to create WireGuard connection for '{node_name}': {e}"
+            ))
+        })?;
+
+        for (wg_name, wg_config) in &node.wireguard {
+            if wg_config.peers.is_empty() {
+                continue;
+            }
+
+            for peer_node_name in &wg_config.peers {
+                // Find the peer's WireGuard public key and endpoint
+                let peer_keys = wg_public_keys.get(peer_node_name).ok_or_else(|| {
+                    Error::invalid_topology(format!(
+                        "WireGuard peer '{peer_node_name}' referenced by '{node_name}'.{wg_name} has no WireGuard interfaces"
+                    ))
+                })?;
+
+                // Find the matching WG interface on the peer (first one that lists us as a peer)
+                let peer_node = &topology.nodes[peer_node_name];
+                for (peer_wg_name, peer_wg_config) in &peer_node.wireguard {
+                    if !peer_wg_config.peers.contains(node_name) {
+                        continue;
+                    }
+                    let peer_pubkey = peer_keys.get(peer_wg_name).ok_or_else(|| {
+                        Error::deploy_failed(format!(
+                            "missing public key for '{peer_node_name}'.{peer_wg_name}"
+                        ))
+                    })?;
+
+                    let mut peer_builder = nlink::netlink::genl::wireguard::WgPeerBuilder::new(*peer_pubkey);
+
+                    // Set endpoint if peer has a listen port and an address we can reach
+                    if let Some(port) = peer_wg_config.listen_port {
+                        // Try to find a reachable address for the peer from link addresses
+                        if let Some(addr) = find_peer_endpoint(topology, peer_node_name) {
+                            let endpoint = std::net::SocketAddr::new(addr, port);
+                            peer_builder = peer_builder.endpoint(endpoint);
+                        }
+                    }
+
+                    // Add allowed IPs from the peer's WireGuard addresses
+                    for addr_str in &peer_wg_config.addresses {
+                        if let Ok((ip, prefix)) = parse_cidr(addr_str) {
+                            let allowed_ip = match ip {
+                                IpAddr::V4(v4) => nlink::netlink::genl::wireguard::AllowedIp::v4(v4, prefix),
+                                IpAddr::V6(v6) => nlink::netlink::genl::wireguard::AllowedIp::v6(v6, prefix),
+                            };
+                            peer_builder = peer_builder.allowed_ip(allowed_ip);
+                        }
+                    }
+
+                    wg_conn
+                        .set_device(wg_name.as_str(), |dev| dev.peer(peer_builder))
+                        .await
+                        .map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to add peer '{peer_node_name}' to WireGuard '{wg_name}' on '{node_name}': {e}"
+                            ))
+                        })?;
+                }
+            }
         }
     }
 
@@ -380,6 +697,24 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
         for (dest, route_config) in &node.routes {
             add_route(&conn, node_name, dest, route_config).await?;
+        }
+    }
+
+    // ── Step 12b: Add VRF routes ───────────────────────────────────
+    for (node_name, node) in &topology.nodes {
+        if node.vrfs.is_empty() {
+            continue;
+        }
+        let ns_name = &namespace_names[node_name];
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        for (vrf_name, vrf_config) in &node.vrfs {
+            for (dest, route_config) in &vrf_config.routes {
+                add_route_with_table(&conn, node_name, dest, route_config, vrf_config.table, vrf_name)
+                    .await?;
+            }
         }
     }
 
@@ -706,6 +1041,158 @@ async fn add_route(
     }
 
     Ok(())
+}
+
+/// Add a single route in a VRF routing table.
+async fn add_route_with_table(
+    conn: &Connection<Route>,
+    node_name: &str,
+    dest: &str,
+    route_config: &crate::types::RouteConfig,
+    table: u32,
+    vrf_name: &str,
+) -> Result<()> {
+    let is_default = dest == "default";
+
+    let gw: Option<IpAddr> = if let Some(via) = &route_config.via {
+        Some(via.parse().map_err(|e| {
+            Error::invalid_topology(format!(
+                "invalid gateway '{via}' for VRF route '{dest}' on '{node_name}'.{vrf_name}: {e}"
+            ))
+        })?)
+    } else {
+        None
+    };
+
+    let is_v6 = gw.map_or(false, |ip| ip.is_ipv6())
+        || (!is_default && dest.contains(':'));
+
+    if is_v6 {
+        let mut route = if is_default {
+            nlink::netlink::route::Ipv6Route::new("::", 0)
+        } else {
+            let (addr, prefix) = parse_cidr(dest)?;
+            match addr {
+                IpAddr::V6(v6) => nlink::netlink::route::Ipv6Route::from_addr(v6, prefix),
+                _ => {
+                    return Err(Error::invalid_topology(format!(
+                        "VRF route '{dest}' on '{node_name}': expected IPv6 address"
+                    )));
+                }
+            }
+        };
+        if let Some(IpAddr::V6(gw)) = gw {
+            route = route.gateway(gw);
+        }
+        if let Some(dev) = &route_config.dev {
+            route = route.dev(dev);
+        }
+        if let Some(metric) = route_config.metric {
+            route = route.metric(metric);
+        }
+        route = route.table(table);
+        conn.add_route(route).await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to add VRF route '{dest}' in '{vrf_name}' on '{node_name}': {e}"
+            ))
+        })?;
+    } else {
+        let mut route = if is_default {
+            nlink::netlink::route::Ipv4Route::new("0.0.0.0", 0)
+        } else {
+            let (addr, prefix) = parse_cidr(dest)?;
+            match addr {
+                IpAddr::V4(v4) => nlink::netlink::route::Ipv4Route::from_addr(v4, prefix),
+                _ => {
+                    return Err(Error::invalid_topology(format!(
+                        "VRF route '{dest}' on '{node_name}': expected IPv4 address"
+                    )));
+                }
+            }
+        };
+        if let Some(IpAddr::V4(gw)) = gw {
+            route = route.gateway(gw);
+        }
+        if let Some(dev) = &route_config.dev {
+            route = route.dev(dev);
+        }
+        if let Some(metric) = route_config.metric {
+            route = route.metric(metric);
+        }
+        route = route.table(table);
+        conn.add_route(route).await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to add VRF route '{dest}' in '{vrf_name}' on '{node_name}': {e}"
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Generate a random WireGuard private key.
+fn generate_wg_private_key() -> [u8; 32] {
+    use std::io::Read;
+    let mut key = [0u8; 32];
+    std::fs::File::open("/dev/urandom")
+        .expect("/dev/urandom")
+        .read_exact(&mut key)
+        .expect("read urandom");
+    // Clamp per Curve25519 convention
+    key[0] &= 248;
+    key[31] &= 127;
+    key[31] |= 64;
+    key
+}
+
+/// Derive a WireGuard public key from a private key.
+fn derive_wg_public_key(private_key: &[u8; 32]) -> [u8; 32] {
+    let secret = x25519_dalek::StaticSecret::from(*private_key);
+    let public = x25519_dalek::PublicKey::from(&secret);
+    public.to_bytes()
+}
+
+/// Decode a base64-encoded WireGuard key.
+fn decode_wg_key(s: &str) -> std::result::Result<[u8; 32], String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(s)
+        .map_err(|e| format!("base64 decode: {e}"))?;
+    if bytes.len() != 32 {
+        return Err(format!("expected 32 bytes, got {}", bytes.len()));
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&bytes);
+    Ok(key)
+}
+
+/// Find a reachable IP address for a peer node (from link or interface addresses).
+fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Option<IpAddr> {
+    // Check link addresses first
+    for link in &topology.links {
+        if let Some(addresses) = &link.addresses {
+            for (i, ep_str) in link.endpoints.iter().enumerate() {
+                if let Some(ep) = EndpointRef::parse(ep_str) {
+                    if ep.node == peer_name {
+                        if let Ok((ip, _)) = parse_cidr(&addresses[i]) {
+                            return Some(ip);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Check explicit interface addresses
+    if let Some(node) = topology.nodes.get(peer_name) {
+        for iface_config in node.interfaces.values() {
+            for addr_str in &iface_config.addresses {
+                if let Ok((ip, _)) = parse_cidr(addr_str) {
+                    return Some(ip);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Build a NetemConfig from an Impairment.

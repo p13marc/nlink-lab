@@ -182,36 +182,36 @@ for (port_node, port_config) in &network.ports {
 
 ### VRF
 
-- [ ] Create VRF interfaces in Step 6
-- [ ] Bring up VRF interfaces in Step 10
-- [ ] Enslave interfaces to VRFs after Step 10
-- [ ] Add VRF routes with `.table()` in Step 12
+- [x] Create VRF interfaces in Step 6
+- [x] Bring up VRF interfaces in Step 10
+- [x] Enslave interfaces to VRFs after Step 10
+- [x] Add VRF routes with `.table()` in Step 12
 - [ ] Test: VRF topology from NLINK_LAB.md section 4.4
 
 ### WireGuard
 
-- [ ] Create WireGuard interfaces in Step 6
-- [ ] Key generation helper (`generate_wg_key() -> [u8; 32]`)
-- [ ] Public key derivation from private key
-- [ ] Configure WG device via `Connection<Wireguard>::set_device()`
-- [ ] Peer resolution: map node names to public keys and endpoints
+- [x] Create WireGuard interfaces in Step 6
+- [x] Key generation helper (`generate_wg_key() -> [u8; 32]`)
+- [x] Public key derivation from private key
+- [x] Configure WG device via `Connection<Wireguard>::set_device()`
+- [x] Peer resolution: map node names to public keys and endpoints
 - [ ] Store generated keys in state file
 - [ ] Test: WireGuard VPN topology from NLINK_LAB.md section 4.4
 
 ### Bond
 
-- [ ] Create bond interfaces in Step 6
-- [ ] Add `members` field to `InterfaceConfig` (optional)
-- [ ] Enslave members to bond after creation
+- [x] Create bond interfaces in Step 6
+- [x] Add `members` field to `InterfaceConfig` (optional)
+- [x] Enslave members to bond after creation
 
 ### VLAN
 
-- [ ] Add `parent` field to `InterfaceConfig`
-- [ ] Create VLAN sub-interfaces in Step 6
-- [ ] Update parser tests for new field
+- [x] Add `parent` field to `InterfaceConfig`
+- [x] Create VLAN sub-interfaces in Step 6
+- [x] Update parser tests for new field
 
 ### Bridge VLAN Ports
 
-- [ ] Apply `BridgeVlanBuilder` per port after attaching members
-- [ ] Handle pvid + untagged flags
+- [x] Apply `BridgeVlanBuilder` per port after attaching members
+- [x] Handle pvid + untagged flags
 - [ ] Test: VLAN trunk topology from NLINK_LAB.md section 4.4

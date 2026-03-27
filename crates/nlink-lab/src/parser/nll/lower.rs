@@ -573,7 +573,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                         remote: vx.remote.clone(),
                         port: vx.port,
                         addresses: vx.address.iter().cloned().collect(),
-                        mtu: None,
+                        ..Default::default()
                     },
                 );
             }

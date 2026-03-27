@@ -35,6 +35,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Utilities
 libc = "0.2"
 
+# Crypto (WireGuard key generation)
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+base64 = "0.22"
+
 # Networking (git dependency during development, crates.io for release)
 nlink = { git = "https://github.com/p13marc/nlink", features = ["full"] }
 

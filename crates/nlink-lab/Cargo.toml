@@ -17,6 +17,8 @@ thiserror = { workspace = true }
 libc = { workspace = true }
 tracing = { workspace = true }
 logos = "0.15"
+x25519-dalek = { workspace = true }
+base64 = { workspace = true }
 winnow = "0.7"
 miette = { version = "7", features = ["fancy"] }
 nlink-lab-macros = { workspace = true }

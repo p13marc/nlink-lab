@@ -141,6 +141,13 @@ pub struct InterfaceConfig {
 
     /// MTU.
     pub mtu: Option<u32>,
+
+    /// Parent interface (for VLAN sub-interfaces).
+    pub parent: Option<String>,
+
+    /// Member interfaces (for bond interfaces).
+    #[serde(default)]
+    pub members: Vec<String>,
 }
 
 /// Route configuration.

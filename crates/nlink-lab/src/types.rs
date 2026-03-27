@@ -52,6 +52,19 @@ pub struct Topology {
     pub rate_limits: HashMap<String, RateLimit>,
 }
 
+/// Container runtime selection.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ContainerRuntime {
+    /// Auto-detect: prefer podman, fall back to docker.
+    #[default]
+    Auto,
+    /// Use Docker.
+    Docker,
+    /// Use Podman.
+    Podman,
+}
+
 /// Lab metadata.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LabConfig {
@@ -63,6 +76,9 @@ pub struct LabConfig {
 
     /// Prefix for namespace names (defaults to lab name).
     pub prefix: Option<String>,
+
+    /// Container runtime to use when nodes specify an image.
+    pub runtime: Option<ContainerRuntime>,
 }
 
 impl LabConfig {
@@ -83,11 +99,25 @@ pub struct Profile {
     pub firewall: Option<FirewallConfig>,
 }
 
-/// Node definition — becomes a network namespace.
+/// Node definition — becomes a network namespace or container.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Node {
     /// Profile to inherit from.
     pub profile: Option<String>,
+
+    /// Container image (when set, node is deployed as a container instead of bare namespace).
+    pub image: Option<String>,
+
+    /// Container command override (requires `image`).
+    pub cmd: Option<Vec<String>>,
+
+    /// Container environment variables (requires `image`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
+
+    /// Container bind mounts in "host:container" format (requires `image`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volumes: Option<Vec<String>>,
 
     /// Sysctl values (merged with profile).
     #[serde(default)]
@@ -115,6 +145,13 @@ pub struct Node {
     /// WireGuard interfaces.
     #[serde(default)]
     pub wireguard: HashMap<String, WireguardConfig>,
+}
+
+impl Node {
+    /// Returns true if this node should be deployed as a container.
+    pub fn is_container(&self) -> bool {
+        self.image.is_some()
+    }
 }
 
 /// Explicit interface configuration (for interfaces not created by links).

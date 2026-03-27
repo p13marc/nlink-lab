@@ -57,6 +57,10 @@ pub enum Token {
     Dummy,
     #[token("run")]
     Run,
+    #[token("image")]
+    Image,
+    #[token("cmd")]
+    Cmd,
 
     // Sub-keywords
     #[token("default")]

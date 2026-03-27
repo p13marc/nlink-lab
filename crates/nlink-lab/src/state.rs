@@ -24,6 +24,25 @@ pub struct LabState {
     /// WireGuard public keys: node_name -> (wg_iface -> base64-encoded public key).
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub wg_public_keys: std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    /// Container state: node_name -> container info.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub containers: std::collections::HashMap<String, ContainerState>,
+    /// Container runtime binary used ("docker" or "podman").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<String>,
+}
+
+/// Persisted state for a container node.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerState {
+    /// Container ID.
+    pub id: String,
+    /// Container name.
+    pub name: String,
+    /// Container image.
+    pub image: String,
+    /// Init PID at deploy time.
+    pub pid: u32,
 }
 
 /// Summary info about a running lab (for status listing).
@@ -170,6 +189,8 @@ mod tests {
             namespaces,
             pids: vec![("r1".to_string(), 1234)],
             wg_public_keys: HashMap::new(),
+            containers: HashMap::new(),
+            runtime: None,
         };
 
         let topology = crate::parser::parse(

@@ -54,6 +54,7 @@
 //! ```
 
 pub mod builder;
+pub mod container;
 pub mod deploy;
 pub mod error;
 pub mod helpers;
@@ -67,9 +68,9 @@ pub use builder::Lab;
 pub use error::{Error, Result};
 pub use running::{ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab};
 pub use types::{
-    EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment, InterfaceConfig, LabConfig,
-    Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig, Topology, VlanConfig,
-    VrfConfig, WireguardConfig,
+    ContainerRuntime, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
+    InterfaceConfig, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig,
+    Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
 pub use validator::{Severity, ValidationIssue, ValidationResult};
 

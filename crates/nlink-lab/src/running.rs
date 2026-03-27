@@ -10,7 +10,7 @@ use nlink::netlink::namespace;
 use nlink::{Connection, Route};
 
 use crate::error::{Error, Result};
-use crate::state::{self, LabInfo};
+use crate::state::{self, ContainerState, LabInfo};
 use crate::types::EndpointRef;
 use crate::types::Topology;
 
@@ -18,8 +18,12 @@ use crate::types::Topology;
 pub struct RunningLab {
     /// The topology used to deploy.
     topology: Topology,
-    /// Map of node_name -> namespace_name.
+    /// Map of node_name -> namespace_name (bare namespace nodes only).
     namespace_names: HashMap<String, String>,
+    /// Map of node_name -> container state (container nodes only).
+    containers: HashMap<String, ContainerState>,
+    /// Container runtime binary ("docker" or "podman"), if any containers.
+    runtime_binary: Option<String>,
     /// Background process PIDs: (node_name, pid).
     pids: Vec<(String, u32)>,
 }
@@ -62,11 +66,15 @@ impl RunningLab {
     pub(crate) fn new(
         topology: Topology,
         namespace_names: HashMap<String, String>,
+        containers: HashMap<String, ContainerState>,
+        runtime_binary: Option<String>,
         pids: Vec<(String, u32)>,
     ) -> Self {
         Self {
             topology,
             namespace_names,
+            containers,
+            runtime_binary,
             pids,
         }
     }
@@ -81,14 +89,17 @@ impl RunningLab {
         &self.topology.lab.name
     }
 
-    /// Get the number of namespaces.
+    /// Get the number of nodes (namespaces + containers).
     pub fn namespace_count(&self) -> usize {
-        self.namespace_names.len()
+        self.namespace_names.len() + self.containers.len()
     }
 
     /// Get node names.
     pub fn node_names(&self) -> impl Iterator<Item = &str> {
-        self.namespace_names.keys().map(|s| s.as_str())
+        self.namespace_names
+            .keys()
+            .chain(self.containers.keys())
+            .map(|s| s.as_str())
     }
 
     /// Look up the namespace name for a node.
@@ -103,20 +114,35 @@ impl RunningLab {
 
     /// Execute a command in a lab node and collect output.
     pub fn exec(&self, node: &str, cmd: &str, args: &[&str]) -> Result<ExecOutput> {
-        let ns_name = self.namespace_for(node)?;
-
-        let mut command = std::process::Command::new(cmd);
-        command.args(args);
-
-        let output = namespace::spawn_output(ns_name, command).map_err(|e| {
-            Error::deploy_failed(format!("exec in '{node}' failed: {e}"))
-        })?;
-
-        Ok(ExecOutput {
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            exit_code: output.status.code().unwrap_or(-1),
-        })
+        if let Some(container) = self.containers.get(node) {
+            // Use docker/podman exec for container nodes
+            let rt_binary = self.runtime_binary.as_deref().ok_or_else(|| {
+                Error::deploy_failed("no container runtime binary in state")
+            })?;
+            let mut all_args = vec!["exec", &container.id, cmd];
+            all_args.extend(args);
+            let output = std::process::Command::new(rt_binary)
+                .args(&all_args)
+                .output()
+                .map_err(|e| Error::deploy_failed(format!("exec in container '{node}' failed: {e}")))?;
+            Ok(ExecOutput {
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                exit_code: output.status.code().unwrap_or(-1),
+            })
+        } else {
+            let ns_name = self.namespace_for(node)?;
+            let mut command = std::process::Command::new(cmd);
+            command.args(args);
+            let output = namespace::spawn_output(ns_name, command).map_err(|e| {
+                Error::deploy_failed(format!("exec in '{node}' failed: {e}"))
+            })?;
+            Ok(ExecOutput {
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                exit_code: output.status.code().unwrap_or(-1),
+            })
+        }
     }
 
     /// Spawn a background process in a lab node.
@@ -183,11 +209,11 @@ impl RunningLab {
     /// Run diagnostics on the lab, optionally filtered to a single node.
     pub async fn diagnose(&self, node: Option<&str>) -> Result<Vec<NodeDiagnostic>> {
         let mut results = Vec::new();
+
+        // Diagnose bare namespace nodes
         for (node_name, ns_name) in &self.namespace_names {
             if let Some(filter) = node {
-                if node_name != filter {
-                    continue;
-                }
+                if node_name != filter { continue; }
             }
             let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
                 Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
@@ -202,6 +228,26 @@ impl RunningLab {
                 issues: report.issues,
             });
         }
+
+        // Diagnose container nodes
+        for (node_name, container) in &self.containers {
+            if let Some(filter) = node {
+                if node_name != filter { continue; }
+            }
+            let conn: Connection<Route> = namespace::connection_for_pid(container.pid).map_err(|e| {
+                Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
+            })?;
+            let diag = Diagnostics::new(conn);
+            let report = diag.scan().await.map_err(|e| {
+                Error::deploy_failed(format!("diagnostics scan for container '{node_name}': {e}"))
+            })?;
+            results.push(NodeDiagnostic {
+                node: node_name.clone(),
+                interfaces: report.interfaces,
+                issues: report.issues,
+            });
+        }
+
         Ok(results)
     }
 
@@ -214,14 +260,25 @@ impl RunningLab {
         Ok(())
     }
 
-    /// Destroy the lab: kill processes, delete namespaces, remove state.
+    /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
     pub async fn destroy(self) -> Result<()> {
         // 1. Kill background processes
         for (_node, pid) in &self.pids {
             kill_process(*pid);
         }
 
-        // 2. Delete namespaces
+        // 2. Remove containers
+        if let Some(binary) = &self.runtime_binary {
+            for (_node_name, container) in &self.containers {
+                let _ = std::process::Command::new(binary)
+                    .args(["rm", "-f", &container.id])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+            }
+        }
+
+        // 3. Delete namespaces
         for (_node_name, ns_name) in &self.namespace_names {
             if namespace::exists(ns_name) {
                 if let Err(e) = namespace::delete(ns_name) {
@@ -230,7 +287,7 @@ impl RunningLab {
             }
         }
 
-        // 3. Delete management namespace (bridges) if it exists
+        // 4. Delete management namespace (bridges) if it exists
         if !self.topology.networks.is_empty() {
             let mgmt_ns = format!("{}-mgmt", self.topology.lab.prefix());
             if namespace::exists(&mgmt_ns) {
@@ -240,7 +297,7 @@ impl RunningLab {
             }
         }
 
-        // 4. Remove state file
+        // 5. Remove state file
         state::remove(&self.topology.lab.name)?;
 
         Ok(())
@@ -252,6 +309,8 @@ impl RunningLab {
         Ok(Self {
             topology,
             namespace_names: lab_state.namespaces,
+            containers: lab_state.containers,
+            runtime_binary: lab_state.runtime,
             pids: lab_state.pids,
         })
     }

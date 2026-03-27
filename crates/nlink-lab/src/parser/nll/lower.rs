@@ -245,6 +245,8 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
     ast::NodeDef {
         name: i(&n.name, vars),
         profile: n.profile.clone(),
+        image: n.image.as_ref().map(|s| i(s, vars)),
+        cmd: n.cmd.clone(),
         props: n.props.iter().map(|p| interpolate_prop(p, vars)).collect(),
     }
 }
@@ -462,6 +464,7 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
         name: lab.name.clone(),
         description: lab.description.clone(),
         prefix: lab.prefix.clone(),
+        ..Default::default()
     }
 }
 
@@ -472,6 +475,8 @@ fn lower_node(
 ) -> Result<()> {
     let mut n = types::Node {
         profile: node.profile.clone(),
+        image: node.image.clone(),
+        cmd: node.cmd.clone(),
         ..Default::default()
     };
 

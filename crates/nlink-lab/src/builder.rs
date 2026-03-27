@@ -25,6 +25,8 @@
 //! assert_eq!(topology.nodes.len(), 2);
 //! ```
 
+use std::collections::HashMap;
+
 use crate::types::{
     ExecConfig, FirewallConfig, FirewallRule, Impairment, InterfaceConfig, LabConfig, Link,
     Network, Node, PortConfig, Profile, RateLimit, RouteConfig, Topology, VlanConfig, VrfConfig,
@@ -59,6 +61,12 @@ impl Lab {
     /// Set the namespace prefix (defaults to lab name).
     pub fn prefix(mut self, prefix: &str) -> Self {
         self.topology.lab.prefix = Some(prefix.to_string());
+        self
+    }
+
+    /// Set the container runtime (docker, podman, or auto-detect).
+    pub fn runtime(mut self, runtime: crate::types::ContainerRuntime) -> Self {
+        self.topology.lab.runtime = Some(runtime);
         self
     }
 
@@ -192,6 +200,36 @@ impl NodeBuilder {
     /// Set the profile to inherit from.
     pub fn profile(mut self, name: &str) -> Self {
         self.node.profile = Some(name.to_string());
+        self
+    }
+
+    /// Set a container image (makes this node a container instead of a bare namespace).
+    pub fn image(mut self, image: &str) -> Self {
+        self.node.image = Some(image.to_string());
+        self
+    }
+
+    /// Set the container command override (requires `image`).
+    pub fn cmd(mut self, cmd: &[&str]) -> Self {
+        self.node.cmd = Some(cmd.iter().map(|s| s.to_string()).collect());
+        self
+    }
+
+    /// Add a container environment variable (requires `image`).
+    pub fn env(mut self, key: &str, value: &str) -> Self {
+        self.node
+            .env
+            .get_or_insert_with(HashMap::new)
+            .insert(key.to_string(), value.to_string());
+        self
+    }
+
+    /// Add a container bind mount in "host:container" format (requires `image`).
+    pub fn volume(mut self, mount: &str) -> Self {
+        self.node
+            .volumes
+            .get_or_insert_with(Vec::new)
+            .push(mount.to_string());
         self
     }
 

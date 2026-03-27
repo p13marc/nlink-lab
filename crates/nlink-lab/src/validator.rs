@@ -196,6 +196,7 @@ impl Topology {
         validate_route_reachability(self, &interfaces, &mut issues);
         validate_unreferenced_nodes(self, &interfaces, &mut issues);
         validate_exec_cmds(self, &mut issues);
+        validate_container_fields(self, &mut issues);
 
         ValidationResult { issues }
     }
@@ -789,6 +790,47 @@ fn validate_exec_cmds(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                     rule: "empty-exec-cmd",
                     message: format!("exec[{i}] has empty cmd"),
                     location: Some(format!("nodes.{node_name}.exec[{i}]")),
+                });
+            }
+        }
+    }
+}
+
+/// Container field validation: cmd/env/volumes require image.
+fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in &topology.nodes {
+        if node.image.is_none() {
+            if node.cmd.is_some() {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "container-requires-image",
+                    message: "cmd requires image".to_string(),
+                    location: Some(format!("nodes.{node_name}.cmd")),
+                });
+            }
+            if node.env.is_some() {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "container-requires-image",
+                    message: "env requires image".to_string(),
+                    location: Some(format!("nodes.{node_name}.env")),
+                });
+            }
+            if node.volumes.is_some() {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "container-requires-image",
+                    message: "volumes requires image".to_string(),
+                    location: Some(format!("nodes.{node_name}.volumes")),
+                });
+            }
+        } else if let Some(image) = &node.image {
+            if image.is_empty() {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "empty-image",
+                    message: "image must not be empty".to_string(),
+                    location: Some(format!("nodes.{node_name}.image")),
                 });
             }
         }

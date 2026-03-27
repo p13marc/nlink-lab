@@ -43,6 +43,8 @@ pub struct ProfileDef {
 pub struct NodeDef {
     pub name: String,
     pub profile: Option<String>,
+    pub image: Option<String>,
+    pub cmd: Option<Vec<String>>,
     pub props: Vec<NodeProp>,
 }
 

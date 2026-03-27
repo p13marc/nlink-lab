@@ -11,11 +11,83 @@ use nlink::netlink::ratelimit::RateLimiter;
 use nlink::netlink::tc::NetemConfig;
 use nlink::{Connection, Route, Wireguard};
 
+use nlink::netlink::namespace::NamespaceFd;
+
+use crate::container::{self, CreateOpts, Runtime};
 use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_duration, parse_percent, parse_rate_bps};
 use crate::running::RunningLab;
-use crate::state::{self, LabState};
+use crate::state::{self, ContainerState, LabState};
 use crate::types::{EndpointRef, Topology};
+
+/// Abstraction over bare namespace vs container node.
+enum NodeHandle {
+    Namespace { ns_name: String },
+    Container {
+        id: String,
+        name: String,
+        pid: u32,
+        ns_path: String,
+    },
+}
+
+impl NodeHandle {
+    fn connection<P: nlink::netlink::ProtocolState + Default>(&self) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::connection_for(ns_name),
+            NodeHandle::Container { pid, .. } => namespace::connection_for_pid(*pid),
+        }
+    }
+
+    fn open_ns_fd(&self) -> std::result::Result<NamespaceFd, nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::open(ns_name),
+            NodeHandle::Container { ns_path, .. } => namespace::open_path(ns_path),
+        }
+    }
+
+    fn set_sysctls(&self, entries: &[(&str, &str)]) -> std::result::Result<(), nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::set_sysctls(ns_name, entries),
+            NodeHandle::Container { ns_path, .. } => namespace::set_sysctls_path(ns_path, entries),
+        }
+    }
+
+    fn spawn_output(&self, cmd: std::process::Command) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::spawn_output(ns_name, cmd),
+            NodeHandle::Container { ns_path, .. } => namespace::spawn_output_path(ns_path, cmd),
+        }
+    }
+
+    fn spawn(&self, cmd: std::process::Command) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::spawn(ns_name, cmd),
+            NodeHandle::Container { ns_path, .. } => namespace::spawn_path(ns_path, cmd),
+        }
+    }
+
+    fn enter(&self) -> std::result::Result<nlink::netlink::namespace::NamespaceGuard, nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::enter(ns_name),
+            NodeHandle::Container { ns_path, .. } => namespace::enter_path(ns_path),
+        }
+    }
+
+    fn ns_name(&self) -> Option<&str> {
+        match self {
+            NodeHandle::Namespace { ns_name } => Some(ns_name),
+            NodeHandle::Container { .. } => None,
+        }
+    }
+
+    fn container_id(&self) -> Option<&str> {
+        match self {
+            NodeHandle::Container { id, .. } => Some(id),
+            NodeHandle::Namespace { .. } => None,
+        }
+    }
+}
 
 /// Deploy a topology, creating all namespaces, links, addresses, routes, etc.
 ///
@@ -32,22 +104,72 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     let mut cleanup = Cleanup::new();
+    let mut node_handles: HashMap<String, NodeHandle> = HashMap::new();
     let mut namespace_names: HashMap<String, String> = HashMap::new();
+    let mut container_states: HashMap<String, ContainerState> = HashMap::new();
     let mut pids: Vec<(String, u32)> = Vec::new();
 
-    // ── Step 3: Create namespaces ──────────────────────────────────
-    for node_name in topology.nodes.keys() {
-        let ns_name = topology.namespace_name(node_name);
-        if namespace::exists(&ns_name) {
-            return Err(Error::AlreadyExists {
-                name: format!("namespace '{ns_name}' already exists"),
-            });
+    // Detect container runtime if any node uses an image
+    let has_container_nodes = topology.nodes.values().any(|n| n.image.is_some());
+    let container_runtime = if has_container_nodes {
+        let rt_config = topology.lab.runtime.as_ref().cloned().unwrap_or_default();
+        let rt = Runtime::new(&rt_config)?;
+        cleanup.set_runtime(rt.binary());
+        Some(rt)
+    } else {
+        None
+    };
+
+    // ── Step 3: Create namespaces / containers ─────────────────────
+    for (node_name, node) in &topology.nodes {
+        if let Some(image) = &node.image {
+            // Container node
+            let rt = container_runtime.as_ref().unwrap();
+            rt.ensure_image(image)?;
+            let container_name = format!("{}-{}", topology.lab.prefix(), node_name);
+            let opts = CreateOpts {
+                cmd: node.cmd.clone(),
+                env: node.env.clone().unwrap_or_default(),
+                volumes: node.volumes.clone().unwrap_or_default(),
+            };
+            let info = rt.create(&container_name, image, &opts)?;
+            cleanup.add_container(info.id.clone());
+            container_states.insert(
+                node_name.clone(),
+                ContainerState {
+                    id: info.id.clone(),
+                    name: info.name.clone(),
+                    image: image.clone(),
+                    pid: info.pid,
+                },
+            );
+            node_handles.insert(
+                node_name.clone(),
+                NodeHandle::Container {
+                    id: info.id,
+                    name: info.name,
+                    pid: info.pid,
+                    ns_path: format!("/proc/{}/ns/net", info.pid),
+                },
+            );
+        } else {
+            // Bare namespace node
+            let ns_name = topology.namespace_name(node_name);
+            if namespace::exists(&ns_name) {
+                return Err(Error::AlreadyExists {
+                    name: format!("namespace '{ns_name}' already exists"),
+                });
+            }
+            namespace::create(&ns_name).map_err(|e| {
+                Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
+            })?;
+            cleanup.add_namespace(ns_name.clone());
+            namespace_names.insert(node_name.clone(), ns_name.clone());
+            node_handles.insert(
+                node_name.clone(),
+                NodeHandle::Namespace { ns_name },
+            );
         }
-        namespace::create(&ns_name).map_err(|e| {
-            Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
-        })?;
-        cleanup.add_namespace(ns_name.clone());
-        namespace_names.insert(node_name.clone(), ns_name);
     }
 
     // ── Step 4: Create bridge networks ───────────────────────────────
@@ -105,7 +227,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 let ep = EndpointRef::parse(member).ok_or_else(|| Error::InvalidEndpoint {
                     endpoint: member.clone(),
                 })?;
-                let node_ns = namespace_names.get(&ep.node).ok_or_else(|| {
+                let node_handle = node_handles.get(&ep.node).ok_or_else(|| {
                     Error::NodeNotFound {
                         name: ep.node.clone(),
                     }
@@ -120,8 +242,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 };
 
                 let node_conn: Connection<Route> =
-                    namespace::connection_for(node_ns).map_err(|e| {
-                        Error::deploy_failed(format!("connection for '{node_ns}': {e}"))
+                    node_handle.connection().map_err(|e| {
+                        Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                     })?;
 
                 let veth = nlink::netlink::link::VethLink::new(&ep.iface, &peer_name)
@@ -197,21 +319,21 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             }
         })?;
 
-        let ns_a = namespace_names.get(&ep_a.node).ok_or_else(|| Error::NodeNotFound {
+        let handle_a = node_handles.get(&ep_a.node).ok_or_else(|| Error::NodeNotFound {
             name: ep_a.node.clone(),
         })?;
-        let ns_b = namespace_names.get(&ep_b.node).ok_or_else(|| Error::NodeNotFound {
+        let handle_b = node_handles.get(&ep_b.node).ok_or_else(|| Error::NodeNotFound {
             name: ep_b.node.clone(),
         })?;
 
         // Open namespace fd for the peer end
-        let ns_b_fd = namespace::open(ns_b).map_err(|e| {
-            Error::deploy_failed(format!("failed to open namespace '{ns_b}': {e}"))
+        let ns_b_fd = handle_b.open_ns_fd().map_err(|e| {
+            Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
         })?;
 
         // Get connection for namespace A
-        let conn_a: Connection<Route> = namespace::connection_for(ns_a).map_err(|e| {
-            Error::deploy_failed(format!("failed to connect to namespace '{ns_a}': {e}"))
+        let conn_a: Connection<Route> = handle_a.connection().map_err(|e| {
+            Error::deploy_failed(format!("failed to connect to '{}': {e}", ep_a.node))
         })?;
 
         // Create veth pair
@@ -233,9 +355,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 6: Create additional interfaces (loopback addresses handled in step 9) ──
     for (node_name, node) in &topology.nodes {
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("failed to connect to namespace '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (iface_name, iface_config) in &node.interfaces {
@@ -335,9 +457,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.vrfs.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (vrf_name, vrf_config) in &node.vrfs {
@@ -362,9 +484,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.wireguard.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for wg_name in node.wireguard.keys() {
@@ -384,9 +506,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if let Some(addresses) = &link.addresses {
             for (j, ep_str) in link.endpoints.iter().enumerate() {
                 let ep = EndpointRef::parse(ep_str).unwrap();
-                let ns_name = &namespace_names[&ep.node];
-                let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-                    Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+                let ep_handle = &node_handles[&ep.node];
+                let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
+                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                 })?;
                 let (ip, prefix) = parse_cidr(&addresses[j])?;
                 let iface_ref = nlink::netlink::InterfaceRef::Name(ep.iface.clone());
@@ -408,9 +530,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // From explicit interfaces
     for (node_name, node) in &topology.nodes {
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (iface_name, iface_config) in &node.interfaces {
@@ -444,9 +566,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.wireguard.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (wg_name, wg_config) in &node.wireguard {
@@ -471,17 +593,17 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 10: Bring interfaces up ───────────────────────────────
     for (node_name, _) in &topology.nodes {
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
         let links = conn.get_links().await.map_err(|e| {
-            Error::deploy_failed(format!("failed to list links in '{ns_name}': {e}"))
+            Error::deploy_failed(format!("failed to list links in '{node_name}': {e}"))
         })?;
         for link_msg in &links {
             conn.set_link_up_by_index(link_msg.ifindex()).await.map_err(|e| {
                 Error::deploy_failed(format!(
-                    "failed to bring up interface idx {} in '{ns_name}': {e}",
+                    "failed to bring up interface idx {} in '{node_name}': {e}",
                     link_msg.ifindex()
                 ))
             })?;
@@ -490,9 +612,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 10b: Enslave bond members ─────────────────────────────
     for (node_name, node) in &topology.nodes {
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (iface_name, iface_config) in &node.interfaces {
@@ -525,9 +647,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.vrfs.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (vrf_name, vrf_config) in &node.vrfs {
@@ -551,9 +673,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.wireguard.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let _guard = namespace::enter(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("failed to enter namespace '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let _guard = node_handle.enter().map_err(|e| {
+            Error::deploy_failed(format!("failed to enter namespace for '{node_name}': {e}"))
         })?;
         let wg_conn = Connection::<Wireguard>::new_async().await.map_err(|e| {
             Error::deploy_failed(format!(
@@ -598,9 +720,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.wireguard.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let _guard = namespace::enter(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("failed to enter namespace '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let _guard = node_handle.enter().map_err(|e| {
+            Error::deploy_failed(format!("failed to enter namespace for '{node_name}': {e}"))
         })?;
         let wg_conn = Connection::<Wireguard>::new_async().await.map_err(|e| {
             Error::deploy_failed(format!(
@@ -672,12 +794,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     for (node_name, node) in &topology.nodes {
         let sysctls = topology.effective_sysctls(node);
         if !sysctls.is_empty() {
-            let ns_name = &namespace_names[node_name];
+            let node_handle = &node_handles[node_name];
             let entries: Vec<(&str, &str)> = sysctls
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
-            namespace::set_sysctls(ns_name, &entries).map_err(|e| {
+            node_handle.set_sysctls(&entries).map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to apply sysctls for node '{node_name}': {e}"
                 ))
@@ -690,9 +812,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.routes.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (dest, route_config) in &node.routes {
@@ -705,9 +827,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if node.vrfs.is_empty() {
             continue;
         }
-        let ns_name = &namespace_names[node_name];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
         })?;
 
         for (vrf_name, vrf_config) in &node.vrfs {
@@ -721,8 +843,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // ── Step 13: Apply nftables firewall rules ──────────────────────
     for (node_name, node) in &topology.nodes {
         if let Some(fw) = topology.effective_firewall(node) {
-            let ns_name = &namespace_names[node_name];
-            apply_firewall(ns_name, node_name, fw).await?;
+            let node_handle = &node_handles[node_name];
+            apply_firewall(node_handle, node_name, fw).await?;
         }
     }
 
@@ -731,9 +853,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         let ep = EndpointRef::parse(endpoint_str).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint_str.clone(),
         })?;
-        let ns_name = &namespace_names[&ep.node];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let ep_handle = &node_handles[&ep.node];
+        let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
         })?;
 
         let netem = build_netem(impairment)?;
@@ -757,9 +879,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         let ep = EndpointRef::parse(endpoint_str).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint_str.clone(),
         })?;
-        let ns_name = &namespace_names[&ep.node];
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        let ep_handle = &node_handles[&ep.node];
+        let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
         })?;
 
         let mut limiter = RateLimiter::new(&ep.iface);
@@ -782,36 +904,75 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 16: Spawn background processes ────────────────────────
     for (node_name, node) in &topology.nodes {
-        let ns_name = &namespace_names[node_name];
+        let node_handle = &node_handles[node_name];
 
         for (i, exec_config) in node.exec.iter().enumerate() {
             if exec_config.cmd.is_empty() {
                 continue;
             }
 
-            let mut cmd = std::process::Command::new(&exec_config.cmd[0]);
-            cmd.args(&exec_config.cmd[1..]);
-
-            if exec_config.background {
-                let child = namespace::spawn(ns_name, cmd).map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to spawn background process on '{node_name}' exec[{i}]: {e}"
-                    ))
-                })?;
-                pids.push((node_name.clone(), child.id()));
+            // For container nodes, use docker/podman exec so commands see the container FS
+            if node.is_container() {
+                if let Some(rt) = &container_runtime {
+                    let container_id = node_handle.container_id().unwrap();
+                    let cmd_strs: Vec<&str> = exec_config.cmd.iter().map(|s| s.as_str()).collect();
+                    if exec_config.background {
+                        // Use -d flag for background exec in container
+                        let mut args = vec!["exec", "-d", container_id];
+                        args.extend(&cmd_strs);
+                        let output = std::process::Command::new(rt.binary())
+                            .args(&args)
+                            .output()
+                            .map_err(|e| {
+                                Error::deploy_failed(format!(
+                                    "failed to exec in container '{node_name}' exec[{i}]: {e}"
+                                ))
+                            })?;
+                        if !output.status.success() {
+                            return Err(Error::deploy_failed(format!(
+                                "exec[{i}] on container '{node_name}' failed: {}",
+                                String::from_utf8_lossy(&output.stderr)
+                            )));
+                        }
+                    } else {
+                        let output = rt.exec(container_id, &cmd_strs).map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to exec in container '{node_name}' exec[{i}]: {e}"
+                            ))
+                        })?;
+                        if !output.status.success() {
+                            return Err(Error::deploy_failed(format!(
+                                "exec[{i}] on container '{node_name}' failed (exit {}): {}",
+                                output.status.code().unwrap_or(-1),
+                                String::from_utf8_lossy(&output.stderr)
+                            )));
+                        }
+                    }
+                }
             } else {
-                // Run and wait for completion
-                let output = namespace::spawn_output(ns_name, cmd).map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to run command on '{node_name}' exec[{i}]: {e}"
-                    ))
-                })?;
-                if !output.status.success() {
-                    return Err(Error::deploy_failed(format!(
-                        "exec[{i}] on node '{node_name}' failed (exit {}): {}",
-                        output.status.code().unwrap_or(-1),
-                        String::from_utf8_lossy(&output.stderr)
-                    )));
+                let mut cmd = std::process::Command::new(&exec_config.cmd[0]);
+                cmd.args(&exec_config.cmd[1..]);
+
+                if exec_config.background {
+                    let child = node_handle.spawn(cmd).map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to spawn background process on '{node_name}' exec[{i}]: {e}"
+                        ))
+                    })?;
+                    pids.push((node_name.clone(), child.id()));
+                } else {
+                    let output = node_handle.spawn_output(cmd).map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to run command on '{node_name}' exec[{i}]: {e}"
+                        ))
+                    })?;
+                    if !output.status.success() {
+                        return Err(Error::deploy_failed(format!(
+                            "exec[{i}] on node '{node_name}' failed (exit {}): {}",
+                            output.status.code().unwrap_or(-1),
+                            String::from_utf8_lossy(&output.stderr)
+                        )));
+                    }
                 }
             }
         }
@@ -841,6 +1002,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         namespaces: namespace_names.clone(),
         pids: pids.clone(),
         wg_public_keys: wg_public_keys_b64,
+        containers: container_states.clone(),
+        runtime: container_runtime.as_ref().map(|rt| rt.binary().to_string()),
     };
     state::save(&lab_state, topology)?;
 
@@ -850,13 +1013,15 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     Ok(RunningLab::new(
         topology.clone(),
         namespace_names,
+        container_states,
+        container_runtime.as_ref().map(|rt| rt.binary().to_string()),
         pids,
     ))
 }
 
 /// Apply nftables firewall rules for a node.
 async fn apply_firewall(
-    ns_name: &str,
+    node_handle: &NodeHandle,
     node_name: &str,
     fw: &crate::types::FirewallConfig,
 ) -> Result<()> {
@@ -865,7 +1030,7 @@ async fn apply_firewall(
 
     // nftables needs Connection<Nftables> (NETLINK_NETFILTER socket)
     let nft_conn: Connection<Nftables> =
-        namespace::connection_for(ns_name).map_err(|e| {
+        node_handle.connection().map_err(|e| {
             Error::deploy_failed(format!(
                 "failed to create nftables connection for '{node_name}': {e}"
             ))
@@ -1275,6 +1440,8 @@ fn days_to_date(days: u64) -> (u64, u64, u64) {
 /// Cleanup guard that removes namespaces on drop if deployment fails.
 struct Cleanup {
     namespaces: Vec<String>,
+    containers: Vec<String>,
+    runtime_binary: Option<String>,
     armed: bool,
 }
 
@@ -1282,12 +1449,22 @@ impl Cleanup {
     fn new() -> Self {
         Self {
             namespaces: Vec::new(),
+            containers: Vec::new(),
+            runtime_binary: None,
             armed: true,
         }
     }
 
     fn add_namespace(&mut self, name: String) {
         self.namespaces.push(name);
+    }
+
+    fn add_container(&mut self, id: String) {
+        self.containers.push(id);
+    }
+
+    fn set_runtime(&mut self, binary: &str) {
+        self.runtime_binary = Some(binary.to_string());
     }
 
     fn disarm(&mut self) {
@@ -1303,6 +1480,15 @@ impl Drop for Cleanup {
         for ns in &self.namespaces {
             if namespace::exists(ns) {
                 let _ = namespace::delete(ns);
+            }
+        }
+        if let Some(binary) = &self.runtime_binary {
+            for id in &self.containers {
+                let _ = std::process::Command::new(binary)
+                    .args(["rm", "-f", id])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
             }
         }
     }

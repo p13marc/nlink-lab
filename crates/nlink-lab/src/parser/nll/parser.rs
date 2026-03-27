@@ -319,6 +319,16 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         None
     };
 
+    // Parse inline image/cmd before the block
+    let mut image = None;
+    let mut cmd = None;
+    if eat(tokens, pos, &Token::Image) {
+        image = Some(expect_string(tokens, pos)?);
+        if eat(tokens, pos, &Token::Cmd) {
+            cmd = Some(vec![expect_string(tokens, pos)?]);
+        }
+    }
+
     let props = if check(tokens, *pos, &Token::LBrace) {
         parse_node_block(tokens, pos)?
     } else {
@@ -328,6 +338,8 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     Ok(ast::NodeDef {
         name,
         profile,
+        image,
+        cmd,
         props,
     })
 }

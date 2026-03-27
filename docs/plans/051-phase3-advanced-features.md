@@ -52,10 +52,10 @@ If `--clear`, remove the qdisc via `conn.del_qdisc(iface, "root")`.
 
 #### Progress
 
-- [ ] Add `Impair` command to CLI
-- [ ] Build `Impairment` from CLI flags
-- [ ] Handle `--clear` (remove qdisc)
-- [ ] Print confirmation with new impairment values
+- [x] Add `Impair` command to CLI
+- [x] Build `Impairment` from CLI flags
+- [x] Handle `--clear` (remove qdisc)
+- [x] Print confirmation with new impairment values
 
 ### 2. Diagnostics
 
@@ -103,10 +103,10 @@ impl RunningLab {
 
 #### Progress
 
-- [ ] Add `diagnose()` method to `RunningLab`
-- [ ] Define `NodeDiagnostic` struct
-- [ ] Add `Diagnose` command to CLI
-- [ ] Format diagnostic output (OK/WARN per interface)
+- [x] Add `diagnose()` method to `RunningLab`
+- [x] Define `NodeDiagnostic` struct
+- [x] Add `Diagnose` command to CLI
+- [x] Format diagnostic output (OK/WARN per interface)
 
 ### 3. Packet Capture
 
@@ -146,9 +146,9 @@ The tricky part is making this interactive (Ctrl+C to stop). Options:
 
 #### Progress
 
-- [ ] Add `Capture` command to CLI
-- [ ] Spawn tcpdump in namespace
-- [ ] Support `-w` (pcap file) and `-c` (packet count)
+- [x] Add `Capture` command to CLI
+- [x] Spawn tcpdump in namespace
+- [x] Support `-w` (pcap file) and `-c` (packet count)
 
 ### 4. Topology Graph
 
@@ -202,9 +202,9 @@ pub fn topology_to_dot(topology: &Topology) -> String {
 
 #### Progress
 
-- [ ] Add `graph.rs` module with `topology_to_dot()`
-- [ ] Add `Graph` command to CLI
-- [ ] DOT format output
+- [x] Add `graph.rs` module with `topology_to_dot()`
+- [x] Add `Graph` command to CLI
+- [x] DOT format output
 - [ ] (Optional) ASCII format with simple layout
 
 ### 5. Process Manager
@@ -239,6 +239,6 @@ impl RunningLab {
 
 #### Progress
 
-- [ ] Add `process_status()` to `RunningLab`
-- [ ] Add `Ps` command to CLI (list processes with status)
-- [ ] Add `Kill` command to CLI (kill specific process)
+- [x] Add `process_status()` to `RunningLab`
+- [x] Add `Ps` command to CLI (list processes with status)
+- [x] Add `Kill` command to CLI (kill specific process)

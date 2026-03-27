@@ -27,8 +27,8 @@
 //! let lab = topology.deploy().await?;
 //!
 //! // Interact
-//! let output = lab.exec("server1", "ping", &["-c1", "10.0.0.1"]).await?;
-//! println!("{}", output);
+//! let output = lab.exec("server1", "ping", &["-c1", "10.0.0.1"])?;
+//! println!("{}", output.stdout);
 //!
 //! // Teardown
 //! lab.destroy().await?;
@@ -65,7 +65,7 @@ pub mod validator;
 
 pub use builder::Lab;
 pub use error::{Error, Result};
-pub use running::{ExecOutput, ProcessInfo, RunningLab};
+pub use running::{ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab};
 pub use types::{
     EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment, InterfaceConfig, LabConfig,
     Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig, Topology, VlanConfig,

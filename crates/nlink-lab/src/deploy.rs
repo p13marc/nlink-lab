@@ -818,11 +818,29 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 18: Write state file ──────────────────────────────────
+    // Encode WG public keys as base64 for state persistence
+    let wg_public_keys_b64 = {
+        use base64::Engine;
+        let mut map = HashMap::new();
+        for (node, keys) in &wg_public_keys {
+            let mut node_map = HashMap::new();
+            for (iface, pubkey) in keys {
+                node_map.insert(
+                    iface.clone(),
+                    base64::engine::general_purpose::STANDARD.encode(pubkey),
+                );
+            }
+            map.insert(node.clone(), node_map);
+        }
+        map
+    };
+
     let lab_state = LabState {
         name: topology.lab.name.clone(),
         created_at: now_iso8601(),
         namespaces: namespace_names.clone(),
         pids: pids.clone(),
+        wg_public_keys: wg_public_keys_b64,
     };
     state::save(&lab_state, topology)?;
 

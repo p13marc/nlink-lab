@@ -230,9 +230,9 @@ fn unique_lab_name(base: &str) -> String {
 The crate already has doc comments on all public types and functions. Ensure
 `cargo doc` builds cleanly and the module-level examples compile.
 
-- [ ] `cargo doc --no-deps -p nlink-lab` builds without warnings
-- [ ] Module-level examples in `lib.rs` are up to date with current API
-- [ ] Builder DSL examples in `builder.rs` are complete
+- [x] `cargo doc --no-deps -p nlink-lab` builds without warnings
+- [x] Module-level examples in `lib.rs` are up to date with current API
+- [x] Builder DSL examples in `builder.rs` are complete
 
 ### User Guide (README.md at repo root)
 
@@ -241,5 +241,5 @@ The crate already has doc comments on all public types and functions. Ensure
 - [x] Topology file format overview (TOML + NLL with examples)
 - [x] Builder DSL example
 - [x] Testing with `#[lab_test]`
-- [ ] Comparison with containerlab (brief table)
+- [x] Comparison with containerlab (brief table)
 - [x] Requirements (Linux, root/CAP_NET_ADMIN, kernel version)

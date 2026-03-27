@@ -21,6 +21,9 @@ pub struct LabState {
     pub namespaces: std::collections::HashMap<String, String>,
     /// Background process PIDs: (node_name, pid).
     pub pids: Vec<(String, u32)>,
+    /// WireGuard public keys: node_name -> (wg_iface -> base64-encoded public key).
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub wg_public_keys: std::collections::HashMap<String, std::collections::HashMap<String, String>>,
 }
 
 /// Summary info about a running lab (for status listing).
@@ -166,6 +169,7 @@ mod tests {
             created_at: "2026-03-22T14:00:00Z".to_string(),
             namespaces,
             pids: vec![("r1".to_string(), 1234)],
+            wg_public_keys: HashMap::new(),
         };
 
         let topology = crate::parser::parse(

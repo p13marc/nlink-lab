@@ -103,6 +103,41 @@ enum Commands {
         /// Lab name.
         lab: String,
     },
+
+    /// Kill a tracked background process.
+    Kill {
+        /// Lab name.
+        lab: String,
+
+        /// Process ID to kill.
+        pid: u32,
+    },
+
+    /// Run diagnostics on a lab.
+    Diagnose {
+        /// Lab name.
+        lab: String,
+
+        /// Node name (omit to diagnose all).
+        node: Option<String>,
+    },
+
+    /// Capture packets on an interface (tcpdump).
+    Capture {
+        /// Lab name.
+        lab: String,
+
+        /// Endpoint (e.g., "router:eth0").
+        endpoint: String,
+
+        /// Write to pcap file.
+        #[arg(short, long)]
+        write: Option<PathBuf>,
+
+        /// Capture N packets then stop.
+        #[arg(short, long)]
+        count: Option<u32>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -277,12 +312,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let running = nlink_lab::RunningLab::load(&lab)?;
 
             if clear {
-                running
-                    .set_impairment(
-                        &endpoint,
-                        &nlink_lab::Impairment::default(),
-                    )
-                    .await?;
+                running.clear_impairment(&endpoint).await?;
                 println!("Cleared impairment on {endpoint}");
             } else {
                 let impairment = nlink_lab::Impairment {
@@ -315,6 +345,78 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     let status = if p.alive { "running" } else { "dead" };
                     println!("{:<12} {:<8} {}", p.node, p.pid, status);
                 }
+            }
+            Ok(())
+        }
+
+        Commands::Kill { lab, pid } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            running.kill_process(pid)?;
+            println!("Killed process {pid}");
+            Ok(())
+        }
+
+        Commands::Diagnose { lab, node } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let results = running.diagnose(node.as_deref()).await?;
+            for diag in &results {
+                println!("── {} ──", diag.node);
+                for iface in &diag.interfaces {
+                    let status = if iface.issues.is_empty() {
+                        "OK"
+                    } else {
+                        "WARN"
+                    };
+                    println!(
+                        "  [{status:<4}] {:<12} state={:<6} mtu={:<5} rx={} tx={}",
+                        iface.name,
+                        format!("{:?}", iface.state),
+                        iface.mtu.unwrap_or(0),
+                        iface.stats.rx_bytes(),
+                        iface.stats.tx_bytes(),
+                    );
+                    for issue in &iface.issues {
+                        println!("         {issue}");
+                    }
+                }
+                for issue in &diag.issues {
+                    println!("  [WARN] {issue}");
+                }
+            }
+            Ok(())
+        }
+
+        Commands::Capture {
+            lab,
+            endpoint,
+            write,
+            count,
+        } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let ep = nlink_lab::EndpointRef::parse(&endpoint).ok_or_else(|| {
+                nlink_lab::Error::InvalidEndpoint {
+                    endpoint: endpoint.clone(),
+                }
+            })?;
+
+            let mut args = vec!["-i".to_string(), ep.iface.clone(), "-nn".to_string()];
+            if let Some(file) = &write {
+                args.push("-w".to_string());
+                args.push(file.to_string_lossy().into_owned());
+            }
+            if let Some(n) = count {
+                args.push("-c".to_string());
+                args.push(n.to_string());
+            }
+
+            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let output = running.exec(&ep.node, "tcpdump", &arg_refs)?;
+            print!("{}", output.stdout);
+            if !output.stderr.is_empty() {
+                eprint!("{}", output.stderr);
             }
             Ok(())
         }

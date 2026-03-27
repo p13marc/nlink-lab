@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use nlink::netlink::diagnostics::{Diagnostics, InterfaceDiag, Issue, Severity};
 use nlink::netlink::namespace;
 use nlink::{Connection, Route};
 
@@ -43,6 +44,17 @@ pub struct ProcessInfo {
     pub pid: u32,
     /// Whether the process is still alive.
     pub alive: bool,
+}
+
+/// Diagnostic results for a single node.
+#[derive(Debug)]
+pub struct NodeDiagnostic {
+    /// Node name.
+    pub node: String,
+    /// Per-interface diagnostics.
+    pub interfaces: Vec<InterfaceDiag>,
+    /// Issues detected.
+    pub issues: Vec<Issue>,
 }
 
 impl RunningLab {
@@ -149,6 +161,57 @@ impl RunningLab {
                 .await
                 .map_err(|e| Error::deploy_failed(format!("set impairment on '{endpoint}': {e}"))),
         }
+    }
+
+    /// Remove all impairments from an interface.
+    pub async fn clear_impairment(&self, endpoint: &str) -> Result<()> {
+        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: endpoint.to_string(),
+        })?;
+        let ns_name = self.namespace_for(&ep.node)?;
+        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+        })?;
+
+        // Delete the root qdisc (removes all netem config)
+        conn.del_qdisc(&ep.iface, "root").await.map_err(|e| {
+            Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}"))
+        })?;
+        Ok(())
+    }
+
+    /// Run diagnostics on the lab, optionally filtered to a single node.
+    pub async fn diagnose(&self, node: Option<&str>) -> Result<Vec<NodeDiagnostic>> {
+        let mut results = Vec::new();
+        for (node_name, ns_name) in &self.namespace_names {
+            if let Some(filter) = node {
+                if node_name != filter {
+                    continue;
+                }
+            }
+            let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+                Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+            })?;
+            let diag = Diagnostics::new(conn);
+            let report = diag.scan().await.map_err(|e| {
+                Error::deploy_failed(format!("diagnostics scan for '{node_name}': {e}"))
+            })?;
+            results.push(NodeDiagnostic {
+                node: node_name.clone(),
+                interfaces: report.interfaces,
+                issues: report.issues,
+            });
+        }
+        Ok(results)
+    }
+
+    /// Kill a tracked background process by PID.
+    pub fn kill_process(&self, pid: u32) -> Result<()> {
+        if !self.pids.iter().any(|(_, p)| *p == pid) {
+            return Err(Error::deploy_failed(format!("PID {pid} not tracked by this lab")));
+        }
+        kill_process(pid);
+        Ok(())
     }
 
     /// Destroy the lab: kill processes, delete namespaces, remove state.

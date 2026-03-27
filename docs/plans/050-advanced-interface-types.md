@@ -195,7 +195,7 @@ for (port_node, port_config) in &network.ports {
 - [x] Public key derivation from private key
 - [x] Configure WG device via `Connection<Wireguard>::set_device()`
 - [x] Peer resolution: map node names to public keys and endpoints
-- [ ] Store generated keys in state file
+- [x] Store generated keys in state file
 - [ ] Test: WireGuard VPN topology from NLINK_LAB.md section 4.4
 
 ### Bond

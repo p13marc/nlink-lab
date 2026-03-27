@@ -158,6 +158,21 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 
 Each example is available in both `.toml` and `.nll` formats.
 
+## Comparison with containerlab
+
+| | **nlink-lab** | **containerlab** |
+|---|---|---|
+| **Abstraction** | Network namespaces | Docker/podman containers |
+| **Focus** | L2/L3/L4 networking primitives | NOS container orchestration |
+| **Topology format** | TOML + NLL DSL | YAML |
+| **Programmatic API** | Rust builder DSL + `#[lab_test]` macro | Go library |
+| **Traffic control** | Native TC/netem integration | External tools |
+| **Firewall** | Native nftables | Container-dependent |
+| **VRF / VXLAN / WireGuard** | First-class support | Depends on NOS image |
+| **Dependencies** | Linux kernel only | Docker/podman runtime |
+| **Startup time** | Milliseconds (namespace creation) | Seconds (container pull + boot) |
+| **Best for** | Protocol testing, network simulation, CI | Multi-vendor NOS labs |
+
 ## Requirements
 
 - Linux (kernel 4.19+)

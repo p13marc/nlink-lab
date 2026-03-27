@@ -138,6 +138,32 @@ enum Commands {
         #[arg(short, long)]
         count: Option<u32>,
     },
+
+    /// Create a topology file from a built-in template.
+    Init {
+        /// Template name (e.g., "router", "spine-leaf"). Use --list to see all.
+        template: Option<String>,
+
+        /// List available templates.
+        #[arg(long)]
+        list: bool,
+
+        /// Output directory (default: current directory).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format.
+        #[arg(short, long, default_value = "toml")]
+        format: String,
+
+        /// Override the lab name.
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Overwrite existing files.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -418,6 +444,71 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             if !output.stderr.is_empty() {
                 eprint!("{}", output.stderr);
             }
+            Ok(())
+        }
+
+        Commands::Init {
+            template,
+            list,
+            output,
+            format,
+            name,
+            force,
+        } => {
+            if list || template.is_none() {
+                println!("{:<15} {:<5} {:<5} {}", "TEMPLATE", "NODES", "LINKS", "DESCRIPTION");
+                println!("{}", "─".repeat(70));
+                for t in nlink_lab::templates::list() {
+                    println!(
+                        "{:<15} {:<5} {:<5} {}",
+                        t.name, t.node_count, t.link_count, t.description
+                    );
+                }
+                return Ok(());
+            }
+
+            let template_name = template.unwrap();
+            let t = nlink_lab::templates::get(&template_name).ok_or_else(|| {
+                nlink_lab::Error::invalid_topology(format!(
+                    "unknown template '{template_name}'. Use --list to see available templates"
+                ))
+            })?;
+
+            let (toml_content, nll_content) = nlink_lab::templates::render(t, name.as_deref());
+            let out_dir = output.unwrap_or_else(|| PathBuf::from("."));
+            let lab_name = name.as_deref().unwrap_or(t.name);
+
+            let write_file = |ext: &str, content: &str| -> nlink_lab::Result<()> {
+                let path = out_dir.join(format!("{lab_name}.{ext}"));
+                if path.exists() && !force {
+                    return Err(nlink_lab::Error::AlreadyExists {
+                        name: format!("{} (use --force to overwrite)", path.display()),
+                    });
+                }
+                std::fs::write(&path, content)?;
+                println!(
+                    "Created {} ({} nodes, {} links)",
+                    path.display(),
+                    t.node_count,
+                    t.link_count
+                );
+                Ok(())
+            };
+
+            match format.as_str() {
+                "toml" => write_file("toml", &toml_content)?,
+                "nll" => write_file("nll", &nll_content)?,
+                "both" => {
+                    write_file("toml", &toml_content)?;
+                    write_file("nll", &nll_content)?;
+                }
+                other => {
+                    return Err(nlink_lab::Error::invalid_topology(format!(
+                        "unknown format '{other}': expected toml, nll, or both"
+                    )));
+                }
+            }
+
             Ok(())
         }
     }

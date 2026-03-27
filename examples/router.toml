@@ -1,0 +1,33 @@
+# Router topology: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── router ──── host2 (10.0.2.2)
+#                       eth0    eth1
+#
+# The router has IP forwarding enabled. Each host has a
+# default route through the router.
+
+[lab]
+name = "router"
+description = "Router between two subnets"
+
+[profiles.router]
+sysctls = { "net.ipv4.ip_forward" = "1" }
+
+[nodes.router]
+profile = "router"
+
+[nodes.host1]
+[nodes.host1.routes]
+default = { via = "10.0.1.1" }
+
+[nodes.host2]
+[nodes.host2.routes]
+default = { via = "10.0.2.1" }
+
+[[links]]
+endpoints = ["router:eth0", "host1:eth0"]
+addresses = ["10.0.1.1/24", "10.0.1.2/24"]
+
+[[links]]
+endpoints = ["router:eth1", "host2:eth0"]
+addresses = ["10.0.2.1/24", "10.0.2.2/24"]

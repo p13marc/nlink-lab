@@ -61,6 +61,7 @@ pub mod helpers;
 pub mod parser;
 pub mod running;
 pub mod state;
+pub mod templates;
 pub mod types;
 pub mod validator;
 

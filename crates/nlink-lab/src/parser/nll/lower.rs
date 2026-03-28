@@ -593,7 +593,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                 node.interfaces.insert(
                     vx.name.clone(),
                     types::InterfaceConfig {
-                        kind: Some("vxlan".to_string()),
+                        kind: Some(types::InterfaceKind::Vxlan),
                         vni: Some(vx.vni),
                         local: vx.local.clone(),
                         remote: vx.remote.clone(),
@@ -607,7 +607,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                 node.interfaces.insert(
                     d.name.clone(),
                     types::InterfaceConfig {
-                        kind: Some("dummy".to_string()),
+                        kind: Some(types::InterfaceKind::Dummy),
                         addresses: d.addresses.clone(),
                         ..Default::default()
                     },
@@ -687,7 +687,7 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
 
 fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) {
     let mut network = types::Network {
-        kind: Some("bridge".to_string()),
+        kind: Some("bridge".to_string()),  // Network kind stays as String
         vlan_filtering: if net.vlan_filtering { Some(true) } else { None },
         mtu: net.mtu,
         members: net.members.clone(),
@@ -740,6 +740,7 @@ fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
 #[cfg(test)]
 mod tests {
     use crate::parser::nll;
+    use crate::types;
 
     fn parse_and_lower(input: &str) -> crate::types::Topology {
         nll::parse(input).unwrap()
@@ -970,7 +971,7 @@ node vtep1 {
 }"#,
         );
         let iface = &topo.nodes["vtep1"].interfaces["vxlan100"];
-        assert_eq!(iface.kind.as_deref(), Some("vxlan"));
+        assert_eq!(iface.kind, Some(types::InterfaceKind::Vxlan));
         assert_eq!(iface.vni, Some(100));
         assert_eq!(iface.local.as_deref(), Some("10.0.0.1"));
         assert_eq!(iface.remote.as_deref(), Some("10.0.0.2"));
@@ -1082,7 +1083,7 @@ node r1 : nonexistent"#);
     fn test_example_vxlan() {
         let topo = parse_example("vxlan-overlay.nll");
         let vxlan = &topo.nodes["vtep1"].interfaces["vxlan100"];
-        assert_eq!(vxlan.kind.as_deref(), Some("vxlan"));
+        assert_eq!(vxlan.kind, Some(types::InterfaceKind::Vxlan));
         assert_eq!(vxlan.vni, Some(100));
     }
 

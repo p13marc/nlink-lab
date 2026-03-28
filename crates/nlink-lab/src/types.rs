@@ -154,11 +154,22 @@ impl Node {
     }
 }
 
+/// Interface type for explicit interfaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InterfaceKind {
+    Dummy,
+    Vxlan,
+    Vlan,
+    Bond,
+    Loopback,
+}
+
 /// Explicit interface configuration (for interfaces not created by links).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InterfaceConfig {
-    /// Interface type (vxlan, bond, vlan, dummy, etc.).
-    pub kind: Option<String>,
+    /// Interface type.
+    pub kind: Option<InterfaceKind>,
 
     /// IP addresses in CIDR notation.
     #[serde(default)]

@@ -143,6 +143,15 @@ impl Lab {
     pub fn build(self) -> Topology {
         self.topology
     }
+
+    /// Finalize, validate, and return the topology.
+    ///
+    /// Returns an error if the topology has validation errors.
+    pub fn build_validated(self) -> crate::error::Result<Topology> {
+        let topo = self.build();
+        topo.validate().bail()?;
+        Ok(topo)
+    }
 }
 
 // ─────────────────────────────────────────────────
@@ -333,9 +342,9 @@ impl InterfaceBuilder {
         }
     }
 
-    /// Set the interface kind (vxlan, bond, dummy, etc.).
-    pub fn kind(mut self, kind: &str) -> Self {
-        self.config.kind = Some(kind.to_string());
+    /// Set the interface kind.
+    pub fn kind(mut self, kind: crate::types::InterfaceKind) -> Self {
+        self.config.kind = Some(kind);
         self
     }
 

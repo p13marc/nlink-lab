@@ -70,7 +70,7 @@ pub use error::{Error, Result};
 pub use running::{ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab};
 pub use types::{
     ContainerRuntime, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
-    InterfaceConfig, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig,
+    InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig,
     Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
 pub use validator::{Severity, ValidationIssue, ValidationResult};

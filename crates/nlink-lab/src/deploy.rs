@@ -18,7 +18,7 @@ use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_duration, parse_percent, parse_rate_bps};
 use crate::running::RunningLab;
 use crate::state::{self, ContainerState, LabState};
-use crate::types::{EndpointRef, Topology};
+use crate::types::{EndpointRef, InterfaceKind, Topology};
 
 /// Abstraction over bare namespace vs container node.
 enum NodeHandle {
@@ -352,8 +352,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
 
         for (iface_name, iface_config) in &node.interfaces {
-            match iface_config.kind.as_deref() {
-                Some("dummy") => {
+            match &iface_config.kind {
+                Some(InterfaceKind::Dummy) => {
                     conn.add_link(nlink::netlink::link::DummyLink::new(iface_name))
                         .await
                         .map_err(|e| {
@@ -362,7 +362,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                             ))
                         })?;
                 }
-                Some("vxlan") => {
+                Some(InterfaceKind::Vxlan) => {
                     let vni = iface_config.vni.ok_or_else(|| {
                         Error::invalid_topology(format!(
                             "vxlan interface '{iface_name}' on node '{node_name}' missing vni"
@@ -392,7 +392,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         ))
                     })?;
                 }
-                Some("bond") => {
+                Some(InterfaceKind::Bond) => {
                     conn.add_link(nlink::netlink::link::BondLink::new(iface_name))
                         .await
                         .map_err(|e| {
@@ -401,7 +401,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                             ))
                         })?;
                 }
-                Some("vlan") => {
+                Some(InterfaceKind::Vlan) => {
                     let parent = iface_config.parent.as_deref().ok_or_else(|| {
                         Error::invalid_topology(format!(
                             "vlan interface '{iface_name}' on node '{node_name}' missing parent"
@@ -422,16 +422,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 }
                 // loopback or no kind — skip creation (lo exists already, addresses set in step 9)
                 None => {}
-                Some(kind) => {
-                    tracing::warn!(
-                        "unsupported interface kind '{kind}' on node '{node_name}'.{iface_name} — skipping"
-                    );
+                Some(InterfaceKind::Loopback) => {
+                    // loopback exists already, addresses set in step 9
                 }
             }
 
             // Set MTU if specified
             if let Some(mtu) = iface_config.mtu {
-                if iface_config.kind.is_some() {
+                if iface_config.kind.is_some() && iface_config.kind != Some(InterfaceKind::Loopback) {
                     // Only set MTU on interfaces we created (not lo)
                     conn.set_link_mtu(iface_name, mtu).await.map_err(|e| {
                         Error::deploy_failed(format!(
@@ -609,7 +607,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
 
         for (iface_name, iface_config) in &node.interfaces {
-            if iface_config.kind.as_deref() != Some("bond") || iface_config.members.is_empty() {
+            if iface_config.kind != Some(InterfaceKind::Bond) || iface_config.members.is_empty() {
                 continue;
             }
             for member in &iface_config.members {
@@ -1394,36 +1392,9 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
 }
 
 fn now_iso8601() -> String {
-    // Simple UTC timestamp without external crate
-    let dur = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = dur.as_secs();
-    // Rough conversion to ISO 8601 (good enough for state tracking)
-    let days = secs / 86400;
-    let time_of_day = secs % 86400;
-    let hours = time_of_day / 3600;
-    let minutes = (time_of_day % 3600) / 60;
-    let seconds = time_of_day % 60;
-
-    // Days since epoch to Y-M-D (simplified)
-    let (year, month, day) = days_to_date(days);
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
-}
-
-fn days_to_date(days: u64) -> (u64, u64, u64) {
-    // Algorithm from https://howardhinnant.github.io/date_algorithms.html
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 /// Cleanup guard that removes namespaces on drop if deployment fails.

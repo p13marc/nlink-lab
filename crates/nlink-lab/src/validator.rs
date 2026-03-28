@@ -961,7 +961,7 @@ link a:eth0 -- nonexistent:eth0
         topo.lab.name = "bad-vlan".into();
         topo.nodes.insert("a".into(), Default::default());
         let mut net = crate::types::Network {
-            kind: Some("bridge".into()),
+            kind: Some("bridge".to_string()),
             members: vec!["a:eth0".into()],
             ..Default::default()
         };

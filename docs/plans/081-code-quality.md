@@ -227,9 +227,9 @@ Or use an enum if more kinds are planned.
 ## Progress
 
 ### Type Safety
-- [ ] Replace interface kind `String` with enum
+- [x] Replace interface kind `String` with `InterfaceKind` enum
 - [ ] `EndpointRef::parse()` returns `Result` instead of `Option`
-- [ ] Add interface name validation helper
+- [x] Add interface name validation helper (`helpers::validate_interface_name`)
 - [ ] Default `Network.kind` to `"bridge"`
 
 ### Error Handling
@@ -238,9 +238,9 @@ Or use an enum if more kinds are planned.
 - [ ] Update deploy.rs to use specific error variants
 
 ### Builder
-- [ ] Add `build_validated()` method
+- [x] Add `build_validated()` method
 - [ ] Validate interface name length in builder
 - [ ] Validate lab name is non-empty
 
 ### Cleanup
-- [ ] Replace `now_iso8601()` with `time` crate
+- [x] Replace `now_iso8601()` with `time` crate

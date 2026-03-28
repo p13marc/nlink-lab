@@ -1,6 +1,6 @@
-//! Value parsing helpers.
+//! Value parsing and validation helpers.
 //!
-//! Convert human-friendly strings from TOML topology files into values
+//! Convert human-friendly strings from topology files into values
 //! that nlink APIs expect.
 
 use std::net::IpAddr;
@@ -165,6 +165,32 @@ pub fn ip_in_subnet(ip: IpAddr, network: IpAddr, prefix_len: u8) -> bool {
         }
         _ => false, // v4 vs v6 mismatch
     }
+}
+
+/// Validate a Linux interface name.
+///
+/// Rules: 1-15 characters, no '/' or whitespace, not "." or "..".
+pub fn validate_interface_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(Error::Validation("interface name is empty".into()));
+    }
+    if name.len() > 15 {
+        return Err(Error::Validation(format!(
+            "interface name '{name}' is {} chars (max 15)",
+            name.len()
+        )));
+    }
+    if name == "." || name == ".." {
+        return Err(Error::Validation(format!(
+            "interface name '{name}' is reserved"
+        )));
+    }
+    if name.contains('/') || name.contains(char::is_whitespace) {
+        return Err(Error::Validation(format!(
+            "interface name '{name}' contains invalid characters"
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

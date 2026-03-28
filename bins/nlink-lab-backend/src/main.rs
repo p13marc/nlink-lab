@@ -147,6 +147,12 @@ async fn run(
         .await
         .map_err(|e| anyhow::anyhow!("liveliness token: {e}"))?;
 
+    // ── Events publisher ──────────────────────────────────
+    let events_publisher = session
+        .declare_publisher(topics::events(&lab_name))
+        .await
+        .map_err(|e| anyhow::anyhow!("events publisher: {e}"))?;
+
     // ── Main event loop ────────────────────────────────────
     let mut collector = collector::MetricsCollector::new(&lab);
     let mut health_interval = tokio::time::interval(Duration::from_secs(10));
@@ -158,7 +164,27 @@ async fn run(
         tokio::select! {
             _ = metrics_interval.tick() => {
                 match collector.snapshot(&lab).await {
-                    Ok(snapshot) => {
+                    Ok((snapshot, events)) => {
+                        // Publish events
+                        for event in &events {
+                            if let Ok(json) = serde_json::to_vec(event) {
+                                if let Err(e) = events_publisher.put(json).await {
+                                    warn!("publish event: {e}");
+                                }
+                            }
+                        }
+                        // Publish per-interface metrics
+                        for (node_name, node_metrics) in &snapshot.nodes {
+                            for iface in &node_metrics.interfaces {
+                                let topic = topics::metrics_iface(&lab_name, node_name, &iface.name);
+                                if let Ok(json) = serde_json::to_vec(iface) {
+                                    if let Err(e) = session.put(&topic, json).await {
+                                        warn!("publish iface metrics {topic}: {e}");
+                                    }
+                                }
+                            }
+                        }
+                        // Publish full snapshot
                         if let Ok(json) = serde_json::to_vec(&snapshot) {
                             if let Err(e) = snapshot_publisher.put(json).await {
                                 warn!("publish metrics: {e}");

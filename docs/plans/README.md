@@ -6,13 +6,11 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [071](071-live-metrics-dashboard.md) | Zenoh backend daemon, metrics collector, CLI dashboard | Low | 5-7 days |
 | [070](070-topoviewer.md) | Native topology visualizer (Iced GUI, Zenoh client) | Low | 5-7 days |
 
 ### Recommended Order
 
-1. **071 — Zenoh daemon & metrics** — privileged backend (must come before 070)
-2. **070 — TopoViewer GUI** — unprivileged Iced GUI via Zenoh
+1. **070 — TopoViewer GUI** — unprivileged Iced GUI via Zenoh
 
 ## Completed
 
@@ -20,8 +18,8 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 060 (NLL parser), 072 (lab templates), 080 (bug fixes & safety),
 081 (code quality), 082 (NLL completeness), 083 (validator hardening),
 084 (CLI UX), 085 (test coverage), 086 (feature flags), 087 (topology composition
-& hot-reload), and 088 (remove TOML) have been implemented and their plan files
-removed.
+& hot-reload), 088 (remove TOML), and 071 (Zenoh backend & metrics) have been
+implemented and their plan files removed.
 
 ## Reference
 

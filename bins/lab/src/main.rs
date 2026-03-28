@@ -30,6 +30,10 @@ enum Commands {
         /// Destroy existing lab with same name before deploying.
         #[arg(long)]
         force: bool,
+
+        /// Start the Zenoh backend daemon after deploying.
+        #[arg(long)]
+        daemon: bool,
     },
 
     /// Apply topology changes to a running lab.
@@ -310,6 +314,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             topology,
             dry_run,
             force,
+            daemon,
         } => {
             let topo = nlink_lab::parser::parse_file(&topology)?;
             let result = topo.validate();
@@ -342,7 +347,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             check_root();
 
             let start = Instant::now();
-            let _lab = topo.deploy().await?;
+            let lab = topo.deploy().await?;
             let elapsed = start.elapsed();
 
             println!(
@@ -350,6 +355,10 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 topo.lab.name, elapsed
             );
             print_deploy_summary(&topo);
+
+            if daemon {
+                run_daemon_inline(&lab).await?;
+            }
             Ok(())
         }
 
@@ -690,163 +699,19 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
         Commands::Daemon {
             lab,
-            interval,
-            zenoh_mode,
-            zenoh_listen,
-            zenoh_connect,
+            interval: _interval,
+            zenoh_mode: _zenoh_mode,
+            zenoh_listen: _zenoh_listen,
+            zenoh_connect: _zenoh_connect,
         } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
             println!(
-                "Starting Zenoh backend for lab '{}' ({} nodes, interval {}s)",
+                "Starting Zenoh backend for lab '{}' ({} nodes)",
                 lab,
                 running.namespace_count(),
-                interval
             );
-
-            let mut zenoh_config = zenoh::Config::default();
-            if zenoh_mode == "client" {
-                zenoh_config
-                    .insert_json5("mode", r#""client""#)
-                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}")))?;
-            }
-            if let Some(listen) = &zenoh_listen {
-                zenoh_config
-                    .insert_json5("listen/endpoints", &format!(r#"["{listen}"]"#))
-                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh listen config: {e}")))?;
-            }
-            if let Some(connect) = &zenoh_connect {
-                zenoh_config
-                    .insert_json5("connect/endpoints", &format!(r#"["{connect}"]"#))
-                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh connect config: {e}")))?;
-            }
-
-            let session = zenoh::open(zenoh_config).await.map_err(|e| {
-                nlink_lab::Error::deploy_failed(format!("failed to open Zenoh session: {e}"))
-            })?;
-
-            // Run the backend daemon inline (blocks until Ctrl-C)
-            use nlink_lab_shared::{messages::*, topics};
-            use std::time::Duration;
-
-            let lab_name = running.name().to_string();
-            let start_time = Instant::now();
-
-            let topo_publisher = session
-                .declare_publisher(topics::topology(&lab_name))
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
-            let health_publisher = session
-                .declare_publisher(topics::health(&lab_name))
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
-            let snapshot_publisher = session
-                .declare_publisher(topics::metrics_snapshot(&lab_name))
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
-
-            let exec_queryable = session
-                .declare_queryable(topics::rpc_exec(&lab_name))
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("queryable: {e}")))?;
-            let status_queryable = session
-                .declare_queryable(topics::rpc_status(&lab_name))
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("queryable: {e}")))?;
-
-            // Publish initial topology
-            let topo_json = serde_json::to_string(running.topology())?;
-            let topo_update = TopologyUpdate {
-                lab_name: lab_name.clone(),
-                timestamp: now_unix(),
-                node_count: running.topology().nodes.len(),
-                link_count: running.topology().links.len(),
-                topology_json: topo_json,
-            };
-            topo_publisher
-                .put(serde_json::to_vec(&topo_update).unwrap())
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publish: {e}")))?;
-
-            let _token = session
-                .liveliness()
-                .declare_token(topics::health(&lab_name))
-                .await
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("liveliness: {e}")))?;
-
-            eprintln!("Backend daemon running (Ctrl-C to stop)");
-
-            let mut health_interval = tokio::time::interval(Duration::from_secs(10));
-            let mut metrics_interval = tokio::time::interval(Duration::from_secs(interval));
-
-            loop {
-                tokio::select! {
-                    _ = metrics_interval.tick() => {
-                        if let Ok(diags) = running.diagnose(None).await {
-                            let snapshot = diags_to_snapshot(&lab_name, &diags);
-                            if let Ok(json) = serde_json::to_vec(&snapshot) {
-                                let _ = snapshot_publisher.put(json).await;
-                            }
-                        }
-                    }
-                    _ = health_interval.tick() => {
-                        let status = HealthStatus {
-                            lab_name: lab_name.clone(),
-                            timestamp: now_unix(),
-                            node_count: running.topology().nodes.len(),
-                            namespace_count: running.namespace_count(),
-                            container_count: 0,
-                            pid_count: running.process_status().len(),
-                            uptime_secs: start_time.elapsed().as_secs(),
-                        };
-                        if let Ok(json) = serde_json::to_vec(&status) {
-                            let _ = health_publisher.put(json).await;
-                        }
-                    }
-                    Ok(query) = exec_queryable.recv_async() => {
-                        if let Some(payload) = query.payload() {
-                            if let Ok(req) = serde_json::from_slice::<ExecRequest>(&payload.to_bytes()) {
-                                let args: Vec<&str> = req.args.iter().map(|s| s.as_str()).collect();
-                                let resp = match running.exec(&req.node, &req.cmd, &args) {
-                                    Ok(output) => ExecResponse {
-                                        success: output.exit_code == 0,
-                                        exit_code: output.exit_code,
-                                        stdout: output.stdout,
-                                        stderr: output.stderr,
-                                    },
-                                    Err(e) => ExecResponse {
-                                        success: false,
-                                        exit_code: -1,
-                                        stdout: String::new(),
-                                        stderr: e.to_string(),
-                                    },
-                                };
-                                if let Ok(json) = serde_json::to_string(&resp) {
-                                    let _ = query.reply(topics::rpc_exec(&lab_name), json).await;
-                                }
-                            }
-                        }
-                    }
-                    Ok(query) = status_queryable.recv_async() => {
-                        let resp = StatusResponse {
-                            lab_name: lab_name.clone(),
-                            node_count: running.topology().nodes.len(),
-                            namespace_count: running.namespace_count(),
-                            container_count: 0,
-                            uptime_secs: start_time.elapsed().as_secs(),
-                            nodes: running.node_names().map(|s| s.to_string()).collect(),
-                        };
-                        if let Ok(json) = serde_json::to_string(&resp) {
-                            let _ = query.reply(topics::rpc_status(&lab_name), json).await;
-                        }
-                    }
-                    _ = tokio::signal::ctrl_c() => {
-                        eprintln!("\nShutting down daemon");
-                        break;
-                    }
-                }
-            }
-            Ok(())
+            run_daemon_inline(&running).await
         }
 
         Commands::Metrics {
@@ -1013,6 +878,146 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
     }
+}
+
+async fn run_daemon_inline(lab: &nlink_lab::RunningLab) -> nlink_lab::Result<()> {
+    use nlink_lab_shared::{messages::*, topics};
+    use std::time::Duration;
+
+    let zenoh_config = zenoh::Config::default();
+    let session = zenoh::open(zenoh_config).await.map_err(|e| {
+        nlink_lab::Error::deploy_failed(format!("failed to open Zenoh session: {e}"))
+    })?;
+
+    let lab_name = lab.name().to_string();
+    let start_time = Instant::now();
+
+    let topo_publisher = session
+        .declare_publisher(topics::topology(&lab_name))
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
+    let health_publisher = session
+        .declare_publisher(topics::health(&lab_name))
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
+    let snapshot_publisher = session
+        .declare_publisher(topics::metrics_snapshot(&lab_name))
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
+
+    let exec_queryable = session
+        .declare_queryable(topics::rpc_exec(&lab_name))
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("queryable: {e}")))?;
+    let status_queryable = session
+        .declare_queryable(topics::rpc_status(&lab_name))
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("queryable: {e}")))?;
+
+    // Publish initial topology
+    let topo_json = serde_json::to_string(lab.topology())?;
+    let topo_update = TopologyUpdate {
+        lab_name: lab_name.clone(),
+        timestamp: now_unix(),
+        node_count: lab.topology().nodes.len(),
+        link_count: lab.topology().links.len(),
+        topology_json: topo_json,
+    };
+    topo_publisher
+        .put(serde_json::to_vec(&topo_update).unwrap())
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("publish: {e}")))?;
+
+    let _token = session
+        .liveliness()
+        .declare_token(topics::health(&lab_name))
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("liveliness: {e}")))?;
+
+    eprintln!("Backend daemon running (Ctrl-C to stop)");
+
+    let mut health_interval = tokio::time::interval(Duration::from_secs(10));
+    let mut metrics_interval = tokio::time::interval(Duration::from_secs(2));
+
+    loop {
+        tokio::select! {
+            _ = metrics_interval.tick() => {
+                if let Ok(diags) = lab.diagnose(None).await {
+                    let snapshot = diags_to_snapshot(&lab_name, &diags);
+                    // Per-interface metrics
+                    for (node_name, node_metrics) in &snapshot.nodes {
+                        for iface in &node_metrics.interfaces {
+                            let topic = topics::metrics_iface(&lab_name, node_name, &iface.name);
+                            if let Ok(json) = serde_json::to_vec(iface) {
+                                let _ = session.put(&topic, json).await;
+                            }
+                        }
+                    }
+                    // Full snapshot
+                    if let Ok(json) = serde_json::to_vec(&snapshot) {
+                        let _ = snapshot_publisher.put(json).await;
+                    }
+                }
+            }
+            _ = health_interval.tick() => {
+                let status = HealthStatus {
+                    lab_name: lab_name.clone(),
+                    timestamp: now_unix(),
+                    node_count: lab.topology().nodes.len(),
+                    namespace_count: lab.namespace_count(),
+                    container_count: 0,
+                    pid_count: lab.process_status().len(),
+                    uptime_secs: start_time.elapsed().as_secs(),
+                };
+                if let Ok(json) = serde_json::to_vec(&status) {
+                    let _ = health_publisher.put(json).await;
+                }
+            }
+            Ok(query) = exec_queryable.recv_async() => {
+                if let Some(payload) = query.payload() {
+                    if let Ok(req) = serde_json::from_slice::<ExecRequest>(&payload.to_bytes()) {
+                        let args: Vec<&str> = req.args.iter().map(|s| s.as_str()).collect();
+                        let resp = match lab.exec(&req.node, &req.cmd, &args) {
+                            Ok(output) => ExecResponse {
+                                success: output.exit_code == 0,
+                                exit_code: output.exit_code,
+                                stdout: output.stdout,
+                                stderr: output.stderr,
+                            },
+                            Err(e) => ExecResponse {
+                                success: false,
+                                exit_code: -1,
+                                stdout: String::new(),
+                                stderr: e.to_string(),
+                            },
+                        };
+                        if let Ok(json) = serde_json::to_string(&resp) {
+                            let _ = query.reply(topics::rpc_exec(&lab_name), json).await;
+                        }
+                    }
+                }
+            }
+            Ok(query) = status_queryable.recv_async() => {
+                let resp = StatusResponse {
+                    lab_name: lab_name.clone(),
+                    node_count: lab.topology().nodes.len(),
+                    namespace_count: lab.namespace_count(),
+                    container_count: 0,
+                    uptime_secs: start_time.elapsed().as_secs(),
+                    nodes: lab.node_names().map(|s| s.to_string()).collect(),
+                };
+                if let Ok(json) = serde_json::to_string(&resp) {
+                    let _ = query.reply(topics::rpc_status(&lab_name), json).await;
+                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                eprintln!("\nShutting down daemon");
+                break;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn now_unix() -> u64 {

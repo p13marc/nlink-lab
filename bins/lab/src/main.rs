@@ -145,6 +145,20 @@ enum Commands {
         /// Capture N packets then stop.
         #[arg(short, long)]
         count: Option<u32>,
+
+        /// BPF filter expression (e.g., "tcp port 80").
+        #[arg(short, long)]
+        filter: Option<String>,
+    },
+
+    /// Wait for a lab to be ready.
+    Wait {
+        /// Lab name.
+        name: String,
+
+        /// Timeout in seconds (default: 30).
+        #[arg(short, long, default_value = "30")]
+        timeout: u64,
     },
 
     /// Compare two topology files and show differences.
@@ -489,6 +503,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             endpoint,
             write,
             count,
+            filter,
         } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
@@ -506,6 +521,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             if let Some(n) = count {
                 args.push("-c".to_string());
                 args.push(n.to_string());
+            }
+            if let Some(f) = &filter {
+                args.push(f.clone());
             }
 
             let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
@@ -614,6 +632,22 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             );
 
             Ok(())
+        }
+
+        Commands::Wait { name, timeout } => {
+            let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
+            loop {
+                if nlink_lab::state::exists(&name) {
+                    println!("Lab '{name}' is ready.");
+                    return Ok(());
+                }
+                if Instant::now() >= deadline {
+                    return Err(nlink_lab::Error::invalid_topology(format!(
+                        "timeout waiting for lab '{name}' after {timeout}s"
+                    )));
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
         }
 
         Commands::Completions { .. } => {

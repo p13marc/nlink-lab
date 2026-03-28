@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/nlink-lab",
     "crates/nlink-lab-macros",
+    "crates/nlink-lab-shared",
     "bins/lab",
 ]
 
@@ -48,3 +49,4 @@ nlink = { git = "https://github.com/p13marc/nlink", features = ["full"] }
 # Workspace crates
 nlink-lab = { path = "crates/nlink-lab" }
 nlink-lab-macros = { path = "crates/nlink-lab-macros" }
+nlink-lab-shared = { path = "crates/nlink-lab-shared" }

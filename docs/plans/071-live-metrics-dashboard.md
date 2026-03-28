@@ -502,7 +502,7 @@ so one client can observe multiple labs from different machines.
 ## Progress
 
 ### Phase 1: Shared Types + Daemon Core
-- [ ] Create `crates/nlink-lab-shared/` with messages + topics
+- [x] Create `crates/nlink-lab-shared/` with messages + topics
 - [ ] Create `bins/nlink-lab-backend/` with Zenoh session
 - [ ] Publish topology + health on startup
 - [ ] Handle `Status` queryable

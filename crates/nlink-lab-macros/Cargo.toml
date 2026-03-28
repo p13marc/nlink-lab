@@ -6,6 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["networking", "testing", "namespaces", "lab"]
+categories = ["development-tools::testing"]
 
 [lib]
 proc-macro = true

@@ -226,11 +226,11 @@ This catches compile errors from missing feature gates.
 - [ ] CLI forwards features correctly
 
 ### Publishing
-- [ ] Add crate metadata (license, description, repository, keywords)
-- [ ] Verify `cargo doc` builds cleanly
+- [x] Add crate metadata (keywords, categories, readme)
+- [x] Verify `cargo doc --no-deps` builds with zero warnings
 - [ ] Verify `cargo package` includes correct files
-- [ ] Add CHANGELOG.md
-- [ ] Ensure license files present
+- [x] Add CHANGELOG.md
+- [x] Add license files (MIT + Apache-2.0)
 
 ### CI
 - [ ] Feature matrix in CI (5 combinations)

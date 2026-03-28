@@ -6,6 +6,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+keywords = ["networking", "testing", "namespaces", "lab", "topology"]
+categories = ["network-programming", "development-tools::testing"]
+readme = "../../README.md"
 
 [dependencies]
 nlink = { workspace = true }

@@ -14,9 +14,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Deploy a lab from a topology file (.toml or .nll).
+    /// Deploy a lab from a topology file (.nll).
     Deploy {
-        /// Path to the topology file (.toml or .nll).
+        /// Path to the topology file (.nll).
         topology: PathBuf,
 
         /// Validate only, don't actually deploy.
@@ -59,7 +59,7 @@ enum Commands {
 
     /// Validate a topology file without deploying.
     Validate {
-        /// Path to the topology file (.toml or .nll).
+        /// Path to the topology file (.nll).
         topology: PathBuf,
     },
 
@@ -94,7 +94,7 @@ enum Commands {
 
     /// Print topology as DOT graph.
     Graph {
-        /// Path to the topology file (.toml or .nll).
+        /// Path to the topology file (.nll).
         topology: PathBuf,
     },
 
@@ -153,7 +153,7 @@ enum Commands {
         output: Option<PathBuf>,
 
         /// Output format.
-        #[arg(short, long, default_value = "toml")]
+        #[arg(short, long, default_value = "nll")]
         format: String,
 
         /// Override the lab name.
@@ -474,40 +474,23 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 ))
             })?;
 
-            let (toml_content, nll_content) = nlink_lab::templates::render(t, name.as_deref());
+            let nll_content = nlink_lab::templates::render(t, name.as_deref());
             let out_dir = output.unwrap_or_else(|| PathBuf::from("."));
             let lab_name = name.as_deref().unwrap_or(t.name);
 
-            let write_file = |ext: &str, content: &str| -> nlink_lab::Result<()> {
-                let path = out_dir.join(format!("{lab_name}.{ext}"));
-                if path.exists() && !force {
-                    return Err(nlink_lab::Error::AlreadyExists {
-                        name: format!("{} (use --force to overwrite)", path.display()),
-                    });
-                }
-                std::fs::write(&path, content)?;
-                println!(
-                    "Created {} ({} nodes, {} links)",
-                    path.display(),
-                    t.node_count,
-                    t.link_count
-                );
-                Ok(())
-            };
-
-            match format.as_str() {
-                "toml" => write_file("toml", &toml_content)?,
-                "nll" => write_file("nll", &nll_content)?,
-                "both" => {
-                    write_file("toml", &toml_content)?;
-                    write_file("nll", &nll_content)?;
-                }
-                other => {
-                    return Err(nlink_lab::Error::invalid_topology(format!(
-                        "unknown format '{other}': expected toml, nll, or both"
-                    )));
-                }
+            let path = out_dir.join(format!("{lab_name}.nll"));
+            if path.exists() && !force {
+                return Err(nlink_lab::Error::AlreadyExists {
+                    name: format!("{} (use --force to overwrite)", path.display()),
+                });
             }
+            std::fs::write(&path, &nll_content)?;
+            println!(
+                "Created {} ({} nodes, {} links)",
+                path.display(),
+                t.node_count,
+                t.link_count
+            );
 
             Ok(())
         }

@@ -842,32 +842,24 @@ mod tests {
     use super::*;
     use crate::parser;
 
-    fn parse_and_validate(toml: &str) -> ValidationResult {
-        let topo = parser::parse(toml).unwrap();
+    fn parse_and_validate(nll: &str) -> ValidationResult {
+        let topo = parser::parse(nll).unwrap();
+        topo.validate()
+    }
+
+    /// Build a topology directly for tests that can't be expressed in NLL.
+    fn validate_topo(topo: crate::types::Topology) -> ValidationResult {
         topo.validate()
     }
 
     #[test]
     fn test_valid_topology() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "valid"
-
-[profiles.router]
-sysctls = { "net.ipv4.ip_forward" = "1" }
-
-[nodes.r1]
-profile = "router"
-
-[nodes.h1]
-
-[nodes.h1.routes]
-default = { via = "10.0.0.1" }
-
-[[links]]
-endpoints = ["r1:eth0", "h1:eth0"]
-addresses = ["10.0.0.1/24", "10.0.0.2/24"]
+            r#"lab "valid"
+profile router { forward ipv4 }
+node r1 : router
+node h1 { route default via 10.0.0.1 }
+link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 "#,
         );
         assert!(!result.has_errors(), "unexpected errors: {:?}", result.issues());
@@ -875,19 +867,13 @@ addresses = ["10.0.0.1/24", "10.0.0.2/24"]
 
     #[test]
     fn test_invalid_cidr() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-cidr"
-
-[nodes.a]
-[nodes.b]
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-addresses = ["10.0.0.1", "10.0.0.2/24"]
-"#,
-        );
+        // Use builder: NLL parser enforces CIDR format during parsing
+        let topo = crate::Lab::new("bad-cidr")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1", "10.0.0.2/24"))
+            .build();
+        let result = validate_topo(topo);
         assert!(result.has_errors());
         let errors: Vec<_> = result.errors().collect();
         assert_eq!(errors.len(), 1);
@@ -896,37 +882,29 @@ addresses = ["10.0.0.1", "10.0.0.2/24"]
 
     #[test]
     fn test_invalid_cidr_prefix_too_large() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-prefix"
-
-[nodes.a]
-[nodes.b]
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-addresses = ["10.0.0.1/33", "10.0.0.2/24"]
-"#,
-        );
+        let topo = crate::Lab::new("bad-prefix")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/33", "10.0.0.2/24"))
+            .build();
+        let result = validate_topo(topo);
         assert!(result.has_errors());
         assert!(result.errors().any(|e| e.rule == "valid-cidr"));
     }
 
     #[test]
     fn test_bad_endpoint_format() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-ep"
-
-[nodes.a]
-[nodes.b]
-
-[[links]]
-endpoints = ["nocolon", "b:eth0"]
-"#,
-        );
+        // NLL parser enforces endpoint format, so use builder with raw link
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "bad-ep".into();
+        topo.nodes.insert("a".into(), Default::default());
+        topo.nodes.insert("b".into(), Default::default());
+        topo.links.push(crate::types::Link {
+            endpoints: ["nocolon".into(), "b:eth0".into()],
+            addresses: None,
+            mtu: None,
+        });
+        let result = validate_topo(topo);
         assert!(result.has_errors());
         assert!(result.errors().any(|e| e.rule == "endpoint-format"));
     }
@@ -934,14 +912,9 @@ endpoints = ["nocolon", "b:eth0"]
     #[test]
     fn test_dangling_node_ref() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "dangling"
-
-[nodes.a]
-
-[[links]]
-endpoints = ["a:eth0", "nonexistent:eth0"]
+            r#"lab "dangling"
+node a
+link a:eth0 -- nonexistent:eth0
 "#,
         );
         assert!(result.has_errors());
@@ -950,152 +923,121 @@ endpoints = ["a:eth0", "nonexistent:eth0"]
 
     #[test]
     fn test_dangling_profile_ref() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "dangling-profile"
-
-[nodes.a]
-profile = "nonexistent"
-"#,
-        );
+        // NLL lowerer catches undefined profiles during lowering, so use direct construction
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "dangling-profile".into();
+        let mut node = crate::types::Node::default();
+        node.profile = Some("nonexistent".into());
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
         assert!(result.has_errors());
         assert!(result.errors().any(|e| e.rule == "dangling-profile-ref"));
     }
 
     #[test]
     fn test_duplicate_interface() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "dup-iface"
-
-[nodes.a]
-[nodes.a.interfaces.eth0]
-addresses = ["10.0.0.1/24"]
-
-[nodes.b]
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-"#,
-        );
+        // NLL can't create explicit interfaces with the same name as link endpoints
+        // easily, so use the builder
+        let mut topo = crate::Lab::new("dup-iface")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| l)
+            .build();
+        // Add an explicit interface with the same name
+        topo.nodes
+            .get_mut("a")
+            .unwrap()
+            .interfaces
+            .insert("eth0".into(), Default::default());
+        let result = validate_topo(topo);
         assert!(result.has_errors());
-        assert!(result
-            .errors()
-            .any(|e| e.rule == "interface-uniqueness"));
+        assert!(result.errors().any(|e| e.rule == "interface-uniqueness"));
     }
 
     #[test]
     fn test_vlan_out_of_range_port() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-vlan"
-
-[nodes.a]
-
-[networks.test]
-kind = "bridge"
-members = ["a:eth0"]
-
-[networks.test.ports.a]
-interface = "eth0"
-vlans = [0, 4095]
-pvid = 0
-"#,
+        // VLAN out-of-range requires specific numeric values that are easier with builder
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "bad-vlan".into();
+        topo.nodes.insert("a".into(), Default::default());
+        let mut net = crate::types::Network {
+            kind: Some("bridge".into()),
+            members: vec!["a:eth0".into()],
+            ..Default::default()
+        };
+        net.ports.insert(
+            "a".into(),
+            crate::types::PortConfig {
+                interface: Some("eth0".into()),
+                vlans: vec![0, 4095],
+                pvid: Some(0),
+                ..Default::default()
+            },
         );
+        topo.networks.insert("test".into(), net);
+        let result = validate_topo(topo);
         assert!(result.has_errors());
-        let vlan_errors: Vec<_> = result
-            .errors()
-            .filter(|e| e.rule == "vlan-range")
-            .collect();
+        let vlan_errors: Vec<_> = result.errors().filter(|e| e.rule == "vlan-range").collect();
         assert_eq!(vlan_errors.len(), 3); // vlans[0]=0, vlans[1]=4095, pvid=0
     }
 
     #[test]
     fn test_impairment_ref_invalid() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-impairment"
-
-[nodes.a]
-[nodes.b]
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-
-[impairments."a:eth99"]
-delay = "10ms"
+            r#"lab "bad-impairment"
+node a
+node b
+link a:eth0 -- b:eth0
+impair a:eth99 delay 10ms
 "#,
         );
         assert!(result.has_errors());
-        assert!(result
-            .errors()
-            .any(|e| e.rule == "impairment-ref-valid"));
+        assert!(result.errors().any(|e| e.rule == "impairment-ref-valid"));
     }
 
     #[test]
     fn test_rate_limit_ref_invalid() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-rl"
-
-[nodes.a]
-[nodes.b]
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-
-[rate_limits."a:eth99"]
-egress = "100mbit"
+            r#"lab "bad-rl"
+node a
+node b
+link a:eth0 -- b:eth0
+rate a:eth99 egress 100mbit
 "#,
         );
         assert!(result.has_errors());
-        assert!(result
-            .errors()
-            .any(|e| e.rule == "rate-limit-ref-valid"));
+        assert!(result.errors().any(|e| e.rule == "rate-limit-ref-valid"));
     }
 
     #[test]
     fn test_route_missing_via_and_dev() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad-route"
-
-[nodes.a]
-
-[nodes.a.routes]
-default = {}
-"#,
+        // Route without via/dev requires direct type construction
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "bad-route".into();
+        let mut node = crate::types::Node::default();
+        node.routes.insert(
+            "default".into(),
+            crate::types::RouteConfig {
+                via: None,
+                dev: None,
+                metric: None,
+            },
         );
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
         assert!(result.has_errors());
-        assert!(result
-            .errors()
-            .any(|e| e.rule == "route-gateway-type"));
+        assert!(result.errors().any(|e| e.rule == "route-gateway-type"));
     }
 
     #[test]
     fn test_duplicate_ip_warning() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "dup-ip"
-
-[nodes.a]
-[nodes.b]
-[nodes.c]
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-addresses = ["10.0.0.1/24", "10.0.0.2/24"]
-
-[[links]]
-endpoints = ["b:eth1", "c:eth0"]
-addresses = ["10.0.0.1/24", "10.0.0.3/24"]
+            r#"lab "dup-ip"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+link b:eth1 -- c:eth0 { 10.0.0.1/24 -- 10.0.0.3/24 }
 "#,
         );
         assert!(result.has_warnings());
@@ -1105,16 +1047,11 @@ addresses = ["10.0.0.1/24", "10.0.0.3/24"]
     #[test]
     fn test_unreferenced_node_warning() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "isolated"
-
-[nodes.connected_a]
-[nodes.connected_b]
-[nodes.isolated]
-
-[[links]]
-endpoints = ["connected_a:eth0", "connected_b:eth0"]
+            r#"lab "isolated"
+node connected-a
+node connected-b
+node isolated
+link connected-a:eth0 -- connected-b:eth0
 "#,
         );
         assert!(result.has_warnings());
@@ -1127,57 +1064,38 @@ endpoints = ["connected_a:eth0", "connected_b:eth0"]
     #[test]
     fn test_route_reachability_warning() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "unreachable-gw"
-
-[nodes.a]
-[nodes.b]
-
-[nodes.a.routes]
-default = { via = "192.168.1.1" }
-
-[[links]]
-endpoints = ["a:eth0", "b:eth0"]
-addresses = ["10.0.0.1/24", "10.0.0.2/24"]
+            r#"lab "unreachable-gw"
+node a { route default via 192.168.1.1 }
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 "#,
         );
         assert!(result.has_warnings());
-        assert!(result
-            .warnings()
-            .any(|w| w.rule == "route-reachability"));
+        assert!(result.warnings().any(|w| w.rule == "route-reachability"));
     }
 
     #[test]
     fn test_empty_exec_cmd_warning() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "empty-cmd"
-
-[nodes.a]
-
-[[nodes.a.exec]]
-cmd = []
-"#,
-        );
+        // Empty exec cmd can't be expressed in NLL, use builder
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "empty-cmd".into();
+        let mut node = crate::types::Node::default();
+        node.exec.push(crate::types::ExecConfig {
+            cmd: Vec::new(),
+            background: false,
+        });
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
         assert!(result.has_warnings());
-        assert!(result
-            .warnings()
-            .any(|w| w.rule == "empty-exec-cmd"));
+        assert!(result.warnings().any(|w| w.rule == "empty-exec-cmd"));
     }
 
     #[test]
     fn test_bail_on_errors() {
         let result = parse_and_validate(
-            r#"
-[lab]
-name = "bad"
-
-[nodes.a]
-
-[[links]]
-endpoints = ["a:eth0", "missing:eth0"]
+            r#"lab "bad"
+node a
+link a:eth0 -- missing:eth0
 "#,
         );
         assert!(result.bail().is_err());
@@ -1185,17 +1103,16 @@ endpoints = ["a:eth0", "missing:eth0"]
 
     #[test]
     fn test_bail_ok_on_warnings_only() {
-        let result = parse_and_validate(
-            r#"
-[lab]
-name = "warnings-only"
-
-[nodes.a]
-
-[[nodes.a.exec]]
-cmd = []
-"#,
-        );
+        // Warning-only: use empty exec cmd via builder
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "warnings-only".into();
+        let mut node = crate::types::Node::default();
+        node.exec.push(crate::types::ExecConfig {
+            cmd: Vec::new(),
+            background: false,
+        });
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
         assert!(result.bail().is_ok());
     }
 }

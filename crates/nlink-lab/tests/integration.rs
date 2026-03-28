@@ -11,19 +11,13 @@ use nlink_lab::RunningLab;
 
 // ─── File-based tests ─────────────────────────────────────
 
-#[lab_test("examples/simple.toml")]
-async fn deploy_simple_toml(lab: RunningLab) {
+#[lab_test("examples/simple.nll")]
+async fn deploy_simple(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 2);
     assert_eq!(lab.topology().links.len(), 1);
 }
 
 #[lab_test("examples/simple.nll")]
-async fn deploy_simple_nll(lab: RunningLab) {
-    assert_eq!(lab.topology().nodes.len(), 2);
-    assert_eq!(lab.topology().links.len(), 1);
-}
-
-#[lab_test("examples/simple.toml")]
 async fn exec_ip_addr(lab: RunningLab) {
     let output = lab.exec("router", "ip", &["addr", "show", "eth0"]).unwrap();
     assert_eq!(output.exit_code, 0);
@@ -34,7 +28,7 @@ async fn exec_ip_addr(lab: RunningLab) {
     );
 }
 
-#[lab_test("examples/simple.toml")]
+#[lab_test("examples/simple.nll")]
 async fn exec_ip_route(lab: RunningLab) {
     let output = lab.exec("host", "ip", &["route", "show"]).unwrap();
     assert_eq!(output.exit_code, 0);
@@ -45,7 +39,7 @@ async fn exec_ip_route(lab: RunningLab) {
     );
 }
 
-#[lab_test("examples/simple.toml")]
+#[lab_test("examples/simple.nll")]
 async fn exec_ping(lab: RunningLab) {
     let output = lab
         .exec("host", "ping", &["-c1", "-W1", "10.0.0.1"])
@@ -57,7 +51,7 @@ async fn exec_ping(lab: RunningLab) {
     );
 }
 
-#[lab_test("examples/simple.toml")]
+#[lab_test("examples/simple.nll")]
 async fn sysctl_forwarding(lab: RunningLab) {
     let output = lab
         .exec("router", "cat", &["/proc/sys/net/ipv4/ip_forward"])
@@ -66,7 +60,7 @@ async fn sysctl_forwarding(lab: RunningLab) {
     assert_eq!(output.stdout.trim(), "1");
 }
 
-#[lab_test("examples/simple.toml")]
+#[lab_test("examples/simple.nll")]
 async fn netem_applied(lab: RunningLab) {
     let output = lab
         .exec("router", "tc", &["qdisc", "show", "dev", "eth0"])
@@ -79,7 +73,7 @@ async fn netem_applied(lab: RunningLab) {
     );
 }
 
-#[lab_test("examples/simple.toml")]
+#[lab_test("examples/simple.nll")]
 async fn exit_code_forwarded(lab: RunningLab) {
     let output = lab.exec("host", "false", &[]).unwrap();
     assert_ne!(output.exit_code, 0);
@@ -108,7 +102,7 @@ fn builder_topology() -> nlink_lab::Topology {
 
 // ─── Firewall test ────────────────────────────────────────
 
-#[lab_test("examples/firewall.toml")]
+#[lab_test("examples/firewall.nll")]
 async fn deploy_firewall(lab: RunningLab) {
     let output = lab.exec("server", "nft", &["list", "ruleset"]).unwrap();
     assert_eq!(output.exit_code, 0);
@@ -121,7 +115,7 @@ async fn deploy_firewall(lab: RunningLab) {
 
 // ─── Spine-leaf test ──────────────────────────────────────
 
-#[lab_test("examples/spine-leaf.toml")]
+#[lab_test("examples/spine-leaf.nll")]
 async fn deploy_spine_leaf(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 6);
     assert_eq!(lab.topology().links.len(), 6);
@@ -138,7 +132,7 @@ async fn deploy_spine_leaf(lab: RunningLab) {
 
 // ─── State persistence test ───────────────────────────────
 
-#[lab_test("examples/simple.toml")]
+#[lab_test("examples/simple.nll")]
 async fn state_persistence(lab: RunningLab) {
     let name = lab.name().to_string();
     assert!(nlink_lab::state::exists(&name));
@@ -150,7 +144,7 @@ async fn state_persistence(lab: RunningLab) {
 
 // ─── VRF test (plan 050) ─────────────────────────────────
 
-#[lab_test("examples/vrf-multitenant.toml")]
+#[lab_test("examples/vrf-multitenant.nll")]
 async fn deploy_vrf(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 3);
 
@@ -201,7 +195,7 @@ async fn deploy_vrf(lab: RunningLab) {
 
 // ─── WireGuard test (plan 050) ───────────────────────────
 
-#[lab_test("examples/wireguard-vpn.toml")]
+#[lab_test("examples/wireguard-vpn.nll")]
 async fn deploy_wireguard(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 4);
 
@@ -243,7 +237,7 @@ async fn deploy_wireguard(lab: RunningLab) {
 
 // ─── VLAN trunk / bridge test (plans 050 + 052) ─────────
 
-#[lab_test("examples/vlan-trunk.toml")]
+#[lab_test("examples/vlan-trunk.nll")]
 async fn deploy_bridge_vlan(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 4);
 

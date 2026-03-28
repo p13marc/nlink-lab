@@ -3,7 +3,7 @@
 //! Create isolated, reproducible network topologies using Linux network namespaces.
 //! Unlike containerlab (which focuses on container orchestration), nlink-lab is
 //! **networking-first**: deep control over L2/L3/L4 topology, traffic control,
-//! firewalling, and diagnostics — all through a declarative TOML topology file
+//! firewalling, and diagnostics — all through the NLL topology DSL
 //! or a Rust builder DSL.
 //!
 //! # Quick Start
@@ -12,7 +12,7 @@
 //! use nlink_lab::parser;
 //!
 //! // Parse a topology file
-//! let topology = parser::parse_file("datacenter.toml")?;
+//! let topology = parser::parse_file("datacenter.nll")?;
 //!
 //! // Validate
 //! let result = topology.validate();

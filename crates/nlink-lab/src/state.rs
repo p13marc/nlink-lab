@@ -118,7 +118,11 @@ pub fn load(name: &str) -> Result<(LabState, Topology)> {
 
     let topo_path = dir.join("topology.toml");
     let topo_toml = std::fs::read_to_string(&topo_path)?;
-    let topology: Topology = toml::from_str(&topo_toml)?;
+    let topology: Topology = toml::from_str(&topo_toml)
+        .map_err(|e| crate::Error::State {
+            message: format!("failed to parse topology state: {e}"),
+            path: topo_path.clone(),
+        })?;
 
     Ok((state, topology))
 }
@@ -194,15 +198,10 @@ mod tests {
         };
 
         let topology = crate::parser::parse(
-            r#"
-[lab]
-name = "test-lab"
-
-[nodes.r1]
-[nodes.h1]
-
-[[links]]
-endpoints = ["r1:eth0", "h1:eth0"]
+            r#"lab "test-lab"
+node r1
+node h1
+link r1:eth0 -- h1:eth0
 "#,
         )
         .unwrap();

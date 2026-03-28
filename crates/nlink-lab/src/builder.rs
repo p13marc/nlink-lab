@@ -1008,7 +1008,7 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_matches_toml_parsing() {
+    fn test_builder_matches_nll_parsing() {
         // Build topology via builder
         let built = Lab::new("simple")
             .description("Minimal two-node lab")
@@ -1026,34 +1026,16 @@ mod tests {
             .impair("router:eth0", |i| i.delay("10ms").jitter("2ms"))
             .build();
 
-        // Parse equivalent TOML
+        // Parse equivalent NLL
         let parsed = crate::parser::parse(
-            r#"
-[lab]
-name = "simple"
-description = "Minimal two-node lab"
-
-[profiles.router]
-sysctls = { "net.ipv4.ip_forward" = "1" }
-
-[nodes.router]
-profile = "router"
-
-[nodes.router.routes]
-"10.0.0.0/8" = { via = "10.0.0.2" }
-
-[nodes.host]
-
-[nodes.host.routes]
-default = { via = "10.0.0.1" }
-
-[[links]]
-endpoints = ["router:eth0", "host:eth0"]
-addresses = ["10.0.0.1/24", "10.0.0.2/24"]
-
-[impairments."router:eth0"]
-delay = "10ms"
-jitter = "2ms"
+            r#"lab "simple" {
+    description "Minimal two-node lab"
+}
+profile router { sysctl "net.ipv4.ip_forward" "1" }
+node router : router { route 10.0.0.0/8 via 10.0.0.2 }
+node host { route default via 10.0.0.1 }
+link router:eth0 -- host:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+impair router:eth0 delay 10ms jitter 2ms
 "#,
         )
         .unwrap();

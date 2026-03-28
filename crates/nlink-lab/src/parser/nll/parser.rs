@@ -98,6 +98,11 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Metric => Some("metric".into()),
         Token::Egress => Some("egress".into()),
         Token::Ingress => Some("ingress".into()),
+        Token::Burst => Some("burst".into()),
+        Token::Env => Some("env".into()),
+        Token::Volumes => Some("volumes".into()),
+        Token::Runtime => Some("runtime".into()),
+        Token::Parent => Some("parent".into()),
         _ => None,
     }
 }
@@ -236,6 +241,12 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let name = expect_string(tokens, pos)?;
     let mut description = None;
     let mut prefix = None;
+    let mut runtime = None;
+
+    // Parse optional inline runtime before block
+    if eat(tokens, pos, &Token::Runtime) {
+        runtime = Some(expect_string(tokens, pos)?);
+    }
 
     if eat(tokens, pos, &Token::LBrace) {
         loop {
@@ -252,13 +263,17 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                     *pos += 1;
                     prefix = Some(expect_string(tokens, pos)?);
                 }
+                Some(Token::Runtime) => {
+                    *pos += 1;
+                    runtime = Some(expect_string(tokens, pos)?);
+                }
                 Some(other) => {
                     return Err(err(tokens, *pos, format!(
                         "unexpected {other} in lab block"
                     )));
                 }
                 None => {
-                    return Err(err(tokens, *pos, 
+                    return Err(err(tokens, *pos,
                         "unexpected end of input in lab block".into(),
                     ));
                 }
@@ -270,6 +285,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         name,
         description,
         prefix,
+        runtime,
     })
 }
 
@@ -322,15 +338,54 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     // Parse inline image/cmd before the block
     let mut image = None;
     let mut cmd = None;
+    let mut env = Vec::new();
+    let mut volumes = Vec::new();
     if eat(tokens, pos, &Token::Image) {
         image = Some(expect_string(tokens, pos)?);
         if eat(tokens, pos, &Token::Cmd) {
-            cmd = Some(vec![expect_string(tokens, pos)?]);
+            if check(tokens, *pos, &Token::LBracket) {
+                cmd = Some(parse_string_list(tokens, pos)?);
+            } else {
+                cmd = Some(vec![expect_string(tokens, pos)?]);
+            }
         }
     }
 
     let props = if check(tokens, *pos, &Token::LBrace) {
-        parse_node_block(tokens, pos)?
+        let mut props = Vec::new();
+        expect(tokens, pos, &Token::LBrace)?;
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
+            }
+            match at(tokens, *pos) {
+                Some(Token::Image) => {
+                    *pos += 1;
+                    image = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Cmd) => {
+                    *pos += 1;
+                    if check(tokens, *pos, &Token::LBracket) {
+                        cmd = Some(parse_string_list(tokens, pos)?);
+                    } else {
+                        cmd = Some(vec![expect_string(tokens, pos)?]);
+                    }
+                }
+                Some(Token::Env) => {
+                    *pos += 1;
+                    env = parse_string_list(tokens, pos)?;
+                }
+                Some(Token::Volumes) => {
+                    *pos += 1;
+                    volumes = parse_string_list(tokens, pos)?;
+                }
+                _ => {
+                    props.push(parse_node_prop(tokens, pos)?);
+                }
+            }
+        }
+        props
     } else {
         Vec::new()
     };
@@ -340,6 +395,8 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         profile,
         image,
         cmd,
+        env,
+        volumes,
         props,
     })
 }
@@ -693,7 +750,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
 
     let mut key = None;
     let mut listen_port = None;
-    let mut address = None;
+    let mut addresses = Vec::new();
     let mut peers = Vec::new();
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -713,7 +770,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
             }
             Some(Token::Address) => {
                 *pos += 1;
-                address = Some(parse_cidr_or_name(tokens, pos)?);
+                addresses.push(parse_cidr_or_name(tokens, pos)?);
             }
             Some(Token::Peers) => {
                 *pos += 1;
@@ -725,7 +782,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
                 )));
             }
             None => {
-                return Err(err(tokens, *pos, 
+                return Err(err(tokens, *pos,
                     "unexpected end of input in wireguard block".into(),
                 ));
             }
@@ -736,7 +793,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
         name,
         key,
         listen_port,
-        address,
+        addresses,
         peers,
     })
 }
@@ -750,7 +807,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
     let mut local = None;
     let mut remote = None;
     let mut port = None;
-    let mut address = None;
+    let mut addresses = Vec::new();
 
     expect(tokens, pos, &Token::LBrace)?;
     loop {
@@ -777,7 +834,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
             }
             Some(Token::Address) => {
                 *pos += 1;
-                address = Some(parse_cidr_or_name(tokens, pos)?);
+                addresses.push(parse_cidr_or_name(tokens, pos)?);
             }
             Some(other) => {
                 return Err(err(tokens, *pos, format!(
@@ -785,7 +842,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
                 )));
             }
             None => {
-                return Err(err(tokens, *pos, 
+                return Err(err(tokens, *pos,
                     "unexpected end of input in vxlan block".into(),
                 ));
             }
@@ -798,7 +855,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
         local,
         remote,
         port,
-        address,
+        addresses,
     })
 }
 
@@ -806,7 +863,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
 
 fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef> {
     let name = expect_ident(tokens, pos)?;
-    let mut address = None;
+    let mut addresses = Vec::new();
 
     if eat(tokens, pos, &Token::LBrace) {
         loop {
@@ -817,7 +874,7 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
             match at(tokens, *pos) {
                 Some(Token::Address) => {
                     *pos += 1;
-                    address = Some(parse_cidr_or_name(tokens, pos)?);
+                    addresses.push(parse_cidr_or_name(tokens, pos)?);
                 }
                 Some(other) => {
                     return Err(err(tokens, *pos, format!(
@@ -825,7 +882,7 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
                     )));
                 }
                 None => {
-                    return Err(err(tokens, *pos, 
+                    return Err(err(tokens, *pos,
                         "unexpected end of input in dummy block".into(),
                     ));
                 }
@@ -833,7 +890,7 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
         }
     }
 
-    Ok(ast::DummyDef { name, address })
+    Ok(ast::DummyDef { name, addresses })
 }
 
 // ─── Run ──────────────────────────────────────────────────
@@ -976,6 +1033,10 @@ fn parse_rate_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RateProp
             Some(Token::Ingress) => {
                 *pos += 1;
                 props.ingress = Some(parse_value(tokens, pos)?);
+            }
+            Some(Token::Burst) => {
+                *pos += 1;
+                props.burst = Some(parse_value(tokens, pos)?);
             }
             _ => break,
         }
@@ -1533,7 +1594,7 @@ node gw {
                     assert_eq!(wg.name, "wg0");
                     assert_eq!(wg.key.as_deref(), Some("auto"));
                     assert_eq!(wg.listen_port, Some(51820));
-                    assert_eq!(wg.address.as_deref(), Some("192.168.255.1/32"));
+                    assert_eq!(wg.addresses, vec!["192.168.255.1/32"]);
                     assert_eq!(wg.peers, vec!["gw-b"]);
                 }
                 _ => panic!("expected Wireguard"),

@@ -15,7 +15,7 @@
 //!
 //! // Get a specific template
 //! let t = templates::get("router").unwrap();
-//! let (toml, nll) = templates::render(t, Some("my-lab"));
+//! let nll = templates::render(t, Some("my-lab"));
 //! ```
 
 /// A built-in topology template.
@@ -30,8 +30,6 @@ pub struct Template {
     pub link_count: usize,
     /// Key features demonstrated.
     pub features: &'static [&'static str],
-    /// TOML content.
-    pub toml: &'static str,
     /// NLL content.
     pub nll: &'static str,
 }
@@ -43,7 +41,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 2,
         link_count: 1,
         features: &["veth", "addresses", "routes", "netem"],
-        toml: include_str!("../../../../examples/simple.toml"),
         nll: include_str!("../../../../examples/simple.nll"),
     },
     Template {
@@ -52,7 +49,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 3,
         link_count: 2,
         features: &["profiles", "ip-forwarding", "default-routes"],
-        toml: include_str!("../../../../examples/router.toml"),
         nll: include_str!("../../../../examples/router.nll"),
     },
     Template {
@@ -61,7 +57,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 6,
         link_count: 8,
         features: &["profiles", "loopback", "multi-hop", "netem"],
-        toml: include_str!("../../../../examples/spine-leaf.toml"),
         nll: include_str!("../../../../examples/spine-leaf.nll"),
     },
     Template {
@@ -70,7 +65,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 4,
         link_count: 3,
         features: &["delay", "loss", "rate-limiting", "jitter"],
-        toml: include_str!("../../../../examples/wan-impairment.toml"),
         nll: include_str!("../../../../examples/wan-impairment.nll"),
     },
     Template {
@@ -79,7 +73,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 3,
         link_count: 2,
         features: &["nftables", "conntrack", "policy", "rules"],
-        toml: include_str!("../../../../examples/firewall.toml"),
         nll: include_str!("../../../../examples/firewall.nll"),
     },
     Template {
@@ -88,7 +81,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 4,
         link_count: 0,
         features: &["bridge", "vlan-filtering", "pvid", "tagged"],
-        toml: include_str!("../../../../examples/vlan-trunk.toml"),
         nll: include_str!("../../../../examples/vlan-trunk.nll"),
     },
     Template {
@@ -97,7 +89,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 3,
         link_count: 2,
         features: &["vrf", "routing-tables", "tenant-isolation"],
-        toml: include_str!("../../../../examples/vrf-multitenant.toml"),
         nll: include_str!("../../../../examples/vrf-multitenant.nll"),
     },
     Template {
@@ -106,7 +97,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 2,
         link_count: 1,
         features: &["wireguard", "encryption", "tunnel"],
-        toml: include_str!("../../../../examples/wireguard-vpn.toml"),
         nll: include_str!("../../../../examples/wireguard-vpn.nll"),
     },
     Template {
@@ -115,7 +105,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 2,
         link_count: 1,
         features: &["vxlan", "overlay", "underlay"],
-        toml: include_str!("../../../../examples/vxlan-overlay.toml"),
         nll: include_str!("../../../../examples/vxlan-overlay.nll"),
     },
     Template {
@@ -124,7 +113,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 2,
         link_count: 1,
         features: &["container", "mixed-topology", "docker"],
-        toml: include_str!("../../../../examples/container.toml"),
         nll: include_str!("../../../../examples/container.nll"),
     },
     Template {
@@ -133,7 +121,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 4,
         link_count: 6,
         features: &["full-mesh", "point-to-point"],
-        toml: include_str!("../../../../examples/mesh.toml"),
         nll: include_str!("../../../../examples/mesh.nll"),
     },
     Template {
@@ -142,7 +129,6 @@ const TEMPLATES: &[Template] = &[
         node_count: 2,
         link_count: 1,
         features: &["iperf3", "rate-limiting", "exec"],
-        toml: include_str!("../../../../examples/iperf-benchmark.toml"),
         nll: include_str!("../../../../examples/iperf-benchmark.nll"),
     },
 ];
@@ -159,27 +145,25 @@ pub fn get(name: &str) -> Option<&'static Template> {
 
 /// Render a template with an optional lab name override.
 ///
-/// Returns `(toml_content, nll_content)` with the lab name replaced.
-pub fn render(template: &Template, name: Option<&str>) -> (String, String) {
+/// Returns the NLL content with the lab name replaced.
+pub fn render(template: &Template, name: Option<&str>) -> String {
     match name {
         Some(new_name) => {
-            let old_name = extract_lab_name(template.toml);
-            let toml = template.toml.replacen(&old_name, new_name, 1);
-            let nll = template.nll.replacen(&old_name, new_name, 1);
-            (toml, nll)
+            let old_name = extract_lab_name(template.nll);
+            template.nll.replacen(&old_name, new_name, 1)
         }
-        None => (template.toml.to_string(), template.nll.to_string()),
+        None => template.nll.to_string(),
     }
 }
 
-/// Extract the lab name from TOML content.
-fn extract_lab_name(toml: &str) -> String {
-    for line in toml.lines() {
+/// Extract the lab name from NLL content (looks for `lab "name"`).
+fn extract_lab_name(nll: &str) -> String {
+    for line in nll.lines() {
         let line = line.trim();
-        if line.starts_with("name") {
-            if let Some(val) = line.split('=').nth(1) {
-                return val.trim().trim_matches('"').to_string();
-            }
+        if let Some(rest) = line.strip_prefix("lab ") {
+            let rest = rest.trim().trim_matches('"');
+            // Stop at first whitespace or brace (handles `lab "name" {`)
+            return rest.split_whitespace().next().unwrap_or(rest).to_string();
         }
     }
     String::new()
@@ -192,26 +176,14 @@ mod tests {
     #[test]
     fn all_templates_parse_and_validate() {
         for template in list() {
-            // Test TOML parsing
-            let topo = crate::parser::parse(template.toml)
-                .unwrap_or_else(|e| panic!("template '{}' TOML parse failed: {e}", template.name));
+            let topo = crate::parser::nll::parse(template.nll)
+                .unwrap_or_else(|e| panic!("template '{}' parse failed: {e}", template.name));
             let result = topo.validate();
             assert!(
                 !result.has_errors(),
-                "template '{}' TOML has validation errors: {:?}",
+                "template '{}' has validation errors: {:?}",
                 template.name,
                 result.errors().collect::<Vec<_>>()
-            );
-
-            // Test NLL parsing
-            let topo_nll = crate::parser::nll::parse(template.nll)
-                .unwrap_or_else(|e| panic!("template '{}' NLL parse failed: {e}", template.name));
-            let result_nll = topo_nll.validate();
-            assert!(
-                !result_nll.has_errors(),
-                "template '{}' NLL has validation errors: {:?}",
-                template.name,
-                result_nll.errors().collect::<Vec<_>>()
             );
         }
     }
@@ -219,10 +191,9 @@ mod tests {
     #[test]
     fn render_replaces_name() {
         let t = get("simple").unwrap();
-        let (toml, nll) = render(t, Some("my-custom-lab"));
-        assert!(toml.contains("my-custom-lab"));
+        let nll = render(t, Some("my-custom-lab"));
         assert!(nll.contains("my-custom-lab"));
-        assert!(!toml.contains("name = \"simple\""));
+        assert!(!nll.contains("\"simple\""));
     }
 
     #[test]

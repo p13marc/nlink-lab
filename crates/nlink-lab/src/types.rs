@@ -1,10 +1,10 @@
 //! Core topology types.
 //!
 //! These types represent the topology of a network lab. They can be constructed
-//! from a TOML file via [`crate::parser::parse`] or programmatically via the
+//! from an NLL file via [`crate::parser::parse`] or programmatically via the
 //! builder DSL ([`crate::Lab`]).
 //!
-//! The type hierarchy mirrors the TOML structure:
+//! The type hierarchy:
 //!
 //! ```text
 //! Topology

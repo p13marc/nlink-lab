@@ -16,6 +16,7 @@ pub struct LabDecl {
     pub name: String,
     pub description: Option<String>,
     pub prefix: Option<String>,
+    pub runtime: Option<String>,
 }
 
 /// Top-level statement.
@@ -45,6 +46,8 @@ pub struct NodeDef {
     pub profile: Option<String>,
     pub image: Option<String>,
     pub cmd: Option<Vec<String>>,
+    pub env: Vec<String>,
+    pub volumes: Vec<String>,
     pub props: Vec<NodeProp>,
 }
 
@@ -108,7 +111,7 @@ pub struct WireguardDef {
     pub name: String,
     pub key: Option<String>,
     pub listen_port: Option<u16>,
-    pub address: Option<String>,
+    pub addresses: Vec<String>,
     pub peers: Vec<String>,
 }
 
@@ -120,14 +123,14 @@ pub struct VxlanDef {
     pub local: Option<String>,
     pub remote: Option<String>,
     pub port: Option<u16>,
-    pub address: Option<String>,
+    pub addresses: Vec<String>,
 }
 
 /// Dummy interface definition.
 #[derive(Debug, Clone)]
 pub struct DummyDef {
     pub name: String,
-    pub address: Option<String>,
+    pub addresses: Vec<String>,
 }
 
 /// Process execution definition.
@@ -153,6 +156,7 @@ pub struct ImpairProps {
 pub struct RateProps {
     pub egress: Option<String>,
     pub ingress: Option<String>,
+    pub burst: Option<String>,
 }
 
 /// Link definition.

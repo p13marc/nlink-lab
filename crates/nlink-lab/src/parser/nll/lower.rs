@@ -247,6 +247,8 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
         profile: n.profile.clone(),
         image: n.image.as_ref().map(|s| i(s, vars)),
         cmd: n.cmd.clone(),
+        env: n.env.iter().map(|s| i(s, vars)).collect(),
+        volumes: n.volumes.iter().map(|s| i(s, vars)).collect(),
         props: n.props.iter().map(|p| interpolate_prop(p, vars)).collect(),
     }
 }
@@ -263,7 +265,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
         ast::NodeProp::Vxlan(vx) => ast::NodeProp::Vxlan(interpolate_vxlan(vx, vars)),
         ast::NodeProp::Dummy(d) => ast::NodeProp::Dummy(ast::DummyDef {
             name: i(&d.name, vars),
-            address: io(&d.address, vars),
+            addresses: d.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
         ast::NodeProp::Run(r) => ast::NodeProp::Run(r.clone()),
     }
@@ -292,7 +294,7 @@ fn interpolate_wg(wg: &ast::WireguardDef, vars: &HashMap<String, String>) -> ast
         name: i(&wg.name, vars),
         key: wg.key.clone(),
         listen_port: wg.listen_port,
-        address: io(&wg.address, vars),
+        addresses: wg.addresses.iter().map(|s| i(s, vars)).collect(),
         peers: wg.peers.iter().map(|s| i(s, vars)).collect(),
     }
 }
@@ -304,7 +306,7 @@ fn interpolate_vxlan(vx: &ast::VxlanDef, vars: &HashMap<String, String>) -> ast:
         local: io(&vx.local, vars),
         remote: io(&vx.remote, vars),
         port: vx.port,
-        address: io(&vx.address, vars),
+        addresses: vx.addresses.iter().map(|s| i(s, vars)).collect(),
     }
 }
 
@@ -345,6 +347,7 @@ fn interpolate_rate_props(
     ast::RateProps {
         egress: io(&p.egress, vars),
         ingress: io(&p.ingress, vars),
+        burst: io(&p.burst, vars),
     }
 }
 
@@ -464,7 +467,11 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
         name: lab.name.clone(),
         description: lab.description.clone(),
         prefix: lab.prefix.clone(),
-        ..Default::default()
+        runtime: lab.runtime.as_deref().map(|s| match s {
+            "docker" => types::ContainerRuntime::Docker,
+            "podman" => types::ContainerRuntime::Podman,
+            _ => types::ContainerRuntime::Auto,
+        }),
     }
 }
 
@@ -479,6 +486,19 @@ fn lower_node(
         cmd: node.cmd.clone(),
         ..Default::default()
     };
+
+    // Container env/volumes
+    if !node.env.is_empty() {
+        let map: HashMap<String, String> = node
+            .env
+            .iter()
+            .filter_map(|s| s.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())))
+            .collect();
+        n.env = Some(map);
+    }
+    if !node.volumes.is_empty() {
+        n.volumes = Some(node.volumes.clone());
+    }
 
     // Apply profile properties first
     if let Some(profile_name) = &node.profile {
@@ -563,7 +583,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                     types::WireguardConfig {
                         private_key: wg.key.clone(),
                         listen_port: wg.listen_port,
-                        addresses: wg.address.iter().cloned().collect(),
+                        addresses: wg.addresses.clone(),
                         peers: wg.peers.clone(),
                     },
                 );
@@ -577,7 +597,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                         local: vx.local.clone(),
                         remote: vx.remote.clone(),
                         port: vx.port,
-                        addresses: vx.address.iter().cloned().collect(),
+                        addresses: vx.addresses.clone(),
                         ..Default::default()
                     },
                 );
@@ -587,7 +607,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                     d.name.clone(),
                     types::InterfaceConfig {
                         kind: Some("dummy".to_string()),
-                        addresses: d.address.iter().cloned().collect(),
+                        addresses: d.addresses.clone(),
                         ..Default::default()
                     },
                 );
@@ -639,17 +659,17 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef) {
         topo.impairments.insert(ep, lower_impair_props(imp));
     }
 
-    // Lower rate
+    // Lower rate (both endpoints)
     if let Some(rate) = &link.rate {
-        let ep = format!("{}:{}", link.left_node, link.left_iface);
-        topo.rate_limits.insert(
-            ep,
-            types::RateLimit {
-                egress: rate.egress.clone(),
-                ingress: rate.ingress.clone(),
-                burst: None,
-            },
-        );
+        let left_ep = format!("{}:{}", link.left_node, link.left_iface);
+        let right_ep = format!("{}:{}", link.right_node, link.right_iface);
+        let rl = types::RateLimit {
+            egress: rate.egress.clone(),
+            ingress: rate.ingress.clone(),
+            burst: rate.burst.clone(),
+        };
+        topo.rate_limits.insert(left_ep, rl.clone());
+        topo.rate_limits.insert(right_ep, rl);
     }
 }
 
@@ -711,7 +731,7 @@ fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
         types::RateLimit {
             egress: rate.props.egress.clone(),
             ingress: rate.props.ingress.clone(),
-            burst: None,
+            burst: rate.props.burst.clone(),
         },
     );
 }
@@ -1032,152 +1052,82 @@ node r1 : nonexistent"#);
         assert!(err.contains("undefined profile"), "got: {err}");
     }
 
-    #[test]
-    fn test_all_nll_examples_parse() {
-        let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
+    // ─── Example file tests ───────────────────────────────
 
-        let mut count = 0;
-        for entry in std::fs::read_dir(&examples_dir).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.extension().is_some_and(|e| e == "nll") {
-                let contents = std::fs::read_to_string(&path)
-                    .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
-                let topo = nll::parse(&contents)
-                    .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
-                let result = topo.validate();
-                assert!(
-                    !result.has_errors(),
-                    "validation errors in {}: {:?}",
-                    path.display(),
-                    result.errors().collect::<Vec<_>>()
-                );
-                count += 1;
-            }
-        }
-        assert!(count >= 6, "expected at least 6 NLL example files, found {count}");
+    fn examples_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("examples")
     }
 
-    // ─── Equivalence tests (NLL matches TOML) ────────────
-
-    fn assert_equivalent(nll_input: &str, toml_input: &str) {
-        let nll_topo = nll::parse(nll_input).unwrap();
-        let toml_topo: crate::types::Topology = toml::from_str(toml_input).unwrap();
-
-        assert_eq!(nll_topo.lab.name, toml_topo.lab.name, "lab name mismatch");
-        assert_eq!(nll_topo.nodes.len(), toml_topo.nodes.len(), "node count mismatch");
-        assert_eq!(nll_topo.links.len(), toml_topo.links.len(), "link count mismatch");
+    fn parse_example(name: &str) -> crate::types::Topology {
+        let path = examples_dir().join(name);
+        let content = std::fs::read_to_string(&path).unwrap();
+        nll::parse(&content).unwrap()
     }
 
     #[test]
-    fn test_nll_matches_toml_simple() {
-        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
-
-        let nll = std::fs::read_to_string(examples.join("simple.nll")).unwrap();
-        let toml = std::fs::read_to_string(examples.join("simple.toml")).unwrap();
-        assert_equivalent(&nll, &toml);
-    }
-
-    #[test]
-    fn test_nll_matches_toml_firewall() {
-        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
-
-        let nll = std::fs::read_to_string(examples.join("firewall.nll")).unwrap();
-        let toml = std::fs::read_to_string(examples.join("firewall.toml")).unwrap();
-        assert_equivalent(&nll, &toml);
-
-        let nll_topo = nll::parse(&nll).unwrap();
-        let fw = nll_topo.nodes["server"].firewall.as_ref().unwrap();
+    fn test_example_firewall() {
+        let topo = parse_example("firewall.nll");
+        let fw = topo.nodes["server"].firewall.as_ref().unwrap();
         assert_eq!(fw.policy.as_deref(), Some("drop"));
         assert_eq!(fw.rules.len(), 3);
     }
 
     #[test]
-    fn test_nll_matches_toml_vxlan() {
-        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
-
-        let nll = std::fs::read_to_string(examples.join("vxlan-overlay.nll")).unwrap();
-        let toml = std::fs::read_to_string(examples.join("vxlan-overlay.toml")).unwrap();
-        assert_equivalent(&nll, &toml);
-
-        let nll_topo = nll::parse(&nll).unwrap();
-        let vxlan = &nll_topo.nodes["vtep1"].interfaces["vxlan100"];
+    fn test_example_vxlan() {
+        let topo = parse_example("vxlan-overlay.nll");
+        let vxlan = &topo.nodes["vtep1"].interfaces["vxlan100"];
         assert_eq!(vxlan.kind.as_deref(), Some("vxlan"));
         assert_eq!(vxlan.vni, Some(100));
     }
 
     #[test]
-    fn test_nll_matches_toml_vrf() {
-        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
-
-        let nll = std::fs::read_to_string(examples.join("vrf-multitenant.nll")).unwrap();
-        let toml = std::fs::read_to_string(examples.join("vrf-multitenant.toml")).unwrap();
-        assert_equivalent(&nll, &toml);
-
-        let nll_topo = nll::parse(&nll).unwrap();
-        let vrf = &nll_topo.nodes["pe"].vrfs["red"];
+    fn test_example_vrf() {
+        let topo = parse_example("vrf-multitenant.nll");
+        let vrf = &topo.nodes["pe"].vrfs["red"];
         assert_eq!(vrf.table, 10);
         assert_eq!(vrf.interfaces, vec!["eth1"]);
     }
 
     #[test]
-    fn test_nll_matches_toml_wireguard() {
-        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
-
-        let nll = std::fs::read_to_string(examples.join("wireguard-vpn.nll")).unwrap();
-        let toml = std::fs::read_to_string(examples.join("wireguard-vpn.toml")).unwrap();
-        assert_equivalent(&nll, &toml);
-
-        let nll_topo = nll::parse(&nll).unwrap();
-        let wg = &nll_topo.nodes["gw-a"].wireguard["wg0"];
+    fn test_example_wireguard() {
+        let topo = parse_example("wireguard-vpn.nll");
+        let wg = &topo.nodes["gw-a"].wireguard["wg0"];
         assert_eq!(wg.private_key.as_deref(), Some("auto"));
         assert_eq!(wg.listen_port, Some(51820));
     }
 
     #[test]
-    fn test_nll_matches_toml_iperf() {
-        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("examples");
+    fn test_example_iperf() {
+        let topo = parse_example("iperf-benchmark.nll");
+        assert_eq!(topo.rate_limits.len(), 2);
+    }
 
-        let nll = std::fs::read_to_string(examples.join("iperf-benchmark.nll")).unwrap();
-        let toml = std::fs::read_to_string(examples.join("iperf-benchmark.toml")).unwrap();
-        assert_equivalent(&nll, &toml);
-
-        let nll_topo = nll::parse(&nll).unwrap();
-        assert_eq!(nll_topo.rate_limits.len(), 2);
+    #[test]
+    fn test_all_nll_examples_parse() {
+        let dir = examples_dir();
+        let mut count = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) == Some("nll") {
+                let content = std::fs::read_to_string(&path).unwrap();
+                let topo = nll::parse(&content).unwrap_or_else(|e| {
+                    panic!("failed to parse {}: {e}", path.display())
+                });
+                let diags = topo.validate();
+                assert!(
+                    !diags.has_errors(),
+                    "{} has validation errors: {:?}",
+                    path.display(),
+                    diags
+                );
+                count += 1;
+            }
+        }
+        assert!(count >= 12, "expected at least 12 .nll examples, found {count}");
     }
 }

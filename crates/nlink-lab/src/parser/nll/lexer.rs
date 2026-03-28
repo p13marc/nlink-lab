@@ -151,6 +151,20 @@ pub enum Token {
     Corrupt,
     #[token("reorder")]
     Reorder,
+    #[token("burst")]
+    Burst,
+
+    // Container node keywords
+    #[token("env")]
+    Env,
+    #[token("volumes")]
+    Volumes,
+    #[token("runtime")]
+    Runtime,
+
+    // VLAN interface keyword
+    #[token("parent")]
+    Parent,
 
     // ── Operators / Punctuation ──────────────────
     #[token("--")]

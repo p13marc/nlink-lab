@@ -256,6 +256,8 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         Token::Int(s) => s.clone(),
         Token::Cidr(s) => s.clone(),
         Token::Ipv4Addr(s) => s.clone(),
+        Token::Ipv6Cidr(s) => s.clone(),
+        Token::Ipv6Addr(s) => s.clone(),
         Token::Duration(s) => s.clone(),
         Token::RateLit(s) => s.clone(),
         Token::Percent(s) => s.clone(),
@@ -539,10 +541,9 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             break;
         }
         match &tokens[*pos].token {
-            Token::Cidr(s) | Token::Ipv4Addr(s) => {
+            Token::Cidr(s) | Token::Ipv4Addr(s) | Token::Ipv6Cidr(s) | Token::Ipv6Addr(s) => {
                 val.push_str(s);
                 *pos += 1;
-                // After a full CIDR/IP, stop unless followed by interpolation-related tokens
                 break;
             }
             Token::Interp(s) => {
@@ -971,8 +972,9 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
             }
 
             match at(tokens, *pos) {
-                // Address pair: CIDR -- CIDR (may start with CIDR, Interp, or Int for compound addresses)
-                Some(Token::Cidr(_)) | Some(Token::Interp(_)) | Some(Token::Int(_)) => {
+                // Address pair: CIDR -- CIDR (IPv4 or IPv6)
+                Some(Token::Cidr(_)) | Some(Token::Ipv6Cidr(_)) | Some(Token::Ipv6Addr(_))
+                | Some(Token::Interp(_)) | Some(Token::Int(_)) => {
                     let left_addr = parse_cidr_or_name(tokens, pos)?;
                     expect(tokens, pos, &Token::DashDash)?;
                     let right_addr = parse_cidr_or_name(tokens, pos)?;

@@ -199,9 +199,24 @@ pub enum Token {
     Slash,
 
     // ── Typed literals (order matters: longer matches first) ──
+
+    // IPv6 CIDR: fd00::1/64, 2001:db8::1/48, ::1/128
+    // Prefix must contain a digit to distinguish from ident::ident
+    #[regex(r"[0-9a-fA-F]*[0-9][0-9a-fA-F]*::[0-9a-fA-F:.]*/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
+    #[regex(r"::[0-9a-fA-F:.]*/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
+    Ipv6Cidr(String),
+
+    // IPv6 address: fd00::1, 2001:db8::1, ::1
+    // Prefix must contain a digit to distinguish from ident::ident
+    #[regex(r"[0-9a-fA-F]*[0-9][0-9a-fA-F]*::[0-9a-fA-F:.]*", |lex| lex.slice().to_string(), priority = 4)]
+    #[regex(r"::[0-9a-fA-F]+", |lex| lex.slice().to_string(), priority = 4)]
+    Ipv6Addr(String),
+
+    // IPv4 CIDR: 10.0.0.1/24
     #[regex(r"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+", |lex| lex.slice().to_string())]
     Cidr(String),
 
+    // IPv4 address: 10.0.0.1
     #[regex(r"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+", |lex| lex.slice().to_string())]
     Ipv4Addr(String),
 
@@ -262,6 +277,8 @@ impl std::fmt::Display for Token {
             Token::Newline => write!(f, "newline"),
             Token::Int(v) => write!(f, "{v}"),
             Token::String(v) => write!(f, "\"{v}\""),
+            Token::Ipv6Cidr(v) => write!(f, "{v}"),
+            Token::Ipv6Addr(v) => write!(f, "{v}"),
             Token::Cidr(v) => write!(f, "{v}"),
             Token::Ipv4Addr(v) => write!(f, "{v}"),
             Token::Duration(v) => write!(f, "{v}"),
@@ -652,6 +669,24 @@ link router:eth0 -- host:eth0 {
                 Token::Duration("30ms".into()),
             ]
         );
+    }
+
+    #[test]
+    fn test_ipv6_address() {
+        let tokens = lex_tokens("fd00::1");
+        assert_eq!(tokens, vec![Token::Ipv6Addr("fd00::1".into())]);
+    }
+
+    #[test]
+    fn test_ipv6_cidr() {
+        let tokens = lex_tokens("fd00::1/64");
+        assert_eq!(tokens, vec![Token::Ipv6Cidr("fd00::1/64".into())]);
+    }
+
+    #[test]
+    fn test_ipv6_loopback() {
+        let tokens = lex_tokens("::1/128");
+        assert_eq!(tokens, vec![Token::Ipv6Cidr("::1/128".into())]);
     }
 
     #[test]

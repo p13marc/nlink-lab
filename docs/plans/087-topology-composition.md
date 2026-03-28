@@ -233,7 +233,7 @@ Apply? [y/N]
 - [x] Dot in names for import prefixes (`dc.r1:eth0`)
 - [x] Tests: basic import, circular rejection, prefix_endpoint
 - [x] Example: `examples/imports/base-network.nll` + `composed.nll`
-- [ ] Update NLL_DSL_DESIGN.md with import syntax
+- [x] Update NLL_DSL_DESIGN.md with import syntax
 
 ### Part 2: Hot-Reload
 - [ ] Implement `diff_topologies()` — compute change set

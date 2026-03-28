@@ -188,12 +188,11 @@ categories = ["network-programming", "development-tools::testing"]
 ### Checklist
 
 - [ ] All public types have doc comments
-- [ ] `cargo doc --no-deps` builds without warnings
+- [x] `cargo doc --no-deps` builds without warnings
 - [ ] `cargo package --list` shows only intended files
-- [ ] `.cargo/config.toml` excludes test fixtures if large
 - [ ] README.md has crates.io badge placeholder
-- [ ] CHANGELOG.md exists (even if minimal for 0.1.0)
-- [ ] License files present (MIT + Apache-2.0)
+- [x] CHANGELOG.md exists
+- [x] License files present (MIT + Apache-2.0)
 
 ## 4. CI Feature Matrix
 

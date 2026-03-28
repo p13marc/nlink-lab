@@ -329,5 +329,5 @@ link server:eth0 -- client:eth0 {
 
 ### Phase 4: New Examples
 - [ ] Bond failover example
-- [ ] IPv6 example (blocked: NLL lexer needs IPv6 address token)
+- [x] IPv6 example (IPv6 lexer tokens added)
 - [x] Asymmetric impairment example (NLL)

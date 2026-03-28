@@ -3,14 +3,33 @@
 //! Expands `for` loops, substitutes `let` variables, resolves profiles,
 //! and maps AST nodes to the [`crate::types::Topology`] struct.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use super::ast;
 use crate::error::Result;
 use crate::types;
 
-/// Lower an NLL AST into a Topology.
+/// Lower an NLL AST into a Topology (no import support).
 pub fn lower(file: &ast::File) -> Result<types::Topology> {
+    lower_with_base_dir(file, None, &mut HashSet::new())
+}
+
+/// Lower an NLL AST with import resolution from a base directory.
+pub fn lower_with_imports(file: &ast::File, base_dir: &Path) -> Result<types::Topology> {
+    let mut visited = HashSet::new();
+    // Track the current file to detect circular imports
+    if let Ok(canonical) = std::fs::canonicalize(base_dir) {
+        visited.insert(canonical);
+    }
+    lower_with_base_dir(file, Some(base_dir), &mut visited)
+}
+
+fn lower_with_base_dir(
+    file: &ast::File,
+    base_dir: Option<&Path>,
+    visited: &mut HashSet<std::path::PathBuf>,
+) -> Result<types::Topology> {
     let mut ctx = LowerCtx::new();
 
     // First pass: collect profiles and variables
@@ -32,6 +51,14 @@ pub fn lower(file: &ast::File) -> Result<types::Topology> {
     let mut topology = types::Topology::default();
     topology.lab = lower_lab(&file.lab);
 
+    // Resolve imports before lowering statements
+    if !file.imports.is_empty() {
+        let base = base_dir.ok_or_else(|| {
+            crate::Error::NllParse("import requires file-based parsing (use parse_file)".into())
+        })?;
+        resolve_imports(&file.imports, base, &mut topology, visited)?;
+    }
+
     // Add profiles to topology (for validator cross-referencing)
     for (name, profile_def) in &ctx.profiles {
         topology.profiles.insert(name.clone(), lower_profile(profile_def));
@@ -49,6 +76,90 @@ pub fn lower(file: &ast::File) -> Result<types::Topology> {
     }
 
     Ok(topology)
+}
+
+// ─── Import Resolution ───────────────────────────────────
+
+fn resolve_imports(
+    imports: &[ast::ImportDef],
+    base_dir: &Path,
+    topology: &mut types::Topology,
+    visited: &mut HashSet<std::path::PathBuf>,
+) -> Result<()> {
+    for imp in imports {
+        let import_path = base_dir.join(&imp.path);
+        let canonical = std::fs::canonicalize(&import_path).map_err(|e| {
+            crate::Error::NllParse(format!("cannot resolve import '{}': {e}", imp.path))
+        })?;
+
+        // Circular import detection
+        if visited.contains(&canonical) {
+            return Err(crate::Error::NllParse(format!(
+                "circular import detected: '{}'",
+                imp.path
+            )));
+        }
+        visited.insert(canonical.clone());
+
+        // Parse and lower the imported file
+        let content = std::fs::read_to_string(&import_path).map_err(|e| {
+            crate::Error::NllParse(format!("cannot read import '{}': {e}", imp.path))
+        })?;
+        let tokens = super::lexer::lex(&content)?;
+        let ast = super::parser::parse_tokens(&tokens, &content)?;
+        let import_base = import_path.parent().unwrap_or(base_dir);
+        let imported = lower_with_base_dir(&ast, Some(import_base), visited)?;
+
+        // Merge imported topology with alias prefix
+        merge_import(topology, &imp.alias, imported);
+    }
+    Ok(())
+}
+
+fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topology) {
+    // Merge nodes with prefixed names
+    for (name, node) in imported.nodes {
+        main.nodes.insert(format!("{alias}.{name}"), node);
+    }
+
+    // Merge links with prefixed endpoint references
+    for mut link in imported.links {
+        for ep in &mut link.endpoints {
+            *ep = prefix_endpoint(alias, ep);
+        }
+        main.links.push(link);
+    }
+
+    // Merge networks with prefixed names and member references
+    for (name, mut network) in imported.networks {
+        for member in &mut network.members {
+            *member = prefix_endpoint(alias, member);
+        }
+        main.networks.insert(format!("{alias}.{name}"), network);
+    }
+
+    // Merge impairments with prefixed endpoint keys
+    for (key, imp) in imported.impairments {
+        main.impairments.insert(prefix_endpoint(alias, &key), imp);
+    }
+
+    // Merge rate limits with prefixed endpoint keys
+    for (key, rl) in imported.rate_limits {
+        main.rate_limits.insert(prefix_endpoint(alias, &key), rl);
+    }
+
+    // Merge profiles with prefixed names
+    for (name, profile) in imported.profiles {
+        main.profiles.insert(format!("{alias}.{name}"), profile);
+    }
+}
+
+fn prefix_endpoint(alias: &str, endpoint: &str) -> String {
+    if let Some((node, iface)) = endpoint.split_once(':') {
+        format!("{alias}.{node}:{iface}")
+    } else {
+        format!("{alias}.{endpoint}")
+    }
 }
 
 // ─── Context ──────────────────────────────────────────────
@@ -1182,5 +1293,69 @@ node r1 : nonexistent"#);
             }
         }
         assert!(count >= 12, "expected at least 12 .nll examples, found {count}");
+    }
+
+    // ─── Import tests ────────────────────────────────────
+
+    #[test]
+    fn test_import_basic() {
+        let composed_path = examples_dir().join("imports/composed.nll");
+        let topo = crate::parser::parse_file(&composed_path).unwrap();
+
+        assert_eq!(topo.lab.name, "composed");
+        // Imported nodes are prefixed with "dc."
+        assert!(topo.nodes.contains_key("dc.r1"), "missing dc.r1");
+        assert!(topo.nodes.contains_key("dc.r2"), "missing dc.r2");
+        // Local node is not prefixed
+        assert!(topo.nodes.contains_key("host"), "missing host");
+        // Total: 2 imported + 1 local
+        assert_eq!(topo.nodes.len(), 3);
+
+        // Imported link endpoints are prefixed
+        let imported_link = topo.links.iter().find(|l| {
+            l.endpoints[0].starts_with("dc.") && l.endpoints[1].starts_with("dc.")
+        });
+        assert!(imported_link.is_some(), "imported link not found");
+
+        // Local link references the imported node
+        let local_link = topo.links.iter().find(|l| {
+            l.endpoints.iter().any(|e| e == "dc.r1:eth1")
+                && l.endpoints.iter().any(|e| e == "host:eth0")
+        });
+        assert!(local_link.is_some(), "local→imported link not found");
+    }
+
+    #[test]
+    fn test_import_circular_rejected() {
+        // Create a temp file that imports itself
+        let dir = std::env::temp_dir().join("nlink-lab-test-circular");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("self.nll");
+        std::fs::write(
+            &file,
+            r#"import "self.nll" as me
+lab "circular"
+node a
+"#,
+        )
+        .unwrap();
+
+        let result = crate::parser::parse_file(&file);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("circular"),
+            "expected circular import error, got: {err}"
+        );
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_import_prefix_endpoint() {
+        assert_eq!(super::prefix_endpoint("dc", "r1:eth0"), "dc.r1:eth0");
+        assert_eq!(super::prefix_endpoint("wan", "pe1:wan0"), "wan.pe1:wan0");
+        assert_eq!(super::prefix_endpoint("dc", "switch:br0"), "dc.switch:br0");
     }
 }

@@ -7,6 +7,18 @@ use crate::error::Result;
 /// Parse a token stream into an NLL AST.
 pub fn parse_tokens(tokens: &[Spanned], _source: &str) -> Result<ast::File> {
     let mut pos = 0;
+
+    // Parse optional imports before the lab declaration
+    let mut imports = Vec::new();
+    loop {
+        skip_newlines(tokens, &mut pos);
+        if pos < tokens.len() && tokens[pos].token == Token::Import {
+            imports.push(parse_import(tokens, &mut pos)?);
+        } else {
+            break;
+        }
+    }
+
     let lab = parse_lab_decl(tokens, &mut pos)?;
     let mut statements = Vec::new();
 
@@ -18,7 +30,21 @@ pub fn parse_tokens(tokens: &[Spanned], _source: &str) -> Result<ast::File> {
         statements.push(parse_statement(tokens, &mut pos)?);
     }
 
-    Ok(ast::File { lab, statements })
+    Ok(ast::File {
+        imports,
+        lab,
+        statements,
+    })
+}
+
+// ─── Import ──────────────────────────────────────────────
+
+fn parse_import(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ImportDef> {
+    expect(tokens, pos, &Token::Import)?;
+    let path = expect_string(tokens, pos)?;
+    expect(tokens, pos, &Token::As)?;
+    let alias = expect_ident(tokens, pos)?;
+    Ok(ast::ImportDef { path, alias })
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -98,6 +124,8 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Metric => Some("metric".into()),
         Token::Egress => Some("egress".into()),
         Token::Ingress => Some("ingress".into()),
+        Token::Import => Some("import".into()),
+        Token::As => Some("as".into()),
         Token::Burst => Some("burst".into()),
         Token::Env => Some("env".into()),
         Token::Volumes => Some("volumes".into()),
@@ -182,6 +210,11 @@ fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             Token::Int(s) if started => {
                 // Integers only allowed after an ident/interp (e.g. `spine1`)
                 name.push_str(s);
+                *pos += 1;
+            }
+            Token::Dot if started => {
+                // Dots allowed for import prefixes (e.g. `dc.r1`)
+                name.push('.');
                 *pos += 1;
             }
             _ => break,

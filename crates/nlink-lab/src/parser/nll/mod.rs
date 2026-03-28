@@ -9,14 +9,31 @@ pub mod lexer;
 pub mod lower;
 pub mod parser;
 
+use std::path::Path;
+
 use crate::error::Result;
 use crate::types::Topology;
 
-/// Parse an NLL string into a topology.
+/// Parse an NLL string into a topology (no import support).
 pub fn parse(input: &str) -> Result<Topology> {
     let tokens = lexer::lex(input)?;
     let ast = parser::parse_tokens(&tokens, input)?;
     lower::lower(&ast)
+}
+
+/// Parse an NLL string from a file path, with import resolution.
+///
+/// Imports are resolved relative to the file's parent directory.
+pub fn parse_file_with_imports(input: &str, file_path: &Path) -> Result<Topology> {
+    let tokens = lexer::lex(input)?;
+    let ast = parser::parse_tokens(&tokens, input)?;
+
+    if ast.imports.is_empty() {
+        lower::lower(&ast)
+    } else {
+        let base_dir = file_path.parent().unwrap_or(Path::new("."));
+        lower::lower_with_imports(&ast, base_dir)
+    }
 }
 
 /// Parse an NLL string, producing rich diagnostics with source context on error.
@@ -24,9 +41,7 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
     match parse(input) {
         Ok(topo) => Ok(topo),
         Err(crate::Error::NllParse(msg)) => {
-            // Try to extract line/column from the message to create a span
-            let span = extract_span_from_message(&msg, input);
-            // Strip internal markers from user-facing message
+            let span = extract_span(&msg, input);
             let clean_msg = msg
                 .split(" [at byte ")
                 .next()
@@ -48,7 +63,7 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
 ///
 /// Looks for patterns like `[at byte N]` (from parser) or
 /// `at line N, column M` (from lexer).
-fn extract_span_from_message(msg: &str, source: &str) -> (usize, usize) {
+pub fn extract_span(msg: &str, source: &str) -> (usize, usize) {
     // Try pattern: "[at byte N]" (parser errors)
     if let Some(start) = msg.find("[at byte ") {
         let after = &msg[start + 9..];

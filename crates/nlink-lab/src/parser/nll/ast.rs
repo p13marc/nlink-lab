@@ -6,8 +6,16 @@
 /// A complete NLL file.
 #[derive(Debug)]
 pub struct File {
+    pub imports: Vec<ImportDef>,
     pub lab: LabDecl,
     pub statements: Vec<Statement>,
+}
+
+/// Import declaration: `import "path.nll" as alias`.
+#[derive(Debug, Clone)]
+pub struct ImportDef {
+    pub path: String,
+    pub alias: String,
 }
 
 /// Lab declaration at the top of the file.

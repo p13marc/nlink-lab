@@ -224,13 +224,15 @@ Apply? [y/N]
 ## Progress
 
 ### Part 1: NLL Imports
-- [ ] Add `Import` and `As` tokens to lexer
-- [ ] Parse `import "file" as alias` statements
-- [ ] Add `ImportDef` to AST and `File.imports`
-- [ ] Implement `resolve_imports()` — parse imported files
-- [ ] Implement `merge_import()` — prefix and merge topologies
-- [ ] Circular import detection
-- [ ] Tests: basic import, multi-import, circular rejection
+- [x] Add `Import` and `As` tokens to lexer
+- [x] Parse `import "file" as alias` statements
+- [x] Add `ImportDef` to AST and `File.imports`
+- [x] Implement `resolve_imports()` — parse imported files
+- [x] Implement `merge_import()` — prefix and merge topologies
+- [x] Circular import detection
+- [x] Dot in names for import prefixes (`dc.r1:eth0`)
+- [x] Tests: basic import, circular rejection, prefix_endpoint
+- [x] Example: `examples/imports/base-network.nll` + `composed.nll`
 - [ ] Update NLL_DSL_DESIGN.md with import syntax
 
 ### Part 2: Hot-Reload

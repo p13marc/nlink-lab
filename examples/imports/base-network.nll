@@ -1,0 +1,13 @@
+# Base network module — two routers with a link.
+# Designed to be imported by other topologies.
+
+lab "base-network"
+
+profile router { forward ipv4 }
+
+node r1 : router
+node r2 : router
+
+link r1:eth0 -- r2:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+}

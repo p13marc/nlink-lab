@@ -17,6 +17,10 @@ pub struct Spanned {
 #[logos(skip r"#[^\n]*")]
 pub enum Token {
     // ── Keywords ─────────────────────────────────
+    #[token("import")]
+    Import,
+    #[token("as")]
+    As,
     #[token("lab")]
     Lab,
     #[token("node")]

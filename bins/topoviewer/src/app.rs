@@ -2,25 +2,24 @@
 
 use std::collections::HashMap;
 
-use iced::widget::{canvas, column, container, row, scrollable, text, Canvas};
+use iced::widget::{button, canvas, column, container, row, scrollable, text, Canvas};
 use iced::{Element, Length, Point, Subscription, Task, Theme, Vector};
 
 use nlink_lab::Topology;
 use nlink_lab_shared::metrics::NodeMetrics;
 
+use crate::canvas::NODE_WIDTH;
+use crate::canvas::NODE_HEIGHT;
 use crate::layout::LayoutEngine;
 
 pub struct TopoViewer {
-    // Data
     pub topology: Option<Topology>,
     pub lab_name: Option<String>,
     pub node_positions: HashMap<String, Point>,
     pub metrics: HashMap<String, NodeMetrics>,
 
-    // Zenoh
     pub zenoh_session: Option<std::sync::Arc<zenoh::Session>>,
 
-    // UI state
     pub selected_node: Option<String>,
     pub camera: Camera,
     pub dragging: Option<String>,
@@ -36,6 +35,14 @@ pub struct Camera {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    // Canvas interaction
+    NodeClicked(String),
+    NodeDragged(String, Point),
+    NodeDragEnd(String),
+    BackgroundClicked,
+    PanCamera(Vector),
+    ScrollZoom(f32, Point),
+
     // Data
     MetricsReceived(HashMap<String, NodeMetrics>),
 
@@ -94,6 +101,28 @@ impl TopoViewer {
         self.canvas_cache.clear();
     }
 
+    /// Convert screen coordinates to world coordinates.
+    pub fn screen_to_world(&self, screen: Point) -> Point {
+        Point::new(
+            (screen.x - self.camera.offset.x) / self.camera.scale,
+            (screen.y - self.camera.offset.y) / self.camera.scale,
+        )
+    }
+
+    /// Find the node at a world position (hit test).
+    pub fn node_at(&self, world: Point) -> Option<String> {
+        for (name, pos) in &self.node_positions {
+            if world.x >= pos.x
+                && world.x <= pos.x + NODE_WIDTH
+                && world.y >= pos.y
+                && world.y <= pos.y + NODE_HEIGHT
+            {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
     pub fn title(&self) -> String {
         match &self.topology {
             Some(t) => format!("TopoViewer — {}", t.lab.name),
@@ -103,8 +132,44 @@ impl TopoViewer {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::NodeClicked(name) => {
+                self.selected_node = Some(name.clone());
+                self.dragging = Some(name);
+                self.canvas_cache.clear();
+            }
+            Message::NodeDragged(name, pos) => {
+                self.node_positions.insert(name, pos);
+                self.canvas_cache.clear();
+            }
+            Message::NodeDragEnd(_) => {
+                self.dragging = None;
+            }
+            Message::BackgroundClicked => {
+                self.selected_node = None;
+                self.canvas_cache.clear();
+            }
+            Message::PanCamera(delta) => {
+                self.camera.offset.x += delta.x;
+                self.camera.offset.y += delta.y;
+                self.canvas_cache.clear();
+            }
+            Message::ScrollZoom(delta, cursor_pos) => {
+                let old_scale = self.camera.scale;
+                let factor = if delta > 0.0 { 1.1 } else { 1.0 / 1.1 };
+                self.camera.scale = (old_scale * factor).clamp(0.1, 5.0);
+
+                // Zoom towards cursor position
+                let scale_change = self.camera.scale / old_scale;
+                self.camera.offset.x =
+                    cursor_pos.x - scale_change * (cursor_pos.x - self.camera.offset.x);
+                self.camera.offset.y =
+                    cursor_pos.y - scale_change * (cursor_pos.y - self.camera.offset.y);
+
+                self.canvas_cache.clear();
+            }
             Message::MetricsReceived(metrics) => {
                 self.metrics = metrics;
+                self.show_metrics = true;
                 self.canvas_cache.clear();
             }
             Message::ToggleAddresses => {
@@ -147,25 +212,45 @@ impl TopoViewer {
     }
 
     fn sidebar_view(&self) -> Element<Message> {
-        let mut col = column![
-            text("TopoViewer").size(20),
-        ]
-        .spacing(8)
-        .padding(5);
+        let mut col = column![text("TopoViewer").size(20)]
+            .spacing(6)
+            .padding(5);
 
         if let Some(ref topo) = self.topology {
             col = col.push(text(format!("Lab: {}", topo.lab.name)).size(14));
-            col = col.push(text(format!("Nodes: {}", topo.nodes.len())).size(12));
-            col = col.push(text(format!("Links: {}", topo.links.len())).size(12));
+            col = col.push(text(format!("Nodes: {}  Links: {}", topo.nodes.len(), topo.links.len())).size(12));
         }
+
+        // Controls
+        col = col.push(
+            row![
+                button("Addresses").on_press(Message::ToggleAddresses),
+                button("Metrics").on_press(Message::ToggleMetrics),
+                button("Fit").on_press(Message::FitToScreen),
+            ]
+            .spacing(4),
+        );
+        col = col.push(
+            row![
+                button("+").on_press(Message::ZoomIn),
+                button("-").on_press(Message::ZoomOut),
+                text(format!("{:.0}%", self.camera.scale * 100.0)).size(12),
+            ]
+            .spacing(4),
+        );
 
         col = col.push(text("").size(4));
 
+        // Selected node details
         if let Some(ref name) = self.selected_node {
-            col = col.push(text(format!("Selected: {name}")).size(16));
+            col = col.push(text(format!("Node: {name}")).size(16));
 
             if let Some(ref topo) = self.topology {
                 if let Some(node) = topo.nodes.get(name) {
+                    if node.image.is_some() {
+                        col = col.push(text("  (container)").size(11));
+                    }
+
                     for link in &topo.links {
                         for (i, ep) in link.endpoints.iter().enumerate() {
                             if ep.starts_with(&format!("{name}:")) {
@@ -176,9 +261,8 @@ impl TopoViewer {
                                     .as_ref()
                                     .map(|a| a[i].as_str())
                                     .unwrap_or("-");
-                                col = col.push(
-                                    text(format!("  {iface}: {addr} -> {peer}")).size(11),
-                                );
+                                col = col
+                                    .push(text(format!("  {iface}: {addr} -> {peer}")).size(11));
                             }
                         }
                     }
@@ -189,7 +273,7 @@ impl TopoViewer {
                     }
 
                     if let Some(nm) = self.metrics.get(name) {
-                        col = col.push(text("Metrics:").size(13));
+                        col = col.push(text("Live metrics:").size(13));
                         for im in &nm.interfaces {
                             let rx = nlink_lab_shared::metrics::format_rate(im.rx_bps);
                             let tx = nlink_lab_shared::metrics::format_rate(im.tx_bps);
@@ -198,18 +282,26 @@ impl TopoViewer {
                                     .size(11),
                             );
                         }
+                        for issue in &nm.issues {
+                            col = col.push(text(format!("  ! {issue}")).size(11));
+                        }
                     }
                 }
             }
         } else if self.topology.is_some() {
             col = col.push(text("Click a node for details").size(12));
+            col = col.push(text("Scroll to zoom, drag to pan").size(11));
         }
 
         scrollable(col).into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        Subscription::none()
+        if let Some(ref lab) = self.lab_name {
+            crate::zenoh_client::metrics_subscription(lab.clone())
+        } else {
+            Subscription::none()
+        }
     }
 
     pub fn theme(&self) -> Theme {

@@ -8,6 +8,7 @@ use clap::Parser;
 mod app;
 mod canvas;
 mod layout;
+mod zenoh_client;
 
 #[derive(Parser)]
 #[command(name = "nlink-lab-topoviewer", about = "Interactive topology visualizer for nlink-lab")]

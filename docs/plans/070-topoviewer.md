@@ -322,24 +322,24 @@ between labs.
 - [x] Create `bins/topoviewer/` crate
 - [x] Force-directed layout engine
 - [x] Canvas rendering (nodes, links, labels)
-- [ ] Pan and zoom (mouse interaction)
+- [x] Pan and zoom (scroll + drag)
 - [x] Detail sidebar (node info, metrics)
 - [x] Load topology from .nll file
 
 ### Phase 2: Live Metrics via Zenoh
 
-- [ ] Zenoh client (session, subscriptions, queries)
-- [ ] Bridge Zenoh → Iced messages
-- [ ] Interface status color-coding
-- [ ] Live bandwidth display on links
-- [ ] Issue badges on nodes
+- [x] Zenoh client (session, subscriptions)
+- [x] Bridge Zenoh → Iced messages via Subscription
+- [x] Link color-coding (green=traffic, red=errors, gray=idle)
+- [x] Live bandwidth in sidebar
+- [x] Issue badges on nodes
 - [ ] Multi-lab discovery
 
 ### Phase 3: Polish
 
-- [ ] Dark/light theme
-- [ ] Node dragging
-- [ ] Fit-to-screen
+- [x] Dark theme (default)
+- [x] Node dragging to reposition
+- [x] Fit-to-screen button
 - [ ] Export PNG/SVG
-- [ ] Keyboard shortcuts
+- [x] Keyboard shortcuts (Esc, +/-, f, a, m)
 - [ ] Exec panel via Zenoh query

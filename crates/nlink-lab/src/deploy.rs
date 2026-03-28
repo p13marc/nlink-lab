@@ -1070,7 +1070,9 @@ async fn apply_firewall(
         let mut rule = Rule::new(table_name, "input").family(Family::Inet);
 
         // Parse common match expressions
-        rule = apply_match_expr(rule, match_expr);
+        if !match_expr.is_empty() {
+            rule = apply_match_expr(rule, match_expr)?;
+        }
 
         // Apply action
         rule = match action {
@@ -1093,20 +1095,20 @@ async fn apply_firewall(
 fn apply_match_expr(
     rule: nlink::netlink::nftables::types::Rule,
     expr: &str,
-) -> nlink::netlink::nftables::types::Rule {
+) -> Result<nlink::netlink::nftables::types::Rule> {
     use nlink::netlink::nftables::types::CtState;
 
     let expr = expr.trim();
 
     if expr.starts_with("tcp dport ") {
         if let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>() {
-            return rule.match_tcp_dport(port);
+            return Ok(rule.match_tcp_dport(port));
         }
     }
 
     if expr.starts_with("udp dport ") {
         if let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>() {
-            return rule.match_udp_dport(port);
+            return Ok(rule.match_udp_dport(port));
         }
     }
 
@@ -1122,12 +1124,13 @@ fn apply_match_expr(
                 _ => {}
             }
         }
-        return rule.match_ct_state(ct);
+        return Ok(rule.match_ct_state(ct));
     }
 
-    // For unrecognized expressions, return the rule unchanged (best effort)
-    tracing::warn!("unrecognized nftables match expression: '{expr}'");
-    rule
+    Err(Error::deploy_failed(format!(
+        "unsupported firewall match expression: '{expr}'. \
+         Supported: 'ct state ...', 'tcp dport N', 'udp dport N'"
+    )))
 }
 
 /// Add a single route in a namespace.

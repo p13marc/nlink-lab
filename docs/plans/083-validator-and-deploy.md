@@ -242,18 +242,18 @@ _ => {
 ## Progress
 
 ### New Validation Rules
-- [ ] Rule 15: `interface-name-length` (max 15 chars)
+- [x] Rule 15: `interface-name-length` (max 15 chars)
 - [ ] Rule 16: `subnet-overlap` (warning for same subnet on same node)
-- [ ] Rule 17: `wireguard-peer-exists` (peer node exists with WG interface)
-- [ ] Rule 18: `vrf-table-unique` (no duplicate table IDs per node)
-- [ ] Rule 19: `duplicate-link-endpoint` (same endpoint in multiple links)
+- [x] Rule 17: `wireguard-peer-exists` (peer node exists with WG interface)
+- [x] Rule 18: `vrf-table-unique` (no duplicate table IDs per node)
+- [x] Rule 19: `duplicate-link-endpoint` (same endpoint in multiple links)
 - [ ] Fix: route reachability check for empty subnet list
 
 ### Deployer Hardening
 - [ ] Health checks after Steps 3, 5, 10
 - [ ] Veth peer name collision detection
 - [ ] WireGuard peer endpoint resolution: prefer direct links
-- [ ] Firewall: error on unrecognized match expressions
+- [x] Firewall: error on unrecognized match expressions
 
 ### Tests
 - [ ] Unit tests for each new validation rule

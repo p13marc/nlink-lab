@@ -189,6 +189,10 @@ impl Topology {
         validate_impairment_refs(self, &interfaces, &mut issues);
         validate_rate_limit_refs(self, &interfaces, &mut issues);
         validate_route_config(self, &mut issues);
+        validate_interface_name_length(self, &interfaces, &mut issues);
+        validate_wireguard_peers(self, &mut issues);
+        validate_vrf_table_unique(self, &mut issues);
+        validate_duplicate_link_endpoints(self, &mut issues);
 
         // Warning-level rules
         validate_unique_ips(self, &mut issues);
@@ -602,6 +606,96 @@ fn validate_route_config(topology: &Topology, issues: &mut Vec<ValidationIssue>)
                     rule: "route-gateway-type",
                     message: format!("route '{dest}' has neither 'via' nor 'dev'"),
                     location: Some(format!("nodes.{node_name}.routes.{dest}")),
+                });
+            }
+        }
+    }
+}
+
+/// Rule 15: Interface names must not exceed 15 characters (Linux IFNAMSIZ - 1).
+fn validate_interface_name_length(
+    _topology: &Topology,
+    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    for (node_name, ifaces) in interfaces {
+        for (iface_name, _) in ifaces {
+            if iface_name.len() > 15 {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "interface-name-length",
+                    message: format!(
+                        "interface '{iface_name}' on node '{node_name}' is {} chars (max 15)",
+                        iface_name.len()
+                    ),
+                    location: Some(format!("nodes.{node_name}.{iface_name}")),
+                });
+            }
+        }
+    }
+}
+
+/// Rule 17: WireGuard peers must reference existing nodes with WireGuard interfaces.
+fn validate_wireguard_peers(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in &topology.nodes {
+        for (wg_name, wg_config) in &node.wireguard {
+            for peer in &wg_config.peers {
+                if !topology.nodes.contains_key(peer) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "wireguard-peer-exists",
+                        message: format!(
+                            "WireGuard peer '{peer}' referenced from {node_name}:{wg_name} does not exist"
+                        ),
+                        location: Some(format!("nodes.{node_name}.wireguard.{wg_name}.peers")),
+                    });
+                } else if topology.nodes[peer].wireguard.is_empty() {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "wireguard-peer-exists",
+                        message: format!(
+                            "WireGuard peer '{peer}' referenced from {node_name}:{wg_name} has no WireGuard interfaces"
+                        ),
+                        location: Some(format!("nodes.{node_name}.wireguard.{wg_name}.peers")),
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Rule 18: VRF table IDs must be unique within a node.
+fn validate_vrf_table_unique(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in &topology.nodes {
+        let mut seen: HashMap<u32, &str> = HashMap::new();
+        for (vrf_name, vrf_config) in &node.vrfs {
+            if let Some(existing) = seen.get(&vrf_config.table) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "vrf-table-unique",
+                    message: format!(
+                        "VRF '{vrf_name}' and '{existing}' on node '{node_name}' share table {}",
+                        vrf_config.table
+                    ),
+                    location: Some(format!("nodes.{node_name}.vrfs.{vrf_name}")),
+                });
+            }
+            seen.insert(vrf_config.table, vrf_name);
+        }
+    }
+}
+
+/// Rule 19: The same endpoint should not appear in multiple links.
+fn validate_duplicate_link_endpoints(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    for (i, link) in topology.links.iter().enumerate() {
+        for ep in &link.endpoints {
+            if let Some(prev) = seen.insert(ep.clone(), i) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "duplicate-link-endpoint",
+                    message: format!("endpoint '{ep}' used in both link {prev} and link {i}"),
+                    location: Some(format!("links[{i}]")),
                 });
             }
         }

@@ -186,7 +186,7 @@ for (port_node, port_config) in &network.ports {
 - [x] Bring up VRF interfaces in Step 10
 - [x] Enslave interfaces to VRFs after Step 10
 - [x] Add VRF routes with `.table()` in Step 12
-- [ ] Test: VRF topology from NLINK_LAB.md section 4.4
+- [x] Test: VRF topology from NLINK_LAB.md section 4.4
 
 ### WireGuard
 
@@ -196,7 +196,7 @@ for (port_node, port_config) in &network.ports {
 - [x] Configure WG device via `Connection<Wireguard>::set_device()`
 - [x] Peer resolution: map node names to public keys and endpoints
 - [x] Store generated keys in state file
-- [ ] Test: WireGuard VPN topology from NLINK_LAB.md section 4.4
+- [x] Test: WireGuard VPN topology from NLINK_LAB.md section 4.4
 
 ### Bond
 
@@ -214,4 +214,4 @@ for (port_node, port_config) in &network.ports {
 
 - [x] Apply `BridgeVlanBuilder` per port after attaching members
 - [x] Handle pvid + untagged flags
-- [ ] Test: VLAN trunk topology from NLINK_LAB.md section 4.4
+- [x] Test: VLAN trunk topology from NLINK_LAB.md section 4.4

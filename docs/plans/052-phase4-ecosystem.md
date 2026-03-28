@@ -158,7 +158,7 @@ if unsafe { libc::geteuid() } != 0 {
 - [x] Root/capability check with skip
 - [x] Re-export from `nlink-lab` crate: `pub use nlink_lab_macros::lab_test;`
 - [x] Test: basic macro expansion works (12 integration tests compile and run)
-- [ ] Test: lab deploys and destroys around test body (requires root CI)
+- [x] Test: lab deploys and destroys around test body (requires root CI)
 
 ## 3. Integration Tests
 
@@ -219,7 +219,7 @@ fn unique_lab_name(base: &str) -> String {
 - [x] `deploy_from_builder` — builder DSL topology
 - [x] `deploy_firewall` — nftables rules exist in namespace
 - [x] `deploy_spine_leaf` — 6-node datacenter fabric
-- [ ] `deploy_bridge` — L2 connectivity through bridge (needs plan 050)
+- [x] `deploy_bridge` — L2 connectivity through bridge (needs plan 050)
 
 ## 4. Documentation
 

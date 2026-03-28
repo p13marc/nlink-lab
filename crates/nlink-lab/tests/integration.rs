@@ -147,3 +147,133 @@ async fn state_persistence(lab: RunningLab) {
     let loaded = nlink_lab::RunningLab::load(&name).unwrap();
     assert_eq!(loaded.namespace_count(), lab.namespace_count());
 }
+
+// ─── VRF test (plan 050) ─────────────────────────────────
+
+#[lab_test("examples/vrf-multitenant.toml")]
+async fn deploy_vrf(lab: RunningLab) {
+    assert_eq!(lab.topology().nodes.len(), 3);
+
+    // VRF "red" interface should exist on PE
+    let output = lab.exec("pe", "ip", &["link", "show", "red"]).unwrap();
+    assert_eq!(output.exit_code, 0, "VRF 'red' not found: {}", output.stderr);
+
+    // VRF "blue" interface should exist on PE
+    let output = lab.exec("pe", "ip", &["link", "show", "blue"]).unwrap();
+    assert_eq!(output.exit_code, 0, "VRF 'blue' not found: {}", output.stderr);
+
+    // eth1 should be enslaved to VRF red
+    let output = lab.exec("pe", "ip", &["link", "show", "eth1"]).unwrap();
+    assert!(
+        output.stdout.contains("master red"),
+        "eth1 not enslaved to VRF red: {}",
+        output.stdout
+    );
+
+    // eth2 should be enslaved to VRF blue
+    let output = lab.exec("pe", "ip", &["link", "show", "eth2"]).unwrap();
+    assert!(
+        output.stdout.contains("master blue"),
+        "eth2 not enslaved to VRF blue: {}",
+        output.stdout
+    );
+
+    // Tenant A can reach PE via VRF red
+    let output = lab
+        .exec("tenant-a", "ping", &["-c1", "-W1", "10.10.0.1"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "tenant-a cannot reach PE: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+
+    // Tenant B can reach PE via VRF blue
+    let output = lab
+        .exec("tenant-b", "ping", &["-c1", "-W1", "10.20.0.1"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "tenant-b cannot reach PE: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+}
+
+// ─── WireGuard test (plan 050) ───────────────────────────
+
+#[lab_test("examples/wireguard-vpn.toml")]
+async fn deploy_wireguard(lab: RunningLab) {
+    assert_eq!(lab.topology().nodes.len(), 4);
+
+    // wg0 interface should exist on both gateways
+    let output = lab.exec("gw-a", "ip", &["link", "show", "wg0"]).unwrap();
+    assert_eq!(output.exit_code, 0, "wg0 not found on gw-a: {}", output.stderr);
+
+    let output = lab.exec("gw-b", "ip", &["link", "show", "wg0"]).unwrap();
+    assert_eq!(output.exit_code, 0, "wg0 not found on gw-b: {}", output.stderr);
+
+    // wg0 should have the configured address on gw-a
+    let output = lab.exec("gw-a", "ip", &["addr", "show", "wg0"]).unwrap();
+    assert!(
+        output.stdout.contains("192.168.255.1"),
+        "expected 192.168.255.1 on gw-a wg0: {}",
+        output.stdout
+    );
+
+    // Underlay connectivity: gateways can reach each other
+    let output = lab
+        .exec("gw-a", "ping", &["-c1", "-W1", "10.0.0.2"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "gw-a cannot reach gw-b underlay: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+
+    // WireGuard tunnel: gw-a can reach gw-b overlay address
+    let output = lab
+        .exec("gw-a", "ping", &["-c1", "-W2", "192.168.255.2"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "WireGuard tunnel not working: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+}
+
+// ─── VLAN trunk / bridge test (plans 050 + 052) ─────────
+
+#[lab_test("examples/vlan-trunk.toml")]
+async fn deploy_bridge_vlan(lab: RunningLab) {
+    assert_eq!(lab.topology().nodes.len(), 4);
+
+    // host1 should have its address
+    let output = lab
+        .exec("host1", "ip", &["addr", "show", "eth0"])
+        .unwrap();
+    assert!(
+        output.stdout.contains("10.100.0.10/24"),
+        "expected 10.100.0.10/24 on host1: {}",
+        output.stdout
+    );
+
+    // host1 and host2 are on the same VLAN 100 — they should reach each other
+    let output = lab
+        .exec("host1", "ping", &["-c1", "-W1", "10.100.0.20"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "host1 cannot reach host2 on VLAN 100: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+
+    // host3 is on VLAN 200 — verify its address
+    let output = lab
+        .exec("host3", "ip", &["addr", "show", "eth0"])
+        .unwrap();
+    assert!(
+        output.stdout.contains("10.200.0.10/24"),
+        "expected 10.200.0.10/24 on host3: {}",
+        output.stdout
+    );
+}

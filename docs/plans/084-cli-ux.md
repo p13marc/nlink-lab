@@ -289,7 +289,7 @@ Commands::Impair { name, show, .. } => {
 
 ### Phase 2: New Commands
 - [x] `nlink-lab export` — TOML/JSON export of running lab topology
-- [ ] `nlink-lab diff` — drift detection against topology file
+- [x] `nlink-lab diff` — compare two topology files
 - [ ] `nlink-lab wait` — block until lab is ready
 
 ### Phase 3: Capture & Impairment

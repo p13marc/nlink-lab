@@ -147,6 +147,15 @@ enum Commands {
         count: Option<u32>,
     },
 
+    /// Compare two topology files and show differences.
+    Diff {
+        /// First topology file (or lab name with --lab).
+        a: PathBuf,
+
+        /// Second topology file.
+        b: PathBuf,
+    },
+
     /// Export a running lab's topology as serialized data.
     Export {
         /// Lab name.
@@ -504,6 +513,39 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             print!("{}", output.stdout);
             if !output.stderr.is_empty() {
                 eprint!("{}", output.stderr);
+            }
+            Ok(())
+        }
+
+        Commands::Diff { a, b } => {
+            let topo_a = nlink_lab::parser::parse_file(&a)?;
+            let topo_b = nlink_lab::parser::parse_file(&b)?;
+            let diff = nlink_lab::diff_topologies(&topo_a, &topo_b);
+            if json {
+                // For JSON, output a simple summary
+                println!("{}", serde_json::json!({
+                    "nodes_added": diff.nodes_added,
+                    "nodes_removed": diff.nodes_removed,
+                    "links_added": diff.links_added.len(),
+                    "links_removed": diff.links_removed.len(),
+                    "impairments_changed": diff.impairments_changed.len(),
+                    "impairments_added": diff.impairments_added.len(),
+                    "impairments_removed": diff.impairments_removed.len(),
+                    "total_changes": diff.change_count(),
+                }));
+            } else if diff.is_empty() {
+                println!("No differences.");
+            } else {
+                println!(
+                    "Diff: {} → {}",
+                    a.display(),
+                    b.display()
+                );
+                print!("{diff}");
+                println!(
+                    "\n{} change(s)",
+                    diff.change_count()
+                );
             }
             Ok(())
         }

@@ -236,7 +236,7 @@ Apply? [y/N]
 - [x] Update NLL_DSL_DESIGN.md with import syntax
 
 ### Part 2: Hot-Reload
-- [ ] Implement `diff_topologies()` — compute change set
+- [x] Implement `diff_topologies()` — compute change set
 - [ ] Implement `apply_diff()` — execute changes in order
 - [ ] Add `apply` CLI command with `--dry-run`
 - [ ] Handle node add/remove

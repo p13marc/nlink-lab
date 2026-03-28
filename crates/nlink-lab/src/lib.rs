@@ -56,6 +56,7 @@
 pub mod builder;
 pub mod container;
 pub mod deploy;
+pub mod diff;
 pub mod error;
 pub mod helpers;
 pub mod parser;
@@ -73,6 +74,7 @@ pub use types::{
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig,
     Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
+pub use diff::{diff_topologies, TopologyDiff};
 pub use validator::{Severity, ValidationIssue, ValidationResult};
 
 /// Proc macro for integration testing. See [`lab_test`] for details.

@@ -282,10 +282,10 @@ Commands::Impair { name, show, .. } => {
 ## Progress
 
 ### Phase 1: Quick Wins
-- [ ] Add shell completions (bash/zsh/fish) via `clap_complete`
-- [ ] Add `--json` flag to status, diagnose, ps commands
-- [ ] Add `--dry-run` flag to deploy command
-- [ ] Add `serde_json` dependency
+- [x] Add shell completions (bash/zsh/fish) via `clap_complete`
+- [x] Add `--json` global flag to status and ps commands
+- [x] `--dry-run` flag on deploy (already existed)
+- [x] Add `serde_json` + `clap_complete` dependencies to CLI
 
 ### Phase 2: New Commands
 - [ ] `nlink-lab export` — TOML export of running lab topology

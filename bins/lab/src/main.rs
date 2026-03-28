@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -8,6 +8,10 @@ use std::time::Instant;
 #[command(about = "Network lab engine — create isolated network topologies using Linux namespaces")]
 #[command(version)]
 struct Cli {
+    /// Output JSON instead of human-readable text (for status, diagnose, ps).
+    #[arg(long, global = true)]
+    json: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -139,6 +143,13 @@ enum Commands {
         count: Option<u32>,
     },
 
+    /// Generate shell completions.
+    Completions {
+        /// Shell to generate completions for.
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+
     /// Create a topology file from a built-in template.
     Init {
         /// Template name (e.g., "router", "spine-leaf"). Use --list to see all.
@@ -175,6 +186,17 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
+    // Handle completions synchronously (no runtime needed)
+    if let Commands::Completions { shell } = &cli.command {
+        clap_complete::generate(
+            *shell,
+            &mut Cli::command(),
+            "nlink-lab",
+            &mut std::io::stdout(),
+        );
+        return ExitCode::SUCCESS;
+    }
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     match rt.block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
@@ -191,6 +213,7 @@ fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> nlink_lab::Result<()> {
+    let json = cli.json;
     match cli.command {
         Commands::Deploy {
             topology,
@@ -261,7 +284,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Status { name } => match name {
             None => {
                 let labs = nlink_lab::RunningLab::list()?;
-                if labs.is_empty() {
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&labs)?);
+                } else if labs.is_empty() {
                     println!("No running labs.");
                 } else {
                     println!("{:<18} {:<6} {}", "NAME", "NODES", "CREATED");
@@ -276,13 +301,17 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
             Some(name) => {
                 let lab = nlink_lab::RunningLab::load(&name)?;
-                println!("Lab: {}", lab.name());
-                println!("Nodes: {}", lab.namespace_count());
-                let topo = lab.topology();
-                println!("Links: {}", topo.links.len());
-                println!("Impairments: {}", topo.impairments.len());
-                let node_names: Vec<&str> = lab.node_names().collect();
-                println!("  {}", node_names.join(", "));
+                if json {
+                    println!("{}", serde_json::to_string_pretty(lab.topology())?);
+                } else {
+                    println!("Lab: {}", lab.name());
+                    println!("Nodes: {}", lab.namespace_count());
+                    let topo = lab.topology();
+                    println!("Links: {}", topo.links.len());
+                    println!("Impairments: {}", topo.impairments.len());
+                    let node_names: Vec<&str> = lab.node_names().collect();
+                    println!("  {}", node_names.join(", "));
+                }
                 Ok(())
             }
         },
@@ -363,7 +392,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Ps { lab } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let procs = running.process_status();
-            if procs.is_empty() {
+            if json {
+                println!("{}", serde_json::to_string_pretty(&procs)?);
+            } else if procs.is_empty() {
                 println!("No tracked processes.");
             } else {
                 println!("{:<12} {:<8} {}", "NODE", "PID", "STATUS");
@@ -492,6 +523,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 t.link_count
             );
 
+            Ok(())
+        }
+
+        Commands::Completions { .. } => {
+            // Already handled before async runtime
             Ok(())
         }
     }

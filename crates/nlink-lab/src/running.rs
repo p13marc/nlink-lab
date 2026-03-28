@@ -40,7 +40,7 @@ pub struct ExecOutput {
 }
 
 /// Status of a tracked background process.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ProcessInfo {
     /// Node the process runs in.
     pub node: String,

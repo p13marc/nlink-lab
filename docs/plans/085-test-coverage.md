@@ -323,11 +323,11 @@ link server:eth0 -- client:eth0 {
 - [ ] Concurrent lab coexistence
 
 ### Phase 3: Unit Tests
-- [ ] Firewall match expression parsing tests
-- [ ] Builder invalid input tests
+- [x] Firewall match expression parsing tests (4 tests in deploy.rs)
+- [x] Builder invalid input tests (build_validated, duplicate endpoints)
 - [ ] State file corruption recovery test
 
 ### Phase 4: New Examples
-- [ ] Bond failover example (TOML + NLL)
-- [ ] IPv6 simple example (TOML + NLL)
-- [ ] Asymmetric impairment example (NLL)
+- [ ] Bond failover example
+- [ ] IPv6 example (blocked: NLL lexer needs IPv6 address token)
+- [x] Asymmetric impairment example (NLL)

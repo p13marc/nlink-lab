@@ -1071,4 +1071,37 @@ impair router:eth0 delay 10ms jitter 2ms
             parsed.impairments["router:eth0"].delay
         );
     }
+
+    #[test]
+    fn test_build_validated_catches_errors() {
+        let result = Lab::new("bad")
+            .node("a", |n| n)
+            .link("a:eth0", "missing:eth0", |l| l)
+            .build_validated();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_validated_ok() {
+        let result = Lab::new("good")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+            .build_validated();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_duplicate_link_endpoints_caught() {
+        let topo = Lab::new("dup")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .node("c", |n| n)
+            .link("a:eth0", "b:eth0", |l| l)
+            .link("a:eth0", "c:eth0", |l| l) // a:eth0 used twice
+            .build();
+        let result = topo.validate();
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "duplicate-link-endpoint"));
+    }
 }

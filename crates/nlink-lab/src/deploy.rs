@@ -1456,3 +1456,41 @@ impl Drop for Cleanup {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_match_expr_tcp_dport() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "tcp dport 80");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_udp_dport() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "udp dport 53");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_ct_state() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "ct state established,related");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_unknown_errors() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "icmp type 8");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unsupported"));
+    }
+}

@@ -31,8 +31,7 @@ semantic clarity.
 | **GNS3** | JSON | VM/Docker | GUI only | None | GUI only |
 | **Vagrant** | Ruby DSL | VM | N/A | Full language | Per-VM config |
 | **Terraform** | HCL | Cloud/VM | N/A | `for_each` | Resource refs |
-| **nlink-lab** | TOML | Namespaces | First-class section | None | First-class on links |
-| **nlink-lab** | **NLL** | Namespaces | Inline on links | `for` loops | Inline `--` syntax |
+| **nlink-lab** | **NLL** | Namespaces | Inline on links | `for` loops, imports | Inline `--` syntax |
 
 ### What NLL Learns from Each
 
@@ -78,7 +77,31 @@ lab "spine-leaf" {
 }
 ```
 
-### 2. Profiles
+### 2. Imports
+
+Compose topologies from reusable modules. Imported files are parsed
+independently; all names are prefixed with the alias.
+
+```nll
+import "base-dc.nll" as dc
+import "wan-overlay.nll" as wan
+
+lab "multi-site"
+
+# Reference imported nodes with alias prefix
+link dc.spine1:wan0 -- wan.pe1:eth0 {
+    10.0.0.1/30 -- 10.0.0.2/30
+}
+```
+
+**Semantics:**
+- Imports must appear before the `lab` declaration
+- All node, network, profile, and endpoint names are prefixed: `dc.spine1`, `dc.r1:eth0`
+- The `lab` name comes from the root file only
+- Imports can be recursive (imported files can import others)
+- Circular imports are detected and rejected
+
+### 3. Profiles
 
 Reusable node templates. Nodes inherit with `:`.
 
@@ -946,14 +969,15 @@ more concise.
 ## Grammar
 
 ```
-file           = lab_decl statement*
-lab_decl       = "lab" STRING block?
+file           = import* lab_decl statement*
+import         = "import" STRING "as" IDENT
+lab_decl       = "lab" STRING ("runtime" STRING)? block?
 
 statement      = profile | node | link | network
                | impair | rate | let_decl | for_loop
 
 profile        = "profile" IDENT block
-node           = "node" IDENT (":" IDENT)? (block | NEWLINE)
+node           = "node" name (":" IDENT)? ("image" STRING ("cmd" (STRING | string_list))?)? (block | NEWLINE)
 link           = "link" endpoint "--" endpoint (block | NEWLINE)
 network        = "network" IDENT block
 impair         = "impair" endpoint impair_props
@@ -961,7 +985,8 @@ rate           = "rate" endpoint rate_props
 let_decl       = "let" IDENT "=" value
 for_loop       = "for" IDENT "in" range block
 
-endpoint       = IDENT ":" IDENT
+name           = (IDENT | INTERP) (IDENT | INTERP | INT | ".")*
+endpoint       = name ":" name
 
 block          = "{" block_item* "}"
 block_item     = statement | property
@@ -1002,7 +1027,7 @@ dir_impair     = ("->" | "<-") impair_props
 impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
                  ("loss" PERCENT)? ("rate" RATE)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
-rate_props     = ("egress" RATE)? ("ingress" RATE)?
+rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" RATE)?
 
 range          = INT ".." INT
 list           = "[" value ("," value)* "]"

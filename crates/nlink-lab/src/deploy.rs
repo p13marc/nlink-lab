@@ -13,7 +13,7 @@ use nlink::{Connection, Route, Wireguard};
 
 use nlink::netlink::namespace::NamespaceFd;
 
-use crate::container::{self, CreateOpts, Runtime};
+use crate::container::{CreateOpts, Runtime};
 use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_duration, parse_percent, parse_rate_bps};
 use crate::running::RunningLab;
@@ -25,7 +25,6 @@ enum NodeHandle {
     Namespace { ns_name: String },
     Container {
         id: String,
-        name: String,
         pid: u32,
         ns_path: String,
     },
@@ -71,13 +70,6 @@ impl NodeHandle {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::enter(ns_name),
             NodeHandle::Container { ns_path, .. } => namespace::enter_path(ns_path),
-        }
-    }
-
-    fn ns_name(&self) -> Option<&str> {
-        match self {
-            NodeHandle::Namespace { ns_name } => Some(ns_name),
-            NodeHandle::Container { .. } => None,
         }
     }
 
@@ -147,7 +139,6 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 node_name.clone(),
                 NodeHandle::Container {
                     id: info.id,
-                    name: info.name,
                     pid: info.pid,
                     ns_path: format!("/proc/{}/ns/net", info.pid),
                 },
@@ -686,7 +677,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         let mut node_keys = HashMap::new();
         for (wg_name, wg_config) in &node.wireguard {
             let private_key = match wg_config.private_key.as_deref() {
-                Some("auto") | None => generate_wg_private_key(),
+                Some("auto") | None => generate_wg_private_key()?,
                 Some(key_str) => decode_wg_key(key_str).map_err(|e| {
                     Error::invalid_topology(format!(
                         "invalid WireGuard private key for '{wg_name}' on '{node_name}': {e}"
@@ -1314,18 +1305,16 @@ async fn add_route_with_table(
 }
 
 /// Generate a random WireGuard private key.
-fn generate_wg_private_key() -> [u8; 32] {
-    use std::io::Read;
+fn generate_wg_private_key() -> Result<[u8; 32]> {
     let mut key = [0u8; 32];
-    std::fs::File::open("/dev/urandom")
-        .expect("/dev/urandom")
-        .read_exact(&mut key)
-        .expect("read urandom");
+    getrandom::fill(&mut key).map_err(|e| {
+        Error::deploy_failed(format!("failed to generate WireGuard key: {e}"))
+    })?;
     // Clamp per Curve25519 convention
     key[0] &= 248;
     key[31] &= 127;
     key[31] |= 64;
-    key
+    Ok(key)
 }
 
 /// Derive a WireGuard public key from a private key.

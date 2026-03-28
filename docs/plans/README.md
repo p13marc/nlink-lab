@@ -2,75 +2,11 @@
 
 Implementation plans for nlink-lab.
 
-## Completed
-
-### Phase 2: Core Lab Engine (65 tests)
-
-| Component | Files | Status |
-|-----------|-------|--------|
-| Topology types + Serialize | `types.rs` | Done |
-| TOML parser | `parser/toml.rs` | Done |
-| Builder DSL | `builder.rs` | Done |
-| Value helpers | `helpers.rs` | Done |
-| Validator (14 rules) | `validator.rs` | Done |
-| Deployer (steps 3-18) | `deploy.rs` | Done |
-| RunningLab | `running.rs` | Done |
-| State persistence | `state.rs` | Done |
-| CLI (8 commands) | `bins/lab/src/main.rs` | Done |
-
-### Plan 050: Advanced Interface Types
-
-| Component | Files | Status |
-|-----------|-------|--------|
-| VRF, WireGuard, bond, VLAN | `deploy.rs` | Done |
-| Bridge VLAN ports | `deploy.rs` | Done |
-| Integration tests (3) | `tests/integration.rs` | Done |
-
-### Plan 051: Phase 3 — Advanced Features
-
-| Component | Files | Status |
-|-----------|-------|--------|
-| Runtime impairment CLI | `running.rs`, `main.rs` | Done |
-| Diagnostics | `running.rs` | Done |
-| Packet capture | `main.rs` | Done |
-| DOT graph | `main.rs` | Done |
-| Process manager | `running.rs` | Done |
-
-### Plan 052: Ecosystem (15 integration tests)
-
-| Component | Files | Status |
-|-----------|-------|--------|
-| Example topologies (9 TOML + 9 NLL) | `examples/` | Done |
-| `#[lab_test]` proc macro | `crates/nlink-lab-macros/` | Done |
-| Integration tests (15) | `tests/integration.rs` | Done |
-| README.md | `README.md` | Done |
-
-### Plan 060: NLL Parser (68 tests)
-
-| Component | Files | Status |
-|-----------|-------|--------|
-| Lexer (logos) | `parser/nll/lexer.rs` | Done |
-| AST types | `parser/nll/ast.rs` | Done |
-| Parser | `parser/nll/parser.rs` | Done |
-| Lowering (AST → Topology) | `parser/nll/lower.rs` | Done |
-| Format dispatch | `parser/mod.rs` | Done |
-| miette error diagnostics | `error.rs` | Done |
-| NLL example files (9) | `examples/*.nll` | Done |
-| Equivalence tests (6) | `parser/nll/lower.rs` | Done |
-
-### Plan 072: Lab Templates
-
-| Component | Files | Status |
-|-----------|-------|--------|
-| 12 built-in templates | `bins/lab/src/main.rs` | Done |
-| `nlink-lab init` command | `bins/lab/src/main.rs` | Done |
-
 ## Active Plans
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [088](088-remove-toml-format.md) | Close NLL gaps, remove TOML topology format | **High** | 3-4 days |
-| [080](080-bugfixes-and-safety.md) | Bug fixes, panic risks, state safety | Critical | 1-2 days |
+| [080](080-bugfixes-and-safety.md) | Bug fixes, panic risks, state safety | High | 1-2 days |
 | [081](081-code-quality.md) | Type safety, error stratification, builder validation | High | 2-3 days |
 | [082](082-nll-completeness.md) | NLL missing features (image/cmd, ICMP, interpolation) | Medium | 3-4 days |
 | [083](083-validator-and-deploy.md) | New validation rules, deployer hardening | Medium | 2-3 days |
@@ -83,16 +19,21 @@ Implementation plans for nlink-lab.
 
 ### Recommended Order
 
-1. **088 — Remove TOML format** — close NLL gaps then drop TOML topology parsing
-2. **080 — Bug fixes & safety** — fix known bugs and panic risks
-3. **081 — Code quality** — type safety and error improvements
-4. **082 — NLL completeness** — image/cmd lowering, ICMP firewall, interpolation
-5. **083 — Validator & deploy** — new rules, hardening
-6. **084 — CLI UX** — completions, --json, export, diff
-7. **085 — Test coverage** — verify advanced features actually work
-8. **086 — Feature flags** — prepare for publishing
-9. **087 — Composition** — imports and hot-reload (power user feature)
-10. **070/071 — GUI & metrics** — visualization layer
+1. **080 — Bug fixes & safety** — fix remaining bugs (FD validation, PID ownership)
+2. **081 — Code quality** — type safety and error improvements
+3. **082 — NLL completeness** — image/cmd lowering, ICMP firewall, interpolation
+4. **083 — Validator & deploy** — new rules, hardening
+5. **084 — CLI UX** — completions, --json, export, diff
+6. **085 — Test coverage** — verify advanced features actually work
+7. **086 — Feature flags** — prepare for publishing
+8. **087 — Composition** — imports and hot-reload (power user feature)
+9. **070/071 — GUI & metrics** — visualization layer
+
+## Completed
+
+Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
+060 (NLL parser), 072 (lab templates), and 088 (remove TOML format) have been
+implemented and their plan files removed.
 
 ## Reference
 

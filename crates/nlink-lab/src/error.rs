@@ -65,21 +65,12 @@ pub enum Error {
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 #[error("{message}")]
 pub struct NllDiagnostic {
-    /// Error message.
     pub message: String,
-
-    /// Source code for context.
     #[source_code]
     pub src: miette::NamedSource<String>,
-
-    /// Span pointing to the error location.
     #[label("{label}")]
     pub span: miette::SourceSpan,
-
-    /// Label for the error span.
     pub label: String,
-
-    /// Help text.
     #[help]
     pub help: Option<String>,
 }

@@ -86,16 +86,25 @@ pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
     let dir = state_dir(&state.name);
     std::fs::create_dir_all(&dir)?;
 
+    // Atomic write: write to temp file then rename to prevent corruption on crash
     let state_json = serde_json::to_string_pretty(state)?;
-    std::fs::write(dir.join("state.json"), state_json)?;
+    atomic_write(&dir.join("state.json"), &state_json)?;
 
     let topo_toml = toml::to_string_pretty(topology)
         .map_err(|e| Error::State {
             message: format!("failed to serialize topology: {e}"),
             path: dir.join("topology.toml"),
         })?;
-    std::fs::write(dir.join("topology.toml"), topo_toml)?;
+    atomic_write(&dir.join("topology.toml"), &topo_toml)?;
 
+    Ok(())
+}
+
+/// Write content to a file atomically using temp-file + rename.
+fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, content)?;
+    std::fs::rename(&tmp, path)?;
     Ok(())
 }
 

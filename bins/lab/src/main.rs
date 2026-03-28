@@ -451,7 +451,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             template,
             list,
             output,
-            format,
+            format: _,
             name,
             force,
         } => {

@@ -194,20 +194,21 @@ fn validate_pid_ownership(&self, pid: u32) -> bool {
 ## Progress
 
 ### Panic Risks
-- [ ] Replace `/dev/urandom` unwrap with `getrandom` crate
+- [x] Replace `/dev/urandom` unwrap with `getrandom` crate
 - [ ] Validate raw FD before use in veth creation
 
 ### NLL Parser Bugs
-- [ ] Reject bare integer tokens as node names
-- [ ] Fix rate limiting to apply to both endpoints
-- [ ] Remove no-op `replace()` call in NLL diagnostics
+- [x] Reject bare integer tokens as node names
+- [x] Fix rate limiting to apply to both endpoints (done in plan 088)
+- [x] Remove no-op `replace()` call in NLL diagnostics
 - [ ] Warn or error on extra address pairs in link block
-- [ ] Error on division by zero in interpolation
+- [x] Error on division by zero in interpolation (tracing::error)
 
 ### State & Cleanup
-- [ ] Atomic state file writes (temp + rename)
-- [ ] Log warnings during destroy (tracing::warn)
+- [x] Atomic state file writes (temp + rename)
+- [x] Log warnings during destroy (already implemented)
 - [ ] PID ownership validation in kill_process
 
 ### Warnings
-- [ ] Fix all compiler warnings (5 files)
+- [x] Fix all compiler warnings (deploy.rs, running.rs, CLI)
+- Note: NllDiagnostic derive macro warnings are false positives (unfixable)

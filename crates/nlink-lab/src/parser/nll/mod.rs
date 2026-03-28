@@ -28,7 +28,6 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
             let span = extract_span_from_message(&msg, input);
             // Strip internal markers from user-facing message
             let clean_msg = msg
-                .replace(|_| false, "") // keep as-is, strip below
                 .split(" [at byte ")
                 .next()
                 .unwrap_or(&msg)

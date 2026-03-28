@@ -199,6 +199,7 @@ fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
                 "*" => left_num * right_num,
                 "/" => {
                     if right_num == 0 {
+                        tracing::error!("division by zero in expression: ${{{expr}}}");
                         return format!("${{{expr}}}");
                     }
                     left_num / right_num

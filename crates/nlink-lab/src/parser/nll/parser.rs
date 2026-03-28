@@ -156,9 +156,13 @@ fn eat(tokens: &[Spanned], pos: &mut usize, expected: &Token) -> bool {
 }
 
 /// Parse a compound name that may contain interpolation: `spine${i}` → `"spine${i}"`.
+///
+/// Names must start with an identifier or interpolation, not a bare integer.
+/// Integers are allowed as continuations (e.g. `spine1`, `leaf${i}2`).
 fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     let mut name = String::new();
     let start = *pos;
+    let mut started = false;
 
     loop {
         if *pos >= tokens.len() {
@@ -168,12 +172,15 @@ fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             Token::Ident(s) => {
                 name.push_str(s);
                 *pos += 1;
+                started = true;
             }
             Token::Interp(s) => {
                 name.push_str(s);
                 *pos += 1;
+                started = true;
             }
-            Token::Int(s) => {
+            Token::Int(s) if started => {
+                // Integers only allowed after an ident/interp (e.g. `spine1`)
                 name.push_str(s);
                 *pos += 1;
             }

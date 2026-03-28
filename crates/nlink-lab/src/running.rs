@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use nlink::netlink::diagnostics::{Diagnostics, InterfaceDiag, Issue, Severity};
+use nlink::netlink::diagnostics::{Diagnostics, InterfaceDiag, Issue};
 use nlink::netlink::namespace;
 use nlink::{Connection, Route};
 

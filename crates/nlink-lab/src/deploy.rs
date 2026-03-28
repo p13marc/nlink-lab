@@ -657,7 +657,19 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // We collect all generated public keys first, then configure peers.
     let mut wg_public_keys: HashMap<String, HashMap<String, [u8; 32]>> = HashMap::new();
 
+    #[cfg(not(feature = "wireguard"))]
+    {
+        let has_wg = topology.nodes.values().any(|n| !n.wireguard.is_empty());
+        if has_wg {
+            return Err(Error::deploy_failed(
+                "topology uses WireGuard but the 'wireguard' feature is not enabled. \
+                 Rebuild with: cargo build --features wireguard"
+            ));
+        }
+    }
+
     // First pass: set private keys and listen ports, collect public keys
+    #[cfg(feature = "wireguard")]
     for (node_name, node) in &topology.nodes {
         if node.wireguard.is_empty() {
             continue;
@@ -705,6 +717,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // Second pass: configure peers
+    #[cfg(feature = "wireguard")]
     for (node_name, node) in &topology.nodes {
         if node.wireguard.is_empty() {
             continue;
@@ -970,19 +983,27 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // ── Step 18: Write state file ──────────────────────────────────
     // Encode WG public keys as base64 for state persistence
     let wg_public_keys_b64 = {
-        use base64::Engine;
-        let mut map = HashMap::new();
-        for (node, keys) in &wg_public_keys {
-            let mut node_map = HashMap::new();
-            for (iface, pubkey) in keys {
-                node_map.insert(
-                    iface.clone(),
-                    base64::engine::general_purpose::STANDARD.encode(pubkey),
-                );
+        #[cfg(feature = "wireguard")]
+        {
+            use base64::Engine;
+            let mut map = HashMap::new();
+            for (node, keys) in &wg_public_keys {
+                let mut node_map = HashMap::new();
+                for (iface, pubkey) in keys {
+                    node_map.insert(
+                        iface.clone(),
+                        base64::engine::general_purpose::STANDARD.encode(pubkey),
+                    );
+                }
+                map.insert(node.clone(), node_map);
             }
-            map.insert(node.clone(), node_map);
+            map
         }
-        map
+        #[cfg(not(feature = "wireguard"))]
+        {
+            let _: &HashMap<String, HashMap<String, [u8; 32]>> = &wg_public_keys;
+            HashMap::new()
+        }
     };
 
     let lab_state = LabState {
@@ -1305,6 +1326,7 @@ async fn add_route_with_table(
     Ok(())
 }
 
+#[cfg(feature = "wireguard")]
 /// Generate a random WireGuard private key.
 fn generate_wg_private_key() -> Result<[u8; 32]> {
     let mut key = [0u8; 32];
@@ -1318,6 +1340,7 @@ fn generate_wg_private_key() -> Result<[u8; 32]> {
     Ok(key)
 }
 
+#[cfg(feature = "wireguard")]
 /// Derive a WireGuard public key from a private key.
 fn derive_wg_public_key(private_key: &[u8; 32]) -> [u8; 32] {
     let secret = x25519_dalek::StaticSecret::from(*private_key);
@@ -1325,6 +1348,7 @@ fn derive_wg_public_key(private_key: &[u8; 32]) -> [u8; 32] {
     public.to_bytes()
 }
 
+#[cfg(feature = "wireguard")]
 /// Decode a base64-encoded WireGuard key.
 fn decode_wg_key(s: &str) -> std::result::Result<[u8; 32], String> {
     use base64::Engine;

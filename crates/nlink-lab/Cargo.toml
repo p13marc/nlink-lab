@@ -10,6 +10,11 @@ keywords = ["networking", "testing", "namespaces", "lab", "topology"]
 categories = ["network-programming", "development-tools::testing"]
 readme = "../../README.md"
 
+[features]
+default = ["wireguard", "containers"]
+wireguard = ["dep:x25519-dalek", "dep:base64", "dep:getrandom"]
+containers = []
+
 [dependencies]
 nlink = { workspace = true }
 tokio = { workspace = true }
@@ -20,13 +25,15 @@ thiserror = { workspace = true }
 libc = { workspace = true }
 tracing = { workspace = true }
 logos = "0.15"
-x25519-dalek = { workspace = true }
-base64 = { workspace = true }
-getrandom = { workspace = true }
 time = { workspace = true }
 winnow = "0.7"
 miette = { version = "7", features = ["fancy"] }
 nlink-lab-macros = { workspace = true }
+
+# Feature-gated dependencies
+x25519-dalek = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }

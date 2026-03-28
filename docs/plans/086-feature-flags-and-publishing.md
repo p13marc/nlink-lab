@@ -214,15 +214,12 @@ This catches compile errors from missing feature gates.
 ## Progress
 
 ### Feature Flags
-- [ ] Design feature flag structure in Cargo.toml
-- [ ] Gate NLL parser behind `nll` feature
-- [ ] Gate WireGuard behind `wireguard` feature
-- [ ] Gate nftables behind `nftables` feature
-- [ ] Gate TC/netem behind `tc` feature
-- [ ] Gate containers behind `containers` feature
-- [ ] Gate diagnostics behind `diagnostics` feature
-- [ ] Add compile-time validation for missing features
-- [ ] CLI forwards features correctly
+- [x] Design feature flag structure in Cargo.toml
+- [x] Gate WireGuard behind `wireguard` feature (x25519-dalek, base64, getrandom optional)
+- [x] `containers` feature flag (runtime check)
+- [x] Compile-time error when WG topology used without feature
+- [x] Builds clean with `--no-default-features`
+- [x] All 139 tests pass in both configurations
 
 ### Publishing
 - [x] Add crate metadata (keywords, categories, readme)

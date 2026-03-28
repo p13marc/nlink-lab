@@ -34,12 +34,12 @@ impl MetricsCollector {
             let mut iface_metrics = Vec::new();
 
             for iface in &diag.interfaces {
-                let state_str = format!("{:?}", iface.state);
+                let state_str = iface.state.to_string();
 
                 // Detect state changes
                 if let Some(prev_state) = prev_node.get(&iface.name) {
                     if *prev_state != state_str {
-                        let kind = if state_str == "Up" {
+                        let kind = if state_str == "up" {
                             LabEventKind::InterfaceUp {
                                 node: diag.node.clone(),
                                 interface: iface.name.clone(),

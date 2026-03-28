@@ -95,6 +95,14 @@ pub enum Token {
     Udp,
     #[token("dport")]
     Dport,
+    #[token("sport")]
+    Sport,
+    #[token("icmp")]
+    Icmp,
+    #[token("icmpv6")]
+    Icmpv6,
+    #[token("mark")]
+    Mark,
     #[token("ipv4")]
     Ipv4,
     #[token("ipv6")]
@@ -606,7 +614,7 @@ link router:eth0 -- host:eth0 {
 
     #[test]
     fn test_firewall_keywords() {
-        let tokens = lex_tokens("firewall policy accept drop reject ct tcp udp dport");
+        let tokens = lex_tokens("firewall policy accept drop reject ct tcp udp dport sport icmp icmpv6 mark");
         assert_eq!(
             tokens,
             vec![
@@ -619,6 +627,10 @@ link router:eth0 -- host:eth0 {
                 Token::Tcp,
                 Token::Udp,
                 Token::Dport,
+                Token::Sport,
+                Token::Icmp,
+                Token::Icmpv6,
+                Token::Mark,
             ]
         );
     }

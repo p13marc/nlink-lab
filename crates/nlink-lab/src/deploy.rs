@@ -38,6 +38,13 @@ impl NodeHandle {
         }
     }
 
+    async fn wireguard_connection(&self) -> std::result::Result<Connection<Wireguard>, nlink::netlink::Error> {
+        match self {
+            NodeHandle::Namespace { ns_name } => namespace::connection_for_async(ns_name).await,
+            NodeHandle::Container { pid, .. } => namespace::connection_for_pid_async(*pid).await,
+        }
+    }
+
     fn open_ns_fd(&self) -> std::result::Result<NamespaceFd, nlink::netlink::Error> {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::open(ns_name),
@@ -63,13 +70,6 @@ impl NodeHandle {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::spawn(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_path(ns_path, cmd),
-        }
-    }
-
-    fn enter(&self) -> std::result::Result<nlink::netlink::namespace::NamespaceGuard, nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::enter(ns_name),
-            NodeHandle::Container { ns_path, .. } => namespace::enter_path(ns_path),
         }
     }
 
@@ -491,7 +491,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 9: Set interface addresses ────────────────────────────
     // From links
-    for (i, link) in topology.links.iter().enumerate() {
+    for link in &topology.links {
         if let Some(addresses) = &link.addresses {
             for (j, ep_str) in link.endpoints.iter().enumerate() {
                 let ep = EndpointRef::parse(ep_str).unwrap();
@@ -500,14 +500,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                 })?;
                 let (ip, prefix) = parse_cidr(&addresses[j])?;
-                let iface_ref = nlink::netlink::InterfaceRef::Name(ep.iface.clone());
-                let idx = conn.resolve_interface(&iface_ref).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "cannot resolve interface '{}' in link[{i}]: {e}",
-                        ep.iface
-                    ))
-                })?;
-                conn.add_address_by_index(idx, ip, prefix).await.map_err(|e| {
+                conn.add_address_by_name(&ep.iface, ip, prefix).await.map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to add address '{}'/{prefix} to '{}' on '{}': {e}",
                         ip, ep.iface, ep.node
@@ -527,19 +520,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         for (iface_name, iface_config) in &node.interfaces {
             for addr_str in &iface_config.addresses {
                 let (ip, prefix) = parse_cidr(addr_str)?;
-                // For loopback, use index 1; otherwise resolve by name
-                let idx = if iface_name == "lo" {
-                    1
-                } else {
-                    let iface_ref =
-                        nlink::netlink::InterfaceRef::Name(iface_name.clone());
-                    conn.resolve_interface(&iface_ref).await.map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "cannot resolve interface '{iface_name}' on '{node_name}': {e}"
-                        ))
-                    })?
-                };
-                conn.add_address_by_index(idx, ip, prefix)
+                conn.add_address_by_name(iface_name, ip, prefix)
                     .await
                     .map_err(|e| {
                         Error::deploy_failed(format!(
@@ -561,15 +542,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
 
         for (wg_name, wg_config) in &node.wireguard {
-            let iface_ref = nlink::netlink::InterfaceRef::Name(wg_name.clone());
-            let idx = conn.resolve_interface(&iface_ref).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "cannot resolve WireGuard interface '{wg_name}' on '{node_name}': {e}"
-                ))
-            })?;
             for addr_str in &wg_config.addresses {
                 let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_index(idx, ip, prefix)
+                conn.add_address_by_name(wg_name, ip, prefix)
                     .await
                     .map_err(|e| {
                         Error::deploy_failed(format!(
@@ -611,20 +586,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 continue;
             }
             for member in &iface_config.members {
-                // Members must be down to be enslaved to a bond
-                conn.set_link_down(member).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to bring down '{member}' for bond enslavement on '{node_name}': {e}"
-                    ))
-                })?;
-                conn.set_link_master(member, iface_name).await.map_err(|e| {
+                conn.enslave(member, iface_name).await.map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to enslave '{member}' to bond '{iface_name}' on '{node_name}': {e}"
-                    ))
-                })?;
-                conn.set_link_up(member).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to bring up '{member}' after bond enslavement on '{node_name}': {e}"
                     ))
                 })?;
             }
@@ -675,10 +639,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let _guard = node_handle.enter().map_err(|e| {
-            Error::deploy_failed(format!("failed to enter namespace for '{node_name}': {e}"))
-        })?;
-        let wg_conn = Connection::<Wireguard>::new_async().await.map_err(|e| {
+        let wg_conn = node_handle.wireguard_connection().await.map_err(|e| {
             Error::deploy_failed(format!(
                 "failed to create WireGuard connection for '{node_name}': {e}"
             ))
@@ -723,10 +684,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let _guard = node_handle.enter().map_err(|e| {
-            Error::deploy_failed(format!("failed to enter namespace for '{node_name}': {e}"))
-        })?;
-        let wg_conn = Connection::<Wireguard>::new_async().await.map_err(|e| {
+        let wg_conn = node_handle.wireguard_connection().await.map_err(|e| {
             Error::deploy_failed(format!(
                 "failed to create WireGuard connection for '{node_name}': {e}"
             ))
@@ -1127,9 +1085,39 @@ fn apply_match_expr(
         }
     }
 
+    if expr.starts_with("tcp sport ") {
+        if let Ok(port) = expr.trim_start_matches("tcp sport ").trim().parse::<u16>() {
+            return Ok(rule.match_tcp_sport(port));
+        }
+    }
+
     if expr.starts_with("udp dport ") {
         if let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>() {
             return Ok(rule.match_udp_dport(port));
+        }
+    }
+
+    if expr.starts_with("udp sport ") {
+        if let Ok(port) = expr.trim_start_matches("udp sport ").trim().parse::<u16>() {
+            return Ok(rule.match_udp_sport(port));
+        }
+    }
+
+    if expr.starts_with("icmp type ") {
+        if let Ok(icmp_type) = expr.trim_start_matches("icmp type ").trim().parse::<u8>() {
+            return Ok(rule.match_icmp_type(icmp_type));
+        }
+    }
+
+    if expr.starts_with("icmpv6 type ") {
+        if let Ok(icmp_type) = expr.trim_start_matches("icmpv6 type ").trim().parse::<u8>() {
+            return Ok(rule.match_icmpv6_type(icmp_type));
+        }
+    }
+
+    if expr.starts_with("mark ") {
+        if let Ok(mark) = expr.trim_start_matches("mark ").trim().parse::<u32>() {
+            return Ok(rule.match_mark(mark));
         }
     }
 
@@ -1150,7 +1138,8 @@ fn apply_match_expr(
 
     Err(Error::deploy_failed(format!(
         "unsupported firewall match expression: '{expr}'. \
-         Supported: 'ct state ...', 'tcp dport N', 'udp dport N'"
+         Supported: 'ct state ...', 'tcp dport N', 'tcp sport N', 'udp dport N', \
+         'udp sport N', 'icmp type N', 'icmpv6 type N', 'mark N'"
     )))
 }
 
@@ -1552,14 +1541,7 @@ pub async fn apply_diff(
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                 })?;
                 let (ip, prefix) = parse_cidr(addr_str)?;
-                let iface_ref = nlink::netlink::InterfaceRef::Name(ep.iface.clone());
-                let idx = conn.resolve_interface(&iface_ref).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "cannot resolve interface '{}' on '{}': {e}",
-                        ep.iface, ep.node
-                    ))
-                })?;
-                conn.add_address_by_index(idx, ip, prefix).await.map_err(|e| {
+                conn.add_address_by_name(&ep.iface, ip, prefix).await.map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
                         ep.iface, ep.node
@@ -1754,10 +1736,50 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_match_expr_unknown_errors() {
+    fn test_apply_match_expr_tcp_sport() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "tcp sport 8080");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_udp_sport() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "udp sport 5353");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_icmp_type() {
         let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
             .family(nlink::netlink::nftables::types::Family::Inet);
         let result = apply_match_expr(rule, "icmp type 8");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_icmpv6_type() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "icmpv6 type 128");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_mark() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "mark 42");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_unknown_errors() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "unknown expression");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("unsupported"));
     }

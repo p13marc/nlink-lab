@@ -710,22 +710,68 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         Some(Token::Tcp) => {
             *pos += 1;
             expr.push_str("tcp ");
-            expect(tokens, pos, &Token::Dport)?;
-            expr.push_str("dport ");
+            match at(tokens, *pos) {
+                Some(Token::Dport) => {
+                    *pos += 1;
+                    expr.push_str("dport ");
+                }
+                Some(Token::Sport) => {
+                    *pos += 1;
+                    expr.push_str("sport ");
+                }
+                other => {
+                    return Err(err(tokens, *pos, format!(
+                        "expected 'dport' or 'sport' after 'tcp', found {}",
+                        other.map_or("end of input".to_string(), |t| t.to_string())
+                    )));
+                }
+            }
             let port = expect_int(tokens, pos)?;
             expr.push_str(&port.to_string());
         }
         Some(Token::Udp) => {
             *pos += 1;
             expr.push_str("udp ");
-            expect(tokens, pos, &Token::Dport)?;
-            expr.push_str("dport ");
+            match at(tokens, *pos) {
+                Some(Token::Dport) => {
+                    *pos += 1;
+                    expr.push_str("dport ");
+                }
+                Some(Token::Sport) => {
+                    *pos += 1;
+                    expr.push_str("sport ");
+                }
+                other => {
+                    return Err(err(tokens, *pos, format!(
+                        "expected 'dport' or 'sport' after 'udp', found {}",
+                        other.map_or("end of input".to_string(), |t| t.to_string())
+                    )));
+                }
+            }
             let port = expect_int(tokens, pos)?;
             expr.push_str(&port.to_string());
         }
+        Some(Token::Icmp) => {
+            *pos += 1;
+            expr.push_str("icmp type ");
+            let icmp_type = expect_int(tokens, pos)?;
+            expr.push_str(&icmp_type.to_string());
+        }
+        Some(Token::Icmpv6) => {
+            *pos += 1;
+            expr.push_str("icmpv6 type ");
+            let icmp_type = expect_int(tokens, pos)?;
+            expr.push_str(&icmp_type.to_string());
+        }
+        Some(Token::Mark) => {
+            *pos += 1;
+            expr.push_str("mark ");
+            let mark = expect_int(tokens, pos)?;
+            expr.push_str(&mark.to_string());
+        }
         Some(other) => {
             return Err(err(tokens, *pos, format!(
-                "expected match expression (ct/tcp/udp), found {other}"
+                "expected match expression (ct/tcp/udp/icmp/icmpv6/mark), found {other}"
             )));
         }
         None => {

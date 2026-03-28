@@ -1,78 +1,270 @@
-# Plan 071: Live Metrics Dashboard
+# Plan 071: Backend Daemon, Metrics & CLI Dashboard
 
 **Priority:** High
-**Effort:** 3-4 days
-**Target:** `crates/nlink-lab/src/metrics.rs` (new), `bins/lab/src/main.rs`
+**Effort:** 5-7 days
+**Target:** `crates/nlink-lab-shared/` (new), `bins/nlink-lab-backend/` (new), `bins/lab/src/main.rs`
 
 ## Summary
 
-Add a `nlink-lab metrics` CLI command that streams live per-interface and
-per-link metrics to the terminal in a TUI-like display. Uses nlink's
-`Diagnostics::scan()` API with periodic sampling for rate calculations.
+Add a privileged backend daemon (`nlink-lab-backend`) that runs as root (or with
+`CAP_NET_ADMIN`), collects live metrics from all lab nodes, and exposes them via
+**Zenoh** pub/sub and query/reply. Unprivileged clients (the GUI from plan 070,
+the `nlink-lab metrics` CLI, or external tools) connect via Zenoh to receive
+streaming metrics, query topology, and issue commands.
 
-This is the headless counterpart to the TopoViewer GUI — useful in SSH
-sessions, CI pipelines, and scripted monitoring.
+Architecture follows the same pattern as [tcgui](https://github.com/p13marc/tcgui):
+shared types crate, Zenoh AdvancedPublisher with history for state, queryables
+for mutating operations.
 
 ## Architecture
 
 ```
-crates/nlink-lab/src/
-  metrics.rs            # NEW: MetricsCollector, MetricsSnapshot, time-series
-
-bins/lab/src/
-  main.rs               # Add Metrics command
+┌───────────────────────────────────────────────────────────────┐
+│                  Unprivileged clients                         │
+│                                                               │
+│  nlink-lab metrics    TopoViewer GUI     External tools       │
+│  (CLI, table/json)    (Iced, plan 070)   (zenoh-cli, jq)     │
+│                                                               │
+│  Zenoh subscribers         Zenoh get()                        │
+│  (pub/sub streams)         (query/reply)                      │
+└──────────┬────────────────────┬──────────────────┬────────────┘
+           │       Zenoh (TCP / UDP / TLS / QUIC)  │
+┌──────────▼────────────────────▼──────────────────▼────────────┐
+│              nlink-lab-backend (CAP_NET_ADMIN)                 │
+│                                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐│
+│  │ Publishers    │  │ Queryables   │  │ Background tasks     ││
+│  │ - metrics     │  │ - exec       │  │ - MetricsCollector   ││
+│  │ - topology    │  │ - impairment │  │   (periodic scan)    ││
+│  │ - health      │  │ - deploy     │  │ - Netlink events     ││
+│  │ - events      │  │ - destroy    │  │   (interface state)  ││
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘│
+│         └──────────────────┼─────────────────────┘            │
+│                     RunningLab → nlink (netlink)              │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-## nlink Diagnostics API (what we consume)
-
-Each `Diagnostics::scan()` call returns:
+## Crate Structure
 
 ```
-DiagnosticReport
-├── interfaces: Vec<InterfaceDiag>
-│   ├── name, ifindex, state, mtu, flags
-│   ├── stats: LinkStats { rx_bytes, tx_bytes, rx_packets, tx_packets,
-│   │                      rx_errors, tx_errors, rx_dropped, tx_dropped }
-│   ├── rates: LinkRates { rx_bps, tx_bps, rx_pps, tx_pps }
-│   ├── tc: Option<TcDiag> { qdisc, drops, overlimits, backlog, qlen,
-│   │                         rate_bps, rate_pps, bytes, packets }
-│   └── issues: Vec<Issue>
-├── routes: RouteDiag { ipv4_count, ipv6_count, has_default_v4/v6 }
-└── issues: Vec<Issue> { severity, category, message }
+crates/nlink-lab-shared/       # NEW: Shared types between backend & clients
+  Cargo.toml                   # depends on serde, serde_json
+  src/
+    lib.rs                     # Re-exports
+    topics.rs                  # Zenoh key expression helpers
+    messages.rs                # All pub/sub + query/reply message types
+    metrics.rs                 # MetricsSnapshot, NodeMetrics, InterfaceMetrics
+
+bins/nlink-lab-backend/        # NEW: Privileged backend daemon
+  Cargo.toml                   # depends on zenoh, zenoh-ext, nlink-lab, nlink, tokio
+  src/
+    main.rs                    # Entry point, Zenoh session, event loop
+    collector.rs               # MetricsCollector (periodic diagnostics scan)
+    handlers.rs                # Queryable handlers (exec, impairment, deploy)
+
+bins/lab/src/main.rs           # Existing CLI — add `daemon`, `metrics` commands
 ```
 
-Rates are automatically calculated by the Diagnostics module between
-consecutive `scan()` calls (it caches previous stats internally).
+## Dependencies
 
-## Design
+```toml
+# crates/nlink-lab-shared/Cargo.toml
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
 
-### MetricsCollector
+# bins/nlink-lab-backend/Cargo.toml
+[dependencies]
+zenoh = { version = "1.5", features = ["unstable"] }
+zenoh-ext = "1.5"
+nlink-lab = { workspace = true }
+nlink-lab-shared = { workspace = true }
+nlink = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+
+# bins/lab/Cargo.toml — add for metrics CLI
+zenoh = { version = "1.5", features = ["unstable"] }
+nlink-lab-shared = { workspace = true }
+```
+
+## Zenoh Topics
+
+All topics use format: `nlink-lab/{lab-name}/{category}/...`
+
+### Pub/Sub (backend publishes, clients subscribe)
+
+| Topic | Message Type | QoS | History | Description |
+|-------|-------------|-----|---------|-------------|
+| `nlink-lab/{lab}/topology` | `TopologyUpdate` | Reliable | Keep Last 1 | Full topology (on startup + changes) |
+| `nlink-lab/{lab}/health` | `HealthStatus` | Reliable | Keep Last 1 | Backend alive, node/link counts |
+| `nlink-lab/{lab}/metrics/{node}/{iface}` | `InterfaceMetrics` | Best Effort | None | Per-interface bandwidth, errors (high freq) |
+| `nlink-lab/{lab}/metrics/snapshot` | `MetricsSnapshot` | Reliable | Keep Last 1 | Full snapshot all nodes (periodic) |
+| `nlink-lab/{lab}/events` | `LabEvent` | Reliable | Keep Last 10 | Interface state changes, process exits |
+
+### Query/Reply (clients query, backend replies)
+
+| Topic | Request | Response | Description |
+|-------|---------|----------|-------------|
+| `nlink-lab/{lab}/rpc/exec` | `ExecRequest` | `ExecResponse` | Execute command in node |
+| `nlink-lab/{lab}/rpc/impairment` | `ImpairmentRequest` | `ImpairmentResponse` | Modify TC impairment |
+| `nlink-lab/{lab}/rpc/status` | `StatusRequest` | `StatusResponse` | Lab status summary |
+
+### Topic Helpers (in nlink-lab-shared)
 
 ```rust
-/// Periodically collects diagnostics from all lab nodes.
-pub struct MetricsCollector {
-    lab: RunningLab,
-    interval: Duration,
-    history: VecDeque<MetricsSnapshot>,
-    max_history: usize,
+// crates/nlink-lab-shared/src/topics.rs
+
+pub fn topology(lab: &str) -> String {
+    format!("nlink-lab/{lab}/topology")
 }
 
-/// A single point-in-time snapshot of all node metrics.
+pub fn health(lab: &str) -> String {
+    format!("nlink-lab/{lab}/health")
+}
+
+pub fn metrics_iface(lab: &str, node: &str, iface: &str) -> String {
+    format!("nlink-lab/{lab}/metrics/{node}/{iface}")
+}
+
+pub fn metrics_snapshot(lab: &str) -> String {
+    format!("nlink-lab/{lab}/metrics/snapshot")
+}
+
+pub fn events(lab: &str) -> String {
+    format!("nlink-lab/{lab}/events")
+}
+
+pub fn rpc_exec(lab: &str) -> String {
+    format!("nlink-lab/{lab}/rpc/exec")
+}
+
+pub fn rpc_impairment(lab: &str) -> String {
+    format!("nlink-lab/{lab}/rpc/impairment")
+}
+
+pub fn rpc_status(lab: &str) -> String {
+    format!("nlink-lab/{lab}/rpc/status")
+}
+
+/// Extract lab name from a topic key expression.
+pub fn extract_lab_name(key_expr: &str) -> Option<&str> {
+    key_expr.strip_prefix("nlink-lab/")?.split('/').next()
+}
+```
+
+## Shared Message Types
+
+```rust
+// crates/nlink-lab-shared/src/messages.rs
+
+use serde::{Serialize, Deserialize};
+
+// ─── Pub/Sub messages ────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopologyUpdate {
+    pub lab_name: String,
+    pub topology: nlink_lab::Topology,  // re-exported, already Serialize
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthStatus {
+    pub lab_name: String,
+    pub node_count: usize,
+    pub namespace_count: usize,
+    pub container_count: usize,
+    pub pid_count: usize,
+    pub uptime_secs: u64,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabEvent {
+    pub lab_name: String,
+    pub kind: LabEventKind,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LabEventKind {
+    InterfaceUp { node: String, interface: String },
+    InterfaceDown { node: String, interface: String },
+    ProcessExited { node: String, pid: u32, exit_code: i32 },
+}
+
+// ─── Query/Reply messages ────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecRequest {
+    pub node: String,
+    pub cmd: String,
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecResponse {
+    pub success: bool,
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImpairmentRequest {
+    pub node: String,
+    pub interface: String,
+    pub delay: Option<String>,
+    pub jitter: Option<String>,
+    pub loss: Option<String>,
+    pub corrupt: Option<String>,
+    pub reorder: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImpairmentResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusResponse {
+    pub lab_name: String,
+    pub node_count: usize,
+    pub namespace_count: usize,
+    pub container_count: usize,
+    pub uptime_secs: u64,
+}
+```
+
+```rust
+// crates/nlink-lab-shared/src/metrics.rs
+
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsSnapshot {
-    pub timestamp: Instant,
+    pub lab_name: String,
+    pub timestamp: u64,
     pub nodes: HashMap<String, NodeMetrics>,
 }
 
-/// Metrics for a single node.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMetrics {
     pub interfaces: Vec<InterfaceMetrics>,
-    pub issues: Vec<Issue>,
+    pub issues: Vec<String>,
 }
 
-/// Metrics for a single interface.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InterfaceMetrics {
     pub name: String,
-    pub state: OperState,
+    pub state: String,
     pub rx_bps: u64,
     pub tx_bps: u64,
     pub rx_pps: u64,
@@ -83,147 +275,258 @@ pub struct InterfaceMetrics {
     pub tx_dropped: u64,
     pub tc_drops: u64,
     pub tc_qlen: u32,
-    pub tc_backlog: u32,
-}
-
-impl MetricsCollector {
-    pub fn new(lab: RunningLab, interval: Duration) -> Self;
-
-    /// Take a single snapshot (calls scan() on all nodes).
-    pub async fn snapshot(&mut self) -> Result<MetricsSnapshot>;
-
-    /// Stream snapshots at the configured interval.
-    pub fn stream(&mut self) -> impl Stream<Item = Result<MetricsSnapshot>>;
 }
 ```
 
-### CLI Command
+## Backend Daemon
+
+### Main Loop
+
+```rust
+// bins/nlink-lab-backend/src/main.rs
+
+async fn run(lab_name: &str, zenoh_config: zenoh::Config, interval: Duration) -> Result<()> {
+    let lab = RunningLab::load(lab_name)?;
+    let session = zenoh::open(zenoh_config).await?;
+
+    // ── Publishers (with history for late joiners) ──
+
+    let topo_publisher = session
+        .declare_publisher(topics::topology(lab_name))
+        .cache(CacheConfig::default().max_samples(1))
+        .publisher_detection()
+        .await?;
+
+    let health_publisher = session
+        .declare_publisher(topics::health(lab_name))
+        .cache(CacheConfig::default().max_samples(1))
+        .await?;
+
+    let snapshot_publisher = session
+        .declare_publisher(topics::metrics_snapshot(lab_name))
+        .cache(CacheConfig::default().max_samples(1))
+        .await?;
+
+    // ── Queryables ──
+
+    let exec_queryable = session
+        .declare_queryable(topics::rpc_exec(lab_name))
+        .await?;
+
+    let impair_queryable = session
+        .declare_queryable(topics::rpc_impairment(lab_name))
+        .await?;
+
+    // ── Publish initial topology ──
+    topo_publisher.put(serde_json::to_string(&TopologyUpdate {
+        lab_name: lab_name.into(),
+        topology: lab.topology().clone(),
+        timestamp: now(),
+    })?).await?;
+
+    // ── Liveliness token ──
+    let _token = session.liveliness()
+        .declare_token(topics::health(lab_name))
+        .await?;
+
+    // ── Main event loop ──
+    let mut collector = MetricsCollector::new(&lab, interval);
+    let mut health_interval = tokio::time::interval(Duration::from_secs(10));
+    let mut metrics_interval = tokio::time::interval(interval);
+
+    loop {
+        tokio::select! {
+            // Periodic metrics collection
+            _ = metrics_interval.tick() => {
+                if let Ok(snapshot) = collector.snapshot().await {
+                    let json = serde_json::to_string(&snapshot)?;
+                    snapshot_publisher.put(json).await?;
+                }
+            }
+
+            // Periodic health heartbeat
+            _ = health_interval.tick() => {
+                let status = HealthStatus { /* ... */ };
+                health_publisher.put(serde_json::to_string(&status)?).await?;
+            }
+
+            // Handle exec queries
+            Ok(query) = exec_queryable.recv_async() => {
+                handle_exec_query(query, &lab).await;
+            }
+
+            // Handle impairment queries
+            Ok(query) = impair_queryable.recv_async() => {
+                handle_impairment_query(query, &lab).await;
+            }
+        }
+    }
+}
+```
+
+### MetricsCollector
+
+```rust
+// bins/nlink-lab-backend/src/collector.rs
+
+pub struct MetricsCollector {
+    lab: RunningLab,
+    interval: Duration,
+}
+
+impl MetricsCollector {
+    pub fn new(lab: &RunningLab, interval: Duration) -> Self;
+
+    /// Collect a full snapshot from all nodes via RunningLab::diagnose().
+    pub async fn snapshot(&mut self) -> Result<MetricsSnapshot>;
+}
+```
+
+## CLI Commands
+
+### `nlink-lab daemon`
+
+```
+nlink-lab daemon <lab> [OPTIONS]
+
+Start the Zenoh backend for a running lab.
+
+Options:
+  -i, --interval <SEC>        Metrics collection interval (default: 2)
+  --zenoh-mode <MODE>         Zenoh mode: peer (default), client
+  --zenoh-listen <ENDPOINT>   Zenoh listen endpoint (default: tcp/0.0.0.0:7447)
+  --zenoh-connect <ENDPOINT>  Connect to Zenoh router
+  --foreground                Run in foreground (default: daemonize)
+```
+
+Requires root or `CAP_NET_ADMIN`. Typically started after deploy:
+
+```bash
+sudo nlink-lab deploy datacenter.nll
+sudo nlink-lab daemon datacenter &
+
+# Now any user can:
+nlink-lab metrics datacenter
+nlink-lab-topoviewer --lab datacenter
+```
+
+### `nlink-lab metrics`
 
 ```
 nlink-lab metrics <lab> [OPTIONS]
 
+Stream live metrics from the backend via Zenoh (no root required).
+
 Options:
-  -i, --interval <SEC>    Refresh interval in seconds (default: 2)
   -n, --node <NODE>       Filter to specific node
-  -f, --format <FMT>      Output format: table (default), json, csv
-  -c, --count <N>         Number of samples then exit (default: infinite)
-  --no-header             Omit header row (for scripting)
-  --interfaces-only       Show only interface metrics, skip routes/issues
+  -f, --format <FMT>      Output: table (default), json, csv
+  -c, --count <N>         Number of samples then exit
+  --zenoh-connect <EP>    Connect to specific Zenoh endpoint
 ```
 
-### Output Formats
+Subscribes to `nlink-lab/{lab}/metrics/snapshot` — **no root required**.
 
-**Table (default) — refreshing terminal display:**
+### Table Output
 
 ```
-lab: datacenter-sim  |  nodes: 6  |  refresh: 2s  |  sample: #5
+lab: datacenter  |  nodes: 6  |  refresh: 2s  |  sample: #5
 
-NODE         IFACE     STATE    RX rate    TX rate    RX pps   TX pps   ERRORS  DROPS
-─────────────────────────────────────────────────────────────────────────────────────
-spine1       eth1      UP       45.2 Mbps  45.1 Mbps  38.2k   37.9k      0      0
-spine1       eth2      UP       22.8 Mbps  22.9 Mbps  19.1k   19.2k      0      0
-leaf1        eth1      UP       45.1 Mbps  45.2 Mbps  37.9k   38.2k      0      0
-leaf1        eth3      UP        1.2 Mbps   0.8 Mbps   1.0k    0.7k      0     12 ⚠
-server1      eth0      UP        0.8 Mbps   1.2 Mbps   0.7k    1.0k      0      0
+NODE         IFACE     STATE    RX rate    TX rate    ERRORS  DROPS
+────────────────────────────────────────────────────────────────────
+spine1       eth1      UP       45.2 Mbps  45.1 Mbps     0      0
+spine1       eth2      UP       22.8 Mbps  22.9 Mbps     0      0
+leaf1        eth3      UP        1.2 Mbps   0.8 Mbps     0     12 ⚠
 
 ISSUES:
-  [WARN] leaf1:eth3 — qdisc drops detected (12 drops, netem delay=10ms)
+  [WARN] leaf1:eth3 — qdisc drops detected (12 drops)
 ```
 
-**JSON — one object per sample, for piping:**
+## Multi-Lab & Remote Support
 
-```json
-{
-  "timestamp": "2026-03-27T14:30:00Z",
-  "nodes": {
-    "spine1": {
-      "interfaces": [
-        {
-          "name": "eth1",
-          "state": "Up",
-          "rx_bps": 45200000,
-          "tx_bps": 45100000,
-          "rx_errors": 0,
-          "tx_errors": 0
-        }
-      ]
-    }
-  }
-}
+Because Zenoh handles discovery and routing, this architecture natively supports:
+
+```
+┌──────────────────────┐    ┌──────────────────────┐
+│  Lab "dc-east"       │    │  Lab "dc-west"       │
+│  backend on host-a   │    │  backend on host-b   │
+└──────────┬───────────┘    └──────────┬───────────┘
+           │      Zenoh mesh           │
+           └──────────┬────────────────┘
+                      │
+              ┌───────▼──────────┐
+              │  Frontend / CLI  │
+              │  (any machine)   │
+              └──────────────────┘
 ```
 
-**CSV — for import into spreadsheets/analysis tools:**
-
-```csv
-timestamp,node,interface,state,rx_bps,tx_bps,rx_pps,tx_pps,errors,drops
-2026-03-27T14:30:00Z,spine1,eth1,Up,45200000,45100000,38200,37900,0,0
-```
-
-### Integration with TopoViewer
-
-The `MetricsCollector` is shared between the CLI metrics command and the
-TopoViewer GUI. The TopoViewer uses `MetricsCollector::snapshot()` in its
-subscription loop. The CLI uses `MetricsCollector::stream()` for continuous
-output.
-
-### Rate Formatting Helper
-
-```rust
-fn format_rate(bps: u64) -> String {
-    match bps {
-        0 => "0".to_string(),
-        b if b < 1_000 => format!("{b} bps"),
-        b if b < 1_000_000 => format!("{:.1} Kbps", b as f64 / 1_000.0),
-        b if b < 1_000_000_000 => format!("{:.1} Mbps", b as f64 / 1_000_000.0),
-        b => format!("{:.1} Gbps", b as f64 / 1_000_000_000.0),
-    }
-}
-```
+Topics are lab-namespaced (`nlink-lab/dc-east/...`, `nlink-lab/dc-west/...`),
+so one client can observe multiple labs from different machines.
 
 ## Implementation Order
 
-### Phase 1: Core Metrics (days 1-2)
+### Phase 1: Shared Types + Daemon Core (days 1-2)
 
-1. Create `crates/nlink-lab/src/metrics.rs` with `MetricsCollector`
-2. Implement `snapshot()` using `RunningLab::diagnose()`
-3. Implement `stream()` using tokio interval
-4. Add `Metrics` command to CLI with table output
-5. Rate formatting helper
+1. Create `crates/nlink-lab-shared/` crate with message types and topic helpers
+2. Create `bins/nlink-lab-backend/` with Zenoh session setup
+3. Publish topology and health on startup
+4. Handle `Ping`/`Status` queryables
+5. Add `nlink-lab daemon` CLI command
 
-### Phase 2: Output Formats (day 2-3)
+### Phase 2: Metrics Collector (days 2-3)
 
-6. JSON output (`--format json`)
-7. CSV output (`--format csv`)
-8. Node filtering (`--node`)
-9. Sample count limit (`--count`)
+6. Implement `MetricsCollector` using `RunningLab::diagnose()`
+7. Publish `MetricsSnapshot` at configured interval
+8. Publish per-interface metrics to individual topics
+9. Rate formatting helper
 
-### Phase 3: Polish (day 3-4)
+### Phase 3: CLI Metrics Client (days 3-4)
 
-10. Terminal clearing for refreshing table display
-11. Issue summary at bottom of table
-12. Color output (green/yellow/red for status)
-13. Register `metrics` module in lib.rs and re-export types
+10. Add `nlink-lab metrics` CLI command — Zenoh subscriber
+11. Table output with terminal clearing refresh
+12. JSON and CSV output formats
+13. Node filtering + count limit
+
+### Phase 4: Mutating Operations (days 5-6)
+
+14. Handle `ExecRequest` queryable
+15. Handle `ImpairmentRequest` queryable
+16. `--daemon` flag on `nlink-lab deploy` to auto-start backend
+17. Graceful shutdown on SIGTERM
+
+### Phase 5: Polish (day 7)
+
+18. Zenoh config CLI flags (mode, listen, connect)
+19. Liveliness token for backend discovery
+20. Lab event publishing (interface state changes)
 
 ## Progress
 
-### Phase 1: Core Metrics
+### Phase 1: Shared Types + Daemon Core
+- [ ] Create `crates/nlink-lab-shared/` with messages + topics
+- [ ] Create `bins/nlink-lab-backend/` with Zenoh session
+- [ ] Publish topology + health on startup
+- [ ] Handle `Status` queryable
+- [ ] `nlink-lab daemon` CLI command
 
-- [ ] Create `metrics.rs` with `MetricsCollector`
-- [ ] Implement `snapshot()` from diagnostics
-- [ ] Implement `stream()` with tokio interval
-- [ ] Add `Metrics` CLI command with table output
+### Phase 2: Metrics Collector
+- [ ] `MetricsCollector` from diagnostics
+- [ ] Publish `MetricsSnapshot` periodically
+- [ ] Per-interface metrics publishing
 - [ ] Rate formatting helper
 
-### Phase 2: Output Formats
+### Phase 3: CLI Metrics Client
+- [ ] `nlink-lab metrics` command (Zenoh subscriber)
+- [ ] Table output with refresh
+- [ ] JSON + CSV output
+- [ ] Node filtering + count limit
 
-- [ ] JSON output
-- [ ] CSV output
-- [ ] Node filtering
-- [ ] Sample count limit
+### Phase 4: Mutating Operations
+- [ ] Handle `ExecRequest`
+- [ ] Handle `ImpairmentRequest`
+- [ ] `--daemon` flag on deploy
+- [ ] Graceful shutdown
 
-### Phase 3: Polish
-
-- [ ] Refreshing terminal display
-- [ ] Issue summary
-- [ ] Color output (ANSI)
-- [ ] Module registration and exports
+### Phase 5: Polish
+- [ ] Zenoh config CLI flags
+- [ ] Liveliness token
+- [ ] Lab event publishing

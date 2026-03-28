@@ -14,8 +14,8 @@ Implementation plans for nlink-lab.
 | [085](085-test-coverage.md) | Integration tests for advanced features, lifecycle, stress | Medium | 2-3 days |
 | [086](086-feature-flags-and-publishing.md) | Cargo feature flags, crates.io preparation | Medium | 2-3 days |
 | [087](087-topology-composition.md) | NLL imports, hot-reload / apply | Low | 5-7 days |
-| [070](070-topoviewer.md) | Native topology visualizer (Iced GUI) | Low | 5-7 days |
-| [071](071-live-metrics-dashboard.md) | Metrics collector + CLI dashboard | Low | 3-4 days |
+| [071](071-live-metrics-dashboard.md) | Zenoh backend daemon, metrics collector, CLI dashboard | Low | 5-7 days |
+| [070](070-topoviewer.md) | Native topology visualizer (Iced GUI, Zenoh client) | Low | 5-7 days |
 
 ### Recommended Order
 
@@ -27,7 +27,8 @@ Implementation plans for nlink-lab.
 6. **085 — Test coverage** — verify advanced features actually work
 7. **086 — Feature flags** — prepare for publishing
 8. **087 — Composition** — imports and hot-reload (power user feature)
-9. **070/071 — GUI & metrics** — visualization layer
+9. **071 — Zenoh daemon & metrics** — privileged backend + shared types + CLI metrics (must come before 070)
+10. **070 — TopoViewer GUI** — unprivileged Iced GUI, connects to backend via Zenoh
 
 ## Completed
 
@@ -41,5 +42,4 @@ implemented and their plan files removed.
 |------|-------------|
 | [GUIDELINES.md](GUIDELINES.md) | Implementation guidelines |
 | [../NLINK_LAB.md](../NLINK_LAB.md) | Full design document |
-| [../NLINK_LAB_READINESS_REPORT.md](../NLINK_LAB_READINESS_REPORT.md) | nlink readiness assessment |
-| [../DEEP_ANALYSIS_REPORT.md](../DEEP_ANALYSIS_REPORT.md) | Deep codebase analysis (2026-03-28) |
+| [../NLL_DSL_DESIGN.md](../NLL_DSL_DESIGN.md) | NLL language specification |

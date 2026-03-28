@@ -40,8 +40,23 @@ fn main() -> iced::Result {
 
     let lab_name = cli.lab.clone();
 
+    // Build Zenoh config if in live/discovery mode
+    let zenoh_config = if lab_name.is_some() || topology.is_none() {
+        let mut config = zenoh::Config::default();
+        if let Some(ref endpoint) = cli.zenoh_connect {
+            config
+                .connect
+                .endpoints
+                .set(vec![endpoint.parse().unwrap()])
+                .unwrap();
+        }
+        Some(config)
+    } else {
+        None
+    };
+
     iced::application(
-        move || app::TopoViewer::boot(topology.clone(), lab_name.clone()),
+        move || app::TopoViewer::boot(topology.clone(), lab_name.clone(), zenoh_config.clone()),
         app::TopoViewer::update,
         app::TopoViewer::view,
     )

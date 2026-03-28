@@ -122,6 +122,7 @@ impl canvas::Program<Message> for TopoViewer {
                 "f" => Some(Action::publish(Message::FitToScreen)),
                 "a" => Some(Action::publish(Message::ToggleAddresses)),
                 "m" => Some(Action::publish(Message::ToggleMetrics)),
+                "e" => Some(Action::publish(Message::ExportPng)),
                 _ => None,
             },
 

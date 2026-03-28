@@ -333,13 +333,13 @@ between labs.
 - [x] Link color-coding (green=traffic, red=errors, gray=idle)
 - [x] Live bandwidth in sidebar
 - [x] Issue badges on nodes
-- [ ] Multi-lab discovery
+- [x] Multi-lab discovery
 
 ### Phase 3: Polish
 
 - [x] Dark theme (default)
 - [x] Node dragging to reposition
 - [x] Fit-to-screen button
-- [ ] Export PNG/SVG
-- [x] Keyboard shortcuts (Esc, +/-, f, a, m)
-- [ ] Exec panel via Zenoh query
+- [x] Export PNG (via screenshot + png crate)
+- [x] Keyboard shortcuts (Esc, +/-, f, a, m, e)
+- [x] Exec panel via Zenoh query

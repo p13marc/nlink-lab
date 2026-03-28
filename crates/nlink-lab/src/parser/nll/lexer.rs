@@ -283,7 +283,8 @@ pub fn lex(input: &str) -> Result<Vec<Spanned>> {
             Ok(token) => tokens.push(Spanned { token, span }),
             Err(()) => {
                 let line = input[..span.start].matches('\n').count() + 1;
-                let col = span.start - input[..span.start].rfind('\n').map_or(0, |p| p + 1) + 1;
+                let line_start = input[..span.start].rfind('\n').map_or(0, |p| p + 1);
+                let col = input[line_start..span.start].chars().count() + 1;
                 return Err(crate::Error::NllParse(format!(
                     "unexpected character at line {line}, column {col}: {:?}",
                     &input[span.start..span.end]

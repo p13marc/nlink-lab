@@ -41,7 +41,7 @@ pub fn lower(file: &ast::File) -> Result<types::Topology> {
         match stmt {
             ast::Statement::Node(n) => lower_node(&mut topology, n, &ctx)?,
             ast::Statement::Link(l) => lower_link(&mut topology, l),
-            ast::Statement::Network(n) => lower_network(&mut topology, n),
+            ast::Statement::Network(n) => lower_network(&mut topology, n)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
             ast::Statement::Profile(_) | ast::Statement::Let(_) | ast::Statement::For(_) => {}
@@ -67,6 +67,9 @@ impl LowerCtx {
     }
 
     fn add_profile(&mut self, p: &ast::ProfileDef) {
+        if self.profiles.contains_key(&p.name) {
+            tracing::warn!("duplicate profile name '{}' — later definition wins", p.name);
+        }
         self.profiles.insert(p.name.clone(), p.clone());
     }
 
@@ -164,11 +167,21 @@ fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
 }
 
 /// Evaluate a simple expression: variable name, or `var op int`.
+///
+/// Supports both spaced (`${i + 1}`) and unspaced (`${i+1}`) operators.
 fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
     let expr = expr.trim();
 
-    // Try: var + N, var - N, var * N, var / N
-    for op in [" + ", " - ", " * ", " / "] {
+    // Try operators: with spaces first, then without
+    for (spaced, unspaced) in [(" + ", "+"), (" - ", "-"), (" * ", "*"), (" / ", "/")] {
+        let op = if expr.contains(spaced) {
+            spaced
+        } else if expr.contains(unspaced) {
+            unspaced
+        } else {
+            continue;
+        };
+
         if let Some((left, right)) = expr.split_once(op) {
             let left = left.trim();
             let right = right.trim();
@@ -179,18 +192,15 @@ fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
                 .unwrap_or_else(|| left.to_string());
             let left_num: i64 = match left_val.parse() {
                 Ok(n) => n,
-                Err(_) => return format!("${{{expr}}}"), // can't evaluate
+                Err(_) => return format!("${{{expr}}}"),
             };
-            let right_num: i64 = match right.parse() {
+            let right_val = vars
+                .get(right)
+                .cloned()
+                .unwrap_or_else(|| right.to_string());
+            let right_num: i64 = match right_val.parse() {
                 Ok(n) => n,
-                Err(_) => {
-                    // right might also be a variable
-                    let rv = vars.get(right).cloned().unwrap_or_else(|| right.to_string());
-                    match rv.parse() {
-                        Ok(n) => n,
-                        Err(_) => return format!("${{{expr}}}"),
-                    }
-                }
+                Err(_) => return format!("${{{expr}}}"),
             };
 
             let result = match op.trim() {
@@ -511,6 +521,12 @@ fn lower_node(
     // Apply node's own properties (overrides profile)
     apply_node_props(&mut n, &node.props);
 
+    if topo.nodes.contains_key(&node.name) {
+        return Err(crate::Error::NllParse(format!(
+            "duplicate node name '{}' — each node must have a unique name",
+            node.name
+        )));
+    }
     topo.nodes.insert(node.name.clone(), n);
     Ok(())
 }
@@ -685,7 +701,7 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
     }
 }
 
-fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) {
+fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()> {
     let mut network = types::Network {
         kind: Some("bridge".to_string()),  // Network kind stays as String
         vlan_filtering: if net.vlan_filtering { Some(true) } else { None },
@@ -717,7 +733,14 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) {
         );
     }
 
+    if topo.networks.contains_key(&net.name) {
+        return Err(crate::Error::NllParse(format!(
+            "duplicate network name '{}' — each network must have a unique name",
+            net.name
+        )));
+    }
     topo.networks.insert(net.name.clone(), network);
+    Ok(())
 }
 
 fn lower_impair(topo: &mut types::Topology, imp: &ast::ImpairDef) {
@@ -1043,6 +1066,34 @@ for i in 1..2 {
         assert_eq!(lo1.addresses, vec!["10.255.0.1/32"]);
         let lo2 = &topo.nodes["r2"].interfaces["lo"];
         assert_eq!(lo2.addresses, vec!["10.255.0.2/32"]);
+    }
+
+    #[test]
+    fn test_interpolation_no_spaces() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+
+for i in 1..3 {
+  node n${i} { lo 10.0.0.${i*10}/32 }
+}"#,
+        );
+        assert_eq!(topo.nodes.len(), 3);
+        let lo1 = &topo.nodes["n1"].interfaces["lo"];
+        assert_eq!(lo1.addresses, vec!["10.0.0.10/32"]);
+        let lo3 = &topo.nodes["n3"].interfaces["lo"];
+        assert_eq!(lo3.addresses, vec!["10.0.0.30/32"]);
+    }
+
+    #[test]
+    fn test_duplicate_node_error() {
+        let result = nll::parse(
+            r#"lab "t"
+node a
+node a"#,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("duplicate node"), "got: {err}");
     }
 
     #[test]

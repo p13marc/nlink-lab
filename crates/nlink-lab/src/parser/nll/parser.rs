@@ -316,7 +316,7 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
         other => Err(err(tokens, *pos, format!(
-            "expected statement, found {other}"
+            "expected statement (profile, node, link, network, impair, rate, let, for), found {other}"
         ))),
     }
 }
@@ -485,7 +485,7 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
             parse_run_def(tokens, pos).map(ast::NodeProp::Run)
         }
         Some(other) => Err(err(tokens, *pos, format!(
-            "expected node property, found {other}"
+            "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, run), found {other}"
         ))),
         None => Err(err(tokens, *pos, 
             "unexpected end of input in node block".into(),

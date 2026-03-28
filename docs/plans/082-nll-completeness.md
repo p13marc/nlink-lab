@@ -236,24 +236,24 @@ let col = input[line_start..span.start].chars().count() + 1;
 ## Progress
 
 ### Feature Completeness
-- [ ] Lower `image`/`cmd` from AST to Topology
-- [ ] Support `cmd` as string list in parser
+- [x] Lower `image`/`cmd` from AST to Topology (done in plan 088)
+- [x] Support `cmd` as string list in parser (done in plan 088)
 - [ ] Add ICMP type matching to firewall rules
 - [ ] Add IP saddr/daddr matching to firewall rules
 - [ ] Add `meta l4proto` matching to firewall rules
 - [ ] Extend `apply_match_expr()` in deploy.rs for new match types
 
 ### Interpolation & Variables
-- [ ] Support `${i+1}` without spaces (trim operands)
+- [x] Support `${i+1}` without spaces (trim operands)
 - [ ] Error on undefined variables instead of silent passthrough
 - [ ] Test multi-variable expressions
 
 ### Validation
-- [ ] Detect duplicate profile names
-- [ ] Detect duplicate node names
-- [ ] Detect duplicate network names
+- [x] Detect duplicate profile names (warning)
+- [x] Detect duplicate node names (error)
+- [x] Detect duplicate network names (error)
 
 ### Error Quality
-- [ ] List valid keywords in "expected statement" errors
-- [ ] List valid properties in link/node block errors
-- [ ] UTF-8 aware column counting in lexer diagnostics
+- [x] List valid keywords in "expected statement" errors
+- [x] List valid properties in node block errors
+- [x] UTF-8 aware column counting in lexer diagnostics

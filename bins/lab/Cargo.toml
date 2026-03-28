@@ -22,4 +22,6 @@ libc = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+zenoh = { workspace = true }
+nlink-lab-shared = { workspace = true }
 miette = { version = "7", features = ["fancy"] }

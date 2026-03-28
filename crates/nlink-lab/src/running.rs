@@ -112,6 +112,41 @@ impl RunningLab {
             })
     }
 
+    /// Access namespace names map (crate-internal, used by apply_diff).
+    pub(crate) fn namespace_names(&self) -> &HashMap<String, String> {
+        &self.namespace_names
+    }
+
+    /// Mutable access to namespace names map (crate-internal, used by apply_diff).
+    pub(crate) fn namespace_names_mut(&mut self) -> &mut HashMap<String, String> {
+        &mut self.namespace_names
+    }
+
+    /// Access container states map (crate-internal, used by apply_diff).
+    pub(crate) fn containers(&self) -> &HashMap<String, ContainerState> {
+        &self.containers
+    }
+
+    /// Mutable access to container states map (crate-internal, used by apply_diff).
+    pub(crate) fn containers_mut(&mut self) -> &mut HashMap<String, ContainerState> {
+        &mut self.containers
+    }
+
+    /// Access background PIDs (crate-internal).
+    pub(crate) fn pids(&self) -> &[(String, u32)] {
+        &self.pids
+    }
+
+    /// Runtime binary (crate-internal).
+    pub(crate) fn runtime_binary(&self) -> Option<&str> {
+        self.runtime_binary.as_deref()
+    }
+
+    /// Replace the topology (crate-internal, used after apply).
+    pub(crate) fn set_topology(&mut self, topology: Topology) {
+        self.topology = topology;
+    }
+
     /// Execute a command in a lab node and collect output.
     pub fn exec(&self, node: &str, cmd: &str, args: &[&str]) -> Result<ExecOutput> {
         if let Some(container) = self.containers.get(node) {

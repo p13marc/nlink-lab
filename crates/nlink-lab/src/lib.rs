@@ -74,6 +74,7 @@ pub use types::{
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig,
     Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
+pub use deploy::apply_diff;
 pub use diff::{diff_topologies, TopologyDiff};
 pub use validator::{Severity, ValidationIssue, ValidationResult};
 

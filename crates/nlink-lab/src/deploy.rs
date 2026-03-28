@@ -1392,6 +1392,250 @@ fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Opt
     None
 }
 
+/// Apply a topology diff to a running lab, performing incremental updates.
+///
+/// Executes changes in dependency order:
+/// 1. Remove impairments from endpoints on nodes being removed
+/// 2. Remove links connected to nodes being removed
+/// 3. Remove nodes (delete namespaces)
+/// 4. Add new nodes (create namespaces)
+/// 5. Add new links (create veth pairs, set addresses, bring up)
+/// 6. Configure new nodes (sysctls, routes, firewall)
+/// 7. Apply impairment changes (add, update, remove)
+/// 8. Update state file
+pub async fn apply_diff(
+    running: &mut RunningLab,
+    desired: &Topology,
+    diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    // ── Phase 1: Remove impairments from endpoints being removed ──
+    for ep_str in &diff.impairments_removed {
+        running.clear_impairment(ep_str).await?;
+    }
+
+    // ── Phase 2: Remove links ──────────────────────────────────────
+    // Delete the veth interface from one side — kernel removes the pair.
+    for link in &diff.links_removed {
+        let ep = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: link.endpoints[0].clone(),
+        })?;
+
+        // Get a connection to the node's namespace
+        if let Some(ns_name) = running.namespace_names().get(&ep.node) {
+            if namespace::exists(ns_name) {
+                let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+                    Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
+                })?;
+                // Deleting one end removes the whole veth pair
+                if let Err(e) = conn.del_link(&ep.iface).await {
+                    tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
+                }
+            }
+        }
+    }
+
+    // ── Phase 3: Remove nodes ──────────────────────────────────────
+    for node_name in &diff.nodes_removed {
+        // Kill any background processes on this node
+        for (pnode, pid) in running.pids() {
+            if pnode == node_name {
+                unsafe { libc::kill(*pid as i32, libc::SIGKILL); }
+            }
+        }
+
+        if let Some(ns_name) = running.namespace_names_mut().remove(node_name) {
+            if namespace::exists(&ns_name) {
+                if let Err(e) = namespace::delete(&ns_name) {
+                    tracing::warn!("failed to delete namespace '{ns_name}': {e}");
+                }
+            }
+        }
+        // Container removal
+        if let Some(container) = running.containers_mut().remove(node_name) {
+            if let Some(binary) = running.runtime_binary() {
+                let _ = std::process::Command::new(binary)
+                    .args(["rm", "-f", &container.id])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+            }
+        }
+    }
+
+    // ── Phase 4: Add new nodes ─────────────────────────────────────
+    for node_name in &diff.nodes_added {
+        let node = desired.nodes.get(node_name).ok_or_else(|| Error::NodeNotFound {
+            name: node_name.clone(),
+        })?;
+
+        if node.image.is_some() {
+            // Container nodes in apply are not yet supported (v1 limitation)
+            return Err(Error::deploy_failed(format!(
+                "adding container node '{node_name}' via apply is not yet supported; \
+                 destroy and redeploy instead"
+            )));
+        }
+
+        let ns_name = desired.namespace_name(node_name);
+        if namespace::exists(&ns_name) {
+            return Err(Error::AlreadyExists {
+                name: format!("namespace '{ns_name}' already exists"),
+            });
+        }
+        namespace::create(&ns_name).map_err(|e| {
+            Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
+        })?;
+        running.namespace_names_mut().insert(node_name.clone(), ns_name.clone());
+
+        // Apply sysctls
+        let sysctls = desired.effective_sysctls(node);
+        if !sysctls.is_empty() {
+            let entries: Vec<(&str, &str)> = sysctls
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            namespace::set_sysctls(&ns_name, &entries).map_err(|e| {
+                Error::deploy_failed(format!("failed to apply sysctls for node '{node_name}': {e}"))
+            })?;
+        }
+    }
+
+    // ── Phase 5: Add new links ─────────────────────────────────────
+    for link in &diff.links_added {
+        let ep_a = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: link.endpoints[0].clone(),
+        })?;
+        let ep_b = EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: link.endpoints[1].clone(),
+        })?;
+
+        // Resolve namespace names for both endpoints
+        let ns_a = running
+            .namespace_names()
+            .get(&ep_a.node)
+            .ok_or_else(|| Error::NodeNotFound { name: ep_a.node.clone() })?
+            .clone();
+        let ns_b = running
+            .namespace_names()
+            .get(&ep_b.node)
+            .ok_or_else(|| Error::NodeNotFound { name: ep_b.node.clone() })?
+            .clone();
+
+        let ns_b_fd = namespace::open(&ns_b).map_err(|e| {
+            Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
+        })?;
+
+        let conn_a: Connection<Route> = namespace::connection_for(&ns_a).map_err(|e| {
+            Error::deploy_failed(format!("failed to connect to '{}': {e}", ep_a.node))
+        })?;
+
+        let mut veth = nlink::netlink::link::VethLink::new(&ep_a.iface, &ep_b.iface)
+            .peer_netns_fd(ns_b_fd.as_raw_fd());
+
+        if let Some(mtu) = link.mtu {
+            veth = veth.mtu(mtu);
+        }
+
+        conn_a.add_link(veth).await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to create veth pair ({} <-> {}): {e}",
+                link.endpoints[0], link.endpoints[1]
+            ))
+        })?;
+
+        // Set addresses
+        if let Some(addresses) = &link.addresses {
+            for (ep_str, addr_str) in link.endpoints.iter().zip(addresses.iter()) {
+                let ep = EndpointRef::parse(ep_str).unwrap();
+                let ns = &running.namespace_names()[&ep.node];
+                let conn: Connection<Route> = namespace::connection_for(ns).map_err(|e| {
+                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
+                })?;
+                let (ip, prefix) = parse_cidr(addr_str)?;
+                let iface_ref = nlink::netlink::InterfaceRef::Name(ep.iface.clone());
+                let idx = conn.resolve_interface(&iface_ref).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "cannot resolve interface '{}' on '{}': {e}",
+                        ep.iface, ep.node
+                    ))
+                })?;
+                conn.add_address_by_index(idx, ip, prefix).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
+                        ep.iface, ep.node
+                    ))
+                })?;
+            }
+        }
+
+        // Bring up interfaces on both sides
+        for ep_str in &link.endpoints {
+            let ep = EndpointRef::parse(ep_str).unwrap();
+            let ns = &running.namespace_names()[&ep.node];
+            let conn: Connection<Route> = namespace::connection_for(ns).map_err(|e| {
+                Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
+            })?;
+            conn.set_link_up(&ep.iface).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up '{}' on '{}': {e}",
+                    ep.iface, ep.node
+                ))
+            })?;
+        }
+    }
+
+    // ── Phase 6: Configure new nodes (routes, firewall) ────────────
+    for node_name in &diff.nodes_added {
+        let node = &desired.nodes[node_name];
+        let ns_name = &running.namespace_names()[node_name];
+
+        // Routes
+        if !node.routes.is_empty() {
+            let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+                Error::deploy_failed(format!("connection for '{node_name}': {e}"))
+            })?;
+            for (dest, route_config) in &node.routes {
+                add_route(&conn, node_name, dest, route_config).await?;
+            }
+        }
+
+        // Firewall
+        if let Some(fw) = desired.effective_firewall(node) {
+            let handle = NodeHandle::Namespace {
+                ns_name: ns_name.clone(),
+            };
+            apply_firewall(&handle, node_name, fw).await?;
+        }
+    }
+
+    // ── Phase 7: Apply impairment changes ──────────────────────────
+    // Add new impairments
+    for (ep_str, impairment) in &diff.impairments_added {
+        running.set_impairment(ep_str, impairment).await?;
+    }
+
+    // Update changed impairments
+    for change in &diff.impairments_changed {
+        running.set_impairment(&change.endpoint, &change.new).await?;
+    }
+
+    // ── Phase 8: Update state file ─────────────────────────────────
+    running.set_topology(desired.clone());
+
+    let lab_state = LabState {
+        name: desired.lab.name.clone(),
+        created_at: now_iso8601(),
+        namespaces: running.namespace_names().clone(),
+        pids: running.pids().to_vec(),
+        wg_public_keys: HashMap::new(),
+        containers: running.containers().iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        runtime: running.runtime_binary().map(|s| s.to_string()),
+    };
+    state::save(&lab_state, desired)?;
+
+    Ok(())
+}
+
 /// Build a NetemConfig from an Impairment.
 pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<NetemConfig> {
     let mut netem = NetemConfig::new();

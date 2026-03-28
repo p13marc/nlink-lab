@@ -1,10 +1,6 @@
 //! Zenoh message types for nlink-lab pub/sub and query/reply.
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
-
-use crate::metrics::MetricsSnapshot;
 
 // ─── Pub/Sub messages (backend → clients) ────────────
 

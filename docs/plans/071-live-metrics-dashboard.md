@@ -503,30 +503,30 @@ so one client can observe multiple labs from different machines.
 
 ### Phase 1: Shared Types + Daemon Core
 - [x] Create `crates/nlink-lab-shared/` with messages + topics
-- [ ] Create `bins/nlink-lab-backend/` with Zenoh session
-- [ ] Publish topology + health on startup
-- [ ] Handle `Status` queryable
-- [ ] `nlink-lab daemon` CLI command
+- [x] Create `bins/nlink-lab-backend/` with Zenoh session
+- [x] Publish topology + health on startup
+- [x] Handle `Status` queryable
+- [x] `nlink-lab daemon` CLI command
 
 ### Phase 2: Metrics Collector
-- [ ] `MetricsCollector` from diagnostics
-- [ ] Publish `MetricsSnapshot` periodically
+- [x] `MetricsCollector` from diagnostics
+- [x] Publish `MetricsSnapshot` periodically
 - [ ] Per-interface metrics publishing
-- [ ] Rate formatting helper
+- [x] Rate formatting helper
 
 ### Phase 3: CLI Metrics Client
-- [ ] `nlink-lab metrics` command (Zenoh subscriber)
-- [ ] Table output with refresh
-- [ ] JSON + CSV output
-- [ ] Node filtering + count limit
+- [x] `nlink-lab metrics` command (Zenoh subscriber)
+- [x] Table output with refresh
+- [x] JSON output
+- [x] Node filtering + count limit
 
 ### Phase 4: Mutating Operations
-- [ ] Handle `ExecRequest`
-- [ ] Handle `ImpairmentRequest`
+- [x] Handle `ExecRequest`
+- [x] Handle `ImpairmentRequest`
 - [ ] `--daemon` flag on deploy
-- [ ] Graceful shutdown
+- [x] Graceful shutdown
 
 ### Phase 5: Polish
-- [ ] Zenoh config CLI flags
-- [ ] Liveliness token
+- [x] Zenoh config CLI flags
+- [x] Liveliness token
 - [ ] Lab event publishing

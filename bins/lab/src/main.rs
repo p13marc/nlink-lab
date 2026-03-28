@@ -197,6 +197,50 @@ enum Commands {
         shell: clap_complete::Shell,
     },
 
+    /// Start the Zenoh backend daemon for a running lab.
+    Daemon {
+        /// Lab name (must be deployed).
+        lab: String,
+
+        /// Metrics collection interval in seconds.
+        #[arg(short, long, default_value = "2")]
+        interval: u64,
+
+        /// Zenoh mode: peer or client.
+        #[arg(long, default_value = "peer")]
+        zenoh_mode: String,
+
+        /// Zenoh listen endpoint.
+        #[arg(long)]
+        zenoh_listen: Option<String>,
+
+        /// Zenoh connect endpoint.
+        #[arg(long)]
+        zenoh_connect: Option<String>,
+    },
+
+    /// Stream live metrics from a lab via Zenoh (no root required).
+    Metrics {
+        /// Lab name.
+        lab: String,
+
+        /// Filter to specific node.
+        #[arg(short, long)]
+        node: Option<String>,
+
+        /// Output format: table (default), json.
+        #[arg(short, long, default_value = "table")]
+        format: String,
+
+        /// Number of samples then exit.
+        #[arg(short, long)]
+        count: Option<usize>,
+
+        /// Zenoh connect endpoint.
+        #[arg(long)]
+        zenoh_connect: Option<String>,
+    },
+
     /// Create a topology file from a built-in template.
     Init {
         /// Template name (e.g., "router", "spine-leaf"). Use --list to see all.
@@ -329,7 +373,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     name: format!("{lab_name} (deploy first, then apply changes)"),
                 });
             }
-            let running = nlink_lab::RunningLab::load(lab_name)?;
+            let mut running = nlink_lab::RunningLab::load(lab_name)?;
             let current = running.topology();
 
             let diff = nlink_lab::diff_topologies(current, &desired);
@@ -348,12 +392,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 return Ok(());
             }
 
-            // TODO: implement apply_diff() to actually execute changes
-            // For now, suggest destroy + redeploy
             check_root();
-            eprintln!("\nLive apply not yet implemented. To apply changes:");
-            eprintln!("  sudo nlink-lab destroy {lab_name}");
-            eprintln!("  sudo nlink-lab deploy {}", topology.display());
+            let start = Instant::now();
+            nlink_lab::apply_diff(&mut running, &desired, &diff).await?;
+            let elapsed = start.elapsed();
+
+            println!("\nApplied {} change(s) in {:.0?}", diff.change_count(), elapsed);
             Ok(())
         }
 
@@ -644,6 +688,262 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
+        Commands::Daemon {
+            lab,
+            interval,
+            zenoh_mode,
+            zenoh_listen,
+            zenoh_connect,
+        } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            println!(
+                "Starting Zenoh backend for lab '{}' ({} nodes, interval {}s)",
+                lab,
+                running.namespace_count(),
+                interval
+            );
+
+            let mut zenoh_config = zenoh::Config::default();
+            if zenoh_mode == "client" {
+                zenoh_config
+                    .insert_json5("mode", r#""client""#)
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}")))?;
+            }
+            if let Some(listen) = &zenoh_listen {
+                zenoh_config
+                    .insert_json5("listen/endpoints", &format!(r#"["{listen}"]"#))
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh listen config: {e}")))?;
+            }
+            if let Some(connect) = &zenoh_connect {
+                zenoh_config
+                    .insert_json5("connect/endpoints", &format!(r#"["{connect}"]"#))
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh connect config: {e}")))?;
+            }
+
+            let session = zenoh::open(zenoh_config).await.map_err(|e| {
+                nlink_lab::Error::deploy_failed(format!("failed to open Zenoh session: {e}"))
+            })?;
+
+            // Run the backend daemon inline (blocks until Ctrl-C)
+            use nlink_lab_shared::{messages::*, topics};
+            use std::time::Duration;
+
+            let lab_name = running.name().to_string();
+            let start_time = Instant::now();
+
+            let topo_publisher = session
+                .declare_publisher(topics::topology(&lab_name))
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
+            let health_publisher = session
+                .declare_publisher(topics::health(&lab_name))
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
+            let snapshot_publisher = session
+                .declare_publisher(topics::metrics_snapshot(&lab_name))
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publisher: {e}")))?;
+
+            let exec_queryable = session
+                .declare_queryable(topics::rpc_exec(&lab_name))
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("queryable: {e}")))?;
+            let status_queryable = session
+                .declare_queryable(topics::rpc_status(&lab_name))
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("queryable: {e}")))?;
+
+            // Publish initial topology
+            let topo_json = serde_json::to_string(running.topology())?;
+            let topo_update = TopologyUpdate {
+                lab_name: lab_name.clone(),
+                timestamp: now_unix(),
+                node_count: running.topology().nodes.len(),
+                link_count: running.topology().links.len(),
+                topology_json: topo_json,
+            };
+            topo_publisher
+                .put(serde_json::to_vec(&topo_update).unwrap())
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("publish: {e}")))?;
+
+            let _token = session
+                .liveliness()
+                .declare_token(topics::health(&lab_name))
+                .await
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("liveliness: {e}")))?;
+
+            eprintln!("Backend daemon running (Ctrl-C to stop)");
+
+            let mut health_interval = tokio::time::interval(Duration::from_secs(10));
+            let mut metrics_interval = tokio::time::interval(Duration::from_secs(interval));
+
+            loop {
+                tokio::select! {
+                    _ = metrics_interval.tick() => {
+                        if let Ok(diags) = running.diagnose(None).await {
+                            let snapshot = diags_to_snapshot(&lab_name, &diags);
+                            if let Ok(json) = serde_json::to_vec(&snapshot) {
+                                let _ = snapshot_publisher.put(json).await;
+                            }
+                        }
+                    }
+                    _ = health_interval.tick() => {
+                        let status = HealthStatus {
+                            lab_name: lab_name.clone(),
+                            timestamp: now_unix(),
+                            node_count: running.topology().nodes.len(),
+                            namespace_count: running.namespace_count(),
+                            container_count: 0,
+                            pid_count: running.process_status().len(),
+                            uptime_secs: start_time.elapsed().as_secs(),
+                        };
+                        if let Ok(json) = serde_json::to_vec(&status) {
+                            let _ = health_publisher.put(json).await;
+                        }
+                    }
+                    Ok(query) = exec_queryable.recv_async() => {
+                        if let Some(payload) = query.payload() {
+                            if let Ok(req) = serde_json::from_slice::<ExecRequest>(&payload.to_bytes()) {
+                                let args: Vec<&str> = req.args.iter().map(|s| s.as_str()).collect();
+                                let resp = match running.exec(&req.node, &req.cmd, &args) {
+                                    Ok(output) => ExecResponse {
+                                        success: output.exit_code == 0,
+                                        exit_code: output.exit_code,
+                                        stdout: output.stdout,
+                                        stderr: output.stderr,
+                                    },
+                                    Err(e) => ExecResponse {
+                                        success: false,
+                                        exit_code: -1,
+                                        stdout: String::new(),
+                                        stderr: e.to_string(),
+                                    },
+                                };
+                                if let Ok(json) = serde_json::to_string(&resp) {
+                                    let _ = query.reply(topics::rpc_exec(&lab_name), json).await;
+                                }
+                            }
+                        }
+                    }
+                    Ok(query) = status_queryable.recv_async() => {
+                        let resp = StatusResponse {
+                            lab_name: lab_name.clone(),
+                            node_count: running.topology().nodes.len(),
+                            namespace_count: running.namespace_count(),
+                            container_count: 0,
+                            uptime_secs: start_time.elapsed().as_secs(),
+                            nodes: running.node_names().map(|s| s.to_string()).collect(),
+                        };
+                        if let Ok(json) = serde_json::to_string(&resp) {
+                            let _ = query.reply(topics::rpc_status(&lab_name), json).await;
+                        }
+                    }
+                    _ = tokio::signal::ctrl_c() => {
+                        eprintln!("\nShutting down daemon");
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        Commands::Metrics {
+            lab,
+            node,
+            format: fmt,
+            count,
+            zenoh_connect,
+        } => {
+            let mut zenoh_config = zenoh::Config::default();
+            if let Some(connect) = &zenoh_connect {
+                zenoh_config
+                    .insert_json5("connect/endpoints", &format!(r#"["{connect}"]"#))
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}")))?;
+            }
+
+            let session = zenoh::open(zenoh_config).await.map_err(|e| {
+                nlink_lab::Error::deploy_failed(format!("failed to open Zenoh session: {e}"))
+            })?;
+
+            let topic = nlink_lab_shared::topics::metrics_snapshot(&lab);
+            let subscriber = session.declare_subscriber(&topic).await.map_err(|e| {
+                nlink_lab::Error::deploy_failed(format!("subscribe to '{topic}': {e}"))
+            })?;
+
+            eprintln!("Subscribing to metrics for lab '{lab}'... (Ctrl-C to stop)");
+
+            let mut samples = 0usize;
+            loop {
+                tokio::select! {
+                    Ok(sample) = subscriber.recv_async() => {
+                        let payload = sample.payload().to_bytes();
+                        if let Ok(snapshot) = serde_json::from_slice::<nlink_lab_shared::metrics::MetricsSnapshot>(&payload) {
+                            samples += 1;
+
+                            if fmt == "json" {
+                                println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
+                            } else {
+                                // Clear screen for table mode
+                                print!("\x1B[2J\x1B[H");
+                                println!(
+                                    "lab: {}  |  nodes: {}  |  sample: #{}",
+                                    snapshot.lab_name,
+                                    snapshot.nodes.len(),
+                                    samples,
+                                );
+                                println!();
+                                println!(
+                                    "{:<12} {:<10} {:<6} {:>12} {:>12} {:>8} {:>8}",
+                                    "NODE", "IFACE", "STATE", "RX rate", "TX rate", "ERRORS", "DROPS"
+                                );
+                                println!("{}", "─".repeat(78));
+
+                                let mut node_names: Vec<&String> = snapshot.nodes.keys().collect();
+                                node_names.sort();
+                                for node_name in node_names {
+                                    if let Some(filter) = &node {
+                                        if node_name != filter { continue; }
+                                    }
+                                    let metrics = &snapshot.nodes[node_name];
+                                    for iface in &metrics.interfaces {
+                                        let errors = iface.rx_errors + iface.tx_errors;
+                                        let drops = iface.rx_dropped + iface.tx_dropped + iface.tc_drops as u64;
+                                        let drop_warn = if drops > 0 { " !" } else { "" };
+                                        println!(
+                                            "{:<12} {:<10} {:<6} {:>12} {:>12} {:>8} {:>7}{}",
+                                            node_name,
+                                            iface.name,
+                                            iface.state,
+                                            nlink_lab_shared::metrics::format_rate(iface.rx_bps),
+                                            nlink_lab_shared::metrics::format_rate(iface.tx_bps),
+                                            errors,
+                                            drops,
+                                            drop_warn,
+                                        );
+                                    }
+                                    for issue in &metrics.issues {
+                                        println!("  [WARN] {node_name}: {issue}");
+                                    }
+                                }
+                            }
+
+                            if let Some(max) = count {
+                                if samples >= max {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ = tokio::signal::ctrl_c() => {
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        }
+
         Commands::Init {
             template,
             list,
@@ -712,6 +1012,48 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             // Already handled before async runtime
             Ok(())
         }
+    }
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn diags_to_snapshot(
+    lab_name: &str,
+    diags: &[nlink_lab::NodeDiagnostic],
+) -> nlink_lab_shared::metrics::MetricsSnapshot {
+    use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics};
+    let mut nodes = std::collections::HashMap::new();
+    for diag in diags {
+        let iface_metrics: Vec<InterfaceMetrics> = diag
+            .interfaces
+            .iter()
+            .map(|iface| InterfaceMetrics {
+                name: iface.name.clone(),
+                state: format!("{:?}", iface.state),
+                rx_bps: iface.rates.rx_bps,
+                tx_bps: iface.rates.tx_bps,
+                rx_pps: iface.rates.rx_pps,
+                tx_pps: iface.rates.tx_pps,
+                rx_errors: iface.stats.rx_errors(),
+                tx_errors: iface.stats.tx_errors(),
+                rx_dropped: iface.stats.rx_dropped(),
+                tx_dropped: iface.stats.tx_dropped(),
+                tc_drops: iface.tc.as_ref().map_or(0, |tc| tc.drops),
+                tc_qlen: iface.tc.as_ref().map_or(0, |tc| tc.qlen),
+            })
+            .collect();
+        let issues: Vec<String> = diag.issues.iter().map(|i| i.to_string()).collect();
+        nodes.insert(diag.node.clone(), NodeMetrics { interfaces: iface_metrics, issues });
+    }
+    MetricsSnapshot {
+        lab_name: lab_name.to_string(),
+        timestamp: now_unix(),
+        nodes,
     }
 }
 

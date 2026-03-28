@@ -7,7 +7,7 @@
 
 use nlink_lab::lab_test;
 #[allow(unused_imports)]
-use nlink_lab::RunningLab;
+use nlink_lab::{Lab, RunningLab};
 
 // ─── File-based tests ─────────────────────────────────────
 
@@ -270,4 +270,193 @@ async fn deploy_bridge_vlan(lab: RunningLab) {
         "expected 10.200.0.10/24 on host3: {}",
         output.stdout
     );
+}
+
+// ─── apply_diff tests ────────────────────────────────────
+
+/// Helper: deploy a topology and return the running lab, with a panic-safe cleanup guard.
+/// Returns (lab, guard) — forget the guard after destroy.
+struct LabCleanup {
+    name: String,
+}
+impl Drop for LabCleanup {
+    fn drop(&mut self) {
+        let prefix = format!("{}-", self.name);
+        if let Ok(output) = std::process::Command::new("ip")
+            .args(["netns", "list"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let ns = line.split_whitespace().next().unwrap_or("");
+                if ns.starts_with(&prefix) {
+                    let _ = std::process::Command::new("ip")
+                        .args(["netns", "delete", ns])
+                        .status();
+                }
+            }
+        }
+        let _ = nlink_lab::state::remove(&self.name);
+    }
+}
+
+#[tokio::test]
+async fn apply_add_node_and_link() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_add_node_and_link: requires root");
+        return;
+    }
+
+    let lab_name = format!("apply-add-{}", std::process::id());
+
+    // Initial topology: two nodes, one link
+    let initial = Lab::new(&lab_name)
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .build();
+
+    let mut lab = initial.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup { name: lab.name().to_string() };
+
+    // Desired topology: add node c and link b--c
+    let desired = Lab::new(&lab_name)
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .node("c", |n| n)
+        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .link("b:eth1", "c:eth0", |l| l.addresses("10.0.1.1/24", "10.0.1.2/24"))
+        .build();
+
+    let diff = nlink_lab::diff_topologies(lab.topology(), &desired);
+    assert_eq!(diff.nodes_added, vec!["c"]);
+    assert_eq!(diff.links_added.len(), 1);
+
+    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+        .await
+        .expect("apply_diff failed");
+
+    // Verify: node c exists and has the right address
+    let output = lab.exec("c", "ip", &["addr", "show", "eth0"]).unwrap();
+    assert_eq!(output.exit_code, 0);
+    assert!(
+        output.stdout.contains("10.0.1.2/24"),
+        "expected 10.0.1.2/24 on c:eth0: {}",
+        output.stdout
+    );
+
+    // Verify: b can ping c
+    let output = lab
+        .exec("b", "ping", &["-c1", "-W1", "10.0.1.2"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "b cannot ping c: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+
+    // Clean up
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+#[tokio::test]
+async fn apply_remove_node() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_remove_node: requires root");
+        return;
+    }
+
+    let lab_name = format!("apply-rm-{}", std::process::id());
+
+    // Initial: three nodes
+    let initial = Lab::new(&lab_name)
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .node("c", |n| n)
+        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .link("b:eth1", "c:eth0", |l| l.addresses("10.0.1.1/24", "10.0.1.2/24"))
+        .build();
+
+    let mut lab = initial.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup { name: lab.name().to_string() };
+
+    // Desired: remove node c and its link
+    let desired = Lab::new(&lab_name)
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .build();
+
+    let diff = nlink_lab::diff_topologies(lab.topology(), &desired);
+    assert_eq!(diff.nodes_removed, vec!["c"]);
+    assert_eq!(diff.links_removed.len(), 1);
+
+    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+        .await
+        .expect("apply_diff failed");
+
+    // Verify: node c's namespace no longer exists
+    assert!(
+        lab.exec("c", "ip", &["addr"]).is_err(),
+        "node c should no longer exist"
+    );
+
+    // Verify: a and b still work
+    let output = lab
+        .exec("a", "ping", &["-c1", "-W1", "10.0.0.2"])
+        .unwrap();
+    assert_eq!(output.exit_code, 0);
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+#[tokio::test]
+async fn apply_impairment_change() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_impairment_change: requires root");
+        return;
+    }
+
+    let lab_name = format!("apply-imp-{}", std::process::id());
+
+    // Initial: link with 10ms delay
+    let initial = Lab::new(&lab_name)
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .impair("a:eth0", |i| i.delay("10ms"))
+        .build();
+
+    let mut lab = initial.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup { name: lab.name().to_string() };
+
+    // Desired: change delay to 50ms
+    let desired = Lab::new(&lab_name)
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .impair("a:eth0", |i| i.delay("50ms"))
+        .build();
+
+    let diff = nlink_lab::diff_topologies(lab.topology(), &desired);
+    assert_eq!(diff.impairments_changed.len(), 1);
+
+    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+        .await
+        .expect("apply_diff failed");
+
+    // Verify: netem shows updated delay
+    let output = lab
+        .exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(
+        output.stdout.contains("50"),
+        "expected 50ms delay in netem output: {}",
+        output.stdout
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
 }

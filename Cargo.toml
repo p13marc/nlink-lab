@@ -5,6 +5,7 @@ members = [
     "crates/nlink-lab-macros",
     "crates/nlink-lab-shared",
     "bins/lab",
+    "bins/nlink-lab-backend",
 ]
 
 [workspace.package]
@@ -42,6 +43,10 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }
 base64 = "0.22"
 getrandom = "0.3"
 time = { version = "0.3", features = ["formatting"] }
+
+# Zenoh pub/sub
+zenoh = { version = "1.8", features = ["unstable"] }
+zenoh-ext = "1.8"
 
 # Networking (git dependency during development, crates.io for release)
 nlink = { git = "https://github.com/p13marc/nlink", features = ["full"] }

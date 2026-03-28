@@ -3,7 +3,7 @@
 //! Compares two [`Topology`] structs and produces a structured change set.
 //! Used by the `nlink-lab diff` CLI and the future `apply` command.
 
-use crate::types::{Impairment, Link, Node, Topology};
+use crate::types::{Impairment, Link, Topology};
 
 /// A structured diff between two topologies.
 #[derive(Debug, Default)]

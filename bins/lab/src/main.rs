@@ -32,6 +32,16 @@ enum Commands {
         force: bool,
     },
 
+    /// Apply topology changes to a running lab.
+    Apply {
+        /// Path to the updated topology file (.nll).
+        topology: PathBuf,
+
+        /// Show what would change without applying.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Tear down a running lab.
     Destroy {
         /// Lab name.
@@ -296,6 +306,54 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 topo.lab.name, elapsed
             );
             print_deploy_summary(&topo);
+            Ok(())
+        }
+
+        Commands::Apply { topology, dry_run } => {
+            let desired = nlink_lab::parser::parse_file(&topology)?;
+            let result = desired.validate();
+            for w in result.warnings() {
+                eprintln!("  WARN  {w}");
+            }
+            if result.has_errors() {
+                for e in result.errors() {
+                    eprintln!("  ERROR {e}");
+                }
+                return Err(nlink_lab::Error::Validation("see errors above".into()));
+            }
+
+            // Load current topology from running lab state
+            let lab_name = &desired.lab.name;
+            if !nlink_lab::state::exists(lab_name) {
+                return Err(nlink_lab::Error::NotFound {
+                    name: format!("{lab_name} (deploy first, then apply changes)"),
+                });
+            }
+            let running = nlink_lab::RunningLab::load(lab_name)?;
+            let current = running.topology();
+
+            let diff = nlink_lab::diff_topologies(current, &desired);
+
+            if diff.is_empty() {
+                println!("No changes to apply.");
+                return Ok(());
+            }
+
+            println!("Changes for lab '{lab_name}':");
+            print!("{diff}");
+            println!("{} change(s)", diff.change_count());
+
+            if dry_run {
+                println!("\n(dry run — no changes applied)");
+                return Ok(());
+            }
+
+            // TODO: implement apply_diff() to actually execute changes
+            // For now, suggest destroy + redeploy
+            check_root();
+            eprintln!("\nLive apply not yet implemented. To apply changes:");
+            eprintln!("  sudo nlink-lab destroy {lab_name}");
+            eprintln!("  sudo nlink-lab deploy {}", topology.display());
             Ok(())
         }
 

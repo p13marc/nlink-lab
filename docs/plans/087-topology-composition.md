@@ -238,7 +238,7 @@ Apply? [y/N]
 ### Part 2: Hot-Reload
 - [x] Implement `diff_topologies()` — compute change set
 - [ ] Implement `apply_diff()` — execute changes in order
-- [ ] Add `apply` CLI command with `--dry-run`
+- [x] Add `apply` CLI command with `--dry-run`
 - [ ] Handle node add/remove
 - [ ] Handle link add/remove
 - [ ] Handle impairment changes

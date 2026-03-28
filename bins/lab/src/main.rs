@@ -72,8 +72,12 @@ enum Commands {
         /// Lab name.
         lab: String,
 
-        /// Endpoint (e.g., "router:eth0").
-        endpoint: String,
+        /// Endpoint (e.g., "router:eth0"). Not required with --show.
+        endpoint: Option<String>,
+
+        /// Show current impairments on all interfaces.
+        #[arg(long)]
+        show: bool,
 
         /// Delay (e.g., "10ms").
         #[arg(long)]
@@ -141,6 +145,16 @@ enum Commands {
         /// Capture N packets then stop.
         #[arg(short, long)]
         count: Option<u32>,
+    },
+
+    /// Export a running lab's topology as serialized data.
+    Export {
+        /// Lab name.
+        lab: String,
+
+        /// Output file (default: stdout).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 
     /// Generate shell completions.
@@ -357,6 +371,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Impair {
             lab,
             endpoint,
+            show,
             delay,
             jitter,
             loss,
@@ -365,6 +380,21 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
+
+            if show {
+                for node_name in running.node_names() {
+                    let output = running.exec(node_name, "tc", &["qdisc", "show"])?;
+                    if !output.stdout.trim().is_empty() {
+                        println!("--- {node_name} ---");
+                        println!("{}", output.stdout.trim());
+                    }
+                }
+                return Ok(());
+            }
+
+            let endpoint = endpoint.ok_or_else(|| {
+                nlink_lab::Error::invalid_topology("endpoint required (use --show to inspect)")
+            })?;
 
             if clear {
                 running.clear_impairment(&endpoint).await?;
@@ -474,6 +504,24 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             print!("{}", output.stdout);
             if !output.stderr.is_empty() {
                 eprint!("{}", output.stderr);
+            }
+            Ok(())
+        }
+
+        Commands::Export { lab, output } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let content = if json {
+                serde_json::to_string_pretty(running.topology())?
+            } else {
+                toml::to_string_pretty(running.topology())
+                    .map_err(|e| nlink_lab::Error::invalid_topology(format!("serialize: {e}")))?
+            };
+            match output {
+                Some(path) => {
+                    std::fs::write(&path, &content)?;
+                    eprintln!("Exported to {}", path.display());
+                }
+                None => print!("{content}"),
             }
             Ok(())
         }

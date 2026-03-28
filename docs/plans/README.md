@@ -6,12 +6,8 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [080](080-bugfixes-and-safety.md) | Bug fixes, panic risks, state safety | High | 1-2 days |
-| [081](081-code-quality.md) | Type safety, error stratification, builder validation | High | 2-3 days |
-| [082](082-nll-completeness.md) | NLL missing features (image/cmd, ICMP, interpolation) | Medium | 3-4 days |
-| [083](083-validator-and-deploy.md) | New validation rules, deployer hardening | Medium | 2-3 days |
-| [084](084-cli-ux.md) | Shell completions, --json, --dry-run, export, diff | Medium | 3-4 days |
-| [085](085-test-coverage.md) | Integration tests for advanced features, lifecycle, stress | Medium | 2-3 days |
+| [084](084-cli-ux.md) | New CLI commands (export, diff, wait) | Medium | 2-3 days |
+| [085](085-test-coverage.md) | Integration tests, new examples | Medium | 2-3 days |
 | [086](086-feature-flags-and-publishing.md) | Cargo feature flags, crates.io preparation | Medium | 2-3 days |
 | [087](087-topology-composition.md) | NLL imports, hot-reload / apply | Low | 5-7 days |
 | [071](071-live-metrics-dashboard.md) | Zenoh backend daemon, metrics collector, CLI dashboard | Low | 5-7 days |
@@ -19,22 +15,19 @@ Implementation plans for nlink-lab.
 
 ### Recommended Order
 
-1. **080 — Bug fixes & safety** — fix remaining bugs (FD validation, PID ownership)
-2. **081 — Code quality** — type safety and error improvements
-3. **082 — NLL completeness** — image/cmd lowering, ICMP firewall, interpolation
-4. **083 — Validator & deploy** — new rules, hardening
-5. **084 — CLI UX** — completions, --json, export, diff
-6. **085 — Test coverage** — verify advanced features actually work
-7. **086 — Feature flags** — prepare for publishing
-8. **087 — Composition** — imports and hot-reload (power user feature)
-9. **071 — Zenoh daemon & metrics** — privileged backend + shared types + CLI metrics (must come before 070)
-10. **070 — TopoViewer GUI** — unprivileged Iced GUI, connects to backend via Zenoh
+1. **084 — CLI UX** — export, diff, wait commands
+2. **085 — Test coverage** — integration tests for advanced features
+3. **086 — Feature flags** — Cargo features and crates.io prep
+4. **087 — Composition** — NLL imports and hot-reload
+5. **071 — Zenoh daemon & metrics** — privileged backend (must come before 070)
+6. **070 — TopoViewer GUI** — unprivileged Iced GUI via Zenoh
 
 ## Completed
 
 Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
-060 (NLL parser), 072 (lab templates), and 088 (remove TOML format) have been
-implemented and their plan files removed.
+060 (NLL parser), 072 (lab templates), 080 (bug fixes & safety),
+081 (code quality), 082 (NLL completeness), 083 (validator hardening),
+and 088 (remove TOML) have been implemented and their plan files removed.
 
 ## Reference
 

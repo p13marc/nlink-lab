@@ -288,10 +288,10 @@ Commands::Impair { name, show, .. } => {
 - [x] Add `serde_json` + `clap_complete` dependencies to CLI
 
 ### Phase 2: New Commands
-- [ ] `nlink-lab export` — TOML export of running lab topology
+- [x] `nlink-lab export` — TOML/JSON export of running lab topology
 - [ ] `nlink-lab diff` — drift detection against topology file
 - [ ] `nlink-lab wait` — block until lab is ready
 
 ### Phase 3: Capture & Impairment
 - [ ] BPF filter support in capture command
-- [ ] `nlink-lab impair --show` to inspect current state
+- [x] `nlink-lab impair --show` to inspect current TC state

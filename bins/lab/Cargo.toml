@@ -17,6 +17,7 @@ nlink-lab = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 serde_json = { workspace = true }
+toml = { workspace = true }
 libc = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -1,0 +1,218 @@
+//! Iced Application — main app state, messages, and update logic.
+
+use std::collections::HashMap;
+
+use iced::widget::{canvas, column, container, row, scrollable, text, Canvas};
+use iced::{Element, Length, Point, Subscription, Task, Theme, Vector};
+
+use nlink_lab::Topology;
+use nlink_lab_shared::metrics::NodeMetrics;
+
+use crate::layout::LayoutEngine;
+
+pub struct TopoViewer {
+    // Data
+    pub topology: Option<Topology>,
+    pub lab_name: Option<String>,
+    pub node_positions: HashMap<String, Point>,
+    pub metrics: HashMap<String, NodeMetrics>,
+
+    // Zenoh
+    pub zenoh_session: Option<std::sync::Arc<zenoh::Session>>,
+
+    // UI state
+    pub selected_node: Option<String>,
+    pub camera: Camera,
+    pub dragging: Option<String>,
+    pub canvas_cache: canvas::Cache,
+    pub show_addresses: bool,
+    pub show_metrics: bool,
+}
+
+pub struct Camera {
+    pub offset: Vector,
+    pub scale: f32,
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    // Data
+    MetricsReceived(HashMap<String, NodeMetrics>),
+
+    // Controls
+    ToggleAddresses,
+    ToggleMetrics,
+    ZoomIn,
+    ZoomOut,
+    FitToScreen,
+}
+
+impl TopoViewer {
+    pub fn boot(
+        topology: Option<Topology>,
+        lab_name: Option<String>,
+    ) -> (Self, Task<Message>) {
+        let mut app = Self {
+            topology: None,
+            lab_name,
+            node_positions: HashMap::new(),
+            metrics: HashMap::new(),
+            zenoh_session: None,
+            selected_node: None,
+            camera: Camera {
+                offset: Vector::new(50.0, 50.0),
+                scale: 1.0,
+            },
+            dragging: None,
+            canvas_cache: canvas::Cache::new(),
+            show_addresses: true,
+            show_metrics: false,
+        };
+
+        if let Some(topo) = topology {
+            app.load_topology(topo);
+        }
+
+        (app, Task::none())
+    }
+
+    fn load_topology(&mut self, topo: Topology) {
+        let node_names: Vec<&str> = topo.nodes.keys().map(|s| s.as_str()).collect();
+        let edges: Vec<[&str; 2]> = topo
+            .links
+            .iter()
+            .map(|l| {
+                let a = l.endpoints[0].split(':').next().unwrap_or("");
+                let b = l.endpoints[1].split(':').next().unwrap_or("");
+                [a, b]
+            })
+            .collect();
+
+        let layout = LayoutEngine::new(&node_names, &edges);
+        self.node_positions = layout.positions;
+        self.topology = Some(topo);
+        self.canvas_cache.clear();
+    }
+
+    pub fn title(&self) -> String {
+        match &self.topology {
+            Some(t) => format!("TopoViewer — {}", t.lab.name),
+            None => "TopoViewer".to_string(),
+        }
+    }
+
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::MetricsReceived(metrics) => {
+                self.metrics = metrics;
+                self.canvas_cache.clear();
+            }
+            Message::ToggleAddresses => {
+                self.show_addresses = !self.show_addresses;
+                self.canvas_cache.clear();
+            }
+            Message::ToggleMetrics => {
+                self.show_metrics = !self.show_metrics;
+                self.canvas_cache.clear();
+            }
+            Message::ZoomIn => {
+                self.camera.scale = (self.camera.scale * 1.2).min(5.0);
+                self.canvas_cache.clear();
+            }
+            Message::ZoomOut => {
+                self.camera.scale = (self.camera.scale / 1.2).max(0.1);
+                self.canvas_cache.clear();
+            }
+            Message::FitToScreen => {
+                self.camera.offset = Vector::new(50.0, 50.0);
+                self.camera.scale = 1.0;
+                self.canvas_cache.clear();
+            }
+        }
+        Task::none()
+    }
+
+    pub fn view(&self) -> Element<Message> {
+        let canvas_view = Canvas::new(self)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        let sidebar = self.sidebar_view();
+
+        row![
+            container(canvas_view).width(Length::FillPortion(3)),
+            container(sidebar).width(Length::FillPortion(1)).padding(10),
+        ]
+        .into()
+    }
+
+    fn sidebar_view(&self) -> Element<Message> {
+        let mut col = column![
+            text("TopoViewer").size(20),
+        ]
+        .spacing(8)
+        .padding(5);
+
+        if let Some(ref topo) = self.topology {
+            col = col.push(text(format!("Lab: {}", topo.lab.name)).size(14));
+            col = col.push(text(format!("Nodes: {}", topo.nodes.len())).size(12));
+            col = col.push(text(format!("Links: {}", topo.links.len())).size(12));
+        }
+
+        col = col.push(text("").size(4));
+
+        if let Some(ref name) = self.selected_node {
+            col = col.push(text(format!("Selected: {name}")).size(16));
+
+            if let Some(ref topo) = self.topology {
+                if let Some(node) = topo.nodes.get(name) {
+                    for link in &topo.links {
+                        for (i, ep) in link.endpoints.iter().enumerate() {
+                            if ep.starts_with(&format!("{name}:")) {
+                                let iface = ep.split(':').nth(1).unwrap_or("?");
+                                let peer = &link.endpoints[1 - i];
+                                let addr = link
+                                    .addresses
+                                    .as_ref()
+                                    .map(|a| a[i].as_str())
+                                    .unwrap_or("-");
+                                col = col.push(
+                                    text(format!("  {iface}: {addr} -> {peer}")).size(11),
+                                );
+                            }
+                        }
+                    }
+
+                    for (dest, rc) in &node.routes {
+                        let via = rc.via.as_deref().unwrap_or("?");
+                        col = col.push(text(format!("  route {dest} via {via}")).size(11));
+                    }
+
+                    if let Some(nm) = self.metrics.get(name) {
+                        col = col.push(text("Metrics:").size(13));
+                        for im in &nm.interfaces {
+                            let rx = nlink_lab_shared::metrics::format_rate(im.rx_bps);
+                            let tx = nlink_lab_shared::metrics::format_rate(im.tx_bps);
+                            col = col.push(
+                                text(format!("  {} {} rx:{rx} tx:{tx}", im.name, im.state))
+                                    .size(11),
+                            );
+                        }
+                    }
+                }
+            }
+        } else if self.topology.is_some() {
+            col = col.push(text("Click a node for details").size(12));
+        }
+
+        scrollable(col).into()
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        Subscription::none()
+    }
+
+    pub fn theme(&self) -> Theme {
+        Theme::Dark
+    }
+}

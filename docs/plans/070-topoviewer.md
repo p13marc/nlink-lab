@@ -319,12 +319,12 @@ between labs.
 
 ### Phase 1: Static Viewer
 
-- [ ] Create `bins/topoviewer/` crate
-- [ ] Force-directed layout engine
-- [ ] Canvas rendering (nodes, links, labels)
-- [ ] Pan and zoom
-- [ ] Click-to-select with detail sidebar
-- [ ] Load topology from .nll file
+- [x] Create `bins/topoviewer/` crate
+- [x] Force-directed layout engine
+- [x] Canvas rendering (nodes, links, labels)
+- [ ] Pan and zoom (mouse interaction)
+- [x] Detail sidebar (node info, metrics)
+- [x] Load topology from .nll file
 
 ### Phase 2: Live Metrics via Zenoh
 

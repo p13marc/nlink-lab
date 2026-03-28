@@ -6,6 +6,7 @@ members = [
     "crates/nlink-lab-shared",
     "bins/lab",
     "bins/nlink-lab-backend",
+    "bins/topoviewer",
 ]
 
 [workspace.package]

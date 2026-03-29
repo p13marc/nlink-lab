@@ -164,26 +164,26 @@ Add a build script or a `xtask` command to regenerate it.
 ## Progress
 
 ### Phase 1: User Guide
-- [ ] Installation
-- [ ] Your First Lab
-- [ ] NLL by Example
-- [ ] Runtime Operations
-- [ ] Templates
-- [ ] Daemon + TopoViewer
+- [x] Installation
+- [x] Your First Lab
+- [x] NLL by Example
+- [x] Runtime Operations
+- [x] Templates
+- [x] Daemon + TopoViewer
 
 ### Phase 2: Integration Testing Guide
-- [ ] `#[lab_test]` reference
-- [ ] File + builder examples
-- [ ] CI setup
-- [ ] Best practices
+- [x] `#[lab_test]` reference
+- [x] File + builder examples
+- [x] CI setup
+- [x] Best practices
 
 ### Phase 3: Troubleshooting Guide
-- [ ] Permission errors
-- [ ] Namespace cleanup
-- [ ] NLL parse errors
-- [ ] Deploy failures
-- [ ] Container troubleshooting
-- [ ] State corruption
+- [x] Permission errors
+- [x] Namespace cleanup
+- [x] NLL parse errors
+- [x] Deploy failures
+- [x] Container troubleshooting
+- [x] State corruption
 
 ### Phase 4: Man Page
 - [ ] clap_mangen integration

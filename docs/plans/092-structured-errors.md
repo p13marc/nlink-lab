@@ -254,29 +254,29 @@ State {
 ## Progress
 
 ### Phase 1: Fix Unsafe Unwraps
-- [ ] Replace `EndpointRef::parse().unwrap()` (3 sites)
-- [ ] Audit other unwraps
+- [x] Replace `EndpointRef::parse().unwrap()` (3 sites)
+- [x] Audit other unwraps (11 risky total; 3 fixed, rest in CLI/topoviewer)
 - [ ] Add test
 
 ### Phase 2: Specific Deploy Error Variants
-- [ ] Add new error variants
-- [ ] Migrate namespace errors
-- [ ] Migrate netlink errors
+- [x] Add new error variants (Namespace, NetlinkOp, Route, Firewall, Container)
+- [x] Migrate namespace errors
+- [ ] Migrate netlink errors (remaining ~30 sites)
 - [ ] Migrate route errors
 - [ ] Migrate firewall errors
 - [ ] Migrate container errors
-- [ ] Update `apply_diff()`
+- [x] Update `apply_diff()`
 
 ### Phase 3: Deployment Phase Context
-- [ ] Add tracing markers
+- [x] Add tracing markers (steps 3, 5, 9, 10, 12-14, 16, 18)
 - [ ] Phase context in errors
 - [ ] Phase context in `apply_diff()`
 
 ### Phase 4: Validation Error Structure
-- [ ] Add `ValidationErrors` variant
-- [ ] Update `bail()`
+- [x] Add `ValidationErrors` variant
+- [x] Update `bail()`
 - [ ] Update CLI rendering
 
 ### Phase 5: State Error Context
-- [ ] Update `State` variant
-- [ ] Update construction sites
+- [x] Update `State` variant (added `op` field)
+- [x] Update construction sites (3 sites in state.rs)

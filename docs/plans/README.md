@@ -6,15 +6,13 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [093](093-nll-expressions.md) | Expression engine: modulo, compound exprs, conditionals, auto-vars, block comments | High | 2-3 days |
-| [094](094-nll-ergonomics.md) | Syntax ergonomics: subnet auto-assign, list iteration, defaults, for-exprs, render | High | 3-4 days |
-| [095](095-nll-composition.md) | Modules & composition: firewall src/dst, multi-profile, parametric imports, cross-refs | Medium | 4-5 days |
+| [093](093-nll-v2.md) | NLL v2 Language & Ergonomics: expressions, syntax sugar, render | High | 5-7 days |
+| [094](094-nll-composition.md) | NLL v2 Composition & Safety: firewall, multi-profile, modules, cross-refs | Medium | 4-5 days |
 
 ### Recommended Order
 
-1. **093 — Expression Engine** — foundation for conditionals used by 094 and 095
-2. **094 — Syntax Ergonomics** — biggest boilerplate reduction, can parallel with 093
-3. **095 — Modules & Composition** — depends on 093 for conditionals, heaviest lift
+1. **093 — NLL v2 Language** — expressions + syntax sugar (foundation for 094)
+2. **094 — NLL v2 Composition** — depends on 093 for ForRange enum and expression engine
 
 ## Completed
 

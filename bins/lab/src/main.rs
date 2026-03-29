@@ -34,6 +34,10 @@ enum Commands {
         /// Start the Zenoh backend daemon after deploying.
         #[arg(long)]
         daemon: bool,
+
+        /// Skip validate block assertions after deploy.
+        #[arg(long)]
+        skip_validate: bool,
     },
 
     /// Apply topology changes to a running lab.
@@ -127,6 +131,9 @@ enum Commands {
         /// Output as DOT graph (for Graphviz).
         #[arg(long)]
         dot: bool,
+        /// Output as ASCII diagram.
+        #[arg(long)]
+        ascii: bool,
     },
 
     /// List processes running in a lab.
@@ -324,8 +331,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             dry_run,
             force,
             daemon,
+            skip_validate,
         } => {
-            let topo = nlink_lab::parser::parse_file(&topology)?;
+            let mut topo = nlink_lab::parser::parse_file(&topology)?;
+            if skip_validate {
+                topo.assertions.clear();
+            }
             let result = topo.validate();
 
             // Print warnings
@@ -562,12 +573,14 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Render { topology, dot } => {
+        Commands::Render { topology, dot, ascii } => {
             let topo = nlink_lab::parser::parse_file(&topology)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&topo)?);
             } else if dot {
                 print!("{}", topology_to_dot(&topo));
+            } else if ascii {
+                print!("{}", topology_to_ascii(&topo));
             } else {
                 print!("{}", nlink_lab::render::render(&topo));
             }
@@ -1157,6 +1170,58 @@ fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
     }
 
     out += "}\n";
+    out
+}
+
+fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
+    use std::collections::HashSet;
+
+    let mut out = String::new();
+    out.push_str(&format!("Lab: {}\n", topo.lab.name));
+    if let Some(desc) = &topo.lab.description {
+        out.push_str(&format!("  {desc}\n"));
+    }
+    out.push('\n');
+
+    out.push_str("Nodes:\n");
+    let mut nodes: Vec<&String> = topo.nodes.keys().collect();
+    nodes.sort();
+    for name in &nodes {
+        let node = &topo.nodes[*name];
+        let kind = if node.image.is_some() { " [container]" } else { "" };
+        out.push_str(&format!("  {name}{kind}\n"));
+    }
+
+    out.push_str("\nLinks:\n");
+    let mut shown: HashSet<String> = HashSet::new();
+    for link in &topo.links {
+        let key = format!("{} -- {}", link.endpoints[0], link.endpoints[1]);
+        if shown.insert(key.clone()) {
+            let mut parts = vec![format!("  {}", key)];
+            if let Some(addrs) = &link.addresses {
+                parts.push(format!("{} -- {}", addrs[0], addrs[1]));
+            }
+            if let Some(mtu) = link.mtu {
+                parts.push(format!("mtu={mtu}"));
+            }
+            out.push_str(&format!("{}\n", parts.join("  ")));
+        }
+    }
+
+    if !topo.assertions.is_empty() {
+        out.push_str("\nAssertions:\n");
+        for a in &topo.assertions {
+            match a {
+                nlink_lab::types::Assertion::Reach { from, to } => {
+                    out.push_str(&format!("  reach {from} -> {to}\n"));
+                }
+                nlink_lab::types::Assertion::NoReach { from, to } => {
+                    out.push_str(&format!("  no-reach {from} -> {to}\n"));
+                }
+            }
+        }
+    }
+
     out
 }
 

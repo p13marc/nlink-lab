@@ -997,13 +997,21 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // Disarm cleanup — deployment succeeded
     cleanup.disarm();
 
-    Ok(RunningLab::new(
+    let running = RunningLab::new(
         topology.clone(),
         namespace_names,
         container_states,
         container_runtime.as_ref().map(|rt| rt.binary().to_string()),
         pids,
-    ))
+    );
+
+    // ── Step 19: Run validate assertions ─────────────────────────
+    if !topology.assertions.is_empty() {
+        tracing::info!("step 19: running validate assertions");
+        run_assertions(&running, topology);
+    }
+
+    Ok(running)
 }
 
 /// Apply nftables firewall rules for a node.
@@ -1663,6 +1671,57 @@ pub async fn apply_diff(
 /// Resolve a node name to a [`NodeHandle`] from a [`RunningLab`].
 ///
 /// Looks up namespace nodes first, then container nodes.
+/// Run post-deploy reachability assertions from the validate block.
+fn run_assertions(running: &RunningLab, topology: &Topology) {
+    use crate::types::Assertion;
+
+    // Build address map to find target IPs
+    let mut ip_map: HashMap<String, String> = HashMap::new();
+    for link in &topology.links {
+        if let Some(addrs) = &link.addresses {
+            for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
+                if let Some(ep_ref) = EndpointRef::parse(ep) {
+                    let ip = addr.split('/').next().unwrap_or(addr);
+                    ip_map.entry(ep_ref.node.clone()).or_insert_with(|| ip.to_string());
+                }
+            }
+        }
+    }
+
+    for assertion in &topology.assertions {
+        match assertion {
+            Assertion::Reach { from, to } => {
+                if let Some(target_ip) = ip_map.get(to) {
+                    match running.exec(from, "ping", &["-c1", "-W2", target_ip]) {
+                        Ok(out) if out.exit_code == 0 => {
+                            tracing::info!("PASS: {from} can reach {to} ({target_ip})");
+                        }
+                        _ => {
+                            tracing::warn!("FAIL: {from} cannot reach {to} ({target_ip})");
+                        }
+                    }
+                } else {
+                    tracing::warn!("SKIP: no IP found for node '{to}'");
+                }
+            }
+            Assertion::NoReach { from, to } => {
+                if let Some(target_ip) = ip_map.get(to) {
+                    match running.exec(from, "ping", &["-c1", "-W2", target_ip]) {
+                        Ok(out) if out.exit_code != 0 => {
+                            tracing::info!("PASS: {from} cannot reach {to} (expected)");
+                        }
+                        _ => {
+                            tracing::warn!("FAIL: {from} CAN reach {to} (should be blocked)");
+                        }
+                    }
+                } else {
+                    tracing::warn!("SKIP: no IP found for node '{to}'");
+                }
+            }
+        }
+    }
+}
+
 /// Build container CreateOpts from a Node's fields.
 fn build_create_opts(node: &crate::types::Node) -> CreateOpts {
     CreateOpts {

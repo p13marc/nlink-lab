@@ -2925,9 +2925,9 @@ dependencies = [
 
 [[package]]
 name = "nlink"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd7155ec1abef609d3924f12136c7594ab8be2356b84394b20152f9e54ce5a80"
+checksum = "15fe77e5ca1b6a57e7a0dfb92dd9c4d97d9be9b56f8a5f6a91907466bf74c0f7"
 dependencies = [
  "bytes",
  "inotify",

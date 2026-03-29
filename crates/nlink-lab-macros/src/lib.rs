@@ -62,8 +62,35 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
         // Try to parse as a string literal first (file path)
         let attr2 = attr.clone();
         if let Ok(path) = syn::parse::<LitStr>(attr) {
+            // Resolve relative paths against the workspace root at compile time
+            // so tests work regardless of the runtime working directory.
+            let workspace_root = std::env::var("CARGO_WORKSPACE_DIR")
+                .unwrap_or_else(|_| {
+                    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+                        .expect("CARGO_MANIFEST_DIR not set");
+                    let mut dir = std::path::PathBuf::from(&manifest_dir);
+                    // Walk up to find the workspace root (directory with [workspace] in Cargo.toml)
+                    loop {
+                        let cargo_toml = dir.join("Cargo.toml");
+                        if cargo_toml.exists() {
+                            if let Ok(contents) = std::fs::read_to_string(&cargo_toml) {
+                                if contents.contains("[workspace]") {
+                                    return dir.to_string_lossy().to_string();
+                                }
+                            }
+                        }
+                        if !dir.pop() {
+                            // Fallback to manifest dir if no workspace root found
+                            return manifest_dir;
+                        }
+                    }
+                });
+            let abs_path = std::path::Path::new(&workspace_root)
+                .join(path.value())
+                .to_string_lossy()
+                .to_string();
             quote! {
-                let __topo = nlink_lab::parser::parse_file(#path)
+                let __topo = nlink_lab::parser::parse_file(#abs_path)
                     .expect("failed to parse topology file");
             }
         } else {

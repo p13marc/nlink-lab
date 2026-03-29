@@ -1977,7 +1977,7 @@ node r1 : router"#);
     fn test_parse_container_properties() {
         let ast = parse_nll(r#"lab "t"
 node web image "nginx" {
-    cpu "0.5"
+    cpu 0.5
     memory 256m
     hostname "web-01"
     workdir "/app"

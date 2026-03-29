@@ -2401,7 +2401,7 @@ link r1:eth0 -- h1:eth0 { subnet 10.0.0.0/30 }
         let topo = parse_and_lower(
             r#"lab "t"
 node web image "nginx" {
-    cpu "0.5"
+    cpu 0.5
     memory "256m"
     hostname "web-01"
     workdir "/app"

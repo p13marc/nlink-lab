@@ -8,14 +8,13 @@ lab "container-advanced" {
     description "Container nodes with advanced configuration"
 }
 
-let web_cpu = "0.5"
 let app_memory = 512m
 
 profile router { forward ipv4 }
 
 /* Web server: fine-grained capabilities, env from file */
 node web image "nginx:alpine" {
-    cpu ${web_cpu}
+    cpu 0.5
     memory 256m
     cap-add [NET_ADMIN, NET_RAW]
     hostname "web-server"

@@ -1,0 +1,13 @@
+# Parametric import example.
+#
+# Imports a ring module with custom size and adds a monitoring host.
+#
+# Demonstrates: parametric imports, cross-references to imported nodes.
+
+import "parametric-ring.nll" as backbone(count=6)
+
+lab "ring-with-monitor"
+
+node monitor { route default via ${backbone.r1.eth0} }
+
+link backbone.r1:mon0 -- monitor:eth0 { 172.16.0.0/30 }

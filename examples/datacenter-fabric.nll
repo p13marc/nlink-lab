@@ -1,0 +1,66 @@
+# Datacenter fabric with NLL v2 features.
+#
+# 4 spines, 8 leaves, 8 servers — generated with loops, modulo,
+# subnet auto-assign, defaults, for-expressions, and cross-references.
+#
+# Demonstrates: for-loops, modulo, compound expressions, subnet auto-assign,
+# defaults, for-expressions in lists, cross-references, lab metadata.
+
+lab "dc-fabric" {
+  description "4-spine 8-leaf Clos fabric"
+  version "1.0"
+  author "nlink-lab"
+  tags [datacenter, clos, fabric, large]
+}
+
+defaults link { mtu 9000 }
+
+profile router { forward ipv4 }
+
+/* ── Spine tier ────────────────────────────── */
+
+for s in 1..4 {
+  node spine${s} : router { lo 10.255.0.${s}/32 }
+}
+
+/* ── Leaf tier ─────────────────────────────── */
+
+for l in 1..8 {
+  node leaf${l} : router {
+    lo 10.255.1.${l}/32
+  }
+}
+
+/* ── Server tier ───────────────────────────── */
+
+node server1 { route default via ${leaf1.eth0} }
+node server2 { route default via ${leaf2.eth0} }
+node server3 { route default via ${leaf3.eth0} }
+node server4 { route default via ${leaf4.eth0} }
+node server5 { route default via ${leaf5.eth0} }
+node server6 { route default via ${leaf6.eth0} }
+node server7 { route default via ${leaf7.eth0} }
+node server8 { route default via ${leaf8.eth0} }
+
+/* ── Fabric links (spine <-> leaf) ─────────── */
+/*
+ * Each leaf connects to all 4 spines.
+ * Link addressing: 10.{spine}.{leaf}.0/31
+ */
+
+for l in 1..8 {
+  for s in 1..4 {
+    link spine${s}:eth${l} -- leaf${l}:up${s} {
+      10.${s}.${l}.0/31
+    }
+  }
+}
+
+/* ── Access links (leaf <-> server) ────────── */
+
+for l in 1..8 {
+  link leaf${l}:eth0 -- server${l}:eth0 {
+    10.100.${l}.0/24
+    mtu 1500
+  }
+}

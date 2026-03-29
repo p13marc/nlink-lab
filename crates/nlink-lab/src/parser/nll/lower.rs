@@ -1643,7 +1643,7 @@ node r1 : nonexistent"#);
         let topo = parse_example("firewall.nll");
         let fw = topo.nodes["server"].firewall.as_ref().unwrap();
         assert_eq!(fw.policy.as_deref(), Some("drop"));
-        assert_eq!(fw.rules.len(), 3);
+        assert_eq!(fw.rules.len(), 4);
     }
 
     #[test]

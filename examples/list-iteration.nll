@@ -1,0 +1,26 @@
+# List iteration and for-expressions.
+#
+# Deploy a set of named services behind a load balancer.
+# Uses list iteration to create nodes with meaningful names
+# instead of numeric indices.
+#
+# Demonstrates: list iteration, for-expressions, cross-references.
+
+lab "services" {
+  description "Named service nodes behind a load balancer"
+}
+
+profile router { forward ipv4 }
+
+node lb : router
+
+/* Create service nodes from a named list */
+for svc in [web, api, worker, cache] {
+  node ${svc} { route default via ${lb.eth0} }
+}
+
+/* Load balancer connects to all services */
+link lb:eth0 -- web:eth0 { 10.0.1.0/24 }
+link lb:eth1 -- api:eth0 { 10.0.2.0/24 }
+link lb:eth2 -- worker:eth0 { 10.0.3.0/24 }
+link lb:eth3 -- cache:eth0 { 10.0.4.0/24 }

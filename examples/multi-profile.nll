@@ -1,0 +1,35 @@
+# Multi-profile inheritance.
+#
+# Compose orthogonal concerns: routing, monitoring, and security
+# as separate profiles that can be mixed per node.
+#
+# Demonstrates: multi-profile inheritance, profile merge semantics.
+
+lab "multi-profile"
+
+profile router { forward ipv4 }
+profile monitored {
+  sysctl "net.core.rmem_max" "16777216"
+  sysctl "net.core.wmem_max" "16777216"
+}
+profile secured {
+  firewall policy drop {
+    accept ct established,related
+    accept icmp 8
+    accept tcp dport 22
+  }
+}
+
+# Core router: routing + monitoring
+node core : router, monitored
+
+# Edge router: routing + monitoring + firewall
+node edge : router, monitored, secured {
+  route default via ${core.eth0}
+}
+
+# Host: no profiles, just a default route
+node host { route default via ${edge.eth1} }
+
+link core:eth0 -- edge:eth0 { 10.0.0.0/30 }
+link edge:eth1 -- host:eth0 { 10.0.1.0/24 }

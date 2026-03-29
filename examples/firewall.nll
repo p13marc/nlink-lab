@@ -1,8 +1,10 @@
 # Firewall topology.
 #
 # A server behind a stateful firewall that only allows established
-# connections, ICMP, and TCP port 8080. A client and an attacker
-# node test access.
+# connections, ICMP, TCP port 8080, and SSH from the trusted subnet.
+# A client and an attacker node test access.
+#
+# Demonstrates: firewall src/dst matching, cross-references.
 
 lab "firewall" {
   description "Server with stateful nftables firewall"
@@ -12,16 +14,17 @@ profile router { forward ipv4 }
 
 node router : router
 
-node client { route default via 10.0.1.1 }
+node client { route default via ${router.eth0} }
 
 node server {
-  route default via 10.0.2.1
+  route default via ${router.eth1}
   firewall policy drop {
     accept ct established,related
     accept tcp dport 8080
     accept udp dport 53
+    accept tcp dport 22 src 10.0.1.0/24
   }
 }
 
-link router:eth0 -- client:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
-link router:eth1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }
+link router:eth0 -- client:eth0 { 10.0.1.0/24 }
+link router:eth1 -- server:eth0 { 10.0.2.0/24 }

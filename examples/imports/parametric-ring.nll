@@ -1,0 +1,22 @@
+# Parametric ring module.
+#
+# Creates a ring of N routers with point-to-point /30 links.
+# Import with: import "parametric-ring.nll" as ring(count=6)
+#
+# Demonstrates: param declarations with defaults.
+
+param count default 4
+
+lab "ring"
+
+profile router { forward ipv4 }
+
+for i in 1..${count} {
+  node r${i} : router { lo 10.255.0.${i}/32 }
+}
+
+for i in 1..${count} {
+  link r${i}:right -- r${i % count + 1}:left {
+    10.0.${i}.0/31
+  }
+}

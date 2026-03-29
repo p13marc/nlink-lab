@@ -2,43 +2,47 @@
 #
 # 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
 # addresses, netem impairment on spine uplinks, and iperf3 on servers.
+#
+# Demonstrates: subnet auto-assign, defaults, for-loops, cross-references.
 
 lab "spine-leaf" {
   description "Spine-leaf datacenter fabric"
+  version "2.0"
   prefix "dc"
+  tags [datacenter, fabric, l3]
 }
+
+defaults link { mtu 9000 }
+defaults impair { delay 5ms jitter 1ms }
 
 profile router { forward ipv4 }
 profile host { sysctl "net.ipv4.ip_forward" "0" }
 
 # Spines
-node spine1 : router { lo 10.255.0.1/32 }
-node spine2 : router { lo 10.255.0.2/32 }
+for s in 1..2 {
+  node spine${s} : router { lo 10.255.0.${s}/32 }
+}
 
-# Leaves
+# Leaves (with cross-reference to spine for default route)
 node leaf1 : router {
   lo 10.255.1.1/32
-  route default via 10.0.11.1
+  route default via ${spine1.eth1}
 }
 node leaf2 : router {
   lo 10.255.1.2/32
-  route default via 10.0.12.1
+  route default via ${spine1.eth2}
 }
 
 # Servers
-node server1 : host { route default via 10.1.1.1 }
-node server2 : host { route default via 10.1.2.1 }
+node server1 : host { route default via ${leaf1.eth3} }
+node server2 : host { route default via ${leaf2.eth3} }
 
-# Fabric links (spine <-> leaf)
-link spine1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
-link spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 9000 }
-link spine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
-link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/30  mtu 9000 }
+# Fabric links (spine <-> leaf) — subnet auto-assigned, MTU from defaults
+link spine1:eth1 -- leaf1:eth1 { 10.0.11.0/30 }
+link spine1:eth2 -- leaf2:eth1 { 10.0.12.0/30 }
+link spine2:eth1 -- leaf1:eth2 { 10.0.21.0/30 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.0/30 }
 
-# Access links (leaf <-> server)
-link leaf1:eth3 -- server1:eth0 { 10.1.1.1/24 -- 10.1.1.10/24 }
-link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
-
-# Impairments
-impair spine1:eth1 delay 5ms jitter 1ms
-impair spine1:eth2 delay 5ms jitter 1ms
+# Access links (leaf <-> server) — no jumbo MTU needed
+link leaf1:eth3 -- server1:eth0 { 10.1.1.0/24 mtu 1500 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.0/24 mtu 1500 }

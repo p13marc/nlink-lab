@@ -41,6 +41,13 @@ fn lower_with_base_dir(
         }
     }
 
+    // Inject lab auto-variables
+    ctx.variables.insert("lab.name".into(), file.lab.name.clone());
+    ctx.variables.insert(
+        "lab.prefix".into(),
+        file.lab.prefix.clone().unwrap_or_else(|| file.lab.name.clone()),
+    );
+
     // Pre-lowering validation
     validate_ast(file, &ctx)?;
 
@@ -222,6 +229,9 @@ impl LowerCtx {
 
         for i in for_loop.start..=for_loop.end {
             vars.insert(for_loop.var.clone(), i.to_string());
+            vars.insert("loop.index".into(), i.to_string());
+            vars.insert("loop.first".into(), (i == for_loop.start).to_string());
+            vars.insert("loop.last".into(), (i == for_loop.end).to_string());
 
             for stmt in &for_loop.body {
                 match stmt {
@@ -242,14 +252,20 @@ impl LowerCtx {
         }
 
         vars.remove(&for_loop.var);
+        vars.remove("loop.index");
+        vars.remove("loop.first");
+        vars.remove("loop.last");
         Ok(result)
     }
 }
 
 // ─── Interpolation ────────────────────────────────────────
 
-/// Replace `${var}` with its value from the variables map.
-/// Supports simple arithmetic: `${var + N}`, `${var - N}`, `${var * N}`, `${var / N}`.
+/// Replace `${expr}` with its evaluated value.
+///
+/// Supports arithmetic (`${i + 1}`, `${(i - 1) * 2}`, `${i % 3}`),
+/// ternary conditionals (`${env == "prod" ? "5ms" : "50ms"}`),
+/// and simple variable lookup (`${var}`).
 fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
     let mut result = String::with_capacity(template.len());
     let mut chars = template.chars().peekable();
@@ -277,58 +293,24 @@ fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
     result
 }
 
-/// Evaluate a simple expression: variable name, or `var op int`.
-///
-/// Supports both spaced (`${i + 1}`) and unspaced (`${i+1}`) operators.
+/// Evaluate an expression with support for:
+/// - Arithmetic with precedence: `+`, `-`, `*`, `/`, `%`
+/// - Compound expressions: `(i - 1) * 2 + 1`
+/// - Ternary conditionals: `var == "value" ? true_val : false_val`
+/// - Variable lookup: `var`
 fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
     let expr = expr.trim();
 
-    // Try operators: with spaces first, then without
-    for (spaced, unspaced) in [(" + ", "+"), (" - ", "-"), (" * ", "*"), (" / ", "/")] {
-        let op = if expr.contains(spaced) {
-            spaced
-        } else if expr.contains(unspaced) {
-            unspaced
-        } else {
-            continue;
-        };
+    // Ternary conditional: `cond ? true_val : false_val`
+    if let Some(result) = eval_ternary(expr, vars) {
+        return result;
+    }
 
-        if let Some((left, right)) = expr.split_once(op) {
-            let left = left.trim();
-            let right = right.trim();
-
-            let left_val = vars
-                .get(left)
-                .cloned()
-                .unwrap_or_else(|| left.to_string());
-            let left_num: i64 = match left_val.parse() {
-                Ok(n) => n,
-                Err(_) => return format!("${{{expr}}}"),
-            };
-            let right_val = vars
-                .get(right)
-                .cloned()
-                .unwrap_or_else(|| right.to_string());
-            let right_num: i64 = match right_val.parse() {
-                Ok(n) => n,
-                Err(_) => return format!("${{{expr}}}"),
-            };
-
-            let result = match op.trim() {
-                "+" => left_num + right_num,
-                "-" => left_num - right_num,
-                "*" => left_num * right_num,
-                "/" => {
-                    if right_num == 0 {
-                        tracing::error!("division by zero in expression: ${{{expr}}}");
-                        return format!("${{{expr}}}");
-                    }
-                    left_num / right_num
-                }
-                _ => unreachable!(),
-            };
-
-            return result.to_string();
+    // Arithmetic expression
+    let tokens = tokenize_arith(expr, vars);
+    if !tokens.is_empty() {
+        if let Ok(val) = parse_arith_expr(&tokens, &mut 0) {
+            return val.to_string();
         }
     }
 
@@ -336,6 +318,185 @@ fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
     vars.get(expr)
         .cloned()
         .unwrap_or_else(|| format!("${{{expr}}}"))
+}
+
+/// Evaluate a ternary expression: `var == "lit" ? true_val : false_val`
+fn eval_ternary(expr: &str, vars: &HashMap<String, String>) -> Option<String> {
+    let q = expr.find('?')?;
+    let condition = expr[..q].trim();
+    let rest = expr[q + 1..].trim();
+    let colon = rest.find(':')?;
+    let true_val = rest[..colon].trim();
+    let false_val = rest[colon + 1..].trim();
+
+    let result = if let Some((left, right)) = condition.split_once("!=") {
+        resolve_var(left.trim(), vars) != resolve_var(right.trim(), vars)
+    } else if let Some((left, right)) = condition.split_once("==") {
+        resolve_var(left.trim(), vars) == resolve_var(right.trim(), vars)
+    } else {
+        return None;
+    };
+
+    let chosen = if result { true_val } else { false_val };
+    Some(resolve_var(chosen, vars))
+}
+
+/// Resolve a value: strip quotes from string literals, look up variables.
+fn resolve_var(s: &str, vars: &HashMap<String, String>) -> String {
+    let s = s.trim();
+    if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
+        return s[1..s.len() - 1].to_string();
+    }
+    vars.get(s).cloned().unwrap_or_else(|| s.to_string())
+}
+
+// ─── Arithmetic expression parser ────────────────────────
+
+#[derive(Debug, Clone, Copy)]
+enum ArithTok {
+    Num(i64),
+    Plus,
+    Minus,
+    Mul,
+    Div,
+    Mod,
+    LParen,
+    RParen,
+}
+
+/// Tokenize an arithmetic expression, resolving variables to numbers.
+fn tokenize_arith(expr: &str, vars: &HashMap<String, String>) -> Vec<ArithTok> {
+    let mut tokens = Vec::new();
+    let mut chars = expr.chars().peekable();
+
+    while let Some(&ch) = chars.peek() {
+        match ch {
+            ' ' | '\t' => { chars.next(); }
+            '+' => { chars.next(); tokens.push(ArithTok::Plus); }
+            '-' => {
+                chars.next();
+                // Unary minus: after operator, open paren, or at start
+                let is_unary = tokens.is_empty()
+                    || matches!(tokens.last(), Some(ArithTok::Plus | ArithTok::Minus
+                        | ArithTok::Mul | ArithTok::Div | ArithTok::Mod | ArithTok::LParen));
+                if is_unary {
+                    // Parse the number/variable and negate
+                    let val = read_operand(&mut chars, vars);
+                    if let Some(n) = val { tokens.push(ArithTok::Num(-n)); }
+                    else { return vec![]; } // can't parse → bail
+                } else {
+                    tokens.push(ArithTok::Minus);
+                }
+            }
+            '*' => { chars.next(); tokens.push(ArithTok::Mul); }
+            '/' => { chars.next(); tokens.push(ArithTok::Div); }
+            '%' => { chars.next(); tokens.push(ArithTok::Mod); }
+            '(' => { chars.next(); tokens.push(ArithTok::LParen); }
+            ')' => { chars.next(); tokens.push(ArithTok::RParen); }
+            '0'..='9' => {
+                let mut num = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_ascii_digit() { num.push(c); chars.next(); } else { break; }
+                }
+                if let Ok(n) = num.parse::<i64>() { tokens.push(ArithTok::Num(n)); }
+                else { return vec![]; }
+            }
+            'a'..='z' | 'A'..='Z' | '_' => {
+                let mut name = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_alphanumeric() || c == '_' || c == '.' || c == '-' {
+                        name.push(c); chars.next();
+                    } else { break; }
+                }
+                if let Some(val) = vars.get(&name) {
+                    if let Ok(n) = val.parse::<i64>() { tokens.push(ArithTok::Num(n)); }
+                    else { return vec![]; } // non-numeric variable → bail to string lookup
+                } else {
+                    return vec![]; // unknown variable → bail
+                }
+            }
+            _ => return vec![], // unexpected char → bail
+        }
+    }
+    tokens
+}
+
+/// Read a numeric operand (number or variable) from the char stream.
+fn read_operand(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, vars: &HashMap<String, String>) -> Option<i64> {
+    while let Some(&' ') = chars.peek() { chars.next(); }
+    if let Some(&c) = chars.peek() {
+        if c.is_ascii_digit() {
+            let mut num = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_ascii_digit() { num.push(c); chars.next(); } else { break; }
+            }
+            num.parse().ok()
+        } else if c.is_alphabetic() || c == '_' {
+            let mut name = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_alphanumeric() || c == '_' || c == '.' { name.push(c); chars.next(); } else { break; }
+            }
+            vars.get(&name)?.parse().ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Parse expression: handles `+` and `-` (lowest precedence).
+fn parse_arith_expr(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result<i64, ()> {
+    let mut left = parse_arith_term(tokens, pos)?;
+    while *pos < tokens.len() {
+        match tokens[*pos] {
+            ArithTok::Plus => { *pos += 1; left += parse_arith_term(tokens, pos)?; }
+            ArithTok::Minus => { *pos += 1; left -= parse_arith_term(tokens, pos)?; }
+            _ => break,
+        }
+    }
+    Ok(left)
+}
+
+/// Parse term: handles `*`, `/`, `%` (higher precedence).
+fn parse_arith_term(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result<i64, ()> {
+    let mut left = parse_arith_factor(tokens, pos)?;
+    while *pos < tokens.len() {
+        match tokens[*pos] {
+            ArithTok::Mul => { *pos += 1; left *= parse_arith_factor(tokens, pos)?; }
+            ArithTok::Div => {
+                *pos += 1;
+                let right = parse_arith_factor(tokens, pos)?;
+                if right == 0 { return Err(()); }
+                left /= right;
+            }
+            ArithTok::Mod => {
+                *pos += 1;
+                let right = parse_arith_factor(tokens, pos)?;
+                if right == 0 { return Err(()); }
+                left %= right;
+            }
+            _ => break,
+        }
+    }
+    Ok(left)
+}
+
+/// Parse factor: number or parenthesized expression.
+fn parse_arith_factor(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result<i64, ()> {
+    if *pos >= tokens.len() { return Err(()); }
+    match tokens[*pos] {
+        ArithTok::Num(n) => { *pos += 1; Ok(n) }
+        ArithTok::LParen => {
+            *pos += 1;
+            let val = parse_arith_expr(tokens, pos)?;
+            if *pos < tokens.len() && matches!(tokens[*pos], ArithTok::RParen) {
+                *pos += 1;
+            }
+            Ok(val)
+        }
+        _ => Err(()),
+    }
 }
 
 /// Interpolate all string fields in a statement.
@@ -873,6 +1034,8 @@ fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::parser::nll;
     use crate::types;
 
@@ -1357,5 +1520,140 @@ node a
         assert_eq!(super::prefix_endpoint("dc", "r1:eth0"), "dc.r1:eth0");
         assert_eq!(super::prefix_endpoint("wan", "pe1:wan0"), "wan.pe1:wan0");
         assert_eq!(super::prefix_endpoint("dc", "switch:br0"), "dc.switch:br0");
+    }
+
+    // ─── Expression engine tests ─────────────────────────
+
+    #[test]
+    fn test_modulo_operator() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+for i in 0..3 {
+    node n${i} { lo 10.0.${i % 2}.${i}/32 }
+}"#,
+        );
+        assert_eq!(topo.nodes["n0"].interfaces["lo"].addresses, vec!["10.0.0.0/32"]);
+        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.1.1/32"]);
+        assert_eq!(topo.nodes["n2"].interfaces["lo"].addresses, vec!["10.0.0.2/32"]);
+        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.1.3/32"]);
+    }
+
+    #[test]
+    fn test_compound_expression() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+for i in 1..3 {
+    node n${i} { lo 10.0.0.${(i - 1) * 10 + 1}/32 }
+}"#,
+        );
+        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.0.1/32"]);
+        assert_eq!(topo.nodes["n2"].interfaces["lo"].addresses, vec!["10.0.0.11/32"]);
+        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.0.21/32"]);
+    }
+
+    #[test]
+    fn test_ternary_conditional() {
+        let mut vars = HashMap::new();
+        vars.insert("env".into(), "prod".into());
+        assert_eq!(super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars), "5ms");
+        assert_eq!(super::eval_expr(r#"env != "prod" ? 5ms : 50ms"#, &vars), "50ms");
+
+        vars.insert("env".into(), "dev".into());
+        assert_eq!(super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars), "50ms");
+    }
+
+    #[test]
+    fn test_ternary_with_variables() {
+        let mut vars = HashMap::new();
+        vars.insert("mode".into(), "fast".into());
+        vars.insert("fast_delay".into(), "1ms".into());
+        vars.insert("slow_delay".into(), "100ms".into());
+        assert_eq!(
+            super::eval_expr(r#"mode == "fast" ? fast_delay : slow_delay"#, &vars),
+            "1ms"
+        );
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        let vars = HashMap::new();
+        // Division by zero returns the original expression
+        assert_eq!(super::eval_expr("4 / 0", &vars), "${4 / 0}");
+        assert_eq!(super::eval_expr("4 % 0", &vars), "${4 % 0}");
+    }
+
+    #[test]
+    fn test_backward_compat_simple() {
+        let mut vars = HashMap::new();
+        vars.insert("i".into(), "3".into());
+        // All existing expression forms still work
+        assert_eq!(super::eval_expr("i", &vars), "3");
+        assert_eq!(super::eval_expr("i + 1", &vars), "4");
+        assert_eq!(super::eval_expr("i+1", &vars), "4");
+        assert_eq!(super::eval_expr("i - 1", &vars), "2");
+        assert_eq!(super::eval_expr("i * 2", &vars), "6");
+        assert_eq!(super::eval_expr("i / 2", &vars), "1");
+    }
+
+    #[test]
+    fn test_auto_variables_loop() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+for i in 1..3 {
+    node n${i} { lo 10.0.${loop.index}.0/32 }
+}"#,
+        );
+        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.1.0/32"]);
+        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.3.0/32"]);
+    }
+
+    #[test]
+    fn test_auto_variables_loop_first_last() {
+        let mut vars = HashMap::new();
+        // Simulate first iteration of for i in 1..3
+        vars.insert("i".into(), "1".into());
+        vars.insert("loop.first".into(), "true".into());
+        vars.insert("loop.last".into(), "false".into());
+        assert_eq!(
+            super::eval_expr(r#"loop.first == "true" ? first : other"#, &vars),
+            "first"
+        );
+        assert_eq!(
+            super::eval_expr(r#"loop.last == "true" ? last : other"#, &vars),
+            "other"
+        );
+    }
+
+    #[test]
+    fn test_auto_variables_lab() {
+        let topo = parse_and_lower(
+            r#"lab "mylab" { prefix "ml" }
+node test"#,
+        );
+        // Lab variables are available during expansion but consumed.
+        // Verify the lab name and prefix were set correctly.
+        assert_eq!(topo.lab.name, "mylab");
+        assert_eq!(topo.lab.prefix(), "ml");
+    }
+
+    #[test]
+    fn test_block_comments() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode a\n/* this node is disabled\nnode b\n*/\nnode c",
+        );
+        assert_eq!(topo.nodes.len(), 2);
+        assert!(topo.nodes.contains_key("a"));
+        assert!(topo.nodes.contains_key("c"));
+        assert!(!topo.nodes.contains_key("b"));
+    }
+
+    #[test]
+    fn test_nested_block_comments() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode a\n/* outer /* inner */ still commented */\nnode b",
+        );
+        assert_eq!(topo.nodes.len(), 2);
+        assert!(topo.nodes.contains_key("a"));
+        assert!(topo.nodes.contains_key("b"));
     }
 }

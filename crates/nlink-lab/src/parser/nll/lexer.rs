@@ -302,9 +302,39 @@ impl std::fmt::Display for Token {
 /// Lex an NLL source string into a token stream.
 ///
 /// Strips leading/trailing newlines and collapses consecutive newlines.
+/// Strip block comments (`/* ... */`) from input, preserving line numbers.
+/// Supports nested block comments.
+fn strip_block_comments(input: &str) -> Result<String> {
+    let mut result = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut depth: usize = 0;
+
+    while let Some(c) = chars.next() {
+        if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            depth += 1;
+        } else if c == '*' && chars.peek() == Some(&'/') && depth > 0 {
+            chars.next();
+            depth -= 1;
+        } else if depth == 0 {
+            result.push(c);
+        } else if c == '\n' {
+            result.push('\n'); // preserve line numbers for error reporting
+        }
+    }
+
+    if depth > 0 {
+        return Err(crate::Error::NllParse("unterminated block comment".into()));
+    }
+
+    Ok(result)
+}
+
 pub fn lex(input: &str) -> Result<Vec<Spanned>> {
+    // Pre-process: strip block comments (/* ... */) before lexing
+    let input = strip_block_comments(input)?;
     let mut tokens = Vec::new();
-    let mut lexer = Token::lexer(input);
+    let mut lexer = Token::lexer(&input);
 
     while let Some(result) = lexer.next() {
         let span = lexer.span();

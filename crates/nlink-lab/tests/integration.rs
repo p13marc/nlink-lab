@@ -130,10 +130,15 @@ async fn deploy_firewall() {
         return;
     }
 
-    let topo = nlink_lab::parser::parse_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/firewall.nll"))
-        .expect("failed to parse topology file");
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall.nll"
+    ))
+    .expect("failed to parse topology file");
     let lab = topo.deploy().await.expect("failed to deploy lab");
-    let _guard = LabCleanup { name: lab.name().to_string() };
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
 
     let output = lab.exec("server", "nft", &["list", "ruleset"]).unwrap();
     assert_eq!(output.exit_code, 0);
@@ -189,10 +194,15 @@ async fn deploy_vrf() {
         return;
     }
 
-    let topo = nlink_lab::parser::parse_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/vrf-multitenant.nll"))
-        .expect("failed to parse topology file");
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/vrf-multitenant.nll"
+    ))
+    .expect("failed to parse topology file");
     let lab = topo.deploy().await.expect("failed to deploy lab");
-    let _guard = LabCleanup { name: lab.name().to_string() };
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
 
     assert_eq!(lab.topology().nodes.len(), 3);
 

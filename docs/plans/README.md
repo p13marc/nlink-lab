@@ -4,7 +4,15 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-None.
+| Plan | Description | Priority | Effort |
+|------|-------------|----------|--------|
+| [097](097-parser-hardening.md) | Parser hardening: float literal, type validation, cross-ref errors, healthcheck tokens, validator coverage | High | 2-3 days |
+| [098](098-nll-patterns.md) | NLL patterns: subnet pools, topology generators (spine-leaf/mesh/ring/star), reachability assertions | Medium | 4-5 days |
+
+### Recommended Order
+
+1. **097 — Parser Hardening** — correctness fixes, no new syntax (except float)
+2. **098 — NLL Patterns** — depends on 097 for float literal (pool sizes)
 
 ## Completed
 

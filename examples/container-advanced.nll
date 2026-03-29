@@ -2,20 +2,25 @@
 #
 # Demonstrates container-specific NLL features: resource limits,
 # capabilities, entrypoint, hostname, workdir, labels, pull policy,
-# and post-deploy exec commands.
+# env-file, cap-add, and post-deploy exec commands.
 
 lab "container-advanced" {
     description "Container nodes with advanced configuration"
 }
 
+let web_cpu = "0.5"
+let app_memory = 512m
+
 profile router { forward ipv4 }
 
-/* Web server: resource-limited, custom hostname, exec for setup */
+/* Web server: fine-grained capabilities, env from file */
 node web image "nginx:alpine" {
-    cpu "0.5"
+    cpu ${web_cpu}
     memory 256m
+    cap-add [NET_ADMIN, NET_RAW]
     hostname "web-server"
     labels ["nlink.role=web", "nlink.tier=frontend"]
+    env-file "configs/web.env"
     exec "nginx -t"
     route default via ${router.eth0}
 }
@@ -26,7 +31,8 @@ node app image "python:3-slim" {
     cmd ["-c", "python -m http.server 8080"]
     workdir "/app"
     cpu "1"
-    memory 512m
+    memory ${app_memory}
+    cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]
     labels ["nlink.role=app", "nlink.tier=backend"]
     route default via ${router.eth1}
 }

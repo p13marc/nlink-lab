@@ -1,0 +1,15 @@
+# Ring topology using the ring pattern.
+#
+# Generates 6 nodes in a ring with automatic links and addressing.
+
+lab "pattern-ring"
+
+profile router { forward ipv4 }
+
+pool backbone 10.0.0.0/24 /31
+
+ring backbone {
+    count 6
+    pool backbone
+    profile router
+}

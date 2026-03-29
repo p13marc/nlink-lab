@@ -184,6 +184,12 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Validate => Some("validate".into()),
         Token::Reach => Some("reach".into()),
         Token::NoReach => Some("no-reach".into()),
+        Token::Mesh => Some("mesh".into()),
+        Token::Ring => Some("ring".into()),
+        Token::Star => Some("star".into()),
+        Token::Hub => Some("hub".into()),
+        Token::Spokes => Some("spokes".into()),
+        Token::Count => Some("count".into()),
         _ => None,
     }
 }
@@ -250,6 +256,11 @@ fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             break;
         }
         match &tokens[*pos].token {
+            _ if !started && token_as_ident(&tokens[*pos].token).is_some() => {
+                name.push_str(&token_as_ident(&tokens[*pos].token).unwrap());
+                *pos += 1;
+                started = true;
+            }
             Token::Ident(s) => {
                 name.push_str(s);
                 *pos += 1;
@@ -470,6 +481,7 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Rate => parse_rate_stmt(tokens, pos).map(ast::Statement::Rate),
         Token::Defaults => parse_defaults(tokens, pos).map(ast::Statement::Defaults),
         Token::Pool => parse_pool(tokens, pos).map(ast::Statement::Pool),
+        Token::Mesh | Token::Ring | Token::Star => parse_pattern(tokens, pos).map(ast::Statement::Pattern),
         Token::Validate => parse_validate(tokens, pos).map(ast::Statement::Validate),
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
@@ -1607,6 +1619,66 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
 }
 
 // ─── Let / For ────────────────────────────────────────────
+
+fn parse_pattern(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PatternDef> {
+    let kind_token = tokens[*pos].token.clone();
+    *pos += 1;
+    let name = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::LBrace)?;
+
+    let mut nodes = Vec::new();
+    let mut count = None;
+    let mut pool = None;
+    let mut profile = None;
+    let mut hub = None;
+    let mut spokes = Vec::new();
+
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) { break; }
+        match at(tokens, *pos) {
+            Some(Token::Node) => {
+                // nodes [n1, n2, n3]
+                *pos += 1;
+                nodes = parse_ident_list(tokens, pos)?;
+            }
+            Some(Token::Count) => {
+                *pos += 1;
+                count = Some(expect_int(tokens, pos)?);
+            }
+            Some(Token::Pool) => {
+                *pos += 1;
+                pool = Some(expect_ident(tokens, pos)?);
+            }
+            Some(Token::Profile) => {
+                *pos += 1;
+                profile = Some(expect_ident(tokens, pos)?);
+            }
+            Some(Token::Hub) => {
+                *pos += 1;
+                hub = Some(expect_ident(tokens, pos)?);
+            }
+            Some(Token::Spokes) => {
+                *pos += 1;
+                spokes = parse_ident_list(tokens, pos)?;
+            }
+            _ => { *pos += 1; } // skip unknown
+        }
+    }
+
+    let kind = match kind_token {
+        Token::Mesh => ast::PatternKind::Mesh,
+        Token::Ring => ast::PatternKind::Ring,
+        Token::Star => {
+            let hub_name = hub.unwrap_or_else(|| "hub".to_string());
+            nodes = spokes;
+            ast::PatternKind::Star { hub: hub_name }
+        }
+        _ => unreachable!(),
+    };
+
+    Ok(ast::PatternDef { kind, name, nodes, count, pool, profile })
+}
 
 fn parse_pool(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PoolDef> {
     expect(tokens, pos, &Token::Pool)?;

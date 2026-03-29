@@ -99,6 +99,7 @@ fn lower_with_base_dir(
             ast::Statement::Network(n) => lower_network(&mut topology, n)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
+            ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx),
             ast::Statement::Validate(_) => {
                 // Validation assertions are stored for post-deploy; skip during lowering
             }
@@ -734,6 +735,7 @@ fn interpolate_statement(
         ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
         ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
         ast::Statement::Pool(p) => ast::Statement::Pool(p.clone()),
+        ast::Statement::Pattern(p) => ast::Statement::Pattern(p.clone()),
         ast::Statement::Validate(v) => ast::Statement::Validate(v.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
@@ -1214,6 +1216,116 @@ fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
         let a = std::net::Ipv4Addr::from(network + 1);
         let b = std::net::Ipv4Addr::from(network + 2);
         Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
+    }
+}
+
+/// Expand a topology pattern (mesh, ring, star) into nodes and links.
+fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &mut LowerCtx) {
+    match &pattern.kind {
+        ast::PatternKind::Mesh => {
+            // Generate nodes
+            for name in &pattern.nodes {
+                let node_name = format!("{}.{}", pattern.name, name);
+                let mut node = types::Node::default();
+                node.profile = pattern.profile.clone();
+                topo.nodes.insert(node_name, node);
+            }
+            // Generate full-mesh links (all pairwise, i < j)
+            for (i, a) in pattern.nodes.iter().enumerate() {
+                for b in &pattern.nodes[i + 1..] {
+                    let left = format!("{}.{}", pattern.name, a);
+                    let right = format!("{}.{}", pattern.name, b);
+                    let left_iface = format!("to-{b}");
+                    let right_iface = format!("to-{a}");
+
+                    let addresses = if let Some(pool_name) = &pattern.pool {
+                        if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
+                            let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+                            let network = pool.base + pool.next_offset;
+                            pool.next_offset += subnet_size;
+                            let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+                            split_subnet(&cidr).ok()
+                        } else { None }
+                    } else { None };
+
+                    topo.links.push(types::Link {
+                        endpoints: [format!("{left}:{left_iface}"), format!("{right}:{right_iface}")],
+                        addresses,
+                        mtu: ctx.default_link_mtu,
+                    });
+                }
+            }
+        }
+        ast::PatternKind::Ring => {
+            let n = pattern.count.unwrap_or(pattern.nodes.len() as i64) as usize;
+            let names: Vec<String> = if pattern.nodes.is_empty() {
+                (1..=n).map(|i| format!("r{i}")).collect()
+            } else {
+                pattern.nodes.clone()
+            };
+
+            // Generate nodes
+            for name in &names {
+                let node_name = format!("{}.{}", pattern.name, name);
+                let mut node = types::Node::default();
+                node.profile = pattern.profile.clone();
+                topo.nodes.insert(node_name, node);
+            }
+
+            // Generate ring links
+            for i in 0..names.len() {
+                let j = (i + 1) % names.len();
+                let left = format!("{}.{}", pattern.name, names[i]);
+                let right = format!("{}.{}", pattern.name, names[j]);
+
+                let addresses = if let Some(pool_name) = &pattern.pool {
+                    if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
+                        let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+                        let network = pool.base + pool.next_offset;
+                        pool.next_offset += subnet_size;
+                        let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+                        split_subnet(&cidr).ok()
+                    } else { None }
+                } else { None };
+
+                topo.links.push(types::Link {
+                    endpoints: [format!("{left}:right"), format!("{right}:left")],
+                    addresses,
+                    mtu: ctx.default_link_mtu,
+                });
+            }
+        }
+        ast::PatternKind::Star { hub } => {
+            // Generate hub node
+            let hub_name = format!("{}.{}", pattern.name, hub);
+            let mut hub_node = types::Node::default();
+            hub_node.profile = pattern.profile.clone();
+            topo.nodes.insert(hub_name.clone(), hub_node);
+
+            // Generate spoke nodes and links
+            for (i, spoke) in pattern.nodes.iter().enumerate() {
+                let spoke_name = format!("{}.{}", pattern.name, spoke);
+                let mut spoke_node = types::Node::default();
+                spoke_node.profile = pattern.profile.clone();
+                topo.nodes.insert(spoke_name.clone(), spoke_node);
+
+                let addresses = if let Some(pool_name) = &pattern.pool {
+                    if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
+                        let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+                        let network = pool.base + pool.next_offset;
+                        pool.next_offset += subnet_size;
+                        let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+                        split_subnet(&cidr).ok()
+                    } else { None }
+                } else { None };
+
+                topo.links.push(types::Link {
+                    endpoints: [format!("{hub_name}:eth{i}"), format!("{spoke_name}:eth0")],
+                    addresses,
+                    mtu: ctx.default_link_mtu,
+                });
+            }
+        }
     }
 }
 
@@ -2362,6 +2474,60 @@ validate {
         // Validate block is parsed but not stored in Topology (yet)
         // Just verify parsing succeeds
         assert_eq!(topo.nodes.len(), 2);
+    }
+
+    #[test]
+    fn test_mesh_pattern() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+pool p 10.0.0.0/24 /30
+mesh cluster {
+    node [a, b, c]
+    pool p
+}"#,
+        );
+        // 3 nodes: cluster.a, cluster.b, cluster.c
+        assert_eq!(topo.nodes.len(), 3);
+        assert!(topo.nodes.contains_key("cluster.a"));
+        assert!(topo.nodes.contains_key("cluster.b"));
+        assert!(topo.nodes.contains_key("cluster.c"));
+        // 3 links (C(3,2) = 3 pairwise)
+        assert_eq!(topo.links.len(), 3);
+        // All links have auto-allocated addresses
+        for link in &topo.links {
+            assert!(link.addresses.is_some());
+        }
+    }
+
+    #[test]
+    fn test_ring_pattern() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+ring backbone {
+    count 4
+}"#,
+        );
+        // 4 nodes: backbone.r1..r4
+        assert_eq!(topo.nodes.len(), 4);
+        // 4 links (ring)
+        assert_eq!(topo.links.len(), 4);
+    }
+
+    #[test]
+    fn test_star_pattern() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+star net {
+    hub center
+    spokes [s1, s2, s3]
+}"#,
+        );
+        // 4 nodes: net.center + net.s1, net.s2, net.s3
+        assert_eq!(topo.nodes.len(), 4);
+        assert!(topo.nodes.contains_key("net.center"));
+        assert!(topo.nodes.contains_key("net.s1"));
+        // 3 links (hub to each spoke)
+        assert_eq!(topo.links.len(), 3);
     }
 
     #[test]

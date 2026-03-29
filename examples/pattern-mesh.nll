@@ -1,0 +1,13 @@
+# Full-mesh topology using the mesh pattern.
+#
+# Generates 4 nodes with all 6 pairwise links automatically.
+# Compare with manual mesh.nll which requires listing all links.
+
+lab "pattern-mesh"
+
+pool links 10.0.0.0/24 /30
+
+mesh cluster {
+    node [n1, n2, n3, n4]
+    pool links
+}

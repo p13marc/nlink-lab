@@ -89,6 +89,18 @@ pub enum Token {
     Reach,
     #[token("no-reach")]
     NoReach,
+    #[token("mesh")]
+    Mesh,
+    #[token("ring")]
+    Ring,
+    #[token("star")]
+    Star,
+    #[token("hub")]
+    Hub,
+    #[token("spokes")]
+    Spokes,
+    #[token("count")]
+    Count,
     #[token("version")]
     Version,
     #[token("author")]

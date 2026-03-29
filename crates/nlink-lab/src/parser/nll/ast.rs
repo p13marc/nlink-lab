@@ -50,6 +50,7 @@ pub enum Statement {
     Defaults(DefaultsDef),
     Param(ParamDef),
     Pool(PoolDef),
+    Pattern(PatternDef),
     Validate(ValidateDef),
     Let(LetDef),
     For(ForLoop),
@@ -74,6 +75,25 @@ pub struct ValidateDef {
 pub enum AssertionDef {
     Reach { from: String, to: String },
     NoReach { from: String, to: String },
+}
+
+/// Topology pattern: `mesh`, `ring`, `star`.
+#[derive(Debug, Clone)]
+pub struct PatternDef {
+    pub kind: PatternKind,
+    pub name: String,
+    pub nodes: Vec<String>,
+    pub count: Option<i64>,
+    pub pool: Option<String>,
+    pub profile: Option<String>,
+}
+
+/// Type of topology pattern.
+#[derive(Debug, Clone)]
+pub enum PatternKind {
+    Mesh,
+    Ring,
+    Star { hub: String },
 }
 
 /// Defaults block: `defaults link { mtu 9000 }` or `defaults impair { delay 5ms }`.

@@ -1,0 +1,16 @@
+# Star (hub-and-spoke) topology using the star pattern.
+#
+# Generates a central hub connected to 4 spokes.
+
+lab "pattern-star"
+
+pool access 10.0.0.0/24 /24
+
+profile router { forward ipv4 }
+
+star campus {
+    hub router
+    spokes [lab1, lab2, lab3, lab4]
+    pool access
+    profile router
+}

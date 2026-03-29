@@ -47,4 +47,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Integration tests (requires root)
-        run: sudo -E cargo test -p nlink-lab --test integration
+        run: sudo -E env PATH="$PATH" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" $(which cargo) test -p nlink-lab --test integration

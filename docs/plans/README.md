@@ -6,11 +6,13 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [090](090-hardening.md) | Container apply, fuzzing, scalability, validator coverage | Medium | 4-5 days |
+| [091](091-user-documentation.md) | User guide, testing guide, troubleshooting, man page | High | 3-4 days |
+| [092](092-structured-errors.md) | Specific error variants, phase context, fix unsafe unwraps | High | 2-3 days |
 
 ### Recommended Order
 
-1. **090 — Hardening** — container apply support, NLL fuzzing, scalability, validator coverage
+1. **092 — Structured Errors** — fix unsafe unwraps first (safety), then improve error variants
+2. **091 — User Documentation** — user guide, testing guide, troubleshooting
 
 ## Completed
 
@@ -19,8 +21,8 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 072 (lab templates), 080 (bug fixes & safety), 081 (code quality),
 082 (NLL completeness), 083 (validator hardening), 084 (CLI UX),
 085 (test coverage), 086 (feature flags), 087 (topology composition
-& hot-reload), and 088 (remove TOML) have been implemented and their
-plan files removed.
+& hot-reload), 088 (remove TOML), and 090 (hardening) have been
+implemented and their plan files removed.
 
 ## Reference
 

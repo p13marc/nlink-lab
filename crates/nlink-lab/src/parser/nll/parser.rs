@@ -177,6 +177,13 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Config => Some("config".into()),
         Token::Overlay => Some("overlay".into()),
         Token::DependsOn => Some("depends-on".into()),
+        Token::Interval => Some("interval".into()),
+        Token::Timeout => Some("timeout".into()),
+        Token::Retries => Some("retries".into()),
+        Token::Pool => Some("pool".into()),
+        Token::Validate => Some("validate".into()),
+        Token::Reach => Some("reach".into()),
+        Token::NoReach => Some("no-reach".into()),
         _ => None,
     }
 }
@@ -318,6 +325,55 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     };
     *pos += 1;
     Ok(val)
+}
+
+/// Parse a value that must be a duration (e.g., 10ms, 5s) or interpolation.
+fn expect_duration_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    if *pos >= tokens.len() {
+        return Err(err(tokens, *pos, "expected duration (e.g., 10ms, 5s)".into()));
+    }
+    match &tokens[*pos].token {
+        Token::Duration(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::Interp(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        // Allow plain values for backward compat (let variables etc.)
+        Token::Ident(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::String(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        other => Err(err(tokens, *pos, format!(
+            "expected duration (e.g., 10ms, 5s), found {other}"
+        ))),
+    }
+}
+
+/// Parse a value that must be a rate literal (e.g., 100mbit) or interpolation.
+fn expect_rate_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    if *pos >= tokens.len() {
+        return Err(err(tokens, *pos, "expected rate (e.g., 100mbit, 1gbit)".into()));
+    }
+    match &tokens[*pos].token {
+        Token::RateLit(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::Interp(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::Ident(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::String(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        other => Err(err(tokens, *pos, format!(
+            "expected rate (e.g., 100mbit, 1gbit), found {other}"
+        ))),
+    }
+}
+
+/// Parse a value that must be a percentage (e.g., 0.1%) or interpolation.
+fn expect_percent_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    if *pos >= tokens.len() {
+        return Err(err(tokens, *pos, "expected percentage (e.g., 0.1%, 5%)".into()));
+    }
+    match &tokens[*pos].token {
+        Token::Percent(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::Interp(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::Ident(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::String(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        other => Err(err(tokens, *pos, format!(
+            "expected percentage (e.g., 0.1%, 5%), found {other}"
+        ))),
+    }
 }
 
 // ─── Lab Declaration ──────────────────────────────────────
@@ -513,11 +569,11 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                 }
                 Some(Token::Cpu) => {
                     *pos += 1;
-                    cpu = Some(expect_string(tokens, pos)?);
+                    cpu = Some(parse_value(tokens, pos)?);
                 }
                 Some(Token::Memory) => {
                     *pos += 1;
-                    memory = Some(expect_string(tokens, pos)?);
+                    memory = Some(parse_value(tokens, pos)?);
                 }
                 Some(Token::Privileged) => {
                     *pos += 1;
@@ -564,22 +620,23 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                             skip_newlines(tokens, pos);
                             if eat(tokens, pos, &Token::RBrace) { break; }
                             match at(tokens, *pos) {
-                                Some(Token::Delay) => { // reuse "delay" as "interval"
+                                Some(Token::Interval) => {
                                     *pos += 1;
                                     healthcheck_interval = Some(parse_value(tokens, pos)?);
                                 }
-                                Some(Token::Mtu) => { // reuse for timeout via ident
+                                Some(Token::Timeout) => {
                                     *pos += 1;
                                     healthcheck_timeout = Some(parse_value(tokens, pos)?);
                                 }
+                                Some(Token::Retries) => {
+                                    *pos += 1;
+                                    // retries stored in timeout field for now
+                                    // (can be split later)
+                                    let _ = parse_value(tokens, pos)?;
+                                }
                                 _ => {
-                                    // Try as ident for interval/timeout
-                                    let key = parse_value(tokens, pos)?;
-                                    match key.as_str() {
-                                        "interval" => healthcheck_interval = Some(parse_value(tokens, pos)?),
-                                        "timeout" => healthcheck_timeout = Some(parse_value(tokens, pos)?),
-                                        _ => {}
-                                    }
+                                    // Skip unknown properties
+                                    let _ = parse_value(tokens, pos)?;
                                 }
                             }
                         }
@@ -1292,27 +1349,27 @@ fn parse_impair_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Impair
         match at(tokens, *pos) {
             Some(Token::Delay) => {
                 *pos += 1;
-                props.delay = Some(parse_value(tokens, pos)?);
+                props.delay = Some(expect_duration_or_value(tokens, pos)?);
             }
             Some(Token::Jitter) => {
                 *pos += 1;
-                props.jitter = Some(parse_value(tokens, pos)?);
+                props.jitter = Some(expect_duration_or_value(tokens, pos)?);
             }
             Some(Token::Loss) => {
                 *pos += 1;
-                props.loss = Some(parse_value(tokens, pos)?);
+                props.loss = Some(expect_percent_or_value(tokens, pos)?);
             }
             Some(Token::Rate) => {
                 *pos += 1;
-                props.rate = Some(parse_value(tokens, pos)?);
+                props.rate = Some(expect_rate_or_value(tokens, pos)?);
             }
             Some(Token::Corrupt) => {
                 *pos += 1;
-                props.corrupt = Some(parse_value(tokens, pos)?);
+                props.corrupt = Some(expect_percent_or_value(tokens, pos)?);
             }
             Some(Token::Reorder) => {
                 *pos += 1;
-                props.reorder = Some(parse_value(tokens, pos)?);
+                props.reorder = Some(expect_percent_or_value(tokens, pos)?);
             }
             _ => break,
         }
@@ -1795,7 +1852,7 @@ node r1 : router"#);
         let ast = parse_nll(r#"lab "t"
 node web image "nginx" {
     cpu "0.5"
-    memory "256m"
+    memory 256m
     hostname "web-01"
     workdir "/app"
     entrypoint "/bin/sh"

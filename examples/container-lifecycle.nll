@@ -18,7 +18,7 @@ node router : router {
 node db image "postgres:16" {
     env ["POSTGRES_PASSWORD=secret"]
     cpu "1"
-    memory "512m"
+    memory 512m
     healthcheck "pg_isready -U postgres"
     startup-delay 3s
 }

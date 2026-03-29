@@ -128,6 +128,7 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
         if let Some(mem) = &node.memory { writeln!(out, "  memory \"{mem}\"").unwrap(); }
         if node.privileged { writeln!(out, "  privileged").unwrap(); }
         if !node.cap_add.is_empty() { writeln!(out, "  cap-add [{}]", node.cap_add.join(", ")).unwrap(); }
+        if !node.cap_drop.is_empty() { writeln!(out, "  cap-drop [{}]", node.cap_drop.join(", ")).unwrap(); }
         if let Some(ep) = &node.entrypoint { writeln!(out, "  entrypoint \"{ep}\"").unwrap(); }
         if let Some(h) = &node.hostname { writeln!(out, "  hostname \"{h}\"").unwrap(); }
         if let Some(w) = &node.workdir { writeln!(out, "  workdir \"{w}\"").unwrap(); }
@@ -137,7 +138,16 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
         }
         if let Some(p) = &node.pull { writeln!(out, "  pull {p}").unwrap(); }
         for cmd in &node.container_exec { writeln!(out, "  exec \"{cmd}\"").unwrap(); }
-        if let Some(hc) = &node.healthcheck { writeln!(out, "  healthcheck \"{hc}\"").unwrap(); }
+        if let Some(hc) = &node.healthcheck {
+            write!(out, "  healthcheck \"{hc}\"").unwrap();
+            if node.healthcheck_interval.is_some() || node.healthcheck_timeout.is_some() {
+                out.push_str(" {");
+                if let Some(iv) = &node.healthcheck_interval { write!(out, " interval {iv}").unwrap(); }
+                if let Some(to) = &node.healthcheck_timeout { write!(out, " timeout {to}").unwrap(); }
+                out.push_str(" }");
+            }
+            out.push('\n');
+        }
         if let Some(d) = &node.startup_delay { writeln!(out, "  startup-delay {d}").unwrap(); }
         if let Some(ef) = &node.env_file { writeln!(out, "  env-file \"{ef}\"").unwrap(); }
         for (h, c) in &node.configs { writeln!(out, "  config \"{h}\" \"{c}\"").unwrap(); }

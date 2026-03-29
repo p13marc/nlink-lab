@@ -93,6 +93,7 @@ fn lower_with_base_dir(
 
     // Post-lowering pass: resolve cross-references like ${router.eth0}
     resolve_cross_refs(&mut topology)?;
+    warn_unresolved_refs(&topology);
 
     Ok(topology)
 }
@@ -320,6 +321,32 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Warn about unresolved cross-references remaining after lowering.
+fn warn_unresolved_refs(topology: &types::Topology) {
+    for (node_name, node) in &topology.nodes {
+        for (dest, route) in &node.routes {
+            if let Some(via) = &route.via {
+                if via.contains("${") {
+                    tracing::warn!(
+                        "unresolved reference in route '{dest}' on '{node_name}': {via}"
+                    );
+                }
+            }
+        }
+        if let Some(fw) = &node.firewall {
+            for rule in &fw.rules {
+                if let Some(expr) = &rule.match_expr {
+                    if expr.contains("${") {
+                        tracing::warn!(
+                            "unresolved reference in firewall rule on '{node_name}': {expr}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ─── Context ──────────────────────────────────────────────

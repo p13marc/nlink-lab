@@ -75,6 +75,20 @@ pub enum Token {
     Overlay,
     #[token("depends-on")]
     DependsOn,
+    #[token("interval")]
+    Interval,
+    #[token("timeout")]
+    Timeout,
+    #[token("retries")]
+    Retries,
+    #[token("pool")]
+    Pool,
+    #[token("validate")]
+    Validate,
+    #[token("reach")]
+    Reach,
+    #[token("no-reach")]
+    NoReach,
     #[token("version")]
     Version,
     #[token("author")]
@@ -283,7 +297,7 @@ pub enum Token {
     #[regex(r"[0-9]+(\.[0-9]+)?(ms|us|ns|s)", |lex| lex.slice().to_string(), priority = 3)]
     Duration(String),
 
-    #[regex(r"[0-9]+(mbit|kbit|gbit|bit|mbyte|kbyte|gbyte|byte)", |lex| lex.slice().to_string(), priority = 3)]
+    #[regex(r"[0-9]+(mbit|kbit|gbit|bit|mbyte|kbyte|gbyte|byte|[mgtp])", |lex| lex.slice().to_string(), priority = 3)]
     RateLit(String),
 
     #[regex(r"[0-9]+(\.[0-9]+)?%", |lex| lex.slice().to_string())]

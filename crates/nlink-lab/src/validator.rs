@@ -918,18 +918,27 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                     location: Some(format!("nodes.{node_name}.volumes")),
                 });
             }
-            // New container properties also require image
-            for prop in ["cpu", "memory", "entrypoint", "hostname", "workdir", "healthcheck"] {
-                let has_prop = match prop {
-                    "cpu" => node.cpu.is_some(),
-                    "memory" => node.memory.is_some(),
-                    "entrypoint" => node.entrypoint.is_some(),
-                    "hostname" => node.hostname.is_some(),
-                    "workdir" => node.workdir.is_some(),
-                    "healthcheck" => node.healthcheck.is_some(),
-                    _ => false,
-                };
-                if has_prop {
+            // All container properties require image
+            let container_checks: &[(&str, bool)] = &[
+                ("cpu", node.cpu.is_some()),
+                ("memory", node.memory.is_some()),
+                ("entrypoint", node.entrypoint.is_some()),
+                ("hostname", node.hostname.is_some()),
+                ("workdir", node.workdir.is_some()),
+                ("healthcheck", node.healthcheck.is_some()),
+                ("privileged", node.privileged),
+                ("pull", node.pull.is_some()),
+                ("startup-delay", node.startup_delay.is_some()),
+                ("env-file", node.env_file.is_some()),
+                ("overlay", node.overlay.is_some()),
+                ("cap-add", !node.cap_add.is_empty()),
+                ("cap-drop", !node.cap_drop.is_empty()),
+                ("labels", !node.labels.is_empty()),
+                ("exec", !node.container_exec.is_empty()),
+                ("configs", !node.configs.is_empty()),
+            ];
+            for (prop, has_value) in container_checks {
+                if *has_value {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
                         rule: "container-requires-image",
@@ -945,6 +954,20 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                     rule: "empty-image",
                     message: "image must not be empty".to_string(),
                     location: Some(format!("nodes.{node_name}.image")),
+                });
+            }
+        }
+    }
+
+    // Validate depends-on references
+    for (node_name, node) in &topology.nodes {
+        for dep in &node.depends_on {
+            if !topology.nodes.contains_key(dep) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "depends-on-exists",
+                    message: format!("depends-on references undefined node '{dep}'"),
+                    location: Some(format!("nodes.{node_name}.depends-on")),
                 });
             }
         }

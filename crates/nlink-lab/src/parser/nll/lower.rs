@@ -504,6 +504,19 @@ impl LowerCtx {
 /// ternary conditionals (`${env == "prod" ? "5ms" : "50ms"}`),
 /// and simple variable lookup (`${var}`).
 fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
+    // Run interpolation repeatedly until stable (handles nested ${leaf${i}})
+    let mut current = template.to_string();
+    for _ in 0..10 {
+        let next = interpolate_once(&current, vars);
+        if next == current {
+            break;
+        }
+        current = next;
+    }
+    current
+}
+
+fn interpolate_once(template: &str, vars: &HashMap<String, String>) -> String {
     let mut result = String::with_capacity(template.len());
     let mut chars = template.chars().peekable();
 
@@ -511,16 +524,28 @@ fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
         if ch == '$' && chars.peek() == Some(&'{') {
             chars.next(); // consume '{'
             let mut expr = String::new();
+            let mut depth = 1;
             while let Some(&c) = chars.peek() {
-                if c == '}' {
-                    chars.next();
-                    break;
+                if c == '{' {
+                    depth += 1;
+                } else if c == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        chars.next();
+                        break;
+                    }
                 }
                 expr.push(c);
                 chars.next();
             }
 
-            let value = eval_expr(&expr, vars);
+            // If expr contains nested ${}, recursively interpolate the inner part first
+            let resolved_expr = if expr.contains("${") {
+                interpolate_once(&expr, vars)
+            } else {
+                expr
+            };
+            let value = eval_expr(&resolved_expr, vars);
             result.push_str(&value);
         } else {
             result.push(ch);
@@ -2432,6 +2457,28 @@ node router image "frr" {
         assert_eq!(n.configs[0], ("a.conf".to_string(), "/etc/a.conf".to_string()));
         assert_eq!(n.overlay.as_deref(), Some("configs/router/"));
         assert_eq!(n.env_file.as_deref(), Some("router.env"));
+    }
+
+    #[test]
+    fn test_nested_interpolation() {
+        let mut vars = HashMap::new();
+        vars.insert("i".into(), "2".into());
+        vars.insert("leaf2".into(), "resolved".into());
+        // ${leaf${i}} → first pass resolves ${i} → ${leaf2} → second pass → "resolved"
+        assert_eq!(super::interpolate("${leaf${i}}", &vars), "resolved");
+    }
+
+    #[test]
+    fn test_adjacent_interpolation_in_topology() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let base = "node"
+for i in 1..2 {
+    node ${base}${i}
+}"#,
+        );
+        assert!(topo.nodes.contains_key("node1"));
+        assert!(topo.nodes.contains_key("node2"));
     }
 
     // ─── Plan 098 tests ──────────────────────────────

@@ -124,6 +124,9 @@ enum Commands {
     Render {
         /// Path to the topology file (.nll).
         topology: PathBuf,
+        /// Output as DOT graph (for Graphviz).
+        #[arg(long)]
+        dot: bool,
     },
 
     /// List processes running in a lab.
@@ -559,10 +562,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Render { topology } => {
+        Commands::Render { topology, dot } => {
             let topo = nlink_lab::parser::parse_file(&topology)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&topo)?);
+            } else if dot {
+                print!("{}", topology_to_dot(&topo));
             } else {
                 print!("{}", nlink_lab::render::render(&topo));
             }

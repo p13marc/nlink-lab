@@ -4,15 +4,7 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-| Plan | Description | Priority | Effort |
-|------|-------------|----------|--------|
-| [100](100-validate-and-errors.md) | Validate deploy execution, error migration, man page, NLL spec update | Medium | 2-3 days |
-| [101](101-nll-syntax-cleanup.md) | Breaking syntax: explicit subnet, container block, firewall, render --ascii | Low | 3-5 days |
-
-### Recommended Order
-
-1. **100 — Validate & Errors** — wire validate execution, clean up errors, update spec
-2. **101 — Syntax Cleanup** — breaking changes, after CI catches regressions
+None.
 
 ## Completed
 
@@ -25,8 +17,9 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 091 (user documentation), 092 (structured errors),
 093 (NLL v2 language & ergonomics), 094 (NLL v2 composition),
 095 (container core), 096 (container lifecycle), 097 (parser hardening),
-098 (NLL patterns), and 099 (production readiness) have been implemented
-and their plan files removed.
+098 (NLL patterns), 099 (production readiness), 100 (validate & errors),
+and 101 (NLL syntax cleanup) have been implemented and their plan files
+removed.
 
 ## Reference
 

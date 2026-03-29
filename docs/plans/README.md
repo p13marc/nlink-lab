@@ -4,15 +4,7 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-| Plan | Description | Priority | Effort |
-|------|-------------|----------|--------|
-| [097](097-parser-hardening.md) | Parser hardening: float literal, type validation, cross-ref errors, healthcheck tokens, validator coverage | High | 2-3 days |
-| [098](098-nll-patterns.md) | NLL patterns: subnet pools, topology generators (spine-leaf/mesh/ring/star), reachability assertions | Medium | 4-5 days |
-
-### Recommended Order
-
-1. **097 — Parser Hardening** — correctness fixes, no new syntax (except float)
-2. **098 — NLL Patterns** — depends on 097 for float literal (pool sizes)
+None.
 
 ## Completed
 
@@ -24,8 +16,8 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 & hot-reload), 088 (remove TOML), 090 (hardening),
 091 (user documentation), 092 (structured errors),
 093 (NLL v2 language & ergonomics), 094 (NLL v2 composition),
-095 (container core), and 096 (container lifecycle) have been
-implemented and their plan files removed.
+095 (container core), 096 (container lifecycle), 097 (parser hardening),
+and 098 (NLL patterns) have been implemented and their plan files removed.
 
 ## Reference
 

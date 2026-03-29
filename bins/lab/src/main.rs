@@ -3,6 +3,25 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+// ─── Color helpers ───────────────────────────────────────
+
+fn use_color() -> bool {
+    std::env::var("NO_COLOR").is_err() && atty::is(atty::Stream::Stderr)
+}
+
+fn green(s: &str) -> String {
+    if use_color() { format!("\x1b[32m{s}\x1b[0m") } else { s.to_string() }
+}
+fn red(s: &str) -> String {
+    if use_color() { format!("\x1b[31m{s}\x1b[0m") } else { s.to_string() }
+}
+fn yellow(s: &str) -> String {
+    if use_color() { format!("\x1b[33m{s}\x1b[0m") } else { s.to_string() }
+}
+fn bold(s: &str) -> String {
+    if use_color() { format!("\x1b[1m{s}\x1b[0m") } else { s.to_string() }
+}
+
 #[derive(Parser)]
 #[command(name = "nlink-lab")]
 #[command(about = "Network lab engine — create isolated network topologies using Linux namespaces")]
@@ -235,6 +254,12 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
+    /// Show comprehensive lab details (status + links + impairments).
+    Inspect {
+        /// Lab name.
+        lab: String,
+    },
+
     /// List container nodes in a running lab.
     Containers {
         /// Lab name.
@@ -408,13 +433,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             // Print warnings
             for w in result.warnings() {
-                eprintln!("  WARN  {w}");
+                eprintln!("  {} {w}", yellow("WARN"));
             }
 
             if result.has_errors() {
                 eprintln!("Validation failed for {:?}:", topo.lab.name);
                 for e in result.errors() {
-                    eprintln!("  ERROR {e}");
+                    eprintln!("  {} {e}", red("ERROR"));
                 }
                 return Err(nlink_lab::Error::Validation("see errors above".into()));
             }
@@ -438,8 +463,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let elapsed = start.elapsed();
 
             println!(
-                "Lab {:?} deployed in {:.0?}",
-                topo.lab.name, elapsed
+                "{} Lab {:?} deployed in {:.0?}",
+                green("OK"), topo.lab.name, elapsed
             );
             print_deploy_summary(&topo);
 
@@ -463,11 +488,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let desired = nlink_lab::parser::parse_file(&topology)?;
             let result = desired.validate();
             for w in result.warnings() {
-                eprintln!("  WARN  {w}");
+                eprintln!("  {} {w}", yellow("WARN"));
             }
             if result.has_errors() {
                 for e in result.errors() {
-                    eprintln!("  ERROR {e}");
+                    eprintln!("  {} {e}", red("ERROR"));
                 }
                 return Err(nlink_lab::Error::Validation("see errors above".into()));
             }
@@ -633,13 +658,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let result = topo.validate();
 
             for w in result.warnings() {
-                eprintln!("  WARN  {w}");
+                eprintln!("  {} {w}", yellow("WARN"));
             }
 
             if result.has_errors() {
                 eprintln!("Validation failed for {:?}:", topo.lab.name);
                 for e in result.errors() {
-                    eprintln!("  ERROR {e}");
+                    eprintln!("  {} {e}", red("ERROR"));
                 }
                 return Err(nlink_lab::Error::Validation("see errors above".into()));
             }
@@ -1088,6 +1113,62 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
+        }
+
+        Commands::Inspect { lab } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let topo = running.topology();
+
+            // Header
+            println!("{}", bold(&format!("Lab: {}", running.name())));
+            println!("Nodes: {}  Links: {}  Impairments: {}",
+                running.namespace_count(), topo.links.len(), topo.impairments.len());
+
+            // Node table
+            println!("\n  {:<20} {:<12} {}", bold("NODE"), bold("TYPE"), bold("IMAGE"));
+            let mut names: Vec<&String> = topo.nodes.keys().collect();
+            names.sort();
+            for name in &names {
+                let node = &topo.nodes[*name];
+                let kind = if node.image.is_some() { "container" } else { "namespace" };
+                let image = node.image.as_deref().unwrap_or("--");
+                println!("  {:<20} {:<12} {}", name, kind, image);
+            }
+
+            // Links
+            if !topo.links.is_empty() {
+                println!("\n  {:<40} {}", bold("LINK"), bold("ADDRESSES"));
+                for link in &topo.links {
+                    let addrs = link.addresses.as_ref()
+                        .map(|a| format!("{} -- {}", a[0], a[1]))
+                        .unwrap_or_else(|| "--".to_string());
+                    println!("  {:<40} {}", format!("{} -- {}", link.endpoints[0], link.endpoints[1]), addrs);
+                }
+            }
+
+            // Impairments
+            if !topo.impairments.is_empty() {
+                println!("\n  {}", bold("IMPAIRMENTS"));
+                for (ep, imp) in &topo.impairments {
+                    let mut parts = Vec::new();
+                    if let Some(d) = &imp.delay { parts.push(format!("delay={d}")); }
+                    if let Some(j) = &imp.jitter { parts.push(format!("jitter={j}")); }
+                    if let Some(l) = &imp.loss { parts.push(format!("loss={l}")); }
+                    if let Some(r) = &imp.rate { parts.push(format!("rate={r}")); }
+                    println!("  {:<24} {}", ep, parts.join("  "));
+                }
+            }
+
+            // Processes
+            let procs: Vec<_> = running.process_status().into_iter().filter(|p| p.alive).collect();
+            if !procs.is_empty() {
+                println!("\n  {}", bold("PROCESSES"));
+                for p in &procs {
+                    println!("  {:<16} pid={}", p.node, p.pid);
+                }
+            }
+
+            Ok(())
         }
 
         Commands::Containers { lab } => {

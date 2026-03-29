@@ -72,13 +72,11 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // Walk up to find the workspace root (directory with [workspace] in Cargo.toml)
                     loop {
                         let cargo_toml = dir.join("Cargo.toml");
-                        if cargo_toml.exists() {
-                            if let Ok(contents) = std::fs::read_to_string(&cargo_toml) {
-                                if contents.contains("[workspace]") {
+                        if cargo_toml.exists()
+                            && let Ok(contents) = std::fs::read_to_string(&cargo_toml)
+                                && contents.contains("[workspace]") {
                                     return dir.to_string_lossy().to_string();
                                 }
-                            }
-                        }
                         if !dir.pop() {
                             // Fallback to manifest dir if no workspace root found
                             return manifest_dir;

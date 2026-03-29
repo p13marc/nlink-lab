@@ -38,6 +38,14 @@ install:
     sudo setcap cap_net_admin+ep /usr/local/bin/nlink-lab
     @echo "Installed /usr/local/bin/nlink-lab with CAP_NET_ADMIN"
 
+# Generate and install man page
+man:
+    cargo build --release -p nlink-lab-cli
+    help2man --no-info target/release/nlink-lab > nlink-lab.1
+    sudo install -m 644 nlink-lab.1 /usr/local/share/man/man1/nlink-lab.1
+    rm -f nlink-lab.1
+    @echo "Installed man page: man nlink-lab"
+
 # Uninstall
 uninstall:
     sudo rm -f /usr/local/bin/nlink-lab

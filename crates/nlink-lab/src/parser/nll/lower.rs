@@ -1056,6 +1056,7 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
         version: lab.version.clone(),
         author: lab.author.clone(),
         tags: lab.tags.clone(),
+        mgmt_subnet: lab.mgmt.clone(),
     }
 }
 

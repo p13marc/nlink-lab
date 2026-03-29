@@ -379,13 +379,17 @@ enum Commands {
 }
 
 fn main() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env(),
-        )
-        .init();
-
     let cli = Cli::parse();
+
+    // Set tracing level based on --verbose flag (default: warn, verbose: info)
+    let env_filter = if cli.verbose {
+        tracing_subscriber::EnvFilter::new("info")
+    } else {
+        tracing_subscriber::EnvFilter::from_default_env()
+    };
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .init();
 
     // Handle completions synchronously (no runtime needed)
     if let Commands::Completions { shell } = &cli.command {
@@ -1118,6 +1122,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Inspect { lab } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let topo = running.topology();
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(topo)?);
+                return Ok(());
+            }
 
             // Header
             println!("{}", bold(&format!("Lab: {}", running.name())));

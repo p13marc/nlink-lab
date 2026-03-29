@@ -1,0 +1,18 @@
+# Management network topology.
+#
+# Demonstrates the mgmt block that auto-creates an out-of-band
+# management bridge connecting all nodes with sequential IPs.
+
+lab "mgmt-demo" {
+    description "Lab with management network"
+    mgmt 172.20.0.0/24
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route default via ${router.eth0} }
+node host2 { route default via ${router.eth0} }
+
+link router:eth0 -- host1:eth0 { subnet 10.0.1.0/24 }
+link router:eth1 -- host2:eth0 { subnet 10.0.2.0/24 }

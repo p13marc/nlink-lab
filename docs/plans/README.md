@@ -4,9 +4,7 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-| Plan | Description | Priority | Effort |
-|------|-------------|----------|--------|
-| [104](104-polish.md) | Polish: management network, colored output, inspect command, deploy timing, man page | Low | 3-4 days |
+None.
 
 ## Completed
 
@@ -20,8 +18,8 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 093 (NLL v2 language & ergonomics), 094 (NLL v2 composition),
 095 (container core), 096 (container lifecycle), 097 (parser hardening),
 098 (NLL patterns), 099 (production readiness), 100 (validate & errors),
-101 (NLL syntax cleanup), 102 (CLI quality), and 103 (container CLI)
-have been implemented and their plan files removed.
+101 (NLL syntax cleanup), 102 (CLI quality), 103 (container CLI),
+and 104 (polish) have been implemented and their plan files removed.
 
 ## Reference
 

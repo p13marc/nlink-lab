@@ -28,7 +28,8 @@ fn render_lab(out: &mut String, lab: &LabConfig) {
         || lab.prefix.is_some()
         || lab.version.is_some()
         || lab.author.is_some()
-        || !lab.tags.is_empty();
+        || !lab.tags.is_empty()
+        || lab.mgmt_subnet.is_some();
 
     if has_block {
         out.push_str(" {\n");
@@ -47,6 +48,9 @@ fn render_lab(out: &mut String, lab: &LabConfig) {
         if !lab.tags.is_empty() {
             let tags: Vec<_> = lab.tags.iter().map(|t| t.as_str()).collect();
             writeln!(out, "  tags [{}]", tags.join(", ")).unwrap();
+        }
+        if let Some(mgmt) = &lab.mgmt_subnet {
+            writeln!(out, "  mgmt {mgmt}").unwrap();
         }
         out.push_str("}\n");
     }

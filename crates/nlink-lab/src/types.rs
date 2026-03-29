@@ -104,6 +104,10 @@ pub struct LabConfig {
     /// Tags for categorization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+
+    /// Management network subnet (auto-creates OOB bridge connecting all nodes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mgmt_subnet: Option<String>,
 }
 
 impl LabConfig {

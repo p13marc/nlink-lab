@@ -4,7 +4,15 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-None.
+| Plan | Description | Priority | Effort |
+|------|-------------|----------|--------|
+| [095](095-container-core.md) | Container core: resource limits, capabilities, properties | High | 2-3 days |
+| [096](096-container-lifecycle.md) | Container lifecycle: health checks, config injection, dependencies | Medium | 3-4 days |
+
+### Recommended Order
+
+1. **095 — Container Core** — resource limits + capabilities (breaking: removes --privileged default)
+2. **096 — Container Lifecycle** — depends on 095 for property plumbing pattern
 
 ## Completed
 

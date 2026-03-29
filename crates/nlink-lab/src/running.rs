@@ -258,9 +258,8 @@ impl RunningLab {
 
         // Diagnose bare namespace nodes
         for (node_name, ns_name) in &self.namespace_names {
-            if let Some(filter) = node {
-                if node_name != filter { continue; }
-            }
+            if let Some(filter) = node
+                && node_name != filter { continue; }
             let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
                 Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
             })?;
@@ -277,9 +276,8 @@ impl RunningLab {
 
         // Diagnose container nodes
         for (node_name, container) in &self.containers {
-            if let Some(filter) = node {
-                if node_name != filter { continue; }
-            }
+            if let Some(filter) = node
+                && node_name != filter { continue; }
             let conn: Connection<Route> = namespace::connection_for_pid(container.pid).map_err(|e| {
                 Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
             })?;
@@ -318,7 +316,7 @@ impl RunningLab {
 
         // 2. Remove containers
         if let Some(binary) = &self.runtime_binary {
-            for (_node_name, container) in &self.containers {
+            for container in self.containers.values() {
                 let _ = std::process::Command::new(binary)
                     .args(["rm", "-f", &container.id])
                     .stdout(std::process::Stdio::null())
@@ -328,22 +326,20 @@ impl RunningLab {
         }
 
         // 3. Delete namespaces
-        for (_node_name, ns_name) in &self.namespace_names {
-            if namespace::exists(ns_name) {
-                if let Err(e) = namespace::delete(ns_name) {
+        for ns_name in self.namespace_names.values() {
+            if namespace::exists(ns_name)
+                && let Err(e) = namespace::delete(ns_name) {
                     tracing::warn!("failed to delete namespace '{ns_name}': {e}");
                 }
-            }
         }
 
         // 4. Delete management namespace (bridges) if it exists
         if !self.topology.networks.is_empty() {
             let mgmt_ns = format!("{}-mgmt", self.topology.lab.prefix());
-            if namespace::exists(&mgmt_ns) {
-                if let Err(e) = namespace::delete(&mgmt_ns) {
+            if namespace::exists(&mgmt_ns)
+                && let Err(e) = namespace::delete(&mgmt_ns) {
                     tracing::warn!("failed to delete management namespace '{mgmt_ns}': {e}");
                 }
-            }
         }
 
         // 5. Remove state file

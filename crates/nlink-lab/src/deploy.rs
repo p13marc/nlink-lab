@@ -291,8 +291,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         })?;
                     }
                     // Apply PVID if not already covered by vlans list
-                    if let Some(pvid) = port_config.pvid {
-                        if !port_config.vlans.contains(&pvid) {
+                    if let Some(pvid) = port_config.pvid
+                        && !port_config.vlans.contains(&pvid) {
                             let vlan = BridgeVlanBuilder::new(pvid).dev(&peer_name).pvid().untagged();
                             mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
                                 Error::deploy_failed(format!(
@@ -300,7 +300,6 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                                 ))
                             })?;
                         }
-                    }
                 }
             }
         }
@@ -438,8 +437,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             }
 
             // Set MTU if specified
-            if let Some(mtu) = iface_config.mtu {
-                if iface_config.kind.is_some() && iface_config.kind != Some(InterfaceKind::Loopback) {
+            if let Some(mtu) = iface_config.mtu
+                && iface_config.kind.is_some() && iface_config.kind != Some(InterfaceKind::Loopback) {
                     // Only set MTU on interfaces we created (not lo)
                     conn.set_link_mtu(iface_name, mtu).await.map_err(|e| {
                         Error::deploy_failed(format!(
@@ -447,7 +446,6 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         ))
                     })?;
                 }
-            }
         }
     }
 
@@ -570,7 +568,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 10: Bring interfaces up ───────────────────────────────
     tracing::info!("step 10/18: bringing interfaces up");
-    for (node_name, _) in &topology.nodes {
+    for node_name in topology.nodes.keys() {
         let node_handle = &node_handles[node_name];
         let conn: Connection<Route> = node_handle.connection().map_err(|e| {
             Error::deploy_failed(format!("connection for '{node_name}': {e}"))
@@ -1106,57 +1104,50 @@ fn apply_match_expr(
 
     let expr = expr.trim();
 
-    if expr.starts_with("tcp dport ") {
-        if let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>() {
+    if expr.starts_with("tcp dport ")
+        && let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>() {
             return Ok(rule.match_tcp_dport(port));
         }
-    }
 
-    if expr.starts_with("tcp sport ") {
-        if let Ok(port) = expr.trim_start_matches("tcp sport ").trim().parse::<u16>() {
+    if expr.starts_with("tcp sport ")
+        && let Ok(port) = expr.trim_start_matches("tcp sport ").trim().parse::<u16>() {
             return Ok(rule.match_tcp_sport(port));
         }
-    }
 
-    if expr.starts_with("udp dport ") {
-        if let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>() {
+    if expr.starts_with("udp dport ")
+        && let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>() {
             return Ok(rule.match_udp_dport(port));
         }
-    }
 
-    if expr.starts_with("udp sport ") {
-        if let Ok(port) = expr.trim_start_matches("udp sport ").trim().parse::<u16>() {
+    if expr.starts_with("udp sport ")
+        && let Ok(port) = expr.trim_start_matches("udp sport ").trim().parse::<u16>() {
             return Ok(rule.match_udp_sport(port));
         }
-    }
 
-    if expr.starts_with("icmp type ") {
-        if let Ok(icmp_type) = expr.trim_start_matches("icmp type ").trim().parse::<u8>() {
+    if expr.starts_with("icmp type ")
+        && let Ok(icmp_type) = expr.trim_start_matches("icmp type ").trim().parse::<u8>() {
             return Ok(rule.match_icmp_type(icmp_type));
         }
-    }
 
-    if expr.starts_with("icmpv6 type ") {
-        if let Ok(icmp_type) = expr.trim_start_matches("icmpv6 type ").trim().parse::<u8>() {
+    if expr.starts_with("icmpv6 type ")
+        && let Ok(icmp_type) = expr.trim_start_matches("icmpv6 type ").trim().parse::<u8>() {
             return Ok(rule.match_icmpv6_type(icmp_type));
         }
-    }
 
-    if expr.starts_with("mark ") {
-        if let Ok(mark) = expr.trim_start_matches("mark ").trim().parse::<u32>() {
+    if expr.starts_with("mark ")
+        && let Ok(mark) = expr.trim_start_matches("mark ").trim().parse::<u32>() {
             return Ok(rule.match_mark(mark));
         }
-    }
 
     if expr.starts_with("ct state ") {
         let states = expr.trim_start_matches("ct state ").trim();
         let mut ct = CtState::empty();
         for state in states.split(',') {
             match state.trim() {
-                "established" => ct = ct | CtState::ESTABLISHED,
-                "related" => ct = ct | CtState::RELATED,
-                "new" => ct = ct | CtState::NEW,
-                "invalid" => ct = ct | CtState::INVALID,
+                "established" => ct |= CtState::ESTABLISHED,
+                "related" => ct |= CtState::RELATED,
+                "new" => ct |= CtState::NEW,
+                "invalid" => ct |= CtState::INVALID,
                 _ => {}
             }
         }
@@ -1191,7 +1182,7 @@ async fn add_route(
         None
     };
 
-    let is_v6 = gw.map_or(false, |ip| ip.is_ipv6())
+    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6())
         || (!is_default && dest.contains(':'));
 
     if is_v6 {
@@ -1276,7 +1267,7 @@ async fn add_route_with_table(
         None
     };
 
-    let is_v6 = gw.map_or(false, |ip| ip.is_ipv6())
+    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6())
         || (!is_default && dest.contains(':'));
 
     if is_v6 {
@@ -1385,13 +1376,11 @@ fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Opt
     for link in &topology.links {
         if let Some(addresses) = &link.addresses {
             for (i, ep_str) in link.endpoints.iter().enumerate() {
-                if let Some(ep) = EndpointRef::parse(ep_str) {
-                    if ep.node == peer_name {
-                        if let Ok((ip, _)) = parse_cidr(&addresses[i]) {
+                if let Some(ep) = EndpointRef::parse(ep_str)
+                    && ep.node == peer_name
+                        && let Ok((ip, _)) = parse_cidr(&addresses[i]) {
                             return Some(ip);
                         }
-                    }
-                }
             }
         }
     }
@@ -1440,13 +1429,11 @@ pub async fn apply_diff(
         })?;
 
         // Get a connection to the node's namespace (bare or container)
-        if let Ok(handle) = node_handle_for(running, &ep.node) {
-            if let Ok(conn) = handle.connection::<Route>() {
-                if let Err(e) = conn.del_link(&ep.iface).await {
+        if let Ok(handle) = node_handle_for(running, &ep.node)
+            && let Ok(conn) = handle.connection::<Route>()
+                && let Err(e) = conn.del_link(&ep.iface).await {
                     tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
                 }
-            }
-        }
     }
 
     // ── Phase 3: Remove nodes ──────────────────────────────────────
@@ -1458,23 +1445,20 @@ pub async fn apply_diff(
             }
         }
 
-        if let Some(ns_name) = running.namespace_names_mut().remove(node_name) {
-            if namespace::exists(&ns_name) {
-                if let Err(e) = namespace::delete(&ns_name) {
+        if let Some(ns_name) = running.namespace_names_mut().remove(node_name)
+            && namespace::exists(&ns_name)
+                && let Err(e) = namespace::delete(&ns_name) {
                     tracing::warn!("failed to delete namespace '{ns_name}': {e}");
                 }
-            }
-        }
         // Container removal
-        if let Some(container) = running.containers_mut().remove(node_name) {
-            if let Some(binary) = running.runtime_binary() {
+        if let Some(container) = running.containers_mut().remove(node_name)
+            && let Some(binary) = running.runtime_binary() {
                 let _ = std::process::Command::new(binary)
                     .args(["rm", "-f", &container.id])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status();
             }
-        }
     }
 
     // ── Phase 4: Add new nodes ─────────────────────────────────────

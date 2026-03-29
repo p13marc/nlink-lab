@@ -45,8 +45,8 @@ fn lower_with_base_dir(
                 }
             }
             ast::Statement::Pool(p) => {
-                if let Ok((ip, prefix)) = crate::helpers::parse_cidr(&p.base) {
-                    if let std::net::IpAddr::V4(v4) = ip {
+                if let Ok((ip, prefix)) = crate::helpers::parse_cidr(&p.base)
+                    && let std::net::IpAddr::V4(v4) = ip {
                         let base = u32::from(v4);
                         let pool_size = 1u32.checked_shl(32 - prefix as u32).unwrap_or(0);
                         ctx.pools.insert(p.name.clone(), PoolState {
@@ -56,7 +56,6 @@ fn lower_with_base_dir(
                             next_offset: 0,
                         });
                     }
-                }
             }
             _ => {}
         }
@@ -338,8 +337,8 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
     }
 
     // Resolve references in node routes and firewall rules
-    for (_, node) in &mut topology.nodes {
-        for (_, route) in &mut node.routes {
+    for node in topology.nodes.values_mut() {
+        for route in node.routes.values_mut() {
             if let Some(via) = &mut route.via {
                 *via = resolve_ref(via, &addr_map)?;
             }
@@ -360,23 +359,21 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
 fn warn_unresolved_refs(topology: &types::Topology) {
     for (node_name, node) in &topology.nodes {
         for (dest, route) in &node.routes {
-            if let Some(via) = &route.via {
-                if via.contains("${") {
+            if let Some(via) = &route.via
+                && via.contains("${") {
                     tracing::warn!(
                         "unresolved reference in route '{dest}' on '{node_name}': {via}"
                     );
                 }
-            }
         }
         if let Some(fw) = &node.firewall {
             for rule in &fw.rules {
-                if let Some(expr) = &rule.match_expr {
-                    if expr.contains("${") {
+                if let Some(expr) = &rule.match_expr
+                    && expr.contains("${") {
                         tracing::warn!(
                             "unresolved reference in firewall rule on '{node_name}': {expr}"
                         );
                     }
-                }
             }
         }
     }
@@ -570,11 +567,10 @@ fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
 
     // Arithmetic expression
     let tokens = tokenize_arith(expr, vars);
-    if !tokens.is_empty() {
-        if let Ok(val) = parse_arith_expr(&tokens, &mut 0) {
+    if !tokens.is_empty()
+        && let Ok(val) = parse_arith_expr(&tokens, &mut 0) {
             return val.to_string();
         }
-    }
 
     // Simple variable lookup
     vars.get(expr)
@@ -984,22 +980,20 @@ fn validate_stmt(stmt: &ast::Statement, ctx: &LowerCtx, errors: &mut Vec<String>
             }
         }
         ast::Statement::For(f) => {
-            if let ast::ForRange::IntRange { start, end } = &f.range {
-                if start > end {
+            if let ast::ForRange::IntRange { start, end } = &f.range
+                && start > end {
                     errors.push(format!(
                         "for loop '{}' has empty range {}..{}",
                         f.var, start, end
                     ));
                 }
-            }
-            if let ast::ForRange::List(items) = &f.range {
-                if items.is_empty() {
+            if let ast::ForRange::List(items) = &f.range
+                && items.is_empty() {
                     errors.push(format!(
                         "for loop '{}' has empty list",
                         f.var
                     ));
                 }
-            }
             for stmt in &f.body {
                 validate_stmt(stmt, ctx, errors);
             }

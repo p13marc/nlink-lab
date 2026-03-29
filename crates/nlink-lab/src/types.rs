@@ -561,11 +561,10 @@ impl Topology {
         let mut sysctls = HashMap::new();
 
         // Start with profile sysctls
-        if let Some(profile_name) = &node.profile {
-            if let Some(profile) = self.profiles.get(profile_name) {
+        if let Some(profile_name) = &node.profile
+            && let Some(profile) = self.profiles.get(profile_name) {
                 sysctls.extend(profile.sysctls.clone());
             }
-        }
 
         // Node-level sysctls override profile
         sysctls.extend(node.sysctls.clone());
@@ -578,11 +577,10 @@ impl Topology {
         if node.firewall.is_some() {
             return node.firewall.as_ref();
         }
-        if let Some(profile_name) = &node.profile {
-            if let Some(profile) = self.profiles.get(profile_name) {
+        if let Some(profile_name) = &node.profile
+            && let Some(profile) = self.profiles.get(profile_name) {
                 return profile.firewall.as_ref();
             }
-        }
         None
     }
 }

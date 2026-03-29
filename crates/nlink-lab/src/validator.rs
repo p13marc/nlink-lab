@@ -280,8 +280,8 @@ fn validate_cidrs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
         }
 
         // Network subnet
-        if let Some(subnet) = &network.subnet {
-            if let Err(e) = parse_cidr(subnet) {
+        if let Some(subnet) = &network.subnet
+            && let Err(e) = parse_cidr(subnet) {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "valid-cidr",
@@ -289,7 +289,6 @@ fn validate_cidrs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                     location: Some(format!("networks.{net_name}.subnet")),
                 });
             }
-        }
     }
 }
 
@@ -352,8 +351,8 @@ fn validate_endpoint_format(topology: &Topology, issues: &mut Vec<ValidationIssu
 fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (i, link) in topology.links.iter().enumerate() {
         for (j, ep_str) in link.endpoints.iter().enumerate() {
-            if let Some(ep) = EndpointRef::parse(ep_str) {
-                if !topology.nodes.contains_key(&ep.node) {
+            if let Some(ep) = EndpointRef::parse(ep_str)
+                && !topology.nodes.contains_key(&ep.node) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
                         rule: "dangling-node-ref",
@@ -361,13 +360,12 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
                         location: Some(format!("links[{i}].endpoints[{j}]")),
                     });
                 }
-            }
         }
     }
 
     for key in topology.impairments.keys() {
-        if let Some(ep) = EndpointRef::parse(key) {
-            if !topology.nodes.contains_key(&ep.node) {
+        if let Some(ep) = EndpointRef::parse(key)
+            && !topology.nodes.contains_key(&ep.node) {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "dangling-node-ref",
@@ -375,12 +373,11 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
                     location: Some(format!("impairments.\"{key}\"")),
                 });
             }
-        }
     }
 
     for key in topology.rate_limits.keys() {
-        if let Some(ep) = EndpointRef::parse(key) {
-            if !topology.nodes.contains_key(&ep.node) {
+        if let Some(ep) = EndpointRef::parse(key)
+            && !topology.nodes.contains_key(&ep.node) {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "dangling-node-ref",
@@ -388,13 +385,12 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
                     location: Some(format!("rate_limits.\"{key}\"")),
                 });
             }
-        }
     }
 
     for (net_name, network) in &topology.networks {
         for (k, member) in network.members.iter().enumerate() {
-            if let Some(ep) = EndpointRef::parse(member) {
-                if !topology.nodes.contains_key(&ep.node) {
+            if let Some(ep) = EndpointRef::parse(member)
+                && !topology.nodes.contains_key(&ep.node) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
                         rule: "dangling-node-ref",
@@ -402,7 +398,6 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
                         location: Some(format!("networks.{net_name}.members[{k}]")),
                     });
                 }
-            }
         }
 
         for port_name in network.ports.keys() {
@@ -421,8 +416,8 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
 /// Rule 4: Profile references must exist.
 fn validate_dangling_profile_refs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
-        if let Some(profile_name) = &node.profile {
-            if !topology.profiles.contains_key(profile_name) {
+        if let Some(profile_name) = &node.profile
+            && !topology.profiles.contains_key(profile_name) {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "dangling-profile-ref",
@@ -432,7 +427,6 @@ fn validate_dangling_profile_refs(topology: &Topology, issues: &mut Vec<Validati
                     location: Some(format!("nodes.{node_name}.profile")),
                 });
             }
-        }
     }
 }
 
@@ -529,8 +523,8 @@ fn validate_vlan_range(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                     });
                 }
             }
-            if let Some(pvid) = port.pvid {
-                if pvid == 0 || pvid > 4094 {
+            if let Some(pvid) = port.pvid
+                && (pvid == 0 || pvid > 4094) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
                         rule: "vlan-range",
@@ -540,7 +534,6 @@ fn validate_vlan_range(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                         )),
                     });
                 }
-            }
         }
     }
 }
@@ -552,9 +545,9 @@ fn validate_impairment_refs(
     issues: &mut Vec<ValidationIssue>,
 ) {
     for key in topology.impairments.keys() {
-        if let Some(ep) = EndpointRef::parse(key) {
-            if let Some(node_ifaces) = interfaces.get(&ep.node) {
-                if !node_ifaces.contains_key(&ep.iface) {
+        if let Some(ep) = EndpointRef::parse(key)
+            && let Some(node_ifaces) = interfaces.get(&ep.node)
+                && !node_ifaces.contains_key(&ep.iface) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
                         rule: "impairment-ref-valid",
@@ -565,9 +558,7 @@ fn validate_impairment_refs(
                         location: Some(format!("impairments.\"{key}\"")),
                     });
                 }
-            }
             // If node doesn't exist, dangling-node-ref will catch it
-        }
     }
 }
 
@@ -578,9 +569,9 @@ fn validate_rate_limit_refs(
     issues: &mut Vec<ValidationIssue>,
 ) {
     for key in topology.rate_limits.keys() {
-        if let Some(ep) = EndpointRef::parse(key) {
-            if let Some(node_ifaces) = interfaces.get(&ep.node) {
-                if !node_ifaces.contains_key(&ep.iface) {
+        if let Some(ep) = EndpointRef::parse(key)
+            && let Some(node_ifaces) = interfaces.get(&ep.node)
+                && !node_ifaces.contains_key(&ep.iface) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
                         rule: "rate-limit-ref-valid",
@@ -591,8 +582,6 @@ fn validate_rate_limit_refs(
                         location: Some(format!("rate_limits.\"{key}\"")),
                     });
                 }
-            }
-        }
     }
 }
 
@@ -619,7 +608,7 @@ fn validate_interface_name_length(
     issues: &mut Vec<ValidationIssue>,
 ) {
     for (node_name, ifaces) in interfaces {
-        for (iface_name, _) in ifaces {
+        for iface_name in ifaces.keys() {
             if iface_name.len() > 15 {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
@@ -766,11 +755,11 @@ fn validate_mtu_consistency(topology: &Topology, issues: &mut Vec<ValidationIssu
     for (i, link) in topology.links.iter().enumerate() {
         if let Some(link_mtu) = link.mtu {
             for (j, ep_str) in link.endpoints.iter().enumerate() {
-                if let Some(ep) = EndpointRef::parse(ep_str) {
-                    if let Some(node) = topology.nodes.get(&ep.node) {
-                        if let Some(iface) = node.interfaces.get(&ep.iface) {
-                            if let Some(iface_mtu) = iface.mtu {
-                                if iface_mtu != link_mtu {
+                if let Some(ep) = EndpointRef::parse(ep_str)
+                    && let Some(node) = topology.nodes.get(&ep.node)
+                        && let Some(iface) = node.interfaces.get(&ep.iface)
+                            && let Some(iface_mtu) = iface.mtu
+                                && iface_mtu != link_mtu {
                                     issues.push(ValidationIssue {
                                         severity: Severity::Warning,
                                         rule: "mtu-consistency",
@@ -780,10 +769,6 @@ fn validate_mtu_consistency(topology: &Topology, issues: &mut Vec<ValidationIssu
                                         location: Some(format!("links[{i}].endpoints[{j}]")),
                                     });
                                 }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -804,13 +789,11 @@ fn validate_route_reachability(
         for link in &topology.links {
             if let Some(addresses) = &link.addresses {
                 for (j, ep_str) in link.endpoints.iter().enumerate() {
-                    if let Some(ep) = EndpointRef::parse(ep_str) {
-                        if ep.node == *node_name {
-                            if let Ok((ip, prefix)) = parse_cidr(&addresses[j]) {
+                    if let Some(ep) = EndpointRef::parse(ep_str)
+                        && ep.node == *node_name
+                            && let Ok((ip, prefix)) = parse_cidr(&addresses[j]) {
                                 subnets.push((ip, prefix));
                             }
-                        }
-                    }
                 }
             }
         }
@@ -826,8 +809,8 @@ fn validate_route_reachability(
 
         // Check each route's gateway
         for (dest, route) in &node.routes {
-            if let Some(via_str) = &route.via {
-                if let Ok(gw) = via_str.parse::<std::net::IpAddr>() {
+            if let Some(via_str) = &route.via
+                && let Ok(gw) = via_str.parse::<std::net::IpAddr>() {
                     let reachable = subnets.iter().any(|(net, prefix)| {
                         ip_in_subnet(gw, *net, *prefix)
                     });
@@ -842,7 +825,6 @@ fn validate_route_reachability(
                         });
                     }
                 }
-            }
         }
     }
 }
@@ -947,8 +929,8 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                     });
                 }
             }
-        } else if let Some(image) = &node.image {
-            if image.is_empty() {
+        } else if let Some(image) = &node.image
+            && image.is_empty() {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "empty-image",
@@ -956,7 +938,6 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                     location: Some(format!("nodes.{node_name}.image")),
                 });
             }
-        }
     }
 
     // Validate depends-on references

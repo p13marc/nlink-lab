@@ -178,17 +178,15 @@ pub fn list() -> Result<Vec<LabInfo>> {
         if entry.file_type()?.is_dir() {
             let name = entry.file_name().to_string_lossy().into_owned();
             let state_path = entry.path().join("state.json");
-            if state_path.exists() {
-                if let Ok(json) = std::fs::read_to_string(&state_path) {
-                    if let Ok(state) = serde_json::from_str::<LabState>(&json) {
+            if state_path.exists()
+                && let Ok(json) = std::fs::read_to_string(&state_path)
+                    && let Ok(state) = serde_json::from_str::<LabState>(&json) {
                         labs.push(LabInfo {
                             name: name.clone(),
                             node_count: state.namespaces.len(),
                             created_at: state.created_at.clone(),
                         });
                     }
-                }
-            }
         }
     }
 

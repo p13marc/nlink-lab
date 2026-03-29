@@ -78,8 +78,8 @@ pub fn extract_span(msg: &str, source: &str) -> (usize, usize) {
         let after_line = &msg[line_start + 5..];
         if let Some(comma) = after_line.find(',') {
             let line_str = &after_line[..comma];
-            if let Ok(line) = line_str.parse::<usize>() {
-                if let Some(col_start) = after_line.find("column ") {
+            if let Ok(line) = line_str.parse::<usize>()
+                && let Some(col_start) = after_line.find("column ") {
                     let after_col = &after_line[col_start + 7..];
                     let col_str: String =
                         after_col.chars().take_while(|c| c.is_ascii_digit()).collect();
@@ -94,7 +94,6 @@ pub fn extract_span(msg: &str, source: &str) -> (usize, usize) {
                         }
                     }
                 }
-            }
         }
     }
 

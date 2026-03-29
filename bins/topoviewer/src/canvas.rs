@@ -170,8 +170,8 @@ impl canvas::Program<Message> for TopoViewer {
                 let path = Path::line(center_a, center_b);
                 frame.stroke(&path, Stroke::default().with_color(link_color).with_width(2.0));
 
-                if self.show_addresses {
-                    if let Some(addresses) = &link.addresses {
+                if self.show_addresses
+                    && let Some(addresses) = &link.addresses {
                         let mid = Point::new(
                             (center_a.x + center_b.x) / 2.0,
                             (center_a.y + center_b.y) / 2.0 - 10.0,
@@ -185,7 +185,6 @@ impl canvas::Program<Message> for TopoViewer {
                             ..Default::default()
                         });
                     }
-                }
             }
         }
 
@@ -234,9 +233,9 @@ impl canvas::Program<Message> for TopoViewer {
             });
 
             // Issue badge
-            if self.show_metrics {
-                if let Some(nm) = self.metrics.get(name.as_str()) {
-                    if !nm.issues.is_empty() {
+            if self.show_metrics
+                && let Some(nm) = self.metrics.get(name.as_str())
+                    && !nm.issues.is_empty() {
                         let badge_pos = Point::new(pos.x + NODE_WIDTH - 16.0, pos.y - 6.0);
                         let badge = Path::circle(badge_pos, 10.0);
                         frame.fill(&badge, Color::from_rgb(0.9, 0.2, 0.2));
@@ -248,8 +247,6 @@ impl canvas::Program<Message> for TopoViewer {
                             ..Default::default()
                         });
                     }
-                }
-            }
         }
 
         vec![frame.into_geometry()]

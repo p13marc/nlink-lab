@@ -246,11 +246,10 @@ impl TopoViewer {
                 self.canvas_cache.clear();
             }
             Message::TopologyReceived(update) => {
-                if self.active_lab().is_some_and(|lab| lab == &update.lab_name) {
-                    if let Ok(topo) = serde_json::from_str::<Topology>(&update.topology_json) {
+                if self.active_lab().is_some_and(|lab| lab == &update.lab_name)
+                    && let Ok(topo) = serde_json::from_str::<Topology>(&update.topology_json) {
                         self.load_topology(topo);
                     }
-                }
             }
             Message::ZenohReady(session) => {
                 self.zenoh_session = Some(session);
@@ -271,8 +270,7 @@ impl TopoViewer {
                 let lab = self.active_lab().cloned();
                 if let (Some(node), Some(session), Some(lab)) =
                     (&self.selected_node, &self.zenoh_session, lab)
-                {
-                    if !self.exec_input.trim().is_empty() {
+                    && !self.exec_input.trim().is_empty() {
                         self.exec_running = true;
                         self.exec_output = None;
                         let session = session.clone();
@@ -283,7 +281,6 @@ impl TopoViewer {
                             Message::ExecResult,
                         );
                     }
-                }
             }
             Message::ExecResult(result) => {
                 self.exec_running = false;
@@ -409,8 +406,8 @@ impl TopoViewer {
         if let Some(ref name) = self.selected_node {
             col = col.push(text(format!("Node: {name}")).size(16));
 
-            if let Some(ref topo) = self.topology {
-                if let Some(node) = topo.nodes.get(name) {
+            if let Some(ref topo) = self.topology
+                && let Some(node) = topo.nodes.get(name) {
                     if node.image.is_some() {
                         col = col.push(text("  (container)").size(11));
                     }
@@ -451,7 +448,6 @@ impl TopoViewer {
                         }
                     }
                 }
-            }
 
             // Exec panel (live mode only)
             if self.is_live() {

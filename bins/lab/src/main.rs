@@ -599,7 +599,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 } else if labs.is_empty() {
                     println!("No running labs.");
                 } else {
-                    println!("{:<18} {:<6} {}", "NAME", "NODES", "CREATED");
+                    println!("{:<18} {:<6} CREATED", "NAME", "NODES");
                     for info in labs {
                         println!(
                             "{:<18} {:<6} {}",
@@ -619,7 +619,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     println!("Nodes: {}  Links: {}  Impairments: {}",
                         lab.namespace_count(), topo.links.len(), topo.impairments.len());
                     println!();
-                    println!("  {:<20} {:<12} {}", "NODE", "TYPE", "IMAGE");
+                    println!("  {:<20} {:<12} IMAGE", "NODE", "TYPE");
                     let mut names: Vec<&String> = topo.nodes.keys().collect();
                     names.sort();
                     for name in names {
@@ -785,7 +785,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             } else if procs.is_empty() {
                 println!("No tracked processes.");
             } else {
-                println!("{:<12} {:<8} {}", "NODE", "PID", "STATUS");
+                println!("{:<12} {:<8} STATUS", "NODE", "PID");
                 for p in &procs {
                     let status = if p.alive { "running" } else { "dead" };
                     println!("{:<12} {:<8} {}", p.node, p.pid, status);
@@ -1011,13 +1011,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                                 let mut node_names: Vec<&String> = snapshot.nodes.keys().collect();
                                 node_names.sort();
                                 for node_name in node_names {
-                                    if let Some(filter) = &node {
-                                        if node_name != filter { continue; }
-                                    }
+                                    if let Some(filter) = &node
+                                        && node_name != filter { continue; }
                                     let metrics = &snapshot.nodes[node_name];
                                     for iface in &metrics.interfaces {
                                         let errors = iface.rx_errors + iface.tx_errors;
-                                        let drops = iface.rx_dropped + iface.tx_dropped + iface.tc_drops as u64;
+                                        let drops = iface.rx_dropped + iface.tx_dropped + iface.tc_drops;
                                         let drop_warn = if drops > 0 { " !" } else { "" };
                                         println!(
                                             "{:<12} {:<10} {:<6} {:>12} {:>12} {:>8} {:>7}{}",
@@ -1037,11 +1036,10 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                                 }
                             }
 
-                            if let Some(max) = count {
-                                if samples >= max {
+                            if let Some(max) = count
+                                && samples >= max {
                                     break;
                                 }
-                            }
                         }
                     }
                     _ = tokio::signal::ctrl_c() => {
@@ -1061,7 +1059,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             force,
         } => {
             if list || template.is_none() {
-                println!("{:<15} {:<5} {:<5} {}", "TEMPLATE", "NODES", "LINKS", "DESCRIPTION");
+                println!("{:<15} {:<5} {:<5} DESCRIPTION", "TEMPLATE", "NODES", "LINKS");
                 println!("{}", "─".repeat(70));
                 for t in nlink_lab::templates::list() {
                     println!(
@@ -1191,7 +1189,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 }).collect();
                 println!("{}", serde_json::to_string_pretty(&data)?);
             } else {
-                println!("  {:<16} {:<20} {:<14} {}", "NODE", "IMAGE", "CONTAINER ID", "PID");
+                println!("  {:<16} {:<20} {:<14} PID", "NODE", "IMAGE", "CONTAINER ID");
                 let mut entries: Vec<_> = containers.iter().collect();
                 entries.sort_by_key(|(name, _)| (*name).clone());
                 for (name, state) in entries {
@@ -1389,8 +1387,8 @@ async fn run_daemon_inline(lab: &nlink_lab::RunningLab) -> nlink_lab::Result<()>
                 }
             }
             Ok(query) = exec_queryable.recv_async() => {
-                if let Some(payload) = query.payload() {
-                    if let Ok(req) = serde_json::from_slice::<ExecRequest>(&payload.to_bytes()) {
+                if let Some(payload) = query.payload()
+                    && let Ok(req) = serde_json::from_slice::<ExecRequest>(&payload.to_bytes()) {
                         let args: Vec<&str> = req.args.iter().map(|s| s.as_str()).collect();
                         let resp = match lab.exec(&req.node, &req.cmd, &args) {
                             Ok(output) => ExecResponse {
@@ -1410,7 +1408,6 @@ async fn run_daemon_inline(lab: &nlink_lab::RunningLab) -> nlink_lab::Result<()>
                             let _ = query.reply(topics::rpc_exec(&lab_name), json).await;
                         }
                     }
-                }
             }
             Ok(query) = status_queryable.recv_async() => {
                 let resp = StatusResponse {

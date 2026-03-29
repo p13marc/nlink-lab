@@ -167,29 +167,26 @@ async fn run(
                     Ok((snapshot, events)) => {
                         // Publish events
                         for event in &events {
-                            if let Ok(json) = serde_json::to_vec(event) {
-                                if let Err(e) = events_publisher.put(json).await {
+                            if let Ok(json) = serde_json::to_vec(event)
+                                && let Err(e) = events_publisher.put(json).await {
                                     warn!("publish event: {e}");
                                 }
-                            }
                         }
                         // Publish per-interface metrics
                         for (node_name, node_metrics) in &snapshot.nodes {
                             for iface in &node_metrics.interfaces {
                                 let topic = topics::metrics_iface(&lab_name, node_name, &iface.name);
-                                if let Ok(json) = serde_json::to_vec(iface) {
-                                    if let Err(e) = session.put(&topic, json).await {
+                                if let Ok(json) = serde_json::to_vec(iface)
+                                    && let Err(e) = session.put(&topic, json).await {
                                         warn!("publish iface metrics {topic}: {e}");
                                     }
-                                }
                             }
                         }
                         // Publish full snapshot
-                        if let Ok(json) = serde_json::to_vec(&snapshot) {
-                            if let Err(e) = snapshot_publisher.put(json).await {
+                        if let Ok(json) = serde_json::to_vec(&snapshot)
+                            && let Err(e) = snapshot_publisher.put(json).await {
                                 warn!("publish metrics: {e}");
                             }
-                        }
                     }
                     Err(e) => warn!("metrics collection: {e}"),
                 }
@@ -205,11 +202,10 @@ async fn run(
                     pid_count: lab.process_status().len(),
                     uptime_secs: start_time.elapsed().as_secs(),
                 };
-                if let Ok(json) = serde_json::to_vec(&status) {
-                    if let Err(e) = health_publisher.put(json).await {
+                if let Ok(json) = serde_json::to_vec(&status)
+                    && let Err(e) = health_publisher.put(json).await {
                         warn!("publish health: {e}");
                     }
-                }
             }
 
             Ok(query) = exec_queryable.recv_async() => {
@@ -229,11 +225,10 @@ async fn run(
                     uptime_secs: start_time.elapsed().as_secs(),
                     nodes: lab.node_names().map(|s| s.to_string()).collect(),
                 };
-                if let Ok(json) = serde_json::to_string(&status) {
-                    if let Err(e) = query.reply(topics::rpc_status(&lab_name), json).await {
+                if let Ok(json) = serde_json::to_string(&status)
+                    && let Err(e) = query.reply(topics::rpc_status(&lab_name), json).await {
                         warn!("reply status: {e}");
                     }
-                }
             }
 
             _ = tokio::signal::ctrl_c() => {

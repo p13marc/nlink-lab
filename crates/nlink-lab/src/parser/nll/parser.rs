@@ -131,6 +131,12 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Volumes => Some("volumes".into()),
         Token::Runtime => Some("runtime".into()),
         Token::Parent => Some("parent".into()),
+        Token::Src => Some("src".into()),
+        Token::Dst => Some("dst".into()),
+        Token::Defaults => Some("defaults".into()),
+        Token::Version => Some("version".into()),
+        Token::Author => Some("author".into()),
+        Token::Tags => Some("tags".into()),
         _ => None,
     }
 }
@@ -390,10 +396,14 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     expect(tokens, pos, &Token::Node)?;
     let name = parse_name(tokens, pos)?;
 
-    let profile = if eat(tokens, pos, &Token::Colon) {
-        Some(expect_ident(tokens, pos)?)
+    let profiles = if eat(tokens, pos, &Token::Colon) {
+        let mut profiles = vec![parse_name(tokens, pos)?];
+        while eat(tokens, pos, &Token::Comma) {
+            profiles.push(parse_name(tokens, pos)?);
+        }
+        profiles
     } else {
-        None
+        vec![]
     };
 
     // Parse inline image/cmd before the block
@@ -453,7 +463,7 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
 
     Ok(ast::NodeDef {
         name,
-        profile,
+        profiles,
         image,
         cmd,
         env,
@@ -711,96 +721,100 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
 }
 
 fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
-    let mut expr = String::new();
+    let mut parts: Vec<String> = Vec::new();
+    let mut matched = false;
 
-    match at(tokens, *pos) {
-        Some(Token::Ct) => {
-            *pos += 1;
-            expr.push_str("ct state ");
-            // Parse comma-separated state list
-            let state = parse_name(tokens, pos)?;
-            expr.push_str(&state);
-            while eat(tokens, pos, &Token::Comma) {
-                let state = parse_name(tokens, pos)?;
-                expr.push(',');
-                expr.push_str(&state);
+    // Parse match components — src/dst can appear before or after protocol matches
+    loop {
+        match at(tokens, *pos) {
+            Some(Token::Src) => {
+                *pos += 1;
+                let addr = parse_cidr_or_name(tokens, pos)?;
+                let family = if addr.contains(':') { "ip6" } else { "ip" };
+                parts.insert(0, format!("{family} saddr {addr}")); // saddr first in nftables order
+                matched = true;
             }
-        }
-        Some(Token::Tcp) => {
-            *pos += 1;
-            expr.push_str("tcp ");
-            match at(tokens, *pos) {
-                Some(Token::Dport) => {
-                    *pos += 1;
-                    expr.push_str("dport ");
+            Some(Token::Dst) => {
+                *pos += 1;
+                let addr = parse_cidr_or_name(tokens, pos)?;
+                let family = if addr.contains(':') { "ip6" } else { "ip" };
+                // Insert after saddr if present, otherwise at start
+                let insert_pos = parts.iter().position(|p| !p.contains("saddr")).unwrap_or(parts.len());
+                parts.insert(insert_pos, format!("{family} daddr {addr}"));
+                matched = true;
+            }
+            Some(Token::Ct) => {
+                *pos += 1;
+                let mut ct = "ct state ".to_string();
+                let state = parse_name(tokens, pos)?;
+                ct.push_str(&state);
+                while eat(tokens, pos, &Token::Comma) {
+                    let state = parse_name(tokens, pos)?;
+                    ct.push(',');
+                    ct.push_str(&state);
                 }
-                Some(Token::Sport) => {
-                    *pos += 1;
-                    expr.push_str("sport ");
-                }
-                other => {
-                    return Err(err(tokens, *pos, format!(
+                parts.push(ct);
+                matched = true;
+            }
+            Some(Token::Tcp) => {
+                *pos += 1;
+                let dir = match at(tokens, *pos) {
+                    Some(Token::Dport) => { *pos += 1; "dport" }
+                    Some(Token::Sport) => { *pos += 1; "sport" }
+                    other => return Err(err(tokens, *pos, format!(
                         "expected 'dport' or 'sport' after 'tcp', found {}",
                         other.map_or("end of input".to_string(), |t| t.to_string())
-                    )));
-                }
+                    ))),
+                };
+                let port = expect_int(tokens, pos)?;
+                parts.push(format!("tcp {dir} {port}"));
+                matched = true;
             }
-            let port = expect_int(tokens, pos)?;
-            expr.push_str(&port.to_string());
-        }
-        Some(Token::Udp) => {
-            *pos += 1;
-            expr.push_str("udp ");
-            match at(tokens, *pos) {
-                Some(Token::Dport) => {
-                    *pos += 1;
-                    expr.push_str("dport ");
-                }
-                Some(Token::Sport) => {
-                    *pos += 1;
-                    expr.push_str("sport ");
-                }
-                other => {
-                    return Err(err(tokens, *pos, format!(
+            Some(Token::Udp) => {
+                *pos += 1;
+                let dir = match at(tokens, *pos) {
+                    Some(Token::Dport) => { *pos += 1; "dport" }
+                    Some(Token::Sport) => { *pos += 1; "sport" }
+                    other => return Err(err(tokens, *pos, format!(
                         "expected 'dport' or 'sport' after 'udp', found {}",
                         other.map_or("end of input".to_string(), |t| t.to_string())
-                    )));
-                }
+                    ))),
+                };
+                let port = expect_int(tokens, pos)?;
+                parts.push(format!("udp {dir} {port}"));
+                matched = true;
             }
-            let port = expect_int(tokens, pos)?;
-            expr.push_str(&port.to_string());
-        }
-        Some(Token::Icmp) => {
-            *pos += 1;
-            expr.push_str("icmp type ");
-            let icmp_type = expect_int(tokens, pos)?;
-            expr.push_str(&icmp_type.to_string());
-        }
-        Some(Token::Icmpv6) => {
-            *pos += 1;
-            expr.push_str("icmpv6 type ");
-            let icmp_type = expect_int(tokens, pos)?;
-            expr.push_str(&icmp_type.to_string());
-        }
-        Some(Token::Mark) => {
-            *pos += 1;
-            expr.push_str("mark ");
-            let mark = expect_int(tokens, pos)?;
-            expr.push_str(&mark.to_string());
-        }
-        Some(other) => {
-            return Err(err(tokens, *pos, format!(
-                "expected match expression (ct/tcp/udp/icmp/icmpv6/mark), found {other}"
-            )));
-        }
-        None => {
-            return Err(err(tokens, *pos, 
-                "unexpected end of input in firewall rule".into(),
-            ));
+            Some(Token::Icmp) => {
+                *pos += 1;
+                let icmp_type = expect_int(tokens, pos)?;
+                parts.push(format!("icmp type {icmp_type}"));
+                matched = true;
+            }
+            Some(Token::Icmpv6) => {
+                *pos += 1;
+                let icmp_type = expect_int(tokens, pos)?;
+                parts.push(format!("icmpv6 type {icmp_type}"));
+                matched = true;
+            }
+            Some(Token::Mark) => {
+                *pos += 1;
+                let mark = expect_int(tokens, pos)?;
+                parts.push(format!("mark {mark}"));
+                matched = true;
+            }
+            _ => break,
         }
     }
 
-    Ok(expr)
+    if !matched {
+        let tok = at(tokens, *pos);
+        return Err(err(tokens, *pos, format!(
+            "expected match expression (ct/tcp/udp/icmp/icmpv6/mark/src/dst), found {}",
+            tok.map_or("end of input".to_string(), |t| t.to_string())
+        )));
+    }
+
+    Ok(parts.join(" "))
 }
 
 // ─── VRF ──────────────────────────────────────────────────
@@ -1570,7 +1584,7 @@ node host"#);
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.name, "host");
-                assert!(n.profile.is_none());
+                assert!(n.profiles.is_empty());
                 assert!(n.props.is_empty());
             }
             _ => panic!("expected Node"),
@@ -1584,7 +1598,7 @@ node r1 : router"#);
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.name, "r1");
-                assert_eq!(n.profile.as_deref(), Some("router"));
+                assert_eq!(n.profiles, vec!["router"]);
             }
             _ => panic!("expected Node"),
         }
@@ -1765,6 +1779,36 @@ node server {
                     assert_eq!(fw.rules[0].action, "accept");
                     assert_eq!(fw.rules[0].match_expr, "ct state established,related");
                     assert_eq!(fw.rules[1].match_expr, "tcp dport 80");
+                }
+                _ => panic!("expected Firewall"),
+            },
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_firewall_src_dst() {
+        let ast = parse_nll(
+            r#"lab "t"
+node server {
+  firewall policy drop {
+    accept tcp dport 443
+    accept tcp dport 80 src 10.0.0.0/8
+    drop src 192.168.0.0/16
+    accept dst 10.0.0.1/32
+    accept src fd00::/64 tcp dport 22
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => match &n.props[0] {
+                ast::NodeProp::Firewall(fw) => {
+                    assert_eq!(fw.rules.len(), 5);
+                    assert_eq!(fw.rules[0].match_expr, "tcp dport 443");
+                    assert_eq!(fw.rules[1].match_expr, "ip saddr 10.0.0.0/8 tcp dport 80");
+                    assert_eq!(fw.rules[2].match_expr, "ip saddr 192.168.0.0/16");
+                    assert_eq!(fw.rules[3].match_expr, "ip daddr 10.0.0.1/32");
+                    assert_eq!(fw.rules[4].match_expr, "ip6 saddr fd00::/64 tcp dport 22");
                 }
                 _ => panic!("expected Firewall"),
             },

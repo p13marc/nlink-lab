@@ -550,7 +550,7 @@ fn io(s: &Option<String>, vars: &HashMap<String, String>) -> Option<String> {
 fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::NodeDef {
     ast::NodeDef {
         name: i(&n.name, vars),
-        profile: n.profile.clone(),
+        profiles: n.profiles.iter().map(|s| i(s, vars)).collect(),
         image: n.image.as_ref().map(|s| i(s, vars)),
         cmd: n.cmd.clone(),
         env: n.env.iter().map(|s| i(s, vars)).collect(),
@@ -709,8 +709,8 @@ fn validate_ast(file: &ast::File, ctx: &LowerCtx) -> Result<()> {
 fn validate_stmt(stmt: &ast::Statement, ctx: &LowerCtx, errors: &mut Vec<String>) {
     match stmt {
         ast::Statement::Node(n) => {
-            // Check profile exists
-            if let Some(ref profile) = n.profile {
+            // Check all profiles exist
+            for profile in &n.profiles {
                 if !ctx.profiles.contains_key(profile) {
                     errors.push(format!(
                         "node '{}' references undefined profile '{profile}'",
@@ -801,7 +801,7 @@ fn lower_node(
     ctx: &LowerCtx,
 ) -> Result<()> {
     let mut n = types::Node {
-        profile: node.profile.clone(),
+        profile: node.profiles.first().cloned(),
         image: node.image.clone(),
         cmd: node.cmd.clone(),
         ..Default::default()
@@ -820,8 +820,8 @@ fn lower_node(
         n.volumes = Some(node.volumes.clone());
     }
 
-    // Apply profile properties first
-    if let Some(profile_name) = &node.profile {
+    // Apply profiles in order (later profiles override earlier ones)
+    for profile_name in &node.profiles {
         if let Some(profile) = ctx.profiles.get(profile_name) {
             apply_node_props(&mut n, &profile.props);
         }
@@ -1167,6 +1167,32 @@ node r2 : router { forward ipv6 }"#,
             topo.nodes["r2"].sysctls["net.ipv6.conf.all.forwarding"],
             "1"
         );
+    }
+
+    #[test]
+    fn test_multi_profile_inheritance() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+profile router { forward ipv4 }
+profile monitored { sysctl "net.core.rmem_max" "16777216" }
+node r1 : router, monitored"#,
+        );
+        // Gets forwarding from router profile
+        assert_eq!(topo.nodes["r1"].sysctls["net.ipv4.ip_forward"], "1");
+        // Gets sysctl from monitored profile
+        assert_eq!(topo.nodes["r1"].sysctls["net.core.rmem_max"], "16777216");
+    }
+
+    #[test]
+    fn test_multi_profile_override() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+profile base { sysctl "net.core.rmem_max" "1000" }
+profile override { sysctl "net.core.rmem_max" "9999" }
+node r1 : base, override"#,
+        );
+        // Later profile wins for conflicting keys
+        assert_eq!(topo.nodes["r1"].sysctls["net.core.rmem_max"], "9999");
     }
 
     #[test]

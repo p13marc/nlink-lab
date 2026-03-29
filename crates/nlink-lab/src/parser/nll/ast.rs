@@ -72,7 +72,7 @@ pub struct ProfileDef {
 #[derive(Debug, Clone)]
 pub struct NodeDef {
     pub name: String,
-    pub profile: Option<String>,
+    pub profiles: Vec<String>,
     pub image: Option<String>,
     pub cmd: Option<Vec<String>>,
     pub env: Vec<String>,

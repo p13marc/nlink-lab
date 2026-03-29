@@ -712,6 +712,14 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
         labels: n.labels.iter().map(|s| i(s, vars)).collect(),
         pull: n.pull.clone(),
         container_exec: n.container_exec.iter().map(|s| i(s, vars)).collect(),
+        healthcheck: io(&n.healthcheck, vars),
+        healthcheck_interval: n.healthcheck_interval.clone(),
+        healthcheck_timeout: n.healthcheck_timeout.clone(),
+        startup_delay: n.startup_delay.clone(),
+        env_file: io(&n.env_file, vars),
+        configs: n.configs.iter().map(|(h, c)| (i(h, vars), i(c, vars))).collect(),
+        overlay: io(&n.overlay, vars),
+        depends_on: n.depends_on.iter().map(|s| i(s, vars)).collect(),
         props: n.props.iter().map(|p| interpolate_prop(p, vars)).collect(),
     }
 }
@@ -972,6 +980,14 @@ fn lower_node(
         labels: node.labels.clone(),
         pull: node.pull.clone(),
         container_exec: node.container_exec.clone(),
+        healthcheck: node.healthcheck.clone(),
+        healthcheck_interval: node.healthcheck_interval.clone(),
+        healthcheck_timeout: node.healthcheck_timeout.clone(),
+        startup_delay: node.startup_delay.clone(),
+        env_file: node.env_file.clone(),
+        configs: node.configs.clone(),
+        overlay: node.overlay.clone(),
+        depends_on: node.depends_on.clone(),
         ..Default::default()
     };
 

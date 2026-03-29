@@ -63,6 +63,18 @@ pub enum Token {
     Memory,
     #[token("exec")]
     Exec,
+    #[token("healthcheck")]
+    Healthcheck,
+    #[token("startup-delay")]
+    StartupDelay,
+    #[token("env-file")]
+    EnvFile,
+    #[token("config")]
+    Config,
+    #[token("overlay")]
+    Overlay,
+    #[token("depends-on")]
+    DependsOn,
     #[token("version")]
     Version,
     #[token("author")]

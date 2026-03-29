@@ -175,6 +175,38 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub container_exec: Vec<String>,
 
+    /// Health check command (executed inside container).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthcheck: Option<String>,
+
+    /// Health check polling interval.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthcheck_interval: Option<String>,
+
+    /// Health check timeout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthcheck_timeout: Option<String>,
+
+    /// Startup delay before proceeding with deployment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub startup_delay: Option<String>,
+
+    /// Environment variables file path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env_file: Option<String>,
+
+    /// Config file mounts: (host_path, container_path).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub configs: Vec<(String, String)>,
+
+    /// Overlay directory (Kathara-style, mirrors into container root).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay: Option<String>,
+
+    /// Nodes this node depends on (deployed after dependencies are healthy).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+
     /// Sysctl values (merged with profile).
     #[serde(default)]
     pub sysctls: HashMap<String, String>,

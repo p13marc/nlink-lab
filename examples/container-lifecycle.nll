@@ -1,0 +1,35 @@
+# Container lifecycle topology.
+#
+# Demonstrates health checks, startup delays, config injection,
+# env files, and dependency ordering between containers.
+
+lab "container-lifecycle" {
+    description "Container nodes with lifecycle management"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+    image "alpine:latest"
+    cmd ["sleep", "infinity"]
+}
+
+/* Database: starts first, has health check */
+node db image "postgres:16" {
+    env ["POSTGRES_PASSWORD=secret"]
+    cpu "1"
+    memory "512m"
+    healthcheck "pg_isready -U postgres"
+    startup-delay 3s
+}
+
+/* App: depends on database */
+node app image "python:3-slim" {
+    cmd ["python", "-m", "http.server", "8080"]
+    workdir "/app"
+    depends-on [db]
+    exec "pip install psycopg2-binary"
+}
+
+link router:eth0 -- db:eth0 { 10.0.1.0/24 }
+link router:eth1 -- app:eth0 { 10.0.2.0/24 }

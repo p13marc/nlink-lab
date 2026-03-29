@@ -171,6 +171,12 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Pull => Some("pull".into()),
         Token::Memory => Some("memory".into()),
         Token::Exec => Some("exec".into()),
+        Token::Healthcheck => Some("healthcheck".into()),
+        Token::StartupDelay => Some("startup-delay".into()),
+        Token::EnvFile => Some("env-file".into()),
+        Token::Config => Some("config".into()),
+        Token::Overlay => Some("overlay".into()),
+        Token::DependsOn => Some("depends-on".into()),
         _ => None,
     }
 }
@@ -457,6 +463,14 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     let mut labels = Vec::new();
     let mut pull = None;
     let mut container_exec = Vec::new();
+    let mut healthcheck = None;
+    let mut healthcheck_interval = None;
+    let mut healthcheck_timeout = None;
+    let mut startup_delay = None;
+    let mut env_file = None;
+    let mut configs = Vec::new();
+    let mut overlay = None;
+    let mut depends_on = Vec::new();
     if eat(tokens, pos, &Token::Image) {
         image = Some(expect_string(tokens, pos)?);
         if eat(tokens, pos, &Token::Cmd) {
@@ -541,6 +555,58 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                     *pos += 1;
                     container_exec.push(expect_string(tokens, pos)?);
                 }
+                Some(Token::Healthcheck) => {
+                    *pos += 1;
+                    healthcheck = Some(expect_string(tokens, pos)?);
+                    // Optional inline interval/timeout
+                    if eat(tokens, pos, &Token::LBrace) {
+                        loop {
+                            skip_newlines(tokens, pos);
+                            if eat(tokens, pos, &Token::RBrace) { break; }
+                            match at(tokens, *pos) {
+                                Some(Token::Delay) => { // reuse "delay" as "interval"
+                                    *pos += 1;
+                                    healthcheck_interval = Some(parse_value(tokens, pos)?);
+                                }
+                                Some(Token::Mtu) => { // reuse for timeout via ident
+                                    *pos += 1;
+                                    healthcheck_timeout = Some(parse_value(tokens, pos)?);
+                                }
+                                _ => {
+                                    // Try as ident for interval/timeout
+                                    let key = parse_value(tokens, pos)?;
+                                    match key.as_str() {
+                                        "interval" => healthcheck_interval = Some(parse_value(tokens, pos)?),
+                                        "timeout" => healthcheck_timeout = Some(parse_value(tokens, pos)?),
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Some(Token::StartupDelay) => {
+                    *pos += 1;
+                    startup_delay = Some(parse_value(tokens, pos)?);
+                }
+                Some(Token::EnvFile) => {
+                    *pos += 1;
+                    env_file = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Config) => {
+                    *pos += 1;
+                    let host = expect_string(tokens, pos)?;
+                    let container = expect_string(tokens, pos)?;
+                    configs.push((host, container));
+                }
+                Some(Token::Overlay) => {
+                    *pos += 1;
+                    overlay = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::DependsOn) => {
+                    *pos += 1;
+                    depends_on = parse_ident_list(tokens, pos)?;
+                }
                 _ => {
                     props.push(parse_node_prop(tokens, pos)?);
                 }
@@ -569,6 +635,14 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         labels,
         pull,
         container_exec,
+        healthcheck,
+        healthcheck_interval,
+        healthcheck_timeout,
+        startup_delay,
+        env_file,
+        configs,
+        overlay,
+        depends_on,
         props,
     })
 }
@@ -1743,6 +1817,31 @@ node web image "nginx" {
                 assert_eq!(n.pull.as_deref(), Some("always"));
                 assert!(n.privileged);
                 assert_eq!(n.container_exec, vec!["nginx -t", "echo ready"]);
+            }
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_container_lifecycle() {
+        let ast = parse_nll(r#"lab "t"
+node db image "postgres" {
+    healthcheck "pg_isready"
+    startup-delay 5s
+    env-file "db.env"
+    config "pg.conf" "/etc/postgresql/postgresql.conf"
+    overlay "configs/db/"
+    depends-on [cache]
+}
+node cache image "redis""#);
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => {
+                assert_eq!(n.healthcheck.as_deref(), Some("pg_isready"));
+                assert_eq!(n.startup_delay.as_deref(), Some("5s"));
+                assert_eq!(n.env_file.as_deref(), Some("db.env"));
+                assert_eq!(n.configs, vec![("pg.conf".to_string(), "/etc/postgresql/postgresql.conf".to_string())]);
+                assert_eq!(n.overlay.as_deref(), Some("configs/db/"));
+                assert_eq!(n.depends_on, vec!["cache"]);
             }
             _ => panic!("expected Node"),
         }

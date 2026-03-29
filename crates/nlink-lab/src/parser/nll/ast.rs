@@ -98,6 +98,15 @@ pub struct NodeDef {
     pub labels: Vec<String>,
     pub pull: Option<String>,
     pub container_exec: Vec<String>,
+    // Lifecycle (plan 096)
+    pub healthcheck: Option<String>,
+    pub healthcheck_interval: Option<String>,
+    pub healthcheck_timeout: Option<String>,
+    pub startup_delay: Option<String>,
+    pub env_file: Option<String>,
+    pub configs: Vec<(String, String)>,
+    pub overlay: Option<String>,
+    pub depends_on: Vec<String>,
     pub props: Vec<NodeProp>,
 }
 

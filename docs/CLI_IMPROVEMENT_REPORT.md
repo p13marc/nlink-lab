@@ -276,6 +276,125 @@ nlink-lab inspect mylab
 # Shows: lab info, node table, link table, impairments, diagnostics
 ```
 
+## Priority 4: Container-Specific Features
+
+The CLI has **zero container-specific commands**. Container nodes are
+deployed and exec'd transparently, but there's no way to inspect or
+manage the container layer directly.
+
+### 4.1 Missing `containers` / `images` command
+
+No way to list containers in a lab or see their status:
+
+```bash
+# Missing:
+nlink-lab containers mylab
+
+# Expected output:
+  NODE    IMAGE            CONTAINER ID    STATUS     PID    CPU    MEMORY
+  web     nginx:alpine     a1b2c3d4e5f6    running    4521   0.5    256m
+  db      postgres:16      f6e5d4c3b2a1    running    4522   1      512m
+  cache   redis:7          1a2b3c4d5e6f    running    4523   --     --
+```
+
+This would shell out to `docker/podman inspect` for live status (CPU,
+memory usage, uptime) beyond what's in the state file.
+
+### 4.2 Missing `logs` command for container processes
+
+Background processes in containers write to stdout/stderr but there's
+no way to retrieve those logs:
+
+```bash
+# Missing:
+nlink-lab logs mylab web
+nlink-lab logs mylab web --follow    # tail -f style
+nlink-lab logs mylab web --tail 50   # last 50 lines
+
+# Implementation: docker/podman logs <container_id>
+```
+
+For namespace nodes, `exec` with `journalctl` or reading log files works.
+But container logs need `docker logs` / `podman logs`.
+
+### 4.3 Missing `pull` command
+
+No way to pre-pull images before deploying. Useful for air-gapped
+environments or CI where you want to cache images:
+
+```bash
+nlink-lab pull topology.nll
+# Parses topology, finds all image references, pulls each one
+# Output: Pulled nginx:alpine (42MB), postgres:16 (380MB), redis:7 (35MB)
+```
+
+### 4.4 Missing `restart` for container nodes
+
+Can't restart a single container node without destroying the whole lab:
+
+```bash
+nlink-lab restart mylab web
+# Stops and starts the container, re-applies networking
+```
+
+### 4.5 `exec` should support `-it` interactive mode
+
+Currently `exec` captures output and prints it. For interactive
+commands (shells, debuggers), it should attach stdin/stdout directly:
+
+```bash
+# Current (non-interactive):
+nlink-lab exec mylab web -- /bin/sh    # hangs or returns immediately
+
+# Better:
+nlink-lab exec -it mylab web -- /bin/sh    # interactive TTY
+nlink-lab shell mylab web                  # shorthand for the above
+```
+
+Implementation: Use `docker exec -it` for containers,
+`nsenter + exec` for namespaces.
+
+### 4.6 `status` should show container health
+
+When nodes have `healthcheck` defined, status should show health state:
+
+```
+  NODE    TYPE        IMAGE           HEALTH      UPTIME
+  web     container   nginx:alpine    healthy     12m
+  db      container   postgres:16     healthy     12m
+  worker  container   myapp           unhealthy   12m
+  router  namespace   --              --          12m
+```
+
+Implementation: For containers, run the healthcheck command and report
+pass/fail. For namespaces, show `--`.
+
+### 4.7 Missing container resource usage
+
+No way to see actual CPU/memory usage of container nodes:
+
+```bash
+nlink-lab stats mylab
+
+  NODE    CPU%    MEMORY      MEMORY%    NET I/O
+  web     2.3%    45.2 MiB    17.6%      1.2 MB / 850 KB
+  db      8.1%    198 MiB     38.7%      3.4 MB / 2.1 MB
+  cache   0.5%    12.1 MiB    4.7%       500 KB / 200 KB
+```
+
+Implementation: `docker stats --no-stream` / `podman stats --no-stream`.
+
+### 4.8 `deploy` should report image pull progress
+
+When deploying with container nodes, image pulls are silent. Should
+show download progress:
+
+```
+Pulling nginx:alpine... done (42MB, 3.2s)
+Pulling postgres:16... done (380MB, 12.1s)
+Creating nodes...
+```
+
 ## Summary
 
 | Priority | Count | Description |
@@ -283,7 +402,8 @@ nlink-lab inspect mylab
 | P1: Must fix | 4 | Broken/missing functionality |
 | P2: Should fix | 7 | Significant UX improvements |
 | P3: Nice to have | 8 | Polish and convenience |
-| **Total** | **19** | |
+| P4: Containers | 8 | Container-specific features |
+| **Total** | **27** | |
 
 ## Recommended Implementation Order
 
@@ -293,5 +413,8 @@ destroy detail, status table.
 **Phase B** (1-2 days): P2 items — wait progress, deploy breakdown,
 impair table, destroy --all, apply summary, capture exit code, verbose flag.
 
-**Phase C** (2-3 days): P3 items — colors, shell command, inspect
-command, deprecate graph, next-step hints.
+**Phase C** (1-2 days): P4 container items — containers command, logs
+command, shell/exec -it, pull command, status health column.
+
+**Phase D** (2-3 days): P3 items — colors, inspect command, deprecate
+graph, next-step hints, stats command.

@@ -4,7 +4,15 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-None.
+| Plan | Description | Priority | Effort |
+|------|-------------|----------|--------|
+| [102](102-cli-quality.md) | CLI quality: diagnose JSON, exec validation, destroy detail, status table, shell, verbose | High | 2-3 days |
+| [103](103-container-cli.md) | Container CLI: containers, logs, pull, stats, restart commands | Medium | 2-3 days |
+
+### Recommended Order
+
+1. **102 — CLI Quality** — must-fix issues + should-fix UX improvements + shell command
+2. **103 — Container CLI** — depends on 102 for `container_for()` API
 
 ## Completed
 

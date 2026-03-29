@@ -380,6 +380,28 @@ nlink-lab render --dot topology.nll    # Graphviz DOT graph
 nlink-lab render --ascii topology.nll  # text summary
 ```
 
+### 17. Management Network
+
+Auto-create an out-of-band management bridge connecting all nodes:
+
+```nll
+lab "mylab" {
+    mgmt 172.20.0.0/24
+}
+```
+
+All nodes get a `mgmt0` interface with a sequential IP from the subnet.
+
+### 18. Container Management
+
+```bash
+nlink-lab containers mylab               # list container nodes
+nlink-lab logs mylab web --follow        # stream logs
+nlink-lab stats mylab                    # live CPU/memory
+sudo nlink-lab restart mylab web         # restart one container
+nlink-lab pull topology.nll              # pre-pull all images
+```
+
 ---
 
 ## CLI Reference
@@ -407,6 +429,13 @@ nlink-lab render --ascii topology.nll  # text summary
 | `wait` | Wait for a lab to be ready |
 | `diff` | Compare two topology files |
 | `export` | Export a running lab's topology |
+| `shell` | Open an interactive shell in a lab node |
+| `inspect` | Combined status + links + impairments view (`--json`) |
+| `containers` | List container nodes with ID, image, PID |
+| `logs` | Show container logs (`--follow`, `--tail`) |
+| `pull` | Pre-pull all container images from a topology |
+| `stats` | Show live container CPU/memory usage |
+| `restart` | Restart a single container node |
 | `completions` | Generate shell completions |
 
 ### deploy

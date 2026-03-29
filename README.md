@@ -8,26 +8,32 @@ programmatic Rust API.
 ## Quick Start
 
 ```bash
-# Build
-cargo build -p nlink-lab-cli
+# Install system-wide (with just)
+just install                # builds + installs to /usr/local/bin + sets CAP_NET_ADMIN
 
 # Create a topology from a template
 nlink-lab init router
 
-# Validate
+# Validate and deploy
 nlink-lab validate router.nll
-
-# Deploy (requires root)
 sudo nlink-lab deploy router.nll
 
-# Run commands in lab nodes
+# Interact with lab nodes
 sudo nlink-lab exec router host -- ping -c1 10.0.0.1
+sudo nlink-lab shell router host         # interactive shell
+nlink-lab inspect router                 # full lab overview
+nlink-lab status router                  # node table
 
-# Show running labs
-nlink-lab status
+# Container management
+nlink-lab containers mylab               # list container nodes
+nlink-lab logs mylab web --follow        # stream container logs
+nlink-lab stats mylab                    # live CPU/memory usage
+sudo nlink-lab restart mylab web         # restart a container node
+nlink-lab pull topology.nll              # pre-pull all images
 
 # Tear down
-sudo nlink-lab destroy router
+sudo nlink-lab destroy router            # single lab
+sudo nlink-lab destroy --all             # all labs
 ```
 
 ## NLL — nlink-lab Language
@@ -39,6 +45,7 @@ cross-references, block comments, and composable modules:
 lab "datacenter" {
   version "2.0"
   tags [fabric, l3]
+  mgmt 172.20.0.0/24     /* management network for all nodes */
 }
 
 defaults link { mtu 9000 }
@@ -226,6 +233,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `imports/composed` | Topology composition via imports |
 | `imports/parametric-ring` | Parametric module with `param` declarations |
 | `imports/use-ring` | Parametric import with custom count |
+| `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 
 All examples use the `.nll` format. Use `nlink-lab init --list` to create from templates.

@@ -75,7 +75,7 @@ bins/lab/src/
   main.rs           # CLI binary (clap)
 
 examples/
-  *.nll             # NLL topology examples (27 files)
+  *.nll             # NLL topology examples (28 files)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -127,14 +127,21 @@ inline impairments (`->` / `<-`), profiles, firewall (with `src`/`dst`
 matching), VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
 capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
-(`validate { reach a b }`), and network (bridge) blocks.
+(`validate { reach a b }`), management network (`mgmt` in lab block),
+and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI includes `nlink-lab render` (flat NLL, `--json`, `--dot`, `--ascii`)
-and `--skip-validate` on deploy to disable assertion execution.
+CLI commands (28 total): `deploy`, `destroy` (with `--all`), `apply`,
+`status`, `exec`, `shell` (interactive TTY), `validate`, `render`
+(`--json`, `--dot`, `--ascii`), `inspect` (combined view), `impair`,
+`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`, `wait`,
+`ps`, `kill`, `init`, `completions`, `daemon`, `metrics`,
+`containers`, `logs` (`--follow`, `--tail`), `pull`, `stats`, `restart`.
+
+Global flags: `--json`, `--verbose`, `--quiet`, `--skip-validate`.
 
 See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 

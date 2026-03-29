@@ -59,8 +59,8 @@ impl ValidationResult {
     /// Return `Err` if there are error-level issues, `Ok(())` otherwise.
     pub fn bail(&self) -> crate::Result<()> {
         if self.has_errors() {
-            let messages: Vec<String> = self.errors().map(|i| i.to_string()).collect();
-            Err(crate::Error::Validation(messages.join("; ")))
+            let errors: Vec<ValidationIssue> = self.errors().cloned().collect();
+            Err(crate::Error::ValidationErrors(errors))
         } else {
             Ok(())
         }

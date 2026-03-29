@@ -113,6 +113,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     };
 
     // ── Step 3: Create namespaces / containers ─────────────────────
+    tracing::info!("step 3/18: creating namespaces");
     for (node_name, node) in &topology.nodes {
         if let Some(image) = &node.image {
             // Container node
@@ -151,8 +152,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     name: format!("namespace '{ns_name}' already exists"),
                 });
             }
-            namespace::create(&ns_name).map_err(|e| {
-                Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
+            namespace::create(&ns_name).map_err(|e| Error::Namespace {
+                op: "create",
+                ns: ns_name.clone(),
+                detail: e.to_string(),
             })?;
             cleanup.add_namespace(ns_name.clone());
             namespace_names.insert(node_name.clone(), ns_name.clone());
@@ -169,8 +172,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     let mut bridge_ns_names: HashMap<String, String> = HashMap::new();
     if !topology.networks.is_empty() {
         let mgmt_ns = format!("{}-mgmt", topology.lab.prefix());
-        namespace::create(&mgmt_ns).map_err(|e| {
-            Error::deploy_failed(format!("failed to create management namespace '{mgmt_ns}': {e}"))
+        namespace::create(&mgmt_ns).map_err(|e| Error::Namespace {
+            op: "create",
+            ns: mgmt_ns.clone(),
+            detail: e.to_string(),
         })?;
         cleanup.add_namespace(mgmt_ns.clone());
 
@@ -298,6 +303,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 5: Create veth pairs ──────────────────────────────────
+    tracing::info!("step 5/18: creating veth pairs");
     for (i, link) in topology.links.iter().enumerate() {
         let ep_a = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| {
             Error::InvalidEndpoint {
@@ -490,11 +496,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 9: Set interface addresses ────────────────────────────
+    tracing::info!("step 9/18: setting interface addresses");
     // From links
     for link in &topology.links {
         if let Some(addresses) = &link.addresses {
             for (j, ep_str) in link.endpoints.iter().enumerate() {
-                let ep = EndpointRef::parse(ep_str).unwrap();
+                let ep = EndpointRef::parse(ep_str).ok_or_else(|| Error::InvalidEndpoint {
+                    endpoint: ep_str.clone(),
+                })?;
                 let ep_handle = &node_handles[&ep.node];
                 let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
@@ -556,6 +565,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 10: Bring interfaces up ───────────────────────────────
+    tracing::info!("step 10/18: bringing interfaces up");
     for (node_name, _) in &topology.nodes {
         let node_handle = &node_handles[node_name];
         let conn: Connection<Route> = node_handle.connection().map_err(|e| {
@@ -768,6 +778,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 12: Add routes ────────────────────────────────────────
+    tracing::info!("step 12/18: adding routes");
     for (node_name, node) in &topology.nodes {
         if node.routes.is_empty() {
             continue;
@@ -801,6 +812,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 13: Apply nftables firewall rules ──────────────────────
+    tracing::info!("step 13/18: applying firewall rules");
     for (node_name, node) in &topology.nodes {
         if let Some(fw) = topology.effective_firewall(node) {
             let node_handle = &node_handles[node_name];
@@ -809,6 +821,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 14: Apply netem impairments ───────────────────────────
+    tracing::info!("step 14/18: applying impairments");
     for (endpoint_str, impairment) in &topology.impairments {
         let ep = EndpointRef::parse(endpoint_str).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint_str.clone(),
@@ -863,6 +876,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 16: Spawn background processes ────────────────────────
+    tracing::info!("step 16/18: spawning background processes");
     for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
 
@@ -939,6 +953,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 18: Write state file ──────────────────────────────────
+    tracing::info!("step 18/18: writing state file");
     // Encode WG public keys as base64 for state persistence
     let wg_public_keys_b64 = {
         #[cfg(feature = "wireguard")]
@@ -1495,8 +1510,10 @@ pub async fn apply_diff(
                     name: format!("namespace '{ns_name}' already exists"),
                 });
             }
-            namespace::create(&ns_name).map_err(|e| {
-                Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
+            namespace::create(&ns_name).map_err(|e| Error::Namespace {
+                op: "create",
+                ns: ns_name.clone(),
+                detail: e.to_string(),
             })?;
             running.namespace_names_mut().insert(node_name.clone(), ns_name.clone());
         }
@@ -1552,7 +1569,9 @@ pub async fn apply_diff(
         // Set addresses
         if let Some(addresses) = &link.addresses {
             for (ep_str, addr_str) in link.endpoints.iter().zip(addresses.iter()) {
-                let ep = EndpointRef::parse(ep_str).unwrap();
+                let ep = EndpointRef::parse(ep_str).ok_or_else(|| Error::InvalidEndpoint {
+                    endpoint: ep_str.clone(),
+                })?;
                 let ep_handle = node_handle_for(running, &ep.node)?;
                 let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
@@ -1569,7 +1588,9 @@ pub async fn apply_diff(
 
         // Bring up interfaces on both sides
         for ep_str in &link.endpoints {
-            let ep = EndpointRef::parse(ep_str).unwrap();
+            let ep = EndpointRef::parse(ep_str).ok_or_else(|| Error::InvalidEndpoint {
+                endpoint: ep_str.clone(),
+            })?;
             let ep_handle = node_handle_for(running, &ep.node)?;
             let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
                 Error::deploy_failed(format!("connection for '{}': {e}", ep.node))

@@ -92,7 +92,8 @@ pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
 
     let topo_toml = toml::to_string_pretty(topology)
         .map_err(|e| Error::State {
-            message: format!("failed to serialize topology: {e}"),
+            op: "write",
+            detail: format!("failed to serialize topology: {e}"),
             path: dir.join("topology.toml"),
         })?;
     atomic_write(&dir.join("topology.toml"), &topo_toml)?;
@@ -121,7 +122,8 @@ pub fn load(name: &str) -> Result<(LabState, Topology)> {
 
     let state_json = std::fs::read_to_string(&state_path)?;
     let state: LabState = serde_json::from_str(&state_json).map_err(|e| Error::State {
-        message: format!("failed to parse state: {e}"),
+        op: "parse",
+        detail: format!("failed to parse state: {e}"),
         path: state_path,
     })?;
 
@@ -129,7 +131,8 @@ pub fn load(name: &str) -> Result<(LabState, Topology)> {
     let topo_toml = std::fs::read_to_string(&topo_path)?;
     let topology: Topology = toml::from_str(&topo_toml)
         .map_err(|e| crate::Error::State {
-            message: format!("failed to parse topology state: {e}"),
+            op: "parse",
+            detail: format!("failed to parse topology state: {e}"),
             path: topo_path.clone(),
         })?;
 

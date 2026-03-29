@@ -21,9 +21,13 @@ pub enum Error {
     #[error("netlink error: {0}")]
     Nlink(#[from] nlink::Error),
 
-    /// Topology validation failed.
+    /// Topology validation failed (single message).
     #[error("validation failed: {0}")]
     Validation(String),
+
+    /// Topology validation failed with structured issues.
+    #[error("validation failed ({count} error{s})", count = .0.len(), s = if .0.len() == 1 { "" } else { "s" })]
+    ValidationErrors(Vec<crate::validator::ValidationIssue>),
 
     /// Lab already exists.
     #[error("lab already exists: {name}")]
@@ -53,13 +57,53 @@ pub enum Error {
     #[error("invalid topology: {0}")]
     InvalidTopology(String),
 
-    /// Deploy failed.
+    /// Namespace operation failed.
+    #[error("{op} namespace '{ns}': {detail}")]
+    Namespace {
+        op: &'static str,
+        ns: String,
+        detail: String,
+    },
+
+    /// Netlink link/address/interface operation failed.
+    #[error("{op} on node '{node}': {detail}")]
+    NetlinkOp {
+        op: String,
+        node: String,
+        detail: String,
+    },
+
+    /// Route configuration failed.
+    #[error("add route '{dest}' on node '{node}': {detail}")]
+    Route {
+        dest: String,
+        node: String,
+        detail: String,
+    },
+
+    /// Firewall (nftables) operation failed.
+    #[error("apply firewall on node '{node}': {detail}")]
+    Firewall { node: String, detail: String },
+
+    /// Container runtime operation failed.
+    #[error("{op} container '{name}': {detail}")]
+    Container {
+        op: &'static str,
+        name: String,
+        detail: String,
+    },
+
+    /// Generic deploy failure (for cases that don't fit specific variants).
     #[error("deploy failed: {0}")]
     DeployFailed(String),
 
     /// State file error.
-    #[error("state error: {message} (path: {path})")]
-    State { message: String, path: PathBuf },
+    #[error("{op} state: {detail} (path: {path})")]
+    State {
+        op: &'static str,
+        detail: String,
+        path: PathBuf,
+    },
 }
 
 /// Rich NLL parse error with source context for miette rendering.
@@ -82,7 +126,7 @@ impl Error {
         Self::InvalidTopology(message.into())
     }
 
-    /// Create a deploy failed error.
+    /// Create a deploy failed error (generic catch-all).
     pub fn deploy_failed(message: impl Into<String>) -> Self {
         Self::DeployFailed(message.into())
     }
@@ -92,3 +136,4 @@ impl Error {
         matches!(self, Self::NotFound { .. } | Self::NodeNotFound { .. })
     }
 }
+

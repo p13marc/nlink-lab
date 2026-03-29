@@ -32,17 +32,23 @@ sudo nlink-lab destroy router
 
 ## NLL — nlink-lab Language
 
-A purpose-built DSL with typed literals, visual link syntax, loops, and variables:
+A purpose-built DSL with typed literals, visual link syntax, loops, variables,
+cross-references, block comments, and composable modules:
 
 ```nll
-lab "simple"
+lab "datacenter" {
+  version "2.0"
+  tags [fabric, l3]
+}
+
+defaults link { mtu 9000 }
 
 profile router { forward ipv4 }
 node router : router
-node host { route default via 10.0.0.1 }
+node host { route default via ${router.eth0} }  /* cross-reference */
 
 link router:eth0 -- host:eth0 {
-  10.0.0.1/24 -- 10.0.0.2/24
+  10.0.0.0/30          /* subnet auto-assign: .1 and .2 */
   delay 10ms jitter 2ms
 }
 ```
@@ -50,30 +56,52 @@ link router:eth0 -- host:eth0 {
 ### Loops and Variables
 
 ```nll
+/* Integer ranges */
 for i in 1..4 {
   node leaf${i} : router { lo 10.255.1.${i}/32 }
 }
 
-for s in 1..2 {
-  for l in 1..4 {
-    link spine${s}:eth${l} -- leaf${l}:eth${s} {
-      10.${s}.${l}.1/30 -- 10.${s}.${l}.2/30
-    }
-  }
+/* List iteration */
+for role in [web, api, db] {
+  node ${role} { route default via 10.0.0.1 }
+}
+
+/* Compound expressions and modulo */
+for i in 0..7 {
+  link leaf${i}:up -- spine${i % 2}:eth${i} { 10.${i % 2}.${i}.0/31 }
 }
 ```
 
-### Imports
+### Parametric Imports
 
-Compose topologies from reusable modules:
+Compose topologies from reusable, parameterized modules:
 
 ```nll
-import "base-dc.nll" as dc
+import "spine-leaf.nll" as dc(spines=4, leaves=8)
 
 lab "extended"
-
 node monitor
-link dc.spine1:eth3 -- monitor:eth0 { 10.99.0.1/30 -- 10.99.0.2/30 }
+link dc.spine1:mon0 -- monitor:eth0 { 172.16.0.0/30 }
+```
+
+### Containers
+
+```nll
+node web image "nginx" {
+  cpu "1"
+  memory "512m"
+  cap-add [NET_ADMIN, NET_RAW]
+  healthcheck "curl -f http://localhost"
+  depends-on [db]
+}
+```
+
+### Multi-Profile Inheritance
+
+```nll
+profile router { forward ipv4 }
+profile monitored { sysctl "net.core.rmem_max" "16777216" }
+node core : router, monitored
 ```
 
 See [`docs/NLL_DSL_DESIGN.md`](docs/NLL_DSL_DESIGN.md) for the full language specification.
@@ -129,17 +157,23 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | Example | Description |
 |---------|-------------|
 | `simple` | 2 nodes, 1 link, impairment |
-| `spine-leaf` | Datacenter fabric (6 nodes) |
+| `spine-leaf` | Datacenter fabric with defaults, subnet auto-assign, cross-refs |
+| `datacenter-fabric` | 4-spine 8-leaf Clos with loops, modulo, block comments |
 | `wan-impairment` | WAN with delay, loss, rate limiting |
-| `firewall` | Stateful nftables firewall |
+| `firewall` | Stateful nftables firewall with src/dst matching |
+| `multi-profile` | Compose router + monitored + secured profiles |
+| `list-iteration` | Named service nodes with `for x in [...]` |
 | `vxlan-overlay` | VXLAN tunnel between VTEPs |
 | `vrf-multitenant` | VRF tenant isolation |
 | `wireguard-vpn` | Site-to-site WireGuard VPN |
 | `iperf-benchmark` | Throughput testing with rate limiting |
 | `vlan-trunk` | Bridge with VLAN filtering |
 | `container` | Docker/Podman container nodes |
+| `container-advanced` | Resource limits, capabilities, labels, exec |
+| `container-lifecycle` | Health checks, depends-on, startup-delay |
 | `asymmetric` | Directional impairments (`->` / `<-`) |
 | `imports/composed` | Topology composition via imports |
+| `imports/parametric-ring` | Parametric module with `param` declarations |
 
 All examples use the `.nll` format. Use `nlink-lab init --list` to create from templates.
 

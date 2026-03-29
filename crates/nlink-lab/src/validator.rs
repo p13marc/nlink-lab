@@ -918,6 +918,26 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                     location: Some(format!("nodes.{node_name}.volumes")),
                 });
             }
+            // New container properties also require image
+            for prop in ["cpu", "memory", "entrypoint", "hostname", "workdir", "healthcheck"] {
+                let has_prop = match prop {
+                    "cpu" => node.cpu.is_some(),
+                    "memory" => node.memory.is_some(),
+                    "entrypoint" => node.entrypoint.is_some(),
+                    "hostname" => node.hostname.is_some(),
+                    "workdir" => node.workdir.is_some(),
+                    "healthcheck" => node.healthcheck.is_some(),
+                    _ => false,
+                };
+                if has_prop {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "container-requires-image",
+                        message: format!("{prop} requires image"),
+                        location: Some(format!("nodes.{node_name}.{prop}")),
+                    });
+                }
+            }
         } else if let Some(image) = &node.image {
             if image.is_empty() {
                 issues.push(ValidationIssue {

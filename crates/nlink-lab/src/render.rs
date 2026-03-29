@@ -103,10 +103,47 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
         || node.firewall.is_some()
         || !node.interfaces.is_empty()
         || !node.wireguard.is_empty()
-        || !node.vrfs.is_empty();
+        || !node.vrfs.is_empty()
+        || node.cpu.is_some()
+        || node.memory.is_some()
+        || node.privileged
+        || !node.cap_add.is_empty()
+        || node.entrypoint.is_some()
+        || node.hostname.is_some()
+        || node.workdir.is_some()
+        || !node.labels.is_empty()
+        || node.pull.is_some()
+        || !node.container_exec.is_empty()
+        || node.healthcheck.is_some()
+        || node.startup_delay.is_some()
+        || !node.depends_on.is_empty()
+        || !node.configs.is_empty()
+        || node.overlay.is_some()
+        || node.env_file.is_some();
 
     if has_props {
         out.push_str(" {\n");
+        // Container properties
+        if let Some(cpu) = &node.cpu { writeln!(out, "  cpu \"{cpu}\"").unwrap(); }
+        if let Some(mem) = &node.memory { writeln!(out, "  memory \"{mem}\"").unwrap(); }
+        if node.privileged { writeln!(out, "  privileged").unwrap(); }
+        if !node.cap_add.is_empty() { writeln!(out, "  cap-add [{}]", node.cap_add.join(", ")).unwrap(); }
+        if let Some(ep) = &node.entrypoint { writeln!(out, "  entrypoint \"{ep}\"").unwrap(); }
+        if let Some(h) = &node.hostname { writeln!(out, "  hostname \"{h}\"").unwrap(); }
+        if let Some(w) = &node.workdir { writeln!(out, "  workdir \"{w}\"").unwrap(); }
+        if !node.labels.is_empty() {
+            let labels: Vec<_> = node.labels.iter().map(|l| format!("\"{l}\"")).collect();
+            writeln!(out, "  labels [{}]", labels.join(", ")).unwrap();
+        }
+        if let Some(p) = &node.pull { writeln!(out, "  pull {p}").unwrap(); }
+        for cmd in &node.container_exec { writeln!(out, "  exec \"{cmd}\"").unwrap(); }
+        if let Some(hc) = &node.healthcheck { writeln!(out, "  healthcheck \"{hc}\"").unwrap(); }
+        if let Some(d) = &node.startup_delay { writeln!(out, "  startup-delay {d}").unwrap(); }
+        if let Some(ef) = &node.env_file { writeln!(out, "  env-file \"{ef}\"").unwrap(); }
+        for (h, c) in &node.configs { writeln!(out, "  config \"{h}\" \"{c}\"").unwrap(); }
+        if let Some(o) = &node.overlay { writeln!(out, "  overlay \"{o}\"").unwrap(); }
+        if !node.depends_on.is_empty() { writeln!(out, "  depends-on [{}]", node.depends_on.join(", ")).unwrap(); }
+
         for (iface_name, iface) in &node.interfaces {
             if iface_name == "lo" {
                 for addr in &iface.addresses {

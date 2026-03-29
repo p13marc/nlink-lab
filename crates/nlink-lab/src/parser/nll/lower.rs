@@ -2167,4 +2167,69 @@ link r1:eth0 -- h1:eth0 { 10.0.0.0/30 }
         // Subnet auto-assigns .1 to left (r1:eth0)
         assert_eq!(route.via.as_deref(), Some("10.0.0.1"));
     }
+
+    // ─── Container property tests ────────────────────
+
+    #[test]
+    fn test_lower_container_properties() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node web image "nginx" {
+    cpu "0.5"
+    memory "256m"
+    hostname "web-01"
+    workdir "/app"
+    entrypoint "/bin/sh"
+    privileged
+    labels ["role=web"]
+    pull always
+    exec "echo setup"
+    startup-delay 3s
+    healthcheck "curl localhost"
+}"#,
+        );
+        let n = &topo.nodes["web"];
+        assert_eq!(n.cpu.as_deref(), Some("0.5"));
+        assert_eq!(n.memory.as_deref(), Some("256m"));
+        assert_eq!(n.hostname.as_deref(), Some("web-01"));
+        assert_eq!(n.workdir.as_deref(), Some("/app"));
+        assert_eq!(n.entrypoint.as_deref(), Some("/bin/sh"));
+        assert!(n.privileged);
+        assert_eq!(n.labels, vec!["role=web"]);
+        assert_eq!(n.pull.as_deref(), Some("always"));
+        assert_eq!(n.container_exec, vec!["echo setup"]);
+        assert_eq!(n.startup_delay.as_deref(), Some("3s"));
+        assert_eq!(n.healthcheck.as_deref(), Some("curl localhost"));
+    }
+
+    #[test]
+    fn test_lower_container_depends_on() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node db image "postgres"
+node app image "myapp" {
+    depends-on [db]
+}"#,
+        );
+        assert_eq!(topo.nodes["app"].depends_on, vec!["db"]);
+        assert!(topo.nodes["db"].depends_on.is_empty());
+    }
+
+    #[test]
+    fn test_lower_container_config_overlay() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node router image "frr" {
+    config "a.conf" "/etc/a.conf"
+    config "b.conf" "/etc/b.conf"
+    overlay "configs/router/"
+    env-file "router.env"
+}"#,
+        );
+        let n = &topo.nodes["router"];
+        assert_eq!(n.configs.len(), 2);
+        assert_eq!(n.configs[0], ("a.conf".to_string(), "/etc/a.conf".to_string()));
+        assert_eq!(n.overlay.as_deref(), Some("configs/router/"));
+        assert_eq!(n.env_file.as_deref(), Some("router.env"));
+    }
 }

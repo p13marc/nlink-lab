@@ -43,6 +43,9 @@ sudo nlink-lab exec simple router -- ip addr
 
 # Show running labs
 nlink-lab status
+
+# Expand loops/variables and print flat NLL
+nlink-lab render examples/spine-leaf.nll
 ```
 
 ## Architecture
@@ -60,7 +63,8 @@ crates/nlink-lab/src/
       parser.rs     # Recursive-descent parser → AST
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (18 rules)
+  validator.rs      # Topology validation (20 rules)
+  render.rs         # Topology → NLL serializer (for `render` command)
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence (~/.nlink-lab/)
@@ -109,9 +113,16 @@ link router:eth0 -- host:eth0 {
 }
 ```
 
-NLL supports `for` loops, `let` variables, `${interpolation}`, `import` for
-composition, inline impairments on links, asymmetric impairments (`->` / `<-`),
-profiles, firewall, VRF, WireGuard, VXLAN, containers, and network (bridge) blocks.
+NLL supports `for` loops (integer ranges and list iteration), `let` variables,
+`${interpolation}` (compound arithmetic, modulo, ternary conditionals),
+`import` for composition (with parametric modules), `defaults` blocks,
+`/* block comments */`, subnet auto-assignment, cross-references (`${node.iface}`),
+multi-profile inheritance, inline impairments (`->` / `<-`), profiles,
+firewall (with `src`/`dst` matching), VRF, WireGuard, VXLAN, containers
+(with cpu/memory limits, capabilities, health checks, depends-on, config
+injection), and network (bridge) blocks.
+
+CLI includes `nlink-lab render` to expand loops/variables and print flat NLL.
 
 See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 

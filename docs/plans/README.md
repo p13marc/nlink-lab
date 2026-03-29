@@ -4,15 +4,7 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-| Plan | Description | Priority | Effort |
-|------|-------------|----------|--------|
-| [095](095-container-core.md) | Container core: resource limits, capabilities, properties | High | 2-3 days |
-| [096](096-container-lifecycle.md) | Container lifecycle: health checks, config injection, dependencies | Medium | 3-4 days |
-
-### Recommended Order
-
-1. **095 — Container Core** — resource limits + capabilities (breaking: removes --privileged default)
-2. **096 — Container Lifecycle** — depends on 095 for property plumbing pattern
+None.
 
 ## Completed
 
@@ -23,8 +15,9 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 085 (test coverage), 086 (feature flags), 087 (topology composition
 & hot-reload), 088 (remove TOML), 090 (hardening),
 091 (user documentation), 092 (structured errors),
-093 (NLL v2 language & ergonomics), and 094 (NLL v2 composition)
-have been implemented and their plan files removed.
+093 (NLL v2 language & ergonomics), 094 (NLL v2 composition),
+095 (container core), and 096 (container lifecycle) have been
+implemented and their plan files removed.
 
 ## Reference
 

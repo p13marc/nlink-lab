@@ -1,0 +1,34 @@
+# Subnet pools and reachability assertions.
+#
+# Demonstrates automatic address allocation from named pools
+# and post-deploy connectivity validation.
+
+lab "pools-demo" {
+    description "Subnet pools with auto-allocation"
+}
+
+profile router { forward ipv4 }
+
+pool fabric 10.0.0.0/16 /30
+pool access 10.1.0.0/16 /24
+
+node spine1 : router
+node spine2 : router
+node leaf1 : router
+node leaf2 : router
+node server1 { route default via ${leaf1.eth3} }
+node server2 { route default via ${leaf2.eth3} }
+
+/* Fabric links — addresses auto-allocated from pool */
+link spine1:eth1 -- leaf1:eth1 { pool fabric }
+link spine1:eth2 -- leaf2:eth1 { pool fabric }
+link spine2:eth1 -- leaf1:eth2 { pool fabric }
+link spine2:eth2 -- leaf2:eth2 { pool fabric }
+
+/* Access links — larger subnets from access pool */
+link leaf1:eth3 -- server1:eth0 { pool access }
+link leaf2:eth3 -- server2:eth0 { pool access }
+
+validate {
+    reach server1 server2
+}

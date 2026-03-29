@@ -49,8 +49,31 @@ pub enum Statement {
     Rate(RateDef),
     Defaults(DefaultsDef),
     Param(ParamDef),
+    Pool(PoolDef),
+    Validate(ValidateDef),
     Let(LetDef),
     For(ForLoop),
+}
+
+/// Named subnet pool: `pool fabric 10.0.0.0/16 /30`.
+#[derive(Debug, Clone)]
+pub struct PoolDef {
+    pub name: String,
+    pub base: String,
+    pub prefix: u8,
+}
+
+/// Reachability assertions: `validate { reach host1 host2 }`.
+#[derive(Debug, Clone)]
+pub struct ValidateDef {
+    pub assertions: Vec<AssertionDef>,
+}
+
+/// Single reachability assertion.
+#[derive(Debug, Clone)]
+pub enum AssertionDef {
+    Reach { from: String, to: String },
+    NoReach { from: String, to: String },
 }
 
 /// Defaults block: `defaults link { mtu 9000 }` or `defaults impair { delay 5ms }`.
@@ -229,6 +252,8 @@ pub struct LinkDef {
     pub right_addr: Option<String>,
     /// Single subnet for auto-assignment (e.g., "10.0.0.0/30" → .1 and .2).
     pub subnet: Option<String>,
+    /// Pool reference for auto-allocation (e.g., "fabric").
+    pub pool: Option<String>,
     pub mtu: Option<u32>,
     /// Symmetric impairment (both directions).
     pub impairment: Option<ImpairProps>,

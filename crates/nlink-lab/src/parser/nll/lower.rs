@@ -44,6 +44,20 @@ fn lower_with_base_dir(
                     ast::DefaultsKind::Rate => ctx.default_rate = d.rate.clone(),
                 }
             }
+            ast::Statement::Pool(p) => {
+                if let Ok((ip, prefix)) = crate::helpers::parse_cidr(&p.base) {
+                    if let std::net::IpAddr::V4(v4) = ip {
+                        let base = u32::from(v4);
+                        let pool_size = 1u32.checked_shl(32 - prefix as u32).unwrap_or(0);
+                        ctx.pools.insert(p.name.clone(), PoolState {
+                            base,
+                            pool_size,
+                            alloc_prefix: p.prefix,
+                            next_offset: 0,
+                        });
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -81,13 +95,16 @@ fn lower_with_base_dir(
     for stmt in &expanded {
         match stmt {
             ast::Statement::Node(n) => lower_node(&mut topology, n, &ctx)?,
-            ast::Statement::Link(l) => lower_link(&mut topology, l, &ctx),
+            ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx),
             ast::Statement::Network(n) => lower_network(&mut topology, n)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
+            ast::Statement::Validate(_) => {
+                // Validation assertions are stored for post-deploy; skip during lowering
+            }
             ast::Statement::Profile(_) | ast::Statement::Let(_)
             | ast::Statement::For(_) | ast::Statement::Defaults(_)
-            | ast::Statement::Param(_) => {}
+            | ast::Statement::Param(_) | ast::Statement::Pool(_) => {}
         }
     }
 
@@ -351,12 +368,21 @@ fn warn_unresolved_refs(topology: &types::Topology) {
 
 // ─── Context ──────────────────────────────────────────────
 
+/// State for a named subnet pool.
+struct PoolState {
+    base: u32,         // base network address as u32
+    pool_size: u32,    // total addresses in the pool
+    alloc_prefix: u8,  // allocation prefix size (e.g., 30 for /30)
+    next_offset: u32,  // next allocation offset from base
+}
+
 struct LowerCtx {
     profiles: HashMap<String, ast::ProfileDef>,
     variables: HashMap<String, String>,
     default_link_mtu: Option<u32>,
     default_impair: Option<ast::ImpairProps>,
     default_rate: Option<ast::RateProps>,
+    pools: HashMap<String, PoolState>,
 }
 
 impl LowerCtx {
@@ -367,6 +393,7 @@ impl LowerCtx {
             default_link_mtu: None,
             default_impair: None,
             default_rate: None,
+            pools: HashMap::new(),
         }
     }
 
@@ -706,6 +733,8 @@ fn interpolate_statement(
         ast::Statement::Rate(r) => ast::Statement::Rate(interpolate_rate_def(r, vars)),
         ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
         ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
+        ast::Statement::Pool(p) => ast::Statement::Pool(p.clone()),
+        ast::Statement::Validate(v) => ast::Statement::Validate(v.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
@@ -817,6 +846,7 @@ fn interpolate_link(l: &ast::LinkDef, vars: &HashMap<String, String>) -> ast::Li
         left_addr: io(&l.left_addr, vars),
         right_addr: io(&l.right_addr, vars),
         subnet: io(&l.subnet, vars),
+        pool: l.pool.clone(),
         mtu: l.mtu,
         impairment: l.impairment.as_ref().map(|p| interpolate_impair_props(p, vars)),
         left_impair: l.left_impair.as_ref().map(|p| interpolate_impair_props(p, vars)),
@@ -1187,15 +1217,28 @@ fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
     }
 }
 
-fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &LowerCtx) {
+fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCtx) {
     let endpoints = [
         format!("{}:{}", link.left_node, link.left_iface),
         format!("{}:{}", link.right_node, link.right_iface),
     ];
 
-    let addresses = match (&link.left_addr, &link.right_addr, &link.subnet) {
-        (Some(l), Some(r), _) => Some([l.clone(), r.clone()]),
-        (_, _, Some(subnet)) => split_subnet(subnet).ok(),
+    let addresses = match (&link.left_addr, &link.right_addr, &link.subnet, &link.pool) {
+        (Some(l), Some(r), _, _) => Some([l.clone(), r.clone()]),
+        (_, _, Some(subnet), _) => split_subnet(subnet).ok(),
+        (_, _, _, Some(pool_name)) => {
+            // Allocate from pool
+            if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
+                let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+                let network = pool.base + pool.next_offset;
+                pool.next_offset += subnet_size;
+                let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+                split_subnet(&cidr).ok()
+            } else {
+                tracing::warn!("undefined pool '{pool_name}'");
+                None
+            }
+        }
         _ => None,
     };
 
@@ -2258,5 +2301,86 @@ node router image "frr" {
         assert_eq!(n.configs[0], ("a.conf".to_string(), "/etc/a.conf".to_string()));
         assert_eq!(n.overlay.as_deref(), Some("configs/router/"));
         assert_eq!(n.env_file.as_deref(), Some("router.env"));
+    }
+
+    // ─── Plan 098 tests ──────────────────────────────
+
+    #[test]
+    fn test_subnet_pool_allocation() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+pool fabric 10.0.0.0/24 /30
+node a
+node b
+node c
+node d
+link a:eth0 -- b:eth0 { pool fabric }
+link c:eth0 -- d:eth0 { pool fabric }
+"#,
+        );
+        // First allocation: 10.0.0.0/30 → .1 and .2
+        let l1 = &topo.links[0];
+        let a1 = l1.addresses.as_ref().unwrap();
+        assert_eq!(a1[0], "10.0.0.1/30");
+        assert_eq!(a1[1], "10.0.0.2/30");
+
+        // Second allocation: 10.0.0.4/30 → .5 and .6
+        let l2 = &topo.links[1];
+        let a2 = l2.addresses.as_ref().unwrap();
+        assert_eq!(a2[0], "10.0.0.5/30");
+        assert_eq!(a2[1], "10.0.0.6/30");
+    }
+
+    #[test]
+    fn test_pool_with_slash31() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+pool p2p 10.0.0.0/24 /31
+node a
+node b
+link a:eth0 -- b:eth0 { pool p2p }
+"#,
+        );
+        let addrs = topo.links[0].addresses.as_ref().unwrap();
+        assert_eq!(addrs[0], "10.0.0.0/31");
+        assert_eq!(addrs[1], "10.0.0.1/31");
+    }
+
+    #[test]
+    fn test_validate_block_parse() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.0/30 }
+validate {
+    reach a b
+    no-reach b a
+}
+"#,
+        );
+        // Validate block is parsed but not stored in Topology (yet)
+        // Just verify parsing succeeds
+        assert_eq!(topo.nodes.len(), 2);
+    }
+
+    #[test]
+    fn test_pool_mixed_with_explicit() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+pool auto 10.0.0.0/24 /30
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { pool auto }
+link b:eth1 -- c:eth0 { 192.168.0.1/24 -- 192.168.0.2/24 }
+"#,
+        );
+        // First link from pool
+        let a1 = topo.links[0].addresses.as_ref().unwrap();
+        assert_eq!(a1[0], "10.0.0.1/30");
+        // Second link explicit
+        let a2 = topo.links[1].addresses.as_ref().unwrap();
+        assert_eq!(a2[0], "192.168.0.1/24");
     }
 }

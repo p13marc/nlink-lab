@@ -469,11 +469,13 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Impair => parse_impair_stmt(tokens, pos).map(ast::Statement::Impair),
         Token::Rate => parse_rate_stmt(tokens, pos).map(ast::Statement::Rate),
         Token::Defaults => parse_defaults(tokens, pos).map(ast::Statement::Defaults),
+        Token::Pool => parse_pool(tokens, pos).map(ast::Statement::Pool),
+        Token::Validate => parse_validate(tokens, pos).map(ast::Statement::Validate),
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
         other => Err(err(tokens, *pos, format!(
-            "expected statement (profile, node, link, network, impair, rate, defaults, param, let, for), found {other}"
+            "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, param, let, for), found {other}"
         ))),
     }
 }
@@ -1269,6 +1271,7 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
         left_addr: None,
         right_addr: None,
         subnet: None,
+        pool: None,
         mtu: None,
         impairment: None,
         left_impair: None,
@@ -1302,6 +1305,11 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 Some(Token::Mtu) => {
                     *pos += 1;
                     link.mtu = Some(expect_int(tokens, pos)? as u32);
+                }
+                // Pool reference
+                Some(Token::Pool) => {
+                    *pos += 1;
+                    link.pool = Some(expect_ident(tokens, pos)?);
                 }
                 // Directional impairment ->
                 Some(Token::ArrowRight) => {
@@ -1599,6 +1607,51 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
 }
 
 // ─── Let / For ────────────────────────────────────────────
+
+fn parse_pool(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PoolDef> {
+    expect(tokens, pos, &Token::Pool)?;
+    let name = expect_ident(tokens, pos)?;
+    let base = parse_cidr_or_name(tokens, pos)?;
+    // Parse allocation prefix: /30, /31, /24, etc.
+    expect(tokens, pos, &Token::Slash)?;
+    let prefix = expect_int(tokens, pos)? as u8;
+    Ok(ast::PoolDef { name, base, prefix })
+}
+
+fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDef> {
+    expect(tokens, pos, &Token::Validate)?;
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut assertions = Vec::new();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) { break; }
+        match at(tokens, *pos) {
+            Some(Token::Reach) => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let to = expect_ident(tokens, pos)?;
+                assertions.push(ast::AssertionDef::Reach { from, to });
+            }
+            Some(Token::NoReach) => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let to = expect_ident(tokens, pos)?;
+                assertions.push(ast::AssertionDef::NoReach { from, to });
+            }
+            Some(other) => {
+                return Err(err(tokens, *pos, format!(
+                    "expected reach or no-reach in validate block, found {other}"
+                )));
+            }
+            None => {
+                return Err(err(tokens, *pos,
+                    "unexpected end of input in validate block".into(),
+                ));
+            }
+        }
+    }
+    Ok(ast::ValidateDef { assertions })
+}
 
 fn parse_param(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ParamDef> {
     expect(tokens, pos, &Token::Param)?;

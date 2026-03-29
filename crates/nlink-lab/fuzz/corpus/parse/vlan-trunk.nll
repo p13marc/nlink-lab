@@ -7,9 +7,9 @@ lab "vlan-trunk" {
   description "Bridge with VLAN trunking and access ports"
 }
 
-node host1 { route default via 10.100.0.1 }
-node host2 { route default via 10.100.0.1 }
-node host3 { route default via 10.200.0.1 }
+node host1
+node host2
+node host3
 
 network fabric {
   vlan-filtering

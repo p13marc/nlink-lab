@@ -27,15 +27,27 @@ fn has_kernel_module(name: &str) -> bool {
 }
 
 /// Check whether nftables actually works (module loaded is not enough —
-/// some CI kernels load the module but the subsystem returns EINVAL).
+/// the nft CLI uses batched netlink but nlink may send unbatched messages
+/// that the kernel rejects with EINVAL).
 fn has_nftables() -> bool {
-    has_kernel_module("nf_tables")
-        && std::process::Command::new("nft")
-            .args(["list", "ruleset"])
+    if !has_kernel_module("nf_tables") {
+        return false;
+    }
+    // Test an actual table creation + deletion, not just listing.
+    let ok = std::process::Command::new("nft")
+        .args(["add", "table", "inet", "__nlink_lab_probe__"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    if ok {
+        let _ = std::process::Command::new("nft")
+            .args(["delete", "table", "inet", "__nlink_lab_probe__"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success())
+            .status();
+    }
+    ok
 }
 
 /// Check whether WireGuard tunnel creation works (not just the module).

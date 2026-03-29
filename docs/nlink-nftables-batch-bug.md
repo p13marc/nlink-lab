@@ -1,127 +1,60 @@
-# Bug Report: nftables mutation operations fail with EINVAL — missing batch wrapping
+# Bug Report: nftables BATCH_BEGIN/END message type constants are wrong
 
 ## Summary
 
-All nftables mutation methods (`add_table`, `add_chain`, `add_rule`, `del_table`, `del_chain`, `del_rule`) fail with `EINVAL` (os error 22) on modern Linux kernels because they send standalone netlink messages without the required `NFNL_MSG_BATCH_BEGIN` / `NFNL_MSG_BATCH_END` wrapping.
+The `NFNL_MSG_BATCH_BEGIN` and `NFNL_MSG_BATCH_END` constants in `src/netlink/nftables/mod.rs` have incorrect values. They are left-shifted by 8 bits as if they were subsystem IDs, but they are raw `nlmsg_type` values that should not be shifted. This causes all nftables batch operations to fail with `EINVAL` because the kernel doesn't recognize the batch delimiters.
 
 ## Affected version
 
-nlink 0.11.2 (and likely all prior versions)
-
-## Affected code
-
-All nftables mutation methods in `src/netlink/nftables/connection.rs` use `nft_request_ack()` (line 477) which sends the message directly as a single netlink message:
-
-| Method | Line | Sends via |
-|--------|------|-----------|
-| `add_table` | 42 | `nft_request_ack` |
-| `add_chain` | 118 | `nft_request_ack` |
-| `add_rule` | 210 | `nft_request_ack` |
-| `del_table` | 81 | `nft_request_ack` |
-| `del_chain` | 142 | `nft_request_ack` |
-| `del_rule` | ~240 | `nft_request_ack` |
-
-The `Transaction` API (line 396) and `send_batch()` (line 411) correctly wrap messages in batch begin/end, but they are not used by the individual methods.
+nlink 0.11.3 (and all prior versions)
 
 ## Root cause
 
-Since approximately Linux 4.6, the kernel's nftables subsystem requires all mutation operations to be sent within a netfilter batch (`NFNL_MSG_BATCH_BEGIN` / `NFNL_MSG_BATCH_END`). The kernel's `nf_tables_valid_genid()` check fails for non-batched mutation messages, returning `EINVAL`.
-
-The `nft_request_ack()` method (line 477) sends raw netlink messages:
+In `src/netlink/nftables/mod.rs` (lines 51-53):
 
 ```rust
-async fn nft_request_ack(&self, mut builder: MessageBuilder) -> Result<()> {
-    let seq = self.socket().next_seq();
-    builder.set_seq(seq);
-    builder.set_pid(self.socket().pid());
-    let msg = builder.finish();
-    self.socket().send(&msg).await?;      // ← sent without batch wrapping
-    // ... wait for ACK
-}
+pub const NFNL_MSG_BATCH_BEGIN: u16 = 0x10 << 8;       // = 4096 ← WRONG
+pub const NFNL_MSG_BATCH_END: u16 = (0x10 << 8) | 1;   // = 4097 ← WRONG
 ```
 
-Compare with `send_batch()` (line 411) which correctly wraps:
+The correct Linux kernel definitions (from `include/uapi/linux/netfilter/nfnetlink.h`):
 
-```rust
-async fn send_batch(&self, messages: Vec<Vec<u8>>) -> Result<()> {
-    let mut batch = Vec::new();
-
-    // NFNL_MSG_BATCH_BEGIN
-    let mut begin = MessageBuilder::new(NFNL_MSG_BATCH_BEGIN, NLM_F_REQUEST);
-    // ... append nfgenmsg ...
-    batch.extend_from_slice(&begin.finish());
-
-    // Add all messages
-    for msg_data in &messages {
-        batch.extend_from_slice(msg_data);
-    }
-
-    // NFNL_MSG_BATCH_END
-    let mut end = MessageBuilder::new(NFNL_MSG_BATCH_END, NLM_F_REQUEST);
-    // ... append nfgenmsg ...
-    batch.extend_from_slice(&end.finish());
-
-    self.socket().send(&batch).await?;
-    // ... wait for ACK
-}
+```c
+#define NFNL_MSG_BATCH_BEGIN    NLMSG_MIN_TYPE      // = 0x10 = 16
+#define NFNL_MSG_BATCH_END      (NLMSG_MIN_TYPE+1)  // = 0x11 = 17
 ```
 
-## How to reproduce
+`NLMSG_MIN_TYPE` is `0x10` (16) — a raw netlink message type. It is **not** a subsystem ID. The current code treats it like `nft_msg_type()` which does `(subsystem << 8) | msg`, but `BATCH_BEGIN/END` are nfnetlink-level messages with subsystem `NFNL_SUBSYS_NONE (0)`. Their message type is simply `0x10` / `0x11`.
 
-```rust
-use nlink::netlink::nftables::types::Family;
-
-// Create a connection in any network namespace
-let conn: Connection<Nftables> = namespace::connection_for("myns")?;
-
-// This fails with EINVAL on modern kernels
-conn.add_table("test", Family::Inet).await?;
-```
-
-## Observed error
-
-```
-failed to create nftables table on 'server': kernel error: Invalid argument (os error 22) (errno 22)
-```
+Because the kernel receives `nlmsg_type = 4096` instead of `16`, it does not recognize the message as a batch delimiter. The inner nftables messages are processed without batch context, and the kernel's `nf_tables_valid_genid()` check fails, returning `EINVAL`.
 
 ## Fix
 
-Route all nftables mutation methods through `send_batch()` instead of `nft_request_ack()`. Each individual mutation should wrap its single message in a one-element batch.
-
-For example, `add_table` should become:
-
 ```rust
-pub async fn add_table(&self, name: &str, family: Family) -> Result<()> {
-    if name.is_empty() || name.len() > 256 {
-        return Err(Error::InvalidMessage(
-            "table name must be 1-256 characters".into(),
-        ));
-    }
+// Before (wrong):
+pub const NFNL_MSG_BATCH_BEGIN: u16 = 0x10 << 8;
+pub const NFNL_MSG_BATCH_END: u16 = (0x10 << 8) | 1;
 
-    let mut builder = MessageBuilder::new(
-        nft_msg_type(NFT_MSG_NEWTABLE),
-        NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
-    );
-    let nfgenmsg = NfGenMsg::new(family);
-    builder.append(&nfgenmsg);
-    builder.append_attr_str(NFTA_TABLE_NAME, name);
-
-    let seq = self.socket().next_seq();
-    builder.set_seq(seq);
-    builder.set_pid(self.socket().pid());
-
-    self.send_batch(vec![builder.finish()]).await   // ← wrap in batch
-}
+// After (correct):
+pub const NFNL_MSG_BATCH_BEGIN: u16 = 0x10;  // NLMSG_MIN_TYPE
+pub const NFNL_MSG_BATCH_END: u16 = 0x11;    // NLMSG_MIN_TYPE + 1
 ```
 
-Apply the same pattern to all other mutation methods (`add_chain`, `add_rule`, `del_table`, `del_chain`, `del_rule`).
+## How to verify
 
-Alternatively, `nft_request_ack` itself could be modified to always wrap the message in a batch, since all callers are mutation operations.
+After the fix, this should succeed:
 
-## Note on the `Transaction` API
+```rust
+use nlink::netlink::{Connection, Nftables};
+use nlink::netlink::nftables::types::Family;
 
-The existing `Transaction` builder API works correctly because `Transaction::commit()` calls `send_batch()`. This bug only affects the individual convenience methods.
+let conn = Connection::<Nftables>::new()?;
+conn.add_table("test", Family::Inet).await?;
+conn.del_table("test", Family::Inet).await?;
+```
 
-## Compatibility
+The `nft` CLI tool (which uses libnftnl and constructs correct batch messages) can serve as a reference — `nft add table inet test` works fine on the same kernel.
 
-The batch wrapping is backwards-compatible with older kernels — the batch protocol has been supported since Linux 3.13 (the initial nftables release). There is no downside to always using batch wrapping.
+## Note
+
+The `Transaction` API is also affected since it uses the same `send_batch()` method with the same wrong constants.

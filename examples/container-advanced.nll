@@ -30,7 +30,7 @@ node app image "python:3-slim" {
     entrypoint "/bin/sh"
     cmd ["-c", "python -m http.server 8080"]
     workdir "/app"
-    cpu "1"
+    cpu 1
     memory ${app_memory}
     cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]
     labels ["nlink.role=app", "nlink.tier=backend"]

@@ -279,13 +279,13 @@ man:
 - [ ] Tests + example
 
 ### Phase 2: Colors
-- [ ] Color helpers
-- [ ] NO_COLOR / --no-color
-- [ ] Apply to all commands
+- [x] Color helpers (ANSI, atty crate for TTY detection)
+- [x] NO_COLOR env var respected
+- [x] Applied to validation (WARN/ERROR) and deploy (OK)
 
 ### Phase 3: Inspect
-- [ ] Command implementation
-- [ ] Combined output
+- [x] Command implementation (combined status + links + impairments + processes)
+- [x] Combined output with bold headers
 - [ ] --json support
 
 ### Phase 4: Deploy Timing

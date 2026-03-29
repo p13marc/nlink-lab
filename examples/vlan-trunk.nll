@@ -1,26 +1,19 @@
 # VLAN trunk topology.
 #
-# A central switch (bridge with VLAN filtering) connecting three hosts.
+# A bridge with VLAN filtering connecting three hosts.
 # Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
 
 lab "vlan-trunk" {
   description "Bridge with VLAN trunking and access ports"
 }
 
-profile switch { forward ipv4 }
-
-node switch : switch
 node host1 { route default via 10.100.0.1 }
 node host2 { route default via 10.100.0.1 }
 node host3 { route default via 10.200.0.1 }
 
-link switch:eth1 -- host1:eth0 { 10.100.0.1/24 -- 10.100.0.10/24 }
-link switch:eth2 -- host2:eth0 { 10.100.0.1/24 -- 10.100.0.20/24 }
-link switch:eth3 -- host3:eth0 { 10.200.0.1/24 -- 10.200.0.10/24 }
-
 network fabric {
   vlan-filtering
-  members [switch:br0]
+  members [host1:eth0, host2:eth0, host3:eth0]
   vlan 100 "sales"
   vlan 200 "engineering"
   port host1 { pvid 100  untagged }

@@ -598,7 +598,7 @@ nlink-lab init --list
 | `spine-leaf` | Datacenter fabric: 2 spines, 2 leaves, 2 servers | 6 | profiles, loopback, multi-hop |
 | `wan` | Two sites over impaired WAN link | 4 | delay, loss, rate-limiting, jitter |
 | `firewall` | Server behind a stateful nftables firewall | 3 | nftables, conntrack, policy |
-| `vlan-trunk` | Bridge with VLAN filtering, trunk and access ports | 4 | bridge, vlan-filtering, pvid, tagged |
+| `vlan-trunk` | Bridge with VLAN filtering, trunk and access ports | 3 | bridge, vlan-filtering, pvid, tagged |
 | `vrf` | PE router with VRF tenant isolation | 3 | vrf, routing-tables, tenant-isolation |
 | `wireguard` | Site-to-site WireGuard VPN tunnel | 2 | wireguard, encryption, tunnel |
 | `vxlan` | VXLAN overlay between two VTEPs | 2 | vxlan, overlay, underlay |

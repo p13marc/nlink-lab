@@ -78,7 +78,7 @@ const TEMPLATES: &[Template] = &[
     Template {
         name: "vlan-trunk",
         description: "Bridge with VLAN filtering, trunk and access ports",
-        node_count: 4,
+        node_count: 3,
         link_count: 0,
         features: &["bridge", "vlan-filtering", "pvid", "tagged"],
         nll: include_str!("../../../../examples/vlan-trunk.nll"),

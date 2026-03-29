@@ -704,22 +704,17 @@ link server:eth0 -- client:eth0 {
 ### 9. VLAN Trunk
 
 ```nll
-lab "vlan-trunk"
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
 
-profile switch { forward ipv4 }
-
-node switch : switch
 node host1 { route default via 10.100.0.1 }
 node host2 { route default via 10.100.0.1 }
 node host3 { route default via 10.200.0.1 }
 
-link switch:eth1 -- host1:eth0 { 10.100.0.1/24 -- 10.100.0.10/24 }
-link switch:eth2 -- host2:eth0 { 10.100.0.1/24 -- 10.100.0.20/24 }
-link switch:eth3 -- host3:eth0 { 10.200.0.1/24 -- 10.200.0.10/24 }
-
 network fabric {
   vlan-filtering
-  members [switch:br0]
+  members [host1:eth0, host2:eth0, host3:eth0]
   vlan 100 "sales"
   vlan 200 "engineering"
   port host1 { pvid 100  untagged }
@@ -957,7 +952,7 @@ for p in 1..4 {
 | vrf-multitenant | 19 | 38 | 50% |
 | wireguard-vpn | 31 | 57 | 46% |
 | iperf-bench | 12 | 24 | 50% |
-| vlan-trunk | 22 | 50 | 56% |
+| vlan-trunk | 15 | 50 | 70% |
 | ring (6 nodes) | 20 | ~80 | 75% |
 | satellite (asym) | 18 | ~40 | 55% |
 | enterprise (VRF) | 42 | ~90 | 53% |

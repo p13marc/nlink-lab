@@ -284,6 +284,9 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut description = None;
     let mut prefix = None;
     let mut runtime = None;
+    let mut version = None;
+    let mut author = None;
+    let mut tags = Vec::new();
 
     // Parse optional inline runtime before block
     if eat(tokens, pos, &Token::Runtime) {
@@ -309,6 +312,18 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                     *pos += 1;
                     runtime = Some(expect_string(tokens, pos)?);
                 }
+                Some(Token::Version) => {
+                    *pos += 1;
+                    version = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Author) => {
+                    *pos += 1;
+                    author = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Tags) => {
+                    *pos += 1;
+                    tags = parse_ident_list(tokens, pos)?;
+                }
                 Some(other) => {
                     return Err(err(tokens, *pos, format!(
                         "unexpected {other} in lab block"
@@ -328,6 +343,9 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         description,
         prefix,
         runtime,
+        version,
+        author,
+        tags,
     })
 }
 

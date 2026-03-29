@@ -79,6 +79,18 @@ pub struct LabConfig {
 
     /// Container runtime to use when nodes specify an image.
     pub runtime: Option<ContainerRuntime>,
+
+    /// Version string.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+
+    /// Author name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+
+    /// Tags for categorization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 impl LabConfig {

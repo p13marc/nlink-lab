@@ -789,6 +789,9 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
             "podman" => types::ContainerRuntime::Podman,
             _ => types::ContainerRuntime::Auto,
         }),
+        version: lab.version.clone(),
+        author: lab.author.clone(),
+        tags: lab.tags.clone(),
     }
 }
 

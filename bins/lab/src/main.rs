@@ -120,6 +120,12 @@ enum Commands {
         topology: PathBuf,
     },
 
+    /// Render a topology file with all loops, variables, and imports expanded.
+    Render {
+        /// Path to the topology file (.nll).
+        topology: PathBuf,
+    },
+
     /// List processes running in a lab.
     Ps {
         /// Lab name.
@@ -550,6 +556,16 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Graph { topology } => {
             let topo = nlink_lab::parser::parse_file(&topology)?;
             print!("{}", topology_to_dot(&topo));
+            Ok(())
+        }
+
+        Commands::Render { topology } => {
+            let topo = nlink_lab::parser::parse_file(&topology)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&topo)?);
+            } else {
+                print!("{}", nlink_lab::render::render(&topo));
+            }
             Ok(())
         }
 

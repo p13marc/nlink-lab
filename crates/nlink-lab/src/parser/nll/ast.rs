@@ -25,6 +25,9 @@ pub struct LabDecl {
     pub description: Option<String>,
     pub prefix: Option<String>,
     pub runtime: Option<String>,
+    pub version: Option<String>,
+    pub author: Option<String>,
+    pub tags: Vec<String>,
 }
 
 /// Top-level statement.

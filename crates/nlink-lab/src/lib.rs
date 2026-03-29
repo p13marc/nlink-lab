@@ -60,6 +60,7 @@ pub mod diff;
 pub mod error;
 pub mod helpers;
 pub mod parser;
+pub mod render;
 pub mod running;
 pub mod state;
 pub mod templates;

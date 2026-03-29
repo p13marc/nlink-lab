@@ -31,6 +31,12 @@ pub enum Token {
     Link,
     #[token("defaults")]
     Defaults,
+    #[token("version")]
+    Version,
+    #[token("author")]
+    Author,
+    #[token("tags")]
+    Tags,
     #[token("network")]
     Network,
     #[token("for")]

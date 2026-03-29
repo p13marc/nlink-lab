@@ -103,7 +103,8 @@ impl RunningLab {
     }
 
     /// Look up the namespace name for a node.
-    fn namespace_for(&self, node: &str) -> Result<&str> {
+    /// Get the namespace name for a bare namespace node.
+    pub fn namespace_for(&self, node: &str) -> Result<&str> {
         self.namespace_names
             .get(node)
             .map(|s| s.as_str())
@@ -122,8 +123,13 @@ impl RunningLab {
         &mut self.namespace_names
     }
 
-    /// Access container states map (crate-internal, used by apply_diff).
-    pub(crate) fn containers(&self) -> &HashMap<String, ContainerState> {
+    /// Get the container state for a container node, if it is one.
+    pub fn container_for(&self, node: &str) -> Option<&ContainerState> {
+        self.containers.get(node)
+    }
+
+    /// Access container states map.
+    pub fn containers(&self) -> &HashMap<String, ContainerState> {
         &self.containers
     }
 
@@ -137,8 +143,8 @@ impl RunningLab {
         &self.pids
     }
 
-    /// Runtime binary (crate-internal).
-    pub(crate) fn runtime_binary(&self) -> Option<&str> {
+    /// Runtime binary (docker or podman).
+    pub fn runtime_binary(&self) -> Option<&str> {
         self.runtime_binary.as_deref()
     }
 

@@ -12,6 +12,14 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
+    /// Verbose output (show deployment steps, tracing info).
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
+    /// Quiet output (errors only).
+    #[arg(short, long, global = true)]
+    quiet: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -52,12 +60,16 @@ enum Commands {
 
     /// Tear down a running lab.
     Destroy {
-        /// Lab name.
-        name: String,
+        /// Lab name (omit with --all to destroy all labs).
+        name: Option<String>,
 
         /// Continue cleanup even if some resources are already gone.
         #[arg(long)]
         force: bool,
+
+        /// Destroy all running labs.
+        #[arg(long)]
+        all: bool,
     },
 
     /// Show running labs or details of a specific lab.
@@ -136,6 +148,19 @@ enum Commands {
         ascii: bool,
     },
 
+    /// Open an interactive shell in a lab node.
+    Shell {
+        /// Lab name.
+        lab: String,
+
+        /// Node name.
+        node: String,
+
+        /// Shell to use (default: /bin/sh).
+        #[arg(long, default_value = "/bin/sh")]
+        shell: String,
+    },
+
     /// List processes running in a lab.
     Ps {
         /// Lab name.
@@ -208,6 +233,46 @@ enum Commands {
         /// Output file (default: stdout).
         #[arg(short, long)]
         output: Option<PathBuf>,
+    },
+
+    /// List container nodes in a running lab.
+    Containers {
+        /// Lab name.
+        lab: String,
+    },
+
+    /// Show container logs.
+    Logs {
+        /// Lab name.
+        lab: String,
+        /// Node name (must be a container node).
+        node: String,
+        /// Stream logs (tail -f style).
+        #[arg(long)]
+        follow: bool,
+        /// Show last N lines.
+        #[arg(long)]
+        tail: Option<u32>,
+    },
+
+    /// Pre-pull all container images from a topology.
+    Pull {
+        /// Path to the topology file (.nll).
+        topology: PathBuf,
+    },
+
+    /// Show container resource usage.
+    Stats {
+        /// Lab name.
+        lab: String,
+    },
+
+    /// Restart a container node.
+    Restart {
+        /// Lab name.
+        lab: String,
+        /// Node name (must be a container node).
+        node: String,
     },
 
     /// Generate shell completions.
@@ -325,6 +390,8 @@ fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> nlink_lab::Result<()> {
     let json = cli.json;
+    let quiet = cli.quiet;
+    let _verbose = cli.verbose;
     match cli.command {
         Commands::Deploy {
             topology,
@@ -375,6 +442,16 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 topo.lab.name, elapsed
             );
             print_deploy_summary(&topo);
+
+            if !quiet {
+                let first_node = topo.nodes.keys().next().map(|s| s.as_str()).unwrap_or("node");
+                println!();
+                println!("Next steps:");
+                println!("  nlink-lab status {}          # inspect lab", topo.lab.name);
+                println!("  nlink-lab exec {} {} -- ip addr", topo.lab.name, first_node);
+                println!("  nlink-lab shell {} {}        # interactive shell", topo.lab.name, first_node);
+                println!("  nlink-lab destroy {}         # tear down", topo.lab.name);
+            }
 
             if daemon {
                 run_daemon_inline(&lab).await?;
@@ -430,16 +507,52 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Destroy { name, force } => {
+        Commands::Destroy { name, force, all } => {
             check_root();
+            if all {
+                let labs = nlink_lab::RunningLab::list()?;
+                if labs.is_empty() {
+                    println!("No running labs.");
+                    return Ok(());
+                }
+                for info in &labs {
+                    match nlink_lab::RunningLab::load(&info.name) {
+                        Ok(lab) => {
+                            lab.destroy().await?;
+                            println!("Destroyed '{}'", info.name);
+                        }
+                        Err(_) if force => {
+                            force_cleanup(&info.name).await;
+                            println!("Force-cleaned '{}'", info.name);
+                        }
+                        Err(e) => eprintln!("Failed to destroy '{}': {e}", info.name),
+                    }
+                }
+                println!("{} lab(s) destroyed", labs.len());
+                return Ok(());
+            }
+            let name = name.ok_or_else(|| {
+                nlink_lab::Error::deploy_failed("lab name required (or use --all)")
+            })?;
             match nlink_lab::RunningLab::load(&name) {
                 Ok(lab) => {
                     let node_count = lab.namespace_count();
+                    let topo = lab.topology();
+                    let container_count = topo.nodes.values().filter(|n| n.image.is_some()).count();
+                    let link_count = topo.links.len();
+                    let process_count = lab.process_status().iter().filter(|p| p.alive).count();
                     lab.destroy().await?;
-                    println!("Lab {name:?} destroyed ({node_count} namespaces removed)");
+                    println!("Lab {name:?} destroyed:");
+                    println!("  Nodes:       {node_count}");
+                    if container_count > 0 {
+                        println!("  Containers:  {container_count} stopped and removed");
+                    }
+                    println!("  Links:       {link_count}");
+                    if process_count > 0 {
+                        println!("  Processes:   {process_count} killed");
+                    }
                 }
                 Err(e) if force => {
-                    // Force cleanup: try to delete namespaces by prefix pattern
                     eprintln!("warning: state not found, attempting force cleanup: {e}");
                     force_cleanup(&name).await;
                     println!("Lab {name:?} force-cleaned");
@@ -472,13 +585,20 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 if json {
                     println!("{}", serde_json::to_string_pretty(lab.topology())?);
                 } else {
-                    println!("Lab: {}", lab.name());
-                    println!("Nodes: {}", lab.namespace_count());
                     let topo = lab.topology();
-                    println!("Links: {}", topo.links.len());
-                    println!("Impairments: {}", topo.impairments.len());
-                    let node_names: Vec<&str> = lab.node_names().collect();
-                    println!("  {}", node_names.join(", "));
+                    println!("Lab: {}", lab.name());
+                    println!("Nodes: {}  Links: {}  Impairments: {}",
+                        lab.namespace_count(), topo.links.len(), topo.impairments.len());
+                    println!();
+                    println!("  {:<20} {:<12} {}", "NODE", "TYPE", "IMAGE");
+                    let mut names: Vec<&String> = topo.nodes.keys().collect();
+                    names.sort();
+                    for name in names {
+                        let node = &topo.nodes[name];
+                        let kind = if node.image.is_some() { "container" } else { "namespace" };
+                        let image = node.image.as_deref().unwrap_or("--");
+                        println!("  {:<20} {:<12} {}", name, kind, image);
+                    }
                 }
                 Ok(())
             }
@@ -487,6 +607,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Exec { lab, node, cmd } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
+            // Validate node exists
+            let node_names: Vec<&str> = running.node_names().collect();
+            if !node_names.contains(&node.as_str()) {
+                eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
+                eprintln!("Available nodes: {}", node_names.join(", "));
+                std::process::exit(1);
+            }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
             let output = running.exec(&node, &cmd[0], &args)?;
 
@@ -587,6 +714,40 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
+        Commands::Shell { lab, node, shell } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            // Validate node exists
+            let node_names: Vec<&str> = running.node_names().collect();
+            if !node_names.contains(&node.as_str()) {
+                eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
+                eprintln!("Available nodes: {}", node_names.join(", "));
+                std::process::exit(1);
+            }
+            if let Some(container) = running.container_for(&node) {
+                let rt = running.runtime_binary().unwrap_or("docker");
+                let status = std::process::Command::new(rt)
+                    .args(["exec", "-it", &container.id, &shell])
+                    .stdin(std::process::Stdio::inherit())
+                    .stdout(std::process::Stdio::inherit())
+                    .stderr(std::process::Stdio::inherit())
+                    .status()
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("exec failed: {e}")))?;
+                std::process::exit(status.code().unwrap_or(1));
+            } else {
+                let ns = running.namespace_for(&node)?;
+                let ns_path = format!("/var/run/netns/{ns}");
+                let status = std::process::Command::new("nsenter")
+                    .args(["--net", &ns_path, "--", &shell])
+                    .stdin(std::process::Stdio::inherit())
+                    .stdout(std::process::Stdio::inherit())
+                    .stderr(std::process::Stdio::inherit())
+                    .status()
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("nsenter failed: {e}")))?;
+                std::process::exit(status.code().unwrap_or(1));
+            }
+        }
+
         Commands::Ps { lab } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let procs = running.process_status();
@@ -616,28 +777,44 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
             let results = running.diagnose(node.as_deref()).await?;
-            for diag in &results {
-                println!("── {} ──", diag.node);
-                for iface in &diag.interfaces {
-                    let status = if iface.issues.is_empty() {
-                        "OK"
-                    } else {
-                        "WARN"
-                    };
-                    println!(
-                        "  [{status:<4}] {:<12} state={:<6} mtu={:<5} rx={} tx={}",
-                        iface.name,
-                        format!("{:?}", iface.state),
-                        iface.mtu.unwrap_or(0),
-                        iface.stats.rx_bytes(),
-                        iface.stats.tx_bytes(),
-                    );
-                    for issue in &iface.issues {
-                        println!("         {issue}");
+            if json {
+                let json_results: Vec<serde_json::Value> = results.iter().map(|diag| {
+                    serde_json::json!({
+                        "node": diag.node,
+                        "interfaces": diag.interfaces.iter().map(|iface| {
+                            serde_json::json!({
+                                "name": iface.name,
+                                "state": format!("{:?}", iface.state),
+                                "mtu": iface.mtu,
+                                "rx_bytes": iface.stats.rx_bytes(),
+                                "tx_bytes": iface.stats.tx_bytes(),
+                                "issues": iface.issues.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+                            })
+                        }).collect::<Vec<_>>(),
+                        "issues": diag.issues.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+                    })
+                }).collect();
+                println!("{}", serde_json::to_string_pretty(&json_results)?);
+            } else {
+                for diag in &results {
+                    println!("── {} ──", diag.node);
+                    for iface in &diag.interfaces {
+                        let status = if iface.issues.is_empty() { "OK" } else { "WARN" };
+                        println!(
+                            "  [{status:<4}] {:<12} state={:<6} mtu={:<5} rx={} tx={}",
+                            iface.name,
+                            format!("{:?}", iface.state),
+                            iface.mtu.unwrap_or(0),
+                            iface.stats.rx_bytes(),
+                            iface.stats.tx_bytes(),
+                        );
+                        for issue in &iface.issues {
+                            println!("         {issue}");
+                        }
                     }
-                }
-                for issue in &diag.issues {
-                    println!("  [WARN] {issue}");
+                    for issue in &diag.issues {
+                        println!("  [WARN] {issue}");
+                    }
                 }
             }
             Ok(())
@@ -676,6 +853,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             print!("{}", output.stdout);
             if !output.stderr.is_empty() {
                 eprint!("{}", output.stderr);
+            }
+            if output.exit_code != 0 {
+                std::process::exit(output.exit_code);
             }
             Ok(())
         }
@@ -892,19 +1072,130 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         }
 
         Commands::Wait { name, timeout } => {
-            let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
+            let start = Instant::now();
+            let deadline = start + std::time::Duration::from_secs(timeout);
+            eprint!("Waiting for lab '{name}'...");
             loop {
                 if nlink_lab::state::exists(&name) {
-                    println!("Lab '{name}' is ready.");
+                    eprintln!(" ready ({:.1}s)", start.elapsed().as_secs_f64());
                     return Ok(());
                 }
                 if Instant::now() >= deadline {
+                    eprintln!(" timeout after {timeout}s");
                     return Err(nlink_lab::Error::invalid_topology(format!(
                         "timeout waiting for lab '{name}' after {timeout}s"
                     )));
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
+        }
+
+        Commands::Containers { lab } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let containers = running.containers();
+            if containers.is_empty() {
+                println!("No container nodes in lab '{lab}'.");
+            } else if json {
+                let data: Vec<serde_json::Value> = containers.iter().map(|(name, state)| {
+                    serde_json::json!({ "node": name, "image": state.image, "id": state.id, "pid": state.pid })
+                }).collect();
+                println!("{}", serde_json::to_string_pretty(&data)?);
+            } else {
+                println!("  {:<16} {:<20} {:<14} {}", "NODE", "IMAGE", "CONTAINER ID", "PID");
+                let mut entries: Vec<_> = containers.iter().collect();
+                entries.sort_by_key(|(name, _)| (*name).clone());
+                for (name, state) in entries {
+                    let short_id = if state.id.len() > 12 { &state.id[..12] } else { &state.id };
+                    println!("  {:<16} {:<20} {:<14} {}", name, state.image, short_id, state.pid);
+                }
+            }
+            Ok(())
+        }
+
+        Commands::Logs { lab, node, follow, tail } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let container = running.container_for(&node).ok_or_else(|| {
+                nlink_lab::Error::deploy_failed(format!(
+                    "node '{node}' is not a container. Logs are only available for container nodes."
+                ))
+            })?;
+            let rt = running.runtime_binary().unwrap_or("docker");
+            let mut args = vec!["logs".to_string()];
+            if follow { args.push("--follow".to_string()); }
+            if let Some(n) = tail { args.push("--tail".to_string()); args.push(n.to_string()); }
+            args.push(container.id.clone());
+            let status = std::process::Command::new(rt)
+                .args(&args)
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("logs failed: {e}")))?;
+            if !status.success() { std::process::exit(status.code().unwrap_or(1)); }
+            Ok(())
+        }
+
+        Commands::Pull { topology } => {
+            let topo = nlink_lab::parser::parse_file(&topology)?;
+            let images: std::collections::BTreeSet<&str> = topo.nodes.values()
+                .filter_map(|n| n.image.as_deref())
+                .collect();
+            if images.is_empty() {
+                println!("No container images in topology.");
+            } else {
+                let rt = nlink_lab::container::Runtime::detect()?;
+                for image in &images {
+                    eprint!("Pulling {image}...");
+                    rt.pull_image(image)?;
+                    eprintln!(" done");
+                }
+                println!("{} image(s) pulled", images.len());
+            }
+            Ok(())
+        }
+
+        Commands::Stats { lab } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let containers = running.containers();
+            if containers.is_empty() {
+                println!("No container nodes in lab '{lab}'.");
+            } else {
+                let rt = running.runtime_binary().unwrap_or("docker");
+                let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
+                let output = std::process::Command::new(rt)
+                    .args(["stats", "--no-stream", "--format",
+                        "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"])
+                    .args(&ids)
+                    .output()
+                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("stats failed: {e}")))?;
+                print!("{}", String::from_utf8_lossy(&output.stdout));
+            }
+            Ok(())
+        }
+
+        Commands::Restart { lab, node } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let container = running.container_for(&node).ok_or_else(|| {
+                nlink_lab::Error::deploy_failed(format!(
+                    "node '{node}' is not a container. Restart is only available for container nodes."
+                ))
+            })?;
+            let rt = running.runtime_binary().unwrap_or("docker");
+            eprint!("Restarting '{node}'...");
+            let status = std::process::Command::new(rt)
+                .args(["restart", &container.id])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("restart failed: {e}")))?;
+            if status.success() {
+                eprintln!(" done");
+            } else {
+                eprintln!(" failed");
+                std::process::exit(1);
+            }
+            Ok(())
         }
 
         Commands::Completions { .. } => {

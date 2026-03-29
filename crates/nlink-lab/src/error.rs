@@ -1,4 +1,5 @@
 //! Error types for nlink-lab operations.
+#![allow(unused_assignments)] // false positives from thiserror/miette derive macros
 
 use std::path::PathBuf;
 

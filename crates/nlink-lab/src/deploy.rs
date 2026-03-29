@@ -1409,13 +1409,9 @@ pub async fn apply_diff(
             endpoint: link.endpoints[0].clone(),
         })?;
 
-        // Get a connection to the node's namespace
-        if let Some(ns_name) = running.namespace_names().get(&ep.node) {
-            if namespace::exists(ns_name) {
-                let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-                    Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
-                })?;
-                // Deleting one end removes the whole veth pair
+        // Get a connection to the node's namespace (bare or container)
+        if let Ok(handle) = node_handle_for(running, &ep.node) {
+            if let Ok(conn) = handle.connection::<Route>() {
                 if let Err(e) = conn.del_link(&ep.iface).await {
                     tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
                 }
@@ -1452,38 +1448,68 @@ pub async fn apply_diff(
     }
 
     // ── Phase 4: Add new nodes ─────────────────────────────────────
+    // Detect container runtime lazily if any new node needs one.
+    let new_container_nodes = diff.nodes_added.iter().any(|name| {
+        desired.nodes.get(name).is_some_and(|n| n.image.is_some())
+    });
+    let container_runtime = if new_container_nodes {
+        let rt_config = desired.lab.runtime.as_ref().cloned().unwrap_or_default();
+        let rt = Runtime::new(&rt_config)?;
+        running.set_runtime_binary(rt.binary().to_string());
+        Some(rt)
+    } else {
+        // Reconstruct from existing state if we need it for removal (already handled)
+        None
+    };
+
     for node_name in &diff.nodes_added {
         let node = desired.nodes.get(node_name).ok_or_else(|| Error::NodeNotFound {
             name: node_name.clone(),
         })?;
 
-        if node.image.is_some() {
-            // Container nodes in apply are not yet supported (v1 limitation)
-            return Err(Error::deploy_failed(format!(
-                "adding container node '{node_name}' via apply is not yet supported; \
-                 destroy and redeploy instead"
-            )));
+        if let Some(image) = &node.image {
+            // Container node
+            let rt = container_runtime.as_ref().unwrap();
+            rt.ensure_image(image)?;
+            let container_name = format!("{}-{}", desired.lab.prefix(), node_name);
+            let opts = CreateOpts {
+                cmd: node.cmd.clone(),
+                env: node.env.clone().unwrap_or_default(),
+                volumes: node.volumes.clone().unwrap_or_default(),
+            };
+            let info = rt.create(&container_name, image, &opts)?;
+            running.containers_mut().insert(
+                node_name.clone(),
+                ContainerState {
+                    id: info.id,
+                    name: info.name,
+                    image: image.clone(),
+                    pid: info.pid,
+                },
+            );
+        } else {
+            // Bare namespace node
+            let ns_name = desired.namespace_name(node_name);
+            if namespace::exists(&ns_name) {
+                return Err(Error::AlreadyExists {
+                    name: format!("namespace '{ns_name}' already exists"),
+                });
+            }
+            namespace::create(&ns_name).map_err(|e| {
+                Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
+            })?;
+            running.namespace_names_mut().insert(node_name.clone(), ns_name.clone());
         }
-
-        let ns_name = desired.namespace_name(node_name);
-        if namespace::exists(&ns_name) {
-            return Err(Error::AlreadyExists {
-                name: format!("namespace '{ns_name}' already exists"),
-            });
-        }
-        namespace::create(&ns_name).map_err(|e| {
-            Error::deploy_failed(format!("failed to create namespace '{ns_name}': {e}"))
-        })?;
-        running.namespace_names_mut().insert(node_name.clone(), ns_name.clone());
 
         // Apply sysctls
+        let handle = node_handle_for(running, node_name)?;
         let sysctls = desired.effective_sysctls(node);
         if !sysctls.is_empty() {
             let entries: Vec<(&str, &str)> = sysctls
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
-            namespace::set_sysctls(&ns_name, &entries).map_err(|e| {
+            handle.set_sysctls(&entries).map_err(|e| {
                 Error::deploy_failed(format!("failed to apply sysctls for node '{node_name}': {e}"))
             })?;
         }
@@ -1498,23 +1524,14 @@ pub async fn apply_diff(
             endpoint: link.endpoints[1].clone(),
         })?;
 
-        // Resolve namespace names for both endpoints
-        let ns_a = running
-            .namespace_names()
-            .get(&ep_a.node)
-            .ok_or_else(|| Error::NodeNotFound { name: ep_a.node.clone() })?
-            .clone();
-        let ns_b = running
-            .namespace_names()
-            .get(&ep_b.node)
-            .ok_or_else(|| Error::NodeNotFound { name: ep_b.node.clone() })?
-            .clone();
+        let handle_a = node_handle_for(running, &ep_a.node)?;
+        let handle_b = node_handle_for(running, &ep_b.node)?;
 
-        let ns_b_fd = namespace::open(&ns_b).map_err(|e| {
+        let ns_b_fd = handle_b.open_ns_fd().map_err(|e| {
             Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
         })?;
 
-        let conn_a: Connection<Route> = namespace::connection_for(&ns_a).map_err(|e| {
+        let conn_a: Connection<Route> = handle_a.connection().map_err(|e| {
             Error::deploy_failed(format!("failed to connect to '{}': {e}", ep_a.node))
         })?;
 
@@ -1536,8 +1553,8 @@ pub async fn apply_diff(
         if let Some(addresses) = &link.addresses {
             for (ep_str, addr_str) in link.endpoints.iter().zip(addresses.iter()) {
                 let ep = EndpointRef::parse(ep_str).unwrap();
-                let ns = &running.namespace_names()[&ep.node];
-                let conn: Connection<Route> = namespace::connection_for(ns).map_err(|e| {
+                let ep_handle = node_handle_for(running, &ep.node)?;
+                let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                 })?;
                 let (ip, prefix) = parse_cidr(addr_str)?;
@@ -1553,8 +1570,8 @@ pub async fn apply_diff(
         // Bring up interfaces on both sides
         for ep_str in &link.endpoints {
             let ep = EndpointRef::parse(ep_str).unwrap();
-            let ns = &running.namespace_names()[&ep.node];
-            let conn: Connection<Route> = namespace::connection_for(ns).map_err(|e| {
+            let ep_handle = node_handle_for(running, &ep.node)?;
+            let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
                 Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
             })?;
             conn.set_link_up(&ep.iface).await.map_err(|e| {
@@ -1569,11 +1586,11 @@ pub async fn apply_diff(
     // ── Phase 6: Configure new nodes (routes, firewall) ────────────
     for node_name in &diff.nodes_added {
         let node = &desired.nodes[node_name];
-        let ns_name = &running.namespace_names()[node_name];
+        let handle = node_handle_for(running, node_name)?;
 
         // Routes
         if !node.routes.is_empty() {
-            let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
+            let conn: Connection<Route> = handle.connection().map_err(|e| {
                 Error::deploy_failed(format!("connection for '{node_name}': {e}"))
             })?;
             for (dest, route_config) in &node.routes {
@@ -1583,9 +1600,6 @@ pub async fn apply_diff(
 
         // Firewall
         if let Some(fw) = desired.effective_firewall(node) {
-            let handle = NodeHandle::Namespace {
-                ns_name: ns_name.clone(),
-            };
             apply_firewall(&handle, node_name, fw).await?;
         }
     }
@@ -1616,6 +1630,27 @@ pub async fn apply_diff(
     state::save(&lab_state, desired)?;
 
     Ok(())
+}
+
+/// Resolve a node name to a [`NodeHandle`] from a [`RunningLab`].
+///
+/// Looks up namespace nodes first, then container nodes.
+fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NodeHandle> {
+    if let Some(ns_name) = running.namespace_names().get(node_name) {
+        return Ok(NodeHandle::Namespace {
+            ns_name: ns_name.clone(),
+        });
+    }
+    if let Some(container) = running.containers().get(node_name) {
+        return Ok(NodeHandle::Container {
+            id: container.id.clone(),
+            pid: container.pid,
+            ns_path: format!("/proc/{}/ns/net", container.pid),
+        });
+    }
+    Err(Error::NodeNotFound {
+        name: node_name.to_string(),
+    })
 }
 
 /// Build a NetemConfig from an Impairment.

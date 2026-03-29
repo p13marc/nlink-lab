@@ -1209,4 +1209,127 @@ link a:eth0 -- missing:eth0
         let result = validate_topo(topo);
         assert!(result.bail().is_ok());
     }
+
+    #[test]
+    fn test_duplicate_link_endpoint() {
+        let result = parse_and_validate(
+            r#"lab "dup-ep"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+"#,
+        );
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "duplicate-link-endpoint"));
+    }
+
+    #[test]
+    fn test_interface_name_length() {
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "long-iface".into();
+        topo.nodes.insert("a".into(), Default::default());
+        topo.nodes.insert("b".into(), Default::default());
+        // 16-char interface name exceeds Linux's 15-char IFNAMSIZ limit
+        topo.links.push(crate::types::Link {
+            endpoints: ["a:this_is_too_long".into(), "b:eth0".into()],
+            addresses: None,
+            mtu: None,
+        });
+        let result = validate_topo(topo);
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "interface-name-length"));
+    }
+
+    #[test]
+    fn test_mtu_consistency_warning() {
+        let mut topo = crate::Lab::new("mtu-mismatch")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| l.mtu(9000))
+            .build();
+        // Set a conflicting MTU on the explicit interface
+        let iface = topo
+            .nodes
+            .get_mut("a")
+            .unwrap()
+            .interfaces
+            .entry("eth0".into())
+            .or_default();
+        iface.mtu = Some(1500);
+        let result = validate_topo(topo);
+        assert!(result.has_warnings());
+        assert!(result.warnings().any(|w| w.rule == "mtu-consistency"));
+    }
+
+    #[test]
+    fn test_vrf_table_unique() {
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "dup-vrf-table".into();
+        let mut node = crate::types::Node::default();
+        node.vrfs.insert(
+            "vrf1".into(),
+            crate::types::VrfConfig {
+                table: 100,
+                interfaces: vec![],
+                routes: Default::default(),
+            },
+        );
+        node.vrfs.insert(
+            "vrf2".into(),
+            crate::types::VrfConfig {
+                table: 100, // same table — conflict
+                interfaces: vec![],
+                routes: Default::default(),
+            },
+        );
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "vrf-table-unique"));
+    }
+
+    #[test]
+    fn test_wireguard_peer_exists() {
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "wg-bad-peer".into();
+        let mut node = crate::types::Node::default();
+        node.wireguard.insert(
+            "wg0".into(),
+            crate::types::WireguardConfig {
+                peers: vec!["nonexistent".into()],
+                ..Default::default()
+            },
+        );
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "wireguard-peer-exists"));
+    }
+
+    #[test]
+    fn test_container_requires_image() {
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "no-image".into();
+        let mut node = crate::types::Node::default();
+        // Set container fields without an image
+        node.env = Some([("FOO".into(), "bar".into())].into());
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "container-requires-image"));
+    }
+
+    #[test]
+    fn test_empty_image() {
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "empty-img".into();
+        let mut node = crate::types::Node::default();
+        node.image = Some(String::new());
+        topo.nodes.insert("a".into(), node);
+        let result = validate_topo(topo);
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "empty-image"));
+    }
 }

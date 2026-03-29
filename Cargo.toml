@@ -8,6 +8,7 @@ members = [
     "bins/nlink-lab-backend",
     "bins/topoviewer",
 ]
+exclude = ["crates/nlink-lab/fuzz"]
 
 [workspace.package]
 version = "0.1.0"

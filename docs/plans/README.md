@@ -6,20 +6,21 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [070](070-topoviewer.md) | Native topology visualizer (Iced GUI, Zenoh client) | Low | 5-7 days |
+| [090](090-hardening.md) | Container apply, fuzzing, scalability, validator coverage | Medium | 4-5 days |
 
 ### Recommended Order
 
-1. **070 — TopoViewer GUI** — unprivileged Iced GUI via Zenoh
+1. **090 — Hardening** — container apply support, NLL fuzzing, scalability, validator coverage
 
 ## Completed
 
 Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
-060 (NLL parser), 072 (lab templates), 080 (bug fixes & safety),
-081 (code quality), 082 (NLL completeness), 083 (validator hardening),
-084 (CLI UX), 085 (test coverage), 086 (feature flags), 087 (topology composition
-& hot-reload), 088 (remove TOML), and 071 (Zenoh backend & metrics) have been
-implemented and their plan files removed.
+060 (NLL parser), 070 (topoviewer GUI), 071 (Zenoh backend & metrics),
+072 (lab templates), 080 (bug fixes & safety), 081 (code quality),
+082 (NLL completeness), 083 (validator hardening), 084 (CLI UX),
+085 (test coverage), 086 (feature flags), 087 (topology composition
+& hot-reload), and 088 (remove TOML) have been implemented and their
+plan files removed.
 
 ## Reference
 

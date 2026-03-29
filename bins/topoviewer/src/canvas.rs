@@ -63,7 +63,8 @@ impl canvas::Program<Message> for TopoViewer {
                 let was_interacting = state.pan_start.is_some() || state.drag_node.is_some();
                 state.pan_start = None;
                 if let Some(node) = state.drag_node.take() {
-                    return Some(Action::publish(Message::NodeDragEnd(node)).and_capture());
+                    drop(node);
+                    return Some(Action::publish(Message::NodeDragEnd).and_capture());
                 }
                 if was_interacting {
                     Some(Action::capture())

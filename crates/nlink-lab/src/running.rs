@@ -142,6 +142,11 @@ impl RunningLab {
         self.runtime_binary.as_deref()
     }
 
+    /// Set the runtime binary (crate-internal, used by apply_diff).
+    pub(crate) fn set_runtime_binary(&mut self, binary: String) {
+        self.runtime_binary = Some(binary);
+    }
+
     /// Replace the topology (crate-internal, used after apply).
     pub(crate) fn set_topology(&mut self, topology: Topology) {
         self.topology = topology;

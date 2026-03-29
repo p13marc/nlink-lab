@@ -50,7 +50,7 @@ pub enum Message {
     // Canvas interaction
     NodeClicked(String),
     NodeDragged(String, Point),
-    NodeDragEnd(String),
+    NodeDragEnd,
     BackgroundClicked,
     PanCamera(Vector),
     ScrollZoom(f32, Point),
@@ -205,7 +205,7 @@ impl TopoViewer {
                 self.node_positions.insert(name, pos);
                 self.canvas_cache.clear();
             }
-            Message::NodeDragEnd(_) => {
+            Message::NodeDragEnd => {
                 self.dragging = None;
             }
             Message::BackgroundClicked => {

@@ -11,11 +11,19 @@ pub struct File {
     pub statements: Vec<Statement>,
 }
 
-/// Import declaration: `import "path.nll" as alias`.
+/// Import declaration: `import "path.nll" as alias` or `import "file.nll" as alias(key=val)`.
 #[derive(Debug, Clone)]
 pub struct ImportDef {
     pub path: String,
     pub alias: String,
+    pub params: Vec<(String, String)>,
+}
+
+/// Module parameter declaration: `param name default value`.
+#[derive(Debug, Clone)]
+pub struct ParamDef {
+    pub name: String,
+    pub default: Option<String>,
 }
 
 /// Lab declaration at the top of the file.
@@ -40,6 +48,7 @@ pub enum Statement {
     Impair(ImpairDef),
     Rate(RateDef),
     Defaults(DefaultsDef),
+    Param(ParamDef),
     Let(LetDef),
     For(ForLoop),
 }

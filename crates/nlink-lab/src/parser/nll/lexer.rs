@@ -31,6 +31,12 @@ pub enum Token {
     Link,
     #[token("defaults")]
     Defaults,
+    #[token("param")]
+    Param,
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
     #[token("src")]
     Src,
     #[token("dst")]

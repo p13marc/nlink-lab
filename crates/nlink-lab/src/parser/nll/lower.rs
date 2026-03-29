@@ -86,9 +86,13 @@ fn lower_with_base_dir(
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
             ast::Statement::Profile(_) | ast::Statement::Let(_)
-            | ast::Statement::For(_) | ast::Statement::Defaults(_) => {}
+            | ast::Statement::For(_) | ast::Statement::Defaults(_)
+            | ast::Statement::Param(_) => {}
         }
     }
+
+    // Post-lowering pass: resolve cross-references like ${router.eth0}
+    resolve_cross_refs(&mut topology)?;
 
     Ok(topology)
 }
@@ -121,13 +125,74 @@ fn resolve_imports(
             crate::Error::NllParse(format!("cannot read import '{}': {e}", imp.path))
         })?;
         let tokens = super::lexer::lex(&content)?;
-        let ast = super::parser::parse_tokens(&tokens, &content)?;
+        let mut ast = super::parser::parse_tokens(&tokens, &content)?;
+
+        // Resolve parametric import: inject caller params, apply defaults from `param` stmts
+        if !imp.params.is_empty() || ast.statements.iter().any(|s| matches!(s, ast::Statement::Param(_))) {
+            resolve_import_params(&imp.params, &mut ast)?;
+        }
+
         let import_base = import_path.parent().unwrap_or(base_dir);
         let imported = lower_with_base_dir(&ast, Some(import_base), visited)?;
 
         // Merge imported topology with alias prefix
         merge_import(topology, &imp.alias, imported);
     }
+    Ok(())
+}
+
+/// Resolve parametric import parameters.
+///
+/// Collects `param` declarations from the imported file, matches them against
+/// caller-provided values, and injects the resolved values as `let` bindings
+/// at the beginning of the imported file's statements.
+fn resolve_import_params(
+    caller_params: &[(String, String)],
+    ast: &mut ast::File,
+) -> Result<()> {
+    // Collect param declarations
+    let module_params: Vec<ast::ParamDef> = ast
+        .statements
+        .iter()
+        .filter_map(|s| match s {
+            ast::Statement::Param(p) => Some(p.clone()),
+            _ => None,
+        })
+        .collect();
+
+    // For each declared param, use caller value or default
+    let mut let_stmts = Vec::new();
+    for param in &module_params {
+        let value = caller_params
+            .iter()
+            .find(|(k, _)| k == &param.name)
+            .map(|(_, v)| v.clone())
+            .or_else(|| param.default.clone())
+            .ok_or_else(|| {
+                crate::Error::NllParse(format!(
+                    "required parameter '{}' not provided in import",
+                    param.name
+                ))
+            })?;
+        let_stmts.push(ast::Statement::Let(ast::LetDef {
+            name: param.name.clone(),
+            value,
+        }));
+    }
+
+    // Warn about unknown caller params
+    for (key, _) in caller_params {
+        if !module_params.iter().any(|p| &p.name == key) {
+            tracing::warn!("unknown parameter '{key}' passed to import");
+        }
+    }
+
+    // Remove param statements and prepend let bindings
+    ast.statements.retain(|s| !matches!(s, ast::Statement::Param(_)));
+    let mut new_stmts = let_stmts;
+    new_stmts.append(&mut ast.statements);
+    ast.statements = new_stmts;
+
     Ok(())
 }
 
@@ -175,6 +240,86 @@ fn prefix_endpoint(alias: &str, endpoint: &str) -> String {
     } else {
         format!("{alias}.{endpoint}")
     }
+}
+
+// ─── Cross-Reference Resolution ─────────────────────────
+
+/// Build a map of node:interface → IP address from all link definitions.
+fn build_address_map(topology: &types::Topology) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for link in &topology.links {
+        if let Some(addrs) = &link.addresses {
+            for (ep_str, addr) in link.endpoints.iter().zip(addrs.iter()) {
+                // Extract IP without prefix length
+                let ip = addr.split('/').next().unwrap_or(addr);
+                map.insert(ep_str.clone(), ip.to_string());
+            }
+        }
+    }
+    // Also collect explicit interface addresses
+    for (node_name, node) in &topology.nodes {
+        for (iface_name, iface_cfg) in &node.interfaces {
+            if let Some(addr) = iface_cfg.addresses.first() {
+                let ip = addr.split('/').next().unwrap_or(addr);
+                let key = format!("{node_name}:{iface_name}");
+                map.entry(key).or_insert_with(|| ip.to_string());
+            }
+        }
+    }
+    map
+}
+
+/// Replace `${node.iface}` references with resolved IP addresses.
+fn resolve_ref(s: &str, addr_map: &HashMap<String, String>) -> Result<String> {
+    let mut result = s.to_string();
+    // Find all ${...} patterns that contain a dot (cross-references)
+    let mut search_from = 0;
+    while let Some(start) = result[search_from..].find("${") {
+        let start = search_from + start;
+        if let Some(end) = result[start..].find('}') {
+            let end = start + end;
+            let expr = &result[start + 2..end];
+            // Only resolve dot-references (node.iface), not arithmetic
+            if let Some(dot) = expr.find('.') {
+                let node = &expr[..dot];
+                let iface = &expr[dot + 1..];
+                let key = format!("{node}:{iface}");
+                if let Some(addr) = addr_map.get(&key) {
+                    result.replace_range(start..=end, addr);
+                    search_from = start + addr.len();
+                    continue;
+                }
+            }
+        }
+        search_from = start + 2;
+    }
+    Ok(result)
+}
+
+/// Resolve cross-references in all topology string fields.
+fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
+    let addr_map = build_address_map(topology);
+    if addr_map.is_empty() {
+        return Ok(());
+    }
+
+    // Resolve references in node routes and firewall rules
+    for (_, node) in &mut topology.nodes {
+        for (_, route) in &mut node.routes {
+            if let Some(via) = &mut route.via {
+                *via = resolve_ref(via, &addr_map)?;
+            }
+        }
+        if let Some(fw) = &mut node.firewall {
+            for rule in &mut fw.rules {
+                if let Some(match_expr) = &mut rule.match_expr {
+                    *match_expr = resolve_ref(match_expr, &addr_map)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 // ─── Context ──────────────────────────────────────────────
@@ -534,6 +679,7 @@ fn interpolate_statement(
         ast::Statement::Rate(r) => ast::Statement::Rate(interpolate_rate_def(r, vars)),
         ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
         ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
+        ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
     }
@@ -1927,5 +2073,60 @@ link a:eth0 -- b:eth0 { 10.0.0.0/30 }
         let ep = "a:eth0";
         assert!(topo.impairments.contains_key(ep));
         assert_eq!(topo.impairments[ep].delay.as_deref(), Some("5ms"));
+    }
+
+    // ─── Plan 094 tests ─────────────────────────────────
+
+    #[test]
+    fn test_cross_reference_route() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node router
+node host { route default via ${router.eth0} }
+link router:eth0 -- host:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        );
+        let route = &topo.nodes["host"].routes["default"];
+        assert_eq!(route.via.as_deref(), Some("10.0.0.1"));
+    }
+
+    #[test]
+    fn test_cross_reference_forward() {
+        // Cross-ref where the link appears BEFORE the route (forward reference)
+        let topo = parse_and_lower(
+            r#"lab "t"
+link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+node r1
+node h1 { route default via ${r1.eth0} }
+"#,
+        );
+        let route = &topo.nodes["h1"].routes["default"];
+        assert_eq!(route.via.as_deref(), Some("10.0.0.1"));
+    }
+
+    #[test]
+    fn test_cross_reference_unresolved_stays() {
+        // Reference to nonexistent node.iface stays as-is (not an error for flexibility)
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a { route default via ${nonexist.eth0} }
+"#,
+        );
+        let route = &topo.nodes["a"].routes["default"];
+        assert_eq!(route.via.as_deref(), Some("${nonexist.eth0}"));
+    }
+
+    #[test]
+    fn test_cross_reference_with_subnet_auto() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node r1
+node h1 { route default via ${r1.eth0} }
+link r1:eth0 -- h1:eth0 { 10.0.0.0/30 }
+"#,
+        );
+        let route = &topo.nodes["h1"].routes["default"];
+        // Subnet auto-assigns .1 to left (r1:eth0)
+        assert_eq!(route.via.as_deref(), Some("10.0.0.1"));
     }
 }

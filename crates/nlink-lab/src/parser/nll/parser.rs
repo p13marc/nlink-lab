@@ -44,7 +44,30 @@ fn parse_import(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ImportDef> {
     let path = expect_string(tokens, pos)?;
     expect(tokens, pos, &Token::As)?;
     let alias = expect_ident(tokens, pos)?;
-    Ok(ast::ImportDef { path, alias })
+
+    // Optional parametric import: (key=value, ...)
+    let params = if eat(tokens, pos, &Token::LParen) {
+        let mut params = Vec::new();
+        loop {
+            skip_newlines(tokens, pos);
+            if check(tokens, *pos, &Token::RParen) {
+                *pos += 1;
+                break;
+            }
+            if !params.is_empty() {
+                eat(tokens, pos, &Token::Comma);
+            }
+            let key = expect_ident(tokens, pos)?;
+            expect(tokens, pos, &Token::Eq)?;
+            let value = parse_value(tokens, pos)?;
+            params.push((key, value));
+        }
+        params
+    } else {
+        vec![]
+    };
+
+    Ok(ast::ImportDef { path, alias, params })
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -373,10 +396,11 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Impair => parse_impair_stmt(tokens, pos).map(ast::Statement::Impair),
         Token::Rate => parse_rate_stmt(tokens, pos).map(ast::Statement::Rate),
         Token::Defaults => parse_defaults(tokens, pos).map(ast::Statement::Defaults),
+        Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
         other => Err(err(tokens, *pos, format!(
-            "expected statement (profile, node, link, network, impair, rate, defaults, let, for), found {other}"
+            "expected statement (profile, node, link, network, impair, rate, defaults, param, let, for), found {other}"
         ))),
     }
 }
@@ -1367,6 +1391,17 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
 }
 
 // ─── Let / For ────────────────────────────────────────────
+
+fn parse_param(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ParamDef> {
+    expect(tokens, pos, &Token::Param)?;
+    let name = expect_ident(tokens, pos)?;
+    let default = if eat(tokens, pos, &Token::Default) {
+        Some(parse_value(tokens, pos)?)
+    } else {
+        None
+    };
+    Ok(ast::ParamDef { name, default })
+}
 
 fn parse_let(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LetDef> {
     expect(tokens, pos, &Token::Let)?;

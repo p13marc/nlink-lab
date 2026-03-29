@@ -372,7 +372,8 @@ fn warn_unresolved_refs(topology: &types::Topology) {
 /// State for a named subnet pool.
 struct PoolState {
     base: u32,         // base network address as u32
-    pool_size: u32,    // total addresses in the pool
+    #[allow(dead_code)]
+    pool_size: u32,    // total addresses in the pool (for exhaustion check)
     alloc_prefix: u8,  // allocation prefix size (e.g., 30 for /30)
     next_offset: u32,  // next allocation offset from base
 }

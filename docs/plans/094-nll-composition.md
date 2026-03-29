@@ -480,25 +480,25 @@ pub fn lower(ast: &ast::File) -> Result<Topology> {
 ## Progress
 
 ### Phase 1: Firewall src/dst
-- [ ] Tokens
-- [ ] Parser
-- [ ] IPv4/IPv6 detection
-- [ ] Tests
+- [x] Tokens
+- [x] Parser (loop-based, supports combined matches)
+- [x] IPv4/IPv6 detection
+- [x] Tests
 
 ### Phase 2: Multi-Profile Inheritance
-- [ ] AST change
-- [ ] Parser
-- [ ] Merge logic
-- [ ] Tests
+- [x] AST change (profile → profiles: Vec<String>)
+- [x] Parser (comma-separated profiles)
+- [x] Merge logic (left-to-right, per-key override)
+- [x] Tests
 
 ### Phase 3: Parametric Imports
-- [ ] Tokens + AST
-- [ ] Parser
-- [ ] Parameter resolution
-- [ ] Tests
+- [x] Tokens + AST (Param, LParen, RParen, ParamDef, ImportDef.params)
+- [x] Parser (param declarations, parametric import syntax)
+- [x] Parameter resolution (inject as let bindings)
+- [x] Tests
 
 ### Phase 4: Cross-References
-- [ ] AddressMap
-- [ ] resolve_cross_refs()
-- [ ] Integration into lowering
-- [ ] Tests
+- [x] AddressMap (build from links + explicit interfaces)
+- [x] resolve_cross_refs() post-lowering pass
+- [x] Integration into lowering (called before Ok(topology))
+- [x] Tests (forward refs, subnet auto-assign interaction, unresolved)

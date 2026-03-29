@@ -46,5 +46,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      - name: Load kernel modules for integration tests
+        run: |
+          sudo modprobe nf_tables || true
+          sudo modprobe vrf || true
+          sudo modprobe wireguard || true
+          sudo modprobe br_netfilter || true
+          sudo modprobe 8021q || true
+
       - name: Integration tests (requires root)
-        run: sudo -E env PATH="$PATH" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" $(which cargo) test -p nlink-lab --test integration
+        run: sudo -E env PATH="$PATH" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" $(which cargo) test -p nlink-lab --test integration -- --test-threads=1

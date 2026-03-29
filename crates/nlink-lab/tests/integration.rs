@@ -9,6 +9,23 @@ use nlink_lab::lab_test;
 #[allow(unused_imports)]
 use nlink_lab::{Lab, RunningLab};
 
+/// Check whether a kernel module is available (loaded or loadable).
+fn has_kernel_module(name: &str) -> bool {
+    // Check if already loaded
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules")
+        && modules.lines().any(|l| l.starts_with(name))
+    {
+        return true;
+    }
+    // Try to load it
+    std::process::Command::new("modprobe")
+        .arg(name)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 // ─── File-based tests ─────────────────────────────────────
 
 #[lab_test("examples/simple.nll")]
@@ -102,8 +119,22 @@ fn builder_topology() -> nlink_lab::Topology {
 
 // ─── Firewall test ────────────────────────────────────────
 
-#[lab_test("examples/firewall.nll")]
-async fn deploy_firewall(lab: RunningLab) {
+#[tokio::test]
+async fn deploy_firewall() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping deploy_firewall: requires root");
+        return;
+    }
+    if !has_kernel_module("nf_tables") {
+        eprintln!("skipping deploy_firewall: nf_tables kernel module not available");
+        return;
+    }
+
+    let topo = nlink_lab::parser::parse_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/firewall.nll"))
+        .expect("failed to parse topology file");
+    let lab = topo.deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup { name: lab.name().to_string() };
+
     let output = lab.exec("server", "nft", &["list", "ruleset"]).unwrap();
     assert_eq!(output.exit_code, 0);
     assert!(
@@ -111,6 +142,9 @@ async fn deploy_firewall(lab: RunningLab) {
         "expected nftables rules in output: {}",
         output.stdout
     );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("failed to destroy lab");
 }
 
 // ─── Spine-leaf test ──────────────────────────────────────
@@ -144,8 +178,22 @@ async fn state_persistence(lab: RunningLab) {
 
 // ─── VRF test (plan 050) ─────────────────────────────────
 
-#[lab_test("examples/vrf-multitenant.nll")]
-async fn deploy_vrf(lab: RunningLab) {
+#[tokio::test]
+async fn deploy_vrf() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping deploy_vrf: requires root");
+        return;
+    }
+    if !has_kernel_module("vrf") {
+        eprintln!("skipping deploy_vrf: vrf kernel module not available");
+        return;
+    }
+
+    let topo = nlink_lab::parser::parse_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/vrf-multitenant.nll"))
+        .expect("failed to parse topology file");
+    let lab = topo.deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup { name: lab.name().to_string() };
+
     assert_eq!(lab.topology().nodes.len(), 3);
 
     // VRF "red" interface should exist on PE
@@ -199,12 +247,19 @@ async fn deploy_vrf(lab: RunningLab) {
         "tenant-b cannot reach PE: stdout={} stderr={}",
         output.stdout, output.stderr
     );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("failed to destroy lab");
 }
 
 // ─── WireGuard test (plan 050) ───────────────────────────
 
 #[lab_test("examples/wireguard-vpn.nll")]
 async fn deploy_wireguard(lab: RunningLab) {
+    if !has_kernel_module("wireguard") {
+        eprintln!("skipping deploy_wireguard: wireguard kernel module not available");
+        return;
+    }
     assert_eq!(lab.topology().nodes.len(), 4);
 
     // wg0 interface should exist on both gateways
@@ -255,6 +310,10 @@ async fn deploy_wireguard(lab: RunningLab) {
 
 #[lab_test("examples/vlan-trunk.nll")]
 async fn deploy_bridge_vlan(lab: RunningLab) {
+    if !has_kernel_module("8021q") {
+        eprintln!("skipping deploy_bridge_vlan: 8021q kernel module not available");
+        return;
+    }
     assert_eq!(lab.topology().nodes.len(), 4);
 
     // host1 should have its address

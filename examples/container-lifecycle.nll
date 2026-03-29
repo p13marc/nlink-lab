@@ -31,5 +31,5 @@ node app image "python:3-slim" {
     exec "pip install psycopg2-binary"
 }
 
-link router:eth0 -- db:eth0 { 10.0.1.0/24 }
-link router:eth1 -- app:eth0 { 10.0.2.0/24 }
+link router:eth0 -- db:eth0 { subnet 10.0.1.0/24 }
+link router:eth1 -- app:eth0 { subnet 10.0.2.0/24 }

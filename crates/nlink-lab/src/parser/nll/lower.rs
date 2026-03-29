@@ -2173,7 +2173,7 @@ node test"#,
             r#"lab "t"
 node a
 node b
-link a:eth0 -- b:eth0 { 10.0.0.0/30 }"#,
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/30 }"#,
         );
         let link = &topo.links[0];
         let addrs = link.addresses.as_ref().unwrap();
@@ -2187,7 +2187,7 @@ link a:eth0 -- b:eth0 { 10.0.0.0/30 }"#,
             r#"lab "t"
 node a
 node b
-link a:eth0 -- b:eth0 { 10.0.0.0/31 }"#,
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/31 }"#,
         );
         let link = &topo.links[0];
         let addrs = link.addresses.as_ref().unwrap();
@@ -2201,7 +2201,7 @@ link a:eth0 -- b:eth0 { 10.0.0.0/31 }"#,
             r#"lab "t"
 node a
 node b
-link a:eth0 -- b:eth0 { 10.0.1.0/24 }"#,
+link a:eth0 -- b:eth0 { subnet 10.0.1.0/24 }"#,
         );
         let link = &topo.links[0];
         let addrs = link.addresses.as_ref().unwrap();
@@ -2215,7 +2215,7 @@ link a:eth0 -- b:eth0 { 10.0.1.0/24 }"#,
             r#"lab "t"
 node a
 node b
-link a:eth0 -- b:eth0 { 10.0.0.0/30 mtu 9000 }"#,
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/30 mtu 9000 }"#,
         );
         let link = &topo.links[0];
         assert!(link.addresses.is_some());
@@ -2285,8 +2285,8 @@ defaults link { mtu 9000 }
 node a
 node b
 node c
-link a:eth0 -- b:eth0 { 10.0.0.0/30 }
-link b:eth0 -- c:eth0 { 10.0.1.0/30 mtu 1500 }
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/30 }
+link b:eth0 -- c:eth0 { subnet 10.0.1.0/30 mtu 1500 }
 "#,
         );
         // First link gets default MTU
@@ -2330,7 +2330,7 @@ for i in 1..3 {
 defaults impair { delay 5ms }
 node a
 node b
-link a:eth0 -- b:eth0 { 10.0.0.0/30 }
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/30 }
 "#,
         );
         // Both endpoints should have the default impairment
@@ -2386,7 +2386,7 @@ node a { route default via ${nonexist.eth0} }
             r#"lab "t"
 node r1
 node h1 { route default via ${r1.eth0} }
-link r1:eth0 -- h1:eth0 { 10.0.0.0/30 }
+link r1:eth0 -- h1:eth0 { subnet 10.0.0.0/30 }
 "#,
         );
         let route = &topo.nodes["h1"].routes["default"];
@@ -2530,7 +2530,7 @@ link a:eth0 -- b:eth0 { pool p2p }
             r#"lab "t"
 node a
 node b
-link a:eth0 -- b:eth0 { 10.0.0.0/30 }
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/30 }
 validate {
     reach a b
     no-reach b a

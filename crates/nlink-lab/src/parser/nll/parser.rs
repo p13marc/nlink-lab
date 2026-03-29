@@ -180,6 +180,7 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Interval => Some("interval".into()),
         Token::Timeout => Some("timeout".into()),
         Token::Retries => Some("retries".into()),
+        Token::Subnet => Some("subnet".into()),
         Token::Pool => Some("pool".into()),
         Token::Validate => Some("validate".into()),
         Token::Reach => Some("reach".into()),
@@ -1303,15 +1304,15 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 Some(Token::Cidr(_)) | Some(Token::Ipv6Cidr(_)) | Some(Token::Ipv6Addr(_))
                 | Some(Token::Interp(_)) | Some(Token::Int(_)) => {
                     let first_addr = parse_cidr_or_name(tokens, pos)?;
-                    if eat(tokens, pos, &Token::DashDash) {
-                        // Paired addresses: left -- right
-                        let right_addr = parse_cidr_or_name(tokens, pos)?;
-                        link.left_addr = Some(first_addr);
-                        link.right_addr = Some(right_addr);
-                    } else {
-                        // Single subnet: auto-assign endpoints
-                        link.subnet = Some(first_addr);
-                    }
+                    expect(tokens, pos, &Token::DashDash)?;
+                    let right_addr = parse_cidr_or_name(tokens, pos)?;
+                    link.left_addr = Some(first_addr);
+                    link.right_addr = Some(right_addr);
+                }
+                // Subnet auto-assignment: subnet 10.0.0.0/30
+                Some(Token::Subnet) => {
+                    *pos += 1;
+                    link.subnet = Some(parse_cidr_or_name(tokens, pos)?);
                 }
                 // MTU
                 Some(Token::Mtu) => {

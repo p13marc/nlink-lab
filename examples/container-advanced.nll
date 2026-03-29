@@ -39,5 +39,5 @@ node router : router {
     pull missing
 }
 
-link router:eth0 -- web:eth0 { 10.0.1.0/24 }
-link router:eth1 -- app:eth0 { 10.0.2.0/24 }
+link router:eth0 -- web:eth0 { subnet 10.0.1.0/24 }
+link router:eth1 -- app:eth0 { subnet 10.0.2.0/24 }

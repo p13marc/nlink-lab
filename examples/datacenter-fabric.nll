@@ -51,7 +51,7 @@ node server8 { route default via ${leaf8.eth0} }
 for l in 1..8 {
   for s in 1..4 {
     link spine${s}:eth${l} -- leaf${l}:up${s} {
-      10.${s}.${l}.0/31
+      subnet 10.${s}.${l}.0/31
     }
   }
 }
@@ -60,7 +60,7 @@ for l in 1..8 {
 
 for l in 1..8 {
   link leaf${l}:eth0 -- server${l}:eth0 {
-    10.100.${l}.0/24
+    subnet 10.100.${l}.0/24
     mtu 1500
   }
 }

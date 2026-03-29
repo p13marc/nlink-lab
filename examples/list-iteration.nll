@@ -20,7 +20,7 @@ for svc in [web, api, worker, cache] {
 }
 
 /* Load balancer connects to all services */
-link lb:eth0 -- web:eth0 { 10.0.1.0/24 }
-link lb:eth1 -- api:eth0 { 10.0.2.0/24 }
-link lb:eth2 -- worker:eth0 { 10.0.3.0/24 }
-link lb:eth3 -- cache:eth0 { 10.0.4.0/24 }
+link lb:eth0 -- web:eth0 { subnet 10.0.1.0/24 }
+link lb:eth1 -- api:eth0 { subnet 10.0.2.0/24 }
+link lb:eth2 -- worker:eth0 { subnet 10.0.3.0/24 }
+link lb:eth3 -- cache:eth0 { subnet 10.0.4.0/24 }

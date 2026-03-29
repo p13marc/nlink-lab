@@ -38,11 +38,11 @@ node server1 : host { route default via ${leaf1.eth3} }
 node server2 : host { route default via ${leaf2.eth3} }
 
 # Fabric links (spine <-> leaf) — subnet auto-assigned, MTU from defaults
-link spine1:eth1 -- leaf1:eth1 { 10.0.11.0/30 }
-link spine1:eth2 -- leaf2:eth1 { 10.0.12.0/30 }
-link spine2:eth1 -- leaf1:eth2 { 10.0.21.0/30 }
-link spine2:eth2 -- leaf2:eth2 { 10.0.22.0/30 }
+link spine1:eth1 -- leaf1:eth1 { subnet 10.0.11.0/30 }
+link spine1:eth2 -- leaf2:eth1 { subnet 10.0.12.0/30 }
+link spine2:eth1 -- leaf1:eth2 { subnet 10.0.21.0/30 }
+link spine2:eth2 -- leaf2:eth2 { subnet 10.0.22.0/30 }
 
 # Access links (leaf <-> server) — no jumbo MTU needed
-link leaf1:eth3 -- server1:eth0 { 10.1.1.0/24 mtu 1500 }
-link leaf2:eth3 -- server2:eth0 { 10.1.2.0/24 mtu 1500 }
+link leaf1:eth3 -- server1:eth0 { subnet 10.1.1.0/24 mtu 1500 }
+link leaf2:eth3 -- server2:eth0 { subnet 10.1.2.0/24 mtu 1500 }

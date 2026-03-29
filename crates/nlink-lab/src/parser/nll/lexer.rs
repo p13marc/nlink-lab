@@ -81,6 +81,8 @@ pub enum Token {
     Timeout,
     #[token("retries")]
     Retries,
+    #[token("subnet")]
+    Subnet,
     #[token("pool")]
     Pool,
     #[token("validate")]

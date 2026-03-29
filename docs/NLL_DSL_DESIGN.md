@@ -303,7 +303,11 @@ Range `1..4` is inclusive: 1, 2, 3, 4.
 ### 13. Comments
 
 ```nll
-# Line comments only (like TOML, Python, shell)
+# Line comments (like TOML, Python, shell)
+
+/* Block comments for multi-line sections.
+   Supports nesting: /* inner */ outer.
+   Line numbers preserved for error reporting. */
 ```
 
 ---
@@ -970,20 +974,33 @@ more concise.
 
 ```
 file           = import* lab_decl statement*
-import         = "import" STRING "as" IDENT
-lab_decl       = "lab" STRING ("runtime" STRING)? block?
+import         = "import" STRING "as" IDENT ("(" param_list ")")?
+param_list     = IDENT "=" value ("," IDENT "=" value)*
+lab_decl       = "lab" STRING ("runtime" STRING)? lab_block?
+lab_block      = "{" lab_prop* "}"
+lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
+               | "version" STRING | "author" STRING | "tags" ident_list
 
 statement      = profile | node | link | network
-               | impair | rate | let_decl | for_loop
+               | impair | rate | defaults | pool | pattern
+               | validate | param | let_decl | for_loop
 
 profile        = "profile" IDENT block
-node           = "node" name (":" IDENT)? ("image" STRING ("cmd" (STRING | string_list))?)? (block | NEWLINE)
-link           = "link" endpoint "--" endpoint (block | NEWLINE)
+node           = "node" name (":" profile_list)?
+                 ("image" STRING ("cmd" (STRING | string_list))?)?
+                 container_props? (block | NEWLINE)
+profile_list   = name ("," name)*
+link           = "link" endpoint "--" endpoint (link_block | NEWLINE)
 network        = "network" IDENT block
 impair         = "impair" endpoint impair_props
 rate           = "rate" endpoint rate_props
+defaults       = "defaults" ("link" | "impair" | "rate") block
+pool           = "pool" IDENT CIDR "/" INT
+pattern        = ("mesh" | "ring" | "star") IDENT block
+validate       = "validate" "{" assertion* "}"
+param          = "param" IDENT ("default" value)?
 let_decl       = "let" IDENT "=" value
-for_loop       = "for" IDENT "in" range block
+for_loop       = "for" IDENT "in" (range | list) block
 
 name           = (IDENT | INTERP) (IDENT | INTERP | INT | ".")*
 endpoint       = name ":" name
@@ -1002,26 +1019,50 @@ property       = "forward" ("ipv4" | "ipv6")
                | "vxlan" IDENT block
                | "dummy" IDENT block
                | "run" "background"? string_list
-               | "interfaces" list
-               | "members" list
-               | "vlan-filtering"
-               | "vlan" INT STRING?
-               | "port" endpoint block
-               | "mtu" INT
-               | "address" CIDR
-               | addr_pair
-               | impair_props
-               | dir_impair
-               | rate_props
 
+# ── Container properties ────────────────────────
+container_props = "cpu" value | "memory" value
+               | "privileged" | "cap-add" ident_list | "cap-drop" ident_list
+               | "entrypoint" STRING | "hostname" STRING | "workdir" STRING
+               | "labels" string_list | "pull" IDENT
+               | "exec" STRING
+               | "healthcheck" STRING healthcheck_block?
+               | "startup-delay" DURATION
+               | "env-file" STRING | "config" STRING STRING | "overlay" STRING
+               | "depends-on" ident_list
+               | "env" string_list | "volumes" string_list
+
+healthcheck_block = "{" ("interval" DURATION | "timeout" DURATION | "retries" INT)* "}"
+
+# ── Link block ───────────────────────────────────
+link_block     = "{" link_item* "}"
+link_item      = addr_pair | "subnet" CIDR | "pool" IDENT
+               | "mtu" INT | impair_props | dir_impair | rate_props
+
+# ── Network block ────────────────────────────────
+network_item   = "members" endpoint_list | "vlan-filtering"
+               | "mtu" INT | "vlan" INT STRING?
+               | "port" endpoint block
+
+# ── Pattern block ────────────────────────────────
+pattern_item   = "node" ident_list | "count" INT | "pool" IDENT
+               | "profile" IDENT | "hub" IDENT | "spokes" ident_list
+
+# ── Assertion ────────────────────────────────────
+assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
+
+# ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR
 route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?
 
 firewall_block = "{" firewall_rule* "}"
-firewall_rule  = ("accept" | "drop" | "reject") match_expr
+firewall_rule  = ("accept" | "drop" | "reject") match_expr+
 match_expr     = "ct" IDENT ("," IDENT)*
-               | ("tcp" | "udp") "dport" INT
+               | ("tcp" | "udp") ("dport" | "sport") INT
+               | "icmp" INT | "icmpv6" INT | "mark" INT
+               | "src" CIDR | "dst" CIDR
 
+# ── Impairment & rate ────────────────────────────
 addr_pair      = CIDR "--" CIDR
 dir_impair     = ("->" | "<-") impair_props
 impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
@@ -1029,25 +1070,35 @@ impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
 rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" RATE)?
 
+# ── Collections ──────────────────────────────────
 range          = INT ".." INT
-list           = "[" value ("," value)* "]"
+list           = "[" (for_expr | value ("," value)*) "]"
+for_expr       = "for" IDENT "in" INT ".." INT ":" name
+ident_list     = "[" (for_expr | IDENT ("," IDENT)*) "]"
+endpoint_list  = "[" (for_expr | endpoint ("," endpoint)*) "]"
 string_list    = "[" STRING ("," STRING)* "]"
 
 # ── Literals ─────────────────────────────────────
 IDENT          = [a-zA-Z_][a-zA-Z0-9_-]*
 STRING         = '"' [^"]* '"'
 INT            = [0-9]+
-FLOAT          = [0-9]+ ("." [0-9]+)?
 CIDR           = IP "/" INT
 IP             = ipv4_addr | ipv6_addr
 DURATION       = (INT | FLOAT) ("s" | "ms" | "us" | "ns")
 PERCENT        = (INT | FLOAT) "%"
 RATE           = INT ("bit" | "kbit" | "mbit" | "gbit"
-                    | "byte" | "kbyte" | "mbyte" | "gbyte")
+                    | "byte" | "kbyte" | "mbyte" | "gbyte"
+                    | "m" | "g" | "t" | "p")
 INTERP         = "${" expr "}"
-expr           = IDENT | IDENT ("+"|"-"|"*"|"/") INT
+expr           = ternary | arith
+ternary        = comparison "?" value ":" value
+comparison     = arith ("==" | "!=") arith
+arith          = term (("+"|"-") term)*
+term           = factor (("*"|"/"|"%") factor)*
+factor         = "(" expr ")" | IDENT | INT
 NEWLINE        = "\n"
-COMMENT        = "#" [^\n]*
+LINE_COMMENT   = "#" [^\n]*
+BLOCK_COMMENT  = "/*" (BLOCK_COMMENT | .)* "*/"
 ```
 
 ---

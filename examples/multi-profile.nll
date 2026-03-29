@@ -31,5 +31,5 @@ node edge : router, monitored, secured {
 # Host: no profiles, just a default route
 node host { route default via ${edge.eth1} }
 
-link core:eth0 -- edge:eth0 { 10.0.0.0/30 }
-link edge:eth1 -- host:eth0 { 10.0.1.0/24 }
+link core:eth0 -- edge:eth0 { subnet 10.0.0.0/30 }
+link edge:eth1 -- host:eth0 { subnet 10.0.1.0/24 }

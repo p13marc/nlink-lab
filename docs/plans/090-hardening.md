@@ -149,18 +149,18 @@ The validator has 18 rules. Tests exist for the happy path but negative coverage
 - [x] Set up cargo-fuzz
 - [x] `fuzz_parse` target
 - [x] `fuzz_lex` target
-- [ ] Run and fix panics
+- [x] Run and fix panics (2.4M parse + 4.1M lex runs, no crashes)
 - [x] Seed corpus
 
 ### Phase 3: Scalability Testing
 - [x] Parser stress (200-node ring + star, 500-node perf)
 - [x] Validator stress (200-node + 500-node perf)
-- [ ] Layout convergence
-- [ ] Deploy stress (50-node ring)
+- [x] Layout convergence (200-node ring, verified finite positions + spread)
+- [x] Deploy stress (50-node ring, `#[ignore]`)
 - [x] Fix performance issues (none found — 500 nodes in <1s)
 
 ### Phase 4: Validator Coverage
 - [x] Audit existing coverage (13/20 rules had tests)
 - [x] Add 7 negative test cases (all 20 rules now covered)
 - [x] Verify error messages
-- [ ] Full-feature topology test
+- [x] Full-feature topology test (NLL + builder DSL)

@@ -113,3 +113,63 @@ impl LayoutEngine {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_200_node_ring_converges() {
+        let n = 200;
+        let names: Vec<String> = (0..n).map(|i| format!("n{i}")).collect();
+        let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let edges: Vec<[&str; 2]> = (0..n)
+            .map(|i| [name_refs[i], name_refs[(i + 1) % n]])
+            .collect();
+        let edge_refs: Vec<[&str; 2]> = edges.iter().map(|e| [e[0], e[1]]).collect();
+
+        let engine = LayoutEngine::new(&name_refs, &edge_refs);
+
+        // Verify all positions are finite (no NaN/Inf)
+        for (name, pos) in &engine.positions {
+            assert!(
+                pos.x.is_finite() && pos.y.is_finite(),
+                "node '{name}' has non-finite position: ({}, {})",
+                pos.x,
+                pos.y
+            );
+        }
+        assert_eq!(engine.positions.len(), n);
+
+        // Verify nodes are spread out (not collapsed to a single point)
+        let xs: Vec<f32> = engine.positions.values().map(|p| p.x).collect();
+        let ys: Vec<f32> = engine.positions.values().map(|p| p.y).collect();
+        let x_range = xs.iter().copied().reduce(f32::max).unwrap()
+            - xs.iter().copied().reduce(f32::min).unwrap();
+        let y_range = ys.iter().copied().reduce(f32::max).unwrap()
+            - ys.iter().copied().reduce(f32::min).unwrap();
+        assert!(
+            x_range > 100.0 && y_range > 100.0,
+            "layout collapsed: x_range={x_range}, y_range={y_range}"
+        );
+    }
+
+    #[test]
+    fn layout_single_node() {
+        let engine = LayoutEngine::new(&["solo"], &[]);
+        assert_eq!(engine.positions.len(), 1);
+        let pos = &engine.positions["solo"];
+        assert!(pos.x.is_finite() && pos.y.is_finite());
+    }
+
+    #[test]
+    fn layout_disconnected_nodes() {
+        let names = ["a", "b", "c"];
+        let engine = LayoutEngine::new(&names, &[]);
+        // All nodes should be finite and repelled from each other
+        for name in &names {
+            let pos = &engine.positions[*name];
+            assert!(pos.x.is_finite() && pos.y.is_finite());
+        }
+    }
+}

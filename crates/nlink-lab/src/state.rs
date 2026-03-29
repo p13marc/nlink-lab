@@ -81,6 +81,32 @@ pub fn exists(name: &str) -> bool {
     state_dir(name).join("state.json").exists()
 }
 
+/// Acquire an exclusive lock on a lab's state directory.
+///
+/// Returns a [`LabLock`] guard that holds the lock until dropped.
+/// Fails immediately if another process holds the lock.
+pub fn lock(name: &str) -> Result<LabLock> {
+    let dir = state_dir(name);
+    std::fs::create_dir_all(&dir)?;
+    let lock_path = dir.join(".lock");
+    let file = std::fs::File::create(&lock_path)?;
+    let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if ret != 0 {
+        return Err(Error::deploy_failed(format!(
+            "lab '{name}' is locked by another process"
+        )));
+    }
+    Ok(LabLock { _file: file })
+}
+
+/// Guard that holds a file lock on a lab's state directory.
+/// The lock is released when this guard is dropped.
+pub struct LabLock {
+    _file: std::fs::File,
+}
+
+use std::os::unix::io::AsRawFd;
+
 /// Save lab state and topology.
 pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
     let dir = state_dir(&state.name);

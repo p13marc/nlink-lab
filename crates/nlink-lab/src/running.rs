@@ -302,6 +302,9 @@ impl RunningLab {
 
     /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
     pub async fn destroy(self) -> Result<()> {
+        // Acquire exclusive lock
+        let _lock = crate::state::lock(&self.topology.lab.name)?;
+
         // 1. Kill background processes
         for (_node, pid) in &self.pids {
             kill_process(*pid);

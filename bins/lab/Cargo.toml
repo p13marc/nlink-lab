@@ -6,7 +6,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-publish = false
+keywords = ["networking", "testing", "namespaces", "lab", "cli"]
+categories = ["command-line-utilities", "network-programming"]
+readme = "../../README.md"
 
 [[bin]]
 name = "nlink-lab"

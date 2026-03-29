@@ -88,6 +88,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // Safety check: validate first
     topology.validate().bail()?;
 
+    // Acquire exclusive lock
+    let _lock = state::lock(&topology.lab.name)?;
+
     // Check if lab already exists
     if state::exists(&topology.lab.name) {
         return Err(Error::AlreadyExists {
@@ -1413,6 +1416,9 @@ pub async fn apply_diff(
     desired: &Topology,
     diff: &crate::diff::TopologyDiff,
 ) -> Result<()> {
+    // Acquire exclusive lock
+    let _lock = state::lock(&desired.lab.name)?;
+
     // ── Phase 1: Remove impairments from endpoints being removed ──
     for ep_str in &diff.impairments_removed {
         running.clear_impairment(ep_str).await?;

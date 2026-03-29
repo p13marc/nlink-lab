@@ -227,11 +227,19 @@ impl LowerCtx {
     ) -> Result<Vec<ast::Statement>> {
         let mut result = Vec::new();
 
-        for i in for_loop.start..=for_loop.end {
-            vars.insert(for_loop.var.clone(), i.to_string());
-            vars.insert("loop.index".into(), i.to_string());
-            vars.insert("loop.first".into(), (i == for_loop.start).to_string());
-            vars.insert("loop.last".into(), (i == for_loop.end).to_string());
+        let values: Vec<String> = match &for_loop.range {
+            ast::ForRange::IntRange { start, end } => {
+                (*start..=*end).map(|i| i.to_string()).collect()
+            }
+            ast::ForRange::List(items) => items.clone(),
+        };
+        let len = values.len();
+
+        for (idx, value) in values.iter().enumerate() {
+            vars.insert(for_loop.var.clone(), value.clone());
+            vars.insert("loop.index".into(), idx.to_string());
+            vars.insert("loop.first".into(), (idx == 0).to_string());
+            vars.insert("loop.last".into(), (idx == len - 1).to_string());
 
             for stmt in &for_loop.body {
                 match stmt {
@@ -601,6 +609,7 @@ fn interpolate_link(l: &ast::LinkDef, vars: &HashMap<String, String>) -> ast::Li
         right_iface: i(&l.right_iface, vars),
         left_addr: io(&l.left_addr, vars),
         right_addr: io(&l.right_addr, vars),
+        subnet: io(&l.subnet, vars),
         mtu: l.mtu,
         impairment: l.impairment.as_ref().map(|p| interpolate_impair_props(p, vars)),
         left_impair: l.left_impair.as_ref().map(|p| interpolate_impair_props(p, vars)),
@@ -696,11 +705,21 @@ fn validate_stmt(stmt: &ast::Statement, ctx: &LowerCtx, errors: &mut Vec<String>
             }
         }
         ast::Statement::For(f) => {
-            if f.start > f.end {
-                errors.push(format!(
-                    "for loop '{}' has empty range {}..{}",
-                    f.var, f.start, f.end
-                ));
+            if let ast::ForRange::IntRange { start, end } = &f.range {
+                if start > end {
+                    errors.push(format!(
+                        "for loop '{}' has empty range {}..{}",
+                        f.var, start, end
+                    ));
+                }
+            }
+            if let ast::ForRange::List(items) = &f.range {
+                if items.is_empty() {
+                    errors.push(format!(
+                        "for loop '{}' has empty list",
+                        f.var
+                    ));
+                }
             }
             for stmt in &f.body {
                 validate_stmt(stmt, ctx, errors);
@@ -911,14 +930,43 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
     }
 }
 
+/// Split a subnet CIDR into two endpoint addresses.
+///
+/// - `/31`: `.0` and `.1` (RFC 3021 point-to-point)
+/// - `/30` and larger: network+1 and network+2
+fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
+    let (ip_str, prefix_str) = cidr.rsplit_once('/').ok_or(())?;
+    let prefix: u8 = prefix_str.parse().map_err(|_| ())?;
+    if prefix >= 32 {
+        return Err(());
+    }
+    let ip: std::net::Ipv4Addr = ip_str.parse().map_err(|_| ())?;
+    let bits = u32::from(ip);
+    if prefix == 31 {
+        // RFC 3021: .0 and .1
+        let base = bits & !(1u32);
+        let a = std::net::Ipv4Addr::from(base);
+        let b = std::net::Ipv4Addr::from(base + 1);
+        Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
+    } else {
+        // Standard: network+1 and network+2
+        let mask = !((1u32 << (32 - prefix)) - 1);
+        let network = bits & mask;
+        let a = std::net::Ipv4Addr::from(network + 1);
+        let b = std::net::Ipv4Addr::from(network + 2);
+        Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
+    }
+}
+
 fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef) {
     let endpoints = [
         format!("{}:{}", link.left_node, link.left_iface),
         format!("{}:{}", link.right_node, link.right_iface),
     ];
 
-    let addresses = match (&link.left_addr, &link.right_addr) {
-        (Some(l), Some(r)) => Some([l.clone(), r.clone()]),
+    let addresses = match (&link.left_addr, &link.right_addr, &link.subnet) {
+        (Some(l), Some(r), _) => Some([l.clone(), r.clone()]),
+        (_, _, Some(subnet)) => split_subnet(subnet).ok(),
         _ => None,
     };
 
@@ -1597,14 +1645,16 @@ for i in 1..3 {
 
     #[test]
     fn test_auto_variables_loop() {
+        // loop.index is 0-based iteration index
         let topo = parse_and_lower(
             r#"lab "t"
 for i in 1..3 {
     node n${i} { lo 10.0.${loop.index}.0/32 }
 }"#,
         );
-        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.1.0/32"]);
-        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.3.0/32"]);
+        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.0.0/32"]); // index 0
+        assert_eq!(topo.nodes["n2"].interfaces["lo"].addresses, vec!["10.0.1.0/32"]); // index 1
+        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.2.0/32"]); // index 2
     }
 
     #[test]
@@ -1655,5 +1705,117 @@ node test"#,
         assert_eq!(topo.nodes.len(), 2);
         assert!(topo.nodes.contains_key("a"));
         assert!(topo.nodes.contains_key("b"));
+    }
+
+    // ─── Wave 2 tests ───────────────────────────────────
+
+    #[test]
+    fn test_subnet_auto_assign_slash30() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.0/30 }"#,
+        );
+        let link = &topo.links[0];
+        let addrs = link.addresses.as_ref().unwrap();
+        assert_eq!(addrs[0], "10.0.0.1/30");
+        assert_eq!(addrs[1], "10.0.0.2/30");
+    }
+
+    #[test]
+    fn test_subnet_auto_assign_slash31() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.0/31 }"#,
+        );
+        let link = &topo.links[0];
+        let addrs = link.addresses.as_ref().unwrap();
+        assert_eq!(addrs[0], "10.0.0.0/31");
+        assert_eq!(addrs[1], "10.0.0.1/31");
+    }
+
+    #[test]
+    fn test_subnet_auto_assign_slash24() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.1.0/24 }"#,
+        );
+        let link = &topo.links[0];
+        let addrs = link.addresses.as_ref().unwrap();
+        assert_eq!(addrs[0], "10.0.1.1/24");
+        assert_eq!(addrs[1], "10.0.1.2/24");
+    }
+
+    #[test]
+    fn test_subnet_with_mtu() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.0/30 mtu 9000 }"#,
+        );
+        let link = &topo.links[0];
+        assert!(link.addresses.is_some());
+        assert_eq!(link.mtu, Some(9000));
+    }
+
+    #[test]
+    fn test_explicit_addresses_still_work() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }"#,
+        );
+        let link = &topo.links[0];
+        let addrs = link.addresses.as_ref().unwrap();
+        assert_eq!(addrs[0], "10.0.0.1/24");
+        assert_eq!(addrs[1], "10.0.0.2/24");
+    }
+
+    #[test]
+    fn test_list_iteration() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+for role in [web, api, db] {
+    node ${role}
+}"#,
+        );
+        assert_eq!(topo.nodes.len(), 3);
+        assert!(topo.nodes.contains_key("web"));
+        assert!(topo.nodes.contains_key("api"));
+        assert!(topo.nodes.contains_key("db"));
+    }
+
+    #[test]
+    fn test_list_iteration_with_properties() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+for name in [alpha, beta] {
+    node ${name} { route default via 10.0.0.1 }
+}"#,
+        );
+        assert_eq!(topo.nodes.len(), 2);
+        assert!(topo.nodes["alpha"].routes.contains_key("default"));
+        assert!(topo.nodes["beta"].routes.contains_key("default"));
+    }
+
+    #[test]
+    fn test_integer_range_still_works() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+for i in 1..3 {
+    node n${i}
+}"#,
+        );
+        assert_eq!(topo.nodes.len(), 3);
+        assert!(topo.nodes.contains_key("n1"));
+        assert!(topo.nodes.contains_key("n2"));
+        assert!(topo.nodes.contains_key("n3"));
     }
 }

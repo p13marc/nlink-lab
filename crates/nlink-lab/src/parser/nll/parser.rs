@@ -1003,6 +1003,7 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
         right_iface,
         left_addr: None,
         right_addr: None,
+        subnet: None,
         mtu: None,
         impairment: None,
         left_impair: None,
@@ -1021,11 +1022,16 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 // Address pair: CIDR -- CIDR (IPv4 or IPv6)
                 Some(Token::Cidr(_)) | Some(Token::Ipv6Cidr(_)) | Some(Token::Ipv6Addr(_))
                 | Some(Token::Interp(_)) | Some(Token::Int(_)) => {
-                    let left_addr = parse_cidr_or_name(tokens, pos)?;
-                    expect(tokens, pos, &Token::DashDash)?;
-                    let right_addr = parse_cidr_or_name(tokens, pos)?;
-                    link.left_addr = Some(left_addr);
-                    link.right_addr = Some(right_addr);
+                    let first_addr = parse_cidr_or_name(tokens, pos)?;
+                    if eat(tokens, pos, &Token::DashDash) {
+                        // Paired addresses: left -- right
+                        let right_addr = parse_cidr_or_name(tokens, pos)?;
+                        link.left_addr = Some(first_addr);
+                        link.right_addr = Some(right_addr);
+                    } else {
+                        // Single subnet: auto-assign endpoints
+                        link.subnet = Some(first_addr);
+                    }
                 }
                 // MTU
                 Some(Token::Mtu) => {
@@ -1290,9 +1296,28 @@ fn parse_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForLoop> {
     expect(tokens, pos, &Token::For)?;
     let var = expect_ident(tokens, pos)?;
     expect(tokens, pos, &Token::In)?;
-    let start = expect_int(tokens, pos)?;
-    expect(tokens, pos, &Token::DotDot)?;
-    let end = expect_int(tokens, pos)?;
+
+    let range = if check(tokens, *pos, &Token::LBracket) {
+        // List iteration: for x in [a, b, c]
+        *pos += 1;
+        let mut items = Vec::new();
+        loop {
+            skip_newlines(tokens, pos);
+            if check(tokens, *pos, &Token::RBracket) {
+                *pos += 1;
+                break;
+            }
+            items.push(parse_value(tokens, pos)?);
+            eat(tokens, pos, &Token::Comma);
+        }
+        ast::ForRange::List(items)
+    } else {
+        // Integer range: for i in 1..4
+        let start = expect_int(tokens, pos)?;
+        expect(tokens, pos, &Token::DotDot)?;
+        let end = expect_int(tokens, pos)?;
+        ast::ForRange::IntRange { start, end }
+    };
 
     expect(tokens, pos, &Token::LBrace)?;
     let mut body = Vec::new();
@@ -1307,8 +1332,7 @@ fn parse_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForLoop> {
 
     Ok(ast::ForLoop {
         var,
-        start,
-        end,
+        range,
         body,
     })
 }
@@ -1588,8 +1612,13 @@ for i in 1..4 {
         match &ast.statements[0] {
             ast::Statement::For(f) => {
                 assert_eq!(f.var, "i");
-                assert_eq!(f.start, 1);
-                assert_eq!(f.end, 4);
+                match &f.range {
+                    ast::ForRange::IntRange { start, end } => {
+                        assert_eq!(*start, 1);
+                        assert_eq!(*end, 4);
+                    }
+                    _ => panic!("expected IntRange"),
+                }
                 assert_eq!(f.body.len(), 1);
             }
             _ => panic!("expected For"),

@@ -176,6 +176,8 @@ pub struct LinkDef {
     pub right_iface: String,
     pub left_addr: Option<String>,
     pub right_addr: Option<String>,
+    /// Single subnet for auto-assignment (e.g., "10.0.0.0/30" → .1 and .2).
+    pub subnet: Option<String>,
     pub mtu: Option<u32>,
     /// Symmetric impairment (both directions).
     pub impairment: Option<ImpairProps>,
@@ -238,11 +240,19 @@ pub struct LetDef {
     pub value: String,
 }
 
+/// Range for a for-loop: integer range or list of values.
+#[derive(Debug, Clone)]
+pub enum ForRange {
+    /// Inclusive integer range: `for i in 1..4`
+    IntRange { start: i64, end: i64 },
+    /// List of string values: `for role in [web, api, db]`
+    List(Vec<String>),
+}
+
 /// For loop.
 #[derive(Debug, Clone)]
 pub struct ForLoop {
     pub var: String,
-    pub start: i64,
-    pub end: i64,
+    pub range: ForRange,
     pub body: Vec<Statement>,
 }

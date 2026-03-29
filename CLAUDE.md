@@ -129,7 +129,12 @@ capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
 (`validate { reach a b }`), and network (bridge) blocks.
 
-CLI includes `nlink-lab render` to expand loops/variables and print flat NLL.
+Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
+Pool exhaustion is detected and errors at parse time.
+State locking via flock prevents concurrent deploy/destroy on the same lab.
+
+CLI includes `nlink-lab render` (flat NLL, `--json`, `--dot`, `--ascii`)
+and `--skip-validate` on deploy to disable assertion execution.
 
 See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 

@@ -48,7 +48,7 @@ node router : router
 node host { route default via ${router.eth0} }  /* cross-reference */
 
 link router:eth0 -- host:eth0 {
-  10.0.0.0/30          /* subnet auto-assign: .1 and .2 */
+  subnet 10.0.0.0/30   /* auto-assign: .1 and .2 */
   delay 10ms jitter 2ms
 }
 ```
@@ -128,11 +128,24 @@ node core : router, monitored
 
 ### Reachability Assertions
 
+Post-deploy connectivity checks declared in the topology:
+
 ```nll
 validate {
     reach host1 host2        # host1 can ping host2
     no-reach host1 host3     # firewall blocks this path
 }
+```
+
+Use `--skip-validate` to disable assertion execution at deploy time.
+
+### Render and Inspect
+
+```bash
+nlink-lab render topology.nll          # expanded flat NLL
+nlink-lab render --json topology.nll   # JSON
+nlink-lab render --dot topology.nll    # Graphviz DOT
+nlink-lab render --ascii topology.nll  # text diagram
 ```
 
 See [`docs/NLL_DSL_DESIGN.md`](docs/NLL_DSL_DESIGN.md) for the full language specification.

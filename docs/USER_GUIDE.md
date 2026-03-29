@@ -359,6 +359,27 @@ validate {
 }
 ```
 
+Assertions run automatically after deploy. Use `--skip-validate` to disable.
+
+### 15. Nested Interpolation
+
+Inner `${}` expressions are resolved first, enabling dynamic references:
+
+```nll
+for i in 1..4 {
+    node host${i} { route default via ${router${i}.eth0} }
+}
+```
+
+### 16. Render Output Modes
+
+```bash
+nlink-lab render topology.nll          # expanded flat NLL (default)
+nlink-lab render --json topology.nll   # JSON
+nlink-lab render --dot topology.nll    # Graphviz DOT graph
+nlink-lab render --ascii topology.nll  # text summary
+```
+
 ---
 
 ## CLI Reference
@@ -380,7 +401,7 @@ validate {
 | `metrics` | Stream live metrics from a lab via Zenoh |
 | `init` | Create a topology file from a built-in template |
 | `graph` | Print topology as DOT graph |
-| `render` | Expand loops/variables/imports and print flat NLL |
+| `render` | Expand loops/variables/imports and print flat NLL (`--json`, `--dot`, `--ascii`) |
 | `ps` | List processes running in a lab |
 | `kill` | Kill a tracked background process |
 | `wait` | Wait for a lab to be ready |

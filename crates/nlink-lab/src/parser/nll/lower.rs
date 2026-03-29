@@ -1857,6 +1857,34 @@ link b:eth0 -- c:eth0 { 10.0.1.0/30 mtu 1500 }
     }
 
     #[test]
+    fn test_for_expression_in_peers() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node hub {
+    wireguard wg0 {
+        key auto
+        listen 51820
+        address 10.0.0.1/32
+        peers [for i in 1..3 : spoke${i}]
+    }
+}
+for i in 1..3 {
+    node spoke${i} {
+        wireguard wg0 {
+            key auto
+            listen 51820
+            address 10.0.0.${i + 1}/32
+            peers [hub]
+        }
+    }
+}
+"#,
+        );
+        let hub_wg = &topo.nodes["hub"].wireguard["wg0"];
+        assert_eq!(hub_wg.peers, vec!["spoke1", "spoke2", "spoke3"]);
+    }
+
+    #[test]
     fn test_defaults_impair() {
         let topo = parse_and_lower(
             r#"lab "t"

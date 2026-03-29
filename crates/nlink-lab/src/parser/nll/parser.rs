@@ -1415,8 +1415,13 @@ fn parse_string_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>>
 
 fn parse_ident_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>> {
     expect(tokens, pos, &Token::LBracket)?;
-    let mut items = Vec::new();
 
+    // For-expression: [for var in start..end : template]
+    if check(tokens, *pos, &Token::For) {
+        return parse_for_expr(tokens, pos);
+    }
+
+    let mut items = Vec::new();
     loop {
         skip_newlines(tokens, pos);
         if eat(tokens, pos, &Token::RBracket) {
@@ -1437,8 +1442,13 @@ fn parse_ident_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>> 
 
 fn parse_endpoint_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>> {
     expect(tokens, pos, &Token::LBracket)?;
-    let mut items = Vec::new();
 
+    // For-expression: [for i in 1..4 : r${i}:mgmt0]
+    if check(tokens, *pos, &Token::For) {
+        return parse_for_expr(tokens, pos);
+    }
+
+    let mut items = Vec::new();
     loop {
         skip_newlines(tokens, pos);
         if eat(tokens, pos, &Token::RBracket) {
@@ -1456,6 +1466,32 @@ fn parse_endpoint_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String
         items.push(format!("{node}:{iface}"));
     }
 
+    Ok(items)
+}
+
+/// Parse a for-expression inside brackets: `for var in start..end : template`.
+/// The opening `[` has already been consumed.
+fn parse_for_expr(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>> {
+    expect(tokens, pos, &Token::For)?;
+    let var = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::In)?;
+    let start = expect_int(tokens, pos)?;
+    expect(tokens, pos, &Token::DotDot)?;
+    let end = expect_int(tokens, pos)?;
+    expect(tokens, pos, &Token::Colon)?;
+
+    // Collect remaining tokens until ] as the template string
+    let mut template_parts = Vec::new();
+    while *pos < tokens.len() && !matches!(tokens[*pos].token, Token::RBracket) {
+        template_parts.push(parse_name(tokens, pos)?);
+    }
+    let template = template_parts.join("");
+    expect(tokens, pos, &Token::RBracket)?;
+
+    // Expand the for-expression
+    let items = (start..=end)
+        .map(|i| template.replace(&format!("${{{var}}}"), &i.to_string()))
+        .collect();
     Ok(items)
 }
 

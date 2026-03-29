@@ -4,7 +4,17 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-None.
+| Plan | Description | Priority | Effort |
+|------|-------------|----------|--------|
+| [099](099-production-readiness.md) | CI pipeline, crates.io packaging, state locking | High | 2-3 days |
+| [100](100-validate-and-errors.md) | Validate execution, error migration, man page, NLL spec update | Medium | 2-3 days |
+| [101](101-nll-syntax-cleanup.md) | Breaking syntax changes: explicit subnet, container block, firewall, nested interpolation | Low | 3-5 days |
+
+### Recommended Order
+
+1. **099 — Production Readiness** — CI must exist before breaking changes
+2. **100 — Validate & Errors** — wire the validate block, clean up errors
+3. **101 — Syntax Cleanup** — breaking changes last, after CI catches regressions
 
 ## Completed
 

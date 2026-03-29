@@ -1,0 +1,43 @@
+# Advanced container topology.
+#
+# Demonstrates container-specific NLL features: resource limits,
+# capabilities, entrypoint, hostname, workdir, labels, pull policy,
+# and post-deploy exec commands.
+
+lab "container-advanced" {
+    description "Container nodes with advanced configuration"
+}
+
+profile router { forward ipv4 }
+
+/* Web server: resource-limited, custom hostname, exec for setup */
+node web image "nginx:alpine" {
+    cpu "0.5"
+    memory "256m"
+    hostname "web-server"
+    labels ["nlink.role=web", "nlink.tier=frontend"]
+    exec "nginx -t"
+    route default via ${router.eth0}
+}
+
+/* App server: custom entrypoint and workdir */
+node app image "python:3-slim" {
+    entrypoint "/bin/sh"
+    cmd ["-c", "python -m http.server 8080"]
+    workdir "/app"
+    cpu "1"
+    memory "512m"
+    labels ["nlink.role=app", "nlink.tier=backend"]
+    route default via ${router.eth1}
+}
+
+/* Router: full privileges for advanced networking */
+node router : router {
+    image "alpine:latest"
+    cmd ["sleep", "infinity"]
+    privileged
+    pull missing
+}
+
+link router:eth0 -- web:eth0 { 10.0.1.0/24 }
+link router:eth1 -- app:eth0 { 10.0.2.0/24 }

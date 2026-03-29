@@ -41,6 +41,28 @@ pub enum Token {
     Src,
     #[token("dst")]
     Dst,
+    #[token("cpu")]
+    Cpu,
+    #[token("privileged")]
+    Privileged,
+    #[token("cap-add")]
+    CapAdd,
+    #[token("cap-drop")]
+    CapDrop,
+    #[token("entrypoint")]
+    Entrypoint,
+    #[token("hostname")]
+    Hostname,
+    #[token("workdir")]
+    Workdir,
+    #[token("labels")]
+    Labels,
+    #[token("pull")]
+    Pull,
+    #[token("memory")]
+    Memory,
+    #[token("exec")]
+    Exec,
     #[token("version")]
     Version,
     #[token("author")]

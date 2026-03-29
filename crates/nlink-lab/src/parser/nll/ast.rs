@@ -86,6 +86,18 @@ pub struct NodeDef {
     pub cmd: Option<Vec<String>>,
     pub env: Vec<String>,
     pub volumes: Vec<String>,
+    // Container properties
+    pub cpu: Option<String>,
+    pub memory: Option<String>,
+    pub privileged: bool,
+    pub cap_add: Vec<String>,
+    pub cap_drop: Vec<String>,
+    pub entrypoint: Option<String>,
+    pub hostname: Option<String>,
+    pub workdir: Option<String>,
+    pub labels: Vec<String>,
+    pub pull: Option<String>,
+    pub container_exec: Vec<String>,
     pub props: Vec<NodeProp>,
 }
 

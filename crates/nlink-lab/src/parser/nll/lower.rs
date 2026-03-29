@@ -701,6 +701,17 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
         cmd: n.cmd.clone(),
         env: n.env.iter().map(|s| i(s, vars)).collect(),
         volumes: n.volumes.iter().map(|s| i(s, vars)).collect(),
+        cpu: io(&n.cpu, vars),
+        memory: io(&n.memory, vars),
+        privileged: n.privileged,
+        cap_add: n.cap_add.clone(),
+        cap_drop: n.cap_drop.clone(),
+        entrypoint: io(&n.entrypoint, vars),
+        hostname: io(&n.hostname, vars),
+        workdir: io(&n.workdir, vars),
+        labels: n.labels.iter().map(|s| i(s, vars)).collect(),
+        pull: n.pull.clone(),
+        container_exec: n.container_exec.iter().map(|s| i(s, vars)).collect(),
         props: n.props.iter().map(|p| interpolate_prop(p, vars)).collect(),
     }
 }
@@ -950,6 +961,17 @@ fn lower_node(
         profile: node.profiles.first().cloned(),
         image: node.image.clone(),
         cmd: node.cmd.clone(),
+        cpu: node.cpu.clone(),
+        memory: node.memory.clone(),
+        privileged: node.privileged,
+        cap_add: node.cap_add.clone(),
+        cap_drop: node.cap_drop.clone(),
+        entrypoint: node.entrypoint.clone(),
+        hostname: node.hostname.clone(),
+        workdir: node.workdir.clone(),
+        labels: node.labels.clone(),
+        pull: node.pull.clone(),
+        container_exec: node.container_exec.clone(),
         ..Default::default()
     };
 

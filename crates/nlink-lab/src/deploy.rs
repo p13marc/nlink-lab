@@ -118,13 +118,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if let Some(image) = &node.image {
             // Container node
             let rt = container_runtime.as_ref().unwrap();
-            rt.ensure_image(image)?;
+            // Pull policy: "always" forces pull, "never" skips, "missing" (default) pulls if needed
+            match node.pull.as_deref() {
+                Some("never") => {}
+                Some("always") => { rt.pull_image(image)?; }
+                _ => { rt.ensure_image(image)?; }
+            }
             let container_name = format!("{}-{}", topology.lab.prefix(), node_name);
-            let opts = CreateOpts {
-                cmd: node.cmd.clone(),
-                env: node.env.clone().unwrap_or_default(),
-                volumes: node.volumes.clone().unwrap_or_default(),
-            };
+            let opts = build_create_opts(node);
             let info = rt.create(&container_name, image, &opts)?;
             cleanup.add_container(info.id.clone());
             container_states.insert(
@@ -1485,13 +1486,13 @@ pub async fn apply_diff(
         if let Some(image) = &node.image {
             // Container node
             let rt = container_runtime.as_ref().unwrap();
-            rt.ensure_image(image)?;
+            match node.pull.as_deref() {
+                Some("never") => {}
+                Some("always") => { rt.pull_image(image)?; }
+                _ => { rt.ensure_image(image)?; }
+            }
             let container_name = format!("{}-{}", desired.lab.prefix(), node_name);
-            let opts = CreateOpts {
-                cmd: node.cmd.clone(),
-                env: node.env.clone().unwrap_or_default(),
-                volumes: node.volumes.clone().unwrap_or_default(),
-            };
+            let opts = build_create_opts(node);
             let info = rt.create(&container_name, image, &opts)?;
             running.containers_mut().insert(
                 node_name.clone(),
@@ -1656,6 +1657,24 @@ pub async fn apply_diff(
 /// Resolve a node name to a [`NodeHandle`] from a [`RunningLab`].
 ///
 /// Looks up namespace nodes first, then container nodes.
+/// Build container CreateOpts from a Node's fields.
+fn build_create_opts(node: &crate::types::Node) -> CreateOpts {
+    CreateOpts {
+        cmd: node.cmd.clone(),
+        env: node.env.clone().unwrap_or_default(),
+        volumes: node.volumes.clone().unwrap_or_default(),
+        cpu: node.cpu.clone(),
+        memory: node.memory.clone(),
+        privileged: node.privileged,
+        cap_add: node.cap_add.clone(),
+        cap_drop: node.cap_drop.clone(),
+        entrypoint: node.entrypoint.clone(),
+        hostname: node.hostname.clone(),
+        workdir: node.workdir.clone(),
+        labels: node.labels.clone(),
+    }
+}
+
 fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NodeHandle> {
     if let Some(ns_name) = running.namespace_names().get(node_name) {
         return Ok(NodeHandle::Namespace {

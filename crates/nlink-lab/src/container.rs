@@ -30,12 +30,30 @@ pub struct ContainerInfo {
 
 /// Options for container creation.
 pub struct CreateOpts {
-    /// Command to run (overrides image entrypoint).
+    /// Command to run (overrides image CMD).
     pub cmd: Option<Vec<String>>,
     /// Environment variables.
     pub env: HashMap<String, String>,
     /// Bind mounts in "host:container" format.
     pub volumes: Vec<String>,
+    /// CPU limit (e.g., "1.5").
+    pub cpu: Option<String>,
+    /// Memory limit (e.g., "512m").
+    pub memory: Option<String>,
+    /// Run in privileged mode.
+    pub privileged: bool,
+    /// Linux capabilities to add.
+    pub cap_add: Vec<String>,
+    /// Linux capabilities to drop.
+    pub cap_drop: Vec<String>,
+    /// Override entrypoint.
+    pub entrypoint: Option<String>,
+    /// Container hostname.
+    pub hostname: Option<String>,
+    /// Working directory.
+    pub workdir: Option<String>,
+    /// Container labels.
+    pub labels: Vec<String>,
 }
 
 impl Runtime {
@@ -121,7 +139,28 @@ impl Runtime {
         Ok(())
     }
 
-    /// Create and start a container with `--network=none --privileged`.
+    /// Force-pull an image (always pull, even if local).
+    pub fn pull_image(&self, image: &str) -> Result<()> {
+        tracing::info!("pulling image '{image}'...");
+        let output = Command::new(&self.binary)
+            .args(["pull", image])
+            .output()
+            .map_err(|e| Error::deploy_failed(format!("failed to pull image '{image}': {e}")))?;
+
+        if !output.status.success() {
+            return Err(Error::deploy_failed(format!(
+                "failed to pull image '{image}': {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Create and start a container with `--network=none`.
+    ///
+    /// By default, adds `NET_ADMIN` and `NET_RAW` capabilities (sufficient for
+    /// network lab operations). Use `privileged: true` for full privileges.
     pub fn create(
         &self,
         name: &str,
@@ -134,8 +173,52 @@ impl Runtime {
             "--name".to_string(),
             name.to_string(),
             "--network=none".to_string(),
-            "--privileged".to_string(),
         ];
+
+        // Capabilities: privileged OR fine-grained caps (default: NET_ADMIN + NET_RAW)
+        if opts.privileged {
+            args.push("--privileged".to_string());
+        } else {
+            let caps = if opts.cap_add.is_empty() {
+                vec!["NET_ADMIN".to_string(), "NET_RAW".to_string()]
+            } else {
+                opts.cap_add.clone()
+            };
+            for cap in &caps {
+                args.push(format!("--cap-add={cap}"));
+            }
+            for cap in &opts.cap_drop {
+                args.push(format!("--cap-drop={cap}"));
+            }
+        }
+
+        // Resource limits
+        if let Some(cpu) = &opts.cpu {
+            args.push("--cpus".to_string());
+            args.push(cpu.clone());
+        }
+        if let Some(memory) = &opts.memory {
+            args.push("--memory".to_string());
+            args.push(memory.clone());
+        }
+
+        // Container options
+        if let Some(entrypoint) = &opts.entrypoint {
+            args.push("--entrypoint".to_string());
+            args.push(entrypoint.clone());
+        }
+        if let Some(hostname) = &opts.hostname {
+            args.push("--hostname".to_string());
+            args.push(hostname.clone());
+        }
+        if let Some(workdir) = &opts.workdir {
+            args.push("--workdir".to_string());
+            args.push(workdir.clone());
+        }
+        for label in &opts.labels {
+            args.push("--label".to_string());
+            args.push(label.clone());
+        }
 
         for (k, v) in &opts.env {
             args.push("--env".to_string());

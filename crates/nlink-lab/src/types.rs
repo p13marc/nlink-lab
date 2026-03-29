@@ -131,6 +131,50 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub volumes: Option<Vec<String>>,
 
+    /// CPU limit (e.g., "1.5").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<String>,
+
+    /// Memory limit (e.g., "512m").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<String>,
+
+    /// Run container in privileged mode (default: false, uses cap-add instead).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub privileged: bool,
+
+    /// Linux capabilities to add (e.g., NET_ADMIN, NET_RAW).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cap_add: Vec<String>,
+
+    /// Linux capabilities to drop.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cap_drop: Vec<String>,
+
+    /// Container entrypoint override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entrypoint: Option<String>,
+
+    /// Container hostname (default: node name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+
+    /// Container working directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workdir: Option<String>,
+
+    /// Container labels (e.g., "key=value").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+
+    /// Image pull policy: "always", "never", "missing" (default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull: Option<String>,
+
+    /// One-shot commands to execute after container start.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub container_exec: Vec<String>,
+
     /// Sysctl values (merged with profile).
     #[serde(default)]
     pub sysctls: HashMap<String, String>,

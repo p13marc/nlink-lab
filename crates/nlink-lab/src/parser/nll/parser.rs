@@ -160,6 +160,17 @@ fn token_as_ident(token: &Token) -> Option<String> {
         Token::Version => Some("version".into()),
         Token::Author => Some("author".into()),
         Token::Tags => Some("tags".into()),
+        Token::Cpu => Some("cpu".into()),
+        Token::Privileged => Some("privileged".into()),
+        Token::CapAdd => Some("cap-add".into()),
+        Token::CapDrop => Some("cap-drop".into()),
+        Token::Entrypoint => Some("entrypoint".into()),
+        Token::Hostname => Some("hostname".into()),
+        Token::Workdir => Some("workdir".into()),
+        Token::Labels => Some("labels".into()),
+        Token::Pull => Some("pull".into()),
+        Token::Memory => Some("memory".into()),
+        Token::Exec => Some("exec".into()),
         _ => None,
     }
 }
@@ -435,6 +446,17 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     let mut cmd = None;
     let mut env = Vec::new();
     let mut volumes = Vec::new();
+    let mut cpu = None;
+    let mut memory = None;
+    let mut privileged = false;
+    let mut cap_add = Vec::new();
+    let mut cap_drop = Vec::new();
+    let mut entrypoint = None;
+    let mut hostname = None;
+    let mut workdir = None;
+    let mut labels = Vec::new();
+    let mut pull = None;
+    let mut container_exec = Vec::new();
     if eat(tokens, pos, &Token::Image) {
         image = Some(expect_string(tokens, pos)?);
         if eat(tokens, pos, &Token::Cmd) {
@@ -475,6 +497,50 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                     *pos += 1;
                     volumes = parse_string_list(tokens, pos)?;
                 }
+                Some(Token::Cpu) => {
+                    *pos += 1;
+                    cpu = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Memory) => {
+                    *pos += 1;
+                    memory = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Privileged) => {
+                    *pos += 1;
+                    privileged = true;
+                }
+                Some(Token::CapAdd) => {
+                    *pos += 1;
+                    cap_add = parse_ident_list(tokens, pos)?;
+                }
+                Some(Token::CapDrop) => {
+                    *pos += 1;
+                    cap_drop = parse_ident_list(tokens, pos)?;
+                }
+                Some(Token::Entrypoint) => {
+                    *pos += 1;
+                    entrypoint = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Hostname) => {
+                    *pos += 1;
+                    hostname = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Workdir) => {
+                    *pos += 1;
+                    workdir = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Labels) => {
+                    *pos += 1;
+                    labels = parse_string_list(tokens, pos)?;
+                }
+                Some(Token::Pull) => {
+                    *pos += 1;
+                    pull = Some(parse_value(tokens, pos)?);
+                }
+                Some(Token::Exec) => {
+                    *pos += 1;
+                    container_exec.push(expect_string(tokens, pos)?);
+                }
                 _ => {
                     props.push(parse_node_prop(tokens, pos)?);
                 }
@@ -492,6 +558,17 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         cmd,
         env,
         volumes,
+        cpu,
+        memory,
+        privileged,
+        cap_add,
+        cap_drop,
+        entrypoint,
+        hostname,
+        workdir,
+        labels,
+        pull,
+        container_exec,
         props,
     })
 }
@@ -1634,6 +1711,55 @@ node r1 : router"#);
             ast::Statement::Node(n) => {
                 assert_eq!(n.name, "r1");
                 assert_eq!(n.profiles, vec!["router"]);
+            }
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_container_properties() {
+        let ast = parse_nll(r#"lab "t"
+node web image "nginx" {
+    cpu "0.5"
+    memory "256m"
+    hostname "web-01"
+    workdir "/app"
+    entrypoint "/bin/sh"
+    labels ["role=web", "tier=frontend"]
+    pull always
+    privileged
+    exec "nginx -t"
+    exec "echo ready"
+}"#);
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => {
+                assert_eq!(n.image.as_deref(), Some("nginx"));
+                assert_eq!(n.cpu.as_deref(), Some("0.5"));
+                assert_eq!(n.memory.as_deref(), Some("256m")); // parsed from string
+                assert_eq!(n.hostname.as_deref(), Some("web-01"));
+                assert_eq!(n.workdir.as_deref(), Some("/app"));
+                assert_eq!(n.entrypoint.as_deref(), Some("/bin/sh"));
+                assert_eq!(n.labels, vec!["role=web", "tier=frontend"]);
+                assert_eq!(n.pull.as_deref(), Some("always"));
+                assert!(n.privileged);
+                assert_eq!(n.container_exec, vec!["nginx -t", "echo ready"]);
+            }
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_container_capabilities() {
+        let ast = parse_nll(r#"lab "t"
+node router image "frr" {
+    cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]
+    cap-drop [MKNOD]
+}"#);
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => {
+                assert_eq!(n.cap_add, vec!["NET_ADMIN", "NET_RAW", "SYS_PTRACE"]);
+                assert_eq!(n.cap_drop, vec!["MKNOD"]);
+                assert!(!n.privileged);
             }
             _ => panic!("expected Node"),
         }

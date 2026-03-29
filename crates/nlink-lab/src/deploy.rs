@@ -1133,77 +1133,138 @@ async fn apply_firewall(
     Ok(())
 }
 
-/// Parse a match expression and apply it to an nftables rule.
+/// Parse a (possibly compound) match expression and apply it to an nftables rule.
+///
+/// The expression may contain multiple space-separated clauses such as
+/// `"ip saddr 10.0.0.0/8 tcp dport 80"`. Each clause is applied in order.
 fn apply_match_expr(
-    rule: nlink::netlink::nftables::types::Rule,
+    mut rule: nlink::netlink::nftables::types::Rule,
     expr: &str,
 ) -> Result<nlink::netlink::nftables::types::Rule> {
     use nlink::netlink::nftables::types::CtState;
 
     let expr = expr.trim();
+    let tokens: Vec<&str> = expr.split_whitespace().collect();
+    let mut i = 0;
 
-    if expr.starts_with("tcp dport ")
-        && let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>()
-    {
-        return Ok(rule.match_tcp_dport(port));
-    }
-
-    if expr.starts_with("tcp sport ")
-        && let Ok(port) = expr.trim_start_matches("tcp sport ").trim().parse::<u16>()
-    {
-        return Ok(rule.match_tcp_sport(port));
-    }
-
-    if expr.starts_with("udp dport ")
-        && let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>()
-    {
-        return Ok(rule.match_udp_dport(port));
-    }
-
-    if expr.starts_with("udp sport ")
-        && let Ok(port) = expr.trim_start_matches("udp sport ").trim().parse::<u16>()
-    {
-        return Ok(rule.match_udp_sport(port));
-    }
-
-    if expr.starts_with("icmp type ")
-        && let Ok(icmp_type) = expr.trim_start_matches("icmp type ").trim().parse::<u8>()
-    {
-        return Ok(rule.match_icmp_type(icmp_type));
-    }
-
-    if expr.starts_with("icmpv6 type ")
-        && let Ok(icmp_type) = expr.trim_start_matches("icmpv6 type ").trim().parse::<u8>()
-    {
-        return Ok(rule.match_icmpv6_type(icmp_type));
-    }
-
-    if expr.starts_with("mark ")
-        && let Ok(mark) = expr.trim_start_matches("mark ").trim().parse::<u32>()
-    {
-        return Ok(rule.match_mark(mark));
-    }
-
-    if expr.starts_with("ct state ") {
-        let states = expr.trim_start_matches("ct state ").trim();
-        let mut ct = CtState::empty();
-        for state in states.split(',') {
-            match state.trim() {
-                "established" => ct |= CtState::ESTABLISHED,
-                "related" => ct |= CtState::RELATED,
-                "new" => ct |= CtState::NEW,
-                "invalid" => ct |= CtState::INVALID,
-                _ => {}
+    while i < tokens.len() {
+        match tokens[i] {
+            // ip saddr <cidr> / ip daddr <cidr>
+            "ip" if i + 2 < tokens.len() && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") => {
+                let cidr = tokens[i + 2];
+                let (addr, prefix) = parse_v4_cidr(cidr).map_err(|e| {
+                    Error::deploy_failed(format!("invalid IPv4 CIDR '{cidr}' in firewall rule: {e}"))
+                })?;
+                rule = if tokens[i + 1] == "saddr" {
+                    rule.match_saddr_v4(addr, prefix)
+                } else {
+                    rule.match_daddr_v4(addr, prefix)
+                };
+                i += 3;
+            }
+            // ip6 saddr/daddr — recognised but not yet supported by nlink for v6
+            "ip6" if i + 2 < tokens.len() && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") => {
+                return Err(Error::deploy_failed(format!(
+                    "IPv6 saddr/daddr matching is not yet supported in firewall rules: '{expr}'"
+                )));
+            }
+            // tcp dport/sport <port>
+            "tcp" if i + 2 < tokens.len() && (tokens[i + 1] == "dport" || tokens[i + 1] == "sport") => {
+                let port: u16 = tokens[i + 2].parse().map_err(|_| {
+                    Error::deploy_failed(format!("invalid port '{}' in firewall rule", tokens[i + 2]))
+                })?;
+                rule = if tokens[i + 1] == "dport" {
+                    rule.match_tcp_dport(port)
+                } else {
+                    rule.match_tcp_sport(port)
+                };
+                i += 3;
+            }
+            // udp dport/sport <port>
+            "udp" if i + 2 < tokens.len() && (tokens[i + 1] == "dport" || tokens[i + 1] == "sport") => {
+                let port: u16 = tokens[i + 2].parse().map_err(|_| {
+                    Error::deploy_failed(format!("invalid port '{}' in firewall rule", tokens[i + 2]))
+                })?;
+                rule = if tokens[i + 1] == "dport" {
+                    rule.match_udp_dport(port)
+                } else {
+                    rule.match_udp_sport(port)
+                };
+                i += 3;
+            }
+            // icmp type <N>
+            "icmp" if i + 2 < tokens.len() && tokens[i + 1] == "type" => {
+                let icmp_type: u8 = tokens[i + 2].parse().map_err(|_| {
+                    Error::deploy_failed(format!(
+                        "invalid ICMP type '{}' in firewall rule",
+                        tokens[i + 2]
+                    ))
+                })?;
+                rule = rule.match_icmp_type(icmp_type);
+                i += 3;
+            }
+            // icmpv6 type <N>
+            "icmpv6" if i + 2 < tokens.len() && tokens[i + 1] == "type" => {
+                let icmp_type: u8 = tokens[i + 2].parse().map_err(|_| {
+                    Error::deploy_failed(format!(
+                        "invalid ICMPv6 type '{}' in firewall rule",
+                        tokens[i + 2]
+                    ))
+                })?;
+                rule = rule.match_icmpv6_type(icmp_type);
+                i += 3;
+            }
+            // mark <N>
+            "mark" if i + 1 < tokens.len() => {
+                let mark: u32 = tokens[i + 1].parse().map_err(|_| {
+                    Error::deploy_failed(format!(
+                        "invalid mark '{}' in firewall rule",
+                        tokens[i + 1]
+                    ))
+                })?;
+                rule = rule.match_mark(mark);
+                i += 2;
+            }
+            // ct state <states>
+            "ct" if i + 2 < tokens.len() && tokens[i + 1] == "state" => {
+                let states = tokens[i + 2];
+                let mut ct = CtState::empty();
+                for state in states.split(',') {
+                    match state.trim() {
+                        "established" => ct |= CtState::ESTABLISHED,
+                        "related" => ct |= CtState::RELATED,
+                        "new" => ct |= CtState::NEW,
+                        "invalid" => ct |= CtState::INVALID,
+                        _ => {}
+                    }
+                }
+                rule = rule.match_ct_state(ct);
+                i += 3;
+            }
+            other => {
+                return Err(Error::deploy_failed(format!(
+                    "unsupported firewall match token '{other}' in expression: '{expr}'. \
+                     Supported: 'ip saddr/daddr CIDR', 'ct state ...', 'tcp dport/sport N', \
+                     'udp dport/sport N', 'icmp type N', 'icmpv6 type N', 'mark N'"
+                )));
             }
         }
-        return Ok(rule.match_ct_state(ct));
     }
 
-    Err(Error::deploy_failed(format!(
-        "unsupported firewall match expression: '{expr}'. \
-         Supported: 'ct state ...', 'tcp dport N', 'tcp sport N', 'udp dport N', \
-         'udp sport N', 'icmp type N', 'icmpv6 type N', 'mark N'"
-    )))
+    Ok(rule)
+}
+
+/// Parse an IPv4 CIDR like `10.0.1.0/24` into address and prefix length.
+fn parse_v4_cidr(s: &str) -> std::result::Result<(std::net::Ipv4Addr, u8), String> {
+    let (addr_str, prefix_str) = s
+        .split_once('/')
+        .ok_or_else(|| format!("missing '/' in CIDR notation: {s}"))?;
+    let addr: std::net::Ipv4Addr = addr_str.parse().map_err(|e| format!("{e}"))?;
+    let prefix: u8 = prefix_str.parse().map_err(|e| format!("{e}"))?;
+    if prefix > 32 {
+        return Err(format!("prefix length {prefix} exceeds 32"));
+    }
+    Ok((addr, prefix))
 }
 
 /// Add a single route in a namespace.
@@ -1969,6 +2030,47 @@ mod tests {
             .family(nlink::netlink::nftables::types::Family::Inet);
         let result = apply_match_expr(rule, "mark 42");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_ip_saddr() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "ip saddr 10.0.1.0/24");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_ip_daddr() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "ip daddr 192.168.0.1/32");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_compound_saddr_tcp() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "ip saddr 10.0.1.0/24 tcp dport 22");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_compound_daddr_udp() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "ip daddr 10.0.2.0/24 udp dport 53");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_match_expr_ip_saddr_bad_cidr() {
+        let rule = nlink::netlink::nftables::types::Rule::new("test", "input")
+            .family(nlink::netlink::nftables::types::Family::Inet);
+        let result = apply_match_expr(rule, "ip saddr not-a-cidr");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("CIDR"));
     }
 
     #[test]

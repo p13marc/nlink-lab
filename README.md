@@ -232,18 +232,25 @@ All examples use the `.nll` format. Use `nlink-lab init --list` to create from t
 
 ## Comparison with containerlab
 
-| | **nlink-lab** | **containerlab** |
+| Feature | **nlink-lab** | **containerlab** |
 |---|---|---|
-| **Abstraction** | Network namespaces | Docker/podman containers |
-| **Focus** | L2/L3/L4 networking primitives | NOS container orchestration |
-| **Topology format** | NLL DSL (loops, imports, typed) | YAML |
+| **Abstraction** | Linux namespaces + optional containers | Docker/podman containers |
+| **Topology format** | NLL DSL (loops, variables, imports, typed literals) | YAML (+ Go templates for generation) |
+| **Inline impairments** | `delay 10ms jitter 2ms` on links, asymmetric `->` / `<-` | Post-deploy only (`tools netem`) |
+| **Address management** | Inline on links, subnet auto-assign, named pools | Manual (via startup-config scripts) |
+| **Topology patterns** | `mesh`, `ring`, `star` generators with pool integration | `generate` for CLOS fabrics |
+| **Firewall** | Native nftables with `src`/`dst` matching | Depends on NOS |
+| **VRF / VXLAN / WireGuard** | First-class NLL syntax | Depends on NOS image |
+| **Cross-references** | `route via ${router.eth0}` | None |
+| **Hot-reload** | `apply` with topology diff | Redeploy required |
+| **Diagnostics** | `diagnose`, `capture`, `metrics` (Zenoh) | None built-in |
+| **Reachability assertions** | `validate { reach a b }` in topology | None |
 | **Programmatic API** | Rust builder DSL + `#[lab_test]` macro | Go library |
-| **Traffic control** | Native TC/netem integration | External tools |
-| **Firewall** | Native nftables | Container-dependent |
-| **VRF / VXLAN / WireGuard** | First-class support | Depends on NOS image |
+| **Vendor NOS support** | None (pure Linux networking) | 80+ kinds (SR Linux, cEOS, vMX, etc.) |
+| **Startup config** | Container `exec` + `config` mounts | SSH/NETCONF provisioning per NOS |
 | **Dependencies** | Linux kernel only | Docker/podman runtime |
-| **Startup time** | Milliseconds (namespace creation) | Seconds (container pull + boot) |
-| **Best for** | Protocol testing, network simulation, CI | Multi-vendor NOS labs |
+| **Startup time** | Milliseconds | Seconds (image pull + boot) |
+| **Best for** | Application network testing, simulation, CI | Multi-vendor NOS labs |
 
 ## Requirements
 

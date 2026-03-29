@@ -1150,10 +1150,14 @@ fn apply_match_expr(
     while i < tokens.len() {
         match tokens[i] {
             // ip saddr <cidr> / ip daddr <cidr>
-            "ip" if i + 2 < tokens.len() && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") => {
+            "ip" if i + 2 < tokens.len()
+                && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") =>
+            {
                 let cidr = tokens[i + 2];
                 let (addr, prefix) = parse_v4_cidr(cidr).map_err(|e| {
-                    Error::deploy_failed(format!("invalid IPv4 CIDR '{cidr}' in firewall rule: {e}"))
+                    Error::deploy_failed(format!(
+                        "invalid IPv4 CIDR '{cidr}' in firewall rule: {e}"
+                    ))
                 })?;
                 rule = if tokens[i + 1] == "saddr" {
                     rule.match_saddr_v4(addr, prefix)
@@ -1163,15 +1167,24 @@ fn apply_match_expr(
                 i += 3;
             }
             // ip6 saddr/daddr — recognised but not yet supported by nlink for v6
-            "ip6" if i + 2 < tokens.len() && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") => {
+            "ip6"
+                if i + 2 < tokens.len()
+                    && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") =>
+            {
                 return Err(Error::deploy_failed(format!(
                     "IPv6 saddr/daddr matching is not yet supported in firewall rules: '{expr}'"
                 )));
             }
             // tcp dport/sport <port>
-            "tcp" if i + 2 < tokens.len() && (tokens[i + 1] == "dport" || tokens[i + 1] == "sport") => {
+            "tcp"
+                if i + 2 < tokens.len()
+                    && (tokens[i + 1] == "dport" || tokens[i + 1] == "sport") =>
+            {
                 let port: u16 = tokens[i + 2].parse().map_err(|_| {
-                    Error::deploy_failed(format!("invalid port '{}' in firewall rule", tokens[i + 2]))
+                    Error::deploy_failed(format!(
+                        "invalid port '{}' in firewall rule",
+                        tokens[i + 2]
+                    ))
                 })?;
                 rule = if tokens[i + 1] == "dport" {
                     rule.match_tcp_dport(port)
@@ -1181,9 +1194,15 @@ fn apply_match_expr(
                 i += 3;
             }
             // udp dport/sport <port>
-            "udp" if i + 2 < tokens.len() && (tokens[i + 1] == "dport" || tokens[i + 1] == "sport") => {
+            "udp"
+                if i + 2 < tokens.len()
+                    && (tokens[i + 1] == "dport" || tokens[i + 1] == "sport") =>
+            {
                 let port: u16 = tokens[i + 2].parse().map_err(|_| {
-                    Error::deploy_failed(format!("invalid port '{}' in firewall rule", tokens[i + 2]))
+                    Error::deploy_failed(format!(
+                        "invalid port '{}' in firewall rule",
+                        tokens[i + 2]
+                    ))
                 })?;
                 rule = if tokens[i + 1] == "dport" {
                     rule.match_udp_dport(port)

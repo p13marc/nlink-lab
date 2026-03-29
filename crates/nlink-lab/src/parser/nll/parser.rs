@@ -348,10 +348,11 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Network => parse_network(tokens, pos).map(ast::Statement::Network),
         Token::Impair => parse_impair_stmt(tokens, pos).map(ast::Statement::Impair),
         Token::Rate => parse_rate_stmt(tokens, pos).map(ast::Statement::Rate),
+        Token::Defaults => parse_defaults(tokens, pos).map(ast::Statement::Defaults),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
         other => Err(err(tokens, *pos, format!(
-            "expected statement (profile, node, link, network, impair, rate, let, for), found {other}"
+            "expected statement (profile, node, link, network, impair, rate, defaults, let, for), found {other}"
         ))),
     }
 }
@@ -1280,6 +1281,57 @@ fn parse_rate_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RateDef> 
         iface,
         props,
     })
+}
+
+// ─── Defaults ─────────────────────────────────────────────
+
+fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDef> {
+    expect(tokens, pos, &Token::Defaults)?;
+
+    let kind = match at(tokens, *pos) {
+        Some(Token::Link) => { *pos += 1; ast::DefaultsKind::Link }
+        Some(Token::Impair) => { *pos += 1; ast::DefaultsKind::Impair }
+        Some(Token::Rate) => { *pos += 1; ast::DefaultsKind::Rate }
+        Some(other) => return Err(err(tokens, *pos, format!(
+            "expected link, impair, or rate after defaults, found {other}"
+        ))),
+        None => return Err(err(tokens, *pos, "unexpected end of input after defaults".into())),
+    };
+
+    expect(tokens, pos, &Token::LBrace)?;
+
+    let mut def = ast::DefaultsDef {
+        kind: kind.clone(),
+        mtu: None,
+        impair: None,
+        rate: None,
+    };
+
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) { break; }
+
+        match (&kind, at(tokens, *pos)) {
+            (ast::DefaultsKind::Link, Some(Token::Mtu)) => {
+                *pos += 1;
+                def.mtu = Some(expect_int(tokens, pos)? as u32);
+            }
+            (ast::DefaultsKind::Impair, _) => {
+                def.impair = Some(parse_impair_props(tokens, pos)?);
+            }
+            (ast::DefaultsKind::Rate, _) => {
+                def.rate = Some(parse_rate_props(tokens, pos)?);
+            }
+            (_, Some(other)) => return Err(err(tokens, *pos, format!(
+                "unexpected {other} in defaults block"
+            ))),
+            (_, None) => return Err(err(tokens, *pos,
+                "unexpected end of input in defaults block".into(),
+            )),
+        }
+    }
+
+    Ok(def)
 }
 
 // ─── Let / For ────────────────────────────────────────────

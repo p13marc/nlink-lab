@@ -36,8 +36,26 @@ pub enum Statement {
     Network(NetworkDef),
     Impair(ImpairDef),
     Rate(RateDef),
+    Defaults(DefaultsDef),
     Let(LetDef),
     For(ForLoop),
+}
+
+/// Defaults block: `defaults link { mtu 9000 }` or `defaults impair { delay 5ms }`.
+#[derive(Debug, Clone)]
+pub struct DefaultsDef {
+    pub kind: DefaultsKind,
+    pub mtu: Option<u32>,
+    pub impair: Option<ImpairProps>,
+    pub rate: Option<RateProps>,
+}
+
+/// What a defaults block applies to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DefaultsKind {
+    Link,
+    Impair,
+    Rate,
 }
 
 /// Profile definition.

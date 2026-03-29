@@ -32,11 +32,18 @@ fn lower_with_base_dir(
 ) -> Result<types::Topology> {
     let mut ctx = LowerCtx::new();
 
-    // First pass: collect profiles and variables
+    // First pass: collect profiles, variables, and defaults
     for stmt in &file.statements {
         match stmt {
             ast::Statement::Profile(p) => ctx.add_profile(p),
             ast::Statement::Let(l) => ctx.add_variable(l),
+            ast::Statement::Defaults(d) => {
+                match d.kind {
+                    ast::DefaultsKind::Link => ctx.default_link_mtu = d.mtu,
+                    ast::DefaultsKind::Impair => ctx.default_impair = d.impair.clone(),
+                    ast::DefaultsKind::Rate => ctx.default_rate = d.rate.clone(),
+                }
+            }
             _ => {}
         }
     }
@@ -74,11 +81,12 @@ fn lower_with_base_dir(
     for stmt in &expanded {
         match stmt {
             ast::Statement::Node(n) => lower_node(&mut topology, n, &ctx)?,
-            ast::Statement::Link(l) => lower_link(&mut topology, l),
+            ast::Statement::Link(l) => lower_link(&mut topology, l, &ctx),
             ast::Statement::Network(n) => lower_network(&mut topology, n)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
-            ast::Statement::Profile(_) | ast::Statement::Let(_) | ast::Statement::For(_) => {}
+            ast::Statement::Profile(_) | ast::Statement::Let(_)
+            | ast::Statement::For(_) | ast::Statement::Defaults(_) => {}
         }
     }
 
@@ -174,6 +182,9 @@ fn prefix_endpoint(alias: &str, endpoint: &str) -> String {
 struct LowerCtx {
     profiles: HashMap<String, ast::ProfileDef>,
     variables: HashMap<String, String>,
+    default_link_mtu: Option<u32>,
+    default_impair: Option<ast::ImpairProps>,
+    default_rate: Option<ast::RateProps>,
 }
 
 impl LowerCtx {
@@ -181,6 +192,9 @@ impl LowerCtx {
         Self {
             profiles: HashMap::new(),
             variables: HashMap::new(),
+            default_link_mtu: None,
+            default_impair: None,
+            default_rate: None,
         }
     }
 
@@ -519,6 +533,7 @@ fn interpolate_statement(
         ast::Statement::Impair(i) => ast::Statement::Impair(interpolate_impair_def(i, vars)),
         ast::Statement::Rate(r) => ast::Statement::Rate(interpolate_rate_def(r, vars)),
         ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
+        ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
     }
@@ -958,7 +973,7 @@ fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
     }
 }
 
-fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef) {
+fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &LowerCtx) {
     let endpoints = [
         format!("{}:{}", link.left_node, link.left_iface),
         format!("{}:{}", link.right_node, link.right_iface),
@@ -970,14 +985,18 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef) {
         _ => None,
     };
 
+    // Apply link defaults (per-link values override defaults)
+    let mtu = link.mtu.or(ctx.default_link_mtu);
+
     topo.links.push(types::Link {
         endpoints,
         addresses,
-        mtu: link.mtu,
+        mtu,
     });
 
-    // Lower symmetric impairment → both endpoints
-    if let Some(imp) = &link.impairment {
+    // Lower symmetric impairment → both endpoints (fall back to defaults)
+    let effective_impair = link.impairment.as_ref().or(ctx.default_impair.as_ref());
+    if let Some(imp) = effective_impair {
         let left_ep = format!("{}:{}", link.left_node, link.left_iface);
         let right_ep = format!("{}:{}", link.right_node, link.right_iface);
         topo.impairments
@@ -1817,5 +1836,39 @@ for i in 1..3 {
         assert!(topo.nodes.contains_key("n1"));
         assert!(topo.nodes.contains_key("n2"));
         assert!(topo.nodes.contains_key("n3"));
+    }
+
+    #[test]
+    fn test_defaults_link_mtu() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+defaults link { mtu 9000 }
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { 10.0.0.0/30 }
+link b:eth0 -- c:eth0 { 10.0.1.0/30 mtu 1500 }
+"#,
+        );
+        // First link gets default MTU
+        assert_eq!(topo.links[0].mtu, Some(9000));
+        // Second link overrides
+        assert_eq!(topo.links[1].mtu, Some(1500));
+    }
+
+    #[test]
+    fn test_defaults_impair() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+defaults impair { delay 5ms }
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.0/30 }
+"#,
+        );
+        // Both endpoints should have the default impairment
+        let ep = "a:eth0";
+        assert!(topo.impairments.contains_key(ep));
+        assert_eq!(topo.impairments[ep].delay.as_deref(), Some("5ms"));
     }
 }

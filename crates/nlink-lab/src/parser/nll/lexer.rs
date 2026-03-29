@@ -29,6 +29,8 @@ pub enum Token {
     Profile,
     #[token("link")]
     Link,
+    #[token("defaults")]
+    Defaults,
     #[token("network")]
     Network,
     #[token("for")]

@@ -96,12 +96,43 @@ node web image "nginx" {
 }
 ```
 
+### Subnet Pools
+
+Automatic address allocation eliminates manual IP planning:
+
+```nll
+pool fabric 10.0.0.0/16 /30
+pool access 10.1.0.0/16 /24
+
+link s1:e1 -- l1:e1 { pool fabric }   # auto: 10.0.0.1/30 -- 10.0.0.2/30
+link s1:e2 -- l2:e1 { pool fabric }   # auto: 10.0.0.5/30 -- 10.0.0.6/30
+```
+
+### Topology Patterns
+
+Generate common topologies in a single statement:
+
+```nll
+mesh cluster { node [a, b, c, d]; pool links }        # full mesh (6 links)
+ring backbone { count 6; pool backbone }                # ring (6 links)
+star campus { hub router; spokes [s1, s2, s3, s4] }    # hub-and-spoke
+```
+
 ### Multi-Profile Inheritance
 
 ```nll
 profile router { forward ipv4 }
 profile monitored { sysctl "net.core.rmem_max" "16777216" }
 node core : router, monitored
+```
+
+### Reachability Assertions
+
+```nll
+validate {
+    reach host1 host2        # host1 can ping host2
+    no-reach host1 host3     # firewall blocks this path
+}
 ```
 
 See [`docs/NLL_DSL_DESIGN.md`](docs/NLL_DSL_DESIGN.md) for the full language specification.
@@ -157,12 +188,19 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | Example | Description |
 |---------|-------------|
 | `simple` | 2 nodes, 1 link, impairment |
+| `router` | Router between two subnets |
 | `spine-leaf` | Datacenter fabric with defaults, subnet auto-assign, cross-refs |
 | `datacenter-fabric` | 4-spine 8-leaf Clos with loops, modulo, block comments |
 | `wan-impairment` | WAN with delay, loss, rate limiting |
 | `firewall` | Stateful nftables firewall with src/dst matching |
 | `multi-profile` | Compose router + monitored + secured profiles |
 | `list-iteration` | Named service nodes with `for x in [...]` |
+| `subnet-pools` | Named pools with auto-allocation + validate block |
+| `pattern-mesh` | Full-mesh via `mesh` pattern |
+| `pattern-ring` | Ring via `ring` pattern |
+| `pattern-star` | Hub-and-spoke via `star` pattern |
+| `mesh` | Manual full mesh (4 nodes, 6 links) |
+| `ipv6-simple` | IPv6-only topology |
 | `vxlan-overlay` | VXLAN tunnel between VTEPs |
 | `vrf-multitenant` | VRF tenant isolation |
 | `wireguard-vpn` | Site-to-site WireGuard VPN |
@@ -174,6 +212,8 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `asymmetric` | Directional impairments (`->` / `<-`) |
 | `imports/composed` | Topology composition via imports |
 | `imports/parametric-ring` | Parametric module with `param` declarations |
+| `imports/use-ring` | Parametric import with custom count |
+| `imports/base-network` | Reusable base network module |
 
 All examples use the `.nll` format. Use `nlink-lab init --list` to create from templates.
 

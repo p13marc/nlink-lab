@@ -321,6 +321,44 @@ Imports must appear before the `lab` declaration. All imported names are prefixe
 
 See `examples/imports/`.
 
+### 12. Subnet Pools
+
+Named pools eliminate manual address planning:
+
+```nll
+pool fabric 10.0.0.0/16 /30
+pool access 10.1.0.0/16 /24
+
+link s1:e1 -- l1:e1 { pool fabric }   # 10.0.0.1/30 -- 10.0.0.2/30
+link s1:e2 -- l2:e1 { pool fabric }   # 10.0.0.5/30 -- 10.0.0.6/30
+link l1:e3 -- h1:e0 { pool access }   # 10.1.0.1/24 -- 10.1.0.2/24
+```
+
+Subnets are allocated sequentially. Pool exhaustion is an error at parse time.
+
+### 13. Topology Patterns
+
+Generate common topologies in a single statement:
+
+```nll
+mesh cluster { node [a, b, c, d]; pool links }     # full mesh
+ring backbone { count 6; pool backbone }             # ring
+star campus { hub router; spokes [s1, s2, s3] }      # hub-and-spoke
+```
+
+Patterns expand to regular nodes and links during lowering. Use `nlink-lab render` to see the expanded topology.
+
+### 14. Reachability Assertions
+
+Declare post-deploy connectivity checks in the topology:
+
+```nll
+validate {
+    reach host1 host2        # host1 can ping host2
+    no-reach host1 host3     # firewall should block this
+}
+```
+
 ---
 
 ## CLI Reference
@@ -342,6 +380,7 @@ See `examples/imports/`.
 | `metrics` | Stream live metrics from a lab via Zenoh |
 | `init` | Create a topology file from a built-in template |
 | `graph` | Print topology as DOT graph |
+| `render` | Expand loops/variables/imports and print flat NLL |
 | `ps` | List processes running in a lab |
 | `kill` | Kill a tracked background process |
 | `wait` | Wait for a lab to be ready |

@@ -75,8 +75,8 @@ bins/lab/src/
   main.rs           # CLI binary (clap)
 
 examples/
-  *.nll             # NLL topology examples (13 files)
-  imports/          # Import composition examples
+  *.nll             # NLL topology examples (27 files)
+  imports/          # Import composition and parametric module examples
 ```
 
 ## Key Types
@@ -84,16 +84,20 @@ examples/
 | Type | Description |
 |------|-------------|
 | `Topology` | Top-level container — parsed from NLL or built programmatically |
-| `LabConfig` | Lab metadata (name, description, prefix) |
+| `LabConfig` | Lab metadata (name, description, prefix, version, author, tags) |
 | `Profile` | Reusable node template (sysctls, firewall) |
-| `Node` | Network namespace definition |
+| `Node` | Network namespace or container definition |
 | `Link` | Point-to-point veth connection |
 | `Network` | Shared L2 bridge segment |
 | `Impairment` | Netem config (delay, jitter, loss, rate) |
 | `RateLimit` | Per-interface traffic shaping |
-| `FirewallConfig` | nftables rules |
+| `FirewallConfig` | nftables rules (with src/dst matching) |
 | `ExecConfig` | Process to spawn in namespace |
 | `EndpointRef` | Parsed "node:interface" reference |
+| `VrfConfig` | VRF routing table configuration |
+| `WireguardConfig` | WireGuard tunnel configuration |
+| `RouteConfig` | Route entry (via, dev, metric) |
+| `ContainerRuntime` | Docker/Podman selection (auto, docker, podman) |
 
 ## NLL Topology Format
 
@@ -116,11 +120,14 @@ link router:eth0 -- host:eth0 {
 NLL supports `for` loops (integer ranges and list iteration), `let` variables,
 `${interpolation}` (compound arithmetic, modulo, ternary conditionals),
 `import` for composition (with parametric modules), `defaults` blocks,
-`/* block comments */`, subnet auto-assignment, cross-references (`${node.iface}`),
-multi-profile inheritance, inline impairments (`->` / `<-`), profiles,
-firewall (with `src`/`dst` matching), VRF, WireGuard, VXLAN, containers
-(with cpu/memory limits, capabilities, health checks, depends-on, config
-injection), and network (bridge) blocks.
+`/* block comments */`, subnet auto-assignment, named subnet pools
+(`pool fabric 10.0.0.0/16 /30`), topology patterns (`mesh`, `ring`, `star`),
+cross-references (`${node.iface}`), multi-profile inheritance,
+inline impairments (`->` / `<-`), profiles, firewall (with `src`/`dst`
+matching), VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
+capabilities, health checks with `interval`/`timeout`/`retries`,
+depends-on, config injection, overlay), reachability assertions
+(`validate { reach a b }`), and network (bridge) blocks.
 
 CLI includes `nlink-lab render` to expand loops/variables and print flat NLL.
 

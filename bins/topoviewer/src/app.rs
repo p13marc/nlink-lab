@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use iced::widget::{button, canvas, column, container, row, scrollable, text, text_input, Canvas};
+use iced::widget::{Canvas, button, canvas, column, container, row, scrollable, text, text_input};
 use iced::{Color, Element, Length, Point, Subscription, Task, Theme, Vector};
 
 use nlink_lab::Topology;
@@ -123,11 +123,9 @@ impl TopoViewer {
 
         // Open Zenoh session for live/discovery modes
         let task = if let Some(config) = app.zenoh_config.take() {
-            Task::perform(crate::zenoh_client::open_session(config), |opt| {
-                match opt {
-                    Some(s) => Message::ZenohReady(s),
-                    None => Message::Noop,
-                }
+            Task::perform(crate::zenoh_client::open_session(config), |opt| match opt {
+                Some(s) => Message::ZenohReady(s),
+                None => Message::Noop,
             })
         } else {
             Task::none()
@@ -247,9 +245,10 @@ impl TopoViewer {
             }
             Message::TopologyReceived(update) => {
                 if self.active_lab().is_some_and(|lab| lab == &update.lab_name)
-                    && let Ok(topo) = serde_json::from_str::<Topology>(&update.topology_json) {
-                        self.load_topology(topo);
-                    }
+                    && let Ok(topo) = serde_json::from_str::<Topology>(&update.topology_json)
+                {
+                    self.load_topology(topo);
+                }
             }
             Message::ZenohReady(session) => {
                 self.zenoh_session = Some(session);
@@ -270,17 +269,18 @@ impl TopoViewer {
                 let lab = self.active_lab().cloned();
                 if let (Some(node), Some(session), Some(lab)) =
                     (&self.selected_node, &self.zenoh_session, lab)
-                    && !self.exec_input.trim().is_empty() {
-                        self.exec_running = true;
-                        self.exec_output = None;
-                        let session = session.clone();
-                        let node = node.clone();
-                        let input = self.exec_input.clone();
-                        return Task::perform(
-                            crate::zenoh_client::exec_command(session, lab, node, input),
-                            Message::ExecResult,
-                        );
-                    }
+                    && !self.exec_input.trim().is_empty()
+                {
+                    self.exec_running = true;
+                    self.exec_output = None;
+                    let session = session.clone();
+                    let node = node.clone();
+                    let input = self.exec_input.clone();
+                    return Task::perform(
+                        crate::zenoh_client::exec_command(session, lab, node, input),
+                        Message::ExecResult,
+                    );
+                }
             }
             Message::ExecResult(result) => {
                 self.exec_running = false;
@@ -331,9 +331,7 @@ impl TopoViewer {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let canvas_view = Canvas::new(self)
-            .width(Length::Fill)
-            .height(Length::Fill);
+        let canvas_view = Canvas::new(self).width(Length::Fill).height(Length::Fill);
 
         let sidebar = self.sidebar_view();
 
@@ -345,9 +343,7 @@ impl TopoViewer {
     }
 
     fn sidebar_view(&self) -> Element<'_, Message> {
-        let mut col = column![text("TopoViewer").size(20)]
-            .spacing(6)
-            .padding(5);
+        let mut col = column![text("TopoViewer").size(20)].spacing(6).padding(5);
 
         // Lab discovery selector
         if self.discovery_mode && !self.discovered_labs.is_empty() {
@@ -407,47 +403,46 @@ impl TopoViewer {
             col = col.push(text(format!("Node: {name}")).size(16));
 
             if let Some(ref topo) = self.topology
-                && let Some(node) = topo.nodes.get(name) {
-                    if node.image.is_some() {
-                        col = col.push(text("  (container)").size(11));
-                    }
+                && let Some(node) = topo.nodes.get(name)
+            {
+                if node.image.is_some() {
+                    col = col.push(text("  (container)").size(11));
+                }
 
-                    for link in &topo.links {
-                        for (i, ep) in link.endpoints.iter().enumerate() {
-                            if ep.starts_with(&format!("{name}:")) {
-                                let iface = ep.split(':').nth(1).unwrap_or("?");
-                                let peer = &link.endpoints[1 - i];
-                                let addr = link
-                                    .addresses
-                                    .as_ref()
-                                    .map(|a| a[i].as_str())
-                                    .unwrap_or("-");
-                                col = col
-                                    .push(text(format!("  {iface}: {addr} -> {peer}")).size(11));
-                            }
-                        }
-                    }
-
-                    for (dest, rc) in &node.routes {
-                        let via = rc.via.as_deref().unwrap_or("?");
-                        col = col.push(text(format!("  route {dest} via {via}")).size(11));
-                    }
-
-                    if let Some(nm) = self.metrics.get(name) {
-                        col = col.push(text("Live metrics:").size(13));
-                        for im in &nm.interfaces {
-                            let rx = nlink_lab_shared::metrics::format_rate(im.rx_bps);
-                            let tx = nlink_lab_shared::metrics::format_rate(im.tx_bps);
-                            col = col.push(
-                                text(format!("  {} {} rx:{rx} tx:{tx}", im.name, im.state))
-                                    .size(11),
-                            );
-                        }
-                        for issue in &nm.issues {
-                            col = col.push(text(format!("  ! {issue}")).size(11));
+                for link in &topo.links {
+                    for (i, ep) in link.endpoints.iter().enumerate() {
+                        if ep.starts_with(&format!("{name}:")) {
+                            let iface = ep.split(':').nth(1).unwrap_or("?");
+                            let peer = &link.endpoints[1 - i];
+                            let addr = link
+                                .addresses
+                                .as_ref()
+                                .map(|a| a[i].as_str())
+                                .unwrap_or("-");
+                            col = col.push(text(format!("  {iface}: {addr} -> {peer}")).size(11));
                         }
                     }
                 }
+
+                for (dest, rc) in &node.routes {
+                    let via = rc.via.as_deref().unwrap_or("?");
+                    col = col.push(text(format!("  route {dest} via {via}")).size(11));
+                }
+
+                if let Some(nm) = self.metrics.get(name) {
+                    col = col.push(text("Live metrics:").size(13));
+                    for im in &nm.interfaces {
+                        let rx = nlink_lab_shared::metrics::format_rate(im.rx_bps);
+                        let tx = nlink_lab_shared::metrics::format_rate(im.tx_bps);
+                        col = col.push(
+                            text(format!("  {} {} rx:{rx} tx:{tx}", im.name, im.state)).size(11),
+                        );
+                    }
+                    for issue in &nm.issues {
+                        col = col.push(text(format!("  ! {issue}")).size(11));
+                    }
+                }
+            }
 
             // Exec panel (live mode only)
             if self.is_live() {
@@ -468,11 +463,7 @@ impl TopoViewer {
                 }
                 if let Some(ref resp) = self.exec_output {
                     if !resp.stdout.is_empty() {
-                        col = col.push(
-                            text(&resp.stdout)
-                                .size(10)
-                                .font(iced::Font::MONOSPACE),
-                        );
+                        col = col.push(text(&resp.stdout).size(10).font(iced::Font::MONOSPACE));
                     }
                     if !resp.stderr.is_empty() {
                         col = col.push(
@@ -546,8 +537,7 @@ async fn save_png(screenshot: iced::window::Screenshot) -> Result<(), String> {
             .as_secs()
     );
 
-    let file =
-        std::fs::File::create(&filename).map_err(|e| format!("create {filename}: {e}"))?;
+    let file = std::fs::File::create(&filename).map_err(|e| format!("create {filename}: {e}"))?;
     let w = std::io::BufWriter::new(file);
 
     let mut encoder = png::Encoder::new(w, width, height);

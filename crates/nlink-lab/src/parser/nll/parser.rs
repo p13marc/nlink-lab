@@ -67,7 +67,11 @@ fn parse_import(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ImportDef> {
         vec![]
     };
 
-    Ok(ast::ImportDef { path, alias, params })
+    Ok(ast::ImportDef {
+        path,
+        alias,
+        params,
+    })
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -92,10 +96,18 @@ fn skip_newlines(tokens: &[Spanned], pos: &mut usize) {
 
 fn expect(tokens: &[Spanned], pos: &mut usize, expected: &Token) -> Result<()> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, format!("unexpected end of input, expected {expected}")));
+        return Err(err(
+            tokens,
+            *pos,
+            format!("unexpected end of input, expected {expected}"),
+        ));
     }
     if &tokens[*pos].token != expected {
-        return Err(err(tokens, *pos, format!("expected {expected}, found {}", tokens[*pos].token)));
+        return Err(err(
+            tokens,
+            *pos,
+            format!("expected {expected}, found {}", tokens[*pos].token),
+        ));
     }
     *pos += 1;
     Ok(())
@@ -103,14 +115,22 @@ fn expect(tokens: &[Spanned], pos: &mut usize, expected: &Token) -> Result<()> {
 
 fn expect_ident(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, "unexpected end of input, expected identifier".into()));
+        return Err(err(
+            tokens,
+            *pos,
+            "unexpected end of input, expected identifier".into(),
+        ));
     }
     // Accept both Ident and keywords-as-identifiers (e.g. `let delay = ...`)
     if let Some(name) = token_as_ident(&tokens[*pos].token) {
         *pos += 1;
         Ok(name)
     } else {
-        Err(err(tokens, *pos, format!("expected identifier, found {}", tokens[*pos].token)))
+        Err(err(
+            tokens,
+            *pos,
+            format!("expected identifier, found {}", tokens[*pos].token),
+        ))
     }
 }
 
@@ -198,7 +218,11 @@ fn token_as_ident(token: &Token) -> Option<String> {
 
 fn expect_string(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, "unexpected end of input, expected string".into()));
+        return Err(err(
+            tokens,
+            *pos,
+            "unexpected end of input, expected string".into(),
+        ));
     }
     match &tokens[*pos].token {
         Token::String(s) => {
@@ -206,23 +230,35 @@ fn expect_string(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             *pos += 1;
             Ok(s)
         }
-        _ => Err(err(tokens, *pos, format!("expected string, found {}", tokens[*pos].token))),
+        _ => Err(err(
+            tokens,
+            *pos,
+            format!("expected string, found {}", tokens[*pos].token),
+        )),
     }
 }
 
 fn expect_int(tokens: &[Spanned], pos: &mut usize) -> Result<i64> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, "unexpected end of input, expected integer".into()));
+        return Err(err(
+            tokens,
+            *pos,
+            "unexpected end of input, expected integer".into(),
+        ));
     }
     match &tokens[*pos].token {
         Token::Int(s) => {
-            let v = s.parse::<i64>().map_err(|e| {
-                err(tokens, *pos, format!("invalid integer '{s}': {e}"))
-            })?;
+            let v = s
+                .parse::<i64>()
+                .map_err(|e| err(tokens, *pos, format!("invalid integer '{s}': {e}")))?;
             *pos += 1;
             Ok(v)
         }
-        _ => Err(err(tokens, *pos, format!("expected integer, found {}", tokens[*pos].token))),
+        _ => Err(err(
+            tokens,
+            *pos,
+            format!("expected integer, found {}", tokens[*pos].token),
+        )),
     }
 }
 
@@ -288,14 +324,18 @@ fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     }
 
     if name.is_empty() {
-        return Err(err(tokens, *pos, format!(
-            "expected name at position {}",
-            if start < tokens.len() {
-                format!("(found {})", tokens[start].token)
-            } else {
-                "end of input".into()
-            }
-        )));
+        return Err(err(
+            tokens,
+            *pos,
+            format!(
+                "expected name at position {}",
+                if start < tokens.len() {
+                    format!("(found {})", tokens[start].token)
+                } else {
+                    "end of input".into()
+                }
+            ),
+        ));
     }
 
     Ok(name)
@@ -312,7 +352,9 @@ fn parse_endpoint(tokens: &[Spanned], pos: &mut usize) -> Result<(String, String
 /// Parse a string that can be a string literal, ident, cidr, ipv4, duration, rate, percent, int, or interp.
 fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, 
+        return Err(err(
+            tokens,
+            *pos,
             "unexpected end of input, expected value".into(),
         ));
     }
@@ -331,9 +373,7 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         Token::Default => "default".into(),
         Token::Auto => "auto".into(),
         other => {
-            return Err(err(tokens, *pos, format!(
-                "expected value, found {other}"
-            )));
+            return Err(err(tokens, *pos, format!("expected value, found {other}")));
         }
     };
     *pos += 1;
@@ -343,49 +383,115 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 /// Parse a value that must be a duration (e.g., 10ms, 5s) or interpolation.
 fn expect_duration_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, "expected duration (e.g., 10ms, 5s)".into()));
+        return Err(err(
+            tokens,
+            *pos,
+            "expected duration (e.g., 10ms, 5s)".into(),
+        ));
     }
     match &tokens[*pos].token {
-        Token::Duration(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::Interp(s) => { let s = s.clone(); *pos += 1; Ok(s) }
+        Token::Duration(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::Interp(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
         // Allow plain values for backward compat (let variables etc.)
-        Token::Ident(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::String(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        other => Err(err(tokens, *pos, format!(
-            "expected duration (e.g., 10ms, 5s), found {other}"
-        ))),
+        Token::Ident(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::String(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        other => Err(err(
+            tokens,
+            *pos,
+            format!("expected duration (e.g., 10ms, 5s), found {other}"),
+        )),
     }
 }
 
 /// Parse a value that must be a rate literal (e.g., 100mbit) or interpolation.
 fn expect_rate_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, "expected rate (e.g., 100mbit, 1gbit)".into()));
+        return Err(err(
+            tokens,
+            *pos,
+            "expected rate (e.g., 100mbit, 1gbit)".into(),
+        ));
     }
     match &tokens[*pos].token {
-        Token::RateLit(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::Interp(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::Ident(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::String(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        other => Err(err(tokens, *pos, format!(
-            "expected rate (e.g., 100mbit, 1gbit), found {other}"
-        ))),
+        Token::RateLit(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::Interp(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::Ident(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::String(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        other => Err(err(
+            tokens,
+            *pos,
+            format!("expected rate (e.g., 100mbit, 1gbit), found {other}"),
+        )),
     }
 }
 
 /// Parse a value that must be a percentage (e.g., 0.1%) or interpolation.
 fn expect_percent_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, "expected percentage (e.g., 0.1%, 5%)".into()));
+        return Err(err(
+            tokens,
+            *pos,
+            "expected percentage (e.g., 0.1%, 5%)".into(),
+        ));
     }
     match &tokens[*pos].token {
-        Token::Percent(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::Interp(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::Ident(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        Token::String(s) => { let s = s.clone(); *pos += 1; Ok(s) }
-        other => Err(err(tokens, *pos, format!(
-            "expected percentage (e.g., 0.1%, 5%), found {other}"
-        ))),
+        Token::Percent(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::Interp(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::Ident(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        Token::String(s) => {
+            let s = s.clone();
+            *pos += 1;
+            Ok(s)
+        }
+        other => Err(err(
+            tokens,
+            *pos,
+            format!("expected percentage (e.g., 0.1%, 5%), found {other}"),
+        )),
     }
 }
 
@@ -445,12 +551,16 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                     mgmt = Some(parse_cidr_or_name(tokens, pos)?);
                 }
                 Some(other) => {
-                    return Err(err(tokens, *pos, format!(
-                        "unexpected {other} in lab block"
-                    )));
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in lab block"),
+                    ));
                 }
                 None => {
-                    return Err(err(tokens, *pos,
+                    return Err(err(
+                        tokens,
+                        *pos,
                         "unexpected end of input in lab block".into(),
                     ));
                 }
@@ -475,7 +585,9 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
 fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement> {
     skip_newlines(tokens, pos);
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, 
+        return Err(err(
+            tokens,
+            *pos,
             "unexpected end of input, expected statement".into(),
         ));
     }
@@ -489,14 +601,20 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Rate => parse_rate_stmt(tokens, pos).map(ast::Statement::Rate),
         Token::Defaults => parse_defaults(tokens, pos).map(ast::Statement::Defaults),
         Token::Pool => parse_pool(tokens, pos).map(ast::Statement::Pool),
-        Token::Mesh | Token::Ring | Token::Star => parse_pattern(tokens, pos).map(ast::Statement::Pattern),
+        Token::Mesh | Token::Ring | Token::Star => {
+            parse_pattern(tokens, pos).map(ast::Statement::Pattern)
+        }
         Token::Validate => parse_validate(tokens, pos).map(ast::Statement::Validate),
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
-        other => Err(err(tokens, *pos, format!(
-            "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, param, let, for), found {other}"
-        ))),
+        other => Err(err(
+            tokens,
+            *pos,
+            format!(
+                "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, param, let, for), found {other}"
+            ),
+        )),
     }
 }
 
@@ -640,7 +758,9 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                     if eat(tokens, pos, &Token::LBrace) {
                         loop {
                             skip_newlines(tokens, pos);
-                            if eat(tokens, pos, &Token::RBrace) { break; }
+                            if eat(tokens, pos, &Token::RBrace) {
+                                break;
+                            }
                             match at(tokens, *pos) {
                                 Some(Token::Interval) => {
                                     *pos += 1;
@@ -755,10 +875,14 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
                     ast::IpVersion::Ipv6
                 }
                 other => {
-                    return Err(err(tokens, *pos, format!(
-                        "expected 'ipv4' or 'ipv6' after 'forward', found {}",
-                        other.map_or("end of input".to_string(), |t| t.to_string())
-                    )));
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!(
+                            "expected 'ipv4' or 'ipv6' after 'forward', found {}",
+                            other.map_or("end of input".to_string(), |t| t.to_string())
+                        ),
+                    ));
                 }
             };
             Ok(ast::NodeProp::Forward(version))
@@ -802,10 +926,16 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
             *pos += 1;
             parse_run_def(tokens, pos).map(ast::NodeProp::Run)
         }
-        Some(other) => Err(err(tokens, *pos, format!(
-            "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, run), found {other}"
-        ))),
-        None => Err(err(tokens, *pos, 
+        Some(other) => Err(err(
+            tokens,
+            *pos,
+            format!(
+                "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, run), found {other}"
+            ),
+        )),
+        None => Err(err(
+            tokens,
+            *pos,
             "unexpected end of input in node block".into(),
         )),
     }
@@ -813,7 +943,9 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
 
 fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
-        return Err(err(tokens, *pos, 
+        return Err(err(
+            tokens,
+            *pos,
             "unexpected end of input, expected CIDR or address".into(),
         ));
     }
@@ -853,10 +985,11 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         }
     }
     if val.is_empty() {
-        return Err(err(tokens, *pos, format!(
-            "expected CIDR or address, found {}",
-            tokens[*pos].token
-        )));
+        return Err(err(
+            tokens,
+            *pos,
+            format!("expected CIDR or address, found {}", tokens[*pos].token),
+        ));
     }
     Ok(val)
 }
@@ -925,10 +1058,14 @@ fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firewa
             s
         }
         other => {
-            return Err(err(tokens, *pos, format!(
-                "expected firewall policy, found {}",
-                other.map_or("end of input".to_string(), |t| t.to_string())
-            )));
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected firewall policy, found {}",
+                    other.map_or("end of input".to_string(), |t| t.to_string())
+                ),
+            ));
         }
     };
 
@@ -961,10 +1098,14 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
             "reject".to_string()
         }
         other => {
-            return Err(err(tokens, *pos, format!(
-                "expected firewall action (accept/drop/reject), found {}",
-                other.map_or("end of input".to_string(), |t| t.to_string())
-            )));
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected firewall action (accept/drop/reject), found {}",
+                    other.map_or("end of input".to_string(), |t| t.to_string())
+                ),
+            ));
         }
     };
 
@@ -993,7 +1134,10 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 let addr = parse_cidr_or_name(tokens, pos)?;
                 let family = if addr.contains(':') { "ip6" } else { "ip" };
                 // Insert after saddr if present, otherwise at start
-                let insert_pos = parts.iter().position(|p| !p.contains("saddr")).unwrap_or(parts.len());
+                let insert_pos = parts
+                    .iter()
+                    .position(|p| !p.contains("saddr"))
+                    .unwrap_or(parts.len());
                 parts.insert(insert_pos, format!("{family} daddr {addr}"));
                 matched = true;
             }
@@ -1013,12 +1157,24 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             Some(Token::Tcp) => {
                 *pos += 1;
                 let dir = match at(tokens, *pos) {
-                    Some(Token::Dport) => { *pos += 1; "dport" }
-                    Some(Token::Sport) => { *pos += 1; "sport" }
-                    other => return Err(err(tokens, *pos, format!(
-                        "expected 'dport' or 'sport' after 'tcp', found {}",
-                        other.map_or("end of input".to_string(), |t| t.to_string())
-                    ))),
+                    Some(Token::Dport) => {
+                        *pos += 1;
+                        "dport"
+                    }
+                    Some(Token::Sport) => {
+                        *pos += 1;
+                        "sport"
+                    }
+                    other => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!(
+                                "expected 'dport' or 'sport' after 'tcp', found {}",
+                                other.map_or("end of input".to_string(), |t| t.to_string())
+                            ),
+                        ));
+                    }
                 };
                 let port = expect_int(tokens, pos)?;
                 parts.push(format!("tcp {dir} {port}"));
@@ -1027,12 +1183,24 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             Some(Token::Udp) => {
                 *pos += 1;
                 let dir = match at(tokens, *pos) {
-                    Some(Token::Dport) => { *pos += 1; "dport" }
-                    Some(Token::Sport) => { *pos += 1; "sport" }
-                    other => return Err(err(tokens, *pos, format!(
-                        "expected 'dport' or 'sport' after 'udp', found {}",
-                        other.map_or("end of input".to_string(), |t| t.to_string())
-                    ))),
+                    Some(Token::Dport) => {
+                        *pos += 1;
+                        "dport"
+                    }
+                    Some(Token::Sport) => {
+                        *pos += 1;
+                        "sport"
+                    }
+                    other => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!(
+                                "expected 'dport' or 'sport' after 'udp', found {}",
+                                other.map_or("end of input".to_string(), |t| t.to_string())
+                            ),
+                        ));
+                    }
                 };
                 let port = expect_int(tokens, pos)?;
                 parts.push(format!("udp {dir} {port}"));
@@ -1062,10 +1230,14 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 
     if !matched {
         let tok = at(tokens, *pos);
-        return Err(err(tokens, *pos, format!(
-            "expected match expression (ct/tcp/udp/icmp/icmpv6/mark/src/dst), found {}",
-            tok.map_or("end of input".to_string(), |t| t.to_string())
-        )));
+        return Err(err(
+            tokens,
+            *pos,
+            format!(
+                "expected match expression (ct/tcp/udp/icmp/icmpv6/mark/src/dst), found {}",
+                tok.map_or("end of input".to_string(), |t| t.to_string())
+            ),
+        ));
     }
 
     Ok(parts.join(" "))
@@ -1097,12 +1269,16 @@ fn parse_vrf_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VrfDef> {
                 routes.push(parse_route_def(tokens, pos)?);
             }
             Some(other) => {
-                return Err(err(tokens, *pos, format!(
-                    "unexpected {other} in VRF block"
-                )));
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in VRF block"),
+                ));
             }
             None => {
-                return Err(err(tokens, *pos, 
+                return Err(err(
+                    tokens,
+                    *pos,
                     "unexpected end of input in VRF block".into(),
                 ));
             }
@@ -1151,12 +1327,16 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
                 peers = parse_ident_list(tokens, pos)?;
             }
             Some(other) => {
-                return Err(err(tokens, *pos, format!(
-                    "unexpected {other} in wireguard block"
-                )));
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in wireguard block"),
+                ));
             }
             None => {
-                return Err(err(tokens, *pos,
+                return Err(err(
+                    tokens,
+                    *pos,
                     "unexpected end of input in wireguard block".into(),
                 ));
             }
@@ -1211,12 +1391,16 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
                 addresses.push(parse_cidr_or_name(tokens, pos)?);
             }
             Some(other) => {
-                return Err(err(tokens, *pos, format!(
-                    "unexpected {other} in vxlan block"
-                )));
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in vxlan block"),
+                ));
             }
             None => {
-                return Err(err(tokens, *pos,
+                return Err(err(
+                    tokens,
+                    *pos,
                     "unexpected end of input in vxlan block".into(),
                 ));
             }
@@ -1251,12 +1435,16 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
                     addresses.push(parse_cidr_or_name(tokens, pos)?);
                 }
                 Some(other) => {
-                    return Err(err(tokens, *pos, format!(
-                        "unexpected {other} in dummy block"
-                    )));
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in dummy block"),
+                    ));
                 }
                 None => {
-                    return Err(err(tokens, *pos,
+                    return Err(err(
+                        tokens,
+                        *pos,
                         "unexpected end of input in dummy block".into(),
                     ));
                 }
@@ -1308,8 +1496,11 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
 
             match at(tokens, *pos) {
                 // Address pair: CIDR -- CIDR (IPv4 or IPv6)
-                Some(Token::Cidr(_)) | Some(Token::Ipv6Cidr(_)) | Some(Token::Ipv6Addr(_))
-                | Some(Token::Interp(_)) | Some(Token::Int(_)) => {
+                Some(Token::Cidr(_))
+                | Some(Token::Ipv6Cidr(_))
+                | Some(Token::Ipv6Addr(_))
+                | Some(Token::Interp(_))
+                | Some(Token::Int(_)) => {
                     let first_addr = parse_cidr_or_name(tokens, pos)?;
                     expect(tokens, pos, &Token::DashDash)?;
                     let right_addr = parse_cidr_or_name(tokens, pos)?;
@@ -1352,12 +1543,16 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                     link.impairment = Some(parse_impair_props(tokens, pos)?);
                 }
                 Some(other) => {
-                    return Err(err(tokens, *pos, format!(
-                        "unexpected {other} in link block"
-                    )));
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in link block"),
+                    ));
                 }
                 None => {
-                    return Err(err(tokens, *pos, 
+                    return Err(err(
+                        tokens,
+                        *pos,
                         "unexpected end of input in link block".into(),
                     ));
                 }
@@ -1474,7 +1669,10 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
                     Some(Token::String(_)) => Some(expect_string(tokens, pos)?),
                     _ => None,
                 };
-                net.vlans.push(ast::VlanDef { id, name: vlan_name });
+                net.vlans.push(ast::VlanDef {
+                    id,
+                    name: vlan_name,
+                });
             }
             Some(Token::Port) => {
                 *pos += 1;
@@ -1483,12 +1681,16 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
                 net.ports.push(port_def);
             }
             Some(other) => {
-                return Err(err(tokens, *pos, format!(
-                    "unexpected {other} in network block"
-                )));
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in network block"),
+                ));
             }
             None => {
-                return Err(err(tokens, *pos, 
+                return Err(err(
+                    tokens,
+                    *pos,
                     "unexpected end of input in network block".into(),
                 ));
             }
@@ -1498,11 +1700,7 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
     Ok(net)
 }
 
-fn parse_port_block(
-    tokens: &[Spanned],
-    pos: &mut usize,
-    endpoint: String,
-) -> Result<ast::PortDef> {
+fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Result<ast::PortDef> {
     let mut port = ast::PortDef {
         endpoint,
         pvid: None,
@@ -1536,12 +1734,16 @@ fn parse_port_block(
                 port.untagged = true;
             }
             Some(other) => {
-                return Err(err(tokens, *pos, format!(
-                    "unexpected {other} in port block"
-                )));
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in port block"),
+                ));
             }
             None => {
-                return Err(err(tokens, *pos, 
+                return Err(err(
+                    tokens,
+                    *pos,
                     "unexpected end of input in port block".into(),
                 ));
             }
@@ -1557,22 +1759,14 @@ fn parse_impair_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ImpairD
     expect(tokens, pos, &Token::Impair)?;
     let (node, iface) = parse_endpoint(tokens, pos)?;
     let props = parse_impair_props(tokens, pos)?;
-    Ok(ast::ImpairDef {
-        node,
-        iface,
-        props,
-    })
+    Ok(ast::ImpairDef { node, iface, props })
 }
 
 fn parse_rate_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RateDef> {
     expect(tokens, pos, &Token::Rate)?;
     let (node, iface) = parse_endpoint(tokens, pos)?;
     let props = parse_rate_props(tokens, pos)?;
-    Ok(ast::RateDef {
-        node,
-        iface,
-        props,
-    })
+    Ok(ast::RateDef { node, iface, props })
 }
 
 // ─── Defaults ─────────────────────────────────────────────
@@ -1581,13 +1775,32 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
     expect(tokens, pos, &Token::Defaults)?;
 
     let kind = match at(tokens, *pos) {
-        Some(Token::Link) => { *pos += 1; ast::DefaultsKind::Link }
-        Some(Token::Impair) => { *pos += 1; ast::DefaultsKind::Impair }
-        Some(Token::Rate) => { *pos += 1; ast::DefaultsKind::Rate }
-        Some(other) => return Err(err(tokens, *pos, format!(
-            "expected link, impair, or rate after defaults, found {other}"
-        ))),
-        None => return Err(err(tokens, *pos, "unexpected end of input after defaults".into())),
+        Some(Token::Link) => {
+            *pos += 1;
+            ast::DefaultsKind::Link
+        }
+        Some(Token::Impair) => {
+            *pos += 1;
+            ast::DefaultsKind::Impair
+        }
+        Some(Token::Rate) => {
+            *pos += 1;
+            ast::DefaultsKind::Rate
+        }
+        Some(other) => {
+            return Err(err(
+                tokens,
+                *pos,
+                format!("expected link, impair, or rate after defaults, found {other}"),
+            ));
+        }
+        None => {
+            return Err(err(
+                tokens,
+                *pos,
+                "unexpected end of input after defaults".into(),
+            ));
+        }
     };
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -1601,7 +1814,9 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
 
     loop {
         skip_newlines(tokens, pos);
-        if eat(tokens, pos, &Token::RBrace) { break; }
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
 
         match (&kind, at(tokens, *pos)) {
             (ast::DefaultsKind::Link, Some(Token::Mtu)) => {
@@ -1614,12 +1829,20 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
             (ast::DefaultsKind::Rate, _) => {
                 def.rate = Some(parse_rate_props(tokens, pos)?);
             }
-            (_, Some(other)) => return Err(err(tokens, *pos, format!(
-                "unexpected {other} in defaults block"
-            ))),
-            (_, None) => return Err(err(tokens, *pos,
-                "unexpected end of input in defaults block".into(),
-            )),
+            (_, Some(other)) => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in defaults block"),
+                ));
+            }
+            (_, None) => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    "unexpected end of input in defaults block".into(),
+                ));
+            }
         }
     }
 
@@ -1643,7 +1866,9 @@ fn parse_pattern(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PatternDef>
 
     loop {
         skip_newlines(tokens, pos);
-        if eat(tokens, pos, &Token::RBrace) { break; }
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
         match at(tokens, *pos) {
             Some(Token::Node) => {
                 // nodes [n1, n2, n3]
@@ -1670,7 +1895,9 @@ fn parse_pattern(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PatternDef>
                 *pos += 1;
                 spokes = parse_ident_list(tokens, pos)?;
             }
-            _ => { *pos += 1; } // skip unknown
+            _ => {
+                *pos += 1;
+            } // skip unknown
         }
     }
 
@@ -1685,7 +1912,14 @@ fn parse_pattern(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PatternDef>
         _ => unreachable!(),
     };
 
-    Ok(ast::PatternDef { kind, name, nodes, count, pool, profile })
+    Ok(ast::PatternDef {
+        kind,
+        name,
+        nodes,
+        count,
+        pool,
+        profile,
+    })
 }
 
 fn parse_pool(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PoolDef> {
@@ -1704,7 +1938,9 @@ fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDe
     let mut assertions = Vec::new();
     loop {
         skip_newlines(tokens, pos);
-        if eat(tokens, pos, &Token::RBrace) { break; }
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
         match at(tokens, *pos) {
             Some(Token::Reach) => {
                 *pos += 1;
@@ -1719,12 +1955,16 @@ fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDe
                 assertions.push(ast::AssertionDef::NoReach { from, to });
             }
             Some(other) => {
-                return Err(err(tokens, *pos, format!(
-                    "expected reach or no-reach in validate block, found {other}"
-                )));
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("expected reach or no-reach in validate block, found {other}"),
+                ));
             }
             None => {
-                return Err(err(tokens, *pos,
+                return Err(err(
+                    tokens,
+                    *pos,
                     "unexpected end of input in validate block".into(),
                 ));
             }
@@ -1790,11 +2030,7 @@ fn parse_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForLoop> {
         body.push(parse_statement(tokens, pos)?);
     }
 
-    Ok(ast::ForLoop {
-        var,
-        range,
-        body,
-    })
+    Ok(ast::ForLoop { var, range, body })
 }
 
 // ─── List Helpers ─────────────────────────────────────────
@@ -1954,8 +2190,10 @@ mod tests {
 
     #[test]
     fn test_parse_bare_node() {
-        let ast = parse_nll(r#"lab "t"
-node host"#);
+        let ast = parse_nll(
+            r#"lab "t"
+node host"#,
+        );
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
@@ -1969,8 +2207,10 @@ node host"#);
 
     #[test]
     fn test_parse_node_with_profile() {
-        let ast = parse_nll(r#"lab "t"
-node r1 : router"#);
+        let ast = parse_nll(
+            r#"lab "t"
+node r1 : router"#,
+        );
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.name, "r1");
@@ -1982,7 +2222,8 @@ node r1 : router"#);
 
     #[test]
     fn test_parse_container_properties() {
-        let ast = parse_nll(r#"lab "t"
+        let ast = parse_nll(
+            r#"lab "t"
 node web image "nginx" {
     cpu 0.5
     memory 256m
@@ -1994,7 +2235,8 @@ node web image "nginx" {
     privileged
     exec "nginx -t"
     exec "echo ready"
-}"#);
+}"#,
+        );
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.image.as_deref(), Some("nginx"));
@@ -2014,7 +2256,8 @@ node web image "nginx" {
 
     #[test]
     fn test_parse_container_lifecycle() {
-        let ast = parse_nll(r#"lab "t"
+        let ast = parse_nll(
+            r#"lab "t"
 node db image "postgres" {
     healthcheck "pg_isready"
     startup-delay 5s
@@ -2023,13 +2266,20 @@ node db image "postgres" {
     overlay "configs/db/"
     depends-on [cache]
 }
-node cache image "redis""#);
+node cache image "redis""#,
+        );
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.healthcheck.as_deref(), Some("pg_isready"));
                 assert_eq!(n.startup_delay.as_deref(), Some("5s"));
                 assert_eq!(n.env_file.as_deref(), Some("db.env"));
-                assert_eq!(n.configs, vec![("pg.conf".to_string(), "/etc/postgresql/postgresql.conf".to_string())]);
+                assert_eq!(
+                    n.configs,
+                    vec![(
+                        "pg.conf".to_string(),
+                        "/etc/postgresql/postgresql.conf".to_string()
+                    )]
+                );
                 assert_eq!(n.overlay.as_deref(), Some("configs/db/"));
                 assert_eq!(n.depends_on, vec!["cache"]);
             }
@@ -2039,11 +2289,13 @@ node cache image "redis""#);
 
     #[test]
     fn test_parse_container_capabilities() {
-        let ast = parse_nll(r#"lab "t"
+        let ast = parse_nll(
+            r#"lab "t"
 node router image "frr" {
     cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]
     cap-drop [MKNOD]
-}"#);
+}"#,
+        );
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.cap_add, vec!["NET_ADMIN", "NET_RAW", "SYS_PTRACE"]);
@@ -2056,12 +2308,17 @@ node router image "frr" {
 
     #[test]
     fn test_parse_node_with_forward() {
-        let ast = parse_nll(r#"lab "t"
-node r1 { forward ipv4 }"#);
+        let ast = parse_nll(
+            r#"lab "t"
+node r1 { forward ipv4 }"#,
+        );
         match &ast.statements[0] {
             ast::Statement::Node(n) => {
                 assert_eq!(n.props.len(), 1);
-                assert!(matches!(n.props[0], ast::NodeProp::Forward(ast::IpVersion::Ipv4)));
+                assert!(matches!(
+                    n.props[0],
+                    ast::NodeProp::Forward(ast::IpVersion::Ipv4)
+                ));
             }
             _ => panic!("expected Node"),
         }
@@ -2069,8 +2326,10 @@ node r1 { forward ipv4 }"#);
 
     #[test]
     fn test_parse_node_with_route() {
-        let ast = parse_nll(r#"lab "t"
-node h1 { route default via 10.0.0.1 }"#);
+        let ast = parse_nll(
+            r#"lab "t"
+node h1 { route default via 10.0.0.1 }"#,
+        );
         match &ast.statements[0] {
             ast::Statement::Node(n) => match &n.props[0] {
                 ast::NodeProp::Route(r) => {
@@ -2085,8 +2344,10 @@ node h1 { route default via 10.0.0.1 }"#);
 
     #[test]
     fn test_parse_bare_link() {
-        let ast = parse_nll(r#"lab "t"
-link r1:eth0 -- r2:eth0"#);
+        let ast = parse_nll(
+            r#"lab "t"
+link r1:eth0 -- r2:eth0"#,
+        );
         match &ast.statements[0] {
             ast::Statement::Link(l) => {
                 assert_eq!(l.left_node, "r1");

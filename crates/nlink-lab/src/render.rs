@@ -5,7 +5,7 @@
 
 use std::fmt::Write;
 
-use crate::types::{Topology, Node, Link, Profile, LabConfig};
+use crate::types::{LabConfig, Link, Node, Profile, Topology};
 
 /// Render a topology as valid NLL syntax.
 pub fn render(topology: &Topology) -> String {
@@ -69,10 +69,20 @@ fn render_profiles(out: &mut String, topo: &Topology) {
 fn render_profile(out: &mut String, name: &str, profile: &Profile) {
     write!(out, "profile {name} {{").unwrap();
     // Check for ip_forward sysctls — render as shorthand
-    if profile.sysctls.get("net.ipv4.ip_forward").map(|v| v.as_str()) == Some("1") {
+    if profile
+        .sysctls
+        .get("net.ipv4.ip_forward")
+        .map(|v| v.as_str())
+        == Some("1")
+    {
         out.push_str(" forward ipv4");
     }
-    if profile.sysctls.get("net.ipv6.conf.all.forwarding").map(|v| v.as_str()) == Some("1") {
+    if profile
+        .sysctls
+        .get("net.ipv6.conf.all.forwarding")
+        .map(|v| v.as_str())
+        == Some("1")
+    {
         out.push_str(" forward ipv6");
     }
     for (k, v) in &profile.sysctls {
@@ -128,35 +138,69 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
     if has_props {
         out.push_str(" {\n");
         // Container properties
-        if let Some(cpu) = &node.cpu { writeln!(out, "  cpu \"{cpu}\"").unwrap(); }
-        if let Some(mem) = &node.memory { writeln!(out, "  memory \"{mem}\"").unwrap(); }
-        if node.privileged { writeln!(out, "  privileged").unwrap(); }
-        if !node.cap_add.is_empty() { writeln!(out, "  cap-add [{}]", node.cap_add.join(", ")).unwrap(); }
-        if !node.cap_drop.is_empty() { writeln!(out, "  cap-drop [{}]", node.cap_drop.join(", ")).unwrap(); }
-        if let Some(ep) = &node.entrypoint { writeln!(out, "  entrypoint \"{ep}\"").unwrap(); }
-        if let Some(h) = &node.hostname { writeln!(out, "  hostname \"{h}\"").unwrap(); }
-        if let Some(w) = &node.workdir { writeln!(out, "  workdir \"{w}\"").unwrap(); }
+        if let Some(cpu) = &node.cpu {
+            writeln!(out, "  cpu \"{cpu}\"").unwrap();
+        }
+        if let Some(mem) = &node.memory {
+            writeln!(out, "  memory \"{mem}\"").unwrap();
+        }
+        if node.privileged {
+            writeln!(out, "  privileged").unwrap();
+        }
+        if !node.cap_add.is_empty() {
+            writeln!(out, "  cap-add [{}]", node.cap_add.join(", ")).unwrap();
+        }
+        if !node.cap_drop.is_empty() {
+            writeln!(out, "  cap-drop [{}]", node.cap_drop.join(", ")).unwrap();
+        }
+        if let Some(ep) = &node.entrypoint {
+            writeln!(out, "  entrypoint \"{ep}\"").unwrap();
+        }
+        if let Some(h) = &node.hostname {
+            writeln!(out, "  hostname \"{h}\"").unwrap();
+        }
+        if let Some(w) = &node.workdir {
+            writeln!(out, "  workdir \"{w}\"").unwrap();
+        }
         if !node.labels.is_empty() {
             let labels: Vec<_> = node.labels.iter().map(|l| format!("\"{l}\"")).collect();
             writeln!(out, "  labels [{}]", labels.join(", ")).unwrap();
         }
-        if let Some(p) = &node.pull { writeln!(out, "  pull {p}").unwrap(); }
-        for cmd in &node.container_exec { writeln!(out, "  exec \"{cmd}\"").unwrap(); }
+        if let Some(p) = &node.pull {
+            writeln!(out, "  pull {p}").unwrap();
+        }
+        for cmd in &node.container_exec {
+            writeln!(out, "  exec \"{cmd}\"").unwrap();
+        }
         if let Some(hc) = &node.healthcheck {
             write!(out, "  healthcheck \"{hc}\"").unwrap();
             if node.healthcheck_interval.is_some() || node.healthcheck_timeout.is_some() {
                 out.push_str(" {");
-                if let Some(iv) = &node.healthcheck_interval { write!(out, " interval {iv}").unwrap(); }
-                if let Some(to) = &node.healthcheck_timeout { write!(out, " timeout {to}").unwrap(); }
+                if let Some(iv) = &node.healthcheck_interval {
+                    write!(out, " interval {iv}").unwrap();
+                }
+                if let Some(to) = &node.healthcheck_timeout {
+                    write!(out, " timeout {to}").unwrap();
+                }
                 out.push_str(" }");
             }
             out.push('\n');
         }
-        if let Some(d) = &node.startup_delay { writeln!(out, "  startup-delay {d}").unwrap(); }
-        if let Some(ef) = &node.env_file { writeln!(out, "  env-file \"{ef}\"").unwrap(); }
-        for (h, c) in &node.configs { writeln!(out, "  config \"{h}\" \"{c}\"").unwrap(); }
-        if let Some(o) = &node.overlay { writeln!(out, "  overlay \"{o}\"").unwrap(); }
-        if !node.depends_on.is_empty() { writeln!(out, "  depends-on [{}]", node.depends_on.join(", ")).unwrap(); }
+        if let Some(d) = &node.startup_delay {
+            writeln!(out, "  startup-delay {d}").unwrap();
+        }
+        if let Some(ef) = &node.env_file {
+            writeln!(out, "  env-file \"{ef}\"").unwrap();
+        }
+        for (h, c) in &node.configs {
+            writeln!(out, "  config \"{h}\" \"{c}\"").unwrap();
+        }
+        if let Some(o) = &node.overlay {
+            writeln!(out, "  overlay \"{o}\"").unwrap();
+        }
+        if !node.depends_on.is_empty() {
+            writeln!(out, "  depends-on [{}]", node.depends_on.join(", ")).unwrap();
+        }
 
         for (iface_name, iface) in &node.interfaces {
             if iface_name == "lo" {
@@ -235,12 +279,24 @@ fn render_networks(out: &mut String, topo: &Topology) {
 fn render_impairments(out: &mut String, topo: &Topology) {
     for (endpoint, imp) in &topo.impairments {
         write!(out, "impair {endpoint}").unwrap();
-        if let Some(d) = &imp.delay { write!(out, " delay {d}").unwrap(); }
-        if let Some(j) = &imp.jitter { write!(out, " jitter {j}").unwrap(); }
-        if let Some(l) = &imp.loss { write!(out, " loss {l}").unwrap(); }
-        if let Some(r) = &imp.rate { write!(out, " rate {r}").unwrap(); }
-        if let Some(c) = &imp.corrupt { write!(out, " corrupt {c}").unwrap(); }
-        if let Some(r) = &imp.reorder { write!(out, " reorder {r}").unwrap(); }
+        if let Some(d) = &imp.delay {
+            write!(out, " delay {d}").unwrap();
+        }
+        if let Some(j) = &imp.jitter {
+            write!(out, " jitter {j}").unwrap();
+        }
+        if let Some(l) = &imp.loss {
+            write!(out, " loss {l}").unwrap();
+        }
+        if let Some(r) = &imp.rate {
+            write!(out, " rate {r}").unwrap();
+        }
+        if let Some(c) = &imp.corrupt {
+            write!(out, " corrupt {c}").unwrap();
+        }
+        if let Some(r) = &imp.reorder {
+            write!(out, " reorder {r}").unwrap();
+        }
         out.push('\n');
     }
 }
@@ -248,8 +304,12 @@ fn render_impairments(out: &mut String, topo: &Topology) {
 fn render_rate_limits(out: &mut String, topo: &Topology) {
     for (endpoint, rl) in &topo.rate_limits {
         write!(out, "rate {endpoint}").unwrap();
-        if let Some(e) = &rl.egress { write!(out, " egress {e}").unwrap(); }
-        if let Some(i) = &rl.ingress { write!(out, " ingress {i}").unwrap(); }
+        if let Some(e) = &rl.egress {
+            write!(out, " egress {e}").unwrap();
+        }
+        if let Some(i) = &rl.ingress {
+            write!(out, " ingress {i}").unwrap();
+        }
         out.push('\n');
     }
 }

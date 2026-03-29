@@ -4,9 +4,9 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 
-use iced::futures::stream::unfold;
-use iced::futures::Stream;
 use iced::Subscription;
+use iced::futures::Stream;
+use iced::futures::stream::unfold;
 
 use nlink_lab_shared::messages::{ExecRequest, ExecResponse, HealthStatus, TopologyUpdate};
 use nlink_lab_shared::metrics::MetricsSnapshot;
@@ -159,13 +159,12 @@ fn create_metrics_stream(key: &MetricsSubKey) -> Pin<Box<dyn Stream<Item = Messa
             State::Receiving(sub) => match sub.recv_async().await {
                 Ok(sample) => {
                     let payload = sample.payload().to_bytes();
-                    let msg = if let Ok(snapshot) =
-                        serde_json::from_slice::<MetricsSnapshot>(&payload)
-                    {
-                        Message::MetricsReceived(snapshot.nodes)
-                    } else {
-                        Message::MetricsReceived(Default::default())
-                    };
+                    let msg =
+                        if let Ok(snapshot) = serde_json::from_slice::<MetricsSnapshot>(&payload) {
+                            Message::MetricsReceived(snapshot.nodes)
+                        } else {
+                            Message::MetricsReceived(Default::default())
+                        };
                     Some((msg, State::Receiving(sub)))
                 }
                 Err(_) => None,
@@ -197,9 +196,7 @@ fn create_health_stream(key: &SubKey) -> Pin<Box<dyn Stream<Item = Message> + Se
             State::Receiving(sub) => match sub.recv_async().await {
                 Ok(sample) => {
                     let payload = sample.payload().to_bytes();
-                    let msg = if let Ok(status) =
-                        serde_json::from_slice::<HealthStatus>(&payload)
-                    {
+                    let msg = if let Ok(status) = serde_json::from_slice::<HealthStatus>(&payload) {
                         Message::HealthReceived(status)
                     } else {
                         Message::Noop
@@ -235,8 +232,7 @@ fn create_topology_stream(key: &SubKey) -> Pin<Box<dyn Stream<Item = Message> + 
             State::Receiving(sub) => match sub.recv_async().await {
                 Ok(sample) => {
                     let payload = sample.payload().to_bytes();
-                    let msg = if let Ok(update) =
-                        serde_json::from_slice::<TopologyUpdate>(&payload)
+                    let msg = if let Ok(update) = serde_json::from_slice::<TopologyUpdate>(&payload)
                     {
                         Message::TopologyReceived(update)
                     } else {

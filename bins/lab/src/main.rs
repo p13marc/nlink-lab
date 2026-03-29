@@ -10,16 +10,32 @@ fn use_color() -> bool {
 }
 
 fn green(s: &str) -> String {
-    if use_color() { format!("\x1b[32m{s}\x1b[0m") } else { s.to_string() }
+    if use_color() {
+        format!("\x1b[32m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
 }
 fn red(s: &str) -> String {
-    if use_color() { format!("\x1b[31m{s}\x1b[0m") } else { s.to_string() }
+    if use_color() {
+        format!("\x1b[31m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
 }
 fn yellow(s: &str) -> String {
-    if use_color() { format!("\x1b[33m{s}\x1b[0m") } else { s.to_string() }
+    if use_color() {
+        format!("\x1b[33m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
 }
 fn bold(s: &str) -> String {
-    if use_color() { format!("\x1b[1m{s}\x1b[0m") } else { s.to_string() }
+    if use_color() {
+        format!("\x1b[1m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
 }
 
 #[derive(Parser)]
@@ -387,9 +403,7 @@ fn main() -> ExitCode {
     } else {
         tracing_subscriber::EnvFilter::from_default_env()
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Handle completions synchronously (no runtime needed)
     if let Commands::Completions { shell } = &cli.command {
@@ -468,17 +482,33 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             println!(
                 "{} Lab {:?} deployed in {:.0?}",
-                green("OK"), topo.lab.name, elapsed
+                green("OK"),
+                topo.lab.name,
+                elapsed
             );
             print_deploy_summary(&topo);
 
             if !quiet {
-                let first_node = topo.nodes.keys().next().map(|s| s.as_str()).unwrap_or("node");
+                let first_node = topo
+                    .nodes
+                    .keys()
+                    .next()
+                    .map(|s| s.as_str())
+                    .unwrap_or("node");
                 println!();
                 println!("Next steps:");
-                println!("  nlink-lab status {}          # inspect lab", topo.lab.name);
-                println!("  nlink-lab exec {} {} -- ip addr", topo.lab.name, first_node);
-                println!("  nlink-lab shell {} {}        # interactive shell", topo.lab.name, first_node);
+                println!(
+                    "  nlink-lab status {}          # inspect lab",
+                    topo.lab.name
+                );
+                println!(
+                    "  nlink-lab exec {} {} -- ip addr",
+                    topo.lab.name, first_node
+                );
+                println!(
+                    "  nlink-lab shell {} {}        # interactive shell",
+                    topo.lab.name, first_node
+                );
                 println!("  nlink-lab destroy {}         # tear down", topo.lab.name);
             }
 
@@ -532,7 +562,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             nlink_lab::apply_diff(&mut running, &desired, &diff).await?;
             let elapsed = start.elapsed();
 
-            println!("\nApplied {} change(s) in {:.0?}", diff.change_count(), elapsed);
+            println!(
+                "\nApplied {} change(s) in {:.0?}",
+                diff.change_count(),
+                elapsed
+            );
             Ok(())
         }
 
@@ -616,15 +650,23 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 } else {
                     let topo = lab.topology();
                     println!("Lab: {}", lab.name());
-                    println!("Nodes: {}  Links: {}  Impairments: {}",
-                        lab.namespace_count(), topo.links.len(), topo.impairments.len());
+                    println!(
+                        "Nodes: {}  Links: {}  Impairments: {}",
+                        lab.namespace_count(),
+                        topo.links.len(),
+                        topo.impairments.len()
+                    );
                     println!();
                     println!("  {:<20} {:<12} IMAGE", "NODE", "TYPE");
                     let mut names: Vec<&String> = topo.nodes.keys().collect();
                     names.sort();
                     for name in names {
                         let node = &topo.nodes[name];
-                        let kind = if node.image.is_some() { "container" } else { "namespace" };
+                        let kind = if node.image.is_some() {
+                            "container"
+                        } else {
+                            "namespace"
+                        };
                         let image = node.image.as_deref().unwrap_or("--");
                         println!("  {:<20} {:<12} {}", name, kind, image);
                     }
@@ -729,7 +771,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Render { topology, dot, ascii } => {
+        Commands::Render {
+            topology,
+            dot,
+            ascii,
+        } => {
             let topo = nlink_lab::parser::parse_file(&topology)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&topo)?);
@@ -828,7 +874,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 for diag in &results {
                     println!("── {} ──", diag.node);
                     for iface in &diag.interfaces {
-                        let status = if iface.issues.is_empty() { "OK" } else { "WARN" };
+                        let status = if iface.issues.is_empty() {
+                            "OK"
+                        } else {
+                            "WARN"
+                        };
                         println!(
                             "  [{status:<4}] {:<12} state={:<6} mtu={:<5} rx={} tx={}",
                             iface.name,
@@ -895,29 +945,25 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let diff = nlink_lab::diff_topologies(&topo_a, &topo_b);
             if json {
                 // For JSON, output a simple summary
-                println!("{}", serde_json::json!({
-                    "nodes_added": diff.nodes_added,
-                    "nodes_removed": diff.nodes_removed,
-                    "links_added": diff.links_added.len(),
-                    "links_removed": diff.links_removed.len(),
-                    "impairments_changed": diff.impairments_changed.len(),
-                    "impairments_added": diff.impairments_added.len(),
-                    "impairments_removed": diff.impairments_removed.len(),
-                    "total_changes": diff.change_count(),
-                }));
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "nodes_added": diff.nodes_added,
+                        "nodes_removed": diff.nodes_removed,
+                        "links_added": diff.links_added.len(),
+                        "links_removed": diff.links_removed.len(),
+                        "impairments_changed": diff.impairments_changed.len(),
+                        "impairments_added": diff.impairments_added.len(),
+                        "impairments_removed": diff.impairments_removed.len(),
+                        "total_changes": diff.change_count(),
+                    })
+                );
             } else if diff.is_empty() {
                 println!("No differences.");
             } else {
-                println!(
-                    "Diff: {} → {}",
-                    a.display(),
-                    b.display()
-                );
+                println!("Diff: {} → {}", a.display(), b.display());
                 print!("{diff}");
-                println!(
-                    "\n{} change(s)",
-                    diff.change_count()
-                );
+                println!("\n{} change(s)", diff.change_count());
             }
             Ok(())
         }
@@ -968,7 +1014,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             if let Some(connect) = &zenoh_connect {
                 zenoh_config
                     .insert_json5("connect/endpoints", &format!(r#"["{connect}"]"#))
-                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}")))?;
+                    .map_err(|e| {
+                        nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}"))
+                    })?;
             }
 
             let session = zenoh::open(zenoh_config).await.map_err(|e| {
@@ -1059,7 +1107,10 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             force,
         } => {
             if list || template.is_none() {
-                println!("{:<15} {:<5} {:<5} DESCRIPTION", "TEMPLATE", "NODES", "LINKS");
+                println!(
+                    "{:<15} {:<5} {:<5} DESCRIPTION",
+                    "TEMPLATE", "NODES", "LINKS"
+                );
                 println!("{}", "─".repeat(70));
                 for t in nlink_lab::templates::list() {
                     println!(
@@ -1128,16 +1179,29 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             // Header
             println!("{}", bold(&format!("Lab: {}", running.name())));
-            println!("Nodes: {}  Links: {}  Impairments: {}",
-                running.namespace_count(), topo.links.len(), topo.impairments.len());
+            println!(
+                "Nodes: {}  Links: {}  Impairments: {}",
+                running.namespace_count(),
+                topo.links.len(),
+                topo.impairments.len()
+            );
 
             // Node table
-            println!("\n  {:<20} {:<12} {}", bold("NODE"), bold("TYPE"), bold("IMAGE"));
+            println!(
+                "\n  {:<20} {:<12} {}",
+                bold("NODE"),
+                bold("TYPE"),
+                bold("IMAGE")
+            );
             let mut names: Vec<&String> = topo.nodes.keys().collect();
             names.sort();
             for name in &names {
                 let node = &topo.nodes[*name];
-                let kind = if node.image.is_some() { "container" } else { "namespace" };
+                let kind = if node.image.is_some() {
+                    "container"
+                } else {
+                    "namespace"
+                };
                 let image = node.image.as_deref().unwrap_or("--");
                 println!("  {:<20} {:<12} {}", name, kind, image);
             }
@@ -1146,10 +1210,16 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             if !topo.links.is_empty() {
                 println!("\n  {:<40} {}", bold("LINK"), bold("ADDRESSES"));
                 for link in &topo.links {
-                    let addrs = link.addresses.as_ref()
+                    let addrs = link
+                        .addresses
+                        .as_ref()
                         .map(|a| format!("{} -- {}", a[0], a[1]))
                         .unwrap_or_else(|| "--".to_string());
-                    println!("  {:<40} {}", format!("{} -- {}", link.endpoints[0], link.endpoints[1]), addrs);
+                    println!(
+                        "  {:<40} {}",
+                        format!("{} -- {}", link.endpoints[0], link.endpoints[1]),
+                        addrs
+                    );
                 }
             }
 
@@ -1158,16 +1228,28 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 println!("\n  {}", bold("IMPAIRMENTS"));
                 for (ep, imp) in &topo.impairments {
                     let mut parts = Vec::new();
-                    if let Some(d) = &imp.delay { parts.push(format!("delay={d}")); }
-                    if let Some(j) = &imp.jitter { parts.push(format!("jitter={j}")); }
-                    if let Some(l) = &imp.loss { parts.push(format!("loss={l}")); }
-                    if let Some(r) = &imp.rate { parts.push(format!("rate={r}")); }
+                    if let Some(d) = &imp.delay {
+                        parts.push(format!("delay={d}"));
+                    }
+                    if let Some(j) = &imp.jitter {
+                        parts.push(format!("jitter={j}"));
+                    }
+                    if let Some(l) = &imp.loss {
+                        parts.push(format!("loss={l}"));
+                    }
+                    if let Some(r) = &imp.rate {
+                        parts.push(format!("rate={r}"));
+                    }
                     println!("  {:<24} {}", ep, parts.join("  "));
                 }
             }
 
             // Processes
-            let procs: Vec<_> = running.process_status().into_iter().filter(|p| p.alive).collect();
+            let procs: Vec<_> = running
+                .process_status()
+                .into_iter()
+                .filter(|p| p.alive)
+                .collect();
             if !procs.is_empty() {
                 println!("\n  {}", bold("PROCESSES"));
                 for p in &procs {
@@ -1189,18 +1271,33 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 }).collect();
                 println!("{}", serde_json::to_string_pretty(&data)?);
             } else {
-                println!("  {:<16} {:<20} {:<14} PID", "NODE", "IMAGE", "CONTAINER ID");
+                println!(
+                    "  {:<16} {:<20} {:<14} PID",
+                    "NODE", "IMAGE", "CONTAINER ID"
+                );
                 let mut entries: Vec<_> = containers.iter().collect();
                 entries.sort_by_key(|(name, _)| (*name).clone());
                 for (name, state) in entries {
-                    let short_id = if state.id.len() > 12 { &state.id[..12] } else { &state.id };
-                    println!("  {:<16} {:<20} {:<14} {}", name, state.image, short_id, state.pid);
+                    let short_id = if state.id.len() > 12 {
+                        &state.id[..12]
+                    } else {
+                        &state.id
+                    };
+                    println!(
+                        "  {:<16} {:<20} {:<14} {}",
+                        name, state.image, short_id, state.pid
+                    );
                 }
             }
             Ok(())
         }
 
-        Commands::Logs { lab, node, follow, tail } => {
+        Commands::Logs {
+            lab,
+            node,
+            follow,
+            tail,
+        } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let container = running.container_for(&node).ok_or_else(|| {
                 nlink_lab::Error::deploy_failed(format!(
@@ -1209,8 +1306,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             })?;
             let rt = running.runtime_binary().unwrap_or("docker");
             let mut args = vec!["logs".to_string()];
-            if follow { args.push("--follow".to_string()); }
-            if let Some(n) = tail { args.push("--tail".to_string()); args.push(n.to_string()); }
+            if follow {
+                args.push("--follow".to_string());
+            }
+            if let Some(n) = tail {
+                args.push("--tail".to_string());
+                args.push(n.to_string());
+            }
             args.push(container.id.clone());
             let status = std::process::Command::new(rt)
                 .args(&args)
@@ -1219,13 +1321,17 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 .stderr(std::process::Stdio::inherit())
                 .status()
                 .map_err(|e| nlink_lab::Error::deploy_failed(format!("logs failed: {e}")))?;
-            if !status.success() { std::process::exit(status.code().unwrap_or(1)); }
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
             Ok(())
         }
 
         Commands::Pull { topology } => {
             let topo = nlink_lab::parser::parse_file(&topology)?;
-            let images: std::collections::BTreeSet<&str> = topo.nodes.values()
+            let images: std::collections::BTreeSet<&str> = topo
+                .nodes
+                .values()
                 .filter_map(|n| n.image.as_deref())
                 .collect();
             if images.is_empty() {
@@ -1251,8 +1357,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 let rt = running.runtime_binary().unwrap_or("docker");
                 let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
                 let output = std::process::Command::new(rt)
-                    .args(["stats", "--no-stream", "--format",
-                        "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"])
+                    .args([
+                        "stats",
+                        "--no-stream",
+                        "--format",
+                        "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}",
+                    ])
                     .args(&ids)
                     .output()
                     .map_err(|e| nlink_lab::Error::deploy_failed(format!("stats failed: {e}")))?;
@@ -1465,7 +1575,13 @@ fn diags_to_snapshot(
             })
             .collect();
         let issues: Vec<String> = diag.issues.iter().map(|i| i.to_string()).collect();
-        nodes.insert(diag.node.clone(), NodeMetrics { interfaces: iface_metrics, issues });
+        nodes.insert(
+            diag.node.clone(),
+            NodeMetrics {
+                interfaces: iface_metrics,
+                issues,
+            },
+        );
     }
     MetricsSnapshot {
         lab_name: lab_name.to_string(),
@@ -1566,7 +1682,11 @@ fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
     nodes.sort();
     for name in &nodes {
         let node = &topo.nodes[*name];
-        let kind = if node.image.is_some() { " [container]" } else { "" };
+        let kind = if node.image.is_some() {
+            " [container]"
+        } else {
+            ""
+        };
         out.push_str(&format!("  {name}{kind}\n"));
     }
 

@@ -161,12 +161,7 @@ impl Runtime {
     ///
     /// By default, adds `NET_ADMIN` and `NET_RAW` capabilities (sufficient for
     /// network lab operations). Use `privileged: true` for full privileges.
-    pub fn create(
-        &self,
-        name: &str,
-        image: &str,
-        opts: &CreateOpts,
-    ) -> Result<ContainerInfo> {
+    pub fn create(&self, name: &str, image: &str, opts: &CreateOpts) -> Result<ContainerInfo> {
         let mut args = vec![
             "run".to_string(),
             "-d".to_string(),
@@ -240,9 +235,7 @@ impl Runtime {
             .args(&args)
             .output()
             .map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to create container '{name}': {e}"
-                ))
+                Error::deploy_failed(format!("failed to create container '{name}': {e}"))
             })?;
 
         if !output.status.success() {
@@ -280,29 +273,19 @@ impl Runtime {
 
         let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
         pid_str.parse::<u32>().map_err(|e| {
-            Error::deploy_failed(format!(
-                "invalid PID '{pid_str}' for container '{id}': {e}"
-            ))
+            Error::deploy_failed(format!("invalid PID '{pid_str}' for container '{id}': {e}"))
         })
     }
 
     /// Execute a command inside a running container.
-    pub fn exec(
-        &self,
-        id: &str,
-        cmd: &[&str],
-    ) -> Result<std::process::Output> {
+    pub fn exec(&self, id: &str, cmd: &[&str]) -> Result<std::process::Output> {
         let mut args = vec!["exec", id];
         args.extend(cmd);
 
         Command::new(&self.binary)
             .args(&args)
             .output()
-            .map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to exec in container '{id}': {e}"
-                ))
-            })
+            .map_err(|e| Error::deploy_failed(format!("failed to exec in container '{id}': {e}")))
     }
 
     /// Stop and remove a container (best-effort).

@@ -120,9 +120,7 @@ impl fmt::Display for InterfaceSource {
 }
 
 /// Collect all interfaces per node from all sources.
-fn collect_interfaces(
-    topology: &Topology,
-) -> HashMap<String, HashMap<String, InterfaceSource>> {
+fn collect_interfaces(topology: &Topology) -> HashMap<String, HashMap<String, InterfaceSource>> {
     let mut result: HashMap<String, HashMap<String, InterfaceSource>> = HashMap::new();
 
     // Ensure all nodes have an entry
@@ -281,14 +279,15 @@ fn validate_cidrs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
 
         // Network subnet
         if let Some(subnet) = &network.subnet
-            && let Err(e) = parse_cidr(subnet) {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "valid-cidr",
-                    message: format!("invalid CIDR '{subnet}': {e}"),
-                    location: Some(format!("networks.{net_name}.subnet")),
-                });
-            }
+            && let Err(e) = parse_cidr(subnet)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "valid-cidr",
+                message: format!("invalid CIDR '{subnet}': {e}"),
+                location: Some(format!("networks.{net_name}.subnet")),
+            });
+        }
     }
 }
 
@@ -300,9 +299,7 @@ fn validate_endpoint_format(topology: &Topology, issues: &mut Vec<ValidationIssu
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "endpoint-format",
-                    message: format!(
-                        "invalid endpoint '{ep}': expected 'node:interface' format"
-                    ),
+                    message: format!("invalid endpoint '{ep}': expected 'node:interface' format"),
                     location: Some(format!("links[{i}].endpoints[{j}]")),
                 });
             }
@@ -352,52 +349,56 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
     for (i, link) in topology.links.iter().enumerate() {
         for (j, ep_str) in link.endpoints.iter().enumerate() {
             if let Some(ep) = EndpointRef::parse(ep_str)
-                && !topology.nodes.contains_key(&ep.node) {
-                    issues.push(ValidationIssue {
-                        severity: Severity::Error,
-                        rule: "dangling-node-ref",
-                        message: format!("node '{}' does not exist", ep.node),
-                        location: Some(format!("links[{i}].endpoints[{j}]")),
-                    });
-                }
+                && !topology.nodes.contains_key(&ep.node)
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "dangling-node-ref",
+                    message: format!("node '{}' does not exist", ep.node),
+                    location: Some(format!("links[{i}].endpoints[{j}]")),
+                });
+            }
         }
     }
 
     for key in topology.impairments.keys() {
         if let Some(ep) = EndpointRef::parse(key)
-            && !topology.nodes.contains_key(&ep.node) {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "dangling-node-ref",
-                    message: format!("node '{}' does not exist", ep.node),
-                    location: Some(format!("impairments.\"{key}\"")),
-                });
-            }
+            && !topology.nodes.contains_key(&ep.node)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "dangling-node-ref",
+                message: format!("node '{}' does not exist", ep.node),
+                location: Some(format!("impairments.\"{key}\"")),
+            });
+        }
     }
 
     for key in topology.rate_limits.keys() {
         if let Some(ep) = EndpointRef::parse(key)
-            && !topology.nodes.contains_key(&ep.node) {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "dangling-node-ref",
-                    message: format!("node '{}' does not exist", ep.node),
-                    location: Some(format!("rate_limits.\"{key}\"")),
-                });
-            }
+            && !topology.nodes.contains_key(&ep.node)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "dangling-node-ref",
+                message: format!("node '{}' does not exist", ep.node),
+                location: Some(format!("rate_limits.\"{key}\"")),
+            });
+        }
     }
 
     for (net_name, network) in &topology.networks {
         for (k, member) in network.members.iter().enumerate() {
             if let Some(ep) = EndpointRef::parse(member)
-                && !topology.nodes.contains_key(&ep.node) {
-                    issues.push(ValidationIssue {
-                        severity: Severity::Error,
-                        rule: "dangling-node-ref",
-                        message: format!("node '{}' does not exist", ep.node),
-                        location: Some(format!("networks.{net_name}.members[{k}]")),
-                    });
-                }
+                && !topology.nodes.contains_key(&ep.node)
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "dangling-node-ref",
+                    message: format!("node '{}' does not exist", ep.node),
+                    location: Some(format!("networks.{net_name}.members[{k}]")),
+                });
+            }
         }
 
         for port_name in network.ports.keys() {
@@ -417,16 +418,17 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
 fn validate_dangling_profile_refs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
         if let Some(profile_name) = &node.profile
-            && !topology.profiles.contains_key(profile_name) {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "dangling-profile-ref",
-                    message: format!(
-                        "profile '{profile_name}' referenced by node '{node_name}' does not exist"
-                    ),
-                    location: Some(format!("nodes.{node_name}.profile")),
-                });
-            }
+            && !topology.profiles.contains_key(profile_name)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "dangling-profile-ref",
+                message: format!(
+                    "profile '{profile_name}' referenced by node '{node_name}' does not exist"
+                ),
+                location: Some(format!("nodes.{node_name}.profile")),
+            });
+        }
     }
 }
 
@@ -517,23 +519,20 @@ fn validate_vlan_range(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                         severity: Severity::Error,
                         rule: "vlan-range",
                         message: format!("VLAN ID {vid} out of range (1-4094)"),
-                        location: Some(format!(
-                            "networks.{net_name}.ports.{port_name}.vlans"
-                        )),
+                        location: Some(format!("networks.{net_name}.ports.{port_name}.vlans")),
                     });
                 }
             }
             if let Some(pvid) = port.pvid
-                && (pvid == 0 || pvid > 4094) {
-                    issues.push(ValidationIssue {
-                        severity: Severity::Error,
-                        rule: "vlan-range",
-                        message: format!("PVID {pvid} out of range (1-4094)"),
-                        location: Some(format!(
-                            "networks.{net_name}.ports.{port_name}.pvid"
-                        )),
-                    });
-                }
+                && (pvid == 0 || pvid > 4094)
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "vlan-range",
+                    message: format!("PVID {pvid} out of range (1-4094)"),
+                    location: Some(format!("networks.{net_name}.ports.{port_name}.pvid")),
+                });
+            }
         }
     }
 }
@@ -547,18 +546,16 @@ fn validate_impairment_refs(
     for key in topology.impairments.keys() {
         if let Some(ep) = EndpointRef::parse(key)
             && let Some(node_ifaces) = interfaces.get(&ep.node)
-                && !node_ifaces.contains_key(&ep.iface) {
-                    issues.push(ValidationIssue {
-                        severity: Severity::Error,
-                        rule: "impairment-ref-valid",
-                        message: format!(
-                            "node '{}' has no interface '{}'",
-                            ep.node, ep.iface
-                        ),
-                        location: Some(format!("impairments.\"{key}\"")),
-                    });
-                }
-            // If node doesn't exist, dangling-node-ref will catch it
+            && !node_ifaces.contains_key(&ep.iface)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "impairment-ref-valid",
+                message: format!("node '{}' has no interface '{}'", ep.node, ep.iface),
+                location: Some(format!("impairments.\"{key}\"")),
+            });
+        }
+        // If node doesn't exist, dangling-node-ref will catch it
     }
 }
 
@@ -571,17 +568,15 @@ fn validate_rate_limit_refs(
     for key in topology.rate_limits.keys() {
         if let Some(ep) = EndpointRef::parse(key)
             && let Some(node_ifaces) = interfaces.get(&ep.node)
-                && !node_ifaces.contains_key(&ep.iface) {
-                    issues.push(ValidationIssue {
-                        severity: Severity::Error,
-                        rule: "rate-limit-ref-valid",
-                        message: format!(
-                            "node '{}' has no interface '{}'",
-                            ep.node, ep.iface
-                        ),
-                        location: Some(format!("rate_limits.\"{key}\"")),
-                    });
-                }
+            && !node_ifaces.contains_key(&ep.iface)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "rate-limit-ref-valid",
+                message: format!("node '{}' has no interface '{}'", ep.node, ep.iface),
+                location: Some(format!("rate_limits.\"{key}\"")),
+            });
+        }
     }
 }
 
@@ -710,9 +705,7 @@ fn validate_unique_ips(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                         issues.push(ValidationIssue {
                             severity: Severity::Warning,
                             rule: "unique-ips",
-                            message: format!(
-                                "duplicate address '{ip_str}' (also at {prev})"
-                            ),
+                            message: format!("duplicate address '{ip_str}' (also at {prev})"),
                             location: Some(location),
                         });
                     } else {
@@ -734,9 +727,7 @@ fn validate_unique_ips(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                         issues.push(ValidationIssue {
                             severity: Severity::Warning,
                             rule: "unique-ips",
-                            message: format!(
-                                "duplicate address '{ip_str}' (also at {prev})"
-                            ),
+                            message: format!("duplicate address '{ip_str}' (also at {prev})"),
                             location: Some(location),
                         });
                     } else {
@@ -757,18 +748,19 @@ fn validate_mtu_consistency(topology: &Topology, issues: &mut Vec<ValidationIssu
             for (j, ep_str) in link.endpoints.iter().enumerate() {
                 if let Some(ep) = EndpointRef::parse(ep_str)
                     && let Some(node) = topology.nodes.get(&ep.node)
-                        && let Some(iface) = node.interfaces.get(&ep.iface)
-                            && let Some(iface_mtu) = iface.mtu
-                                && iface_mtu != link_mtu {
-                                    issues.push(ValidationIssue {
-                                        severity: Severity::Warning,
-                                        rule: "mtu-consistency",
-                                        message: format!(
-                                            "link MTU {link_mtu} differs from interface MTU {iface_mtu} on {ep_str}"
-                                        ),
-                                        location: Some(format!("links[{i}].endpoints[{j}]")),
-                                    });
-                                }
+                    && let Some(iface) = node.interfaces.get(&ep.iface)
+                    && let Some(iface_mtu) = iface.mtu
+                    && iface_mtu != link_mtu
+                {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Warning,
+                        rule: "mtu-consistency",
+                        message: format!(
+                            "link MTU {link_mtu} differs from interface MTU {iface_mtu} on {ep_str}"
+                        ),
+                        location: Some(format!("links[{i}].endpoints[{j}]")),
+                    });
+                }
             }
         }
     }
@@ -791,9 +783,10 @@ fn validate_route_reachability(
                 for (j, ep_str) in link.endpoints.iter().enumerate() {
                     if let Some(ep) = EndpointRef::parse(ep_str)
                         && ep.node == *node_name
-                            && let Ok((ip, prefix)) = parse_cidr(&addresses[j]) {
-                                subnets.push((ip, prefix));
-                            }
+                        && let Ok((ip, prefix)) = parse_cidr(&addresses[j])
+                    {
+                        subnets.push((ip, prefix));
+                    }
                 }
             }
         }
@@ -810,12 +803,13 @@ fn validate_route_reachability(
         // Check each route's gateway
         for (dest, route) in &node.routes {
             if let Some(via_str) = &route.via
-                && let Ok(gw) = via_str.parse::<std::net::IpAddr>() {
-                    let reachable = subnets.iter().any(|(net, prefix)| {
-                        ip_in_subnet(gw, *net, *prefix)
-                    });
-                    if !reachable && !subnets.is_empty() {
-                        issues.push(ValidationIssue {
+                && let Ok(gw) = via_str.parse::<std::net::IpAddr>()
+            {
+                let reachable = subnets
+                    .iter()
+                    .any(|(net, prefix)| ip_in_subnet(gw, *net, *prefix));
+                if !reachable && !subnets.is_empty() {
+                    issues.push(ValidationIssue {
                             severity: Severity::Warning,
                             rule: "route-reachability",
                             message: format!(
@@ -823,8 +817,8 @@ fn validate_route_reachability(
                             ),
                             location: Some(format!("nodes.{node_name}.routes.{dest}")),
                         });
-                    }
                 }
+            }
         }
     }
 }
@@ -838,12 +832,9 @@ fn validate_unreferenced_nodes(
     for node_name in topology.nodes.keys() {
         if let Some(ifaces) = interfaces.get(node_name) {
             // Check if the node has any interfaces from links or networks
-            let has_connections = ifaces.values().any(|src| {
-                matches!(
-                    src,
-                    InterfaceSource::Link(_) | InterfaceSource::Network(_)
-                )
-            });
+            let has_connections = ifaces
+                .values()
+                .any(|src| matches!(src, InterfaceSource::Link(_) | InterfaceSource::Network(_)));
             if !has_connections {
                 issues.push(ValidationIssue {
                     severity: Severity::Warning,
@@ -930,14 +921,15 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                 }
             }
         } else if let Some(image) = &node.image
-            && image.is_empty() {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "empty-image",
-                    message: "image must not be empty".to_string(),
-                    location: Some(format!("nodes.{node_name}.image")),
-                });
-            }
+            && image.is_empty()
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "empty-image",
+                message: "image must not be empty".to_string(),
+                location: Some(format!("nodes.{node_name}.image")),
+            });
+        }
     }
 
     // Validate depends-on references
@@ -980,7 +972,11 @@ node h1 { route default via 10.0.0.1 }
 link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 "#,
         );
-        assert!(!result.has_errors(), "unexpected errors: {:?}", result.issues());
+        assert!(
+            !result.has_errors(),
+            "unexpected errors: {:?}",
+            result.issues()
+        );
     }
 
     #[test]
@@ -989,7 +985,9 @@ link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         let topo = crate::Lab::new("bad-cidr")
             .node("a", |n| n)
             .node("b", |n| n)
-            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1", "10.0.0.2/24"))
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1", "10.0.0.2/24")
+            })
             .build();
         let result = validate_topo(topo);
         assert!(result.has_errors());
@@ -1003,7 +1001,9 @@ link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         let topo = crate::Lab::new("bad-prefix")
             .node("a", |n| n)
             .node("b", |n| n)
-            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/33", "10.0.0.2/24"))
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1/33", "10.0.0.2/24")
+            })
             .build();
         let result = validate_topo(topo);
         assert!(result.has_errors());
@@ -1173,10 +1173,11 @@ link connected-a:eth0 -- connected-b:eth0
 "#,
         );
         assert!(result.has_warnings());
-        assert!(result
-            .warnings()
-            .any(|w| w.rule == "unreferenced-node"
-                && w.message.contains("isolated")));
+        assert!(
+            result
+                .warnings()
+                .any(|w| w.rule == "unreferenced-node" && w.message.contains("isolated"))
+        );
     }
 
     #[test]
@@ -1342,7 +1343,11 @@ link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
         topo.nodes.insert("a".into(), node);
         let result = validate_topo(topo);
         assert!(result.has_errors());
-        assert!(result.errors().any(|e| e.rule == "container-requires-image"));
+        assert!(
+            result
+                .errors()
+                .any(|e| e.rule == "container-requires-image")
+        );
     }
 
     #[test]

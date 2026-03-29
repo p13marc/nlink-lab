@@ -74,7 +74,8 @@ impl LayoutEngine {
 
         // Attractive forces along edges
         for edge in edges {
-            if let (Some(&pa), Some(&pb)) = (self.positions.get(edge[0]), self.positions.get(edge[1]))
+            if let (Some(&pa), Some(&pb)) =
+                (self.positions.get(edge[0]), self.positions.get(edge[1]))
             {
                 let dx = pa.x - pb.x;
                 let dy = pa.y - pb.y;

@@ -101,11 +101,7 @@ impl Lab {
     }
 
     /// Add a shared L2 network (bridge).
-    pub fn network(
-        mut self,
-        name: &str,
-        f: impl FnOnce(NetworkBuilder) -> NetworkBuilder,
-    ) -> Self {
+    pub fn network(mut self, name: &str, f: impl FnOnce(NetworkBuilder) -> NetworkBuilder) -> Self {
         let builder = f(NetworkBuilder::new());
         self.topology
             .networks
@@ -244,9 +240,7 @@ impl NodeBuilder {
 
     /// Add a sysctl key-value pair.
     pub fn sysctl(mut self, key: &str, value: &str) -> Self {
-        self.node
-            .sysctls
-            .insert(key.to_string(), value.to_string());
+        self.node.sysctls.insert(key.to_string(), value.to_string());
         self
     }
 
@@ -264,15 +258,9 @@ impl NodeBuilder {
     }
 
     /// Add a route.
-    pub fn route(
-        mut self,
-        dest: &str,
-        f: impl FnOnce(RouteBuilder) -> RouteBuilder,
-    ) -> Self {
+    pub fn route(mut self, dest: &str, f: impl FnOnce(RouteBuilder) -> RouteBuilder) -> Self {
         let builder = f(RouteBuilder::new());
-        self.node
-            .routes
-            .insert(dest.to_string(), builder.build());
+        self.node.routes.insert(dest.to_string(), builder.build());
         self
     }
 
@@ -523,15 +511,9 @@ impl NetworkBuilder {
     }
 
     /// Add a port configuration.
-    pub fn port(
-        mut self,
-        node: &str,
-        f: impl FnOnce(PortBuilder) -> PortBuilder,
-    ) -> Self {
+    pub fn port(mut self, node: &str, f: impl FnOnce(PortBuilder) -> PortBuilder) -> Self {
         let builder = f(PortBuilder::new());
-        self.network
-            .ports
-            .insert(node.to_string(), builder.build());
+        self.network.ports.insert(node.to_string(), builder.build());
         self
     }
 
@@ -758,15 +740,9 @@ impl VrfBuilder {
     }
 
     /// Add a route within this VRF.
-    pub fn route(
-        mut self,
-        dest: &str,
-        f: impl FnOnce(RouteBuilder) -> RouteBuilder,
-    ) -> Self {
+    pub fn route(mut self, dest: &str, f: impl FnOnce(RouteBuilder) -> RouteBuilder) -> Self {
         let builder = f(RouteBuilder::new());
-        self.config
-            .routes
-            .insert(dest.to_string(), builder.build());
+        self.config.routes.insert(dest.to_string(), builder.build());
         self
     }
 
@@ -933,10 +909,7 @@ mod tests {
         assert_eq!(net.kind.as_deref(), Some("bridge"));
         assert_eq!(net.vlan_filtering, Some(true));
         assert_eq!(net.vlans.len(), 2);
-        assert_eq!(
-            net.vlans[&10].name.as_deref(),
-            Some("engineering")
-        );
+        assert_eq!(net.vlans[&10].name.as_deref(), Some("engineering"));
         assert_eq!(net.ports["switch"].vlans, vec![10, 20]);
         assert_eq!(net.ports["switch"].tagged, Some(true));
         assert_eq!(net.ports["pc1"].pvid, Some(10));
@@ -1010,10 +983,7 @@ mod tests {
         assert_eq!(topo.nodes["server"].exec.len(), 2);
         assert!(topo.nodes["server"].exec[0].background);
         assert!(!topo.nodes["server"].exec[1].background);
-        assert_eq!(
-            topo.nodes["server"].exec[0].cmd,
-            vec!["iperf3", "-s"]
-        );
+        assert_eq!(topo.nodes["server"].exec[0].cmd, vec!["iperf3", "-s"]);
     }
 
     #[test]
@@ -1021,9 +991,7 @@ mod tests {
         // Build topology via builder
         let built = Lab::new("simple")
             .description("Minimal two-node lab")
-            .profile("router", |p| {
-                p.sysctl("net.ipv4.ip_forward", "1")
-            })
+            .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
             .node("router", |n| {
                 n.profile("router")
                     .route("10.0.0.0/8", |r| r.via("10.0.0.2"))
@@ -1086,7 +1054,9 @@ impair router:eth0 delay 10ms jitter 2ms
         let result = Lab::new("good")
             .node("a", |n| n)
             .node("b", |n| n)
-            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1/24", "10.0.0.2/24")
+            })
             .build_validated();
         assert!(result.is_ok());
     }

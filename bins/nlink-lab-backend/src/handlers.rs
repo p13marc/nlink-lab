@@ -41,9 +41,10 @@ pub async fn handle_exec(lab: &RunningLab, query: zenoh::query::Query) {
     };
 
     if let Ok(json) = serde_json::to_string(&response)
-        && let Err(e) = query.reply(topics::rpc_exec(&lab_name), json).await {
-            warn!("reply exec: {e}");
-        }
+        && let Err(e) = query.reply(topics::rpc_exec(&lab_name), json).await
+    {
+        warn!("reply exec: {e}");
+    }
 }
 
 pub async fn handle_impairment(lab: &RunningLab, query: zenoh::query::Query) {
@@ -87,7 +88,8 @@ pub async fn handle_impairment(lab: &RunningLab, query: zenoh::query::Query) {
     };
 
     if let Ok(json) = serde_json::to_string(&response)
-        && let Err(e) = query.reply(topics::rpc_impairment(&lab_name), json).await {
-            warn!("reply impairment: {e}");
-        }
+        && let Err(e) = query.reply(topics::rpc_impairment(&lab_name), json).await
+    {
+        warn!("reply impairment: {e}");
+    }
 }

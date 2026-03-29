@@ -42,11 +42,7 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
         Ok(topo) => Ok(topo),
         Err(crate::Error::NllParse(msg)) => {
             let span = extract_span(&msg, input);
-            let clean_msg = msg
-                .split(" [at byte ")
-                .next()
-                .unwrap_or(&msg)
-                .to_string();
+            let clean_msg = msg.split(" [at byte ").next().unwrap_or(&msg).to_string();
             Err(crate::Error::NllDiagnostic(crate::error::NllDiagnostic {
                 message: clean_msg,
                 src: miette::NamedSource::new(filename, input.to_string()),
@@ -79,21 +75,24 @@ pub fn extract_span(msg: &str, source: &str) -> (usize, usize) {
         if let Some(comma) = after_line.find(',') {
             let line_str = &after_line[..comma];
             if let Ok(line) = line_str.parse::<usize>()
-                && let Some(col_start) = after_line.find("column ") {
-                    let after_col = &after_line[col_start + 7..];
-                    let col_str: String =
-                        after_col.chars().take_while(|c| c.is_ascii_digit()).collect();
-                    if let Ok(col) = col_str.parse::<usize>() {
-                        let mut offset = 0;
-                        for (i, l) in source.lines().enumerate() {
-                            if i + 1 == line {
-                                offset += (col - 1).min(l.len());
-                                return (offset, 1);
-                            }
-                            offset += l.len() + 1;
+                && let Some(col_start) = after_line.find("column ")
+            {
+                let after_col = &after_line[col_start + 7..];
+                let col_str: String = after_col
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                if let Ok(col) = col_str.parse::<usize>() {
+                    let mut offset = 0;
+                    for (i, l) in source.lines().enumerate() {
+                        if i + 1 == line {
+                            offset += (col - 1).min(l.len());
+                            return (offset, 1);
                         }
+                        offset += l.len() + 1;
                     }
                 }
+            }
         }
     }
 

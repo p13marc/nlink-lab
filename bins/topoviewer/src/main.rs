@@ -11,7 +11,10 @@ mod layout;
 mod zenoh_client;
 
 #[derive(Parser)]
-#[command(name = "nlink-lab-topoviewer", about = "Interactive topology visualizer for nlink-lab")]
+#[command(
+    name = "nlink-lab-topoviewer",
+    about = "Interactive topology visualizer for nlink-lab"
+)]
 struct Cli {
     /// Path to .nll topology file (static mode).
     topology: Option<std::path::PathBuf>,

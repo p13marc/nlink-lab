@@ -132,10 +132,7 @@ fn parser_perf_500_nodes() {
     let elapsed = start.elapsed();
     assert_eq!(topo.nodes.len(), 500);
     // Parsing 500 nodes should complete in well under 5 seconds
-    assert!(
-        elapsed.as_secs() < 5,
-        "parsing took too long: {elapsed:?}"
-    );
+    assert!(elapsed.as_secs() < 5, "parsing took too long: {elapsed:?}");
 }
 
 #[test]
@@ -267,7 +264,9 @@ network mgmt {
 
     // Validation should pass
     let result = topo.validate();
-    result.bail().expect("full-feature topology should validate");
+    result
+        .bail()
+        .expect("full-feature topology should validate");
 }
 
 /// Parse and validate a topology built entirely with the Rust builder DSL.
@@ -279,9 +278,15 @@ fn build_full_feature_topology() {
         .node("r2", |n| n.profile("router"))
         .node("h1", |n| n.route("default", |r| r.via("10.0.0.1")))
         .node("h2", |n| n.route("default", |r| r.via("10.0.1.1")))
-        .link("r1:eth0", "h1:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24").mtu(9000))
-        .link("r2:eth0", "h2:eth0", |l| l.addresses("10.0.1.1/24", "10.0.1.2/24"))
-        .link("r1:eth1", "r2:eth1", |l| l.addresses("10.100.0.1/24", "10.100.0.2/24"))
+        .link("r1:eth0", "h1:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24").mtu(9000)
+        })
+        .link("r2:eth0", "h2:eth0", |l| {
+            l.addresses("10.0.1.1/24", "10.0.1.2/24")
+        })
+        .link("r1:eth1", "r2:eth1", |l| {
+            l.addresses("10.100.0.1/24", "10.100.0.2/24")
+        })
         .impair("r1:eth1", |i| i.delay("20ms").jitter("5ms").loss("0.5%"))
         .rate_limit("r1:eth1", |r| r.egress("100mbit"))
         .build();

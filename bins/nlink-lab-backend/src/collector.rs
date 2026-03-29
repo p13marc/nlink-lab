@@ -38,24 +38,25 @@ impl MetricsCollector {
 
                 // Detect state changes
                 if let Some(prev_state) = prev_node.get(&iface.name)
-                    && *prev_state != state_str {
-                        let kind = if state_str == "up" {
-                            LabEventKind::InterfaceUp {
-                                node: diag.node.clone(),
-                                interface: iface.name.clone(),
-                            }
-                        } else {
-                            LabEventKind::InterfaceDown {
-                                node: diag.node.clone(),
-                                interface: iface.name.clone(),
-                            }
-                        };
-                        events.push(LabEvent {
-                            lab_name: lab_name.clone(),
-                            timestamp,
-                            kind,
-                        });
-                    }
+                    && *prev_state != state_str
+                {
+                    let kind = if state_str == "up" {
+                        LabEventKind::InterfaceUp {
+                            node: diag.node.clone(),
+                            interface: iface.name.clone(),
+                        }
+                    } else {
+                        LabEventKind::InterfaceDown {
+                            node: diag.node.clone(),
+                            interface: iface.name.clone(),
+                        }
+                    };
+                    events.push(LabEvent {
+                        lab_name: lab_name.clone(),
+                        timestamp,
+                        kind,
+                    });
+                }
                 prev_node.insert(iface.name.clone(), state_str.clone());
 
                 iface_metrics.push(InterfaceMetrics {

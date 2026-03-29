@@ -23,7 +23,8 @@ pub struct LabState {
     pub pids: Vec<(String, u32)>,
     /// WireGuard public keys: node_name -> (wg_iface -> base64-encoded public key).
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub wg_public_keys: std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    pub wg_public_keys:
+        std::collections::HashMap<String, std::collections::HashMap<String, String>>,
     /// Container state: node_name -> container info.
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub containers: std::collections::HashMap<String, ContainerState>,
@@ -116,12 +117,11 @@ pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
     let state_json = serde_json::to_string_pretty(state)?;
     atomic_write(&dir.join("state.json"), &state_json)?;
 
-    let topo_toml = toml::to_string_pretty(topology)
-        .map_err(|e| Error::State {
-            op: "write",
-            detail: format!("failed to serialize topology: {e}"),
-            path: dir.join("topology.toml"),
-        })?;
+    let topo_toml = toml::to_string_pretty(topology).map_err(|e| Error::State {
+        op: "write",
+        detail: format!("failed to serialize topology: {e}"),
+        path: dir.join("topology.toml"),
+    })?;
     atomic_write(&dir.join("topology.toml"), &topo_toml)?;
 
     Ok(())
@@ -155,12 +155,11 @@ pub fn load(name: &str) -> Result<(LabState, Topology)> {
 
     let topo_path = dir.join("topology.toml");
     let topo_toml = std::fs::read_to_string(&topo_path)?;
-    let topology: Topology = toml::from_str(&topo_toml)
-        .map_err(|e| crate::Error::State {
-            op: "parse",
-            detail: format!("failed to parse topology state: {e}"),
-            path: topo_path.clone(),
-        })?;
+    let topology: Topology = toml::from_str(&topo_toml).map_err(|e| crate::Error::State {
+        op: "parse",
+        detail: format!("failed to parse topology state: {e}"),
+        path: topo_path.clone(),
+    })?;
 
     Ok((state, topology))
 }
@@ -180,13 +179,14 @@ pub fn list() -> Result<Vec<LabInfo>> {
             let state_path = entry.path().join("state.json");
             if state_path.exists()
                 && let Ok(json) = std::fs::read_to_string(&state_path)
-                    && let Ok(state) = serde_json::from_str::<LabState>(&json) {
-                        labs.push(LabInfo {
-                            name: name.clone(),
-                            node_count: state.namespaces.len(),
-                            created_at: state.created_at.clone(),
-                        });
-                    }
+                && let Ok(state) = serde_json::from_str::<LabState>(&json)
+            {
+                labs.push(LabInfo {
+                    name: name.clone(),
+                    node_count: state.namespaces.len(),
+                    created_at: state.created_at.clone(),
+                });
+            }
         }
     }
 

@@ -58,10 +58,18 @@ impl std::fmt::Display for TopologyDiff {
             writeln!(f, "  - remove node: {name}")?;
         }
         for link in &self.links_added {
-            writeln!(f, "  + add link: {} -- {}", link.endpoints[0], link.endpoints[1])?;
+            writeln!(
+                f,
+                "  + add link: {} -- {}",
+                link.endpoints[0], link.endpoints[1]
+            )?;
         }
         for link in &self.links_removed {
-            writeln!(f, "  - remove link: {} -- {}", link.endpoints[0], link.endpoints[1])?;
+            writeln!(
+                f,
+                "  - remove link: {} -- {}",
+                link.endpoints[0], link.endpoints[1]
+            )?;
         }
         for (ep, _imp) in &self.impairments_added {
             writeln!(f, "  + add impairment: {ep}")?;
@@ -167,7 +175,9 @@ mod tests {
         let topo = Lab::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
-            .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1/24", "10.0.0.2/24")
+            })
             .build();
         let diff = diff_topologies(&topo, &topo);
         assert!(diff.is_empty());

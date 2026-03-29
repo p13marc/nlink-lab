@@ -537,10 +537,7 @@ mod tests {
         let tokens = lex_tokens("0.1% 5%");
         assert_eq!(
             tokens,
-            vec![
-                Token::Percent("0.1%".into()),
-                Token::Percent("5%".into()),
-            ]
+            vec![Token::Percent("0.1%".into()), Token::Percent("5%".into()),]
         );
     }
 
@@ -666,10 +663,7 @@ link router:eth0 -- host:eth0 {
     #[test]
     fn test_impair_keywords() {
         let tokens = lex_tokens("impair corrupt reorder");
-        assert_eq!(
-            tokens,
-            vec![Token::Impair, Token::Corrupt, Token::Reorder]
-        );
+        assert_eq!(tokens, vec![Token::Impair, Token::Corrupt, Token::Reorder]);
     }
 
     #[test]
@@ -693,10 +687,7 @@ link router:eth0 -- host:eth0 {
     #[test]
     fn test_vrf_keywords() {
         let tokens = lex_tokens("vrf table interfaces");
-        assert_eq!(
-            tokens,
-            vec![Token::Vrf, Token::Table, Token::Interfaces]
-        );
+        assert_eq!(tokens, vec![Token::Vrf, Token::Table, Token::Interfaces]);
     }
 
     #[test]
@@ -726,7 +717,9 @@ link router:eth0 -- host:eth0 {
 
     #[test]
     fn test_firewall_keywords() {
-        let tokens = lex_tokens("firewall policy accept drop reject ct tcp udp dport sport icmp icmpv6 mark");
+        let tokens = lex_tokens(
+            "firewall policy accept drop reject ct tcp udp dport sport icmp icmpv6 mark",
+        );
         assert_eq!(
             tokens,
             vec![

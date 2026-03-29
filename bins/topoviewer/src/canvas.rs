@@ -77,10 +77,8 @@ impl canvas::Program<Message> for TopoViewer {
                 if let Some(ref node) = state.drag_node {
                     // Drag node
                     let world = self.screen_to_world(*position);
-                    let new_pos = Point::new(
-                        world.x - state.drag_offset.x,
-                        world.y - state.drag_offset.y,
-                    );
+                    let new_pos =
+                        Point::new(world.x - state.drag_offset.x, world.y - state.drag_offset.y);
                     return Some(
                         Action::publish(Message::NodeDragged(node.clone(), new_pos)).and_capture(),
                     );
@@ -154,10 +152,9 @@ impl canvas::Program<Message> for TopoViewer {
             let ep_a = link.endpoints[0].split(':').next().unwrap_or("");
             let ep_b = link.endpoints[1].split(':').next().unwrap_or("");
 
-            if let (Some(&pa), Some(&pb)) = (
-                self.node_positions.get(ep_a),
-                self.node_positions.get(ep_b),
-            ) {
+            if let (Some(&pa), Some(&pb)) =
+                (self.node_positions.get(ep_a), self.node_positions.get(ep_b))
+            {
                 let center_a = Point::new(pa.x + NODE_WIDTH / 2.0, pa.y + NODE_HEIGHT / 2.0);
                 let center_b = Point::new(pb.x + NODE_WIDTH / 2.0, pb.y + NODE_HEIGHT / 2.0);
 
@@ -168,23 +165,27 @@ impl canvas::Program<Message> for TopoViewer {
                 };
 
                 let path = Path::line(center_a, center_b);
-                frame.stroke(&path, Stroke::default().with_color(link_color).with_width(2.0));
+                frame.stroke(
+                    &path,
+                    Stroke::default().with_color(link_color).with_width(2.0),
+                );
 
                 if self.show_addresses
-                    && let Some(addresses) = &link.addresses {
-                        let mid = Point::new(
-                            (center_a.x + center_b.x) / 2.0,
-                            (center_a.y + center_b.y) / 2.0 - 10.0,
-                        );
-                        let label = format!("{} -- {}", addresses[0], addresses[1]);
-                        frame.fill_text(Text {
-                            content: label,
-                            position: mid,
-                            size: LINK_LABEL_SIZE.into(),
-                            color: Color::from_rgb(0.5, 0.5, 0.5),
-                            ..Default::default()
-                        });
-                    }
+                    && let Some(addresses) = &link.addresses
+                {
+                    let mid = Point::new(
+                        (center_a.x + center_b.x) / 2.0,
+                        (center_a.y + center_b.y) / 2.0 - 10.0,
+                    );
+                    let label = format!("{} -- {}", addresses[0], addresses[1]);
+                    frame.fill_text(Text {
+                        content: label,
+                        position: mid,
+                        size: LINK_LABEL_SIZE.into(),
+                        color: Color::from_rgb(0.5, 0.5, 0.5),
+                        ..Default::default()
+                    });
+                }
             }
         }
 
@@ -235,18 +236,19 @@ impl canvas::Program<Message> for TopoViewer {
             // Issue badge
             if self.show_metrics
                 && let Some(nm) = self.metrics.get(name.as_str())
-                    && !nm.issues.is_empty() {
-                        let badge_pos = Point::new(pos.x + NODE_WIDTH - 16.0, pos.y - 6.0);
-                        let badge = Path::circle(badge_pos, 10.0);
-                        frame.fill(&badge, Color::from_rgb(0.9, 0.2, 0.2));
-                        frame.fill_text(Text {
-                            content: nm.issues.len().to_string(),
-                            position: Point::new(badge_pos.x - 4.0, badge_pos.y - 6.0),
-                            size: 11.0.into(),
-                            color: Color::WHITE,
-                            ..Default::default()
-                        });
-                    }
+                && !nm.issues.is_empty()
+            {
+                let badge_pos = Point::new(pos.x + NODE_WIDTH - 16.0, pos.y - 6.0);
+                let badge = Path::circle(badge_pos, 10.0);
+                frame.fill(&badge, Color::from_rgb(0.9, 0.2, 0.2));
+                frame.fill_text(Text {
+                    content: nm.issues.len().to_string(),
+                    position: Point::new(badge_pos.x - 4.0, badge_pos.y - 6.0),
+                    size: 11.0.into(),
+                    color: Color::WHITE,
+                    ..Default::default()
+                });
+            }
         }
 
         vec![frame.into_geometry()]

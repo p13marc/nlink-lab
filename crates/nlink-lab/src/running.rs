@@ -162,15 +162,18 @@ impl RunningLab {
     pub fn exec(&self, node: &str, cmd: &str, args: &[&str]) -> Result<ExecOutput> {
         if let Some(container) = self.containers.get(node) {
             // Use docker/podman exec for container nodes
-            let rt_binary = self.runtime_binary.as_deref().ok_or_else(|| {
-                Error::deploy_failed("no container runtime binary in state")
-            })?;
+            let rt_binary = self
+                .runtime_binary
+                .as_deref()
+                .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
             let mut all_args = vec!["exec", &container.id, cmd];
             all_args.extend(args);
             let output = std::process::Command::new(rt_binary)
                 .args(&all_args)
                 .output()
-                .map_err(|e| Error::deploy_failed(format!("exec in container '{node}' failed: {e}")))?;
+                .map_err(|e| {
+                    Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
+                })?;
             Ok(ExecOutput {
                 stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -180,9 +183,8 @@ impl RunningLab {
             let ns_name = self.namespace_for(node)?;
             let mut command = std::process::Command::new(cmd);
             command.args(args);
-            let output = namespace::spawn_output(ns_name, command).map_err(|e| {
-                Error::deploy_failed(format!("exec in '{node}' failed: {e}"))
-            })?;
+            let output = namespace::spawn_output(ns_name, command)
+                .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
             Ok(ExecOutput {
                 stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -201,9 +203,8 @@ impl RunningLab {
         let mut command = std::process::Command::new(cmd[0]);
         command.args(&cmd[1..]);
 
-        let child = namespace::spawn(ns_name, command).map_err(|e| {
-            Error::deploy_failed(format!("spawn in '{node}' failed: {e}"))
-        })?;
+        let child = namespace::spawn(ns_name, command)
+            .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         let pid = child.id();
         self.pids.push((node.to_string(), pid));
         Ok(pid)
@@ -219,9 +220,8 @@ impl RunningLab {
             endpoint: endpoint.to_string(),
         })?;
         let ns_name = self.namespace_for(&ep.node)?;
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = namespace::connection_for(ns_name)
+            .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
 
         let netem = crate::deploy::build_netem(impairment)?;
 
@@ -241,14 +241,13 @@ impl RunningLab {
             endpoint: endpoint.to_string(),
         })?;
         let ns_name = self.namespace_for(&ep.node)?;
-        let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = namespace::connection_for(ns_name)
+            .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
 
         // Delete the root qdisc (removes all netem config)
-        conn.del_qdisc(&ep.iface, "root").await.map_err(|e| {
-            Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}"))
-        })?;
+        conn.del_qdisc(&ep.iface, "root")
+            .await
+            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
         Ok(())
     }
 
@@ -259,10 +258,12 @@ impl RunningLab {
         // Diagnose bare namespace nodes
         for (node_name, ns_name) in &self.namespace_names {
             if let Some(filter) = node
-                && node_name != filter { continue; }
-            let conn: Connection<Route> = namespace::connection_for(ns_name).map_err(|e| {
-                Error::deploy_failed(format!("connection for '{ns_name}': {e}"))
-            })?;
+                && node_name != filter
+            {
+                continue;
+            }
+            let conn: Connection<Route> = namespace::connection_for(ns_name)
+                .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
             let diag = Diagnostics::new(conn);
             let report = diag.scan().await.map_err(|e| {
                 Error::deploy_failed(format!("diagnostics scan for '{node_name}': {e}"))
@@ -277,10 +278,14 @@ impl RunningLab {
         // Diagnose container nodes
         for (node_name, container) in &self.containers {
             if let Some(filter) = node
-                && node_name != filter { continue; }
-            let conn: Connection<Route> = namespace::connection_for_pid(container.pid).map_err(|e| {
-                Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
-            })?;
+                && node_name != filter
+            {
+                continue;
+            }
+            let conn: Connection<Route> =
+                namespace::connection_for_pid(container.pid).map_err(|e| {
+                    Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
+                })?;
             let diag = Diagnostics::new(conn);
             let report = diag.scan().await.map_err(|e| {
                 Error::deploy_failed(format!("diagnostics scan for container '{node_name}': {e}"))
@@ -298,7 +303,9 @@ impl RunningLab {
     /// Kill a tracked background process by PID.
     pub fn kill_process(&self, pid: u32) -> Result<()> {
         if !self.pids.iter().any(|(_, p)| *p == pid) {
-            return Err(Error::deploy_failed(format!("PID {pid} not tracked by this lab")));
+            return Err(Error::deploy_failed(format!(
+                "PID {pid} not tracked by this lab"
+            )));
         }
         kill_process(pid);
         Ok(())
@@ -328,18 +335,20 @@ impl RunningLab {
         // 3. Delete namespaces
         for ns_name in self.namespace_names.values() {
             if namespace::exists(ns_name)
-                && let Err(e) = namespace::delete(ns_name) {
-                    tracing::warn!("failed to delete namespace '{ns_name}': {e}");
-                }
+                && let Err(e) = namespace::delete(ns_name)
+            {
+                tracing::warn!("failed to delete namespace '{ns_name}': {e}");
+            }
         }
 
         // 4. Delete management namespace (bridges) if it exists
         if !self.topology.networks.is_empty() {
             let mgmt_ns = format!("{}-mgmt", self.topology.lab.prefix());
             if namespace::exists(&mgmt_ns)
-                && let Err(e) = namespace::delete(&mgmt_ns) {
-                    tracing::warn!("failed to delete management namespace '{mgmt_ns}': {e}");
-                }
+                && let Err(e) = namespace::delete(&mgmt_ns)
+            {
+                tracing::warn!("failed to delete management namespace '{mgmt_ns}': {e}");
+            }
         }
 
         // 5. Remove state file

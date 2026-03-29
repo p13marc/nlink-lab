@@ -136,4 +136,3 @@ impl Error {
         matches!(self, Self::NotFound { .. } | Self::NodeNotFound { .. })
     }
 }
-

@@ -37,35 +37,41 @@ fn lower_with_base_dir(
         match stmt {
             ast::Statement::Profile(p) => ctx.add_profile(p),
             ast::Statement::Let(l) => ctx.add_variable(l),
-            ast::Statement::Defaults(d) => {
-                match d.kind {
-                    ast::DefaultsKind::Link => ctx.default_link_mtu = d.mtu,
-                    ast::DefaultsKind::Impair => ctx.default_impair = d.impair.clone(),
-                    ast::DefaultsKind::Rate => ctx.default_rate = d.rate.clone(),
-                }
-            }
+            ast::Statement::Defaults(d) => match d.kind {
+                ast::DefaultsKind::Link => ctx.default_link_mtu = d.mtu,
+                ast::DefaultsKind::Impair => ctx.default_impair = d.impair.clone(),
+                ast::DefaultsKind::Rate => ctx.default_rate = d.rate.clone(),
+            },
             ast::Statement::Pool(p) => {
                 if let Ok((ip, prefix)) = crate::helpers::parse_cidr(&p.base)
-                    && let std::net::IpAddr::V4(v4) = ip {
-                        let base = u32::from(v4);
-                        let pool_size = 1u32.checked_shl(32 - prefix as u32).unwrap_or(0);
-                        ctx.pools.insert(p.name.clone(), PoolState {
+                    && let std::net::IpAddr::V4(v4) = ip
+                {
+                    let base = u32::from(v4);
+                    let pool_size = 1u32.checked_shl(32 - prefix as u32).unwrap_or(0);
+                    ctx.pools.insert(
+                        p.name.clone(),
+                        PoolState {
                             base,
                             pool_size,
                             alloc_prefix: p.prefix,
                             next_offset: 0,
-                        });
-                    }
+                        },
+                    );
+                }
             }
             _ => {}
         }
     }
 
     // Inject lab auto-variables
-    ctx.variables.insert("lab.name".into(), file.lab.name.clone());
+    ctx.variables
+        .insert("lab.name".into(), file.lab.name.clone());
     ctx.variables.insert(
         "lab.prefix".into(),
-        file.lab.prefix.clone().unwrap_or_else(|| file.lab.name.clone()),
+        file.lab
+            .prefix
+            .clone()
+            .unwrap_or_else(|| file.lab.name.clone()),
     );
 
     // Pre-lowering validation
@@ -88,7 +94,9 @@ fn lower_with_base_dir(
 
     // Add profiles to topology (for validator cross-referencing)
     for (name, profile_def) in &ctx.profiles {
-        topology.profiles.insert(name.clone(), lower_profile(profile_def));
+        topology
+            .profiles
+            .insert(name.clone(), lower_profile(profile_def));
     }
 
     for stmt in &expanded {
@@ -117,9 +125,12 @@ fn lower_with_base_dir(
                     }
                 }
             }
-            ast::Statement::Profile(_) | ast::Statement::Let(_)
-            | ast::Statement::For(_) | ast::Statement::Defaults(_)
-            | ast::Statement::Param(_) | ast::Statement::Pool(_) => {}
+            ast::Statement::Profile(_)
+            | ast::Statement::Let(_)
+            | ast::Statement::For(_)
+            | ast::Statement::Defaults(_)
+            | ast::Statement::Param(_)
+            | ast::Statement::Pool(_) => {}
         }
     }
 
@@ -161,7 +172,12 @@ fn resolve_imports(
         let mut ast = super::parser::parse_tokens(&tokens, &content)?;
 
         // Resolve parametric import: inject caller params, apply defaults from `param` stmts
-        if !imp.params.is_empty() || ast.statements.iter().any(|s| matches!(s, ast::Statement::Param(_))) {
+        if !imp.params.is_empty()
+            || ast
+                .statements
+                .iter()
+                .any(|s| matches!(s, ast::Statement::Param(_)))
+        {
             resolve_import_params(&imp.params, &mut ast)?;
         }
 
@@ -179,10 +195,7 @@ fn resolve_imports(
 /// Collects `param` declarations from the imported file, matches them against
 /// caller-provided values, and injects the resolved values as `let` bindings
 /// at the beginning of the imported file's statements.
-fn resolve_import_params(
-    caller_params: &[(String, String)],
-    ast: &mut ast::File,
-) -> Result<()> {
+fn resolve_import_params(caller_params: &[(String, String)], ast: &mut ast::File) -> Result<()> {
     // Collect param declarations
     let module_params: Vec<ast::ParamDef> = ast
         .statements
@@ -221,7 +234,8 @@ fn resolve_import_params(
     }
 
     // Remove param statements and prepend let bindings
-    ast.statements.retain(|s| !matches!(s, ast::Statement::Param(_)));
+    ast.statements
+        .retain(|s| !matches!(s, ast::Statement::Param(_)));
     let mut new_stmts = let_stmts;
     new_stmts.append(&mut ast.statements);
     ast.statements = new_stmts;
@@ -360,20 +374,20 @@ fn warn_unresolved_refs(topology: &types::Topology) {
     for (node_name, node) in &topology.nodes {
         for (dest, route) in &node.routes {
             if let Some(via) = &route.via
-                && via.contains("${") {
-                    tracing::warn!(
-                        "unresolved reference in route '{dest}' on '{node_name}': {via}"
-                    );
-                }
+                && via.contains("${")
+            {
+                tracing::warn!("unresolved reference in route '{dest}' on '{node_name}': {via}");
+            }
         }
         if let Some(fw) = &node.firewall {
             for rule in &fw.rules {
                 if let Some(expr) = &rule.match_expr
-                    && expr.contains("${") {
-                        tracing::warn!(
-                            "unresolved reference in firewall rule on '{node_name}': {expr}"
-                        );
-                    }
+                    && expr.contains("${")
+                {
+                    tracing::warn!(
+                        "unresolved reference in firewall rule on '{node_name}': {expr}"
+                    );
+                }
             }
         }
     }
@@ -383,10 +397,10 @@ fn warn_unresolved_refs(topology: &types::Topology) {
 
 /// State for a named subnet pool.
 struct PoolState {
-    base: u32,         // base network address as u32
-    pool_size: u32,    // total addresses in the pool (for exhaustion check)
-    alloc_prefix: u8,  // allocation prefix size (e.g., 30 for /30)
-    next_offset: u32,  // next allocation offset from base
+    base: u32,        // base network address as u32
+    pool_size: u32,   // total addresses in the pool (for exhaustion check)
+    alloc_prefix: u8, // allocation prefix size (e.g., 30 for /30)
+    next_offset: u32, // next allocation offset from base
 }
 
 struct LowerCtx {
@@ -412,7 +426,10 @@ impl LowerCtx {
 
     fn add_profile(&mut self, p: &ast::ProfileDef) {
         if self.profiles.contains_key(&p.name) {
-            tracing::warn!("duplicate profile name '{}' — later definition wins", p.name);
+            tracing::warn!(
+                "duplicate profile name '{}' — later definition wins",
+                p.name
+            );
         }
         self.profiles.insert(p.name.clone(), p.clone());
     }
@@ -568,9 +585,10 @@ fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
     // Arithmetic expression
     let tokens = tokenize_arith(expr, vars);
     if !tokens.is_empty()
-        && let Ok(val) = parse_arith_expr(&tokens, &mut 0) {
-            return val.to_string();
-        }
+        && let Ok(val) = parse_arith_expr(&tokens, &mut 0)
+    {
+        return val.to_string();
+    }
 
     // Simple variable lookup
     vars.get(expr)
@@ -629,46 +647,92 @@ fn tokenize_arith(expr: &str, vars: &HashMap<String, String>) -> Vec<ArithTok> {
 
     while let Some(&ch) = chars.peek() {
         match ch {
-            ' ' | '\t' => { chars.next(); }
-            '+' => { chars.next(); tokens.push(ArithTok::Plus); }
+            ' ' | '\t' => {
+                chars.next();
+            }
+            '+' => {
+                chars.next();
+                tokens.push(ArithTok::Plus);
+            }
             '-' => {
                 chars.next();
                 // Unary minus: after operator, open paren, or at start
                 let is_unary = tokens.is_empty()
-                    || matches!(tokens.last(), Some(ArithTok::Plus | ArithTok::Minus
-                        | ArithTok::Mul | ArithTok::Div | ArithTok::Mod | ArithTok::LParen));
+                    || matches!(
+                        tokens.last(),
+                        Some(
+                            ArithTok::Plus
+                                | ArithTok::Minus
+                                | ArithTok::Mul
+                                | ArithTok::Div
+                                | ArithTok::Mod
+                                | ArithTok::LParen
+                        )
+                    );
                 if is_unary {
                     // Parse the number/variable and negate
                     let val = read_operand(&mut chars, vars);
-                    if let Some(n) = val { tokens.push(ArithTok::Num(-n)); }
-                    else { return vec![]; } // can't parse → bail
+                    if let Some(n) = val {
+                        tokens.push(ArithTok::Num(-n));
+                    } else {
+                        return vec![];
+                    } // can't parse → bail
                 } else {
                     tokens.push(ArithTok::Minus);
                 }
             }
-            '*' => { chars.next(); tokens.push(ArithTok::Mul); }
-            '/' => { chars.next(); tokens.push(ArithTok::Div); }
-            '%' => { chars.next(); tokens.push(ArithTok::Mod); }
-            '(' => { chars.next(); tokens.push(ArithTok::LParen); }
-            ')' => { chars.next(); tokens.push(ArithTok::RParen); }
+            '*' => {
+                chars.next();
+                tokens.push(ArithTok::Mul);
+            }
+            '/' => {
+                chars.next();
+                tokens.push(ArithTok::Div);
+            }
+            '%' => {
+                chars.next();
+                tokens.push(ArithTok::Mod);
+            }
+            '(' => {
+                chars.next();
+                tokens.push(ArithTok::LParen);
+            }
+            ')' => {
+                chars.next();
+                tokens.push(ArithTok::RParen);
+            }
             '0'..='9' => {
                 let mut num = String::new();
                 while let Some(&c) = chars.peek() {
-                    if c.is_ascii_digit() { num.push(c); chars.next(); } else { break; }
+                    if c.is_ascii_digit() {
+                        num.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
                 }
-                if let Ok(n) = num.parse::<i64>() { tokens.push(ArithTok::Num(n)); }
-                else { return vec![]; }
+                if let Ok(n) = num.parse::<i64>() {
+                    tokens.push(ArithTok::Num(n));
+                } else {
+                    return vec![];
+                }
             }
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut name = String::new();
                 while let Some(&c) = chars.peek() {
                     if c.is_alphanumeric() || c == '_' || c == '.' || c == '-' {
-                        name.push(c); chars.next();
-                    } else { break; }
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
                 }
                 if let Some(val) = vars.get(&name) {
-                    if let Ok(n) = val.parse::<i64>() { tokens.push(ArithTok::Num(n)); }
-                    else { return vec![]; } // non-numeric variable → bail to string lookup
+                    if let Ok(n) = val.parse::<i64>() {
+                        tokens.push(ArithTok::Num(n));
+                    } else {
+                        return vec![];
+                    } // non-numeric variable → bail to string lookup
                 } else {
                     return vec![]; // unknown variable → bail
                 }
@@ -680,19 +744,34 @@ fn tokenize_arith(expr: &str, vars: &HashMap<String, String>) -> Vec<ArithTok> {
 }
 
 /// Read a numeric operand (number or variable) from the char stream.
-fn read_operand(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, vars: &HashMap<String, String>) -> Option<i64> {
-    while let Some(&' ') = chars.peek() { chars.next(); }
+fn read_operand(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    vars: &HashMap<String, String>,
+) -> Option<i64> {
+    while let Some(&' ') = chars.peek() {
+        chars.next();
+    }
     if let Some(&c) = chars.peek() {
         if c.is_ascii_digit() {
             let mut num = String::new();
             while let Some(&c) = chars.peek() {
-                if c.is_ascii_digit() { num.push(c); chars.next(); } else { break; }
+                if c.is_ascii_digit() {
+                    num.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
             }
             num.parse().ok()
         } else if c.is_alphabetic() || c == '_' {
             let mut name = String::new();
             while let Some(&c) = chars.peek() {
-                if c.is_alphanumeric() || c == '_' || c == '.' { name.push(c); chars.next(); } else { break; }
+                if c.is_alphanumeric() || c == '_' || c == '.' {
+                    name.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
             }
             vars.get(&name)?.parse().ok()
         } else {
@@ -708,8 +787,14 @@ fn parse_arith_expr(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result
     let mut left = parse_arith_term(tokens, pos)?;
     while *pos < tokens.len() {
         match tokens[*pos] {
-            ArithTok::Plus => { *pos += 1; left += parse_arith_term(tokens, pos)?; }
-            ArithTok::Minus => { *pos += 1; left -= parse_arith_term(tokens, pos)?; }
+            ArithTok::Plus => {
+                *pos += 1;
+                left += parse_arith_term(tokens, pos)?;
+            }
+            ArithTok::Minus => {
+                *pos += 1;
+                left -= parse_arith_term(tokens, pos)?;
+            }
             _ => break,
         }
     }
@@ -721,17 +806,24 @@ fn parse_arith_term(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result
     let mut left = parse_arith_factor(tokens, pos)?;
     while *pos < tokens.len() {
         match tokens[*pos] {
-            ArithTok::Mul => { *pos += 1; left *= parse_arith_factor(tokens, pos)?; }
+            ArithTok::Mul => {
+                *pos += 1;
+                left *= parse_arith_factor(tokens, pos)?;
+            }
             ArithTok::Div => {
                 *pos += 1;
                 let right = parse_arith_factor(tokens, pos)?;
-                if right == 0 { return Err(()); }
+                if right == 0 {
+                    return Err(());
+                }
                 left /= right;
             }
             ArithTok::Mod => {
                 *pos += 1;
                 let right = parse_arith_factor(tokens, pos)?;
-                if right == 0 { return Err(()); }
+                if right == 0 {
+                    return Err(());
+                }
                 left %= right;
             }
             _ => break,
@@ -742,9 +834,14 @@ fn parse_arith_term(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result
 
 /// Parse factor: number or parenthesized expression.
 fn parse_arith_factor(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result<i64, ()> {
-    if *pos >= tokens.len() { return Err(()); }
+    if *pos >= tokens.len() {
+        return Err(());
+    }
     match tokens[*pos] {
-        ArithTok::Num(n) => { *pos += 1; Ok(n) }
+        ArithTok::Num(n) => {
+            *pos += 1;
+            Ok(n)
+        }
         ArithTok::LParen => {
             *pos += 1;
             let val = parse_arith_expr(tokens, pos)?;
@@ -758,10 +855,7 @@ fn parse_arith_factor(tokens: &[ArithTok], pos: &mut usize) -> std::result::Resu
 }
 
 /// Interpolate all string fields in a statement.
-fn interpolate_statement(
-    stmt: &ast::Statement,
-    vars: &HashMap<String, String>,
-) -> ast::Statement {
+fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) -> ast::Statement {
     match stmt {
         ast::Statement::Node(n) => ast::Statement::Node(interpolate_node(n, vars)),
         ast::Statement::Link(l) => ast::Statement::Link(interpolate_link(l, vars)),
@@ -811,7 +905,11 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
         healthcheck_timeout: n.healthcheck_timeout.clone(),
         startup_delay: n.startup_delay.clone(),
         env_file: io(&n.env_file, vars),
-        configs: n.configs.iter().map(|(h, c)| (i(h, vars), i(c, vars))).collect(),
+        configs: n
+            .configs
+            .iter()
+            .map(|(h, c)| (i(h, vars), i(c, vars)))
+            .collect(),
         overlay: io(&n.overlay, vars),
         depends_on: n.depends_on.iter().map(|s| i(s, vars)).collect(),
         props: n.props.iter().map(|p| interpolate_prop(p, vars)).collect(),
@@ -850,7 +948,11 @@ fn interpolate_vrf(v: &ast::VrfDef, vars: &HashMap<String, String>) -> ast::VrfD
         name: i(&v.name, vars),
         table: v.table,
         interfaces: v.interfaces.iter().map(|s| i(s, vars)).collect(),
-        routes: v.routes.iter().map(|r| interpolate_route(r, vars)).collect(),
+        routes: v
+            .routes
+            .iter()
+            .map(|r| interpolate_route(r, vars))
+            .collect(),
     }
 }
 
@@ -886,9 +988,18 @@ fn interpolate_link(l: &ast::LinkDef, vars: &HashMap<String, String>) -> ast::Li
         subnet: io(&l.subnet, vars),
         pool: l.pool.clone(),
         mtu: l.mtu,
-        impairment: l.impairment.as_ref().map(|p| interpolate_impair_props(p, vars)),
-        left_impair: l.left_impair.as_ref().map(|p| interpolate_impair_props(p, vars)),
-        right_impair: l.right_impair.as_ref().map(|p| interpolate_impair_props(p, vars)),
+        impairment: l
+            .impairment
+            .as_ref()
+            .map(|p| interpolate_impair_props(p, vars)),
+        left_impair: l
+            .left_impair
+            .as_ref()
+            .map(|p| interpolate_impair_props(p, vars)),
+        right_impair: l
+            .right_impair
+            .as_ref()
+            .map(|p| interpolate_impair_props(p, vars)),
         rate: l.rate.as_ref().map(|p| interpolate_rate_props(p, vars)),
     }
 }
@@ -907,10 +1018,7 @@ fn interpolate_impair_props(
     }
 }
 
-fn interpolate_rate_props(
-    p: &ast::RateProps,
-    vars: &HashMap<String, String>,
-) -> ast::RateProps {
+fn interpolate_rate_props(p: &ast::RateProps, vars: &HashMap<String, String>) -> ast::RateProps {
     ast::RateProps {
         egress: io(&p.egress, vars),
         ingress: io(&p.ingress, vars),
@@ -929,10 +1037,7 @@ fn interpolate_network(n: &ast::NetworkDef, vars: &HashMap<String, String>) -> a
     }
 }
 
-fn interpolate_impair_def(
-    imp: &ast::ImpairDef,
-    vars: &HashMap<String, String>,
-) -> ast::ImpairDef {
+fn interpolate_impair_def(imp: &ast::ImpairDef, vars: &HashMap<String, String>) -> ast::ImpairDef {
     ast::ImpairDef {
         node: i(&imp.node, vars),
         iface: i(&imp.iface, vars),
@@ -981,19 +1086,18 @@ fn validate_stmt(stmt: &ast::Statement, ctx: &LowerCtx, errors: &mut Vec<String>
         }
         ast::Statement::For(f) => {
             if let ast::ForRange::IntRange { start, end } = &f.range
-                && start > end {
-                    errors.push(format!(
-                        "for loop '{}' has empty range {}..{}",
-                        f.var, start, end
-                    ));
-                }
+                && start > end
+            {
+                errors.push(format!(
+                    "for loop '{}' has empty range {}..{}",
+                    f.var, start, end
+                ));
+            }
             if let ast::ForRange::List(items) = &f.range
-                && items.is_empty() {
-                    errors.push(format!(
-                        "for loop '{}' has empty list",
-                        f.var
-                    ));
-                }
+                && items.is_empty()
+            {
+                errors.push(format!("for loop '{}' has empty list", f.var));
+            }
             for stmt in &f.body {
                 validate_stmt(stmt, ctx, errors);
             }
@@ -1054,11 +1158,7 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
     }
 }
 
-fn lower_node(
-    topo: &mut types::Topology,
-    node: &ast::NodeDef,
-    ctx: &LowerCtx,
-) -> Result<()> {
+fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &LowerCtx) -> Result<()> {
     let mut n = types::Node {
         profile: node.profiles.first().cloned(),
         image: node.image.clone(),
@@ -1090,7 +1190,10 @@ fn lower_node(
         let map: HashMap<String, String> = node
             .env
             .iter()
-            .filter_map(|s| s.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())))
+            .filter_map(|s| {
+                s.split_once('=')
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+            })
             .collect();
         n.env = Some(map);
     }
@@ -1263,7 +1366,11 @@ fn allocate_from_pool(pool: &mut PoolState, pool_name: &str) -> Option<[String; 
     }
     let network = pool.base + pool.next_offset;
     pool.next_offset += subnet_size;
-    let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+    let cidr = format!(
+        "{}/{}",
+        std::net::Ipv4Addr::from(network),
+        pool.alloc_prefix
+    );
     split_subnet(&cidr).ok()
 }
 
@@ -1289,11 +1396,18 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
                     let addresses = if let Some(pool_name) = &pattern.pool {
                         if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
                             allocate_from_pool(pool, pool_name)
-                        } else { None }
-                    } else { None };
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
 
                     topo.links.push(types::Link {
-                        endpoints: [format!("{left}:{left_iface}"), format!("{right}:{right_iface}")],
+                        endpoints: [
+                            format!("{left}:{left_iface}"),
+                            format!("{right}:{right_iface}"),
+                        ],
                         addresses,
                         mtu: ctx.default_link_mtu,
                     });
@@ -1324,13 +1438,22 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
 
                 let addresses = if let Some(pool_name) = &pattern.pool {
                     if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                        let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+                        let subnet_size =
+                            1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
                         let network = pool.base + pool.next_offset;
                         pool.next_offset += subnet_size;
-                        let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+                        let cidr = format!(
+                            "{}/{}",
+                            std::net::Ipv4Addr::from(network),
+                            pool.alloc_prefix
+                        );
                         split_subnet(&cidr).ok()
-                    } else { None }
-                } else { None };
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 topo.links.push(types::Link {
                     endpoints: [format!("{left}:right"), format!("{right}:left")],
@@ -1355,13 +1478,22 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
 
                 let addresses = if let Some(pool_name) = &pattern.pool {
                     if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                        let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+                        let subnet_size =
+                            1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
                         let network = pool.base + pool.next_offset;
                         pool.next_offset += subnet_size;
-                        let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+                        let cidr = format!(
+                            "{}/{}",
+                            std::net::Ipv4Addr::from(network),
+                            pool.alloc_prefix
+                        );
                         split_subnet(&cidr).ok()
-                    } else { None }
-                } else { None };
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 topo.links.push(types::Link {
                     endpoints: [format!("{hub_name}:eth{i}"), format!("{spoke_name}:eth0")],
@@ -1407,10 +1539,8 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
     if let Some(imp) = effective_impair {
         let left_ep = format!("{}:{}", link.left_node, link.left_iface);
         let right_ep = format!("{}:{}", link.right_node, link.right_iface);
-        topo.impairments
-            .insert(left_ep, lower_impair_props(imp));
-        topo.impairments
-            .insert(right_ep, lower_impair_props(imp));
+        topo.impairments.insert(left_ep, lower_impair_props(imp));
+        topo.impairments.insert(right_ep, lower_impair_props(imp));
     }
 
     // Lower directional impairments
@@ -1450,7 +1580,7 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
 
 fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()> {
     let mut network = types::Network {
-        kind: Some("bridge".to_string()),  // Network kind stays as String
+        kind: Some("bridge".to_string()), // Network kind stays as String
         vlan_filtering: if net.vlan_filtering { Some(true) } else { None },
         mtu: net.mtu,
         members: net.members.clone(),
@@ -1534,10 +1664,7 @@ link router:eth0 -- host:eth0 {
         assert_eq!(topo.lab.name, "simple");
         assert_eq!(topo.nodes.len(), 2);
         assert_eq!(topo.links.len(), 1);
-        assert_eq!(
-            topo.nodes["router"].sysctls["net.ipv4.ip_forward"],
-            "1"
-        );
+        assert_eq!(topo.nodes["router"].sysctls["net.ipv4.ip_forward"], "1");
         assert_eq!(
             topo.nodes["host"].routes["default"].via.as_deref(),
             Some("10.0.0.1")
@@ -1549,10 +1676,7 @@ link router:eth0 -- host:eth0 {
             topo.impairments["router:eth0"].delay.as_deref(),
             Some("10ms")
         );
-        assert_eq!(
-            topo.impairments["host:eth0"].delay.as_deref(),
-            Some("10ms")
-        );
+        assert_eq!(topo.impairments["host:eth0"].delay.as_deref(), Some("10ms"));
     }
 
     #[test]
@@ -1630,7 +1754,11 @@ for s in 1..2 {
         );
         assert_eq!(topo.links.len(), 4);
         // Check one specific link
-        let link = topo.links.iter().find(|l| l.endpoints[0] == "spine1:eth1").unwrap();
+        let link = topo
+            .links
+            .iter()
+            .find(|l| l.endpoints[0] == "spine1:eth1")
+            .unwrap();
         assert_eq!(link.endpoints[1], "leaf1:eth1");
         assert_eq!(link.addresses.as_ref().unwrap()[0], "10.1.1.1/30");
     }
@@ -1647,10 +1775,7 @@ link a:e0 -- b:e0 {
   delay ${wan_delay}
 }"#,
         );
-        assert_eq!(
-            topo.impairments["a:e0"].delay.as_deref(),
-            Some("30ms")
-        );
+        assert_eq!(topo.impairments["a:e0"].delay.as_deref(), Some("30ms"));
     }
 
     #[test]
@@ -1665,14 +1790,8 @@ link a:e0 -- b:e0 {
 }"#,
         );
         assert_eq!(topo.impairments.len(), 2);
-        assert_eq!(
-            topo.impairments["a:e0"].rate.as_deref(),
-            Some("10mbit")
-        );
-        assert_eq!(
-            topo.impairments["b:e0"].rate.as_deref(),
-            Some("2mbit")
-        );
+        assert_eq!(topo.impairments["a:e0"].rate.as_deref(), Some("10mbit"));
+        assert_eq!(topo.impairments["b:e0"].rate.as_deref(), Some("2mbit"));
     }
 
     #[test]
@@ -1873,8 +1992,10 @@ node a"#,
 
     #[test]
     fn test_undefined_profile_error() {
-        let result = nll::parse(r#"lab "t"
-node r1 : nonexistent"#);
+        let result = nll::parse(
+            r#"lab "t"
+node r1 : nonexistent"#,
+        );
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("undefined profile"), "got: {err}");
@@ -1943,9 +2064,8 @@ node r1 : nonexistent"#);
             let path = entry.unwrap().path();
             if path.extension().and_then(|e| e.to_str()) == Some("nll") {
                 let content = std::fs::read_to_string(&path).unwrap();
-                let topo = nll::parse(&content).unwrap_or_else(|e| {
-                    panic!("failed to parse {}: {e}", path.display())
-                });
+                let topo = nll::parse(&content)
+                    .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
                 let diags = topo.validate();
                 assert!(
                     !diags.has_errors(),
@@ -1956,7 +2076,10 @@ node r1 : nonexistent"#);
                 count += 1;
             }
         }
-        assert!(count >= 12, "expected at least 12 .nll examples, found {count}");
+        assert!(
+            count >= 12,
+            "expected at least 12 .nll examples, found {count}"
+        );
     }
 
     // ─── Import tests ────────────────────────────────────
@@ -1976,9 +2099,10 @@ node r1 : nonexistent"#);
         assert_eq!(topo.nodes.len(), 3);
 
         // Imported link endpoints are prefixed
-        let imported_link = topo.links.iter().find(|l| {
-            l.endpoints[0].starts_with("dc.") && l.endpoints[1].starts_with("dc.")
-        });
+        let imported_link = topo
+            .links
+            .iter()
+            .find(|l| l.endpoints[0].starts_with("dc.") && l.endpoints[1].starts_with("dc."));
         assert!(imported_link.is_some(), "imported link not found");
 
         // Local link references the imported node
@@ -2033,10 +2157,22 @@ for i in 0..3 {
     node n${i} { lo 10.0.${i % 2}.${i}/32 }
 }"#,
         );
-        assert_eq!(topo.nodes["n0"].interfaces["lo"].addresses, vec!["10.0.0.0/32"]);
-        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.1.1/32"]);
-        assert_eq!(topo.nodes["n2"].interfaces["lo"].addresses, vec!["10.0.0.2/32"]);
-        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.1.3/32"]);
+        assert_eq!(
+            topo.nodes["n0"].interfaces["lo"].addresses,
+            vec!["10.0.0.0/32"]
+        );
+        assert_eq!(
+            topo.nodes["n1"].interfaces["lo"].addresses,
+            vec!["10.0.1.1/32"]
+        );
+        assert_eq!(
+            topo.nodes["n2"].interfaces["lo"].addresses,
+            vec!["10.0.0.2/32"]
+        );
+        assert_eq!(
+            topo.nodes["n3"].interfaces["lo"].addresses,
+            vec!["10.0.1.3/32"]
+        );
     }
 
     #[test]
@@ -2047,20 +2183,38 @@ for i in 1..3 {
     node n${i} { lo 10.0.0.${(i - 1) * 10 + 1}/32 }
 }"#,
         );
-        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.0.1/32"]);
-        assert_eq!(topo.nodes["n2"].interfaces["lo"].addresses, vec!["10.0.0.11/32"]);
-        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.0.21/32"]);
+        assert_eq!(
+            topo.nodes["n1"].interfaces["lo"].addresses,
+            vec!["10.0.0.1/32"]
+        );
+        assert_eq!(
+            topo.nodes["n2"].interfaces["lo"].addresses,
+            vec!["10.0.0.11/32"]
+        );
+        assert_eq!(
+            topo.nodes["n3"].interfaces["lo"].addresses,
+            vec!["10.0.0.21/32"]
+        );
     }
 
     #[test]
     fn test_ternary_conditional() {
         let mut vars = HashMap::new();
         vars.insert("env".into(), "prod".into());
-        assert_eq!(super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars), "5ms");
-        assert_eq!(super::eval_expr(r#"env != "prod" ? 5ms : 50ms"#, &vars), "50ms");
+        assert_eq!(
+            super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars),
+            "5ms"
+        );
+        assert_eq!(
+            super::eval_expr(r#"env != "prod" ? 5ms : 50ms"#, &vars),
+            "50ms"
+        );
 
         vars.insert("env".into(), "dev".into());
-        assert_eq!(super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars), "50ms");
+        assert_eq!(
+            super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars),
+            "50ms"
+        );
     }
 
     #[test]
@@ -2105,9 +2259,18 @@ for i in 1..3 {
     node n${i} { lo 10.0.${loop.index}.0/32 }
 }"#,
         );
-        assert_eq!(topo.nodes["n1"].interfaces["lo"].addresses, vec!["10.0.0.0/32"]); // index 0
-        assert_eq!(topo.nodes["n2"].interfaces["lo"].addresses, vec!["10.0.1.0/32"]); // index 1
-        assert_eq!(topo.nodes["n3"].interfaces["lo"].addresses, vec!["10.0.2.0/32"]); // index 2
+        assert_eq!(
+            topo.nodes["n1"].interfaces["lo"].addresses,
+            vec!["10.0.0.0/32"]
+        ); // index 0
+        assert_eq!(
+            topo.nodes["n2"].interfaces["lo"].addresses,
+            vec!["10.0.1.0/32"]
+        ); // index 1
+        assert_eq!(
+            topo.nodes["n3"].interfaces["lo"].addresses,
+            vec!["10.0.2.0/32"]
+        ); // index 2
     }
 
     #[test]
@@ -2141,9 +2304,8 @@ node test"#,
 
     #[test]
     fn test_block_comments() {
-        let topo = parse_and_lower(
-            "lab \"t\"\nnode a\n/* this node is disabled\nnode b\n*/\nnode c",
-        );
+        let topo =
+            parse_and_lower("lab \"t\"\nnode a\n/* this node is disabled\nnode b\n*/\nnode c");
         assert_eq!(topo.nodes.len(), 2);
         assert!(topo.nodes.contains_key("a"));
         assert!(topo.nodes.contains_key("c"));
@@ -2152,9 +2314,8 @@ node test"#,
 
     #[test]
     fn test_nested_block_comments() {
-        let topo = parse_and_lower(
-            "lab \"t\"\nnode a\n/* outer /* inner */ still commented */\nnode b",
-        );
+        let topo =
+            parse_and_lower("lab \"t\"\nnode a\n/* outer /* inner */ still commented */\nnode b");
         assert_eq!(topo.nodes.len(), 2);
         assert!(topo.nodes.contains_key("a"));
         assert!(topo.nodes.contains_key("b"));
@@ -2449,7 +2610,10 @@ node router image "frr" {
         );
         let n = &topo.nodes["router"];
         assert_eq!(n.configs.len(), 2);
-        assert_eq!(n.configs[0], ("a.conf".to_string(), "/etc/a.conf".to_string()));
+        assert_eq!(
+            n.configs[0],
+            ("a.conf".to_string(), "/etc/a.conf".to_string())
+        );
         assert_eq!(n.overlay.as_deref(), Some("configs/router/"));
         assert_eq!(n.env_file.as_deref(), Some("router.env"));
     }
@@ -2534,8 +2698,12 @@ validate {
         );
         assert_eq!(topo.nodes.len(), 2);
         assert_eq!(topo.assertions.len(), 2);
-        assert!(matches!(&topo.assertions[0], types::Assertion::Reach { from, to } if from == "a" && to == "b"));
-        assert!(matches!(&topo.assertions[1], types::Assertion::NoReach { from, to } if from == "b" && to == "a"));
+        assert!(
+            matches!(&topo.assertions[0], types::Assertion::Reach { from, to } if from == "a" && to == "b")
+        );
+        assert!(
+            matches!(&topo.assertions[1], types::Assertion::NoReach { from, to } if from == "b" && to == "a")
+        );
     }
 
     #[test]

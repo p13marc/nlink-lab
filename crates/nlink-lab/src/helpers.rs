@@ -10,9 +10,9 @@ use crate::error::{Error, Result};
 
 /// Parse a CIDR string like "10.0.0.1/24" into (IpAddr, prefix_len).
 pub fn parse_cidr(s: &str) -> Result<(IpAddr, u8)> {
-    let (addr_str, prefix_str) = s
-        .rsplit_once('/')
-        .ok_or_else(|| Error::invalid_topology(format!("invalid CIDR '{s}': missing '/' separator")))?;
+    let (addr_str, prefix_str) = s.rsplit_once('/').ok_or_else(|| {
+        Error::invalid_topology(format!("invalid CIDR '{s}': missing '/' separator"))
+    })?;
     let addr: IpAddr = addr_str
         .parse()
         .map_err(|e| Error::invalid_topology(format!("invalid CIDR '{s}': {e}")))?;
@@ -65,9 +65,9 @@ pub fn parse_duration(s: &str) -> Result<Duration> {
 /// Parse a percentage string like "0.1%", "5%" into f64 (0.1, 5.0).
 pub fn parse_percent(s: &str) -> Result<f64> {
     let s = s.trim();
-    let val_str = s
-        .strip_suffix('%')
-        .ok_or_else(|| Error::invalid_topology(format!("invalid percentage '{s}': missing '%' suffix")))?;
+    let val_str = s.strip_suffix('%').ok_or_else(|| {
+        Error::invalid_topology(format!("invalid percentage '{s}': missing '%' suffix"))
+    })?;
     let val: f64 = val_str
         .trim()
         .parse()

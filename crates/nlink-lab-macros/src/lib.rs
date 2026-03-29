@@ -32,7 +32,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn, LitStr};
+use syn::{ItemFn, LitStr, parse_macro_input};
 
 /// Attribute that wraps an async test with lab deploy/destroy lifecycle.
 ///

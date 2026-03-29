@@ -12,7 +12,10 @@ mod collector;
 mod handlers;
 
 #[derive(Parser)]
-#[command(name = "nlink-lab-backend", about = "Zenoh backend daemon for nlink-lab")]
+#[command(
+    name = "nlink-lab-backend",
+    about = "Zenoh backend daemon for nlink-lab"
+)]
 struct Cli {
     /// Lab name (must be deployed).
     lab: String,
@@ -38,8 +41,7 @@ struct Cli {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -47,11 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load the running lab
     let lab = nlink_lab::RunningLab::load(&cli.lab)?;
-    info!(
-        lab = cli.lab,
-        nodes = lab.namespace_count(),
-        "loaded lab"
-    );
+    info!(lab = cli.lab, nodes = lab.namespace_count(), "loaded lab");
 
     // Build Zenoh config
     let mut zenoh_config = zenoh::Config::default();
@@ -74,9 +72,9 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("bad zenoh connect config: {e}"))?;
     }
 
-    let session = zenoh::open(zenoh_config).await.map_err(|e| {
-        anyhow::anyhow!("failed to open Zenoh session: {e}")
-    })?;
+    let session = zenoh::open(zenoh_config)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to open Zenoh session: {e}"))?;
     info!("Zenoh session opened");
 
     run(&session, lab, Duration::from_secs(cli.interval)).await

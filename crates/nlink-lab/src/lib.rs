@@ -68,15 +68,15 @@ pub mod types;
 pub mod validator;
 
 pub use builder::Lab;
+pub use deploy::apply_diff;
+pub use diff::{TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
 pub use running::{ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab};
 pub use types::{
     ContainerRuntime, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
-    InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RouteConfig,
-    Topology, VlanConfig, VrfConfig, WireguardConfig,
+    InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,
+    RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
-pub use deploy::apply_diff;
-pub use diff::{diff_topologies, TopologyDiff};
 pub use validator::{Severity, ValidationIssue, ValidationResult};
 
 /// Proc macro for integration testing. See [`lab_test`] for details.

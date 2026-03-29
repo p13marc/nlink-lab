@@ -494,7 +494,9 @@ pub struct WireguardConfig {
 // ─────────────────────────────────────────────────
 
 /// Deserialize a `HashMap<u16, V>` from TOML tables where keys are strings.
-fn deserialize_u16_keys<'de, V, D>(deserializer: D) -> std::result::Result<HashMap<u16, V>, D::Error>
+fn deserialize_u16_keys<'de, V, D>(
+    deserializer: D,
+) -> std::result::Result<HashMap<u16, V>, D::Error>
 where
     D: serde::Deserializer<'de>,
     V: Deserialize<'de>,
@@ -562,9 +564,10 @@ impl Topology {
 
         // Start with profile sysctls
         if let Some(profile_name) = &node.profile
-            && let Some(profile) = self.profiles.get(profile_name) {
-                sysctls.extend(profile.sysctls.clone());
-            }
+            && let Some(profile) = self.profiles.get(profile_name)
+        {
+            sysctls.extend(profile.sysctls.clone());
+        }
 
         // Node-level sysctls override profile
         sysctls.extend(node.sysctls.clone());
@@ -578,9 +581,10 @@ impl Topology {
             return node.firewall.as_ref();
         }
         if let Some(profile_name) = &node.profile
-            && let Some(profile) = self.profiles.get(profile_name) {
-                return profile.firewall.as_ref();
-            }
+            && let Some(profile) = self.profiles.get(profile_name)
+        {
+            return profile.firewall.as_ref();
+        }
         None
     }
 }

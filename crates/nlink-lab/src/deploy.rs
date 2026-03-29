@@ -3,13 +3,13 @@
 //! Takes a validated [`Topology`] and creates the actual network lab using
 //! nlink APIs. Follows the deployment sequence from the design document.
 
-use std::collections::HashMap;
-use std::net::IpAddr;
 use nlink::netlink::bridge_vlan::BridgeVlanBuilder;
 use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::netlink::tc::NetemConfig;
 use nlink::{Connection, Route, Wireguard};
+use std::collections::HashMap;
+use std::net::IpAddr;
 
 use nlink::netlink::namespace::NamespaceFd;
 
@@ -22,7 +22,9 @@ use crate::types::{EndpointRef, InterfaceKind, Topology};
 
 /// Abstraction over bare namespace vs container node.
 enum NodeHandle {
-    Namespace { ns_name: String },
+    Namespace {
+        ns_name: String,
+    },
     Container {
         id: String,
         pid: u32,
@@ -31,14 +33,18 @@ enum NodeHandle {
 }
 
 impl NodeHandle {
-    fn connection<P: nlink::netlink::ProtocolState + Default>(&self) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
+    fn connection<P: nlink::netlink::ProtocolState + Default>(
+        &self,
+    ) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::connection_for(ns_name),
             NodeHandle::Container { pid, .. } => namespace::connection_for_pid(*pid),
         }
     }
 
-    async fn wireguard_connection(&self) -> std::result::Result<Connection<Wireguard>, nlink::netlink::Error> {
+    async fn wireguard_connection(
+        &self,
+    ) -> std::result::Result<Connection<Wireguard>, nlink::netlink::Error> {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::connection_for_async(ns_name).await,
             NodeHandle::Container { pid, .. } => namespace::connection_for_pid_async(*pid).await,
@@ -52,21 +58,30 @@ impl NodeHandle {
         }
     }
 
-    fn set_sysctls(&self, entries: &[(&str, &str)]) -> std::result::Result<(), nlink::netlink::Error> {
+    fn set_sysctls(
+        &self,
+        entries: &[(&str, &str)],
+    ) -> std::result::Result<(), nlink::netlink::Error> {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::set_sysctls(ns_name, entries),
             NodeHandle::Container { ns_path, .. } => namespace::set_sysctls_path(ns_path, entries),
         }
     }
 
-    fn spawn_output(&self, cmd: std::process::Command) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
+    fn spawn_output(
+        &self,
+        cmd: std::process::Command,
+    ) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::spawn_output(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_output_path(ns_path, cmd),
         }
     }
 
-    fn spawn(&self, cmd: std::process::Command) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
+    fn spawn(
+        &self,
+        cmd: std::process::Command,
+    ) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
         match self {
             NodeHandle::Namespace { ns_name } => namespace::spawn(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_path(ns_path, cmd),
@@ -124,8 +139,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             // Pull policy: "always" forces pull, "never" skips, "missing" (default) pulls if needed
             match node.pull.as_deref() {
                 Some("never") => {}
-                Some("always") => { rt.pull_image(image)?; }
-                _ => { rt.ensure_image(image)?; }
+                Some("always") => {
+                    rt.pull_image(image)?;
+                }
+                _ => {
+                    rt.ensure_image(image)?;
+                }
             }
             let container_name = format!("{}-{}", topology.lab.prefix(), node_name);
             let opts = build_create_opts(node);
@@ -163,10 +182,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             })?;
             cleanup.add_namespace(ns_name.clone());
             namespace_names.insert(node_name.clone(), ns_name.clone());
-            node_handles.insert(
-                node_name.clone(),
-                NodeHandle::Namespace { ns_name },
-            );
+            node_handles.insert(node_name.clone(), NodeHandle::Namespace { ns_name });
         }
     }
 
@@ -183,10 +199,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
         cleanup.add_namespace(mgmt_ns.clone());
 
-        let mgmt_conn: Connection<Route> =
-            namespace::connection_for(&mgmt_ns).map_err(|e| {
-                Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}"))
-            })?;
+        let mgmt_conn: Connection<Route> = namespace::connection_for(&mgmt_ns)
+            .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
 
         for (net_name, network) in &topology.networks {
             let bridge_name = format!("{}-{}", topology.lab.prefix(), net_name);
@@ -211,27 +225,25 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 ))
             })?;
             mgmt_conn.set_link_up(&bridge_name).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to bring up bridge '{bridge_name}': {e}"
-                ))
+                Error::deploy_failed(format!("failed to bring up bridge '{bridge_name}': {e}"))
             })?;
 
             bridge_ns_names.insert(net_name.clone(), mgmt_ns.clone());
 
             // Create veth pairs for each member: one end in node ns, other in mgmt ns attached to bridge
-            let mgmt_ns_fd = namespace::open(&mgmt_ns).map_err(|e| {
-                Error::deploy_failed(format!("failed to open mgmt namespace: {e}"))
-            })?;
+            let mgmt_ns_fd = namespace::open(&mgmt_ns)
+                .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
 
             for (k, member) in network.members.iter().enumerate() {
                 let ep = EndpointRef::parse(member).ok_or_else(|| Error::InvalidEndpoint {
                     endpoint: member.clone(),
                 })?;
-                let node_handle = node_handles.get(&ep.node).ok_or_else(|| {
-                    Error::NodeNotFound {
-                        name: ep.node.clone(),
-                    }
-                })?;
+                let node_handle =
+                    node_handles
+                        .get(&ep.node)
+                        .ok_or_else(|| Error::NodeNotFound {
+                            name: ep.node.clone(),
+                        })?;
 
                 // The peer end in mgmt ns gets a generated name
                 let peer_name = format!("br{}p{}", net_name.chars().take(4).collect::<String>(), k);
@@ -241,10 +253,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     peer_name
                 };
 
-                let node_conn: Connection<Route> =
-                    node_handle.connection().map_err(|e| {
-                        Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-                    })?;
+                let node_conn: Connection<Route> = node_handle.connection().map_err(|e| {
+                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
+                })?;
 
                 let veth = nlink::netlink::link::VethLink::new(&ep.iface, &peer_name)
                     .peer_netns_fd(mgmt_ns_fd.as_raw_fd());
@@ -264,14 +275,11 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                             "failed to attach '{peer_name}' to bridge '{bridge_name}': {e}"
                         ))
                     })?;
-                mgmt_conn
-                    .set_link_up(&peer_name)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to bring up bridge port '{peer_name}': {e}"
-                        ))
-                    })?;
+                mgmt_conn.set_link_up(&peer_name).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to bring up bridge port '{peer_name}': {e}"
+                    ))
+                })?;
 
                 // Apply VLAN configuration for this port if defined
                 if let Some(port_config) = network.ports.get(&ep.node) {
@@ -292,14 +300,18 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     }
                     // Apply PVID if not already covered by vlans list
                     if let Some(pvid) = port_config.pvid
-                        && !port_config.vlans.contains(&pvid) {
-                            let vlan = BridgeVlanBuilder::new(pvid).dev(&peer_name).pvid().untagged();
-                            mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
+                        && !port_config.vlans.contains(&pvid)
+                    {
+                        let vlan = BridgeVlanBuilder::new(pvid)
+                            .dev(&peer_name)
+                            .pvid()
+                            .untagged();
+                        mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
                                 Error::deploy_failed(format!(
                                     "failed to add PVID {pvid} to port '{peer_name}' on bridge '{bridge_name}': {e}"
                                 ))
                             })?;
-                        }
+                    }
                 }
             }
         }
@@ -308,23 +320,25 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // ── Step 5: Create veth pairs ──────────────────────────────────
     tracing::info!("step 5/18: creating veth pairs");
     for (i, link) in topology.links.iter().enumerate() {
-        let ep_a = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| {
-            Error::InvalidEndpoint {
+        let ep_a =
+            EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
                 endpoint: link.endpoints[0].clone(),
-            }
-        })?;
-        let ep_b = EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| {
-            Error::InvalidEndpoint {
+            })?;
+        let ep_b =
+            EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| Error::InvalidEndpoint {
                 endpoint: link.endpoints[1].clone(),
-            }
-        })?;
+            })?;
 
-        let handle_a = node_handles.get(&ep_a.node).ok_or_else(|| Error::NodeNotFound {
-            name: ep_a.node.clone(),
-        })?;
-        let handle_b = node_handles.get(&ep_b.node).ok_or_else(|| Error::NodeNotFound {
-            name: ep_b.node.clone(),
-        })?;
+        let handle_a = node_handles
+            .get(&ep_a.node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: ep_a.node.clone(),
+            })?;
+        let handle_b = node_handles
+            .get(&ep_b.node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: ep_b.node.clone(),
+            })?;
 
         // Open namespace fd for the peer end
         let ns_b_fd = handle_b.open_ns_fd().map_err(|e| {
@@ -337,9 +351,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
 
         // Create veth pair
-        let mut veth =
-            nlink::netlink::link::VethLink::new(&ep_a.iface, &ep_b.iface)
-                .peer_netns_fd(ns_b_fd.as_raw_fd());
+        let mut veth = nlink::netlink::link::VethLink::new(&ep_a.iface, &ep_b.iface)
+            .peer_netns_fd(ns_b_fd.as_raw_fd());
 
         if let Some(mtu) = link.mtu {
             veth = veth.mtu(mtu);
@@ -356,9 +369,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // ── Step 6: Create additional interfaces (loopback addresses handled in step 9) ──
     for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (iface_name, iface_config) in &node.interfaces {
             match &iface_config.kind {
@@ -380,7 +393,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     let mut vxlan = nlink::netlink::link::VxlanLink::new(iface_name, vni);
                     if let Some(local) = &iface_config.local {
                         let addr: std::net::Ipv4Addr = local.parse().map_err(|e| {
-                            Error::invalid_topology(format!("bad vxlan local address '{local}': {e}"))
+                            Error::invalid_topology(format!(
+                                "bad vxlan local address '{local}': {e}"
+                            ))
                         })?;
                         vxlan = vxlan.local(addr);
                     }
@@ -438,14 +453,16 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
             // Set MTU if specified
             if let Some(mtu) = iface_config.mtu
-                && iface_config.kind.is_some() && iface_config.kind != Some(InterfaceKind::Loopback) {
-                    // Only set MTU on interfaces we created (not lo)
-                    conn.set_link_mtu(iface_name, mtu).await.map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to set MTU on '{node_name}'.{iface_name}: {e}"
-                        ))
-                    })?;
-                }
+                && iface_config.kind.is_some()
+                && iface_config.kind != Some(InterfaceKind::Loopback)
+            {
+                // Only set MTU on interfaces we created (not lo)
+                conn.set_link_mtu(iface_name, mtu).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to set MTU on '{node_name}'.{iface_name}: {e}"
+                    ))
+                })?;
+            }
         }
     }
 
@@ -455,18 +472,21 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (vrf_name, vrf_config) in &node.vrfs {
-            conn.add_link(nlink::netlink::link::VrfLink::new(vrf_name, vrf_config.table))
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to create VRF '{vrf_name}' on node '{node_name}': {e}"
-                    ))
-                })?;
+            conn.add_link(nlink::netlink::link::VrfLink::new(
+                vrf_name,
+                vrf_config.table,
+            ))
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to create VRF '{vrf_name}' on node '{node_name}': {e}"
+                ))
+            })?;
             conn.set_link_up(vrf_name).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to bring up VRF '{vrf_name}' on node '{node_name}': {e}"
@@ -482,9 +502,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for wg_name in node.wireguard.keys() {
             conn.add_link(nlink::netlink::link::WireguardLink::new(wg_name))
@@ -511,12 +531,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                 })?;
                 let (ip, prefix) = parse_cidr(&addresses[j])?;
-                conn.add_address_by_name(&ep.iface, ip, prefix).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to add address '{}'/{prefix} to '{}' on '{}': {e}",
-                        ip, ep.iface, ep.node
-                    ))
-                })?;
+                conn.add_address_by_name(&ep.iface, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{}'/{prefix} to '{}' on '{}': {e}",
+                            ip, ep.iface, ep.node
+                        ))
+                    })?;
             }
         }
     }
@@ -524,9 +546,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // From explicit interfaces
     for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (iface_name, iface_config) in &node.interfaces {
             for addr_str in &iface_config.addresses {
@@ -548,9 +570,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (wg_name, wg_config) in &node.wireguard {
             for addr_str in &wg_config.addresses {
@@ -570,28 +592,30 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     tracing::info!("step 10/18: bringing interfaces up");
     for node_name in topology.nodes.keys() {
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
         let links = conn.get_links().await.map_err(|e| {
             Error::deploy_failed(format!("failed to list links in '{node_name}': {e}"))
         })?;
         for link_msg in &links {
-            conn.set_link_up_by_index(link_msg.ifindex()).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to bring up interface idx {} in '{node_name}': {e}",
-                    link_msg.ifindex()
-                ))
-            })?;
+            conn.set_link_up_by_index(link_msg.ifindex())
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to bring up interface idx {} in '{node_name}': {e}",
+                        link_msg.ifindex()
+                    ))
+                })?;
         }
     }
 
     // ── Step 10b: Enslave bond members ─────────────────────────────
     for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (iface_name, iface_config) in &node.interfaces {
             if iface_config.kind != Some(InterfaceKind::Bond) || iface_config.members.is_empty() {
@@ -613,9 +637,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (vrf_name, vrf_config) in &node.vrfs {
             for iface in &vrf_config.interfaces {
@@ -639,7 +663,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         if has_wg {
             return Err(Error::deploy_failed(
                 "topology uses WireGuard but the 'wireguard' feature is not enabled. \
-                 Rebuild with: cargo build --features wireguard"
+                 Rebuild with: cargo build --features wireguard",
             ));
         }
     }
@@ -727,7 +751,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         ))
                     })?;
 
-                    let mut peer_builder = nlink::netlink::genl::wireguard::WgPeerBuilder::new(*peer_pubkey);
+                    let mut peer_builder =
+                        nlink::netlink::genl::wireguard::WgPeerBuilder::new(*peer_pubkey);
 
                     // Set endpoint if peer has a listen port and an address we can reach
                     if let Some(port) = peer_wg_config.listen_port {
@@ -742,8 +767,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     for addr_str in &peer_wg_config.addresses {
                         if let Ok((ip, prefix)) = parse_cidr(addr_str) {
                             let allowed_ip = match ip {
-                                IpAddr::V4(v4) => nlink::netlink::genl::wireguard::AllowedIp::v4(v4, prefix),
-                                IpAddr::V6(v6) => nlink::netlink::genl::wireguard::AllowedIp::v6(v6, prefix),
+                                IpAddr::V4(v4) => {
+                                    nlink::netlink::genl::wireguard::AllowedIp::v4(v4, prefix)
+                                }
+                                IpAddr::V6(v6) => {
+                                    nlink::netlink::genl::wireguard::AllowedIp::v6(v6, prefix)
+                                }
                             };
                             peer_builder = peer_builder.allowed_ip(allowed_ip);
                         }
@@ -786,9 +815,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (dest, route_config) in &node.routes {
             add_route(&conn, node_name, dest, route_config).await?;
@@ -801,14 +830,21 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             continue;
         }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-        })?;
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
 
         for (vrf_name, vrf_config) in &node.vrfs {
             for (dest, route_config) in &vrf_config.routes {
-                add_route_with_table(&conn, node_name, dest, route_config, vrf_config.table, vrf_name)
-                    .await?;
+                add_route_with_table(
+                    &conn,
+                    node_name,
+                    dest,
+                    route_config,
+                    vrf_config.table,
+                    vrf_name,
+                )
+                .await?;
             }
         }
     }
@@ -829,15 +865,13 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             endpoint: endpoint_str.clone(),
         })?;
         let ep_handle = &node_handles[&ep.node];
-        let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-        })?;
+        let conn: Connection<Route> = ep_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
 
         let netem = build_netem(impairment)?;
         conn.add_qdisc(&ep.iface, netem).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to apply netem on '{endpoint_str}': {e}"
-            ))
+            Error::deploy_failed(format!("failed to apply netem on '{endpoint_str}': {e}"))
         })?;
     }
 
@@ -855,9 +889,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             endpoint: endpoint_str.clone(),
         })?;
         let ep_handle = &node_handles[&ep.node];
-        let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-        })?;
+        let conn: Connection<Route> = ep_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
 
         let mut limiter = RateLimiter::new(&ep.iface);
         if let Some(egress) = &rate_limit.egress {
@@ -1018,23 +1052,27 @@ async fn apply_firewall(
     node_name: &str,
     fw: &crate::types::FirewallConfig,
 ) -> Result<()> {
-    use nlink::netlink::nftables::types::{Chain, ChainType, Family, Hook, Policy, Priority, Rule};
     use nlink::netlink::Nftables;
+    use nlink::netlink::nftables::types::{Chain, ChainType, Family, Hook, Policy, Priority, Rule};
 
     // nftables needs Connection<Nftables> (NETLINK_NETFILTER socket)
-    let nft_conn: Connection<Nftables> =
-        node_handle.connection().map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to create nftables connection for '{node_name}': {e}"
-            ))
-        })?;
+    let nft_conn: Connection<Nftables> = node_handle.connection().map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to create nftables connection for '{node_name}': {e}"
+        ))
+    })?;
 
     let table_name = "nlink-lab";
 
     // Create table
-    nft_conn.add_table(table_name, Family::Inet).await.map_err(|e| {
-        Error::deploy_failed(format!("failed to create nftables table on '{node_name}': {e}"))
-    })?;
+    nft_conn
+        .add_table(table_name, Family::Inet)
+        .await
+        .map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to create nftables table on '{node_name}': {e}"
+            ))
+        })?;
 
     // Create input chain with policy
     let policy = match fw.policy.as_deref() {
@@ -1105,39 +1143,46 @@ fn apply_match_expr(
     let expr = expr.trim();
 
     if expr.starts_with("tcp dport ")
-        && let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>() {
-            return Ok(rule.match_tcp_dport(port));
-        }
+        && let Ok(port) = expr.trim_start_matches("tcp dport ").trim().parse::<u16>()
+    {
+        return Ok(rule.match_tcp_dport(port));
+    }
 
     if expr.starts_with("tcp sport ")
-        && let Ok(port) = expr.trim_start_matches("tcp sport ").trim().parse::<u16>() {
-            return Ok(rule.match_tcp_sport(port));
-        }
+        && let Ok(port) = expr.trim_start_matches("tcp sport ").trim().parse::<u16>()
+    {
+        return Ok(rule.match_tcp_sport(port));
+    }
 
     if expr.starts_with("udp dport ")
-        && let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>() {
-            return Ok(rule.match_udp_dport(port));
-        }
+        && let Ok(port) = expr.trim_start_matches("udp dport ").trim().parse::<u16>()
+    {
+        return Ok(rule.match_udp_dport(port));
+    }
 
     if expr.starts_with("udp sport ")
-        && let Ok(port) = expr.trim_start_matches("udp sport ").trim().parse::<u16>() {
-            return Ok(rule.match_udp_sport(port));
-        }
+        && let Ok(port) = expr.trim_start_matches("udp sport ").trim().parse::<u16>()
+    {
+        return Ok(rule.match_udp_sport(port));
+    }
 
     if expr.starts_with("icmp type ")
-        && let Ok(icmp_type) = expr.trim_start_matches("icmp type ").trim().parse::<u8>() {
-            return Ok(rule.match_icmp_type(icmp_type));
-        }
+        && let Ok(icmp_type) = expr.trim_start_matches("icmp type ").trim().parse::<u8>()
+    {
+        return Ok(rule.match_icmp_type(icmp_type));
+    }
 
     if expr.starts_with("icmpv6 type ")
-        && let Ok(icmp_type) = expr.trim_start_matches("icmpv6 type ").trim().parse::<u8>() {
-            return Ok(rule.match_icmpv6_type(icmp_type));
-        }
+        && let Ok(icmp_type) = expr.trim_start_matches("icmpv6 type ").trim().parse::<u8>()
+    {
+        return Ok(rule.match_icmpv6_type(icmp_type));
+    }
 
     if expr.starts_with("mark ")
-        && let Ok(mark) = expr.trim_start_matches("mark ").trim().parse::<u32>() {
-            return Ok(rule.match_mark(mark));
-        }
+        && let Ok(mark) = expr.trim_start_matches("mark ").trim().parse::<u32>()
+    {
+        return Ok(rule.match_mark(mark));
+    }
 
     if expr.starts_with("ct state ") {
         let states = expr.trim_start_matches("ct state ").trim();
@@ -1182,8 +1227,7 @@ async fn add_route(
         None
     };
 
-    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6())
-        || (!is_default && dest.contains(':'));
+    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6()) || (!is_default && dest.contains(':'));
 
     if is_v6 {
         let mut route = if is_default {
@@ -1267,8 +1311,7 @@ async fn add_route_with_table(
         None
     };
 
-    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6())
-        || (!is_default && dest.contains(':'));
+    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6()) || (!is_default && dest.contains(':'));
 
     if is_v6 {
         let mut route = if is_default {
@@ -1337,9 +1380,8 @@ async fn add_route_with_table(
 /// Generate a random WireGuard private key.
 fn generate_wg_private_key() -> Result<[u8; 32]> {
     let mut key = [0u8; 32];
-    getrandom::fill(&mut key).map_err(|e| {
-        Error::deploy_failed(format!("failed to generate WireGuard key: {e}"))
-    })?;
+    getrandom::fill(&mut key)
+        .map_err(|e| Error::deploy_failed(format!("failed to generate WireGuard key: {e}")))?;
     // Clamp per Curve25519 convention
     key[0] &= 248;
     key[31] &= 127;
@@ -1378,9 +1420,10 @@ fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Opt
             for (i, ep_str) in link.endpoints.iter().enumerate() {
                 if let Some(ep) = EndpointRef::parse(ep_str)
                     && ep.node == peer_name
-                        && let Ok((ip, _)) = parse_cidr(&addresses[i]) {
-                            return Some(ip);
-                        }
+                    && let Ok((ip, _)) = parse_cidr(&addresses[i])
+                {
+                    return Some(ip);
+                }
             }
         }
     }
@@ -1431,9 +1474,10 @@ pub async fn apply_diff(
         // Get a connection to the node's namespace (bare or container)
         if let Ok(handle) = node_handle_for(running, &ep.node)
             && let Ok(conn) = handle.connection::<Route>()
-                && let Err(e) = conn.del_link(&ep.iface).await {
-                    tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
-                }
+            && let Err(e) = conn.del_link(&ep.iface).await
+        {
+            tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
+        }
     }
 
     // ── Phase 3: Remove nodes ──────────────────────────────────────
@@ -1441,31 +1485,36 @@ pub async fn apply_diff(
         // Kill any background processes on this node
         for (pnode, pid) in running.pids() {
             if pnode == node_name {
-                unsafe { libc::kill(*pid as i32, libc::SIGKILL); }
+                unsafe {
+                    libc::kill(*pid as i32, libc::SIGKILL);
+                }
             }
         }
 
         if let Some(ns_name) = running.namespace_names_mut().remove(node_name)
             && namespace::exists(&ns_name)
-                && let Err(e) = namespace::delete(&ns_name) {
-                    tracing::warn!("failed to delete namespace '{ns_name}': {e}");
-                }
+            && let Err(e) = namespace::delete(&ns_name)
+        {
+            tracing::warn!("failed to delete namespace '{ns_name}': {e}");
+        }
         // Container removal
         if let Some(container) = running.containers_mut().remove(node_name)
-            && let Some(binary) = running.runtime_binary() {
-                let _ = std::process::Command::new(binary)
-                    .args(["rm", "-f", &container.id])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
-            }
+            && let Some(binary) = running.runtime_binary()
+        {
+            let _ = std::process::Command::new(binary)
+                .args(["rm", "-f", &container.id])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
     }
 
     // ── Phase 4: Add new nodes ─────────────────────────────────────
     // Detect container runtime lazily if any new node needs one.
-    let new_container_nodes = diff.nodes_added.iter().any(|name| {
-        desired.nodes.get(name).is_some_and(|n| n.image.is_some())
-    });
+    let new_container_nodes = diff
+        .nodes_added
+        .iter()
+        .any(|name| desired.nodes.get(name).is_some_and(|n| n.image.is_some()));
     let container_runtime = if new_container_nodes {
         let rt_config = desired.lab.runtime.as_ref().cloned().unwrap_or_default();
         let rt = Runtime::new(&rt_config)?;
@@ -1477,17 +1526,24 @@ pub async fn apply_diff(
     };
 
     for node_name in &diff.nodes_added {
-        let node = desired.nodes.get(node_name).ok_or_else(|| Error::NodeNotFound {
-            name: node_name.clone(),
-        })?;
+        let node = desired
+            .nodes
+            .get(node_name)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node_name.clone(),
+            })?;
 
         if let Some(image) = &node.image {
             // Container node
             let rt = container_runtime.as_ref().unwrap();
             match node.pull.as_deref() {
                 Some("never") => {}
-                Some("always") => { rt.pull_image(image)?; }
-                _ => { rt.ensure_image(image)?; }
+                Some("always") => {
+                    rt.pull_image(image)?;
+                }
+                _ => {
+                    rt.ensure_image(image)?;
+                }
             }
             let container_name = format!("{}-{}", desired.lab.prefix(), node_name);
             let opts = build_create_opts(node);
@@ -1514,7 +1570,9 @@ pub async fn apply_diff(
                 ns: ns_name.clone(),
                 detail: e.to_string(),
             })?;
-            running.namespace_names_mut().insert(node_name.clone(), ns_name.clone());
+            running
+                .namespace_names_mut()
+                .insert(node_name.clone(), ns_name.clone());
         }
 
         // Apply sysctls
@@ -1526,19 +1584,23 @@ pub async fn apply_diff(
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
             handle.set_sysctls(&entries).map_err(|e| {
-                Error::deploy_failed(format!("failed to apply sysctls for node '{node_name}': {e}"))
+                Error::deploy_failed(format!(
+                    "failed to apply sysctls for node '{node_name}': {e}"
+                ))
             })?;
         }
     }
 
     // ── Phase 5: Add new links ─────────────────────────────────────
     for link in &diff.links_added {
-        let ep_a = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: link.endpoints[0].clone(),
-        })?;
-        let ep_b = EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: link.endpoints[1].clone(),
-        })?;
+        let ep_a =
+            EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
+                endpoint: link.endpoints[0].clone(),
+            })?;
+        let ep_b =
+            EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| Error::InvalidEndpoint {
+                endpoint: link.endpoints[1].clone(),
+            })?;
 
         let handle_a = node_handle_for(running, &ep_a.node)?;
         let handle_b = node_handle_for(running, &ep_b.node)?;
@@ -1576,12 +1638,14 @@ pub async fn apply_diff(
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
                 })?;
                 let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(&ep.iface, ip, prefix).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
-                        ep.iface, ep.node
-                    ))
-                })?;
+                conn.add_address_by_name(&ep.iface, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
+                            ep.iface, ep.node
+                        ))
+                    })?;
             }
         }
 
@@ -1591,9 +1655,9 @@ pub async fn apply_diff(
                 endpoint: ep_str.clone(),
             })?;
             let ep_handle = node_handle_for(running, &ep.node)?;
-            let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
-                Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-            })?;
+            let conn: Connection<Route> = ep_handle
+                .connection()
+                .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
             conn.set_link_up(&ep.iface).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to bring up '{}' on '{}': {e}",
@@ -1610,9 +1674,9 @@ pub async fn apply_diff(
 
         // Routes
         if !node.routes.is_empty() {
-            let conn: Connection<Route> = handle.connection().map_err(|e| {
-                Error::deploy_failed(format!("connection for '{node_name}': {e}"))
-            })?;
+            let conn: Connection<Route> = handle
+                .connection()
+                .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
             for (dest, route_config) in &node.routes {
                 add_route(&conn, node_name, dest, route_config).await?;
             }
@@ -1632,7 +1696,9 @@ pub async fn apply_diff(
 
     // Update changed impairments
     for change in &diff.impairments_changed {
-        running.set_impairment(&change.endpoint, &change.new).await?;
+        running
+            .set_impairment(&change.endpoint, &change.new)
+            .await?;
     }
 
     // ── Phase 8: Update state file ─────────────────────────────────
@@ -1644,7 +1710,11 @@ pub async fn apply_diff(
         namespaces: running.namespace_names().clone(),
         pids: running.pids().to_vec(),
         wg_public_keys: HashMap::new(),
-        containers: running.containers().iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        containers: running
+            .containers()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
         runtime: running.runtime_binary().map(|s| s.to_string()),
     };
     state::save(&lab_state, desired)?;
@@ -1666,7 +1736,9 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
             for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
                 if let Some(ep_ref) = EndpointRef::parse(ep) {
                     let ip = addr.split('/').next().unwrap_or(addr);
-                    ip_map.entry(ep_ref.node.clone()).or_insert_with(|| ip.to_string());
+                    ip_map
+                        .entry(ep_ref.node.clone())
+                        .or_insert_with(|| ip.to_string());
                 }
             }
         }

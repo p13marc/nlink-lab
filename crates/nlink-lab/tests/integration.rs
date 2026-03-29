@@ -150,11 +150,19 @@ async fn deploy_vrf(lab: RunningLab) {
 
     // VRF "red" interface should exist on PE
     let output = lab.exec("pe", "ip", &["link", "show", "red"]).unwrap();
-    assert_eq!(output.exit_code, 0, "VRF 'red' not found: {}", output.stderr);
+    assert_eq!(
+        output.exit_code, 0,
+        "VRF 'red' not found: {}",
+        output.stderr
+    );
 
     // VRF "blue" interface should exist on PE
     let output = lab.exec("pe", "ip", &["link", "show", "blue"]).unwrap();
-    assert_eq!(output.exit_code, 0, "VRF 'blue' not found: {}", output.stderr);
+    assert_eq!(
+        output.exit_code, 0,
+        "VRF 'blue' not found: {}",
+        output.stderr
+    );
 
     // eth1 should be enslaved to VRF red
     let output = lab.exec("pe", "ip", &["link", "show", "eth1"]).unwrap();
@@ -201,10 +209,18 @@ async fn deploy_wireguard(lab: RunningLab) {
 
     // wg0 interface should exist on both gateways
     let output = lab.exec("gw-a", "ip", &["link", "show", "wg0"]).unwrap();
-    assert_eq!(output.exit_code, 0, "wg0 not found on gw-a: {}", output.stderr);
+    assert_eq!(
+        output.exit_code, 0,
+        "wg0 not found on gw-a: {}",
+        output.stderr
+    );
 
     let output = lab.exec("gw-b", "ip", &["link", "show", "wg0"]).unwrap();
-    assert_eq!(output.exit_code, 0, "wg0 not found on gw-b: {}", output.stderr);
+    assert_eq!(
+        output.exit_code, 0,
+        "wg0 not found on gw-b: {}",
+        output.stderr
+    );
 
     // wg0 should have the configured address on gw-a
     let output = lab.exec("gw-a", "ip", &["addr", "show", "wg0"]).unwrap();
@@ -242,9 +258,7 @@ async fn deploy_bridge_vlan(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 4);
 
     // host1 should have its address
-    let output = lab
-        .exec("host1", "ip", &["addr", "show", "eth0"])
-        .unwrap();
+    let output = lab.exec("host1", "ip", &["addr", "show", "eth0"]).unwrap();
     assert!(
         output.stdout.contains("10.100.0.10/24"),
         "expected 10.100.0.10/24 on host1: {}",
@@ -262,9 +276,7 @@ async fn deploy_bridge_vlan(lab: RunningLab) {
     );
 
     // host3 is on VLAN 200 — verify its address
-    let output = lab
-        .exec("host3", "ip", &["addr", "show", "eth0"])
-        .unwrap();
+    let output = lab.exec("host3", "ip", &["addr", "show", "eth0"]).unwrap();
     assert!(
         output.stdout.contains("10.200.0.10/24"),
         "expected 10.200.0.10/24 on host3: {}",
@@ -313,19 +325,27 @@ async fn apply_add_node_and_link() {
     let initial = Lab::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
-        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
         .build();
 
     let mut lab = initial.deploy().await.expect("deploy failed");
-    let _guard = LabCleanup { name: lab.name().to_string() };
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
 
     // Desired topology: add node c and link b--c
     let desired = Lab::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .node("c", |n| n)
-        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
-        .link("b:eth1", "c:eth0", |l| l.addresses("10.0.1.1/24", "10.0.1.2/24"))
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
+        .link("b:eth1", "c:eth0", |l| {
+            l.addresses("10.0.1.1/24", "10.0.1.2/24")
+        })
         .build();
 
     let diff = nlink_lab::diff_topologies(lab.topology(), &desired);
@@ -346,9 +366,7 @@ async fn apply_add_node_and_link() {
     );
 
     // Verify: b can ping c
-    let output = lab
-        .exec("b", "ping", &["-c1", "-W1", "10.0.1.2"])
-        .unwrap();
+    let output = lab.exec("b", "ping", &["-c1", "-W1", "10.0.1.2"]).unwrap();
     assert_eq!(
         output.exit_code, 0,
         "b cannot ping c: stdout={} stderr={}",
@@ -374,18 +392,26 @@ async fn apply_remove_node() {
         .node("a", |n| n)
         .node("b", |n| n)
         .node("c", |n| n)
-        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
-        .link("b:eth1", "c:eth0", |l| l.addresses("10.0.1.1/24", "10.0.1.2/24"))
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
+        .link("b:eth1", "c:eth0", |l| {
+            l.addresses("10.0.1.1/24", "10.0.1.2/24")
+        })
         .build();
 
     let mut lab = initial.deploy().await.expect("deploy failed");
-    let _guard = LabCleanup { name: lab.name().to_string() };
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
 
     // Desired: remove node c and its link
     let desired = Lab::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
-        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
         .build();
 
     let diff = nlink_lab::diff_topologies(lab.topology(), &desired);
@@ -403,9 +429,7 @@ async fn apply_remove_node() {
     );
 
     // Verify: a and b still work
-    let output = lab
-        .exec("a", "ping", &["-c1", "-W1", "10.0.0.2"])
-        .unwrap();
+    let output = lab.exec("a", "ping", &["-c1", "-W1", "10.0.0.2"]).unwrap();
     assert_eq!(output.exit_code, 0);
 
     std::mem::forget(_guard);
@@ -425,18 +449,24 @@ async fn apply_impairment_change() {
     let initial = Lab::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
-        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
         .impair("a:eth0", |i| i.delay("10ms"))
         .build();
 
     let mut lab = initial.deploy().await.expect("deploy failed");
-    let _guard = LabCleanup { name: lab.name().to_string() };
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
 
     // Desired: change delay to 50ms
     let desired = Lab::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
-        .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
         .impair("a:eth0", |i| i.delay("50ms"))
         .build();
 

@@ -6,15 +6,13 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Priority | Effort |
 |------|-------------|----------|--------|
-| [099](099-production-readiness.md) | CI pipeline, crates.io packaging, state locking | High | 2-3 days |
-| [100](100-validate-and-errors.md) | Validate execution, error migration, man page, NLL spec update | Medium | 2-3 days |
-| [101](101-nll-syntax-cleanup.md) | Breaking syntax changes: explicit subnet, container block, firewall, nested interpolation | Low | 3-5 days |
+| [100](100-validate-and-errors.md) | Validate deploy execution, error migration, man page, NLL spec update | Medium | 2-3 days |
+| [101](101-nll-syntax-cleanup.md) | Breaking syntax: explicit subnet, container block, firewall, render --ascii | Low | 3-5 days |
 
 ### Recommended Order
 
-1. **099 — Production Readiness** — CI must exist before breaking changes
-2. **100 — Validate & Errors** — wire the validate block, clean up errors
-3. **101 — Syntax Cleanup** — breaking changes last, after CI catches regressions
+1. **100 — Validate & Errors** — wire validate execution, clean up errors, update spec
+2. **101 — Syntax Cleanup** — breaking changes, after CI catches regressions
 
 ## Completed
 
@@ -27,7 +25,8 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 091 (user documentation), 092 (structured errors),
 093 (NLL v2 language & ergonomics), 094 (NLL v2 composition),
 095 (container core), 096 (container lifecycle), 097 (parser hardening),
-and 098 (NLL patterns) have been implemented and their plan files removed.
+098 (NLL patterns), and 099 (production readiness) have been implemented
+and their plan files removed.
 
 ## Reference
 

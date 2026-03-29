@@ -213,10 +213,10 @@ can be installed with `install -m 644 nlink-lab.1 /usr/share/man/man1/`.
 ## Progress
 
 ### Phase 1: Validate Execution
-- [ ] Types + lowering
-- [ ] Deploy execution
-- [ ] CLI flag
-- [ ] Tests
+- [x] Types + lowering (Assertion enum, stored in Topology)
+- [ ] Deploy execution (ping/nc at deploy time)
+- [ ] CLI flag (--skip-validate)
+- [x] Tests (assertions stored correctly)
 
 ### Phase 2: Error Migration
 - [ ] NetlinkOp migrations

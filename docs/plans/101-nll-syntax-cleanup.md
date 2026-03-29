@@ -312,19 +312,19 @@ This is the most disruptive change and should be done last.
 - [ ] Update all consumers
 
 ### Phase 3: Pool exhaustion
-- [ ] Exhaustion check
-- [ ] Remove dead_code allow
-- [ ] Tests
+- [x] Exhaustion check (allocate_from_pool helper)
+- [x] Remove dead_code allow
+- [x] Tests
 
 ### Phase 4: Render modes
-- [ ] --dot
+- [x] --dot (reuses topology_to_dot)
 - [ ] --ascii
 - [ ] Tests
 
 ### Phase 5: Nested interpolation
-- [ ] Recursive interpolation
-- [ ] Depth limit
-- [ ] Tests
+- [x] Recursive interpolation (interpolate_once + multi-pass)
+- [x] Depth limit (max 10 passes)
+- [x] Tests (${leaf${i}}, adjacent ${base}${i})
 
 ### Phase 6: Firewall syntax
 - [ ] New tokens

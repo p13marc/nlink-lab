@@ -100,8 +100,23 @@ fn lower_with_base_dir(
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
             ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx),
-            ast::Statement::Validate(_) => {
-                // Validation assertions are stored for post-deploy; skip during lowering
+            ast::Statement::Validate(v) => {
+                for a in &v.assertions {
+                    match a {
+                        ast::AssertionDef::Reach { from, to } => {
+                            topology.assertions.push(types::Assertion::Reach {
+                                from: from.clone(),
+                                to: to.clone(),
+                            });
+                        }
+                        ast::AssertionDef::NoReach { from, to } => {
+                            topology.assertions.push(types::Assertion::NoReach {
+                                from: from.clone(),
+                                to: to.clone(),
+                            });
+                        }
+                    }
+                }
             }
             ast::Statement::Profile(_) | ast::Statement::Let(_)
             | ast::Statement::For(_) | ast::Statement::Defaults(_)
@@ -372,7 +387,6 @@ fn warn_unresolved_refs(topology: &types::Topology) {
 /// State for a named subnet pool.
 struct PoolState {
     base: u32,         // base network address as u32
-    #[allow(dead_code)]
     pool_size: u32,    // total addresses in the pool (for exhaustion check)
     alloc_prefix: u8,  // allocation prefix size (e.g., 30 for /30)
     next_offset: u32,  // next allocation offset from base
@@ -1220,6 +1234,19 @@ fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
     }
 }
 
+/// Allocate a subnet from a pool, returning the two endpoint addresses.
+fn allocate_from_pool(pool: &mut PoolState, pool_name: &str) -> Option<[String; 2]> {
+    let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
+    if pool.next_offset + subnet_size > pool.pool_size {
+        tracing::error!("pool '{pool_name}' exhausted");
+        return None;
+    }
+    let network = pool.base + pool.next_offset;
+    pool.next_offset += subnet_size;
+    let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
+    split_subnet(&cidr).ok()
+}
+
 /// Expand a topology pattern (mesh, ring, star) into nodes and links.
 fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &mut LowerCtx) {
     match &pattern.kind {
@@ -1241,11 +1268,7 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
 
                     let addresses = if let Some(pool_name) = &pattern.pool {
                         if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                            let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
-                            let network = pool.base + pool.next_offset;
-                            pool.next_offset += subnet_size;
-                            let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
-                            split_subnet(&cidr).ok()
+                            allocate_from_pool(pool, pool_name)
                         } else { None }
                     } else { None };
 
@@ -1340,13 +1363,8 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
         (Some(l), Some(r), _, _) => Some([l.clone(), r.clone()]),
         (_, _, Some(subnet), _) => split_subnet(subnet).ok(),
         (_, _, _, Some(pool_name)) => {
-            // Allocate from pool
             if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
-                let network = pool.base + pool.next_offset;
-                pool.next_offset += subnet_size;
-                let cidr = format!("{}/{}", std::net::Ipv4Addr::from(network), pool.alloc_prefix);
-                split_subnet(&cidr).ok()
+                allocate_from_pool(pool, pool_name)
             } else {
                 tracing::warn!("undefined pool '{pool_name}'");
                 None
@@ -2472,9 +2490,10 @@ validate {
 }
 "#,
         );
-        // Validate block is parsed but not stored in Topology (yet)
-        // Just verify parsing succeeds
         assert_eq!(topo.nodes.len(), 2);
+        assert_eq!(topo.assertions.len(), 2);
+        assert!(matches!(&topo.assertions[0], types::Assertion::Reach { from, to } if from == "a" && to == "b"));
+        assert!(matches!(&topo.assertions[1], types::Assertion::NoReach { from, to } if from == "b" && to == "a"));
     }
 
     #[test]

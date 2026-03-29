@@ -50,6 +50,19 @@ pub struct Topology {
     /// Per-interface rate limiting.
     #[serde(default)]
     pub rate_limits: HashMap<String, RateLimit>,
+
+    /// Post-deploy reachability assertions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assertions: Vec<Assertion>,
+}
+
+/// Post-deploy reachability assertion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Assertion {
+    /// Assert that `from` can reach `to` (ping succeeds).
+    Reach { from: String, to: String },
+    /// Assert that `from` cannot reach `to` (ping fails).
+    NoReach { from: String, to: String },
 }
 
 /// Container runtime selection.

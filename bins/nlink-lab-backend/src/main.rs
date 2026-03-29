@@ -53,13 +53,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Build Zenoh config
     let mut zenoh_config = zenoh::Config::default();
-    match cli.zenoh_mode.as_str() {
-        "client" => {
-            zenoh_config
-                .insert_json5("mode", r#""client""#)
-                .map_err(|e| anyhow::anyhow!("bad zenoh config: {e}"))?;
-        }
-        _ => {} // peer is default
+    if cli.zenoh_mode == "client" {
+        zenoh_config
+            .insert_json5("mode", r#""client""#)
+            .map_err(|e| anyhow::anyhow!("bad zenoh config: {e}"))?;
     }
     if let Some(listen) = &cli.zenoh_listen {
         zenoh_config

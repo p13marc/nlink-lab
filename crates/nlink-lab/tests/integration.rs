@@ -762,7 +762,11 @@ async fn vlan_isolation(lab: RunningLab) {
     // Note: the vlan-trunk.nll example has no IP addresses, so we can't ping.
     // Instead, verify the VLAN configuration was applied correctly.
     let output = lab.exec("host1", "ip", &["link", "show", "eth0"]).unwrap();
-    assert_eq!(output.exit_code, 0, "host1 eth0 not found: {}", output.stderr);
+    assert_eq!(
+        output.exit_code, 0,
+        "host1 eth0 not found: {}",
+        output.stderr
+    );
     assert!(
         output.stdout.contains("eth0"),
         "expected eth0 on host1: {}",
@@ -770,7 +774,11 @@ async fn vlan_isolation(lab: RunningLab) {
     );
 
     let output = lab.exec("host3", "ip", &["link", "show", "eth0"]).unwrap();
-    assert_eq!(output.exit_code, 0, "host3 eth0 not found: {}", output.stderr);
+    assert_eq!(
+        output.exit_code, 0,
+        "host3 eth0 not found: {}",
+        output.stderr
+    );
     assert!(
         output.stdout.contains("eth0"),
         "expected eth0 on host3: {}",

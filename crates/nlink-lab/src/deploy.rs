@@ -206,9 +206,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     let wifi_radio_count = crate::wifi::count_wifi_nodes(topology);
     let mut wifi_loaded = false;
     if wifi_radio_count > 0 {
-        tracing::info!(
-            "step 3b: loading mac80211_hwsim with {wifi_radio_count} radios"
-        );
+        tracing::info!("step 3b: loading mac80211_hwsim with {wifi_radio_count} radios");
         crate::wifi::load_hwsim(wifi_radio_count)?;
         wifi_loaded = true;
         cleanup.wifi_loaded = true;
@@ -243,9 +241,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         for (i, (node_name, _wifi)) in wifi_nodes.iter().enumerate() {
             let phy = &phys[i];
             let node_handle = &node_handles[*node_name];
-            let ns_fd = node_handle.open_ns_fd().map_err(|e| {
-                Error::deploy_failed(format!("open ns fd for '{node_name}': {e}"))
-            })?;
+            let ns_fd = node_handle
+                .open_ns_fd()
+                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             nl_conn
                 .set_wiphy_netns(phy.index, ns_fd.as_raw_fd())
@@ -1256,7 +1254,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         if let Some(mesh_id) = &wifi.mesh_id {
                             let mut cmd = std::process::Command::new("iw");
                             cmd.args([
-                                "dev", &wifi.name, "mesh", "join", mesh_id, "freq",
+                                "dev",
+                                &wifi.name,
+                                "mesh",
+                                "join",
+                                mesh_id,
+                                "freq",
                                 &freq_from_channel(wifi.channel.unwrap_or(1)),
                             ]);
                             let output = node_handle.spawn_output(cmd).map_err(|e| {

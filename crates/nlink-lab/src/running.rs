@@ -28,6 +28,8 @@ pub struct RunningLab {
     pids: Vec<(String, u32)>,
     /// Whether DNS hosts entries were injected into /etc/hosts.
     dns_injected: bool,
+    /// Whether mac80211_hwsim was loaded.
+    wifi_loaded: bool,
 }
 
 /// Output from executing a command in a lab node.
@@ -72,6 +74,7 @@ impl RunningLab {
         runtime_binary: Option<String>,
         pids: Vec<(String, u32)>,
         dns_injected: bool,
+        wifi_loaded: bool,
     ) -> Self {
         Self {
             topology,
@@ -80,6 +83,7 @@ impl RunningLab {
             runtime_binary,
             pids,
             dns_injected,
+            wifi_loaded,
         }
     }
 
@@ -96,6 +100,11 @@ impl RunningLab {
     /// Whether DNS hosts entries were injected into /etc/hosts.
     pub fn dns_injected(&self) -> bool {
         self.dns_injected
+    }
+
+    /// Whether mac80211_hwsim was loaded.
+    pub fn wifi_loaded(&self) -> bool {
+        self.wifi_loaded
     }
 
     /// Get the number of nodes (namespaces + containers).
@@ -374,6 +383,12 @@ impl RunningLab {
             }
         }
 
+        // 5c. Unload mac80211_hwsim and clean up WiFi configs
+        if self.wifi_loaded {
+            crate::wifi::unload_hwsim();
+            crate::wifi::cleanup_configs(&self.topology.lab.name);
+        }
+
         // 6. Remove state file
         state::remove(&self.topology.lab.name)?;
 
@@ -390,6 +405,7 @@ impl RunningLab {
             runtime_binary: lab_state.runtime,
             pids: lab_state.pids,
             dns_injected: lab_state.dns_injected,
+            wifi_loaded: lab_state.wifi_loaded,
         })
     }
 

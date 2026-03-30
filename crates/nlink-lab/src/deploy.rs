@@ -202,6 +202,63 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 3b: Load mac80211_hwsim and move PHYs ──────────────────
+    let wifi_radio_count = crate::wifi::count_wifi_nodes(topology);
+    let mut wifi_loaded = false;
+    if wifi_radio_count > 0 {
+        tracing::info!(
+            "step 3b: loading mac80211_hwsim with {wifi_radio_count} radios"
+        );
+        crate::wifi::load_hwsim(wifi_radio_count)?;
+        wifi_loaded = true;
+        cleanup.wifi_loaded = true;
+
+        // Use nlink's nl80211 to enumerate PHYs and move them to namespaces
+        use nlink::netlink::Nl80211;
+        let nl_conn = nlink::Connection::<Nl80211>::new()
+            .map_err(|e| Error::deploy_failed(format!("nl80211 connection: {e}")))?;
+
+        let phys = nl_conn
+            .get_phys()
+            .await
+            .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?;
+
+        // Collect WiFi nodes in deterministic order, map each to a PHY
+        let mut wifi_nodes: Vec<(&str, &crate::types::WifiConfig)> = Vec::new();
+        for (node_name, node) in &topology.nodes {
+            for wifi in &node.wifi {
+                wifi_nodes.push((node_name, wifi));
+            }
+        }
+
+        if phys.len() < wifi_nodes.len() {
+            return Err(Error::deploy_failed(format!(
+                "expected {} hwsim PHYs but found {}",
+                wifi_nodes.len(),
+                phys.len()
+            )));
+        }
+
+        tracing::info!("step 3c: moving PHYs to namespaces");
+        for (i, (node_name, _wifi)) in wifi_nodes.iter().enumerate() {
+            let phy = &phys[i];
+            let node_handle = &node_handles[*node_name];
+            let ns_fd = node_handle.open_ns_fd().map_err(|e| {
+                Error::deploy_failed(format!("open ns fd for '{node_name}': {e}"))
+            })?;
+
+            nl_conn
+                .set_wiphy_netns(phy.index, ns_fd.as_raw_fd())
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to move phy{} to namespace '{node_name}': {e}",
+                        phy.index
+                    ))
+                })?;
+        }
+    }
+
     // ── Step 4: Create bridge networks ───────────────────────────────
     // Bridges live in a management namespace. For each network, create the bridge
     // in a dedicated namespace, then create veth pairs from member nodes.
@@ -708,6 +765,31 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // From WiFi interfaces (addresses assigned after PHY move)
+    for (node_name, node) in &topology.nodes {
+        if node.wifi.is_empty() {
+            continue;
+        }
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
+
+        for w in &node.wifi {
+            for addr_str in &w.addresses {
+                let (ip, prefix) = parse_cidr(addr_str)?;
+                conn.add_address_by_name(&w.name, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{ip}'/{prefix} to wifi '{}' on '{node_name}': {e}",
+                            w.name
+                        ))
+                    })?;
+            }
+        }
+    }
+
     // ── Step 10: Bring interfaces up ───────────────────────────────
     tracing::info!("step 10/18: bringing interfaces up");
     for node_name in topology.nodes.keys() {
@@ -1130,6 +1212,75 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 16b: Start WiFi daemons ────────────────────────────────
+    if wifi_radio_count > 0 {
+        tracing::info!("step 16b: starting WiFi daemons");
+        for (node_name, node) in &topology.nodes {
+            let node_handle = &node_handles[node_name];
+            for wifi in &node.wifi {
+                match wifi.mode {
+                    crate::types::WifiMode::Ap => {
+                        let conf_content = crate::wifi::generate_hostapd_conf(wifi);
+                        let conf_path = crate::wifi::write_config(
+                            &topology.lab.name,
+                            node_name,
+                            "hostapd.conf",
+                            &conf_content,
+                        )?;
+                        let mut cmd = std::process::Command::new("hostapd");
+                        cmd.args(["-B", &conf_path]);
+                        node_handle.spawn(cmd).map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to start hostapd on '{node_name}': {e}"
+                            ))
+                        })?;
+                    }
+                    crate::types::WifiMode::Station => {
+                        let conf_content = crate::wifi::generate_wpa_conf(wifi);
+                        let conf_path = crate::wifi::write_config(
+                            &topology.lab.name,
+                            node_name,
+                            "wpa.conf",
+                            &conf_content,
+                        )?;
+                        let mut cmd = std::process::Command::new("wpa_supplicant");
+                        cmd.args(["-B", "-i", &wifi.name, "-c", &conf_path]);
+                        node_handle.spawn(cmd).map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to start wpa_supplicant on '{node_name}': {e}"
+                            ))
+                        })?;
+                    }
+                    crate::types::WifiMode::Mesh => {
+                        // 802.11s mesh: use iw to join mesh
+                        if let Some(mesh_id) = &wifi.mesh_id {
+                            let mut cmd = std::process::Command::new("iw");
+                            cmd.args([
+                                "dev", &wifi.name, "mesh", "join", mesh_id, "freq",
+                                &freq_from_channel(wifi.channel.unwrap_or(1)),
+                            ]);
+                            let output = node_handle.spawn_output(cmd).map_err(|e| {
+                                Error::deploy_failed(format!(
+                                    "failed to join mesh '{mesh_id}' on '{node_name}': {e}"
+                                ))
+                            })?;
+                            if !output.status.success() {
+                                tracing::warn!(
+                                    "mesh join failed on '{node_name}': {}",
+                                    String::from_utf8_lossy(&output.stderr)
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Brief pause for WiFi association
+        tracing::info!("waiting for WiFi association...");
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+
     // ── Step 18: Write state file ──────────────────────────────────
     tracing::info!("step 18/18: writing state file");
     // Encode WG public keys as base64 for state persistence
@@ -1166,6 +1317,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         containers: container_states.clone(),
         runtime: container_runtime.as_ref().map(|rt| rt.binary().to_string()),
         dns_injected,
+        wifi_loaded,
     };
     state::save(&lab_state, topology)?;
 
@@ -1179,6 +1331,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         container_runtime.as_ref().map(|rt| rt.binary().to_string()),
         pids,
         dns_injected,
+        wifi_loaded,
     );
 
     // ── Step 19: Run validate assertions ─────────────────────────
@@ -1954,6 +2107,7 @@ pub async fn apply_diff(
             .collect(),
         runtime: running.runtime_binary().map(|s| s.to_string()),
         dns_injected: running.dns_injected(),
+        wifi_loaded: running.wifi_loaded(),
     };
     state::save(&lab_state, desired)?;
 
@@ -2211,6 +2365,33 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
     Ok(netem)
 }
 
+/// Convert WiFi channel number to frequency in MHz (as string for iw).
+fn freq_from_channel(channel: u32) -> String {
+    let freq = match channel {
+        1 => 2412,
+        2 => 2417,
+        3 => 2422,
+        4 => 2427,
+        5 => 2432,
+        6 => 2437,
+        7 => 2442,
+        8 => 2447,
+        9 => 2452,
+        10 => 2457,
+        11 => 2462,
+        12 => 2467,
+        13 => 2472,
+        14 => 2484,
+        // 5 GHz channels
+        36 => 5180,
+        40 => 5200,
+        44 => 5220,
+        48 => 5240,
+        _ => 2412, // default to channel 1
+    };
+    freq.to_string()
+}
+
 fn now_iso8601() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
@@ -2223,6 +2404,7 @@ struct Cleanup {
     containers: Vec<String>,
     runtime_binary: Option<String>,
     dns_lab: Option<String>,
+    wifi_loaded: bool,
     armed: bool,
 }
 
@@ -2233,6 +2415,7 @@ impl Cleanup {
             containers: Vec::new(),
             runtime_binary: None,
             dns_lab: None,
+            wifi_loaded: false,
             armed: true,
         }
     }
@@ -2280,6 +2463,13 @@ impl Drop for Cleanup {
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status();
+            }
+        }
+        // Clean up WiFi module if loaded
+        if self.wifi_loaded {
+            crate::wifi::unload_hwsim();
+            if let Some(lab_name) = &self.dns_lab {
+                crate::wifi::cleanup_configs(lab_name);
             }
         }
     }

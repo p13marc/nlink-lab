@@ -35,6 +35,10 @@ pub struct LabState {
     /// Whether DNS hosts entries were injected into /etc/hosts.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dns_injected: bool,
+
+    /// Whether mac80211_hwsim was loaded for this lab.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wifi_loaded: bool,
 }
 
 /// Persisted state for a container node.
@@ -236,6 +240,7 @@ mod tests {
             containers: HashMap::new(),
             runtime: None,
             dns_injected: false,
+            wifi_loaded: false,
         };
 
         let topology = crate::parser::parse(

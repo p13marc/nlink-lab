@@ -31,6 +31,12 @@ nlink-lab stats mylab                    # live CPU/memory usage
 sudo nlink-lab restart mylab web         # restart a container node
 nlink-lab pull topology.nll              # pre-pull all images
 
+# CI/CD testing (deploy, validate, destroy in one shot)
+sudo nlink-lab test topology.nll         # single topology
+sudo nlink-lab test tests/               # all .nll files in directory
+sudo nlink-lab test --junit results.xml tests/  # JUnit XML output
+sudo nlink-lab test --tap tests/         # TAP output
+
 # Tear down
 sudo nlink-lab destroy router            # single lab
 sudo nlink-lab destroy --all             # all labs

@@ -1,7 +1,7 @@
 # Plan 106: macvlan and ipvlan Interface Support
 
 **Date:** 2026-03-30
-**Status:** Ready
+**Status:** Implemented (2026-03-30)
 **Effort:** Medium (1-2 days)
 **Depends on:** nlink 0.12.0 (`MacvlanLink`, `IpvlanLink` already implemented)
 

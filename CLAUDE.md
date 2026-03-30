@@ -66,6 +66,7 @@ crates/nlink-lab/src/
   validator.rs      # Topology validation (20 rules)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
+  test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence (~/.nlink-lab/)
@@ -141,8 +142,9 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (28 total): `deploy`, `destroy` (with `--all`), `apply`,
-`status`, `exec`, `shell` (interactive TTY), `validate`, `render`
+CLI commands (29 total): `deploy`, `destroy` (with `--all`), `apply`,
+`status`, `exec`, `shell` (interactive TTY), `validate`, `test`
+(`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`), `inspect` (combined view), `impair`,
 `graph`, `diagnose` (`--json`), `capture`, `diff`, `export`, `wait`,
 `ps`, `kill`, `init`, `completions`, `daemon`, `metrics`,

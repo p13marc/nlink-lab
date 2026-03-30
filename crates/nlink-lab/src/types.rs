@@ -397,6 +397,10 @@ pub struct Node {
     /// ipvlan interfaces (attach to host physical NIC, shared MAC).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ipvlans: Vec<IpvlanConfig>,
+
+    /// Wi-Fi interfaces (mac80211_hwsim).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wifi: Vec<WifiConfig>,
 }
 
 impl Node {
@@ -685,6 +689,38 @@ pub enum IpvlanMode {
     #[default]
     L3,
     L3S,
+}
+
+/// Wi-Fi interface configuration (mac80211_hwsim).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WifiConfig {
+    /// Interface name inside the namespace (e.g., "wlan0").
+    pub name: String,
+    /// Wi-Fi mode.
+    pub mode: WifiMode,
+    /// Network SSID (required for AP and Station modes).
+    pub ssid: Option<String>,
+    /// Wi-Fi channel number.
+    pub channel: Option<u32>,
+    /// WPA2-PSK passphrase (omit for open network).
+    pub passphrase: Option<String>,
+    /// Mesh network identifier (required for Mesh mode).
+    pub mesh_id: Option<String>,
+    /// IP addresses in CIDR notation.
+    #[serde(default)]
+    pub addresses: Vec<String>,
+}
+
+/// Wi-Fi interface mode.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WifiMode {
+    /// Access point (runs hostapd).
+    Ap,
+    /// Client station (runs wpa_supplicant).
+    Station,
+    /// 802.11s mesh point.
+    Mesh,
 }
 
 // ─────────────────────────────────────────────────

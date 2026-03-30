@@ -131,6 +131,7 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
         || !node.vrfs.is_empty()
         || !node.macvlans.is_empty()
         || !node.ipvlans.is_empty()
+        || !node.wifi.is_empty()
         || node.cpu.is_some()
         || node.memory.is_some()
         || node.privileged
@@ -282,6 +283,40 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
                 iv.name, iv.parent
             )
             .unwrap();
+        }
+        for w in &node.wifi {
+            let mode = match w.mode {
+                crate::types::WifiMode::Ap => "ap",
+                crate::types::WifiMode::Station => "station",
+                crate::types::WifiMode::Mesh => "mesh",
+            };
+            write!(out, "  wifi {} mode {mode}", w.name).unwrap();
+            let has_props = w.ssid.is_some()
+                || w.channel.is_some()
+                || w.passphrase.is_some()
+                || w.mesh_id.is_some()
+                || !w.addresses.is_empty();
+            if has_props {
+                out.push_str(" {\n");
+                if let Some(ssid) = &w.ssid {
+                    writeln!(out, "    ssid \"{ssid}\"").unwrap();
+                }
+                if let Some(ch) = w.channel {
+                    writeln!(out, "    channel {ch}").unwrap();
+                }
+                if let Some(pass) = &w.passphrase {
+                    writeln!(out, "    wpa2 \"{pass}\"").unwrap();
+                }
+                if let Some(mid) = &w.mesh_id {
+                    writeln!(out, "    mesh-id \"{mid}\"").unwrap();
+                }
+                for addr in &w.addresses {
+                    writeln!(out, "    {addr}").unwrap();
+                }
+                out.push_str("  }\n");
+            } else {
+                out.push('\n');
+            }
         }
         out.push_str("}\n");
     } else {

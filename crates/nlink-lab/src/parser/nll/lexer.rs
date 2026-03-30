@@ -163,6 +163,14 @@ pub enum Token {
     Macvlan,
     #[token("ipvlan")]
     Ipvlan,
+    #[token("wifi")]
+    Wifi,
+    #[token("ssid")]
+    Ssid,
+    #[token("wpa2")]
+    Wpa2,
+    #[token("mesh-id")]
+    MeshId,
     #[token("run")]
     Run,
     #[token("image")]

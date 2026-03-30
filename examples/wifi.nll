@@ -1,0 +1,42 @@
+# Wi-Fi emulation: AP with two stations.
+#
+# Uses mac80211_hwsim to create virtual Wi-Fi radios. Each node gets
+# one PHY moved into its namespace, then hostapd (AP) or wpa_supplicant
+# (station) handles association.
+#
+# Requires: mac80211_hwsim kernel module, hostapd, wpa_supplicant.
+#
+# After deploying:
+#   sudo nlink-lab exec wifi sta1 -- iw wlan0 link
+#   sudo nlink-lab exec wifi sta1 -- ping -c1 10.0.0.1
+
+lab "wifi" { dns hosts }
+
+profile router { forward ipv4 }
+
+node ap : router {
+  wifi wlan0 mode ap {
+    ssid "labnet"
+    channel 6
+    wpa2 "testpassword"
+    10.0.0.1/24
+  }
+}
+
+node sta1 {
+  wifi wlan0 mode station {
+    ssid "labnet"
+    wpa2 "testpassword"
+    10.0.0.2/24
+  }
+  route default via 10.0.0.1
+}
+
+node sta2 {
+  wifi wlan0 mode station {
+    ssid "labnet"
+    wpa2 "testpassword"
+    10.0.0.3/24
+  }
+  route default via 10.0.0.1
+}

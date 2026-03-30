@@ -241,7 +241,20 @@ pub enum NodeProp {
     Dummy(DummyDef),
     Macvlan(MacvlanDef),
     Ipvlan(IpvlanDef),
+    Wifi(WifiDef),
     Run(RunDef),
+}
+
+/// Wi-Fi interface definition.
+#[derive(Debug, Clone)]
+pub struct WifiDef {
+    pub name: String,
+    pub mode: String,
+    pub ssid: Option<String>,
+    pub channel: Option<u32>,
+    pub passphrase: Option<String>,
+    pub mesh_id: Option<String>,
+    pub addresses: Vec<String>,
 }
 
 /// macvlan interface definition.

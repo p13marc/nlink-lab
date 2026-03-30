@@ -69,6 +69,7 @@ crates/nlink-lab/src/
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
   scenario.rs       # Timed scenario execution engine (fault injection + validation)
   benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
+  wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim mgmt)
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence (~/.nlink-lab/)
@@ -104,6 +105,8 @@ examples/
 | `RouteConfig` | Route entry (via, dev, metric) |
 | `MacvlanConfig` | macvlan interface (name, parent, mode, addresses) |
 | `IpvlanConfig` | ipvlan interface (name, parent, mode, addresses) |
+| `WifiConfig` | Wi-Fi interface (name, mode, ssid, channel, passphrase) |
+| `WifiMode` | Wi-Fi mode (Ap, Station, Mesh) |
 | `ContainerRuntime` | Docker/Podman selection (auto, docker, podman) |
 
 ## NLL Topology Format
@@ -141,7 +144,8 @@ rich validation assertions (`tcp-connect`, `latency-under`, `route-has`,
 `dns-resolves`), timed scenarios for fault injection (`scenario` block
 with `at`, `down`, `up`, `clear`, `validate`), performance benchmarks
 (`benchmark` block with `ping`/`iperf3` and `assert` thresholds),
-and network (bridge) blocks.
+Wi-Fi emulation (`wifi` block with `mode ap`/`station`/`mesh`,
+mac80211_hwsim), and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.

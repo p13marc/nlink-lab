@@ -938,6 +938,10 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
             *pos += 1;
             parse_ipvlan_def(tokens, pos).map(ast::NodeProp::Ipvlan)
         }
+        Some(Token::Wifi) => {
+            *pos += 1;
+            parse_wifi_def(tokens, pos).map(ast::NodeProp::Wifi)
+        }
         Some(Token::Run) => {
             *pos += 1;
             parse_run_def(tokens, pos).map(ast::NodeProp::Run)
@@ -946,7 +950,7 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
             tokens,
             *pos,
             format!(
-                "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, macvlan, ipvlan, run), found {other}"
+                "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, macvlan, ipvlan, wifi, run), found {other}"
             ),
         )),
         None => Err(err(
@@ -1588,6 +1592,97 @@ fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDe
         name,
         parent,
         mode,
+        addresses,
+    })
+}
+
+// ─── Wifi ─────────────────────────────────────────────────
+
+// wifi IDENT mode (ap|station|mesh) block?
+fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
+    let name = expect_ident(tokens, pos)?;
+
+    // Expect "mode" as a context-sensitive ident
+    if !matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == "mode") {
+        return Err(err(
+            tokens,
+            *pos,
+            "expected 'mode' after wifi interface name".into(),
+        ));
+    }
+    *pos += 1;
+
+    let mode = expect_ident(tokens, pos)?;
+    if !matches!(mode.as_str(), "ap" | "station" | "mesh") {
+        return Err(err(
+            tokens,
+            *pos - 1,
+            format!("invalid wifi mode '{mode}': expected ap, station, or mesh"),
+        ));
+    }
+
+    let mut ssid = None;
+    let mut channel = None;
+    let mut passphrase = None;
+    let mut mesh_id = None;
+    let mut addresses = Vec::new();
+
+    if eat(tokens, pos, &Token::LBrace) {
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
+            }
+            match at(tokens, *pos) {
+                Some(Token::Ssid) => {
+                    *pos += 1;
+                    ssid = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Ident(s)) if s == "channel" => {
+                    *pos += 1;
+                    channel = Some(expect_int(tokens, pos)? as u32);
+                }
+                Some(Token::Wpa2) => {
+                    *pos += 1;
+                    passphrase = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::MeshId) => {
+                    *pos += 1;
+                    mesh_id = Some(expect_string(tokens, pos)?);
+                }
+                Some(Token::Cidr(c)) => {
+                    addresses.push(c.clone());
+                    *pos += 1;
+                }
+                Some(Token::Address) => {
+                    *pos += 1;
+                    addresses.push(parse_cidr_or_name(tokens, pos)?);
+                }
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in wifi block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in wifi block".into(),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(ast::WifiDef {
+        name,
+        mode,
+        ssid,
+        channel,
+        passphrase,
+        mesh_id,
         addresses,
     })
 }
@@ -3082,6 +3177,82 @@ node router {
                     assert_eq!(iv.mode.as_deref(), Some("l3"));
                 }
                 _ => panic!("expected Ipvlan"),
+            },
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_wifi_ap() {
+        let ast = parse_nll(
+            r#"lab "t"
+node ap {
+  wifi wlan0 mode ap {
+    ssid "testnet"
+    channel 6
+    wpa2 "secret"
+    10.0.0.1/24
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => match &n.props[0] {
+                ast::NodeProp::Wifi(w) => {
+                    assert_eq!(w.name, "wlan0");
+                    assert_eq!(w.mode, "ap");
+                    assert_eq!(w.ssid.as_deref(), Some("testnet"));
+                    assert_eq!(w.channel, Some(6));
+                    assert_eq!(w.passphrase.as_deref(), Some("secret"));
+                    assert_eq!(w.addresses, vec!["10.0.0.1/24"]);
+                }
+                _ => panic!("expected Wifi"),
+            },
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_wifi_station() {
+        let ast = parse_nll(
+            r#"lab "t"
+node sta {
+  wifi wlan0 mode station {
+    ssid "testnet"
+    wpa2 "secret"
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => match &n.props[0] {
+                ast::NodeProp::Wifi(w) => {
+                    assert_eq!(w.mode, "station");
+                    assert_eq!(w.ssid.as_deref(), Some("testnet"));
+                    assert!(w.channel.is_none());
+                }
+                _ => panic!("expected Wifi"),
+            },
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_wifi_mesh() {
+        let ast = parse_nll(
+            r#"lab "t"
+node m {
+  wifi wlan0 mode mesh {
+    mesh-id "labmesh"
+    channel 1
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => match &n.props[0] {
+                ast::NodeProp::Wifi(w) => {
+                    assert_eq!(w.mode, "mesh");
+                    assert_eq!(w.mesh_id.as_deref(), Some("labmesh"));
+                }
+                _ => panic!("expected Wifi"),
             },
             _ => panic!("expected Node"),
         }

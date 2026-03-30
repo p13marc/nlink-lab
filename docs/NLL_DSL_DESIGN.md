@@ -1074,6 +1074,12 @@ bench_block    = "{" bench_prop* "}"
 bench_prop     = "duration" DURATION | "streams" INT | "udp"
                | "count" INT | "assert" IDENT ("above"|"below") value
 
+# ── Wi-Fi ───────────────────────────────────────
+wifi_prop      = "wifi" IDENT "mode" ("ap" | "station" | "mesh") wifi_block?
+wifi_block     = "{" wifi_setting* "}"
+wifi_setting   = "ssid" STRING | "channel" INT | "wpa2" STRING
+               | "mesh-id" STRING | CIDR
+
 # ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR
 route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?

@@ -1000,6 +1000,15 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
             mode: iv.mode.as_ref().map(|s| i(s, vars)),
             addresses: iv.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
+        ast::NodeProp::Wifi(w) => ast::NodeProp::Wifi(ast::WifiDef {
+            name: i(&w.name, vars),
+            mode: w.mode.clone(),
+            ssid: w.ssid.as_ref().map(|s| i(s, vars)),
+            channel: w.channel,
+            passphrase: w.passphrase.clone(),
+            mesh_id: w.mesh_id.as_ref().map(|s| i(s, vars)),
+            addresses: w.addresses.iter().map(|s| i(s, vars)).collect(),
+        }),
         ast::NodeProp::Run(r) => ast::NodeProp::Run(r.clone()),
     }
 }
@@ -1416,6 +1425,22 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                         _ => types::IpvlanMode::L3,
                     },
                     addresses: iv.addresses.clone(),
+                });
+            }
+            ast::NodeProp::Wifi(w) => {
+                node.wifi.push(types::WifiConfig {
+                    name: w.name.clone(),
+                    mode: match w.mode.as_str() {
+                        "ap" => types::WifiMode::Ap,
+                        "station" => types::WifiMode::Station,
+                        "mesh" => types::WifiMode::Mesh,
+                        _ => types::WifiMode::Station,
+                    },
+                    ssid: w.ssid.clone(),
+                    channel: w.channel,
+                    passphrase: w.passphrase.clone(),
+                    mesh_id: w.mesh_id.clone(),
+                    addresses: w.addresses.clone(),
                 });
             }
             ast::NodeProp::Run(r) => {
@@ -3024,6 +3049,40 @@ node r {
         assert_eq!(iv.name, "eth0");
         assert_eq!(iv.parent, "enp3s0");
         assert_eq!(iv.mode, types::IpvlanMode::L2);
+    }
+
+    #[test]
+    fn test_lower_wifi() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node ap {
+  wifi wlan0 mode ap {
+    ssid "testnet"
+    channel 6
+    wpa2 "secret"
+    10.0.0.1/24
+  }
+}
+node sta {
+  wifi wlan0 mode station {
+    ssid "testnet"
+    wpa2 "secret"
+  }
+}
+"#,
+        );
+        assert_eq!(topo.nodes["ap"].wifi.len(), 1);
+        let ap_wifi = &topo.nodes["ap"].wifi[0];
+        assert_eq!(ap_wifi.name, "wlan0");
+        assert_eq!(ap_wifi.mode, types::WifiMode::Ap);
+        assert_eq!(ap_wifi.ssid.as_deref(), Some("testnet"));
+        assert_eq!(ap_wifi.channel, Some(6));
+        assert_eq!(ap_wifi.passphrase.as_deref(), Some("secret"));
+        assert_eq!(ap_wifi.addresses, vec!["10.0.0.1/24"]);
+
+        assert_eq!(topo.nodes["sta"].wifi.len(), 1);
+        let sta_wifi = &topo.nodes["sta"].wifi[0];
+        assert_eq!(sta_wifi.mode, types::WifiMode::Station);
     }
 
     #[test]

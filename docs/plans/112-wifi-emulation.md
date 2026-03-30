@@ -1,7 +1,7 @@
 # Plan 112: Wi-Fi Emulation via mac80211_hwsim
 
 **Date:** 2026-03-30 (updated)
-**Status:** Draft
+**Status:** Implemented (2026-03-30) — DSL, parser, lower, render, wifi.rs, config gen; deploy integration pending
 **Effort:** Large (1-2 weeks)
 **Depends on:** nlink 0.12.1 (delivered — `set_wiphy_netns()` available)
 

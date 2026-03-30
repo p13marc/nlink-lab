@@ -215,6 +215,31 @@ benchmark "latency" {
 
 Supports `ping` (always available) and `iperf3` (requires iperf3 installed).
 
+### Wi-Fi Emulation
+
+Virtual Wi-Fi topologies using the kernel's `mac80211_hwsim` module:
+
+```nll
+node ap {
+  wifi wlan0 mode ap {
+    ssid "labnet"
+    channel 6
+    wpa2 "testpassword"
+    10.0.0.1/24
+  }
+}
+
+node sta1 {
+  wifi wlan0 mode station {
+    ssid "labnet"
+    wpa2 "testpassword"
+  }
+}
+```
+
+Modes: `ap` (hostapd), `station` (wpa_supplicant), `mesh` (802.11s).
+Requires: `mac80211_hwsim` kernel module.
+
 ### Render and Inspect
 
 ```bash
@@ -307,6 +332,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `ipvlan` | ipvlan: shared-MAC attachment to physical host NIC |
 | `scenario` | Timed fault injection with validation checkpoints |
 | `benchmark` | Performance testing with ping/iperf3 assertions |
+| `wifi` | Wi-Fi AP + stations via mac80211_hwsim |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

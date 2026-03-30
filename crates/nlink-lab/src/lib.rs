@@ -72,6 +72,7 @@ pub mod templates;
 pub mod test_runner;
 pub mod types;
 pub mod validator;
+pub mod wifi;
 
 pub use builder::Lab;
 pub use deploy::apply_diff;

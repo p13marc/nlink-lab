@@ -130,6 +130,22 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         None
     };
 
+    // Pre-compute DNS hosts entries for container --add-host flags.
+    // IPs are known at parse time from link addresses, so this is safe before step 3.
+    let dns_extra_hosts: Vec<String> = if topology.lab.dns == DnsMode::Hosts {
+        crate::dns::generate_hosts_entries(topology)
+            .iter()
+            .flat_map(|entry| {
+                entry
+                    .names
+                    .iter()
+                    .map(|name| format!("{name}:{}", entry.ip))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     // ── Step 3: Create namespaces / containers ─────────────────────
     tracing::info!("step 3/18: creating namespaces");
     for (node_name, node) in &topology.nodes {
@@ -147,7 +163,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 }
             }
             let container_name = format!("{}-{}", topology.lab.prefix(), node_name);
-            let opts = build_create_opts(node);
+            let opts = build_create_opts(node, &dns_extra_hosts);
             let info = rt.create(&container_name, image, &opts)?;
             cleanup.add_container(info.id.clone());
             container_states.insert(
@@ -1640,7 +1656,20 @@ pub async fn apply_diff(
                 }
             }
             let container_name = format!("{}-{}", desired.lab.prefix(), node_name);
-            let opts = build_create_opts(node);
+            let extra_hosts: Vec<String> = if desired.lab.dns == DnsMode::Hosts {
+                crate::dns::generate_hosts_entries(desired)
+                    .iter()
+                    .flat_map(|entry| {
+                        entry
+                            .names
+                            .iter()
+                            .map(|name| format!("{name}:{}", entry.ip))
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let opts = build_create_opts(node, &extra_hosts);
             let info = rt.create(&container_name, image, &opts)?;
             running.containers_mut().insert(
                 node_name.clone(),
@@ -1874,7 +1903,7 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
 }
 
 /// Build container CreateOpts from a Node's fields.
-fn build_create_opts(node: &crate::types::Node) -> CreateOpts {
+fn build_create_opts(node: &crate::types::Node, extra_hosts: &[String]) -> CreateOpts {
     CreateOpts {
         cmd: node.cmd.clone(),
         env: node.env.clone().unwrap_or_default(),
@@ -1888,6 +1917,7 @@ fn build_create_opts(node: &crate::types::Node) -> CreateOpts {
         hostname: node.hostname.clone(),
         workdir: node.workdir.clone(),
         labels: node.labels.clone(),
+        extra_hosts: extra_hosts.to_vec(),
     }
 }
 

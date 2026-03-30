@@ -54,6 +54,8 @@ pub struct CreateOpts {
     pub workdir: Option<String>,
     /// Container labels.
     pub labels: Vec<String>,
+    /// Extra /etc/hosts entries in "hostname:ip" format (passed as --add-host).
+    pub extra_hosts: Vec<String>,
 }
 
 impl Runtime {
@@ -223,6 +225,11 @@ impl Runtime {
         for vol in &opts.volumes {
             args.push("--volume".to_string());
             args.push(vol.clone());
+        }
+
+        for host in &opts.extra_hosts {
+            args.push("--add-host".to_string());
+            args.push(host.clone());
         }
 
         args.push(image.to_string());

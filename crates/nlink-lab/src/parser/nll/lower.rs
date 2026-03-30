@@ -122,6 +122,56 @@ fn lower_with_base_dir(
                                 to: to.clone(),
                             });
                         }
+                        ast::AssertionDef::TcpConnect {
+                            from,
+                            to,
+                            port,
+                            timeout,
+                        } => {
+                            topology.assertions.push(types::Assertion::TcpConnect {
+                                from: from.clone(),
+                                to: to.clone(),
+                                port: *port,
+                                timeout: timeout.clone(),
+                            });
+                        }
+                        ast::AssertionDef::LatencyUnder {
+                            from,
+                            to,
+                            max,
+                            samples,
+                        } => {
+                            topology.assertions.push(types::Assertion::LatencyUnder {
+                                from: from.clone(),
+                                to: to.clone(),
+                                max: max.clone(),
+                                samples: *samples,
+                            });
+                        }
+                        ast::AssertionDef::RouteHas {
+                            node,
+                            destination,
+                            via,
+                            dev,
+                        } => {
+                            topology.assertions.push(types::Assertion::RouteHas {
+                                node: node.clone(),
+                                destination: destination.clone(),
+                                via: via.clone(),
+                                dev: dev.clone(),
+                            });
+                        }
+                        ast::AssertionDef::DnsResolves {
+                            from,
+                            name,
+                            expected_ip,
+                        } => {
+                            topology.assertions.push(types::Assertion::DnsResolves {
+                                from: from.clone(),
+                                name: name.clone(),
+                                expected_ip: expected_ip.clone(),
+                            });
+                        }
                     }
                 }
             }
@@ -2725,6 +2775,50 @@ validate {
         );
         assert!(
             matches!(&topo.assertions[1], types::Assertion::NoReach { from, to } if from == "b" && to == "a")
+        );
+    }
+
+    #[test]
+    fn test_validate_rich_assertions() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+validate {
+    reach a b
+    tcp-connect a b 80
+    tcp-connect a b 443 timeout 5s
+    latency-under a b 50ms
+    latency-under a b 100ms samples 10
+    route-has a default via 10.0.0.1
+    route-has b 10.0.0.0/24 dev eth0
+    dns-resolves a "b" "10.0.0.2"
+}
+"#,
+        );
+        assert_eq!(topo.assertions.len(), 8);
+        assert!(matches!(&topo.assertions[0], types::Assertion::Reach { .. }));
+        assert!(
+            matches!(&topo.assertions[1], types::Assertion::TcpConnect { port: 80, timeout: None, .. })
+        );
+        assert!(
+            matches!(&topo.assertions[2], types::Assertion::TcpConnect { port: 443, timeout: Some(t), .. } if t == "5s")
+        );
+        assert!(
+            matches!(&topo.assertions[3], types::Assertion::LatencyUnder { max, samples: None, .. } if max == "50ms")
+        );
+        assert!(
+            matches!(&topo.assertions[4], types::Assertion::LatencyUnder { samples: Some(10), .. })
+        );
+        assert!(
+            matches!(&topo.assertions[5], types::Assertion::RouteHas { node, via: Some(v), .. } if node == "a" && v == "10.0.0.1")
+        );
+        assert!(
+            matches!(&topo.assertions[6], types::Assertion::RouteHas { node, dev: Some(d), .. } if node == "b" && d == "eth0")
+        );
+        assert!(
+            matches!(&topo.assertions[7], types::Assertion::DnsResolves { name, expected_ip, .. } if name == "b" && expected_ip == "10.0.0.2")
         );
     }
 

@@ -95,6 +95,16 @@ pub enum Token {
     Reach,
     #[token("no-reach")]
     NoReach,
+    #[token("tcp-connect")]
+    TcpConnect,
+    #[token("latency-under")]
+    LatencyUnder,
+    #[token("route-has")]
+    RouteHas,
+    #[token("dns-resolves")]
+    DnsResolves,
+    #[token("samples")]
+    Samples,
     #[token("mesh")]
     Mesh,
     #[token("ring")]

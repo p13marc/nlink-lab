@@ -4,7 +4,27 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-None.
+| Plan | Description | Effort | Status |
+|------|-------------|--------|--------|
+| [105](105-dns-phase2.md) | DNS Phase 2 — per-namespace isolation | Small | Ready |
+| [106](106-macvlan-ipvlan.md) | macvlan and ipvlan interface support | Medium | Ready |
+| [107](107-rich-assertions.md) | Rich validation assertions | Medium | Ready |
+| [108](108-scenario-dsl.md) | Timed scenario / fault injection DSL | Large | Draft |
+| [109](109-ci-integration.md) | CI/CD integration (JUnit/TAP, `test` command) | Medium | Ready |
+| [110](110-integration-tests.md) | Integration test expansion (5 → 20+) | Medium | Ready |
+| [111](111-benchmark-block.md) | Benchmark block (iperf3/ping with assertions) | Medium | Draft |
+
+### Recommended execution order
+
+```
+110 (tests)  ─── can start immediately, no dependencies
+105 (DNS P2) ─── can start immediately, small
+106 (macvlan) ── can start immediately, medium
+107 (assertions) ── can start immediately, unlocks 108/109
+109 (CI) ──────── benefits from 107, but standalone value too
+108 (scenario) ── benefits from 107, largest effort
+111 (benchmark) ─ standalone, benefits from 109
+```
 
 ## Completed
 
@@ -20,6 +40,8 @@ Plans 050 (advanced interfaces), 051 (phase 3 features), 052 (ecosystem),
 098 (NLL patterns), 099 (production readiness), 100 (validate & errors),
 101 (NLL syntax cleanup), 102 (CLI quality), 103 (container CLI),
 and 104 (polish) have been implemented and their plan files removed.
+
+DNS support (Phase 1) was implemented on 2026-03-30. See [dns-support.md](dns-support.md).
 
 ## Reference
 

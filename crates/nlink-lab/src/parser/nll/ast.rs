@@ -77,6 +77,29 @@ pub struct ValidateDef {
 pub enum AssertionDef {
     Reach { from: String, to: String },
     NoReach { from: String, to: String },
+    TcpConnect {
+        from: String,
+        to: String,
+        port: u16,
+        timeout: Option<String>,
+    },
+    LatencyUnder {
+        from: String,
+        to: String,
+        max: String,
+        samples: Option<u32>,
+    },
+    RouteHas {
+        node: String,
+        destination: String,
+        via: Option<String>,
+        dev: Option<String>,
+    },
+    DnsResolves {
+        from: String,
+        name: String,
+        expected_ip: String,
+    },
 }
 
 /// Topology pattern: `mesh`, `ring`, `star`.

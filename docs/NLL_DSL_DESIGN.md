@@ -1055,6 +1055,10 @@ pattern_item   = "node" ident_list | "count" INT | "pool" IDENT
 
 # ── Assertion ────────────────────────────────────
 assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
+               | "tcp-connect" IDENT IDENT INT ("timeout" DURATION)?
+               | "latency-under" IDENT IDENT DURATION ("samples" INT)?
+               | "route-has" IDENT value ("via" value)? ("dev" IDENT)?
+               | "dns-resolves" IDENT value value
 
 # ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR

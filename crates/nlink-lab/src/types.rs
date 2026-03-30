@@ -63,6 +63,33 @@ pub enum Assertion {
     Reach { from: String, to: String },
     /// Assert that `from` cannot reach `to` (ping fails).
     NoReach { from: String, to: String },
+    /// Assert TCP connection to `to:port` succeeds from `from`.
+    TcpConnect {
+        from: String,
+        to: String,
+        port: u16,
+        timeout: Option<String>,
+    },
+    /// Assert that latency from `from` to `to` is under `max`.
+    LatencyUnder {
+        from: String,
+        to: String,
+        max: String,
+        samples: Option<u32>,
+    },
+    /// Assert that a route exists in `node`'s routing table.
+    RouteHas {
+        node: String,
+        destination: String,
+        via: Option<String>,
+        dev: Option<String>,
+    },
+    /// Assert that DNS resolution works (requires `dns hosts`).
+    DnsResolves {
+        from: String,
+        name: String,
+        expected_ip: String,
+    },
 }
 
 /// DNS resolution mode for lab nodes.

@@ -1960,11 +1960,82 @@ fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDe
                 let to = expect_ident(tokens, pos)?;
                 assertions.push(ast::AssertionDef::NoReach { from, to });
             }
+            Some(Token::TcpConnect) => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let to = expect_ident(tokens, pos)?;
+                let port = expect_int(tokens, pos)? as u16;
+                let timeout = if eat(tokens, pos, &Token::Timeout) {
+                    Some(expect_duration_or_value(tokens, pos)?)
+                } else {
+                    None
+                };
+                assertions.push(ast::AssertionDef::TcpConnect {
+                    from,
+                    to,
+                    port,
+                    timeout,
+                });
+            }
+            Some(Token::LatencyUnder) => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let to = expect_ident(tokens, pos)?;
+                let max = expect_duration_or_value(tokens, pos)?;
+                let samples = if eat(tokens, pos, &Token::Samples) {
+                    Some(expect_int(tokens, pos)? as u32)
+                } else {
+                    None
+                };
+                assertions.push(ast::AssertionDef::LatencyUnder {
+                    from,
+                    to,
+                    max,
+                    samples,
+                });
+            }
+            Some(Token::RouteHas) => {
+                *pos += 1;
+                let node = expect_ident(tokens, pos)?;
+                let destination = parse_value(tokens, pos)?;
+                let mut via = None;
+                let mut dev = None;
+                while matches!(at(tokens, *pos), Some(Token::Via) | Some(Token::Dev)) {
+                    match at(tokens, *pos) {
+                        Some(Token::Via) => {
+                            *pos += 1;
+                            via = Some(parse_value(tokens, pos)?);
+                        }
+                        Some(Token::Dev) => {
+                            *pos += 1;
+                            dev = Some(expect_ident(tokens, pos)?);
+                        }
+                        _ => break,
+                    }
+                }
+                assertions.push(ast::AssertionDef::RouteHas {
+                    node,
+                    destination,
+                    via,
+                    dev,
+                });
+            }
+            Some(Token::DnsResolves) => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let name = parse_value(tokens, pos)?;
+                let expected_ip = parse_value(tokens, pos)?;
+                assertions.push(ast::AssertionDef::DnsResolves {
+                    from,
+                    name,
+                    expected_ip,
+                });
+            }
             Some(other) => {
                 return Err(err(
                     tokens,
                     *pos,
-                    format!("expected reach or no-reach in validate block, found {other}"),
+                    format!("expected assertion in validate block, found {other}"),
                 ));
             }
             None => {

@@ -192,7 +192,7 @@ impl RunningLab {
             let ns_name = self.namespace_for(node)?;
             let mut command = std::process::Command::new(cmd);
             command.args(args);
-            let output = namespace::spawn_output(ns_name, command)
+            let output = namespace::spawn_output_with_etc(ns_name, command)
                 .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
             Ok(ExecOutput {
                 stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -212,7 +212,7 @@ impl RunningLab {
         let mut command = std::process::Command::new(cmd[0]);
         command.args(&cmd[1..]);
 
-        let child = namespace::spawn(ns_name, command)
+        let child = namespace::spawn_with_etc(ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         let pid = child.id();
         self.pids.push((node.to_string(), pid));
@@ -365,6 +365,13 @@ impl RunningLab {
             && let Err(e) = crate::dns::remove_hosts(&self.topology.lab.name)
         {
             tracing::warn!("failed to remove /etc/hosts entries: {e}");
+        }
+
+        // 5b. Remove per-namespace /etc/netns/ directories
+        if self.dns_injected {
+            for ns_name in self.namespace_names.values() {
+                crate::dns::remove_netns_etc(ns_name);
+            }
         }
 
         // 6. Remove state file

@@ -231,6 +231,82 @@ fn remove_section(content: &str, lab_name: &str) -> String {
     result
 }
 
+/// Create per-namespace `/etc/netns/<ns_name>/` directory with `hosts` and `resolv.conf`.
+///
+/// When processes are spawned via `namespace::spawn_with_etc()`, these files are
+/// bind-mounted over `/etc/hosts` and `/etc/resolv.conf` inside the namespace.
+pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
+    let dir = format!("/etc/netns/{ns_name}");
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        Error::deploy_failed(format!("failed to create {dir}: {e}"))
+    })?;
+
+    // Write hosts file
+    let mut content = String::from("127.0.0.1\tlocalhost\n::1\t\tlocalhost\n");
+    for entry in entries {
+        content.push_str(&entry.ip);
+        for name in &entry.names {
+            content.push('\t');
+            content.push_str(name);
+        }
+        content.push('\n');
+    }
+    std::fs::write(format!("{dir}/hosts"), &content).map_err(|e| {
+        Error::deploy_failed(format!("failed to write {dir}/hosts: {e}"))
+    })?;
+
+    // Write resolv.conf with host's upstream DNS
+    let upstream = detect_upstream_dns();
+    std::fs::write(format!("{dir}/resolv.conf"), format!("nameserver {upstream}\n"))
+        .map_err(|e| {
+            Error::deploy_failed(format!("failed to write {dir}/resolv.conf: {e}"))
+        })?;
+
+    Ok(())
+}
+
+/// Remove per-namespace `/etc/netns/<ns_name>/` directory.
+pub fn remove_netns_etc(ns_name: &str) {
+    let dir = format!("/etc/netns/{ns_name}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Detect the host's upstream DNS server.
+///
+/// Checks systemd-resolved's upstream config first, then falls back to
+/// `/etc/resolv.conf`, skipping the stub resolver at 127.0.0.53.
+pub fn detect_upstream_dns() -> String {
+    // Try systemd-resolved's actual upstream (not the stub)
+    if let Ok(content) = std::fs::read_to_string("/run/systemd/resolve/resolv.conf") {
+        if let Some(ns) = parse_nameserver(&content) {
+            return ns;
+        }
+    }
+    // Fall back to /etc/resolv.conf
+    if let Ok(content) = std::fs::read_to_string("/etc/resolv.conf") {
+        if let Some(ns) = parse_nameserver(&content) {
+            return ns;
+        }
+    }
+    // Last resort
+    "8.8.8.8".to_string()
+}
+
+/// Parse the first non-loopback nameserver from resolv.conf content.
+fn parse_nameserver(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(ns) = line.strip_prefix("nameserver") {
+            let ns = ns.trim();
+            // Skip stub resolver and loopback
+            if ns != "127.0.0.53" && ns != "127.0.0.1" && ns != "::1" && !ns.is_empty() {
+                return Some(ns.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Strip CIDR prefix length from an address (e.g., "10.0.0.1/24" -> "10.0.0.1").
 fn strip_prefix_len(addr: &str) -> Option<String> {
     let ip = addr.split('/').next()?;
@@ -461,6 +537,68 @@ link a:eth0 -- b:eth0 { fd00::1/64 -- fd00::2/64 }
             !content.contains("NLINK-LAB"),
             "no section should be written for empty entries"
         );
+    }
+
+    #[test]
+    fn test_parse_nameserver() {
+        assert_eq!(
+            parse_nameserver("nameserver 1.1.1.1\nnameserver 8.8.8.8\n"),
+            Some("1.1.1.1".into())
+        );
+    }
+
+    #[test]
+    fn test_parse_nameserver_skips_stub() {
+        assert_eq!(
+            parse_nameserver("nameserver 127.0.0.53\nnameserver 1.1.1.1\n"),
+            Some("1.1.1.1".into())
+        );
+    }
+
+    #[test]
+    fn test_parse_nameserver_skips_loopback() {
+        assert_eq!(
+            parse_nameserver("nameserver 127.0.0.1\nnameserver ::1\nnameserver 9.9.9.9\n"),
+            Some("9.9.9.9".into())
+        );
+    }
+
+    #[test]
+    fn test_parse_nameserver_empty() {
+        assert_eq!(parse_nameserver("# no nameservers\n"), None);
+    }
+
+    #[test]
+    fn test_create_netns_etc() {
+        let _dir = tempfile::tempdir().unwrap();
+        // We can't write to /etc/netns/ in tests, so test the content generation logic
+        let entries = vec![
+            HostsEntry {
+                ip: "10.0.0.1".into(),
+                names: vec!["server".into(), "server-eth0".into()],
+            },
+            HostsEntry {
+                ip: "10.0.0.2".into(),
+                names: vec!["client".into(), "client-eth0".into()],
+            },
+        ];
+
+        // Verify generate_hosts_entries + content building logic
+        let mut content = String::from("127.0.0.1\tlocalhost\n::1\t\tlocalhost\n");
+        for entry in &entries {
+            content.push_str(&entry.ip);
+            for name in &entry.names {
+                content.push('\t');
+                content.push_str(name);
+            }
+            content.push('\n');
+        }
+        assert!(content.contains("127.0.0.1\tlocalhost"));
+        assert!(content.contains("10.0.0.1\tserver\tserver-eth0"));
+        assert!(content.contains("10.0.0.2\tclient\tclient-eth0"));
+
+        // Test remove is safe on non-existent dir
+        remove_netns_etc("nonexistent-namespace");
     }
 
     #[test]

@@ -73,7 +73,7 @@ impl NodeHandle {
         cmd: std::process::Command,
     ) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
         match self {
-            NodeHandle::Namespace { ns_name } => namespace::spawn_output(ns_name, cmd),
+            NodeHandle::Namespace { ns_name } => namespace::spawn_output_with_etc(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_output_path(ns_path, cmd),
         }
     }
@@ -83,7 +83,7 @@ impl NodeHandle {
         cmd: std::process::Command,
     ) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
         match self {
-            NodeHandle::Namespace { ns_name } => namespace::spawn(ns_name, cmd),
+            NodeHandle::Namespace { ns_name } => namespace::spawn_with_etc(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_path(ns_path, cmd),
         }
     }
@@ -936,6 +936,16 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             crate::dns::inject_hosts(&topology.lab.name, &entries)?;
             dns_injected = true;
             cleanup.set_dns_lab(topology.lab.name.clone());
+
+            // ── Step 15c: Create per-namespace /etc/netns/ files ──────
+            tracing::info!("step 15c: creating per-namespace DNS files");
+            for (node_name, node) in &topology.nodes {
+                if node.image.is_some() {
+                    continue; // containers use --add-host
+                }
+                let ns_name = &namespace_names[node_name];
+                crate::dns::create_netns_etc(ns_name, &entries)?;
+            }
         }
     }
 
@@ -1898,8 +1908,137 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
                     tracing::warn!("SKIP: no IP found for node '{to}'");
                 }
             }
+            Assertion::TcpConnect {
+                from,
+                to,
+                port,
+                timeout,
+            } => {
+                if let Some(target_ip) = ip_map.get(to) {
+                    let timeout_secs = timeout
+                        .as_deref()
+                        .and_then(|t| crate::helpers::parse_duration(t).ok())
+                        .map(|d| d.as_secs().max(1).to_string())
+                        .unwrap_or_else(|| "3".to_string());
+                    match running.exec(
+                        from,
+                        "bash",
+                        &[
+                            "-c",
+                            &format!(
+                                "timeout {timeout_secs} bash -c 'echo > /dev/tcp/{target_ip}/{port}'"
+                            ),
+                        ],
+                    ) {
+                        Ok(out) if out.exit_code == 0 => {
+                            tracing::info!("PASS: {from} tcp-connect {to}:{port}");
+                        }
+                        _ => {
+                            tracing::warn!("FAIL: {from} cannot tcp-connect {to}:{port}");
+                        }
+                    }
+                } else {
+                    tracing::warn!("SKIP: no IP found for node '{to}'");
+                }
+            }
+            Assertion::LatencyUnder {
+                from,
+                to,
+                max,
+                samples,
+            } => {
+                if let Some(target_ip) = ip_map.get(to) {
+                    let count = samples.unwrap_or(5).to_string();
+                    match running.exec(from, "ping", &["-c", &count, "-q", target_ip]) {
+                        Ok(out) if out.exit_code == 0 => {
+                            // Parse avg from "rtt min/avg/max/mdev = 0.1/0.2/0.3/0.1 ms"
+                            if let Some(avg_ms) = parse_ping_avg(&out.stdout) {
+                                let max_ms =
+                                    crate::helpers::parse_duration(max).map(|d| d.as_secs_f64() * 1000.0).unwrap_or(f64::MAX);
+                                if avg_ms <= max_ms {
+                                    tracing::info!(
+                                        "PASS: {from} -> {to} latency {avg_ms:.1}ms <= {max}"
+                                    );
+                                } else {
+                                    tracing::warn!(
+                                        "FAIL: {from} -> {to} latency {avg_ms:.1}ms > {max}"
+                                    );
+                                }
+                            } else {
+                                tracing::warn!(
+                                    "FAIL: could not parse ping output for latency check"
+                                );
+                            }
+                        }
+                        _ => {
+                            tracing::warn!("FAIL: {from} cannot reach {to} for latency check");
+                        }
+                    }
+                } else {
+                    tracing::warn!("SKIP: no IP found for node '{to}'");
+                }
+            }
+            Assertion::RouteHas {
+                node,
+                destination,
+                via,
+                dev,
+            } => match running.exec(node, "ip", &["route", "show", destination]) {
+                Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
+                    let route_line = out.stdout.trim();
+                    let via_ok = via.as_ref().is_none_or(|v| route_line.contains(&format!("via {v}")));
+                    let dev_ok = dev.as_ref().is_none_or(|d| route_line.contains(&format!("dev {d}")));
+                    if via_ok && dev_ok {
+                        tracing::info!("PASS: {node} route-has {destination}");
+                    } else {
+                        tracing::warn!(
+                            "FAIL: {node} route-has {destination}: got '{route_line}'"
+                        );
+                    }
+                }
+                _ => {
+                    tracing::warn!("FAIL: {node} has no route for {destination}");
+                }
+            },
+            Assertion::DnsResolves {
+                from,
+                name,
+                expected_ip,
+            } => match running.exec(from, "getent", &["hosts", name]) {
+                Ok(out) if out.exit_code == 0 => {
+                    if out.stdout.contains(expected_ip) {
+                        tracing::info!("PASS: {from} dns-resolves {name} -> {expected_ip}");
+                    } else {
+                        tracing::warn!(
+                            "FAIL: {from} dns-resolves {name}: expected {expected_ip}, got '{}'",
+                            out.stdout.trim()
+                        );
+                    }
+                }
+                _ => {
+                    tracing::warn!("FAIL: {from} cannot resolve {name}");
+                }
+            },
         }
     }
+}
+
+/// Parse average latency from ping -q output.
+/// Looks for "rtt min/avg/max/mdev = X/Y/Z/W ms" and returns Y.
+fn parse_ping_avg(output: &str) -> Option<f64> {
+    for line in output.lines() {
+        if line.contains("min/avg/max") {
+            // Format: "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms"
+            let parts: Vec<&str> = line.split('=').collect();
+            if parts.len() >= 2 {
+                let stats: Vec<&str> = parts[1].trim().split('/').collect();
+                if stats.len() >= 2 {
+                    return stats[1].trim().parse::<f64>().ok();
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Build container CreateOpts from a Node's fields.
@@ -2021,6 +2160,8 @@ impl Drop for Cleanup {
             let _ = crate::dns::remove_hosts(lab_name);
         }
         for ns in &self.namespaces {
+            // Clean up per-namespace DNS files
+            crate::dns::remove_netns_etc(ns);
             if namespace::exists(ns) {
                 let _ = namespace::delete(ns);
             }
@@ -2040,6 +2181,20 @@ impl Drop for Cleanup {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_ping_avg() {
+        let output = "PING 10.0.0.1 (10.0.0.1) 56(84) bytes of data.\n\
+            --- 10.0.0.1 ping statistics ---\n\
+            5 packets transmitted, 5 received, 0% packet loss, time 4006ms\n\
+            rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms\n";
+        assert_eq!(parse_ping_avg(output), Some(0.456));
+    }
+
+    #[test]
+    fn test_parse_ping_avg_no_stats() {
+        assert_eq!(parse_ping_avg("no rtt line here"), None);
+    }
 
     #[test]
     fn test_apply_match_expr_tcp_dport() {

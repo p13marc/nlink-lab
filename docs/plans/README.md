@@ -12,7 +12,8 @@ Implementation plans for nlink-lab.
 | [108](108-scenario-dsl.md) | Timed scenario / fault injection DSL | Large | **Implemented** (core) |
 | [109](109-ci-integration.md) | CI/CD integration (JUnit/TAP, `test` command) | Medium | **Implemented** |
 | [110](110-integration-tests.md) | Integration test expansion (17 → 32) | Medium | **Implemented** |
-| [111](111-benchmark-block.md) | Benchmark block (iperf3/ping with assertions) | Medium | **Implemented** (DSL) |
+| [111](111-benchmark-block.md) | Benchmark block (iperf3/ping with assertions) | Medium | **Implemented** |
+| [112](112-wifi-emulation.md) | Wi-Fi emulation via mac80211_hwsim | Large | Draft |
 
 ### Recommended execution order
 

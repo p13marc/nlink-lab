@@ -3,7 +3,7 @@
 **Date:** 2026-03-30 (updated)
 **Status:** Draft
 **Effort:** Large (1-2 weeks)
-**Depends on:** nlink `set_wiphy_netns()` (requested, see `docs/NLINK_FEATURE_REQUEST_WIPHY_NETNS.md`)
+**Depends on:** nlink 0.12.1 (delivered — `set_wiphy_netns()` available)
 
 ---
 
@@ -313,7 +313,7 @@ validate {
 | Operation | Approach | Why |
 |---|---|---|
 | Load/unload hwsim | `modprobe` / `rmmod` | Kernel module, no netlink API |
-| Move PHY to namespace | **nlink** `set_wiphy_netns()` | Requested in `NLINK_FEATURE_REQUEST_WIPHY_NETNS.md` |
+| Move PHY to namespace | **nlink** `set_wiphy_netns()` | nlink 0.12.1 |
 | List PHYs | **nlink** `get_phys()` | Structured, no parsing |
 | List interfaces | **nlink** `get_interfaces()` | Structured |
 | Check association | **nlink** `get_stations()` | Structured, signal/BSSID/rates |
@@ -332,7 +332,7 @@ namespace movement — uses nlink APIs.
 | `mac80211_hwsim` module | Yes | Mainline Linux | No (module param) |
 | `hostapd` | For AP nodes | Package: `hostapd` | No (external daemon) |
 | `wpa_supplicant` | For STA nodes | Package: `wpasupplicant` | No (external daemon) |
-| `iw` | Not needed | Package: `iw` | `set_wiphy_netns()` requested |
+| `iw` | Not needed | Package: `iw` | `set_wiphy_netns()` in nlink 0.12.1 |
 | `wmediumd` | Phase 2 | GitHub | No (external daemon) |
 | nl80211 queries | Yes | nlink 0.12.0 | **Yes — full support** |
 

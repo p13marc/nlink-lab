@@ -3,6 +3,7 @@
 **Date:** 2026-03-30
 **Requested by:** nlink-lab (Plan 112: Wi-Fi Emulation)
 **Priority:** Medium (blocks nlink-lab Wi-Fi support without `iw` dependency)
+**Status:** Delivered in nlink 0.12.1
 
 ---
 

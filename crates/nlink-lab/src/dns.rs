@@ -38,14 +38,13 @@ pub fn generate_hosts_entries(topology: &Topology) -> Vec<HostsEntry> {
     for link in &topology.links {
         if let Some(addrs) = &link.addresses {
             for (i, addr) in addrs.iter().enumerate() {
-                if let Some(ep) = EndpointRef::parse(&link.endpoints[i]) {
-                    if let Some(ip) = strip_prefix_len(addr) {
+                if let Some(ep) = EndpointRef::parse(&link.endpoints[i])
+                    && let Some(ip) = strip_prefix_len(addr) {
                         node_ips
                             .entry(ep.node)
                             .or_default()
                             .push((ip, ep.iface));
                     }
-                }
             }
         }
     }

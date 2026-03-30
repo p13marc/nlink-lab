@@ -612,6 +612,7 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         }
         Token::Validate => parse_validate(tokens, pos).map(ast::Statement::Validate),
         Token::Scenario => parse_scenario(tokens, pos).map(ast::Statement::Scenario),
+        Token::Benchmark => parse_benchmark(tokens, pos).map(ast::Statement::Benchmark),
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
@@ -2267,6 +2268,158 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
     }
 
     Ok(ast::ScenarioDef { name, steps })
+}
+
+// ─── Benchmark ───────────────────────────────────────────
+
+fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::BenchmarkDef> {
+    expect(tokens, pos, &Token::Benchmark)?;
+    let name = expect_string(tokens, pos)?;
+    expect(tokens, pos, &Token::LBrace)?;
+
+    let mut tests = Vec::new();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        match at(tokens, *pos) {
+            Some(Token::Ident(s)) if s == "iperf3" => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let to = expect_ident(tokens, pos)?;
+                let mut duration = None;
+                let mut streams = None;
+                let mut udp = false;
+                let mut assertions = Vec::new();
+
+                if eat(tokens, pos, &Token::LBrace) {
+                    loop {
+                        skip_newlines(tokens, pos);
+                        if eat(tokens, pos, &Token::RBrace) {
+                            break;
+                        }
+                        match at(tokens, *pos) {
+                            Some(Token::Ident(s)) if s == "duration" => {
+                                *pos += 1;
+                                duration = Some(expect_duration_or_value(tokens, pos)?);
+                            }
+                            Some(Token::Ident(s)) if s == "streams" => {
+                                *pos += 1;
+                                streams = Some(expect_int(tokens, pos)? as u32);
+                            }
+                            Some(Token::Ident(s)) if s == "udp" => {
+                                *pos += 1;
+                                udp = true;
+                            }
+                            Some(Token::Ident(s)) if s == "assert" => {
+                                *pos += 1;
+                                assertions.push(parse_benchmark_assertion(tokens, pos)?);
+                            }
+                            Some(other) => {
+                                return Err(err(
+                                    tokens,
+                                    *pos,
+                                    format!("unexpected {other} in iperf3 block"),
+                                ));
+                            }
+                            None => {
+                                return Err(err(
+                                    tokens,
+                                    *pos,
+                                    "unexpected end of input in iperf3 block".into(),
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                tests.push(ast::BenchmarkTestDef::Iperf3 {
+                    from,
+                    to,
+                    duration,
+                    streams,
+                    udp,
+                    assertions,
+                });
+            }
+            Some(Token::Ident(s)) if s == "ping" => {
+                *pos += 1;
+                let from = expect_ident(tokens, pos)?;
+                let to = expect_ident(tokens, pos)?;
+                let mut count = None;
+                let mut assertions = Vec::new();
+
+                if eat(tokens, pos, &Token::LBrace) {
+                    loop {
+                        skip_newlines(tokens, pos);
+                        if eat(tokens, pos, &Token::RBrace) {
+                            break;
+                        }
+                        match at(tokens, *pos) {
+                            Some(Token::Count) => {
+                                *pos += 1;
+                                count = Some(expect_int(tokens, pos)? as u32);
+                            }
+                            Some(Token::Ident(s)) if s == "assert" => {
+                                *pos += 1;
+                                assertions.push(parse_benchmark_assertion(tokens, pos)?);
+                            }
+                            Some(other) => {
+                                return Err(err(
+                                    tokens,
+                                    *pos,
+                                    format!("unexpected {other} in ping block"),
+                                ));
+                            }
+                            None => {
+                                return Err(err(
+                                    tokens,
+                                    *pos,
+                                    "unexpected end of input in ping block".into(),
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                tests.push(ast::BenchmarkTestDef::Ping {
+                    from,
+                    to,
+                    count,
+                    assertions,
+                });
+            }
+            Some(other) => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("expected benchmark test (iperf3, ping), found {other}"),
+                ));
+            }
+            None => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    "unexpected end of input in benchmark block".into(),
+                ));
+            }
+        }
+    }
+
+    Ok(ast::BenchmarkDef { name, tests })
+}
+
+/// Parse `metric op value` (e.g., `bandwidth above 900mbit`, `avg below 5ms`).
+/// Operators: `above` (>), `below` (<).
+fn parse_benchmark_assertion(
+    tokens: &[Spanned],
+    pos: &mut usize,
+) -> Result<ast::BenchmarkAssertionDef> {
+    let metric = expect_ident(tokens, pos)?;
+    let op = expect_ident(tokens, pos)?;
+    let value = parse_value(tokens, pos)?;
+    Ok(ast::BenchmarkAssertionDef { metric, op, value })
 }
 
 fn parse_param(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ParamDef> {

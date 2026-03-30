@@ -1067,6 +1067,13 @@ action         = "down" endpoint | "up" endpoint | "clear" endpoint
                | "validate" "{" assertion* "}"
                | "exec" IDENT STRING+ | "log" STRING
 
+# ── Benchmark ───────────────────────────────────
+benchmark      = "benchmark" STRING "{" bench_test* "}"
+bench_test     = ("iperf3" | "ping") IDENT IDENT bench_block?
+bench_block    = "{" bench_prop* "}"
+bench_prop     = "duration" DURATION | "streams" INT | "udp"
+               | "count" INT | "assert" IDENT ("above"|"below") value
+
 # ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR
 route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?

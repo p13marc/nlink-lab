@@ -93,6 +93,8 @@ pub enum Token {
     Validate,
     #[token("scenario")]
     Scenario,
+    #[token("benchmark")]
+    Benchmark,
     #[token("at")]
     At,
     #[token("reach")]

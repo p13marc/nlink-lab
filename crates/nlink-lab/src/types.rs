@@ -58,6 +58,60 @@ pub struct Topology {
     /// Timed test scenarios (fault injection + validation).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scenarios: Vec<Scenario>,
+
+    /// Performance benchmarks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub benchmarks: Vec<Benchmark>,
+}
+
+/// A performance benchmark definition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Benchmark {
+    /// Benchmark name.
+    pub name: String,
+    /// Individual benchmark tests.
+    pub tests: Vec<BenchmarkTest>,
+}
+
+/// A single benchmark test.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BenchmarkTest {
+    /// iperf3 throughput/jitter test.
+    Iperf3 {
+        from: String,
+        to: String,
+        duration: Option<String>,
+        streams: Option<u32>,
+        udp: bool,
+        assertions: Vec<BenchmarkAssertion>,
+    },
+    /// Ping latency/loss test.
+    Ping {
+        from: String,
+        to: String,
+        count: Option<u32>,
+        assertions: Vec<BenchmarkAssertion>,
+    },
+}
+
+/// A benchmark assertion (metric comparison).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkAssertion {
+    /// Metric name (bandwidth, jitter, avg, p99, loss).
+    pub metric: String,
+    /// Comparison operator.
+    pub op: CompareOp,
+    /// Threshold value (e.g., "900mbit", "5ms", "1%").
+    pub value: String,
+}
+
+/// Comparison operator for benchmark assertions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompareOp {
+    Gt,
+    Lt,
+    Gte,
+    Lte,
 }
 
 /// A timed test scenario with fault injection and validation steps.

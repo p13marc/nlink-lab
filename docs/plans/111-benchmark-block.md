@@ -1,7 +1,7 @@
 # Plan 111: Benchmark Block
 
 **Date:** 2026-03-30
-**Status:** Draft
+**Status:** Implemented (2026-03-30) — types, parser, lower; execution engine deferred
 **Effort:** Medium (3-5 days)
 **Depends on:** Nothing (but benefits from Plan 109 CI integration)
 

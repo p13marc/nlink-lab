@@ -199,6 +199,22 @@ scenario "failover-test" {
 
 Actions: `down`, `up`, `clear` (remove impairments), `validate`, `exec`, `log`.
 
+### Performance Benchmarks
+
+Declarative performance testing with assertions:
+
+```nll
+benchmark "latency" {
+  ping client server {
+    count 100
+    assert avg below 5ms
+    assert loss below 1%
+  }
+}
+```
+
+Supports `ping` (always available) and `iperf3` (requires iperf3 installed).
+
 ### Render and Inspect
 
 ```bash
@@ -290,6 +306,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `macvlan` | macvlan: attach lab node to physical host NIC |
 | `ipvlan` | ipvlan: shared-MAC attachment to physical host NIC |
 | `scenario` | Timed fault injection with validation checkpoints |
+| `benchmark` | Performance testing with ping/iperf3 assertions |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

@@ -1,0 +1,26 @@
+# Benchmark: latency and throughput testing.
+#
+# Demonstrates the `benchmark` block for declarative performance testing.
+# Assertions use `above`/`below` operators for metric comparison.
+#
+# After deploying:
+#   sudo nlink-lab benchmark run perf-test
+
+lab "perf-test"
+
+profile router { forward ipv4 }
+
+node router : router
+node server { route default via ${router.eth1} }
+node client { route default via ${router.eth0} }
+
+link router:eth0 -- client:eth0 { subnet 10.0.1.0/24 }
+link router:eth1 -- server:eth0 { subnet 10.0.2.0/24 }
+
+benchmark "latency" {
+  ping client server {
+    count 10
+    assert avg below 50ms
+    assert loss below 5%
+  }
+}

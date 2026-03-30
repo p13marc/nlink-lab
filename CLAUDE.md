@@ -138,7 +138,9 @@ DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
 macvlan/ipvlan (attach nodes to host physical interfaces),
 rich validation assertions (`tcp-connect`, `latency-under`, `route-has`,
 `dns-resolves`), timed scenarios for fault injection (`scenario` block
-with `at`, `down`, `up`, `clear`, `validate`), and network (bridge) blocks.
+with `at`, `down`, `up`, `clear`, `validate`), performance benchmarks
+(`benchmark` block with `ping`/`iperf3` and `assert` thresholds),
+and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.

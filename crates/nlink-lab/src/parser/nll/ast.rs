@@ -57,6 +57,41 @@ pub enum Statement {
     Let(LetDef),
     For(ForLoop),
     Scenario(ScenarioDef),
+    Benchmark(BenchmarkDef),
+}
+
+/// Benchmark definition.
+#[derive(Debug, Clone)]
+pub struct BenchmarkDef {
+    pub name: String,
+    pub tests: Vec<BenchmarkTestDef>,
+}
+
+/// Single benchmark test.
+#[derive(Debug, Clone)]
+pub enum BenchmarkTestDef {
+    Iperf3 {
+        from: String,
+        to: String,
+        duration: Option<String>,
+        streams: Option<u32>,
+        udp: bool,
+        assertions: Vec<BenchmarkAssertionDef>,
+    },
+    Ping {
+        from: String,
+        to: String,
+        count: Option<u32>,
+        assertions: Vec<BenchmarkAssertionDef>,
+    },
+}
+
+/// Benchmark assertion: `assert metric op value`.
+#[derive(Debug, Clone)]
+pub struct BenchmarkAssertionDef {
+    pub metric: String,
+    pub op: String,
+    pub value: String,
 }
 
 /// Named subnet pool: `pool fabric 10.0.0.0/16 /30`.

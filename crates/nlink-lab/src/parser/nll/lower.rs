@@ -178,6 +178,9 @@ fn lower_with_base_dir(
             ast::Statement::Scenario(s) => {
                 topology.scenarios.push(lower_scenario(s)?);
             }
+            ast::Statement::Benchmark(b) => {
+                topology.benchmarks.push(lower_benchmark(b));
+            }
             ast::Statement::Profile(_)
             | ast::Statement::Let(_)
             | ast::Statement::For(_)
@@ -921,6 +924,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) 
         ast::Statement::Pattern(p) => ast::Statement::Pattern(p.clone()),
         ast::Statement::Validate(v) => ast::Statement::Validate(v.clone()),
         ast::Statement::Scenario(s) => ast::Statement::Scenario(s.clone()),
+        ast::Statement::Benchmark(b) => ast::Statement::Benchmark(b.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
@@ -1730,6 +1734,62 @@ fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
             burst: rate.props.burst.clone(),
         },
     );
+}
+
+fn lower_benchmark(b: &ast::BenchmarkDef) -> types::Benchmark {
+    let tests = b
+        .tests
+        .iter()
+        .map(|t| match t {
+            ast::BenchmarkTestDef::Iperf3 {
+                from,
+                to,
+                duration,
+                streams,
+                udp,
+                assertions,
+            } => types::BenchmarkTest::Iperf3 {
+                from: from.clone(),
+                to: to.clone(),
+                duration: duration.clone(),
+                streams: *streams,
+                udp: *udp,
+                assertions: lower_benchmark_assertions(assertions),
+            },
+            ast::BenchmarkTestDef::Ping {
+                from,
+                to,
+                count,
+                assertions,
+            } => types::BenchmarkTest::Ping {
+                from: from.clone(),
+                to: to.clone(),
+                count: *count,
+                assertions: lower_benchmark_assertions(assertions),
+            },
+        })
+        .collect();
+
+    types::Benchmark {
+        name: b.name.clone(),
+        tests,
+    }
+}
+
+fn lower_benchmark_assertions(defs: &[ast::BenchmarkAssertionDef]) -> Vec<types::BenchmarkAssertion> {
+    defs.iter()
+        .map(|a| types::BenchmarkAssertion {
+            metric: a.metric.clone(),
+            op: match a.op.as_str() {
+                "above" | ">" => types::CompareOp::Gt,
+                "below" | "<" => types::CompareOp::Lt,
+                ">=" => types::CompareOp::Gte,
+                "<=" => types::CompareOp::Lte,
+                _ => types::CompareOp::Gt, // default
+            },
+            value: a.value.clone(),
+        })
+        .collect()
 }
 
 fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
@@ -2964,6 +3024,46 @@ node r {
         assert_eq!(iv.name, "eth0");
         assert_eq!(iv.parent, "enp3s0");
         assert_eq!(iv.mode, types::IpvlanMode::L2);
+    }
+
+    #[test]
+    fn test_lower_benchmark() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+benchmark "perf" {
+  ping a b {
+    count 10
+    assert avg below 50ms
+    assert loss below 5%
+  }
+}
+"#,
+        );
+        assert_eq!(topo.benchmarks.len(), 1);
+        let b = &topo.benchmarks[0];
+        assert_eq!(b.name, "perf");
+        assert_eq!(b.tests.len(), 1);
+        match &b.tests[0] {
+            types::BenchmarkTest::Ping {
+                from,
+                to,
+                count,
+                assertions,
+            } => {
+                assert_eq!(from, "a");
+                assert_eq!(to, "b");
+                assert_eq!(*count, Some(10));
+                assert_eq!(assertions.len(), 2);
+                assert_eq!(assertions[0].metric, "avg");
+                assert_eq!(assertions[0].op, types::CompareOp::Lt);
+                assert_eq!(assertions[0].value, "50ms");
+            }
+            _ => panic!("expected Ping"),
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@
 **Date:** 2026-03-30 (updated)
 **Status:** Draft
 **Effort:** Large (1-2 weeks)
-**Depends on:** Nothing — nlink 0.12.0 already has full nl80211 support
+**Depends on:** nlink `set_wiphy_netns()` (requested, see `docs/NLINK_FEATURE_REQUEST_WIPHY_NETNS.md`)
 
 ---
 
@@ -313,7 +313,7 @@ validate {
 | Operation | Approach | Why |
 |---|---|---|
 | Load/unload hwsim | `modprobe` / `rmmod` | Kernel module, no netlink API |
-| Move PHY to namespace | `iw phy set netns` | nlink lacks `SET_WIPHY_NETNS` (could be added) |
+| Move PHY to namespace | **nlink** `set_wiphy_netns()` | Requested in `NLINK_FEATURE_REQUEST_WIPHY_NETNS.md` |
 | List PHYs | **nlink** `get_phys()` | Structured, no parsing |
 | List interfaces | **nlink** `get_interfaces()` | Structured |
 | Check association | **nlink** `get_stations()` | Structured, signal/BSSID/rates |
@@ -322,8 +322,8 @@ validate {
 | Start wpa_supplicant | `spawn_with_etc()` | External daemon |
 | Assign IP address | **nlink** `add_address_by_name()` | Same as wired |
 
-**Only 2 shell commands** needed (modprobe and iw phy). Everything else uses
-nlink's existing APIs.
+**Only 1 shell command** needed (`modprobe`). Everything else — including PHY
+namespace movement — uses nlink APIs.
 
 ## Dependencies
 
@@ -332,7 +332,7 @@ nlink's existing APIs.
 | `mac80211_hwsim` module | Yes | Mainline Linux | No (module param) |
 | `hostapd` | For AP nodes | Package: `hostapd` | No (external daemon) |
 | `wpa_supplicant` | For STA nodes | Package: `wpasupplicant` | No (external daemon) |
-| `iw` | PHY move only | Package: `iw` | Partial (could add) |
+| `iw` | Not needed | Package: `iw` | `set_wiphy_netns()` requested |
 | `wmediumd` | Phase 2 | GitHub | No (external daemon) |
 | nl80211 queries | Yes | nlink 0.12.0 | **Yes — full support** |
 

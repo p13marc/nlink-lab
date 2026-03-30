@@ -599,3 +599,280 @@ async fn apply_impairment_change() {
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }
+
+// ═══════════════════════════════════════════════════════════
+// Plan 110: Extended integration tests
+// ═══════════════════════════════════════════════════════════
+
+// ─── Multi-hop routing ──────────────────────────────────
+
+#[lab_test(topology = multi_hop_topology)]
+async fn multi_hop_ping(lab: RunningLab) {
+    // client -> router -> server (3 hops)
+    let output = lab
+        .exec("client", "ping", &["-c1", "-W2", "10.0.2.2"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "multi-hop ping failed: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+}
+
+fn multi_hop_topology() -> nlink_lab::Topology {
+    Lab::new("multi-hop-test")
+        .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
+        .node("router", |n| n.profile("router"))
+        .node("client", |n| n.route("default", |r| r.via("10.0.1.1")))
+        .node("server", |n| n.route("default", |r| r.via("10.0.2.1")))
+        .link("router:eth0", "client:eth0", |l| {
+            l.addresses("10.0.1.1/24", "10.0.1.2/24")
+        })
+        .link("router:eth1", "server:eth0", |l| {
+            l.addresses("10.0.2.1/24", "10.0.2.2/24")
+        })
+        .build()
+}
+
+// ─── IPv6 connectivity ──────────────────────────────────
+
+#[lab_test(topology = ipv6_topology)]
+async fn ipv6_ping(lab: RunningLab) {
+    let output = lab
+        .exec("a", "ping", &["-6", "-c1", "-W2", "fd00::2"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "IPv6 ping failed: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+}
+
+fn ipv6_topology() -> nlink_lab::Topology {
+    Lab::new("ipv6-test")
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("fd00::1/64", "fd00::2/64")
+        })
+        .build()
+}
+
+// ─── DNS hosts resolution ───────────────────────────────
+
+#[lab_test(topology = dns_topology)]
+async fn dns_hosts_resolve(lab: RunningLab) {
+    let output = lab.exec("client", "getent", &["hosts", "server"]).unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "getent hosts server failed: stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+    assert!(
+        output.stdout.contains("10.0.1.2"),
+        "expected 10.0.1.2 in getent output: {}",
+        output.stdout
+    );
+}
+
+fn dns_topology() -> nlink_lab::Topology {
+    Lab::new("dns-integ-test")
+        .dns(nlink_lab::DnsMode::Hosts)
+        .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
+        .node("router", |n| n.profile("router"))
+        .node("server", |n| n.route("default", |r| r.via("10.0.1.1")))
+        .node("client", |n| n.route("default", |r| r.via("10.0.2.1")))
+        .link("router:eth0", "server:eth0", |l| {
+            l.addresses("10.0.1.1/24", "10.0.1.2/24")
+        })
+        .link("router:eth1", "client:eth0", |l| {
+            l.addresses("10.0.2.1/24", "10.0.2.2/24")
+        })
+        .build()
+}
+
+// ─── Firewall packet filtering ──────────────────────────
+
+#[tokio::test]
+async fn firewall_blocks_traffic() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_blocks_traffic: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_blocks_traffic: nftables not functional");
+        return;
+    }
+
+    let lab_name = format!("fw-block-{}", std::process::id());
+    let topo = Lab::new(&lab_name)
+        .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
+        .node("router", |n| n.profile("router"))
+        .node("server", |n| {
+            n.route("default", |r| r.via("10.0.2.1")).firewall(|f| {
+                f.policy("drop")
+                    .rule("ct state established,related", "accept")
+            })
+        })
+        .node("client", |n| n.route("default", |r| r.via("10.0.1.1")))
+        .link("router:eth0", "client:eth0", |l| {
+            l.addresses("10.0.1.1/24", "10.0.1.2/24")
+        })
+        .link("router:eth1", "server:eth0", |l| {
+            l.addresses("10.0.2.1/24", "10.0.2.2/24")
+        })
+        .build();
+
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Server has drop policy — client's ping should fail
+    let output = lab
+        .exec("client", "ping", &["-c1", "-W1", "10.0.2.2"])
+        .unwrap();
+    assert_ne!(
+        output.exit_code, 0,
+        "ping should be blocked by firewall, but succeeded"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// ─── VLAN isolation ─────────────────────────────────────
+
+#[lab_test("examples/vlan-trunk.nll")]
+async fn vlan_isolation(lab: RunningLab) {
+    if !has_bridge_vlan_filtering() {
+        eprintln!("skipping vlan_isolation: bridge VLAN filtering not functional");
+        return;
+    }
+
+    // host1 and host2 are both on VLAN 100 — should reach each other
+    let output = lab
+        .exec("host1", "ping", &["-c1", "-W1", "10.0.100.2"])
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "host1 cannot ping host2 (same VLAN 100): stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+
+    // host1 (VLAN 100) should NOT reach host3 (VLAN 200)
+    let output = lab
+        .exec("host1", "ping", &["-c1", "-W1", "10.0.200.1"])
+        .unwrap();
+    assert_ne!(
+        output.exit_code, 0,
+        "host1 can ping host3 across VLANs (should be isolated)"
+    );
+}
+
+// ─── Asymmetric impairment ──────────────────────────────
+
+#[lab_test(topology = asymmetric_topology)]
+async fn asymmetric_netem(lab: RunningLab) {
+    let output = lab
+        .exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(
+        output.stdout.contains("netem"),
+        "expected netem on a:eth0: {}",
+        output.stdout
+    );
+
+    let output = lab
+        .exec("b", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(
+        output.stdout.contains("netem"),
+        "expected netem on b:eth0: {}",
+        output.stdout
+    );
+}
+
+fn asymmetric_topology() -> nlink_lab::Topology {
+    Lab::new("asymmetric-test")
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
+        .impair("a:eth0", |i| i.delay("10ms"))
+        .impair("b:eth0", |i| i.delay("50ms"))
+        .build()
+}
+
+// ─── Runtime impairment modification ────────────────────
+
+#[lab_test(topology = runtime_impair_topology)]
+async fn runtime_set_impairment(lab: RunningLab) {
+    // Set impairment at runtime
+    lab.set_impairment(
+        "a:eth0",
+        &nlink_lab::Impairment {
+            delay: Some("20ms".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("set_impairment failed");
+
+    // Verify it's applied
+    let output = lab
+        .exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(
+        output.stdout.contains("netem"),
+        "expected netem after set_impairment: {}",
+        output.stdout
+    );
+}
+
+fn runtime_impair_topology() -> nlink_lab::Topology {
+    Lab::new("runtime-impair-test")
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.0.0.1/24", "10.0.0.2/24")
+        })
+        .build()
+}
+
+// ─── Topology patterns ──────────────────────────────────
+
+#[lab_test("examples/subnet-pools.nll")]
+async fn subnet_pool_deploy(lab: RunningLab) {
+    assert!(lab.topology().nodes.len() >= 4);
+    assert!(lab.topology().links.len() >= 4);
+}
+
+#[lab_test("examples/pattern-mesh.nll")]
+async fn pattern_mesh_deploy(lab: RunningLab) {
+    // Mesh of 4 nodes = 6 links
+    assert_eq!(lab.topology().links.len(), 6);
+}
+
+#[lab_test("examples/pattern-ring.nll")]
+async fn pattern_ring_deploy(lab: RunningLab) {
+    assert!(lab.topology().links.len() >= 4);
+}
+
+// ─── Scenario example parses ────────────────────────────
+
+#[lab_test("examples/scenario.nll")]
+async fn scenario_parses_and_deploys(lab: RunningLab) {
+    assert_eq!(lab.topology().scenarios.len(), 1);
+    assert_eq!(lab.topology().scenarios[0].name, "failover-test");
+    assert!(lab.topology().scenarios[0].steps.len() >= 4);
+}
+
+// ─── DNS example ────────────────────────────────────────
+
+#[lab_test("examples/dns.nll")]
+async fn dns_example_deploys(lab: RunningLab) {
+    assert_eq!(lab.topology().lab.dns, nlink_lab::DnsMode::Hosts);
+    assert_eq!(lab.topology().nodes.len(), 3);
+}

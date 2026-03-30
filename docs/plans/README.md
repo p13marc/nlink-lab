@@ -11,7 +11,7 @@ Implementation plans for nlink-lab.
 | [107](107-rich-assertions.md) | Rich validation assertions | Medium | **Implemented** |
 | [108](108-scenario-dsl.md) | Timed scenario / fault injection DSL | Large | **Implemented** (core) |
 | [109](109-ci-integration.md) | CI/CD integration (JUnit/TAP, `test` command) | Medium | **Implemented** |
-| [110](110-integration-tests.md) | Integration test expansion (5 → 20+) | Medium | Ready |
+| [110](110-integration-tests.md) | Integration test expansion (17 → 32) | Medium | **Implemented** |
 | [111](111-benchmark-block.md) | Benchmark block (iperf3/ping with assertions) | Medium | Draft |
 
 ### Recommended execution order

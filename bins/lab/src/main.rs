@@ -1828,20 +1828,48 @@ fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
                 nlink_lab::types::Assertion::NoReach { from, to } => {
                     out.push_str(&format!("  no-reach {from} -> {to}\n"));
                 }
-                nlink_lab::types::Assertion::TcpConnect { from, to, port, timeout } => {
-                    let t = timeout.as_deref().map(|t| format!(" timeout {t}")).unwrap_or_default();
+                nlink_lab::types::Assertion::TcpConnect {
+                    from,
+                    to,
+                    port,
+                    timeout,
+                } => {
+                    let t = timeout
+                        .as_deref()
+                        .map(|t| format!(" timeout {t}"))
+                        .unwrap_or_default();
                     out.push_str(&format!("  tcp-connect {from} -> {to}:{port}{t}\n"));
                 }
-                nlink_lab::types::Assertion::LatencyUnder { from, to, max, samples } => {
+                nlink_lab::types::Assertion::LatencyUnder {
+                    from,
+                    to,
+                    max,
+                    samples,
+                } => {
                     let s = samples.map(|s| format!(" samples {s}")).unwrap_or_default();
                     out.push_str(&format!("  latency-under {from} -> {to} < {max}{s}\n"));
                 }
-                nlink_lab::types::Assertion::RouteHas { node, destination, via, dev } => {
-                    let v = via.as_deref().map(|v| format!(" via {v}")).unwrap_or_default();
-                    let d = dev.as_deref().map(|d| format!(" dev {d}")).unwrap_or_default();
+                nlink_lab::types::Assertion::RouteHas {
+                    node,
+                    destination,
+                    via,
+                    dev,
+                } => {
+                    let v = via
+                        .as_deref()
+                        .map(|v| format!(" via {v}"))
+                        .unwrap_or_default();
+                    let d = dev
+                        .as_deref()
+                        .map(|d| format!(" dev {d}"))
+                        .unwrap_or_default();
                     out.push_str(&format!("  route-has {node} {destination}{v}{d}\n"));
                 }
-                nlink_lab::types::Assertion::DnsResolves { from, name, expected_ip } => {
+                nlink_lab::types::Assertion::DnsResolves {
+                    from,
+                    name,
+                    expected_ip,
+                } => {
                     out.push_str(&format!("  dns-resolves {from} {name} -> {expected_ip}\n"));
                 }
             }

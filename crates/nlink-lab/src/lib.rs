@@ -55,6 +55,7 @@
 //! └─────────────────────────────────┘
 //! ```
 
+pub mod benchmark;
 pub mod builder;
 pub mod container;
 pub mod deploy;
@@ -65,8 +66,8 @@ pub mod helpers;
 pub mod parser;
 pub mod render;
 pub mod running;
-pub mod state;
 pub mod scenario;
+pub mod state;
 pub mod templates;
 pub mod test_runner;
 pub mod types;

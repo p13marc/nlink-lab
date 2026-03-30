@@ -141,14 +141,23 @@ fn eval_assertion(
             if let Some(ip) = ip_map.get(to) {
                 match lab.exec(from, "ping", &["-c1", "-W2", ip]) {
                     Ok(out) if out.exit_code != 0 => (desc, true, None),
-                    Ok(_) => (desc, false, Some("host is reachable (expected unreachable)".into())),
+                    Ok(_) => (
+                        desc,
+                        false,
+                        Some("host is reachable (expected unreachable)".into()),
+                    ),
                     Err(e) => (desc, false, Some(e.to_string())),
                 }
             } else {
                 (desc, false, Some(format!("no IP found for node '{to}'")))
             }
         }
-        Assertion::TcpConnect { from, to, port, timeout } => {
+        Assertion::TcpConnect {
+            from,
+            to,
+            port,
+            timeout,
+        } => {
             let desc = format!("tcp-connect {from} {to}:{port}");
             if let Some(ip) = ip_map.get(to) {
                 let t = timeout.as_deref().unwrap_or("3s");
@@ -165,7 +174,12 @@ fn eval_assertion(
                 (desc, false, Some(format!("no IP found for node '{to}'")))
             }
         }
-        Assertion::LatencyUnder { from, to, max, samples } => {
+        Assertion::LatencyUnder {
+            from,
+            to,
+            max,
+            samples,
+        } => {
             let desc = format!("latency-under {from} {to} {max}");
             if let Some(ip) = ip_map.get(to) {
                 let count = samples.unwrap_or(5).to_string();
@@ -190,13 +204,22 @@ fn eval_assertion(
                 (desc, false, Some(format!("no IP found for node '{to}'")))
             }
         }
-        Assertion::RouteHas { node, destination, via, dev } => {
+        Assertion::RouteHas {
+            node,
+            destination,
+            via,
+            dev,
+        } => {
             let desc = format!("route-has {node} {destination}");
             match lab.exec(node, "ip", &["route", "show", destination]) {
                 Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
                     let line = out.stdout.trim().to_string();
-                    let via_ok = via.as_ref().is_none_or(|v| line.contains(&format!("via {v}")));
-                    let dev_ok = dev.as_ref().is_none_or(|d| line.contains(&format!("dev {d}")));
+                    let via_ok = via
+                        .as_ref()
+                        .is_none_or(|v| line.contains(&format!("via {v}")));
+                    let dev_ok = dev
+                        .as_ref()
+                        .is_none_or(|d| line.contains(&format!("dev {d}")));
                     if via_ok && dev_ok {
                         (desc, true, Some(line))
                     } else {
@@ -206,7 +229,11 @@ fn eval_assertion(
                 _ => (desc, false, Some("no route found".into())),
             }
         }
-        Assertion::DnsResolves { from, name, expected_ip } => {
+        Assertion::DnsResolves {
+            from,
+            name,
+            expected_ip,
+        } => {
             let desc = format!("dns-resolves {from} {name} {expected_ip}");
             match lab.exec(from, "getent", &["hosts", name]) {
                 Ok(out) if out.exit_code == 0 && out.stdout.contains(expected_ip) => {
@@ -295,13 +322,13 @@ pub fn format_tap(results: &[TestResult]) -> String {
                 "{prefix} {n} - {} ({}ms)\n",
                 a.description, a.duration_ms
             ));
-            if !a.passed {
-                if let Some(detail) = &a.detail {
-                    out.push_str("  ---\n");
-                    out.push_str(&format!("  message: \"{detail}\"\n"));
-                    out.push_str("  severity: fail\n");
-                    out.push_str("  ...\n");
-                }
+            if !a.passed
+                && let Some(detail) = &a.detail
+            {
+                out.push_str("  ---\n");
+                out.push_str(&format!("  message: \"{detail}\"\n"));
+                out.push_str("  severity: fail\n");
+                out.push_str("  ...\n");
             }
         }
     }
@@ -324,14 +351,12 @@ mod tests {
     fn test_format_junit_pass() {
         let results = vec![TestResult {
             file: "test.nll".into(),
-            assertions: vec![
-                AssertionResult {
-                    description: "reach a b".into(),
-                    passed: true,
-                    detail: None,
-                    duration_ms: 500,
-                },
-            ],
+            assertions: vec![AssertionResult {
+                description: "reach a b".into(),
+                passed: true,
+                detail: None,
+                duration_ms: 500,
+            }],
             deploy_ms: 100,
             total_ms: 700,
             passed: true,
@@ -346,14 +371,12 @@ mod tests {
     fn test_format_junit_fail() {
         let results = vec![TestResult {
             file: "test.nll".into(),
-            assertions: vec![
-                AssertionResult {
-                    description: "tcp-connect a b:80".into(),
-                    passed: false,
-                    detail: Some("connection refused".into()),
-                    duration_ms: 200,
-                },
-            ],
+            assertions: vec![AssertionResult {
+                description: "tcp-connect a b:80".into(),
+                passed: false,
+                detail: Some("connection refused".into()),
+                duration_ms: 200,
+            }],
             deploy_ms: 100,
             total_ms: 400,
             passed: false,

@@ -237,9 +237,8 @@ fn remove_section(content: &str, lab_name: &str) -> String {
 /// bind-mounted over `/etc/hosts` and `/etc/resolv.conf` inside the namespace.
 pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
     let dir = format!("/etc/netns/{ns_name}");
-    std::fs::create_dir_all(&dir).map_err(|e| {
-        Error::deploy_failed(format!("failed to create {dir}: {e}"))
-    })?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| Error::deploy_failed(format!("failed to create {dir}: {e}")))?;
 
     // Write hosts file
     let mut content = String::from("127.0.0.1\tlocalhost\n::1\t\tlocalhost\n");
@@ -251,16 +250,16 @@ pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
         }
         content.push('\n');
     }
-    std::fs::write(format!("{dir}/hosts"), &content).map_err(|e| {
-        Error::deploy_failed(format!("failed to write {dir}/hosts: {e}"))
-    })?;
+    std::fs::write(format!("{dir}/hosts"), &content)
+        .map_err(|e| Error::deploy_failed(format!("failed to write {dir}/hosts: {e}")))?;
 
     // Write resolv.conf with host's upstream DNS
     let upstream = detect_upstream_dns();
-    std::fs::write(format!("{dir}/resolv.conf"), format!("nameserver {upstream}\n"))
-        .map_err(|e| {
-            Error::deploy_failed(format!("failed to write {dir}/resolv.conf: {e}"))
-        })?;
+    std::fs::write(
+        format!("{dir}/resolv.conf"),
+        format!("nameserver {upstream}\n"),
+    )
+    .map_err(|e| Error::deploy_failed(format!("failed to write {dir}/resolv.conf: {e}")))?;
 
     Ok(())
 }
@@ -277,16 +276,16 @@ pub fn remove_netns_etc(ns_name: &str) {
 /// `/etc/resolv.conf`, skipping the stub resolver at 127.0.0.53.
 pub fn detect_upstream_dns() -> String {
     // Try systemd-resolved's actual upstream (not the stub)
-    if let Ok(content) = std::fs::read_to_string("/run/systemd/resolve/resolv.conf") {
-        if let Some(ns) = parse_nameserver(&content) {
-            return ns;
-        }
+    if let Ok(content) = std::fs::read_to_string("/run/systemd/resolve/resolv.conf")
+        && let Some(ns) = parse_nameserver(&content)
+    {
+        return ns;
     }
     // Fall back to /etc/resolv.conf
-    if let Ok(content) = std::fs::read_to_string("/etc/resolv.conf") {
-        if let Some(ns) = parse_nameserver(&content) {
-            return ns;
-        }
+    if let Ok(content) = std::fs::read_to_string("/etc/resolv.conf")
+        && let Some(ns) = parse_nameserver(&content)
+    {
+        return ns;
     }
     // Last resort
     "8.8.8.8".to_string()

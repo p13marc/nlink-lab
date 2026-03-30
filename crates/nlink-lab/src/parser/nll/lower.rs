@@ -1776,7 +1776,9 @@ fn lower_benchmark(b: &ast::BenchmarkDef) -> types::Benchmark {
     }
 }
 
-fn lower_benchmark_assertions(defs: &[ast::BenchmarkAssertionDef]) -> Vec<types::BenchmarkAssertion> {
+fn lower_benchmark_assertions(
+    defs: &[ast::BenchmarkAssertionDef],
+) -> Vec<types::BenchmarkAssertion> {
     defs.iter()
         .map(|a| types::BenchmarkAssertion {
             metric: a.metric.clone(),
@@ -1839,12 +1841,10 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                                 from: from.clone(),
                                 to: to.clone(),
                             },
-                            ast::AssertionDef::NoReach { from, to } => {
-                                types::Assertion::NoReach {
-                                    from: from.clone(),
-                                    to: to.clone(),
-                                }
-                            }
+                            ast::AssertionDef::NoReach { from, to } => types::Assertion::NoReach {
+                                from: from.clone(),
+                                to: to.clone(),
+                            },
                             ast::AssertionDef::TcpConnect {
                                 from,
                                 to,
@@ -3110,8 +3110,26 @@ scenario "test" {
         ));
     }
 
-    // Note: relative time (+5s) requires lexer changes to support "+" prefix
-    // on durations. For now, only absolute times are supported.
+    #[test]
+    fn test_lower_scenario_relative_time() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+scenario "rel" {
+  at 0s { log "start" }
+  at +5s { log "five" }
+  at +3s { log "eight" }
+}
+"#,
+        );
+        let s = &topo.scenarios[0];
+        assert_eq!(s.steps[0].time_ms, 0);
+        assert_eq!(s.steps[1].time_ms, 5000);
+        assert_eq!(s.steps[2].time_ms, 8000);
+    }
 
     #[test]
     fn test_validate_rich_assertions() {
@@ -3133,19 +3151,31 @@ validate {
 "#,
         );
         assert_eq!(topo.assertions.len(), 8);
-        assert!(matches!(&topo.assertions[0], types::Assertion::Reach { .. }));
-        assert!(
-            matches!(&topo.assertions[1], types::Assertion::TcpConnect { port: 80, timeout: None, .. })
-        );
+        assert!(matches!(
+            &topo.assertions[0],
+            types::Assertion::Reach { .. }
+        ));
+        assert!(matches!(
+            &topo.assertions[1],
+            types::Assertion::TcpConnect {
+                port: 80,
+                timeout: None,
+                ..
+            }
+        ));
         assert!(
             matches!(&topo.assertions[2], types::Assertion::TcpConnect { port: 443, timeout: Some(t), .. } if t == "5s")
         );
         assert!(
             matches!(&topo.assertions[3], types::Assertion::LatencyUnder { max, samples: None, .. } if max == "50ms")
         );
-        assert!(
-            matches!(&topo.assertions[4], types::Assertion::LatencyUnder { samples: Some(10), .. })
-        );
+        assert!(matches!(
+            &topo.assertions[4],
+            types::Assertion::LatencyUnder {
+                samples: Some(10),
+                ..
+            }
+        ));
         assert!(
             matches!(&topo.assertions[5], types::Assertion::RouteHas { node, via: Some(v), .. } if node == "a" && v == "10.0.0.1")
         );

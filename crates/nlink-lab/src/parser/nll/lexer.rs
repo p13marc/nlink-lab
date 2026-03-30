@@ -332,7 +332,7 @@ pub enum Token {
     #[regex(r"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+", |lex| lex.slice().to_string())]
     Ipv4Addr(String),
 
-    #[regex(r"[0-9]+(\.[0-9]+)?(ms|us|ns|s)", |lex| lex.slice().to_string(), priority = 3)]
+    #[regex(r"\+?[0-9]+(\.[0-9]+)?(ms|us|ns|s)", |lex| lex.slice().to_string(), priority = 3)]
     Duration(String),
 
     #[regex(r"[0-9]+(mbit|kbit|gbit|bit|mbyte|kbyte|gbyte|byte|[mgtp])", |lex| lex.slice().to_string(), priority = 3)]

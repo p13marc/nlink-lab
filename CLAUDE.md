@@ -68,6 +68,7 @@ crates/nlink-lab/src/
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
   scenario.rs       # Timed scenario execution engine (fault injection + validation)
+  benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence (~/.nlink-lab/)

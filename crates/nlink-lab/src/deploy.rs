@@ -491,9 +491,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
         for (node_name, node) in &topology.nodes {
             let node_handle = &node_handles[node_name];
-            let ns_fd = node_handle.open_ns_fd().map_err(|e| {
-                Error::deploy_failed(format!("open ns fd for '{node_name}': {e}"))
-            })?;
+            let ns_fd = node_handle
+                .open_ns_fd()
+                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             for mv in &node.macvlans {
                 use nlink::netlink::link::{MacvlanLink, MacvlanMode as NlinkMacvlanMode};
@@ -2057,8 +2057,9 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
                         Ok(out) if out.exit_code == 0 => {
                             // Parse avg from "rtt min/avg/max/mdev = 0.1/0.2/0.3/0.1 ms"
                             if let Some(avg_ms) = parse_ping_avg(&out.stdout) {
-                                let max_ms =
-                                    crate::helpers::parse_duration(max).map(|d| d.as_secs_f64() * 1000.0).unwrap_or(f64::MAX);
+                                let max_ms = crate::helpers::parse_duration(max)
+                                    .map(|d| d.as_secs_f64() * 1000.0)
+                                    .unwrap_or(f64::MAX);
                                 if avg_ms <= max_ms {
                                     tracing::info!(
                                         "PASS: {from} -> {to} latency {avg_ms:.1}ms <= {max}"
@@ -2090,14 +2091,16 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
             } => match running.exec(node, "ip", &["route", "show", destination]) {
                 Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
                     let route_line = out.stdout.trim();
-                    let via_ok = via.as_ref().is_none_or(|v| route_line.contains(&format!("via {v}")));
-                    let dev_ok = dev.as_ref().is_none_or(|d| route_line.contains(&format!("dev {d}")));
+                    let via_ok = via
+                        .as_ref()
+                        .is_none_or(|v| route_line.contains(&format!("via {v}")));
+                    let dev_ok = dev
+                        .as_ref()
+                        .is_none_or(|d| route_line.contains(&format!("dev {d}")));
                     if via_ok && dev_ok {
                         tracing::info!("PASS: {node} route-has {destination}");
                     } else {
-                        tracing::warn!(
-                            "FAIL: {node} route-has {destination}: got '{route_line}'"
-                        );
+                        tracing::warn!("FAIL: {node} route-has {destination}: got '{route_line}'");
                     }
                 }
                 _ => {

@@ -92,22 +92,46 @@ async fn execute_action(lab: &RunningLab, action: &ScenarioAction) -> ActionResu
         ScenarioAction::Down(endpoint) => {
             let desc = format!("down {endpoint}");
             match set_link_state(lab, endpoint, false).await {
-                Ok(()) => ActionResult { description: desc, ok: true, detail: None },
-                Err(e) => ActionResult { description: desc, ok: false, detail: Some(e.to_string()) },
+                Ok(()) => ActionResult {
+                    description: desc,
+                    ok: true,
+                    detail: None,
+                },
+                Err(e) => ActionResult {
+                    description: desc,
+                    ok: false,
+                    detail: Some(e.to_string()),
+                },
             }
         }
         ScenarioAction::Up(endpoint) => {
             let desc = format!("up {endpoint}");
             match set_link_state(lab, endpoint, true).await {
-                Ok(()) => ActionResult { description: desc, ok: true, detail: None },
-                Err(e) => ActionResult { description: desc, ok: false, detail: Some(e.to_string()) },
+                Ok(()) => ActionResult {
+                    description: desc,
+                    ok: true,
+                    detail: None,
+                },
+                Err(e) => ActionResult {
+                    description: desc,
+                    ok: false,
+                    detail: Some(e.to_string()),
+                },
             }
         }
         ScenarioAction::Clear(endpoint) => {
             let desc = format!("clear {endpoint}");
             match clear_impairment(lab, endpoint).await {
-                Ok(()) => ActionResult { description: desc, ok: true, detail: None },
-                Err(e) => ActionResult { description: desc, ok: false, detail: Some(e.to_string()) },
+                Ok(()) => ActionResult {
+                    description: desc,
+                    ok: true,
+                    detail: None,
+                },
+                Err(e) => ActionResult {
+                    description: desc,
+                    ok: false,
+                    detail: Some(e.to_string()),
+                },
             }
         }
         ScenarioAction::Validate(assertions) => {
@@ -120,7 +144,10 @@ async fn execute_action(lab: &RunningLab, action: &ScenarioAction) -> ActionResu
                     crate::test_runner::eval_assertion_pub(lab, assertion, &ip_map);
                 if !passed {
                     all_ok = false;
-                    details.push(format!("FAIL: {d}{}", detail.map(|d| format!(": {d}")).unwrap_or_default()));
+                    details.push(format!(
+                        "FAIL: {d}{}",
+                        detail.map(|d| format!(": {d}")).unwrap_or_default()
+                    ));
                 } else {
                     details.push(format!("PASS: {d}"));
                 }
@@ -139,23 +166,33 @@ async fn execute_action(lab: &RunningLab, action: &ScenarioAction) -> ActionResu
         ScenarioAction::Exec { node, cmd } => {
             let desc = format!("exec {node} {:?}", cmd);
             if cmd.is_empty() {
-                return ActionResult { description: desc, ok: false, detail: Some("empty command".into()) };
+                return ActionResult {
+                    description: desc,
+                    ok: false,
+                    detail: Some("empty command".into()),
+                };
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
             match lab.exec(node, &cmd[0], &args) {
-                Ok(out) if out.exit_code == 0 => {
-                    ActionResult { description: desc, ok: true, detail: None }
-                }
-                Ok(out) => {
-                    ActionResult {
-                        description: desc,
-                        ok: false,
-                        detail: Some(format!("exit code {}: {}", out.exit_code, out.stderr.trim())),
-                    }
-                }
-                Err(e) => {
-                    ActionResult { description: desc, ok: false, detail: Some(e.to_string()) }
-                }
+                Ok(out) if out.exit_code == 0 => ActionResult {
+                    description: desc,
+                    ok: true,
+                    detail: None,
+                },
+                Ok(out) => ActionResult {
+                    description: desc,
+                    ok: false,
+                    detail: Some(format!(
+                        "exit code {}: {}",
+                        out.exit_code,
+                        out.stderr.trim()
+                    )),
+                },
+                Err(e) => ActionResult {
+                    description: desc,
+                    ok: false,
+                    detail: Some(e.to_string()),
+                },
             }
         }
         ScenarioAction::Log(msg) => {
@@ -175,18 +212,16 @@ async fn set_link_state(lab: &RunningLab, endpoint: &str, up: bool) -> Result<()
         endpoint: endpoint.to_string(),
     })?;
     let ns_name = lab.namespace_for(&ep.node)?;
-    let conn: Connection<Route> =
-        nlink::netlink::namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-        })?;
+    let conn: Connection<Route> = nlink::netlink::namespace::connection_for(ns_name)
+        .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
     if up {
-        conn.set_link_up(&ep.iface).await.map_err(|e| {
-            Error::deploy_failed(format!("failed to bring up {endpoint}: {e}"))
-        })?;
+        conn.set_link_up(&ep.iface)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("failed to bring up {endpoint}: {e}")))?;
     } else {
-        conn.set_link_down(&ep.iface).await.map_err(|e| {
-            Error::deploy_failed(format!("failed to bring down {endpoint}: {e}"))
-        })?;
+        conn.set_link_down(&ep.iface)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("failed to bring down {endpoint}: {e}")))?;
     }
     Ok(())
 }
@@ -197,10 +232,8 @@ async fn clear_impairment(lab: &RunningLab, endpoint: &str) -> Result<()> {
         endpoint: endpoint.to_string(),
     })?;
     let ns_name = lab.namespace_for(&ep.node)?;
-    let conn: Connection<Route> =
-        nlink::netlink::namespace::connection_for(ns_name).map_err(|e| {
-            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-        })?;
+    let conn: Connection<Route> = nlink::netlink::namespace::connection_for(ns_name)
+        .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
     // Delete root qdisc — this removes all child qdiscs too
     let _ = conn.del_qdisc(&ep.iface, "root").await;
     Ok(())

@@ -111,8 +111,14 @@ pub struct ValidateDef {
 /// Single reachability assertion.
 #[derive(Debug, Clone)]
 pub enum AssertionDef {
-    Reach { from: String, to: String },
-    NoReach { from: String, to: String },
+    Reach {
+        from: String,
+        to: String,
+    },
+    NoReach {
+        from: String,
+        to: String,
+    },
     TcpConnect {
         from: String,
         to: String,

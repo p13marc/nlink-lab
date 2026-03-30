@@ -31,6 +31,10 @@ pub struct LabState {
     /// Container runtime binary used ("docker" or "podman").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
+
+    /// Whether DNS hosts entries were injected into /etc/hosts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dns_injected: bool,
 }
 
 /// Persisted state for a container node.
@@ -231,6 +235,7 @@ mod tests {
             wg_public_keys: HashMap::new(),
             containers: HashMap::new(),
             runtime: None,
+            dns_injected: false,
         };
 
         let topology = crate::parser::parse(

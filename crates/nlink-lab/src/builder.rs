@@ -70,6 +70,12 @@ impl Lab {
         self
     }
 
+    /// Set the DNS resolution mode.
+    pub fn dns(mut self, mode: crate::types::DnsMode) -> Self {
+        self.topology.lab.dns = mode;
+        self
+    }
+
     /// Add a reusable profile.
     pub fn profile(mut self, name: &str, f: impl FnOnce(ProfileBuilder) -> ProfileBuilder) -> Self {
         let builder = f(ProfileBuilder::new());
@@ -951,6 +957,23 @@ mod tests {
         assert_eq!(wg.listen_port, Some(51820));
         assert_eq!(wg.addresses, vec!["10.100.0.1/24"]);
         assert_eq!(wg.peers, vec!["remote"]);
+    }
+
+    #[test]
+    fn test_dns_hosts() {
+        let topo = Lab::new("dns-test")
+            .dns(crate::types::DnsMode::Hosts)
+            .node("server", |n| n)
+            .node("client", |n| n)
+            .link("server:eth0", "client:eth0", |l| {
+                l.addresses("10.0.0.1/24", "10.0.0.2/24")
+            })
+            .build();
+
+        assert_eq!(topo.lab.dns, crate::types::DnsMode::Hosts);
+
+        let entries = crate::dns::generate_hosts_entries(&topo);
+        assert_eq!(entries.len(), 2);
     }
 
     #[test]

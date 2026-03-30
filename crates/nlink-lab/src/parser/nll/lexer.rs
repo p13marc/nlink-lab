@@ -81,6 +81,8 @@ pub enum Token {
     Timeout,
     #[token("retries")]
     Retries,
+    #[token("dns")]
+    Dns,
     #[token("mgmt")]
     Mgmt,
     #[token("subnet")]

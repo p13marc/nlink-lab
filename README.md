@@ -133,6 +133,19 @@ profile monitored { sysctl "net.core.rmem_max" "16777216" }
 node core : router, monitored
 ```
 
+### DNS Resolution
+
+Auto-generate `/etc/hosts` so lab nodes can resolve each other by name:
+
+```nll
+lab "my-lab" {
+  dns hosts
+}
+```
+
+After deploy, `ping server` works from any node instead of `ping 10.0.2.2`.
+Multi-homed nodes get per-interface aliases (e.g., `router-eth0`, `router-eth1`).
+
 ### Reachability Assertions
 
 Post-deploy connectivity checks declared in the topology:
@@ -233,6 +246,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `imports/composed` | Topology composition via imports |
 | `imports/parametric-ring` | Parametric module with `param` declarations |
 | `imports/use-ring` | Parametric import with custom count |
+| `dns` | DNS resolution via `/etc/hosts` injection |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 
@@ -249,6 +263,7 @@ All examples use the `.nll` format. Use `nlink-lab init --list` to create from t
 | **Topology patterns** | `mesh`, `ring`, `star` generators with pool integration | `generate` for CLOS fabrics |
 | **Firewall** | Native nftables with `src`/`dst` matching | Depends on NOS |
 | **VRF / VXLAN / WireGuard** | First-class NLL syntax | Depends on NOS image |
+| **DNS resolution** | `dns hosts` auto-generates `/etc/hosts` | `/etc/hosts` injection on mgmt network |
 | **Cross-references** | `route via ${router.eth0}` | None |
 | **Hot-reload** | `apply` with topology diff | Redeploy required |
 | **Diagnostics** | `diagnose`, `capture`, `metrics` (Zenoh) | None built-in |

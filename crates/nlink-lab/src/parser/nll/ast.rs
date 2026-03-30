@@ -37,6 +37,7 @@ pub struct LabDecl {
     pub author: Option<String>,
     pub tags: Vec<String>,
     pub mgmt: Option<String>,
+    pub dns: Option<String>,
 }
 
 /// Top-level statement.

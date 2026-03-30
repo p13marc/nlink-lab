@@ -77,6 +77,15 @@ lab "spine-leaf" {
 }
 ```
 
+Optional lab properties:
+- `description` — human-readable description
+- `prefix` — namespace prefix (defaults to lab name)
+- `runtime` — container runtime (`"docker"` or `"podman"`)
+- `version`, `author`, `tags` — metadata
+- `mgmt` — management network subnet (auto-creates OOB bridge)
+- `dns hosts` — auto-generate `/etc/hosts` entries so nodes can resolve
+  each other by name (e.g., `ping server` instead of `ping 10.0.2.2`)
+
 ### 2. Imports
 
 Compose topologies from reusable modules. Imported files are parsed
@@ -975,6 +984,7 @@ lab_decl       = "lab" STRING ("runtime" STRING)? lab_block?
 lab_block      = "{" lab_prop* "}"
 lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
                | "version" STRING | "author" STRING | "tags" ident_list
+               | "mgmt" CIDR | "dns" ("hosts" | "off")
 
 statement      = profile | node | link | network
                | impair | rate | defaults | pool | pattern

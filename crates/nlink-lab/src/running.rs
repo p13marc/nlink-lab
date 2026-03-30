@@ -26,6 +26,8 @@ pub struct RunningLab {
     runtime_binary: Option<String>,
     /// Background process PIDs: (node_name, pid).
     pids: Vec<(String, u32)>,
+    /// Whether DNS hosts entries were injected into /etc/hosts.
+    dns_injected: bool,
 }
 
 /// Output from executing a command in a lab node.
@@ -69,6 +71,7 @@ impl RunningLab {
         containers: HashMap<String, ContainerState>,
         runtime_binary: Option<String>,
         pids: Vec<(String, u32)>,
+        dns_injected: bool,
     ) -> Self {
         Self {
             topology,
@@ -76,6 +79,7 @@ impl RunningLab {
             containers,
             runtime_binary,
             pids,
+            dns_injected,
         }
     }
 
@@ -87,6 +91,11 @@ impl RunningLab {
     /// Get the lab name.
     pub fn name(&self) -> &str {
         &self.topology.lab.name
+    }
+
+    /// Whether DNS hosts entries were injected into /etc/hosts.
+    pub fn dns_injected(&self) -> bool {
+        self.dns_injected
     }
 
     /// Get the number of nodes (namespaces + containers).
@@ -351,7 +360,14 @@ impl RunningLab {
             }
         }
 
-        // 5. Remove state file
+        // 5. Remove DNS hosts entries from /etc/hosts
+        if self.dns_injected {
+            if let Err(e) = crate::dns::remove_hosts(&self.topology.lab.name) {
+                tracing::warn!("failed to remove /etc/hosts entries: {e}");
+            }
+        }
+
+        // 6. Remove state file
         state::remove(&self.topology.lab.name)?;
 
         Ok(())
@@ -366,6 +382,7 @@ impl RunningLab {
             containers: lab_state.containers,
             runtime_binary: lab_state.runtime,
             pids: lab_state.pids,
+            dns_injected: lab_state.dns_injected,
         })
     }
 

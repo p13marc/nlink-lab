@@ -1155,6 +1155,10 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
         author: lab.author.clone(),
         tags: lab.tags.clone(),
         mgmt_subnet: lab.mgmt.clone(),
+        dns: match lab.dns.as_deref() {
+            Some("hosts") => types::DnsMode::Hosts,
+            _ => types::DnsMode::Off,
+        },
     }
 }
 
@@ -1809,6 +1813,24 @@ node r1 {
             topo.nodes["r1"].sysctls["net.ipv6.conf.all.forwarding"],
             "1"
         );
+    }
+
+    #[test]
+    fn test_lower_dns_hosts() {
+        let topo = parse_and_lower(r#"lab "t" { dns hosts }"#);
+        assert_eq!(topo.lab.dns, types::DnsMode::Hosts);
+    }
+
+    #[test]
+    fn test_lower_dns_off() {
+        let topo = parse_and_lower(r#"lab "t" { dns off }"#);
+        assert_eq!(topo.lab.dns, types::DnsMode::Off);
+    }
+
+    #[test]
+    fn test_lower_dns_default() {
+        let topo = parse_and_lower(r#"lab "t""#);
+        assert_eq!(topo.lab.dns, types::DnsMode::Off);
     }
 
     #[test]

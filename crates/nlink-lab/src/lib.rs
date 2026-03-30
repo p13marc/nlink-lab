@@ -58,6 +58,7 @@
 pub mod builder;
 pub mod container;
 pub mod deploy;
+pub mod dns;
 pub mod diff;
 pub mod error;
 pub mod helpers;
@@ -75,7 +76,7 @@ pub use diff::{TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
 pub use running::{ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab};
 pub use types::{
-    ContainerRuntime, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
+    ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,
     RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig,
 };

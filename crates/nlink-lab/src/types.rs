@@ -65,6 +65,17 @@ pub enum Assertion {
     NoReach { from: String, to: String },
 }
 
+/// DNS resolution mode for lab nodes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DnsMode {
+    /// No DNS configuration (default).
+    #[default]
+    Off,
+    /// Auto-generate /etc/hosts entries from topology.
+    Hosts,
+}
+
 /// Container runtime selection.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -108,6 +119,14 @@ pub struct LabConfig {
     /// Management network subnet (auto-creates OOB bridge connecting all nodes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mgmt_subnet: Option<String>,
+
+    /// DNS resolution mode.
+    #[serde(default, skip_serializing_if = "is_dns_off")]
+    pub dns: DnsMode,
+}
+
+fn is_dns_off(mode: &DnsMode) -> bool {
+    *mode == DnsMode::Off
 }
 
 impl LabConfig {

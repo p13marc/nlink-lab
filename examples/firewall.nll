@@ -8,6 +8,7 @@
 
 lab "firewall" {
   description "Server with stateful nftables firewall"
+  dns hosts
 }
 
 profile router { forward ipv4 }

@@ -18,7 +18,7 @@ use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_duration, parse_percent, parse_rate_bps};
 use crate::running::RunningLab;
 use crate::state::{self, ContainerState, LabState};
-use crate::types::{EndpointRef, InterfaceKind, Topology};
+use crate::types::{DnsMode, EndpointRef, InterfaceKind, Topology};
 
 /// Abstraction over bare namespace vs container node.
 enum NodeHandle {
@@ -911,6 +911,18 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
     }
 
+    // ── Step 15b: Inject DNS hosts entries ──────────────────────────
+    let mut dns_injected = false;
+    if topology.lab.dns == DnsMode::Hosts {
+        tracing::info!("step 15b: injecting /etc/hosts entries");
+        let entries = crate::dns::generate_hosts_entries(topology);
+        if !entries.is_empty() {
+            crate::dns::inject_hosts(&topology.lab.name, &entries)?;
+            dns_injected = true;
+            cleanup.set_dns_lab(topology.lab.name.clone());
+        }
+    }
+
     // ── Step 16: Spawn background processes ────────────────────────
     tracing::info!("step 16/18: spawning background processes");
     for (node_name, node) in &topology.nodes {
@@ -1023,6 +1035,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         wg_public_keys: wg_public_keys_b64,
         containers: container_states.clone(),
         runtime: container_runtime.as_ref().map(|rt| rt.binary().to_string()),
+        dns_injected,
     };
     state::save(&lab_state, topology)?;
 
@@ -1035,6 +1048,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         container_states,
         container_runtime.as_ref().map(|rt| rt.binary().to_string()),
         pids,
+        dns_injected,
     );
 
     // ── Step 19: Run validate assertions ─────────────────────────
@@ -1796,6 +1810,7 @@ pub async fn apply_diff(
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect(),
         runtime: running.runtime_binary().map(|s| s.to_string()),
+        dns_injected: running.dns_injected(),
     };
     state::save(&lab_state, desired)?;
 
@@ -1931,6 +1946,7 @@ struct Cleanup {
     namespaces: Vec<String>,
     containers: Vec<String>,
     runtime_binary: Option<String>,
+    dns_lab: Option<String>,
     armed: bool,
 }
 
@@ -1940,6 +1956,7 @@ impl Cleanup {
             namespaces: Vec::new(),
             containers: Vec::new(),
             runtime_binary: None,
+            dns_lab: None,
             armed: true,
         }
     }
@@ -1956,6 +1973,10 @@ impl Cleanup {
         self.runtime_binary = Some(binary.to_string());
     }
 
+    fn set_dns_lab(&mut self, name: String) {
+        self.dns_lab = Some(name);
+    }
+
     fn disarm(&mut self) {
         self.armed = false;
     }
@@ -1965,6 +1986,9 @@ impl Drop for Cleanup {
     fn drop(&mut self) {
         if !self.armed {
             return;
+        }
+        if let Some(lab_name) = &self.dns_lab {
+            let _ = crate::dns::remove_hosts(lab_name);
         }
         for ns in &self.namespaces {
             if namespace::exists(ns) {

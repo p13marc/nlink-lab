@@ -1,0 +1,31 @@
+# DNS resolution topology.
+#
+# Demonstrates the `dns hosts` feature: all nodes can resolve each
+# other by name via auto-generated /etc/hosts entries.
+#
+# After deploying:
+#   sudo nlink-lab exec dns server -- getent hosts client
+#   sudo nlink-lab exec dns client -- ping -c1 server
+#
+# Each node gets:
+#   - Bare hostname pointing to its first IP (e.g., "server" -> 10.0.1.1)
+#   - Interface-qualified alias (e.g., "server-eth0" -> 10.0.1.1)
+#
+# Multi-homed nodes (like the router) get an alias per interface:
+#   - "router"      -> 10.0.1.1 (first interface)
+#   - "router-eth0" -> 10.0.1.1
+#   - "router-eth1" -> 10.0.2.1
+
+lab "dns" {
+  description "DNS resolution via /etc/hosts injection"
+  dns hosts
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node server { route default via ${router.eth1} }
+node client { route default via ${router.eth0} }
+
+link router:eth0 -- client:eth0 { subnet 10.0.1.0/24 }
+link router:eth1 -- server:eth0 { subnet 10.0.2.0/24 }

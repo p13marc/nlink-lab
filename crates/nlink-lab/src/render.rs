@@ -5,7 +5,7 @@
 
 use std::fmt::Write;
 
-use crate::types::{LabConfig, Link, Node, Profile, Topology};
+use crate::types::{DnsMode, LabConfig, Link, Node, Profile, Topology};
 
 /// Render a topology as valid NLL syntax.
 pub fn render(topology: &Topology) -> String {
@@ -29,7 +29,8 @@ fn render_lab(out: &mut String, lab: &LabConfig) {
         || lab.version.is_some()
         || lab.author.is_some()
         || !lab.tags.is_empty()
-        || lab.mgmt_subnet.is_some();
+        || lab.mgmt_subnet.is_some()
+        || lab.dns != DnsMode::Off;
 
     if has_block {
         out.push_str(" {\n");
@@ -51,6 +52,13 @@ fn render_lab(out: &mut String, lab: &LabConfig) {
         }
         if let Some(mgmt) = &lab.mgmt_subnet {
             writeln!(out, "  mgmt {mgmt}").unwrap();
+        }
+        if lab.dns != DnsMode::Off {
+            let mode = match lab.dns {
+                DnsMode::Hosts => "hosts",
+                DnsMode::Off => unreachable!(),
+            };
+            writeln!(out, "  dns {mode}").unwrap();
         }
         out.push_str("}\n");
     }
@@ -353,5 +361,33 @@ node a
         assert!(rendered.contains("version \"1.0\""));
         assert!(rendered.contains("author \"Test Author\""));
         assert!(rendered.contains("tags [networking, test]"));
+    }
+
+    #[test]
+    fn test_render_dns_hosts() {
+        let input = r#"lab "mylab" {
+  dns hosts
+}
+
+node a
+"#;
+        let topo = parser::parse(input).unwrap();
+        let rendered = render(&topo);
+        assert!(rendered.contains("dns hosts"), "rendered: {rendered}");
+
+        // Roundtrip: re-parse the rendered output
+        let reparsed = parser::parse(&rendered).unwrap();
+        assert_eq!(reparsed.lab.dns, DnsMode::Hosts);
+    }
+
+    #[test]
+    fn test_render_dns_off_omitted() {
+        let input = r#"lab "simple"
+
+node a
+"#;
+        let topo = parser::parse(input).unwrap();
+        let rendered = render(&topo);
+        assert!(!rendered.contains("dns"), "dns off should not be rendered: {rendered}");
     }
 }

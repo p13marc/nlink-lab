@@ -509,6 +509,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut author = None;
     let mut tags = Vec::new();
     let mut mgmt = None;
+    let mut dns = None;
 
     // Parse optional inline runtime before block
     if eat(tokens, pos, &Token::Runtime) {
@@ -550,6 +551,10 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                     *pos += 1;
                     mgmt = Some(parse_cidr_or_name(tokens, pos)?);
                 }
+                Some(Token::Dns) => {
+                    *pos += 1;
+                    dns = Some(expect_ident(tokens, pos)?);
+                }
                 Some(other) => {
                     return Err(err(
                         tokens,
@@ -577,6 +582,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         author,
         tags,
         mgmt,
+        dns,
     })
 }
 
@@ -2186,6 +2192,18 @@ mod tests {
         assert_eq!(ast.lab.name, "test");
         assert_eq!(ast.lab.description.as_deref(), Some("A test lab"));
         assert_eq!(ast.lab.prefix.as_deref(), Some("t"));
+    }
+
+    #[test]
+    fn test_parse_lab_dns_hosts() {
+        let ast = parse_nll(r#"lab "test" { dns hosts }"#);
+        assert_eq!(ast.lab.dns.as_deref(), Some("hosts"));
+    }
+
+    #[test]
+    fn test_parse_lab_dns_off() {
+        let ast = parse_nll(r#"lab "test" { dns off }"#);
+        assert_eq!(ast.lab.dns.as_deref(), Some("off"));
     }
 
     #[test]

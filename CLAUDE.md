@@ -65,6 +65,7 @@ crates/nlink-lab/src/
   error.rs          # Error types (includes NllDiagnostic for miette)
   validator.rs      # Topology validation (20 rules)
   render.rs         # Topology → NLL serializer (for `render` command)
+  dns.rs            # DNS /etc/hosts generation, injection, removal
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence (~/.nlink-lab/)
@@ -84,7 +85,8 @@ examples/
 | Type | Description |
 |------|-------------|
 | `Topology` | Top-level container — parsed from NLL or built programmatically |
-| `LabConfig` | Lab metadata (name, description, prefix, version, author, tags) |
+| `LabConfig` | Lab metadata (name, description, prefix, version, author, tags, dns) |
+| `DnsMode` | DNS resolution mode (Off, Hosts) |
 | `Profile` | Reusable node template (sysctls, firewall) |
 | `Node` | Network namespace or container definition |
 | `Link` | Point-to-point veth connection |
@@ -128,6 +130,7 @@ matching), VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
 capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
 (`validate { reach a b }`), management network (`mgmt` in lab block),
+DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
 and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
@@ -165,6 +168,7 @@ The deployer executes these steps in order:
 13. Apply nftables rules per namespace
 14. Apply TC qdiscs/impairments per interface
 15. Apply rate limits
+15b. Inject /etc/hosts entries (if `dns hosts`)
 16. Spawn background processes
 17. Run validation (connectivity checks)
 18. Write state file

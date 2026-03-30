@@ -296,6 +296,14 @@ pub struct Node {
     /// WireGuard interfaces.
     #[serde(default)]
     pub wireguard: HashMap<String, WireguardConfig>,
+
+    /// macvlan interfaces (attach to host physical NIC).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macvlans: Vec<MacvlanConfig>,
+
+    /// ipvlan interfaces (attach to host physical NIC, shared MAC).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ipvlans: Vec<IpvlanConfig>,
 }
 
 impl Node {
@@ -533,6 +541,57 @@ pub struct WireguardConfig {
     /// Peer node names (resolved during deployment).
     #[serde(default)]
     pub peers: Vec<String>,
+}
+
+/// macvlan interface configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MacvlanConfig {
+    /// Interface name inside the namespace.
+    pub name: String,
+    /// Host parent interface (e.g., "enp3s0").
+    pub parent: String,
+    /// macvlan mode.
+    #[serde(default)]
+    pub mode: MacvlanMode,
+    /// IP addresses in CIDR notation.
+    #[serde(default)]
+    pub addresses: Vec<String>,
+}
+
+/// macvlan mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MacvlanMode {
+    #[default]
+    Bridge,
+    Private,
+    Vepa,
+    Passthru,
+}
+
+/// ipvlan interface configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpvlanConfig {
+    /// Interface name inside the namespace.
+    pub name: String,
+    /// Host parent interface (e.g., "enp3s0").
+    pub parent: String,
+    /// ipvlan mode.
+    #[serde(default)]
+    pub mode: IpvlanMode,
+    /// IP addresses in CIDR notation.
+    #[serde(default)]
+    pub addresses: Vec<String>,
+}
+
+/// ipvlan mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IpvlanMode {
+    L2,
+    #[default]
+    L3,
+    L3S,
 }
 
 // ─────────────────────────────────────────────────

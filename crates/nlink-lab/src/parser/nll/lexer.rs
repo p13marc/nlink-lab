@@ -153,6 +153,10 @@ pub enum Token {
     Vxlan,
     #[token("dummy")]
     Dummy,
+    #[token("macvlan")]
+    Macvlan,
+    #[token("ipvlan")]
+    Ipvlan,
     #[token("run")]
     Run,
     #[token("image")]

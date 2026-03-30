@@ -482,6 +482,72 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 6a: Create macvlan/ipvlan interfaces ───────────────────
+    // These are created on the host and moved into namespaces because the
+    // parent interface (e.g., enp3s0) lives on the host, not inside the NS.
+    {
+        let host_conn: Connection<Route> = Connection::<Route>::new()
+            .map_err(|e| Error::deploy_failed(format!("host connection: {e}")))?;
+
+        for (node_name, node) in &topology.nodes {
+            let node_handle = &node_handles[node_name];
+            let ns_fd = node_handle.open_ns_fd().map_err(|e| {
+                Error::deploy_failed(format!("open ns fd for '{node_name}': {e}"))
+            })?;
+
+            for mv in &node.macvlans {
+                use nlink::netlink::link::{MacvlanLink, MacvlanMode as NlinkMacvlanMode};
+                let mode = match mv.mode {
+                    crate::types::MacvlanMode::Bridge => NlinkMacvlanMode::Bridge,
+                    crate::types::MacvlanMode::Private => NlinkMacvlanMode::Private,
+                    crate::types::MacvlanMode::Vepa => NlinkMacvlanMode::Vepa,
+                    crate::types::MacvlanMode::Passthru => NlinkMacvlanMode::Passthru,
+                };
+                let macvlan = MacvlanLink::new(&mv.name, &mv.parent).mode(mode);
+                host_conn.add_link(macvlan).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to create macvlan '{}' on node '{node_name}': {e}",
+                        mv.name
+                    ))
+                })?;
+                host_conn
+                    .set_link_netns_fd(&mv.name, ns_fd.as_raw_fd())
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to move macvlan '{}' to namespace '{node_name}': {e}",
+                            mv.name
+                        ))
+                    })?;
+            }
+
+            for iv in &node.ipvlans {
+                use nlink::netlink::link::{IpvlanLink, IpvlanMode as NlinkIpvlanMode};
+                let mode = match iv.mode {
+                    crate::types::IpvlanMode::L2 => NlinkIpvlanMode::L2,
+                    crate::types::IpvlanMode::L3 => NlinkIpvlanMode::L3,
+                    crate::types::IpvlanMode::L3S => NlinkIpvlanMode::L3S,
+                };
+                let ipvlan = IpvlanLink::new(&iv.name, &iv.parent).mode(mode);
+                host_conn.add_link(ipvlan).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to create ipvlan '{}' on node '{node_name}': {e}",
+                        iv.name
+                    ))
+                })?;
+                host_conn
+                    .set_link_netns_fd(&iv.name, ns_fd.as_raw_fd())
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to move ipvlan '{}' to namespace '{node_name}': {e}",
+                            iv.name
+                        ))
+                    })?;
+            }
+        }
+    }
+
     // ── Step 6b: Create VRF interfaces ─────────────────────────────
     for (node_name, node) in &topology.nodes {
         if node.vrfs.is_empty() {
@@ -598,6 +664,44 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     .map_err(|e| {
                         Error::deploy_failed(format!(
                             "failed to add address '{ip}'/{prefix} to WireGuard '{wg_name}' on '{node_name}': {e}"
+                        ))
+                    })?;
+            }
+        }
+    }
+
+    // From macvlan/ipvlan interfaces
+    for (node_name, node) in &topology.nodes {
+        if node.macvlans.is_empty() && node.ipvlans.is_empty() {
+            continue;
+        }
+        let node_handle = &node_handles[node_name];
+        let conn: Connection<Route> = node_handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
+
+        for mv in &node.macvlans {
+            for addr_str in &mv.addresses {
+                let (ip, prefix) = parse_cidr(addr_str)?;
+                conn.add_address_by_name(&mv.name, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{ip}'/{prefix} to macvlan '{}' on '{node_name}': {e}",
+                            mv.name
+                        ))
+                    })?;
+            }
+        }
+        for iv in &node.ipvlans {
+            for addr_str in &iv.addresses {
+                let (ip, prefix) = parse_cidr(addr_str)?;
+                conn.add_address_by_name(&iv.name, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{ip}'/{prefix} to ipvlan '{}' on '{node_name}': {e}",
+                            iv.name
                         ))
                     })?;
             }

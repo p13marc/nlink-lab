@@ -197,7 +197,27 @@ pub enum NodeProp {
     Wireguard(WireguardDef),
     Vxlan(VxlanDef),
     Dummy(DummyDef),
+    Macvlan(MacvlanDef),
+    Ipvlan(IpvlanDef),
     Run(RunDef),
+}
+
+/// macvlan interface definition.
+#[derive(Debug, Clone)]
+pub struct MacvlanDef {
+    pub name: String,
+    pub parent: String,
+    pub mode: Option<String>,
+    pub addresses: Vec<String>,
+}
+
+/// ipvlan interface definition.
+#[derive(Debug, Clone)]
+pub struct IpvlanDef {
+    pub name: String,
+    pub parent: String,
+    pub mode: Option<String>,
+    pub addresses: Vec<String>,
 }
 
 /// Route definition.

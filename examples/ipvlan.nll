@@ -1,0 +1,22 @@
+# ipvlan: attach lab nodes to a physical host interface with shared MAC.
+#
+# Unlike macvlan, ipvlan shares the parent's MAC address. L3 mode routes
+# between containers and the parent based on IP addresses.
+#
+# Edit "enp3s0" to match your host's physical interface.
+#
+# Demonstrates: ipvlan with L3 mode.
+
+lab "ipvlan-demo"
+
+node router {
+  forward ipv4
+  ipvlan eth0 parent "enp3s0" mode l3 {
+    192.168.1.101/24
+  }
+  route default via 192.168.1.1
+}
+
+node host { route default via 10.0.0.1 }
+
+link router:veth0 -- host:eth0 { subnet 10.0.0.0/24 }

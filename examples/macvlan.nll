@@ -1,0 +1,26 @@
+# macvlan: attach lab nodes to a physical host interface.
+#
+# Each macvlan interface gets its own MAC address and appears as a
+# separate device on the physical LAN. The gateway node can reach
+# external services while the internal node uses the gateway as a router.
+#
+# Edit "enp3s0" to match your host's physical interface.
+#
+# Demonstrates: macvlan with mode, addresses, and internal routing.
+
+lab "macvlan-demo"
+
+profile router { forward ipv4 }
+
+node gateway : router {
+  macvlan eth0 parent "enp3s0" mode bridge {
+    192.168.1.100/24
+  }
+  route default via 192.168.1.1
+}
+
+node internal {
+  route default via 10.0.0.1
+}
+
+link gateway:veth0 -- internal:eth0 { subnet 10.0.0.0/24 }

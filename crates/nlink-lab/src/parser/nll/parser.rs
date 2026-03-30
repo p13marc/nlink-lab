@@ -928,6 +928,14 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
             *pos += 1;
             parse_dummy_def(tokens, pos).map(ast::NodeProp::Dummy)
         }
+        Some(Token::Macvlan) => {
+            *pos += 1;
+            parse_macvlan_def(tokens, pos).map(ast::NodeProp::Macvlan)
+        }
+        Some(Token::Ipvlan) => {
+            *pos += 1;
+            parse_ipvlan_def(tokens, pos).map(ast::NodeProp::Ipvlan)
+        }
         Some(Token::Run) => {
             *pos += 1;
             parse_run_def(tokens, pos).map(ast::NodeProp::Run)
@@ -936,7 +944,7 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
             tokens,
             *pos,
             format!(
-                "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, run), found {other}"
+                "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, macvlan, ipvlan, run), found {other}"
             ),
         )),
         None => Err(err(
@@ -1459,6 +1467,127 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
     }
 
     Ok(ast::DummyDef { name, addresses })
+}
+
+// ─── Macvlan ─────────────────────────────────────────────
+
+// macvlan IDENT parent STRING (mode IDENT)? block?
+fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::MacvlanDef> {
+    let name = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::Parent)?;
+    let parent = parse_value(tokens, pos)?;
+    let mut mode = None;
+    let mut addresses = Vec::new();
+
+    // Inline mode before block
+    if matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == "mode") {
+        *pos += 1;
+        mode = Some(expect_ident(tokens, pos)?);
+    }
+
+    if eat(tokens, pos, &Token::LBrace) {
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
+            }
+            match at(tokens, *pos) {
+                Some(Token::Ident(s)) if s == "mode" => {
+                    *pos += 1;
+                    mode = Some(expect_ident(tokens, pos)?);
+                }
+                Some(Token::Address) => {
+                    *pos += 1;
+                    addresses.push(parse_cidr_or_name(tokens, pos)?);
+                }
+                Some(Token::Cidr(c)) => {
+                    addresses.push(c.clone());
+                    *pos += 1;
+                }
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in macvlan block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in macvlan block".into(),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(ast::MacvlanDef {
+        name,
+        parent,
+        mode,
+        addresses,
+    })
+}
+
+// ─── Ipvlan ──────────────────────────────────────────────
+
+// ipvlan IDENT parent STRING (mode IDENT)? block?
+fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDef> {
+    let name = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::Parent)?;
+    let parent = parse_value(tokens, pos)?;
+    let mut mode = None;
+    let mut addresses = Vec::new();
+
+    if matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == "mode") {
+        *pos += 1;
+        mode = Some(expect_ident(tokens, pos)?);
+    }
+
+    if eat(tokens, pos, &Token::LBrace) {
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
+            }
+            match at(tokens, *pos) {
+                Some(Token::Ident(s)) if s == "mode" => {
+                    *pos += 1;
+                    mode = Some(expect_ident(tokens, pos)?);
+                }
+                Some(Token::Address) => {
+                    *pos += 1;
+                    addresses.push(parse_cidr_or_name(tokens, pos)?);
+                }
+                Some(Token::Cidr(c)) => {
+                    addresses.push(c.clone());
+                    *pos += 1;
+                }
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in ipvlan block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in ipvlan block".into(),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(ast::IpvlanDef {
+        name,
+        parent,
+        mode,
+        addresses,
+    })
 }
 
 // ─── Run ──────────────────────────────────────────────────
@@ -2665,6 +2794,51 @@ node gw {
                     assert_eq!(wg.peers, vec!["gw-b"]);
                 }
                 _ => panic!("expected Wireguard"),
+            },
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_macvlan() {
+        let ast = parse_nll(
+            r#"lab "t"
+node gw {
+  macvlan eth0 parent "enp3s0" mode bridge {
+    192.168.1.100/24
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => match &n.props[0] {
+                ast::NodeProp::Macvlan(m) => {
+                    assert_eq!(m.name, "eth0");
+                    assert_eq!(m.parent, "enp3s0");
+                    assert_eq!(m.mode.as_deref(), Some("bridge"));
+                    assert_eq!(m.addresses, vec!["192.168.1.100/24"]);
+                }
+                _ => panic!("expected Macvlan"),
+            },
+            _ => panic!("expected Node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_ipvlan() {
+        let ast = parse_nll(
+            r#"lab "t"
+node router {
+  ipvlan eth0 parent "enp3s0" mode l3
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Node(n) => match &n.props[0] {
+                ast::NodeProp::Ipvlan(iv) => {
+                    assert_eq!(iv.name, "eth0");
+                    assert_eq!(iv.parent, "enp3s0");
+                    assert_eq!(iv.mode.as_deref(), Some("l3"));
+                }
+                _ => panic!("expected Ipvlan"),
             },
             _ => panic!("expected Node"),
         }

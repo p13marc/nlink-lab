@@ -99,6 +99,8 @@ examples/
 | `VrfConfig` | VRF routing table configuration |
 | `WireguardConfig` | WireGuard tunnel configuration |
 | `RouteConfig` | Route entry (via, dev, metric) |
+| `MacvlanConfig` | macvlan interface (name, parent, mode, addresses) |
+| `IpvlanConfig` | ipvlan interface (name, parent, mode, addresses) |
 | `ContainerRuntime` | Docker/Podman selection (auto, docker, podman) |
 
 ## NLL Topology Format
@@ -131,7 +133,9 @@ capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
 (`validate { reach a b }`), management network (`mgmt` in lab block),
 DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
-and network (bridge) blocks.
+macvlan/ipvlan (attach nodes to host physical interfaces),
+rich validation assertions (`tcp-connect`, `latency-under`, `route-has`,
+`dns-resolves`), and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.

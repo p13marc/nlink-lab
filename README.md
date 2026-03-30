@@ -146,14 +146,32 @@ lab "my-lab" {
 After deploy, `ping server` works from any node instead of `ping 10.0.2.2`.
 Multi-homed nodes get per-interface aliases (e.g., `router-eth0`, `router-eth1`).
 
-### Reachability Assertions
+### macvlan / ipvlan
 
-Post-deploy connectivity checks declared in the topology:
+Attach lab nodes directly to host physical interfaces:
+
+```nll
+node gateway {
+  macvlan eth0 parent "enp3s0" mode bridge { 192.168.1.100/24 }
+  route default via 192.168.1.1
+}
+```
+
+Supports macvlan modes (`bridge`, `private`, `vepa`, `passthru`) and ipvlan
+modes (`l2`, `l3`, `l3s`).
+
+### Validation Assertions
+
+Post-deploy connectivity and network state checks:
 
 ```nll
 validate {
-    reach host1 host2        # host1 can ping host2
-    no-reach host1 host3     # firewall blocks this path
+    reach host1 host2              # ICMP ping
+    no-reach host1 host3           # firewall blocks this path
+    tcp-connect client server 80   # TCP port reachable
+    latency-under client server 50ms samples 10
+    route-has router default via 10.0.0.1
+    dns-resolves client "server" "10.0.2.2"
 }
 ```
 
@@ -247,6 +265,8 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `imports/parametric-ring` | Parametric module with `param` declarations |
 | `imports/use-ring` | Parametric import with custom count |
 | `dns` | DNS resolution via `/etc/hosts` injection |
+| `macvlan` | macvlan: attach lab node to physical host NIC |
+| `ipvlan` | ipvlan: shared-MAC attachment to physical host NIC |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

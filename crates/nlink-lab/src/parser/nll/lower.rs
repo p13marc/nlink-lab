@@ -980,6 +980,18 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
             name: i(&d.name, vars),
             addresses: d.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
+        ast::NodeProp::Macvlan(m) => ast::NodeProp::Macvlan(ast::MacvlanDef {
+            name: i(&m.name, vars),
+            parent: i(&m.parent, vars),
+            mode: m.mode.as_ref().map(|s| i(s, vars)),
+            addresses: m.addresses.iter().map(|s| i(s, vars)).collect(),
+        }),
+        ast::NodeProp::Ipvlan(iv) => ast::NodeProp::Ipvlan(ast::IpvlanDef {
+            name: i(&iv.name, vars),
+            parent: i(&iv.parent, vars),
+            mode: iv.mode.as_ref().map(|s| i(s, vars)),
+            addresses: iv.addresses.iter().map(|s| i(s, vars)).collect(),
+        }),
         ast::NodeProp::Run(r) => ast::NodeProp::Run(r.clone()),
     }
 }
@@ -1372,6 +1384,31 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                         ..Default::default()
                     },
                 );
+            }
+            ast::NodeProp::Macvlan(m) => {
+                node.macvlans.push(types::MacvlanConfig {
+                    name: m.name.clone(),
+                    parent: m.parent.clone(),
+                    mode: match m.mode.as_deref() {
+                        Some("private") => types::MacvlanMode::Private,
+                        Some("vepa") => types::MacvlanMode::Vepa,
+                        Some("passthru") => types::MacvlanMode::Passthru,
+                        _ => types::MacvlanMode::Bridge,
+                    },
+                    addresses: m.addresses.clone(),
+                });
+            }
+            ast::NodeProp::Ipvlan(iv) => {
+                node.ipvlans.push(types::IpvlanConfig {
+                    name: iv.name.clone(),
+                    parent: iv.parent.clone(),
+                    mode: match iv.mode.as_deref() {
+                        Some("l2") => types::IpvlanMode::L2,
+                        Some("l3s") => types::IpvlanMode::L3S,
+                        _ => types::IpvlanMode::L3,
+                    },
+                    addresses: iv.addresses.clone(),
+                });
             }
             ast::NodeProp::Run(r) => {
                 node.exec.push(types::ExecConfig {
@@ -2776,6 +2813,39 @@ validate {
         assert!(
             matches!(&topo.assertions[1], types::Assertion::NoReach { from, to } if from == "b" && to == "a")
         );
+    }
+
+    #[test]
+    fn test_lower_macvlan() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node gw {
+  macvlan eth0 parent "enp3s0" mode private {
+    192.168.1.100/24
+  }
+}"#,
+        );
+        assert_eq!(topo.nodes["gw"].macvlans.len(), 1);
+        let mv = &topo.nodes["gw"].macvlans[0];
+        assert_eq!(mv.name, "eth0");
+        assert_eq!(mv.parent, "enp3s0");
+        assert_eq!(mv.mode, types::MacvlanMode::Private);
+        assert_eq!(mv.addresses, vec!["192.168.1.100/24"]);
+    }
+
+    #[test]
+    fn test_lower_ipvlan() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node r {
+  ipvlan eth0 parent "enp3s0" mode l2
+}"#,
+        );
+        assert_eq!(topo.nodes["r"].ipvlans.len(), 1);
+        let iv = &topo.nodes["r"].ipvlans[0];
+        assert_eq!(iv.name, "eth0");
+        assert_eq!(iv.parent, "enp3s0");
+        assert_eq!(iv.mode, types::IpvlanMode::L2);
     }
 
     #[test]

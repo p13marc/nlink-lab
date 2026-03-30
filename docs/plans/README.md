@@ -6,11 +6,11 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Effort | Status |
 |------|-------------|--------|--------|
-| [105](105-dns-phase2.md) | DNS Phase 2 — per-namespace isolation | Small | Ready |
-| [106](106-macvlan-ipvlan.md) | macvlan and ipvlan interface support | Medium | Ready |
-| [107](107-rich-assertions.md) | Rich validation assertions | Medium | Ready |
+| [105](105-dns-phase2.md) | DNS Phase 2 — per-namespace isolation | Small | **Implemented** |
+| [106](106-macvlan-ipvlan.md) | macvlan and ipvlan interface support | Medium | **Implemented** |
+| [107](107-rich-assertions.md) | Rich validation assertions | Medium | **Implemented** |
 | [108](108-scenario-dsl.md) | Timed scenario / fault injection DSL | Large | Draft |
-| [109](109-ci-integration.md) | CI/CD integration (JUnit/TAP, `test` command) | Medium | Ready |
+| [109](109-ci-integration.md) | CI/CD integration (JUnit/TAP, `test` command) | Medium | **Implemented** |
 | [110](110-integration-tests.md) | Integration test expansion (5 → 20+) | Medium | Ready |
 | [111](111-benchmark-block.md) | Benchmark block (iperf3/ping with assertions) | Medium | Draft |
 

@@ -58,8 +58,8 @@
 pub mod builder;
 pub mod container;
 pub mod deploy;
-pub mod dns;
 pub mod diff;
+pub mod dns;
 pub mod error;
 pub mod helpers;
 pub mod parser;

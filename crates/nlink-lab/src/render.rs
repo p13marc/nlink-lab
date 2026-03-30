@@ -388,6 +388,9 @@ node a
 "#;
         let topo = parser::parse(input).unwrap();
         let rendered = render(&topo);
-        assert!(!rendered.contains("dns"), "dns off should not be rendered: {rendered}");
+        assert!(
+            !rendered.contains("dns"),
+            "dns off should not be rendered: {rendered}"
+        );
     }
 }

@@ -362,9 +362,10 @@ impl RunningLab {
 
         // 5. Remove DNS hosts entries from /etc/hosts
         if self.dns_injected
-            && let Err(e) = crate::dns::remove_hosts(&self.topology.lab.name) {
-                tracing::warn!("failed to remove /etc/hosts entries: {e}");
-            }
+            && let Err(e) = crate::dns::remove_hosts(&self.topology.lab.name)
+        {
+            tracing::warn!("failed to remove /etc/hosts entries: {e}");
+        }
 
         // 6. Remove state file
         state::remove(&self.topology.lab.name)?;

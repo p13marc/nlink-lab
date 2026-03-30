@@ -39,12 +39,10 @@ pub fn generate_hosts_entries(topology: &Topology) -> Vec<HostsEntry> {
         if let Some(addrs) = &link.addresses {
             for (i, addr) in addrs.iter().enumerate() {
                 if let Some(ep) = EndpointRef::parse(&link.endpoints[i])
-                    && let Some(ip) = strip_prefix_len(addr) {
-                        node_ips
-                            .entry(ep.node)
-                            .or_default()
-                            .push((ip, ep.iface));
-                    }
+                    && let Some(ip) = strip_prefix_len(addr)
+                {
+                    node_ips.entry(ep.node).or_default().push((ip, ep.iface));
+                }
             }
         }
     }
@@ -95,11 +93,7 @@ pub fn inject_hosts(lab_name: &str, entries: &[HostsEntry]) -> Result<()> {
 }
 
 /// Inject hosts entries into a specific file (for testing).
-pub(crate) fn inject_hosts_to(
-    path: &str,
-    lab_name: &str,
-    entries: &[HostsEntry],
-) -> Result<()> {
+pub(crate) fn inject_hosts_to(path: &str, lab_name: &str, entries: &[HostsEntry]) -> Result<()> {
     if entries.is_empty() {
         return Ok(());
     }
@@ -132,12 +126,10 @@ pub(crate) fn inject_hosts_to(
 
     // Atomic write: temp file + rename
     let tmp = format!("{path}.nlink-tmp");
-    std::fs::write(&tmp, &result).map_err(|e| {
-        Error::deploy_failed(format!("failed to write {tmp}: {e}"))
-    })?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}"))
-    })?;
+    std::fs::write(&tmp, &result)
+        .map_err(|e| Error::deploy_failed(format!("failed to write {tmp}: {e}")))?;
+    std::fs::rename(&tmp, path)
+        .map_err(|e| Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}")))?;
 
     Ok(())
 }
@@ -152,11 +144,7 @@ pub(crate) fn remove_hosts_from(path: &str, lab_name: &str) -> Result<()> {
     let existing = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => {
-            return Err(Error::deploy_failed(format!(
-                "failed to read {path}: {e}"
-            )))
-        }
+        Err(e) => return Err(Error::deploy_failed(format!("failed to read {path}: {e}"))),
     };
 
     let cleaned = remove_section(&existing, lab_name);
@@ -165,12 +153,10 @@ pub(crate) fn remove_hosts_from(path: &str, lab_name: &str) -> Result<()> {
     }
 
     let tmp = format!("{path}.nlink-tmp");
-    std::fs::write(&tmp, &cleaned).map_err(|e| {
-        Error::deploy_failed(format!("failed to write {tmp}: {e}"))
-    })?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}"))
-    })?;
+    std::fs::write(&tmp, &cleaned)
+        .map_err(|e| Error::deploy_failed(format!("failed to write {tmp}: {e}")))?;
+    std::fs::rename(&tmp, path)
+        .map_err(|e| Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}")))?;
 
     Ok(())
 }
@@ -185,11 +171,7 @@ pub(crate) fn remove_all_hosts_from(path: &str) -> Result<()> {
     let existing = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => {
-            return Err(Error::deploy_failed(format!(
-                "failed to read {path}: {e}"
-            )))
-        }
+        Err(e) => return Err(Error::deploy_failed(format!("failed to read {path}: {e}"))),
     };
 
     let mut result = String::new();
@@ -215,12 +197,10 @@ pub(crate) fn remove_all_hosts_from(path: &str) -> Result<()> {
     }
 
     let tmp = format!("{path}.nlink-tmp");
-    std::fs::write(&tmp, &result).map_err(|e| {
-        Error::deploy_failed(format!("failed to write {tmp}: {e}"))
-    })?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}"))
-    })?;
+    std::fs::write(&tmp, &result)
+        .map_err(|e| Error::deploy_failed(format!("failed to write {tmp}: {e}")))?;
+    std::fs::rename(&tmp, path)
+        .map_err(|e| Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}")))?;
 
     Ok(())
 }
@@ -477,7 +457,10 @@ link a:eth0 -- b:eth0 { fd00::1/64 -- fd00::2/64 }
         inject_hosts_to(path.to_str().unwrap(), "mylab", &[]).unwrap();
 
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(!content.contains("NLINK-LAB"), "no section should be written for empty entries");
+        assert!(
+            !content.contains("NLINK-LAB"),
+            "no section should be written for empty entries"
+        );
     }
 
     #[test]

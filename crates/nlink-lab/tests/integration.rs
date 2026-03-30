@@ -638,12 +638,9 @@ fn multi_hop_topology() -> nlink_lab::Topology {
 
 #[lab_test(topology = ipv6_topology)]
 async fn ipv6_ping(lab: RunningLab) {
-    // Disable DAD (Duplicate Address Detection) to avoid the ~1s delay
-    // before IPv6 addresses become usable.
-    let _ = lab.exec("a", "sysctl", &["-w", "net.ipv6.conf.eth0.accept_dad=0"]);
-    let _ = lab.exec("b", "sysctl", &["-w", "net.ipv6.conf.eth0.accept_dad=0"]);
-    // Brief pause for address to become preferred
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // IPv6 DAD (Duplicate Address Detection) keeps addresses in "tentative"
+    // state for ~1s after assignment. Wait for DAD to complete before pinging.
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     let output = lab
         .exec("a", "ping", &["-6", "-c1", "-W3", "fd00::2"])

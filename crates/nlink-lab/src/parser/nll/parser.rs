@@ -611,6 +611,7 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
             parse_pattern(tokens, pos).map(ast::Statement::Pattern)
         }
         Token::Validate => parse_validate(tokens, pos).map(ast::Statement::Validate),
+        Token::Scenario => parse_scenario(tokens, pos).map(ast::Statement::Scenario),
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
@@ -618,7 +619,7 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
             tokens,
             *pos,
             format!(
-                "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, param, let, for), found {other}"
+                "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, scenario, param, let, for), found {other}"
             ),
         )),
     }
@@ -2069,6 +2070,12 @@ fn parse_pool(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PoolDef> {
 
 fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDef> {
     expect(tokens, pos, &Token::Validate)?;
+    let assertions = parse_assertion_block(tokens, pos)?;
+    Ok(ast::ValidateDef { assertions })
+}
+
+/// Parse `{ assertion* }` block — shared between validate and scenario validate actions.
+fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::AssertionDef>> {
     expect(tokens, pos, &Token::LBrace)?;
     let mut assertions = Vec::new();
     loop {
@@ -2176,7 +2183,90 @@ fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDe
             }
         }
     }
-    Ok(ast::ValidateDef { assertions })
+    Ok(assertions)
+}
+
+// ─── Scenario ────────────────────────────────────────────
+
+fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDef> {
+    expect(tokens, pos, &Token::Scenario)?;
+    let name = expect_string(tokens, pos)?;
+    expect(tokens, pos, &Token::LBrace)?;
+
+    let mut steps = Vec::new();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        expect(tokens, pos, &Token::At)?;
+        let time = expect_duration_or_value(tokens, pos)?;
+        expect(tokens, pos, &Token::LBrace)?;
+
+        let mut actions = Vec::new();
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
+            }
+            match at(tokens, *pos) {
+                Some(Token::Ident(s)) if s == "down" => {
+                    *pos += 1;
+                    let (node, iface) = parse_endpoint(tokens, pos)?;
+                    actions.push(ast::ScenarioActionDef::Down(format!("{node}:{iface}")));
+                }
+                Some(Token::Ident(s)) if s == "up" => {
+                    *pos += 1;
+                    let (node, iface) = parse_endpoint(tokens, pos)?;
+                    actions.push(ast::ScenarioActionDef::Up(format!("{node}:{iface}")));
+                }
+                Some(Token::Ident(s)) if s == "clear" => {
+                    *pos += 1;
+                    let (node, iface) = parse_endpoint(tokens, pos)?;
+                    actions.push(ast::ScenarioActionDef::Clear(format!("{node}:{iface}")));
+                }
+                Some(Token::Validate) => {
+                    *pos += 1;
+                    let assertions = parse_assertion_block(tokens, pos)?;
+                    actions.push(ast::ScenarioActionDef::Validate(assertions));
+                }
+                Some(Token::Exec) => {
+                    *pos += 1;
+                    let node = expect_ident(tokens, pos)?;
+                    let mut cmd = Vec::new();
+                    while matches!(at(tokens, *pos), Some(Token::String(_))) {
+                        cmd.push(expect_string(tokens, pos)?);
+                    }
+                    actions.push(ast::ScenarioActionDef::Exec { node, cmd });
+                }
+                Some(Token::Ident(s)) if s == "log" => {
+                    *pos += 1;
+                    let msg = expect_string(tokens, pos)?;
+                    actions.push(ast::ScenarioActionDef::Log(msg));
+                }
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!(
+                            "expected scenario action (down, up, clear, validate, exec, log), found {other}"
+                        ),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in scenario step".into(),
+                    ));
+                }
+            }
+        }
+
+        steps.push(ast::ScenarioStepDef { time, actions });
+    }
+
+    Ok(ast::ScenarioDef { name, steps })
 }
 
 fn parse_param(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ParamDef> {

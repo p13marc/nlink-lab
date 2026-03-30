@@ -175,6 +175,9 @@ fn lower_with_base_dir(
                     }
                 }
             }
+            ast::Statement::Scenario(s) => {
+                topology.scenarios.push(lower_scenario(s)?);
+            }
             ast::Statement::Profile(_)
             | ast::Statement::Let(_)
             | ast::Statement::For(_)
@@ -917,6 +920,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) 
         ast::Statement::Pool(p) => ast::Statement::Pool(p.clone()),
         ast::Statement::Pattern(p) => ast::Statement::Pattern(p.clone()),
         ast::Statement::Validate(v) => ast::Statement::Validate(v.clone()),
+        ast::Statement::Scenario(s) => ast::Statement::Scenario(s.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
@@ -1726,6 +1730,120 @@ fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
             burst: rate.props.burst.clone(),
         },
     );
+}
+
+fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
+    let mut steps = Vec::new();
+    let mut cumulative_ms: u64 = 0;
+
+    for step in &s.steps {
+        let time_str = step.time.trim();
+        let (is_relative, dur_str) = if let Some(stripped) = time_str.strip_prefix('+') {
+            (true, stripped)
+        } else {
+            (false, time_str)
+        };
+
+        let dur = crate::helpers::parse_duration(dur_str).map_err(|_| {
+            crate::error::Error::invalid_topology(format!(
+                "invalid duration '{}' in scenario '{}'",
+                step.time, s.name
+            ))
+        })?;
+        let ms = dur.as_millis() as u64;
+
+        let time_ms = if is_relative {
+            cumulative_ms += ms;
+            cumulative_ms
+        } else {
+            cumulative_ms = ms;
+            ms
+        };
+
+        let mut actions = Vec::new();
+        for action in &step.actions {
+            actions.push(match action {
+                ast::ScenarioActionDef::Down(ep) => types::ScenarioAction::Down(ep.clone()),
+                ast::ScenarioActionDef::Up(ep) => types::ScenarioAction::Up(ep.clone()),
+                ast::ScenarioActionDef::Clear(ep) => types::ScenarioAction::Clear(ep.clone()),
+                ast::ScenarioActionDef::Log(msg) => types::ScenarioAction::Log(msg.clone()),
+                ast::ScenarioActionDef::Exec { node, cmd } => types::ScenarioAction::Exec {
+                    node: node.clone(),
+                    cmd: cmd.clone(),
+                },
+                ast::ScenarioActionDef::Validate(assertions) => {
+                    let mut typed = Vec::new();
+                    for a in assertions {
+                        typed.push(match a {
+                            ast::AssertionDef::Reach { from, to } => types::Assertion::Reach {
+                                from: from.clone(),
+                                to: to.clone(),
+                            },
+                            ast::AssertionDef::NoReach { from, to } => {
+                                types::Assertion::NoReach {
+                                    from: from.clone(),
+                                    to: to.clone(),
+                                }
+                            }
+                            ast::AssertionDef::TcpConnect {
+                                from,
+                                to,
+                                port,
+                                timeout,
+                            } => types::Assertion::TcpConnect {
+                                from: from.clone(),
+                                to: to.clone(),
+                                port: *port,
+                                timeout: timeout.clone(),
+                            },
+                            ast::AssertionDef::LatencyUnder {
+                                from,
+                                to,
+                                max,
+                                samples,
+                            } => types::Assertion::LatencyUnder {
+                                from: from.clone(),
+                                to: to.clone(),
+                                max: max.clone(),
+                                samples: *samples,
+                            },
+                            ast::AssertionDef::RouteHas {
+                                node,
+                                destination,
+                                via,
+                                dev,
+                            } => types::Assertion::RouteHas {
+                                node: node.clone(),
+                                destination: destination.clone(),
+                                via: via.clone(),
+                                dev: dev.clone(),
+                            },
+                            ast::AssertionDef::DnsResolves {
+                                from,
+                                name,
+                                expected_ip,
+                            } => types::Assertion::DnsResolves {
+                                from: from.clone(),
+                                name: name.clone(),
+                                expected_ip: expected_ip.clone(),
+                            },
+                        });
+                    }
+                    types::ScenarioAction::Validate(typed)
+                }
+            });
+        }
+
+        steps.push(types::ScenarioStep { time_ms, actions });
+    }
+
+    // Sort steps by time
+    steps.sort_by_key(|s| s.time_ms);
+
+    Ok(types::Scenario {
+        name: s.name.clone(),
+        steps,
+    })
 }
 
 #[cfg(test)]
@@ -2847,6 +2965,53 @@ node r {
         assert_eq!(iv.parent, "enp3s0");
         assert_eq!(iv.mode, types::IpvlanMode::L2);
     }
+
+    #[test]
+    fn test_lower_scenario() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+scenario "test" {
+  at 0s {
+    log "start"
+    validate { reach a b }
+  }
+  at 2s {
+    down a:eth0
+  }
+  at 4s {
+    validate { no-reach a b }
+  }
+  at 6s {
+    up a:eth0
+  }
+}
+"#,
+        );
+        assert_eq!(topo.scenarios.len(), 1);
+        let s = &topo.scenarios[0];
+        assert_eq!(s.name, "test");
+        assert_eq!(s.steps.len(), 4);
+        assert_eq!(s.steps[0].time_ms, 0);
+        assert_eq!(s.steps[1].time_ms, 2000);
+        assert_eq!(s.steps[2].time_ms, 4000);
+        assert_eq!(s.steps[3].time_ms, 6000);
+        assert_eq!(s.steps[0].actions.len(), 2); // log + validate
+        assert!(matches!(
+            &s.steps[1].actions[0],
+            types::ScenarioAction::Down(ep) if ep == "a:eth0"
+        ));
+        assert!(matches!(
+            &s.steps[3].actions[0],
+            types::ScenarioAction::Up(ep) if ep == "a:eth0"
+        ));
+    }
+
+    // Note: relative time (+5s) requires lexer changes to support "+" prefix
+    // on durations. For now, only absolute times are supported.
 
     #[test]
     fn test_validate_rich_assertions() {

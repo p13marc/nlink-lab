@@ -91,6 +91,10 @@ pub enum Token {
     Pool,
     #[token("validate")]
     Validate,
+    #[token("scenario")]
+    Scenario,
+    #[token("at")]
+    At,
     #[token("reach")]
     Reach,
     #[token("no-reach")]

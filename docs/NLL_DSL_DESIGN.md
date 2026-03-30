@@ -1060,6 +1060,13 @@ assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
                | "route-has" IDENT value ("via" value)? ("dev" IDENT)?
                | "dns-resolves" IDENT value value
 
+# ── Scenario ────────────────────────────────────
+scenario       = "scenario" STRING "{" step* "}"
+step           = "at" DURATION "{" action* "}"
+action         = "down" endpoint | "up" endpoint | "clear" endpoint
+               | "validate" "{" assertion* "}"
+               | "exec" IDENT STRING+ | "log" STRING
+
 # ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR
 route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?

@@ -67,6 +67,7 @@ crates/nlink-lab/src/
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
+  scenario.rs       # Timed scenario execution engine (fault injection + validation)
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence (~/.nlink-lab/)
@@ -136,7 +137,8 @@ depends-on, config injection, overlay), reachability assertions
 DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
 macvlan/ipvlan (attach nodes to host physical interfaces),
 rich validation assertions (`tcp-connect`, `latency-under`, `route-has`,
-`dns-resolves`), and network (bridge) blocks.
+`dns-resolves`), timed scenarios for fault injection (`scenario` block
+with `at`, `down`, `up`, `clear`, `validate`), and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.

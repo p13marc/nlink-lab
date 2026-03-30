@@ -66,6 +66,7 @@ pub mod parser;
 pub mod render;
 pub mod running;
 pub mod state;
+pub mod scenario;
 pub mod templates;
 pub mod test_runner;
 pub mod types;

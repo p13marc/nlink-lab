@@ -56,6 +56,7 @@ pub enum Statement {
     Validate(ValidateDef),
     Let(LetDef),
     For(ForLoop),
+    Scenario(ScenarioDef),
 }
 
 /// Named subnet pool: `pool fabric 10.0.0.0/16 /30`.
@@ -372,6 +373,31 @@ pub struct RateDef {
     pub node: String,
     pub iface: String,
     pub props: RateProps,
+}
+
+/// Scenario definition.
+#[derive(Debug, Clone)]
+pub struct ScenarioDef {
+    pub name: String,
+    pub steps: Vec<ScenarioStepDef>,
+}
+
+/// A timed step in a scenario.
+#[derive(Debug, Clone)]
+pub struct ScenarioStepDef {
+    pub time: String,
+    pub actions: Vec<ScenarioActionDef>,
+}
+
+/// An action in a scenario step.
+#[derive(Debug, Clone)]
+pub enum ScenarioActionDef {
+    Down(String),
+    Up(String),
+    Clear(String),
+    Validate(Vec<AssertionDef>),
+    Exec { node: String, cmd: Vec<String> },
+    Log(String),
 }
 
 /// Variable binding.

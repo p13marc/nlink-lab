@@ -1,0 +1,45 @@
+# Scenario: failover test.
+#
+# Demonstrates timed fault injection and validation. After deploy,
+# run the scenario with: sudo nlink-lab scenario run failover failover-test
+#
+# Timeline:
+#   0s  — verify client can reach server
+#   2s  — bring router:eth0 down (break path)
+#   4s  — verify client cannot reach server
+#   8s  — bring router:eth0 back up (restore path)
+#   10s — verify client can reach server again
+
+lab "failover" { dns hosts }
+
+profile router { forward ipv4 }
+
+node router : router
+node server { route default via ${router.eth1} }
+node client { route default via ${router.eth0} }
+
+link router:eth0 -- client:eth0 { subnet 10.0.1.0/24 }
+link router:eth1 -- server:eth0 { subnet 10.0.2.0/24 }
+
+validate { reach client server }
+
+scenario "failover-test" {
+  at 0s {
+    log "verifying initial connectivity"
+    validate { reach client server }
+  }
+  at 2s {
+    log "bringing router:eth0 down"
+    down router:eth0
+  }
+  at 4s {
+    validate { no-reach client server }
+  }
+  at 8s {
+    log "restoring router:eth0"
+    up router:eth0
+  }
+  at 10s {
+    validate { reach client server }
+  }
+}

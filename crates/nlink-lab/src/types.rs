@@ -54,6 +54,45 @@ pub struct Topology {
     /// Post-deploy reachability assertions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertions: Vec<Assertion>,
+
+    /// Timed test scenarios (fault injection + validation).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scenarios: Vec<Scenario>,
+}
+
+/// A timed test scenario with fault injection and validation steps.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Scenario {
+    /// Scenario name.
+    pub name: String,
+    /// Ordered steps (sorted by time).
+    pub steps: Vec<ScenarioStep>,
+}
+
+/// A single step in a scenario, executed at a specific time offset.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioStep {
+    /// Time offset from scenario start (milliseconds).
+    pub time_ms: u64,
+    /// Actions to execute at this time.
+    pub actions: Vec<ScenarioAction>,
+}
+
+/// An action within a scenario step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ScenarioAction {
+    /// Bring interface down.
+    Down(String),
+    /// Bring interface up.
+    Up(String),
+    /// Remove all impairments from interface.
+    Clear(String),
+    /// Run validation assertions.
+    Validate(Vec<Assertion>),
+    /// Execute command in a node.
+    Exec { node: String, cmd: Vec<String> },
+    /// Print a log message.
+    Log(String),
 }
 
 /// Post-deploy reachability assertion.

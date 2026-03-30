@@ -109,6 +109,15 @@ fn run_assertions_with_results(
     results
 }
 
+/// Evaluate a single assertion (public for use by scenario engine).
+pub fn eval_assertion_pub(
+    lab: &crate::running::RunningLab,
+    assertion: &Assertion,
+    ip_map: &std::collections::HashMap<String, String>,
+) -> (String, bool, Option<String>) {
+    eval_assertion(lab, assertion, ip_map)
+}
+
 fn eval_assertion(
     lab: &crate::running::RunningLab,
     assertion: &Assertion,

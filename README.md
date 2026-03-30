@@ -183,6 +183,22 @@ validate {
 
 Use `--skip-validate` to disable assertion execution at deploy time.
 
+### Timed Scenarios (Fault Injection)
+
+Declarative chaos engineering — timed fault injection with validation:
+
+```nll
+scenario "failover-test" {
+  at 0s  { validate { reach client server } }
+  at 2s  { down router:eth0 }
+  at 4s  { validate { no-reach client server } }
+  at 8s  { up router:eth0 }
+  at 10s { validate { reach client server } }
+}
+```
+
+Actions: `down`, `up`, `clear` (remove impairments), `validate`, `exec`, `log`.
+
 ### Render and Inspect
 
 ```bash
@@ -273,6 +289,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `dns` | DNS resolution via `/etc/hosts` injection |
 | `macvlan` | macvlan: attach lab node to physical host NIC |
 | `ipvlan` | ipvlan: shared-MAC attachment to physical host NIC |
+| `scenario` | Timed fault injection with validation checkpoints |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

@@ -1,7 +1,7 @@
 # Plan 108: Timed Scenario / Fault Injection DSL
 
 **Date:** 2026-03-30
-**Status:** Draft
+**Status:** Implemented (2026-03-30) — core actions (down/up/clear/validate/exec/log); relative time (+Ns) deferred
 **Effort:** Large (1-2 weeks)
 **Depends on:** Plan 107 (rich assertions) recommended but not required
 

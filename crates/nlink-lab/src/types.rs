@@ -378,6 +378,9 @@ pub struct Node {
     /// Firewall rules (overrides profile firewall).
     pub firewall: Option<FirewallConfig>,
 
+    /// NAT rules (masquerade, SNAT, DNAT).
+    pub nat: Option<NatConfig>,
+
     /// Processes to spawn in this namespace.
     #[serde(default)]
     pub exec: Vec<ExecConfig>,
@@ -594,6 +597,38 @@ pub struct FirewallRule {
 
     /// Action ("accept", "drop", "reject").
     pub action: Option<String>,
+}
+
+/// NAT configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NatConfig {
+    /// NAT rules.
+    #[serde(default)]
+    pub rules: Vec<NatRule>,
+}
+
+/// A single NAT rule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NatRule {
+    /// NAT action.
+    pub action: NatAction,
+    /// Source CIDR match.
+    pub src: Option<String>,
+    /// Destination CIDR match.
+    pub dst: Option<String>,
+    /// Target address for SNAT/DNAT.
+    pub target: Option<String>,
+    /// Target port for DNAT.
+    pub target_port: Option<u16>,
+}
+
+/// NAT action type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NatAction {
+    Masquerade,
+    Snat,
+    Dnat,
 }
 
 /// Process to execute in a node.

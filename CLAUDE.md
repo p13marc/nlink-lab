@@ -98,6 +98,7 @@ examples/
 | `Impairment` | Netem config (delay, jitter, loss, rate) |
 | `RateLimit` | Per-interface traffic shaping |
 | `FirewallConfig` | nftables rules (with src/dst matching) |
+| `NatConfig` | NAT rules (masquerade, snat, dnat) |
 | `ExecConfig` | Process to spawn in namespace |
 | `EndpointRef` | Parsed "node:interface" reference |
 | `VrfConfig` | VRF routing table configuration |

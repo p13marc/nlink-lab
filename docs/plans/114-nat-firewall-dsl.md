@@ -1,7 +1,7 @@
 # Plan 114: NAT Support in Firewall DSL
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Medium (2-3 days)
 **Priority:** P1 — blocks realistic firewall/router topologies
 **Depends on:** Nothing (nlink has snat/dnat/masquerade on Rule type)

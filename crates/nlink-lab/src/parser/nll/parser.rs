@@ -810,6 +810,9 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
     } else if check_kw(tokens, *pos, "firewall") {
         *pos += 1;
         parse_firewall_def(tokens, pos).map(ast::NodeProp::Firewall)
+    } else if check_kw(tokens, *pos, "nat") {
+        *pos += 1;
+        parse_nat_def(tokens, pos).map(ast::NodeProp::Nat)
     } else if check_kw(tokens, *pos, "vrf") {
         *pos += 1;
         parse_vrf_def(tokens, pos).map(ast::NodeProp::Vrf)
@@ -944,6 +947,91 @@ fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef>
 }
 
 // ─── Firewall ─────────────────────────────────────────────
+
+// ─── NAT ──────────────────────────────────────────────────
+
+// nat { masquerade src CIDR; dnat dst CIDR to IP; snat src CIDR to IP }
+fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut rules = Vec::new();
+
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+
+        if eat_kw(tokens, pos, "masquerade") {
+            let src = if eat_kw(tokens, pos, "src") {
+                Some(parse_cidr_or_name(tokens, pos)?)
+            } else {
+                None
+            };
+            rules.push(ast::NatRuleDef {
+                action: "masquerade".into(),
+                src,
+                dst: None,
+                target: None,
+                target_port: None,
+            });
+        } else if eat_kw(tokens, pos, "dnat") {
+            let dst = if eat_kw(tokens, pos, "dst") {
+                Some(parse_cidr_or_name(tokens, pos)?)
+            } else {
+                None
+            };
+            expect_kw(tokens, pos, "to")?;
+            let target = parse_value(tokens, pos)?;
+            // Optional :port
+            let target_port = if eat(tokens, pos, &Token::Colon) {
+                Some(expect_int(tokens, pos)? as u16)
+            } else {
+                None
+            };
+            rules.push(ast::NatRuleDef {
+                action: "dnat".into(),
+                src: None,
+                dst,
+                target: Some(target),
+                target_port,
+            });
+        } else if eat_kw(tokens, pos, "snat") {
+            let src = if eat_kw(tokens, pos, "src") {
+                Some(parse_cidr_or_name(tokens, pos)?)
+            } else {
+                None
+            };
+            expect_kw(tokens, pos, "to")?;
+            let target = parse_value(tokens, pos)?;
+            rules.push(ast::NatRuleDef {
+                action: "snat".into(),
+                src,
+                dst: None,
+                target: Some(target),
+                target_port: None,
+            });
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("expected NAT rule (masquerade, dnat, snat), found {other}"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in nat block".into(),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(ast::NatDef { rules })
+}
 
 fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallDef> {
     expect_kw(tokens, pos, "policy")?;

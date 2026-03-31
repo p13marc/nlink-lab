@@ -981,6 +981,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
         ast::NodeProp::Lo(addr) => ast::NodeProp::Lo(i(addr, vars)),
         ast::NodeProp::Route(r) => ast::NodeProp::Route(interpolate_route(r, vars)),
         ast::NodeProp::Firewall(fw) => ast::NodeProp::Firewall(fw.clone()),
+        ast::NodeProp::Nat(nat) => ast::NodeProp::Nat(nat.clone()),
         ast::NodeProp::Vrf(v) => ast::NodeProp::Vrf(interpolate_vrf(v, vars)),
         ast::NodeProp::Wireguard(wg) => ast::NodeProp::Wireguard(interpolate_wg(wg, vars)),
         ast::NodeProp::Vxlan(vx) => ast::NodeProp::Vxlan(interpolate_vxlan(vx, vars)),
@@ -1341,6 +1342,26 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                         .map(|r| types::FirewallRule {
                             match_expr: Some(r.match_expr.clone()),
                             action: Some(r.action.clone()),
+                        })
+                        .collect(),
+                });
+            }
+            ast::NodeProp::Nat(nat) => {
+                node.nat = Some(types::NatConfig {
+                    rules: nat
+                        .rules
+                        .iter()
+                        .map(|r| types::NatRule {
+                            action: match r.action.as_str() {
+                                "masquerade" => types::NatAction::Masquerade,
+                                "snat" => types::NatAction::Snat,
+                                "dnat" => types::NatAction::Dnat,
+                                _ => types::NatAction::Masquerade,
+                            },
+                            src: r.src.clone(),
+                            dst: r.dst.clone(),
+                            target: r.target.clone(),
+                            target_port: r.target_port,
                         })
                         .collect(),
                 });

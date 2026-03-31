@@ -235,6 +235,7 @@ pub enum NodeProp {
     Lo(String),
     Route(RouteDef),
     Firewall(FirewallDef),
+    Nat(NatDef),
     Vrf(VrfDef),
     Wireguard(WireguardDef),
     Vxlan(VxlanDef),
@@ -296,6 +297,22 @@ pub struct FirewallDef {
 pub struct FirewallRuleDef {
     pub action: String,
     pub match_expr: String,
+}
+
+/// NAT definition.
+#[derive(Debug, Clone)]
+pub struct NatDef {
+    pub rules: Vec<NatRuleDef>,
+}
+
+/// A single NAT rule.
+#[derive(Debug, Clone)]
+pub struct NatRuleDef {
+    pub action: String,
+    pub src: Option<String>,
+    pub dst: Option<String>,
+    pub target: Option<String>,
+    pub target_port: Option<u16>,
 }
 
 /// VRF definition.

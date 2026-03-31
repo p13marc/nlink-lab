@@ -1084,6 +1084,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 13b: Apply NAT rules ────────────────────────────────────
+    for (node_name, node) in &topology.nodes {
+        if let Some(nat) = &node.nat {
+            let node_handle = &node_handles[node_name];
+            apply_nat(node_handle, node_name, nat).await?;
+        }
+    }
+
     // ── Step 14: Apply netem impairments ───────────────────────────
     tracing::info!("step 14/18: applying impairments");
     for (endpoint_str, impairment) in &topology.impairments {
@@ -1454,6 +1462,108 @@ async fn apply_firewall(
                 "failed to add nftables rule on '{node_name}': match='{match_expr}' action='{action}': {e}"
             ))
         })?;
+    }
+
+    Ok(())
+}
+
+/// Apply NAT rules to a node.
+async fn apply_nat(
+    node_handle: &NodeHandle,
+    node_name: &str,
+    nat: &crate::types::NatConfig,
+) -> Result<()> {
+    use nlink::netlink::Nftables;
+    use nlink::netlink::nftables::types::{Chain, ChainType, Family, Hook, Priority, Rule};
+
+    let nft_conn: Connection<Nftables> = node_handle.connection().map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to create nftables connection for '{node_name}': {e}"
+        ))
+    })?;
+
+    let table_name = "nlink-lab";
+
+    // Ensure table exists (may already be created by apply_firewall)
+    let _ = nft_conn.add_table(table_name, Family::Inet).await;
+
+    // Create prerouting chain for DNAT
+    let pre_chain = Chain::new(table_name, "prerouting")
+        .family(Family::Inet)
+        .hook(Hook::Prerouting)
+        .priority(Priority::DstNat)
+        .chain_type(ChainType::Nat);
+    let _ = nft_conn.add_chain(pre_chain).await;
+
+    // Create postrouting chain for SNAT/masquerade
+    let post_chain = Chain::new(table_name, "postrouting")
+        .family(Family::Inet)
+        .hook(Hook::Postrouting)
+        .priority(Priority::SrcNat)
+        .chain_type(ChainType::Nat);
+    let _ = nft_conn.add_chain(post_chain).await;
+
+    for nat_rule in &nat.rules {
+        match nat_rule.action {
+            crate::types::NatAction::Masquerade => {
+                let mut rule =
+                    Rule::new(table_name, "postrouting").family(Family::Inet);
+                if let Some(src) = &nat_rule.src {
+                    let (addr, prefix) = parse_v4_cidr(src).map_err(|e| {
+                        Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
+                    })?;
+                    rule = rule.match_saddr_v4(addr, prefix);
+                }
+                rule = rule.masquerade();
+                nft_conn.add_rule(rule).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to add masquerade rule on '{node_name}': {e}"
+                    ))
+                })?;
+            }
+            crate::types::NatAction::Dnat => {
+                let mut rule =
+                    Rule::new(table_name, "prerouting").family(Family::Inet);
+                if let Some(dst) = &nat_rule.dst {
+                    let (addr, prefix) = parse_v4_cidr(dst).map_err(|e| {
+                        Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
+                    })?;
+                    rule = rule.match_daddr_v4(addr, prefix);
+                }
+                if let Some(target) = &nat_rule.target {
+                    let addr: std::net::Ipv4Addr = target.parse().map_err(|e| {
+                        Error::deploy_failed(format!("invalid DNAT target '{target}': {e}"))
+                    })?;
+                    rule = rule.dnat(addr, nat_rule.target_port);
+                }
+                nft_conn.add_rule(rule).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to add DNAT rule on '{node_name}': {e}"
+                    ))
+                })?;
+            }
+            crate::types::NatAction::Snat => {
+                let mut rule =
+                    Rule::new(table_name, "postrouting").family(Family::Inet);
+                if let Some(src) = &nat_rule.src {
+                    let (addr, prefix) = parse_v4_cidr(src).map_err(|e| {
+                        Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
+                    })?;
+                    rule = rule.match_saddr_v4(addr, prefix);
+                }
+                if let Some(target) = &nat_rule.target {
+                    let addr: std::net::Ipv4Addr = target.parse().map_err(|e| {
+                        Error::deploy_failed(format!("invalid SNAT target '{target}': {e}"))
+                    })?;
+                    rule = rule.snat(addr, None);
+                }
+                nft_conn.add_rule(rule).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to add SNAT rule on '{node_name}': {e}"
+                    ))
+                })?;
+            }
+        }
     }
 
     Ok(())

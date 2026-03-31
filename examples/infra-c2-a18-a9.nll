@@ -42,16 +42,15 @@ node c2-fw : router {
   # Return route to DC subnet
   route 10.2.1.0/24 via 10.2.2.1
 
-  # NAT via iptables (runs at deploy time)
-  # Masquerade: outgoing source → modem IP
-  run "iptables -t nat -A POSTROUTING -s 10.2.0.0/16 -j MASQUERADE"
-  # DNAT: 144.18.Y.Z → A18-BLACK modem IP per link type
-  run "iptables -t nat -A PREROUTING -d 144.18.1.0/24 -j DNAT --to-destination 172.100.1.18"
-  run "iptables -t nat -A PREROUTING -d 144.18.2.0/24 -j DNAT --to-destination 172.100.2.18"
-  run "iptables -t nat -A PREROUTING -d 144.18.3.0/24 -j DNAT --to-destination 172.100.3.18"
-  # DNAT: 144.9.Y.Z → A9-CC modem IP per link type
-  run "iptables -t nat -A PREROUTING -d 144.9.1.0/24 -j DNAT --to-destination 172.100.4.9"
-  run "iptables -t nat -A PREROUTING -d 144.9.4.0/24 -j DNAT --to-destination 172.100.5.9"
+  # NAT: translate DCS 144.x → modem 172.x
+  nat {
+    masquerade src 10.2.0.0/16
+    dnat dst 144.18.1.0/24 to 172.100.1.18
+    dnat dst 144.18.2.0/24 to 172.100.2.18
+    dnat dst 144.18.3.0/24 to 172.100.3.18
+    dnat dst 144.9.1.0/24 to 172.100.4.9
+    dnat dst 144.9.4.0/24 to 172.100.5.9
+  }
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -71,7 +70,9 @@ node a18-black : router {
   route 10.18.1.0/24 via 10.18.2.1
 
   # Masquerade internal traffic going out to modems
-  run "iptables -t nat -A POSTROUTING -s 10.18.0.0/16 -j MASQUERADE"
+  nat {
+    masquerade src 10.18.0.0/16
+  }
 }
 
 # ═══════════════════════════════════════════════════════════

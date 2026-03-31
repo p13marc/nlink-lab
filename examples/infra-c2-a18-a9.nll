@@ -19,6 +19,12 @@ lab "infra" {
 
 profile router { forward ipv4 }
 
+# Link type profiles (uncomment impairments to simulate)
+defaults fiber { delay 1ms }
+# defaults satellite { delay 300ms jitter 50ms }
+# defaults radio { delay 15ms jitter 10ms loss 2% }
+# defaults wifi-link { delay 3ms jitter 2ms loss 0.5% }
+
 # ═══════════════════════════════════════════════════════════
 # Asset C2 — Command & Control
 # ═══════════════════════════════════════════════════════════
@@ -119,34 +125,29 @@ link a9-cc:eth0 -- a9-cu:eth0 { 10.9.1.1/24 -- 10.9.1.2/24 }
 # Uncomment impairments to simulate link characteristics.
 # ═══════════════════════════════════════════════════════════
 
-# C2 ↔ A18: Fiber Optic (low latency, high bandwidth)
-link c2-fw:fo -- a18-black:fo {
+# C2 ↔ A18: Fiber Optic
+link c2-fw:fo -- a18-black:fo : fiber {
   172.100.1.2/24 -- 172.100.1.18/24
-  # delay 1ms
 }
 
-# C2 ↔ A18: Satellite (high latency, moderate bandwidth)
+# C2 ↔ A18: Satellite
 link c2-fw:sat -- a18-black:sat {
   172.100.2.2/24 -- 172.100.2.18/24
-  # delay 300ms jitter 50ms
 }
 
-# C2 ↔ A18: Radio (variable latency, loss)
+# C2 ↔ A18: Radio
 link c2-fw:radio -- a18-black:radio {
   172.100.3.2/24 -- 172.100.3.18/24
-  # delay 15ms jitter 10ms loss 2%
 }
 
 # C2 ↔ A9: Fiber Optic
-link c2-fw:fo2 -- a9-cc:fo {
+link c2-fw:fo2 -- a9-cc:fo : fiber {
   172.100.4.2/24 -- 172.100.4.9/24
-  # delay 1ms
 }
 
-# C2 ↔ A9: WiFi (low latency, some loss)
+# C2 ↔ A9: WiFi
 link c2-fw:wifi -- a9-cc:wifi {
   172.100.5.2/24 -- 172.100.5.9/24
-  # delay 3ms jitter 2ms loss 0.5%
 }
 
 # ═══════════════════════════════════════════════════════════

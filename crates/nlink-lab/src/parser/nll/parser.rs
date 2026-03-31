@@ -1686,6 +1686,13 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
     expect(tokens, pos, &Token::DashDash)?;
     let (right_node, right_iface) = parse_endpoint(tokens, pos)?;
 
+    // Optional `: profile` after endpoints
+    let profile = if eat(tokens, pos, &Token::Colon) {
+        Some(expect_ident(tokens, pos)?)
+    } else {
+        None
+    };
+
     let mut link = ast::LinkDef {
         left_node,
         left_iface,
@@ -1700,6 +1707,7 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
         left_impair: None,
         right_impair: None,
         rate: None,
+        profile,
     };
 
     if eat(tokens, pos, &Token::LBrace) {
@@ -1992,11 +2000,16 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
             *pos += 1;
             ast::DefaultsKind::Rate
         }
+        Some(Token::Ident(name)) => {
+            let name = name.clone();
+            *pos += 1;
+            ast::DefaultsKind::Named(name)
+        }
         Some(other) => {
             return Err(err(
                 tokens,
                 *pos,
-                format!("expected link, impair, or rate after defaults, found {other}"),
+                format!("expected link, impair, rate, or profile name after defaults, found {other}"),
             ));
         }
         None => {
@@ -2033,6 +2046,14 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
             }
             (ast::DefaultsKind::Rate, _) => {
                 def.rate = Some(parse_rate_props(tokens, pos)?);
+            }
+            (ast::DefaultsKind::Named(_), Some(Token::Ident(s))) if s == "mtu" => {
+                *pos += 1;
+                def.mtu = Some(expect_int(tokens, pos)? as u32);
+            }
+            (ast::DefaultsKind::Named(_), _) => {
+                // Named profiles accept impairment properties
+                def.impair = Some(parse_impair_props(tokens, pos)?);
             }
             (_, Some(other)) => {
                 return Err(err(

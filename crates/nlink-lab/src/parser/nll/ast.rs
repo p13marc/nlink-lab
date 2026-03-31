@@ -178,6 +178,8 @@ pub enum DefaultsKind {
     Link,
     Impair,
     Rate,
+    /// Named link profile (e.g., `defaults radio { delay 15ms }`)
+    Named(String),
 }
 
 /// Profile definition.
@@ -400,6 +402,8 @@ pub struct LinkDef {
     pub right_impair: Option<ImpairProps>,
     /// Rate limiting.
     pub rate: Option<RateProps>,
+    /// Named link profile reference (e.g., `: radio`).
+    pub profile: Option<String>,
 }
 
 /// Network (bridge) definition.

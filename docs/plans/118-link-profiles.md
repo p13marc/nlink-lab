@@ -1,7 +1,7 @@
 # Plan 118: Link Type Profiles (Named Impairment Presets)
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Medium (1 day)
 **Priority:** P3 — reduces repetition for multi-link topologies
 

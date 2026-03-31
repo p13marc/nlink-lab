@@ -37,10 +37,13 @@ fn lower_with_base_dir(
         match stmt {
             ast::Statement::Profile(p) => ctx.add_profile(p),
             ast::Statement::Let(l) => ctx.add_variable(l),
-            ast::Statement::Defaults(d) => match d.kind {
+            ast::Statement::Defaults(d) => match &d.kind {
                 ast::DefaultsKind::Link => ctx.default_link_mtu = d.mtu,
                 ast::DefaultsKind::Impair => ctx.default_impair = d.impair.clone(),
                 ast::DefaultsKind::Rate => ctx.default_rate = d.rate.clone(),
+                ast::DefaultsKind::Named(name) => {
+                    ctx.link_profiles.insert(name.clone(), d.clone());
+                }
             },
             ast::Statement::Pool(p) => {
                 if let Ok((ip, prefix)) = crate::helpers::parse_cidr(&p.base)
@@ -466,6 +469,7 @@ struct LowerCtx {
     default_impair: Option<ast::ImpairProps>,
     default_rate: Option<ast::RateProps>,
     pools: HashMap<String, PoolState>,
+    link_profiles: HashMap<String, ast::DefaultsDef>,
 }
 
 impl LowerCtx {
@@ -474,6 +478,7 @@ impl LowerCtx {
             profiles: HashMap::new(),
             variables: HashMap::new(),
             default_link_mtu: None,
+            link_profiles: HashMap::new(),
             default_impair: None,
             default_rate: None,
             pools: HashMap::new(),
@@ -1081,6 +1086,7 @@ fn interpolate_link(l: &ast::LinkDef, vars: &HashMap<String, String>) -> ast::Li
             .as_ref()
             .map(|p| interpolate_impair_props(p, vars)),
         rate: l.rate.as_ref().map(|p| interpolate_rate_props(p, vars)),
+        profile: l.profile.clone(),
     }
 }
 
@@ -1671,8 +1677,17 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
         _ => None,
     };
 
-    // Apply link defaults (per-link values override defaults)
-    let mtu = link.mtu.or(ctx.default_link_mtu);
+    // Resolve link profile defaults (profile < global defaults < per-link)
+    let profile_defaults = link
+        .profile
+        .as_ref()
+        .and_then(|name| ctx.link_profiles.get(name));
+
+    let profile_mtu = profile_defaults.and_then(|d| d.mtu);
+    let profile_impair = profile_defaults.and_then(|d| d.impair.as_ref());
+
+    // Apply link defaults: per-link > profile > global
+    let mtu = link.mtu.or(profile_mtu).or(ctx.default_link_mtu);
 
     topo.links.push(types::Link {
         endpoints,
@@ -1680,8 +1695,12 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
         mtu,
     });
 
-    // Lower symmetric impairment → both endpoints (fall back to defaults)
-    let effective_impair = link.impairment.as_ref().or(ctx.default_impair.as_ref());
+    // Lower symmetric impairment → both endpoints (per-link > profile > global)
+    let effective_impair = link
+        .impairment
+        .as_ref()
+        .or(profile_impair)
+        .or(ctx.default_impair.as_ref());
     if let Some(imp) = effective_impair {
         let left_ep = format!("{}:{}", link.left_node, link.left_iface);
         let right_ep = format!("{}:{}", link.right_node, link.right_iface);
@@ -3138,6 +3157,34 @@ node r {
         assert_eq!(iv.name, "eth0");
         assert_eq!(iv.parent, "enp3s0");
         assert_eq!(iv.mode, types::IpvlanMode::L2);
+    }
+
+    #[test]
+    fn test_link_profile() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+defaults radio { delay 15ms jitter 10ms loss 2% }
+node a
+node b
+node c
+link a:eth0 -- b:eth0 : radio { 10.0.0.1/24 -- 10.0.0.2/24 }
+link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 delay 5ms }
+"#,
+        );
+        // Link with :radio profile should get radio's impairment
+        assert!(
+            topo.impairments.contains_key("a:eth0"),
+            "a:eth0 should have impairment from radio profile"
+        );
+        assert_eq!(
+            topo.impairments["a:eth0"].delay.as_deref(),
+            Some("15ms")
+        );
+        // Link without profile gets its own impairment
+        assert_eq!(
+            topo.impairments["a:eth1"].delay.as_deref(),
+            Some("5ms")
+        );
     }
 
     #[test]

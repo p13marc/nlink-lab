@@ -1519,7 +1519,14 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
 
 fn parse_run_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RunDef> {
     let background = eat_kw(tokens, pos, "background");
-    let cmd = parse_string_list(tokens, pos)?;
+    // Shell-style: run "cmd arg1 arg2" → ["sh", "-c", "cmd arg1 arg2"]
+    // List-style:  run ["cmd", "arg1"] → ["cmd", "arg1"]
+    let cmd = if matches!(at(tokens, *pos), Some(Token::String(_))) {
+        let shell_cmd = expect_string(tokens, pos)?;
+        vec!["sh".to_string(), "-c".to_string(), shell_cmd]
+    } else {
+        parse_string_list(tokens, pos)?
+    };
     Ok(ast::RunDef { cmd, background })
 }
 

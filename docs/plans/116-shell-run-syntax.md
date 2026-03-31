@@ -1,7 +1,7 @@
 # Plan 116: Shell-Style `run` Syntax
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Small (half day)
 **Priority:** P2 — usability improvement
 

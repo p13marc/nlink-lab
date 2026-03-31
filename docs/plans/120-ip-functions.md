@@ -1,7 +1,7 @@
 # Plan 120: IP Computation Functions (`subnet`, `host`)
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Medium (2-3 days)
 **Priority:** P0 — unblocks parametric templates, loop-generated rules, auto-addressing
 **Depends on:** Nothing

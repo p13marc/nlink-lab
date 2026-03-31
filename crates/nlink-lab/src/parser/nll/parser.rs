@@ -330,6 +330,13 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             "unexpected end of input, expected value".into(),
         ));
     }
+    // Check for function call: ident(args...)
+    if let Some(Token::Ident(_name)) = at(tokens, *pos)
+        && *pos + 1 < tokens.len()
+        && matches!(&tokens[*pos + 1].token, Token::LParen)
+    {
+        return parse_function_call(tokens, pos);
+    }
     let val = match &tokens[*pos].token {
         Token::String(s) => s.clone(),
         Token::Ident(s) => s.clone(),
@@ -348,6 +355,37 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     };
     *pos += 1;
     Ok(val)
+}
+
+/// Parse a value, optionally followed by /prefix (e.g., `host("10.0.0.0/24", 1)/24`).
+fn parse_value_with_optional_prefix(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    let val = parse_value(tokens, pos)?;
+    // Check for /prefix suffix (e.g., Slash + Int)
+    if eat(tokens, pos, &Token::Slash) {
+        let prefix = expect_int(tokens, pos)?;
+        Ok(format!("{val}/{prefix}"))
+    } else {
+        Ok(val)
+    }
+}
+
+/// Parse a function call: `name(arg1, arg2, ...)`
+/// Returns a deferred expression string: `"@fn:name(arg1, arg2, ...)"`.
+fn parse_function_call(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    let name = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::LParen)?;
+    let mut args = Vec::new();
+    loop {
+        if eat(tokens, pos, &Token::RParen) {
+            break;
+        }
+        if !args.is_empty() {
+            eat(tokens, pos, &Token::Comma);
+        }
+        args.push(parse_value(tokens, pos)?);
+    }
+    // Encode as a deferred function call for the lowerer to evaluate
+    Ok(format!("@fn:{}({})", name, args.join(", ")))
 }
 
 /// Parse a value that must be a duration (e.g., 10ms, 5s) or interpolation.
@@ -871,6 +909,13 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             *pos,
             "unexpected end of input, expected CIDR or address".into(),
         ));
+    }
+    // Function call: subnet(...), host(...)
+    if let Some(Token::Ident(_)) = at(tokens, *pos)
+        && *pos + 1 < tokens.len()
+        && matches!(&tokens[*pos + 1].token, Token::LParen)
+    {
+        return parse_function_call(tokens, pos);
     }
     // May be CIDR, IP, or compound address with interpolation (e.g. 10.255.0.${i}/32)
     let mut val = String::new();
@@ -1715,6 +1760,17 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
             }
 
             match at(tokens, *pos) {
+                // Function call as address: host(...)/prefix -- host(...)/prefix
+                Some(Token::Ident(_))
+                    if *pos + 1 < tokens.len()
+                        && matches!(&tokens[*pos + 1].token, Token::LParen) =>
+                {
+                    let first_addr = parse_value_with_optional_prefix(tokens, pos)?;
+                    expect(tokens, pos, &Token::DashDash)?;
+                    let right_addr = parse_value_with_optional_prefix(tokens, pos)?;
+                    link.left_addr = Some(first_addr);
+                    link.right_addr = Some(right_addr);
+                }
                 // Address pair: CIDR -- CIDR (IPv4 or IPv6)
                 Some(Token::Cidr(_))
                 | Some(Token::Ipv6Cidr(_))

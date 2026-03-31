@@ -625,7 +625,96 @@ fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
         }
         current = next;
     }
-    current
+    // Evaluate deferred function calls (@fn:name(args))
+    resolve_functions(&current)
+}
+
+/// Resolve all `@fn:name(arg1, arg2, ...)` in a string.
+fn resolve_functions(s: &str) -> String {
+    if !s.contains("@fn:") {
+        return s.to_string();
+    }
+    // Find @fn:name(args) patterns and evaluate them
+    let mut result = s.to_string();
+    // Iterate until no more @fn: patterns (handles nested calls)
+    for _ in 0..10 {
+        if !result.contains("@fn:") {
+            break;
+        }
+        if let Some(start) = result.find("@fn:") {
+            // Find the matching closing paren
+            let after_fn = &result[start + 4..];
+            if let Some(paren_start) = after_fn.find('(') {
+                let name = &after_fn[..paren_start];
+                let rest = &after_fn[paren_start + 1..];
+                // Find matching closing paren (handle nesting)
+                let mut depth = 1;
+                let mut end = 0;
+                for (i, ch) in rest.char_indices() {
+                    match ch {
+                        '(' => depth += 1,
+                        ')' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                end = i;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                let args_str = &rest[..end];
+                // Split args by comma (respecting nested parens)
+                let args = split_function_args(args_str);
+                // Recursively resolve args first
+                let resolved_args: Vec<String> =
+                    args.iter().map(|a| resolve_functions(a.trim())).collect();
+
+                match crate::ipfunc::eval_function(name, &resolved_args) {
+                    Ok(value) => {
+                        let full_match_end = start + 4 + paren_start + 1 + end + 1;
+                        result =
+                            format!("{}{}{}", &result[..start], value, &result[full_match_end..]);
+                    }
+                    Err(e) => {
+                        tracing::warn!("function evaluation failed: {e}");
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    result
+}
+
+/// Split function arguments by comma, respecting nested parentheses.
+fn split_function_args(s: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+    for ch in s.chars() {
+        match ch {
+            '(' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                args.push(current.trim().to_string());
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.trim().is_empty() {
+        args.push(current.trim().to_string());
+    }
+    args
 }
 
 fn interpolate_once(template: &str, vars: &HashMap<String, String>) -> String {
@@ -3199,6 +3288,45 @@ node r {
         assert_eq!(iv.name, "eth0");
         assert_eq!(iv.parent, "enp3s0");
         assert_eq!(iv.mode, types::IpvlanMode::L2);
+    }
+
+    #[test]
+    fn test_ip_function_subnet() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+let net = subnet("10.0.0.0/16", 24, 18)
+link a:eth0 -- b:eth0 { host(${net}, 1)/24 -- host(${net}, 2)/24 }
+"#,
+        );
+        let addrs = topo.links[0].addresses.as_ref().unwrap();
+        assert_eq!(addrs[0], "10.0.18.1/24");
+        assert_eq!(addrs[1], "10.0.18.2/24");
+    }
+
+    #[test]
+    fn test_ip_function_nested() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a { route default via host(subnet("10.0.0.0/8", 16, 2), 1) }
+"#,
+        );
+        let route = &topo.nodes["a"].routes["default"];
+        assert_eq!(route.via.as_deref(), Some("10.2.0.1"));
+    }
+
+    #[test]
+    fn test_ip_function_in_let() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let base = subnet("10.0.0.0/8", 16, 5)
+let lan = subnet(${base}, 24, 1)
+node a { route default via host(${lan}, 254) }
+"#,
+        );
+        let route = &topo.nodes["a"].routes["default"];
+        assert_eq!(route.via.as_deref(), Some("10.5.1.254"));
     }
 
     #[test]

@@ -1,0 +1,23 @@
+# NAT: firewall with masquerade and DNAT.
+#
+# Internal hosts reach the internet via masquerade. External
+# traffic to the firewall's public IP is DNATted to the server.
+#
+# Demonstrates: nat block with masquerade, dnat, snat.
+
+lab "nat-demo" { dns hosts }
+
+profile router { forward ipv4 }
+
+node firewall : router {
+  nat {
+    masquerade src 10.0.0.0/16
+    dnat dst 203.0.113.0/24 to 10.0.1.2
+  }
+}
+
+node server { route default via 10.0.1.1 }
+node client { route default via 10.0.2.1 }
+
+link firewall:eth0 -- server:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+link firewall:eth1 -- client:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }

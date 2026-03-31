@@ -425,4 +425,34 @@ mod tests {
         let output = "rtt min/avg/max/mdev = 0.1/2.5/5.0/1.0 ms\n";
         assert_eq!(parse_ping_avg(output), Some(2.5));
     }
+
+    #[test]
+    fn test_parse_ping_avg_no_stats() {
+        assert_eq!(parse_ping_avg("no rtt line"), None);
+    }
+
+    #[test]
+    fn test_format_tap_empty() {
+        let results = vec![TestResult {
+            file: "empty.nll".into(),
+            assertions: vec![],
+            deploy_ms: 50,
+            total_ms: 50,
+            passed: true,
+        }];
+        let tap = format_tap(&results);
+        assert!(tap.contains("1..0"));
+    }
+
+    #[test]
+    fn test_assertion_result_types() {
+        let result = AssertionResult {
+            description: "reach a b".into(),
+            passed: true,
+            detail: Some("ok".into()),
+            duration_ms: 100,
+        };
+        assert!(result.passed);
+        assert_eq!(result.duration_ms, 100);
+    }
 }

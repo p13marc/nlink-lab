@@ -1,0 +1,31 @@
+# Site grouping: two data centers with a cross-site WAN link.
+#
+# All nodes inside a `site` block are automatically prefixed with
+# the site name. Cross-site links use the prefixed names.
+#
+# After deploy:
+#   sudo nlink-lab exec site-demo dc1-server -- ping 172.16.0.2
+
+lab "site-demo" { dns hosts }
+
+profile router { forward ipv4 }
+
+site dc1 {
+  node router : router
+  node server { route default via 10.1.0.1 }
+  link router:eth0 -- server:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
+}
+
+site dc2 {
+  node router : router
+  node server { route default via 10.2.0.1 }
+  link router:eth0 -- server:eth0 { 10.2.0.1/24 -- 10.2.0.2/24 }
+}
+
+# Cross-site WAN link (uses prefixed names: dc1-router, dc2-router)
+link dc1-router:wan -- dc2-router:wan { 172.16.0.1/30 -- 172.16.0.2/30 }
+
+validate {
+  reach dc1-server dc1-router
+  reach dc2-server dc2-router
+}

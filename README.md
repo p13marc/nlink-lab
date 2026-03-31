@@ -265,6 +265,31 @@ node sta1 {
 Modes: `ap` (hostapd), `station` (wpa_supplicant), `mesh` (802.11s).
 Requires: `mac80211_hwsim` kernel module.
 
+### Route Groups
+
+Multiple routes to the same gateway in one line:
+
+```nll
+node dcs {
+  route [144.18.1.0/24, 144.18.2.0/24, 144.18.3.0/24] via 10.2.2.2
+}
+```
+
+### Site Grouping
+
+Group nodes by physical location with automatic name prefixing:
+
+```nll
+site dc1 {
+  node router : router
+  node server { route default via 10.1.0.1 }
+  link router:eth0 -- server:eth0 { subnet 10.1.0.0/24 }
+}
+
+# Cross-site link uses prefixed names
+link dc1-router:wan -- dc2-router:wan { 172.16.0.1/30 -- 172.16.0.2/30 }
+```
+
 ### Render and Inspect
 
 ```bash
@@ -358,6 +383,9 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `scenario` | Timed fault injection with validation checkpoints |
 | `benchmark` | Performance testing with ping/iperf3 assertions |
 | `wifi` | Wi-Fi AP + stations via mac80211_hwsim |
+| `nat` | NAT: masquerade + DNAT firewall |
+| `site-grouping` | Multi-site topology with auto name prefixing |
+| `infra-c2-a18-a9` | Full drone control infrastructure (3 assets, NAT, modem links) |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

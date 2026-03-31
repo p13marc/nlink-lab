@@ -108,6 +108,9 @@ examples/
 | `IpvlanConfig` | ipvlan interface (name, parent, mode, addresses) |
 | `WifiConfig` | Wi-Fi interface (name, mode, ssid, channel, passphrase) |
 | `WifiMode` | Wi-Fi mode (Ap, Station, Mesh) |
+| `Scenario` | Timed fault-injection test (steps with down/up/clear/validate) |
+| `ScenarioStep` | Single timed step at a time offset |
+| `Benchmark` | Performance test (ping/iperf3 with metric assertions) |
 | `ContainerRuntime` | Docker/Podman selection (auto, docker, podman) |
 
 ## NLL Topology Format
@@ -149,7 +152,8 @@ rich validation assertions (`tcp-connect`, `latency-under`, `route-has`,
 with `at`, `down`, `up`, `clear`, `validate`), performance benchmarks
 (`benchmark` block with `ping`/`iperf3` and `assert` thresholds),
 Wi-Fi emulation (`wifi` block with `mode ap`/`station`/`mesh`,
-mac80211_hwsim), and network (bridge) blocks.
+mac80211_hwsim), site grouping (`site name { ... }` auto-prefixes
+node names), and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.

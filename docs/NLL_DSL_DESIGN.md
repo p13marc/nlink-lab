@@ -1096,6 +1096,14 @@ wifi_block     = "{" wifi_setting* "}"
 wifi_setting   = "ssid" STRING | "channel" INT | "wpa2" STRING
                | "mesh-id" STRING | CIDR
 
+# ── macvlan / ipvlan ─────────────────────────────
+macvlan_prop   = "macvlan" IDENT "parent" STRING ("mode" IDENT)? macvlan_block?
+macvlan_block  = "{" CIDR* "}"
+ipvlan_prop    = "ipvlan" IDENT "parent" STRING ("mode" IDENT)?
+
+# ── Process execution ───────────────────────────
+run_config     = "run" ("background")? (STRING | "[" STRING ("," STRING)* "]")
+
 # ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR
 route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?

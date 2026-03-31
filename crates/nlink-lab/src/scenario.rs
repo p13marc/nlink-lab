@@ -239,7 +239,10 @@ async fn clear_impairment(lab: &RunningLab, endpoint: &str) -> Result<()> {
     Ok(())
 }
 
-fn build_ip_map(topology: &crate::types::Topology) -> std::collections::HashMap<String, String> {
+/// Build IP map from a topology (public for testing).
+pub fn build_ip_map(
+    topology: &crate::types::Topology,
+) -> std::collections::HashMap<String, String> {
     let mut ip_map = std::collections::HashMap::new();
     for link in &topology.links {
         if let Some(addrs) = &link.addresses {
@@ -254,4 +257,71 @@ fn build_ip_map(topology: &crate::types::Topology) -> std::collections::HashMap<
         }
     }
     ip_map
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_ip_map() {
+        let topo = crate::parser::parse(
+            r#"
+lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let ip_map = build_ip_map(&topo);
+        assert_eq!(ip_map.get("a").unwrap(), "10.0.0.1");
+        assert_eq!(ip_map.get("b").unwrap(), "10.0.0.2");
+    }
+
+    #[test]
+    fn test_build_ip_map_multi_homed() {
+        let topo = crate::parser::parse(
+            r#"
+lab "t"
+node r
+node a
+node b
+link r:eth0 -- a:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+link r:eth1 -- b:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
+"#,
+        )
+        .unwrap();
+        let ip_map = build_ip_map(&topo);
+        // First IP wins for multi-homed nodes
+        assert_eq!(ip_map.get("r").unwrap(), "10.0.1.1");
+    }
+
+    #[test]
+    fn test_scenario_result_types() {
+        let result = ScenarioResult {
+            name: "test".into(),
+            steps: vec![StepResult {
+                time_ms: 0,
+                actions: vec![
+                    ActionResult {
+                        description: "down a:eth0".into(),
+                        ok: true,
+                        detail: None,
+                    },
+                    ActionResult {
+                        description: "validate".into(),
+                        ok: false,
+                        detail: Some("FAIL: reach a b".into()),
+                    },
+                ],
+            }],
+            passed: false,
+            duration_ms: 5000,
+        };
+        assert!(!result.passed);
+        assert_eq!(result.steps[0].actions.len(), 2);
+        assert!(result.steps[0].actions[0].ok);
+        assert!(!result.steps[0].actions[1].ok);
+    }
 }

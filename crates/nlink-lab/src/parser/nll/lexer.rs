@@ -12,11 +12,14 @@ pub struct Spanned {
 }
 
 /// NLL tokens.
+///
+/// Most keywords are context-sensitive and lex as `Ident`.  Only the
+/// top-level structural keywords that start statements are reserved.
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t]+")]
 #[logos(skip r"#[^\n]*")]
 pub enum Token {
-    // ── Keywords ─────────────────────────────────
+    // ── Reserved top-level keywords ─────────────
     #[token("import")]
     Import,
     #[token("as")]
@@ -29,64 +32,12 @@ pub enum Token {
     Profile,
     #[token("link")]
     Link,
+    #[token("network")]
+    Network,
     #[token("defaults")]
     Defaults,
     #[token("param")]
     Param,
-    #[token("(")]
-    LParen,
-    #[token(")")]
-    RParen,
-    #[token("src")]
-    Src,
-    #[token("dst")]
-    Dst,
-    #[token("cpu")]
-    Cpu,
-    #[token("privileged")]
-    Privileged,
-    #[token("cap-add")]
-    CapAdd,
-    #[token("cap-drop")]
-    CapDrop,
-    #[token("entrypoint")]
-    Entrypoint,
-    #[token("hostname")]
-    Hostname,
-    #[token("workdir")]
-    Workdir,
-    #[token("labels")]
-    Labels,
-    #[token("pull")]
-    Pull,
-    #[token("memory")]
-    Memory,
-    #[token("exec")]
-    Exec,
-    #[token("healthcheck")]
-    Healthcheck,
-    #[token("startup-delay")]
-    StartupDelay,
-    #[token("env-file")]
-    EnvFile,
-    #[token("config")]
-    Config,
-    #[token("overlay")]
-    Overlay,
-    #[token("depends-on")]
-    DependsOn,
-    #[token("interval")]
-    Interval,
-    #[token("timeout")]
-    Timeout,
-    #[token("retries")]
-    Retries,
-    #[token("dns")]
-    Dns,
-    #[token("mgmt")]
-    Mgmt,
-    #[token("subnet")]
-    Subnet,
     #[token("pool")]
     Pool,
     #[token("validate")]
@@ -95,42 +46,12 @@ pub enum Token {
     Scenario,
     #[token("benchmark")]
     Benchmark,
-    #[token("at")]
-    At,
-    #[token("reach")]
-    Reach,
-    #[token("no-reach")]
-    NoReach,
-    #[token("tcp-connect")]
-    TcpConnect,
-    #[token("latency-under")]
-    LatencyUnder,
-    #[token("route-has")]
-    RouteHas,
-    #[token("dns-resolves")]
-    DnsResolves,
-    #[token("samples")]
-    Samples,
     #[token("mesh")]
     Mesh,
     #[token("ring")]
     Ring,
     #[token("star")]
     Star,
-    #[token("hub")]
-    Hub,
-    #[token("spokes")]
-    Spokes,
-    #[token("count")]
-    Count,
-    #[token("version")]
-    Version,
-    #[token("author")]
-    Author,
-    #[token("tags")]
-    Tags,
-    #[token("network")]
-    Network,
     #[token("for")]
     For,
     #[token("in")]
@@ -139,158 +60,14 @@ pub enum Token {
     Let,
     #[token("impair")]
     Impair,
-
-    // Node properties
-    #[token("forward")]
-    Forward,
-    #[token("sysctl")]
-    Sysctl,
-    #[token("route")]
-    Route,
-    #[token("lo")]
-    Lo,
-    #[token("firewall")]
-    Firewall,
-    #[token("vrf")]
-    Vrf,
-    #[token("wireguard")]
-    Wireguard,
-    #[token("vxlan")]
-    Vxlan,
-    #[token("dummy")]
-    Dummy,
-    #[token("macvlan")]
-    Macvlan,
-    #[token("ipvlan")]
-    Ipvlan,
-    #[token("wifi")]
-    Wifi,
-    #[token("ssid")]
-    Ssid,
-    #[token("wpa2")]
-    Wpa2,
-    #[token("mesh-id")]
-    MeshId,
-    #[token("run")]
-    Run,
-    #[token("image")]
-    Image,
-    #[token("cmd")]
-    Cmd,
-
-    // Sub-keywords
-    #[token("default")]
-    Default,
-    #[token("via")]
-    Via,
-    #[token("dev")]
-    Dev,
-    #[token("metric")]
-    Metric,
-    #[token("table")]
-    Table,
-    #[token("mtu")]
-    Mtu,
-    #[token("policy")]
-    Policy,
-    #[token("accept")]
-    Accept,
-    #[token("drop")]
-    Drop,
-    #[token("reject")]
-    Reject,
-    #[token("ct")]
-    Ct,
-    #[token("tcp")]
-    Tcp,
-    #[token("udp")]
-    Udp,
-    #[token("dport")]
-    Dport,
-    #[token("sport")]
-    Sport,
-    #[token("icmp")]
-    Icmp,
-    #[token("icmpv6")]
-    Icmpv6,
-    #[token("mark")]
-    Mark,
-    #[token("ipv4")]
-    Ipv4,
-    #[token("ipv6")]
-    Ipv6,
-    #[token("key")]
-    Key,
-    #[token("auto")]
-    Auto,
-    #[token("listen")]
-    Listen,
-    #[token("address")]
-    Address,
-    #[token("peers")]
-    Peers,
-    #[token("members")]
-    Members,
-    #[token("port")]
-    Port,
-    #[token("vlan-filtering")]
-    VlanFiltering,
-    #[token("vlan")]
-    Vlan,
-    #[token("pvid")]
-    Pvid,
-    #[token("tagged")]
-    Tagged,
-    #[token("untagged")]
-    Untagged,
-    #[token("vlans")]
-    Vlans,
-    #[token("interfaces")]
-    Interfaces,
-    #[token("vni")]
-    Vni,
-    #[token("local")]
-    Local,
-    #[token("remote")]
-    Remote,
-    #[token("background")]
-    Background,
-    #[token("description")]
-    Description,
-    #[token("prefix")]
-    Prefix,
     #[token("rate")]
     Rate,
-    #[token("egress")]
-    Egress,
-    #[token("ingress")]
-    Ingress,
-    #[token("delay")]
-    Delay,
-    #[token("jitter")]
-    Jitter,
-    #[token("loss")]
-    Loss,
-    #[token("corrupt")]
-    Corrupt,
-    #[token("reorder")]
-    Reorder,
-    #[token("burst")]
-    Burst,
-
-    // Container node keywords
-    #[token("env")]
-    Env,
-    #[token("volumes")]
-    Volumes,
-    #[token("runtime")]
-    Runtime,
-
-    // VLAN interface keyword
-    #[token("parent")]
-    Parent,
 
     // ── Operators / Punctuation ──────────────────
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
     #[token("--")]
     DashDash,
     #[token("->")]
@@ -378,9 +155,24 @@ impl std::fmt::Display for Token {
             Token::Profile => write!(f, "profile"),
             Token::Link => write!(f, "link"),
             Token::Network => write!(f, "network"),
+            Token::Defaults => write!(f, "defaults"),
+            Token::Pool => write!(f, "pool"),
+            Token::Validate => write!(f, "validate"),
+            Token::Scenario => write!(f, "scenario"),
+            Token::Benchmark => write!(f, "benchmark"),
+            Token::Mesh => write!(f, "mesh"),
+            Token::Ring => write!(f, "ring"),
+            Token::Star => write!(f, "star"),
             Token::For => write!(f, "for"),
             Token::In => write!(f, "in"),
             Token::Let => write!(f, "let"),
+            Token::Impair => write!(f, "impair"),
+            Token::Rate => write!(f, "rate"),
+            Token::Import => write!(f, "import"),
+            Token::As => write!(f, "as"),
+            Token::Param => write!(f, "param"),
+            Token::LParen => write!(f, "("),
+            Token::RParen => write!(f, ")"),
             Token::LBrace => write!(f, "{{"),
             Token::RBrace => write!(f, "}}"),
             Token::LBracket => write!(f, "["),
@@ -406,7 +198,6 @@ impl std::fmt::Display for Token {
             Token::Percent(v) => write!(f, "{v}"),
             Token::Ident(v) => write!(f, "{v}"),
             Token::Interp(v) => write!(f, "{v}"),
-            other => write!(f, "{other:?}"),
         }
     }
 }
@@ -674,18 +465,18 @@ link router:eth0 -- host:eth0 {
     }
 
     #[test]
-    fn test_sub_keywords() {
-        let tokens = lex_tokens("forward ipv4 delay jitter loss rate mtu");
+    fn test_sub_keywords_lex_as_idents() {
+        // After the context-sensitive keyword refactor, these lex as Ident
+        let tokens = lex_tokens("forward ipv4 delay jitter loss mtu");
         assert_eq!(
             tokens,
             vec![
-                Token::Forward,
-                Token::Ipv4,
-                Token::Delay,
-                Token::Jitter,
-                Token::Loss,
-                Token::Rate,
-                Token::Mtu,
+                Token::Ident("forward".into()),
+                Token::Ident("ipv4".into()),
+                Token::Ident("delay".into()),
+                Token::Ident("jitter".into()),
+                Token::Ident("loss".into()),
+                Token::Ident("mtu".into()),
             ]
         );
     }
@@ -693,7 +484,14 @@ link router:eth0 -- host:eth0 {
     #[test]
     fn test_impair_keywords() {
         let tokens = lex_tokens("impair corrupt reorder");
-        assert_eq!(tokens, vec![Token::Impair, Token::Corrupt, Token::Reorder]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Impair,
+                Token::Ident("corrupt".into()),
+                Token::Ident("reorder".into()),
+            ]
+        );
     }
 
     #[test]
@@ -703,13 +501,13 @@ link router:eth0 -- host:eth0 {
             tokens,
             vec![
                 Token::Network,
-                Token::Members,
-                Token::VlanFiltering,
-                Token::Vlan,
-                Token::Pvid,
-                Token::Tagged,
-                Token::Untagged,
-                Token::Port,
+                Token::Ident("members".into()),
+                Token::Ident("vlan-filtering".into()),
+                Token::Ident("vlan".into()),
+                Token::Ident("pvid".into()),
+                Token::Ident("tagged".into()),
+                Token::Ident("untagged".into()),
+                Token::Ident("port".into()),
             ]
         );
     }
@@ -717,7 +515,14 @@ link router:eth0 -- host:eth0 {
     #[test]
     fn test_vrf_keywords() {
         let tokens = lex_tokens("vrf table interfaces");
-        assert_eq!(tokens, vec![Token::Vrf, Token::Table, Token::Interfaces]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("vrf".into()),
+                Token::Ident("table".into()),
+                Token::Ident("interfaces".into()),
+            ]
+        );
     }
 
     #[test]
@@ -726,12 +531,12 @@ link router:eth0 -- host:eth0 {
         assert_eq!(
             tokens,
             vec![
-                Token::Wireguard,
-                Token::Key,
-                Token::Auto,
-                Token::Listen,
-                Token::Peers,
-                Token::Address,
+                Token::Ident("wireguard".into()),
+                Token::Ident("key".into()),
+                Token::Ident("auto".into()),
+                Token::Ident("listen".into()),
+                Token::Ident("peers".into()),
+                Token::Ident("address".into()),
             ]
         );
     }
@@ -741,7 +546,12 @@ link router:eth0 -- host:eth0 {
         let tokens = lex_tokens("vxlan vni local remote");
         assert_eq!(
             tokens,
-            vec![Token::Vxlan, Token::Vni, Token::Local, Token::Remote]
+            vec![
+                Token::Ident("vxlan".into()),
+                Token::Ident("vni".into()),
+                Token::Ident("local".into()),
+                Token::Ident("remote".into()),
+            ]
         );
     }
 
@@ -753,19 +563,19 @@ link router:eth0 -- host:eth0 {
         assert_eq!(
             tokens,
             vec![
-                Token::Firewall,
-                Token::Policy,
-                Token::Accept,
-                Token::Drop,
-                Token::Reject,
-                Token::Ct,
-                Token::Tcp,
-                Token::Udp,
-                Token::Dport,
-                Token::Sport,
-                Token::Icmp,
-                Token::Icmpv6,
-                Token::Mark,
+                Token::Ident("firewall".into()),
+                Token::Ident("policy".into()),
+                Token::Ident("accept".into()),
+                Token::Ident("drop".into()),
+                Token::Ident("reject".into()),
+                Token::Ident("ct".into()),
+                Token::Ident("tcp".into()),
+                Token::Ident("udp".into()),
+                Token::Ident("dport".into()),
+                Token::Ident("sport".into()),
+                Token::Ident("icmp".into()),
+                Token::Ident("icmpv6".into()),
+                Token::Ident("mark".into()),
             ]
         );
     }
@@ -776,8 +586,8 @@ link router:eth0 -- host:eth0 {
         assert_eq!(
             tokens,
             vec![
-                Token::Run,
-                Token::Background,
+                Token::Ident("run".into()),
+                Token::Ident("background".into()),
                 Token::LBracket,
                 Token::String("iperf3".into()),
                 Token::Comma,
@@ -847,6 +657,35 @@ link router:eth0 -- host:eth0 {
                 Token::Colon,
                 Token::Ident("eth".into()),
                 Token::Interp("${l}".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_rate_still_reserved() {
+        // rate is a reserved top-level keyword
+        let tokens = lex_tokens("rate");
+        assert_eq!(tokens, vec![Token::Rate]);
+    }
+
+    #[test]
+    fn test_hyphenated_keywords_lex_as_idents() {
+        let tokens = lex_tokens("no-reach tcp-connect latency-under route-has dns-resolves cap-add cap-drop depends-on startup-delay env-file vlan-filtering mesh-id");
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("no-reach".into()),
+                Token::Ident("tcp-connect".into()),
+                Token::Ident("latency-under".into()),
+                Token::Ident("route-has".into()),
+                Token::Ident("dns-resolves".into()),
+                Token::Ident("cap-add".into()),
+                Token::Ident("cap-drop".into()),
+                Token::Ident("depends-on".into()),
+                Token::Ident("startup-delay".into()),
+                Token::Ident("env-file".into()),
+                Token::Ident("vlan-filtering".into()),
+                Token::Ident("mesh-id".into()),
             ]
         );
     }

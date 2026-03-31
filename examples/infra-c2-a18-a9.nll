@@ -1,0 +1,170 @@
+# Infrastructure: C2 ↔ A18 ↔ A9 drone control network.
+#
+# C2 (Command & Control): DC1, DC2, DCS, FIREWALL
+# A18 (Remote drone):     CC, CU, RED (≈DCS), BLACK (≈FIREWALL)
+# A9  (Remote drone):     CC (≈BLACK+RED+CC), CU
+#
+# Data path:  DC1/DC2 → DCS → FIREWALL → [modem] → BLACK → RED → CC/CU
+# Addressing: DCS uses 144.X.Y.0/24 (X=asset, Y=link type) via FIREWALL
+#             FIREWALL NATs 144.x → 172.x on modem links
+#
+# Modem links:
+#   C2 ↔ A18: FO (fiber), SAT (satellite), radio
+#   C2 ↔ A9:  FO (fiber), wifi
+
+lab "infra" {
+  description "C2-A18-A9 drone control infrastructure"
+  dns hosts
+}
+
+profile router { forward ipv4 }
+
+# ═══════════════════════════════════════════════════════════
+# Asset C2 — Command & Control
+# ═══════════════════════════════════════════════════════════
+
+node dc1 { route default via 10.2.1.10 }
+node dc2 { route default via 10.2.1.11 }
+
+# DCS: Connectivity Solution — gateway to remote assets
+node dcs : router {
+  # A18 via FIREWALL (translated by NAT from 144.x → 172.x)
+  route 144.18.1.0/24 via 10.2.2.2    # A18 via FO
+  route 144.18.2.0/24 via 10.2.2.2    # A18 via SAT
+  route 144.18.3.0/24 via 10.2.2.2    # A18 via radio
+  # A9 via FIREWALL
+  route 144.9.1.0/24 via 10.2.2.2     # A9 via FO
+  route 144.9.4.0/24 via 10.2.2.2     # A9 via wifi
+}
+
+# FIREWALL: NAT between DCS (144.x) and modems (172.x)
+node c2-fw : router {
+  # Return route to DC subnet
+  route 10.2.1.0/24 via 10.2.2.1
+
+  # NAT via iptables (runs at deploy time)
+  # Masquerade: outgoing source → modem IP
+  run ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "10.2.0.0/16", "-j", "MASQUERADE"]
+  # DNAT: 144.18.Y.Z → A18-BLACK modem IP per link type
+  run ["iptables", "-t", "nat", "-A", "PREROUTING", "-d", "144.18.1.0/24", "-j", "DNAT", "--to-destination", "172.100.1.18"]
+  run ["iptables", "-t", "nat", "-A", "PREROUTING", "-d", "144.18.2.0/24", "-j", "DNAT", "--to-destination", "172.100.2.18"]
+  run ["iptables", "-t", "nat", "-A", "PREROUTING", "-d", "144.18.3.0/24", "-j", "DNAT", "--to-destination", "172.100.3.18"]
+  # DNAT: 144.9.Y.Z → A9-CC modem IP per link type
+  run ["iptables", "-t", "nat", "-A", "PREROUTING", "-d", "144.9.1.0/24", "-j", "DNAT", "--to-destination", "172.100.4.9"]
+  run ["iptables", "-t", "nat", "-A", "PREROUTING", "-d", "144.9.4.0/24", "-j", "DNAT", "--to-destination", "172.100.5.9"]
+}
+
+# ═══════════════════════════════════════════════════════════
+# Asset A18 — Remote Drone
+# ═══════════════════════════════════════════════════════════
+
+node a18-cc { route default via 10.18.1.10 }
+node a18-cu { route default via 10.18.1.11 }
+
+# RED: acts as DCS on remote side — routes between internal and BLACK
+node a18-red : router {
+  route 172.100.0.0/16 via 10.18.2.2
+}
+
+# BLACK: acts as FIREWALL on remote side — NAT for outgoing + modem facing
+node a18-black : router {
+  route 10.18.1.0/24 via 10.18.2.1
+
+  # Masquerade internal traffic going out to modems
+  run ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "10.18.0.0/16", "-j", "MASQUERADE"]
+}
+
+# ═══════════════════════════════════════════════════════════
+# Asset A9 — Remote Drone (simplified: CC = BLACK + RED + CC)
+# ═══════════════════════════════════════════════════════════
+
+node a9-cu { route default via 10.9.1.1 }
+
+# CC: combined role — modem-facing, routing, and control
+node a9-cc : router {
+  # Already on 172.x — no NAT needed
+}
+
+# ═══════════════════════════════════════════════════════════
+# Internal links
+# ═══════════════════════════════════════════════════════════
+
+# C2: DC LAN (point-to-point via DCS acting as switch)
+link dc1:eth0 -- dcs:dc1 { 10.2.1.1/24 -- 10.2.1.10/24 }
+link dc2:eth0 -- dcs:dc2 { 10.2.1.2/24 -- 10.2.1.11/24 }
+
+# C2: DCS ↔ FIREWALL
+link dcs:eth1 -- c2-fw:eth0 { 10.2.2.1/24 -- 10.2.2.2/24 }
+
+# A18: internal LAN (point-to-point via RED acting as switch)
+link a18-cc:eth0 -- a18-red:cc { 10.18.1.1/24 -- 10.18.1.10/24 }
+link a18-cu:eth0 -- a18-red:cu { 10.18.1.2/24 -- 10.18.1.11/24 }
+
+# A18: RED ↔ BLACK
+link a18-red:eth1 -- a18-black:eth0 { 10.18.2.1/24 -- 10.18.2.2/24 }
+
+# A9: CC ↔ CU
+link a9-cc:eth0 -- a9-cu:eth0 { 10.9.1.1/24 -- 10.9.1.2/24 }
+
+# ═══════════════════════════════════════════════════════════
+# Modem links (WAN between assets)
+#
+# Addressing: 172.100.LINK_ID.ASSET_ID/24
+# Link IDs: 1=FO(C2↔A18) 2=SAT(C2↔A18) 3=radio(C2↔A18)
+#            4=FO(C2↔A9) 5=wifi(C2↔A9)
+# Asset IDs: 2=C2  18=A18  9=A9
+#
+# Uncomment impairments to simulate link characteristics.
+# ═══════════════════════════════════════════════════════════
+
+# C2 ↔ A18: Fiber Optic (low latency, high bandwidth)
+link c2-fw:fo -- a18-black:fo {
+  172.100.1.2/24 -- 172.100.1.18/24
+  # delay 1ms
+}
+
+# C2 ↔ A18: Satellite (high latency, moderate bandwidth)
+link c2-fw:sat -- a18-black:sat {
+  172.100.2.2/24 -- 172.100.2.18/24
+  # delay 300ms jitter 50ms
+}
+
+# C2 ↔ A18: Radio (variable latency, loss)
+link c2-fw:radio -- a18-black:radio {
+  172.100.3.2/24 -- 172.100.3.18/24
+  # delay 15ms jitter 10ms loss 2%
+}
+
+# C2 ↔ A9: Fiber Optic
+link c2-fw:fo2 -- a9-cc:fo {
+  172.100.4.2/24 -- 172.100.4.9/24
+  # delay 1ms
+}
+
+# C2 ↔ A9: WiFi (low latency, some loss)
+link c2-fw:wfi -- a9-cc:wfi {
+  172.100.5.2/24 -- 172.100.5.9/24
+  # delay 3ms jitter 2ms loss 0.5%
+}
+
+# ═══════════════════════════════════════════════════════════
+# Validation
+# ═══════════════════════════════════════════════════════════
+
+validate {
+  # C2 internal
+  reach dc1 dc2
+  reach dc1 dcs
+  reach dcs c2-fw
+
+  # A18 internal
+  reach a18-cc a18-red
+  reach a18-red a18-black
+
+  # A9 internal
+  reach a9-cc a9-cu
+
+  # Modem links (L3 reachability between assets)
+  reach c2-fw a18-black
+  reach c2-fw a9-cc
+}

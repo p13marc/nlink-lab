@@ -3141,6 +3141,24 @@ node r {
     }
 
     #[test]
+    fn test_route_group() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node r {
+  route [10.0.0.0/8, 10.1.0.0/8, 10.2.0.0/8] via 192.168.1.1
+  route default via 192.168.1.1
+}
+"#,
+        );
+        let routes = &topo.nodes["r"].routes;
+        assert_eq!(routes.len(), 4); // 3 from list + 1 default
+        assert_eq!(routes["10.0.0.0/8"].via.as_deref(), Some("192.168.1.1"));
+        assert_eq!(routes["10.1.0.0/8"].via.as_deref(), Some("192.168.1.1"));
+        assert_eq!(routes["10.2.0.0/8"].via.as_deref(), Some("192.168.1.1"));
+        assert_eq!(routes["default"].via.as_deref(), Some("192.168.1.1"));
+    }
+
+    #[test]
     fn test_lower_wifi() {
         let topo = parse_and_lower(
             r#"lab "t"

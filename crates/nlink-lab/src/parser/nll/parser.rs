@@ -723,6 +723,12 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                 overlay = Some(expect_string(tokens, pos)?);
             } else if eat_kw(tokens, pos, "depends-on") {
                 depends_on = parse_ident_list(tokens, pos)?;
+            } else if check_kw(tokens, *pos, "route") {
+                *pos += 1;
+                let routes = parse_route_defs(tokens, pos)?;
+                for r in routes {
+                    props.push(ast::NodeProp::Route(r));
+                }
             } else {
                 props.push(parse_node_prop(tokens, pos)?);
             }
@@ -771,7 +777,15 @@ fn parse_node_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Node
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        props.push(parse_node_prop(tokens, pos)?);
+        if check_kw(tokens, *pos, "route") {
+            *pos += 1;
+            let routes = parse_route_defs(tokens, pos)?;
+            for r in routes {
+                props.push(ast::NodeProp::Route(r));
+            }
+        } else {
+            props.push(parse_node_prop(tokens, pos)?);
+        }
     }
 
     Ok(props)
@@ -804,9 +818,7 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
         *pos += 1;
         let addr = parse_cidr_or_name(tokens, pos)?;
         Ok(ast::NodeProp::Lo(addr))
-    } else if check_kw(tokens, *pos, "route") {
-        *pos += 1;
-        parse_route_def(tokens, pos).map(ast::NodeProp::Route)
+    // Note: "route" is handled at the call site (supports list destinations)
     } else if check_kw(tokens, *pos, "firewall") {
         *pos += 1;
         parse_firewall_def(tokens, pos).map(ast::NodeProp::Firewall)
@@ -909,6 +921,54 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 }
 
 // ─── Route ────────────────────────────────────────────────
+
+/// Parse one or more route definitions. Supports list destinations:
+/// `route [10.0.0.0/8, 10.1.0.0/8] via 10.2.2.2`
+fn parse_route_defs(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::RouteDef>> {
+    // Check for list: route [cidr, cidr, ...] via/dev/metric
+    if eat(tokens, pos, &Token::LBracket) {
+        let mut destinations = Vec::new();
+        loop {
+            destinations.push(parse_cidr_or_name(tokens, pos)?);
+            if !eat(tokens, pos, &Token::Comma) {
+                break;
+            }
+        }
+        expect(tokens, pos, &Token::RBracket)?;
+
+        // Parse shared route parameters
+        let mut via = None;
+        let mut dev = None;
+        let mut metric = None;
+        loop {
+            if check_kw(tokens, *pos, "via") {
+                *pos += 1;
+                via = Some(parse_cidr_or_name(tokens, pos)?);
+            } else if check_kw(tokens, *pos, "dev") {
+                *pos += 1;
+                dev = Some(parse_name(tokens, pos)?);
+            } else if check_kw(tokens, *pos, "metric") {
+                *pos += 1;
+                metric = Some(expect_int(tokens, pos)? as u32);
+            } else {
+                break;
+            }
+        }
+
+        Ok(destinations
+            .into_iter()
+            .map(|dest| ast::RouteDef {
+                destination: dest,
+                via: via.clone(),
+                dev: dev.clone(),
+                metric,
+            })
+            .collect())
+    } else {
+        // Single destination
+        parse_route_def(tokens, pos).map(|r| vec![r])
+    }
+}
 
 fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef> {
     // destination: "default" or CIDR

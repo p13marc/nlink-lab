@@ -18,7 +18,7 @@ Implementation plans for nlink-lab.
 | [114](114-nat-firewall-dsl.md) | NAT support in firewall DSL | Medium | **Implemented** |
 | [115](115-network-subnet-addresses.md) | Network subnet + port addresses | Small | **Implemented** |
 | [116](116-shell-run-syntax.md) | Shell-style `run` syntax | Small | **Implemented** |
-| [117](117-route-groups.md) | Route groups (multi-destination) | Small | Ready (P3) |
+| [117](117-route-groups.md) | Route groups (multi-destination) | Small | **Implemented** |
 | [118](118-link-profiles.md) | Link type profiles (named presets) | Medium | Ready (P3) |
 | [119](119-site-grouping.md) | Site/asset grouping | Medium | Draft (P4) |
 

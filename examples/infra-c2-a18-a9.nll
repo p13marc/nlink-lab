@@ -29,12 +29,9 @@ node dc2 { route default via 10.2.1.3 }
 # DCS: Connectivity Solution — gateway to remote assets
 node dcs : router {
   # A18 via FIREWALL (translated by NAT from 144.x → 172.x)
-  route 144.18.1.0/24 via 10.2.2.2    # A18 via FO
-  route 144.18.2.0/24 via 10.2.2.2    # A18 via SAT
-  route 144.18.3.0/24 via 10.2.2.2    # A18 via radio
+  route [144.18.1.0/24, 144.18.2.0/24, 144.18.3.0/24] via 10.2.2.2
   # A9 via FIREWALL
-  route 144.9.1.0/24 via 10.2.2.2     # A9 via FO
-  route 144.9.4.0/24 via 10.2.2.2     # A9 via wifi
+  route [144.9.1.0/24, 144.9.4.0/24] via 10.2.2.2
 }
 
 # FIREWALL: NAT between DCS (144.x) and modems (172.x)

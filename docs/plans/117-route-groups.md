@@ -1,7 +1,7 @@
 # Plan 117: Route Groups (Multi-Destination Shorthand)
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Small (half day)
 **Priority:** P3 — reduces repetition
 

@@ -1,7 +1,7 @@
 # Plan 119: Site / Asset Grouping
 
 **Date:** 2026-03-31
-**Status:** Draft
+**Status:** Implemented (2026-03-31) — basic prefix expansion
 **Effort:** Medium (1-2 days)
 **Priority:** P4 — readability for large topologies
 

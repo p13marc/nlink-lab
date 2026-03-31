@@ -184,6 +184,43 @@ fn lower_with_base_dir(
             ast::Statement::Benchmark(b) => {
                 topology.benchmarks.push(lower_benchmark(b));
             }
+            ast::Statement::Site(s) => {
+                // Expand site: prefix all node/link names and re-lower
+                let prefix = format!("{}-", s.name);
+                for inner in &s.body {
+                    match inner {
+                        ast::Statement::Node(n) => {
+                            let mut prefixed = n.clone();
+                            prefixed.name = format!("{}{}", prefix, n.name);
+                            lower_node(&mut topology, &prefixed, &ctx)?;
+                        }
+                        ast::Statement::Link(l) => {
+                            let mut prefixed = l.clone();
+                            prefixed.left_node = format!("{}{}", prefix, l.left_node);
+                            prefixed.right_node = format!("{}{}", prefix, l.right_node);
+                            lower_link(&mut topology, &prefixed, &mut ctx);
+                        }
+                        ast::Statement::Network(n) => {
+                            let mut prefixed = n.clone();
+                            prefixed.name = format!("{}{}", prefix, n.name);
+                            // Prefix member endpoints
+                            prefixed.members = n
+                                .members
+                                .iter()
+                                .map(|m| {
+                                    if let Some((node, iface)) = m.split_once(':') {
+                                        format!("{}{}:{}", prefix, node, iface)
+                                    } else {
+                                        format!("{}{}", prefix, m)
+                                    }
+                                })
+                                .collect();
+                            lower_network(&mut topology, &prefixed)?;
+                        }
+                        _ => {} // Other statements inside sites ignored for now
+                    }
+                }
+            }
             ast::Statement::Profile(_)
             | ast::Statement::Let(_)
             | ast::Statement::For(_)
@@ -930,6 +967,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) 
         ast::Statement::Validate(v) => ast::Statement::Validate(v.clone()),
         ast::Statement::Scenario(s) => ast::Statement::Scenario(s.clone()),
         ast::Statement::Benchmark(b) => ast::Statement::Benchmark(b.clone()),
+        ast::Statement::Site(s) => ast::Statement::Site(s.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
@@ -3161,6 +3199,39 @@ node r {
         assert_eq!(iv.name, "eth0");
         assert_eq!(iv.parent, "enp3s0");
         assert_eq!(iv.mode, types::IpvlanMode::L2);
+    }
+
+    #[test]
+    fn test_site_grouping() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+profile router { forward ipv4 }
+
+site c2 {
+  node dc1 { route default via 10.2.1.3 }
+  node dcs : router
+  link dc1:eth0 -- dcs:eth0 { 10.2.1.1/24 -- 10.2.1.3/24 }
+}
+
+site a18 {
+  node cc { route default via 10.18.1.3 }
+  node red : router
+  link cc:eth0 -- red:eth0 { 10.18.1.1/24 -- 10.18.1.3/24 }
+}
+
+# Cross-site link (uses prefixed names)
+link c2-dcs:eth1 -- a18-red:eth1 { 172.100.1.2/24 -- 172.100.1.18/24 }
+"#,
+        );
+        // Nodes should be prefixed with site name
+        assert!(topo.nodes.contains_key("c2-dc1"), "expected c2-dc1");
+        assert!(topo.nodes.contains_key("c2-dcs"), "expected c2-dcs");
+        assert!(topo.nodes.contains_key("a18-cc"), "expected a18-cc");
+        assert!(topo.nodes.contains_key("a18-red"), "expected a18-red");
+        // Links should reference prefixed names
+        assert_eq!(topo.links.len(), 3);
+        assert_eq!(topo.links[0].endpoints[0], "c2-dc1:eth0");
+        assert_eq!(topo.links[0].endpoints[1], "c2-dcs:eth0");
     }
 
     #[test]

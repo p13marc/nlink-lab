@@ -1053,6 +1053,10 @@ port_block     = "{" (CIDR | "pvid" INT | "vlans" int_list
 
 # ── NAT block ───────────────────────────────────
 nat_block      = "nat" "{" nat_rule* "}"
+# ── Site grouping ────────────────────────────────
+site           = "site" IDENT STRING? "{" statement* "}"
+               # All node/link/network names inside are prefixed with "site-"
+
 nat_rule       = "masquerade" ("src" CIDR)?
                | "dnat" ("dst" CIDR)? "to" IP (":" INT)?
                | "snat" ("src" CIDR)? "to" IP

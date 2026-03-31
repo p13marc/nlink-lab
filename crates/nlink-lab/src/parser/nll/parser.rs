@@ -572,11 +572,12 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
+        Token::Ident(s) if s == "site" => parse_site(tokens, pos).map(ast::Statement::Site),
         other => Err(err(
             tokens,
             *pos,
             format!(
-                "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, scenario, param, let, for), found {other}"
+                "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, scenario, site, param, let, for), found {other}"
             ),
         )),
     }
@@ -2467,6 +2468,34 @@ fn parse_benchmark_assertion(
     let op = expect_ident(tokens, pos)?;
     let value = parse_value(tokens, pos)?;
     Ok(ast::BenchmarkAssertionDef { metric, op, value })
+}
+
+// ─── Site ─────────────────────────────────────────────────
+
+fn parse_site(tokens: &[Spanned], pos: &mut usize) -> Result<ast::SiteDef> {
+    expect_kw(tokens, pos, "site")?;
+    let name = expect_ident(tokens, pos)?;
+    let description = if matches!(at(tokens, *pos), Some(Token::String(_))) {
+        Some(expect_string(tokens, pos)?)
+    } else {
+        None
+    };
+
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut body = Vec::new();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        body.push(parse_statement(tokens, pos)?);
+    }
+
+    Ok(ast::SiteDef {
+        name,
+        description,
+        body,
+    })
 }
 
 fn parse_param(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ParamDef> {

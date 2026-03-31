@@ -20,7 +20,7 @@ Implementation plans for nlink-lab.
 | [116](116-shell-run-syntax.md) | Shell-style `run` syntax | Small | **Implemented** |
 | [117](117-route-groups.md) | Route groups (multi-destination) | Small | **Implemented** |
 | [118](118-link-profiles.md) | Link type profiles (named presets) | Medium | **Implemented** |
-| [119](119-site-grouping.md) | Site/asset grouping | Medium | Draft (P4) |
+| [119](119-site-grouping.md) | Site/asset grouping | Medium | **Implemented** |
 
 ### Recommended execution order
 

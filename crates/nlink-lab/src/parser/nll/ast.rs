@@ -58,6 +58,15 @@ pub enum Statement {
     For(ForLoop),
     Scenario(ScenarioDef),
     Benchmark(BenchmarkDef),
+    Site(SiteDef),
+}
+
+/// Site definition (groups nodes/links with a common prefix).
+#[derive(Debug, Clone)]
+pub struct SiteDef {
+    pub name: String,
+    pub description: Option<String>,
+    pub body: Vec<Statement>,
 }
 
 /// Benchmark definition.

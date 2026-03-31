@@ -113,6 +113,34 @@ fn expect(tokens: &[Spanned], pos: &mut usize, expected: &Token) -> Result<()> {
     Ok(())
 }
 
+/// Check if current token is a specific keyword (as ident) and consume it.
+fn eat_kw(tokens: &[Spanned], pos: &mut usize, kw: &str) -> bool {
+    if matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == kw) {
+        *pos += 1;
+        true
+    } else {
+        false
+    }
+}
+
+/// Expect a specific keyword (as ident) and consume it, or error.
+fn expect_kw(tokens: &[Spanned], pos: &mut usize, kw: &str) -> Result<()> {
+    if eat_kw(tokens, pos, kw) {
+        Ok(())
+    } else {
+        Err(err(
+            tokens,
+            *pos,
+            format!("expected '{kw}'"),
+        ))
+    }
+}
+
+/// Check if current token is a specific keyword (as ident) without consuming.
+fn check_kw(tokens: &[Spanned], pos: usize, kw: &str) -> bool {
+    matches!(at(tokens, pos), Some(Token::Ident(s)) if s == kw)
+}
+
 fn expect_ident(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     if *pos >= tokens.len() {
         return Err(err(
@@ -134,84 +162,21 @@ fn expect_ident(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     }
 }
 
-/// Extract an identifier string from a token, treating keywords as identifiers
-/// in contexts where they are used as names.
+/// Extract an identifier string from a token, treating reserved keywords as
+/// identifiers in contexts where they are used as names.
 fn token_as_ident(token: &Token) -> Option<String> {
     match token {
         Token::Ident(s) => Some(s.clone()),
-        // Allow keywords to be used as identifiers
-        Token::Delay => Some("delay".into()),
-        Token::Jitter => Some("jitter".into()),
-        Token::Loss => Some("loss".into()),
-        Token::Rate => Some("rate".into()),
-        Token::Corrupt => Some("corrupt".into()),
-        Token::Reorder => Some("reorder".into()),
-        Token::Forward => Some("forward".into()),
-        Token::Route => Some("route".into()),
-        Token::Lo => Some("lo".into()),
-        Token::Mtu => Some("mtu".into()),
-        Token::Table => Some("table".into()),
-        Token::Policy => Some("policy".into()),
-        Token::Accept => Some("accept".into()),
-        Token::Drop => Some("drop".into()),
-        Token::Reject => Some("reject".into()),
-        Token::Key => Some("key".into()),
-        Token::Auto => Some("auto".into()),
-        Token::Listen => Some("listen".into()),
-        Token::Address => Some("address".into()),
-        Token::Port => Some("port".into()),
-        Token::Local => Some("local".into()),
-        Token::Remote => Some("remote".into()),
-        Token::Default => Some("default".into()),
-        Token::Dev => Some("dev".into()),
-        Token::Metric => Some("metric".into()),
-        Token::Egress => Some("egress".into()),
-        Token::Ingress => Some("ingress".into()),
+        // Reserved keywords that may appear as identifiers in some contexts
         Token::Import => Some("import".into()),
         Token::As => Some("as".into()),
-        Token::Burst => Some("burst".into()),
-        Token::Env => Some("env".into()),
-        Token::Volumes => Some("volumes".into()),
-        Token::Runtime => Some("runtime".into()),
-        Token::Parent => Some("parent".into()),
-        Token::Src => Some("src".into()),
-        Token::Dst => Some("dst".into()),
         Token::Defaults => Some("defaults".into()),
-        Token::Version => Some("version".into()),
-        Token::Author => Some("author".into()),
-        Token::Tags => Some("tags".into()),
-        Token::Cpu => Some("cpu".into()),
-        Token::Privileged => Some("privileged".into()),
-        Token::CapAdd => Some("cap-add".into()),
-        Token::CapDrop => Some("cap-drop".into()),
-        Token::Entrypoint => Some("entrypoint".into()),
-        Token::Hostname => Some("hostname".into()),
-        Token::Workdir => Some("workdir".into()),
-        Token::Labels => Some("labels".into()),
-        Token::Pull => Some("pull".into()),
-        Token::Memory => Some("memory".into()),
-        Token::Exec => Some("exec".into()),
-        Token::Healthcheck => Some("healthcheck".into()),
-        Token::StartupDelay => Some("startup-delay".into()),
-        Token::EnvFile => Some("env-file".into()),
-        Token::Config => Some("config".into()),
-        Token::Overlay => Some("overlay".into()),
-        Token::DependsOn => Some("depends-on".into()),
-        Token::Interval => Some("interval".into()),
-        Token::Timeout => Some("timeout".into()),
-        Token::Retries => Some("retries".into()),
-        Token::Mgmt => Some("mgmt".into()),
-        Token::Subnet => Some("subnet".into()),
         Token::Pool => Some("pool".into()),
         Token::Validate => Some("validate".into()),
-        Token::Reach => Some("reach".into()),
-        Token::NoReach => Some("no-reach".into()),
         Token::Mesh => Some("mesh".into()),
         Token::Ring => Some("ring".into()),
         Token::Star => Some("star".into()),
-        Token::Hub => Some("hub".into()),
-        Token::Spokes => Some("spokes".into()),
-        Token::Count => Some("count".into()),
+        Token::Rate => Some("rate".into()),
         _ => None,
     }
 }
@@ -288,35 +253,46 @@ fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     let mut name = String::new();
     let start = *pos;
     let mut started = false;
+    let mut prev_end: usize = 0;
 
     loop {
         if *pos >= tokens.len() {
             break;
         }
+        // After the first token, only consume adjacent tokens (no whitespace gap).
+        // This prevents `node web image "nginx"` from merging `web` and `image`.
+        if started && tokens[*pos].span.start != prev_end {
+            break;
+        }
         match &tokens[*pos].token {
             _ if !started && token_as_ident(&tokens[*pos].token).is_some() => {
                 name.push_str(&token_as_ident(&tokens[*pos].token).unwrap());
+                prev_end = tokens[*pos].span.end;
                 *pos += 1;
                 started = true;
             }
             Token::Ident(s) => {
                 name.push_str(s);
+                prev_end = tokens[*pos].span.end;
                 *pos += 1;
                 started = true;
             }
             Token::Interp(s) => {
                 name.push_str(s);
+                prev_end = tokens[*pos].span.end;
                 *pos += 1;
                 started = true;
             }
             Token::Int(s) if started => {
                 // Integers only allowed after an ident/interp (e.g. `spine1`)
                 name.push_str(s);
+                prev_end = tokens[*pos].span.end;
                 *pos += 1;
             }
             Token::Dot if started => {
                 // Dots allowed for import prefixes (e.g. `dc.r1`)
                 name.push('.');
+                prev_end = tokens[*pos].span.end;
                 *pos += 1;
             }
             _ => break,
@@ -370,8 +346,6 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         Token::RateLit(s) => s.clone(),
         Token::Percent(s) => s.clone(),
         Token::Interp(s) => s.clone(),
-        Token::Default => "default".into(),
-        Token::Auto => "auto".into(),
         other => {
             return Err(err(tokens, *pos, format!("expected value, found {other}")));
         }
@@ -512,7 +486,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut dns = None;
 
     // Parse optional inline runtime before block
-    if eat(tokens, pos, &Token::Runtime) {
+    if eat_kw(tokens, pos, "runtime") {
         runtime = Some(expect_string(tokens, pos)?);
     }
 
@@ -522,52 +496,38 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Description) => {
-                    *pos += 1;
-                    description = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Prefix) => {
-                    *pos += 1;
-                    prefix = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Runtime) => {
-                    *pos += 1;
-                    runtime = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Version) => {
-                    *pos += 1;
-                    version = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Author) => {
-                    *pos += 1;
-                    author = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Tags) => {
-                    *pos += 1;
-                    tags = parse_ident_list(tokens, pos)?;
-                }
-                Some(Token::Mgmt) => {
-                    *pos += 1;
-                    mgmt = Some(parse_cidr_or_name(tokens, pos)?);
-                }
-                Some(Token::Dns) => {
-                    *pos += 1;
-                    dns = Some(expect_ident(tokens, pos)?);
-                }
-                Some(other) => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!("unexpected {other} in lab block"),
-                    ));
-                }
-                None => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "unexpected end of input in lab block".into(),
-                    ));
+            if eat_kw(tokens, pos, "description") {
+                description = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "prefix") {
+                prefix = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "runtime") {
+                runtime = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "version") {
+                version = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "author") {
+                author = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "tags") {
+                tags = parse_ident_list(tokens, pos)?;
+            } else if eat_kw(tokens, pos, "mgmt") {
+                mgmt = Some(parse_cidr_or_name(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "dns") {
+                dns = Some(expect_ident(tokens, pos)?);
+            } else {
+                match at(tokens, *pos) {
+                    Some(other) => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!("unexpected {other} in lab block"),
+                        ));
+                    }
+                    None => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            "unexpected end of input in lab block".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -675,9 +635,9 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     let mut configs = Vec::new();
     let mut overlay = None;
     let mut depends_on = Vec::new();
-    if eat(tokens, pos, &Token::Image) {
+    if eat_kw(tokens, pos, "image") {
         image = Some(expect_string(tokens, pos)?);
-        if eat(tokens, pos, &Token::Cmd) {
+        if eat_kw(tokens, pos, "cmd") {
             if check(tokens, *pos, &Token::LBracket) {
                 cmd = Some(parse_string_list(tokens, pos)?);
             } else {
@@ -694,129 +654,77 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Image) => {
-                    *pos += 1;
-                    image = Some(expect_string(tokens, pos)?);
+            if eat_kw(tokens, pos, "image") {
+                image = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "cmd") {
+                if check(tokens, *pos, &Token::LBracket) {
+                    cmd = Some(parse_string_list(tokens, pos)?);
+                } else {
+                    cmd = Some(vec![expect_string(tokens, pos)?]);
                 }
-                Some(Token::Cmd) => {
-                    *pos += 1;
-                    if check(tokens, *pos, &Token::LBracket) {
-                        cmd = Some(parse_string_list(tokens, pos)?);
-                    } else {
-                        cmd = Some(vec![expect_string(tokens, pos)?]);
-                    }
-                }
-                Some(Token::Env) => {
-                    *pos += 1;
-                    env = parse_string_list(tokens, pos)?;
-                }
-                Some(Token::Volumes) => {
-                    *pos += 1;
-                    volumes = parse_string_list(tokens, pos)?;
-                }
-                Some(Token::Cpu) => {
-                    *pos += 1;
-                    cpu = Some(parse_value(tokens, pos)?);
-                }
-                Some(Token::Memory) => {
-                    *pos += 1;
-                    memory = Some(parse_value(tokens, pos)?);
-                }
-                Some(Token::Privileged) => {
-                    *pos += 1;
-                    privileged = true;
-                }
-                Some(Token::CapAdd) => {
-                    *pos += 1;
-                    cap_add = parse_ident_list(tokens, pos)?;
-                }
-                Some(Token::CapDrop) => {
-                    *pos += 1;
-                    cap_drop = parse_ident_list(tokens, pos)?;
-                }
-                Some(Token::Entrypoint) => {
-                    *pos += 1;
-                    entrypoint = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Hostname) => {
-                    *pos += 1;
-                    hostname = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Workdir) => {
-                    *pos += 1;
-                    workdir = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Labels) => {
-                    *pos += 1;
-                    labels = parse_string_list(tokens, pos)?;
-                }
-                Some(Token::Pull) => {
-                    *pos += 1;
-                    pull = Some(parse_value(tokens, pos)?);
-                }
-                Some(Token::Exec) => {
-                    *pos += 1;
-                    container_exec.push(expect_string(tokens, pos)?);
-                }
-                Some(Token::Healthcheck) => {
-                    *pos += 1;
-                    healthcheck = Some(expect_string(tokens, pos)?);
-                    // Optional inline interval/timeout
-                    if eat(tokens, pos, &Token::LBrace) {
-                        loop {
-                            skip_newlines(tokens, pos);
-                            if eat(tokens, pos, &Token::RBrace) {
-                                break;
-                            }
-                            match at(tokens, *pos) {
-                                Some(Token::Interval) => {
-                                    *pos += 1;
-                                    healthcheck_interval = Some(parse_value(tokens, pos)?);
-                                }
-                                Some(Token::Timeout) => {
-                                    *pos += 1;
-                                    healthcheck_timeout = Some(parse_value(tokens, pos)?);
-                                }
-                                Some(Token::Retries) => {
-                                    *pos += 1;
-                                    // retries stored in timeout field for now
-                                    // (can be split later)
-                                    let _ = parse_value(tokens, pos)?;
-                                }
-                                _ => {
-                                    // Skip unknown properties
-                                    let _ = parse_value(tokens, pos)?;
-                                }
-                            }
+            } else if eat_kw(tokens, pos, "env") {
+                env = parse_string_list(tokens, pos)?;
+            } else if eat_kw(tokens, pos, "volumes") {
+                volumes = parse_string_list(tokens, pos)?;
+            } else if eat_kw(tokens, pos, "cpu") {
+                cpu = Some(parse_value(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "memory") {
+                memory = Some(parse_value(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "privileged") {
+                privileged = true;
+            } else if eat_kw(tokens, pos, "cap-add") {
+                cap_add = parse_ident_list(tokens, pos)?;
+            } else if eat_kw(tokens, pos, "cap-drop") {
+                cap_drop = parse_ident_list(tokens, pos)?;
+            } else if eat_kw(tokens, pos, "entrypoint") {
+                entrypoint = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "hostname") {
+                hostname = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "workdir") {
+                workdir = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "labels") {
+                labels = parse_string_list(tokens, pos)?;
+            } else if eat_kw(tokens, pos, "pull") {
+                pull = Some(parse_value(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "exec") {
+                container_exec.push(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "healthcheck") {
+                healthcheck = Some(expect_string(tokens, pos)?);
+                // Optional inline interval/timeout
+                if eat(tokens, pos, &Token::LBrace) {
+                    loop {
+                        skip_newlines(tokens, pos);
+                        if eat(tokens, pos, &Token::RBrace) {
+                            break;
+                        }
+                        if eat_kw(tokens, pos, "interval") {
+                            healthcheck_interval = Some(parse_value(tokens, pos)?);
+                        } else if eat_kw(tokens, pos, "timeout") {
+                            healthcheck_timeout = Some(parse_value(tokens, pos)?);
+                        } else if eat_kw(tokens, pos, "retries") {
+                            // retries stored in timeout field for now
+                            // (can be split later)
+                            let _ = parse_value(tokens, pos)?;
+                        } else {
+                            // Skip unknown properties
+                            let _ = parse_value(tokens, pos)?;
                         }
                     }
                 }
-                Some(Token::StartupDelay) => {
-                    *pos += 1;
-                    startup_delay = Some(parse_value(tokens, pos)?);
-                }
-                Some(Token::EnvFile) => {
-                    *pos += 1;
-                    env_file = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Config) => {
-                    *pos += 1;
-                    let host = expect_string(tokens, pos)?;
-                    let container = expect_string(tokens, pos)?;
-                    configs.push((host, container));
-                }
-                Some(Token::Overlay) => {
-                    *pos += 1;
-                    overlay = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::DependsOn) => {
-                    *pos += 1;
-                    depends_on = parse_ident_list(tokens, pos)?;
-                }
-                _ => {
-                    props.push(parse_node_prop(tokens, pos)?);
-                }
+            } else if eat_kw(tokens, pos, "startup-delay") {
+                startup_delay = Some(parse_value(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "env-file") {
+                env_file = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "config") {
+                let host = expect_string(tokens, pos)?;
+                let container = expect_string(tokens, pos)?;
+                configs.push((host, container));
+            } else if eat_kw(tokens, pos, "overlay") {
+                overlay = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "depends-on") {
+                depends_on = parse_ident_list(tokens, pos)?;
+            } else {
+                props.push(parse_node_prop(tokens, pos)?);
             }
         }
         props
@@ -870,94 +778,77 @@ fn parse_node_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Node
 }
 
 fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp> {
-    match at(tokens, *pos) {
-        Some(Token::Forward) => {
-            *pos += 1;
-            let version = match at(tokens, *pos) {
-                Some(Token::Ipv4) => {
-                    *pos += 1;
-                    ast::IpVersion::Ipv4
-                }
-                Some(Token::Ipv6) => {
-                    *pos += 1;
-                    ast::IpVersion::Ipv6
-                }
-                other => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!(
-                            "expected 'ipv4' or 'ipv6' after 'forward', found {}",
-                            other.map_or("end of input".to_string(), |t| t.to_string())
-                        ),
-                    ));
-                }
-            };
-            Ok(ast::NodeProp::Forward(version))
+    if check_kw(tokens, *pos, "forward") {
+        *pos += 1;
+        let version = if eat_kw(tokens, pos, "ipv4") {
+            ast::IpVersion::Ipv4
+        } else if eat_kw(tokens, pos, "ipv6") {
+            ast::IpVersion::Ipv6
+        } else {
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected 'ipv4' or 'ipv6' after 'forward', found {}",
+                    at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+                ),
+            ));
+        };
+        Ok(ast::NodeProp::Forward(version))
+    } else if check_kw(tokens, *pos, "sysctl") {
+        *pos += 1;
+        let key = expect_string(tokens, pos)?;
+        let value = expect_string(tokens, pos)?;
+        Ok(ast::NodeProp::Sysctl(key, value))
+    } else if check_kw(tokens, *pos, "lo") {
+        *pos += 1;
+        let addr = parse_cidr_or_name(tokens, pos)?;
+        Ok(ast::NodeProp::Lo(addr))
+    } else if check_kw(tokens, *pos, "route") {
+        *pos += 1;
+        parse_route_def(tokens, pos).map(ast::NodeProp::Route)
+    } else if check_kw(tokens, *pos, "firewall") {
+        *pos += 1;
+        parse_firewall_def(tokens, pos).map(ast::NodeProp::Firewall)
+    } else if check_kw(tokens, *pos, "vrf") {
+        *pos += 1;
+        parse_vrf_def(tokens, pos).map(ast::NodeProp::Vrf)
+    } else if check_kw(tokens, *pos, "wireguard") {
+        *pos += 1;
+        parse_wireguard_def(tokens, pos).map(ast::NodeProp::Wireguard)
+    } else if check_kw(tokens, *pos, "vxlan") {
+        *pos += 1;
+        parse_vxlan_def(tokens, pos).map(ast::NodeProp::Vxlan)
+    } else if check_kw(tokens, *pos, "dummy") {
+        *pos += 1;
+        parse_dummy_def(tokens, pos).map(ast::NodeProp::Dummy)
+    } else if check_kw(tokens, *pos, "macvlan") {
+        *pos += 1;
+        parse_macvlan_def(tokens, pos).map(ast::NodeProp::Macvlan)
+    } else if check_kw(tokens, *pos, "ipvlan") {
+        *pos += 1;
+        parse_ipvlan_def(tokens, pos).map(ast::NodeProp::Ipvlan)
+    } else if check_kw(tokens, *pos, "wifi") {
+        *pos += 1;
+        parse_wifi_def(tokens, pos).map(ast::NodeProp::Wifi)
+    } else if check_kw(tokens, *pos, "run") {
+        *pos += 1;
+        parse_run_def(tokens, pos).map(ast::NodeProp::Run)
+    } else {
+        match at(tokens, *pos) {
+            Some(other) => Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, macvlan, ipvlan, wifi, run), found {other}"
+                ),
+            )),
+            None => Err(err(
+                tokens,
+                *pos,
+                "unexpected end of input in node block".into(),
+            )),
         }
-        Some(Token::Sysctl) => {
-            *pos += 1;
-            let key = expect_string(tokens, pos)?;
-            let value = expect_string(tokens, pos)?;
-            Ok(ast::NodeProp::Sysctl(key, value))
-        }
-        Some(Token::Lo) => {
-            *pos += 1;
-            let addr = parse_cidr_or_name(tokens, pos)?;
-            Ok(ast::NodeProp::Lo(addr))
-        }
-        Some(Token::Route) => {
-            *pos += 1;
-            parse_route_def(tokens, pos).map(ast::NodeProp::Route)
-        }
-        Some(Token::Firewall) => {
-            *pos += 1;
-            parse_firewall_def(tokens, pos).map(ast::NodeProp::Firewall)
-        }
-        Some(Token::Vrf) => {
-            *pos += 1;
-            parse_vrf_def(tokens, pos).map(ast::NodeProp::Vrf)
-        }
-        Some(Token::Wireguard) => {
-            *pos += 1;
-            parse_wireguard_def(tokens, pos).map(ast::NodeProp::Wireguard)
-        }
-        Some(Token::Vxlan) => {
-            *pos += 1;
-            parse_vxlan_def(tokens, pos).map(ast::NodeProp::Vxlan)
-        }
-        Some(Token::Dummy) => {
-            *pos += 1;
-            parse_dummy_def(tokens, pos).map(ast::NodeProp::Dummy)
-        }
-        Some(Token::Macvlan) => {
-            *pos += 1;
-            parse_macvlan_def(tokens, pos).map(ast::NodeProp::Macvlan)
-        }
-        Some(Token::Ipvlan) => {
-            *pos += 1;
-            parse_ipvlan_def(tokens, pos).map(ast::NodeProp::Ipvlan)
-        }
-        Some(Token::Wifi) => {
-            *pos += 1;
-            parse_wifi_def(tokens, pos).map(ast::NodeProp::Wifi)
-        }
-        Some(Token::Run) => {
-            *pos += 1;
-            parse_run_def(tokens, pos).map(ast::NodeProp::Run)
-        }
-        Some(other) => Err(err(
-            tokens,
-            *pos,
-            format!(
-                "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, macvlan, ipvlan, wifi, run), found {other}"
-            ),
-        )),
-        None => Err(err(
-            tokens,
-            *pos,
-            "unexpected end of input in node block".into(),
-        )),
     }
 }
 
@@ -1018,7 +909,7 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 
 fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef> {
     // destination: "default" or CIDR
-    let destination = if eat(tokens, pos, &Token::Default) {
+    let destination = if eat_kw(tokens, pos, "default") {
         "default".to_string()
     } else {
         parse_cidr_or_name(tokens, pos)?
@@ -1030,20 +921,17 @@ fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef>
 
     // Parse optional route parameters on same line
     loop {
-        match at(tokens, *pos) {
-            Some(Token::Via) => {
-                *pos += 1;
-                via = Some(parse_cidr_or_name(tokens, pos)?);
-            }
-            Some(Token::Dev) => {
-                *pos += 1;
-                dev = Some(parse_name(tokens, pos)?);
-            }
-            Some(Token::Metric) => {
-                *pos += 1;
-                metric = Some(expect_int(tokens, pos)? as u32);
-            }
-            _ => break,
+        if check_kw(tokens, *pos, "via") {
+            *pos += 1;
+            via = Some(parse_cidr_or_name(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "dev") {
+            *pos += 1;
+            dev = Some(parse_name(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "metric") {
+            *pos += 1;
+            metric = Some(expect_int(tokens, pos)? as u32);
+        } else {
+            break;
         }
     }
 
@@ -1058,34 +946,30 @@ fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef>
 // ─── Firewall ─────────────────────────────────────────────
 
 fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallDef> {
-    expect(tokens, pos, &Token::Policy)?;
-    let policy = match at(tokens, *pos) {
-        Some(Token::Accept) => {
-            *pos += 1;
-            "accept".to_string()
-        }
-        Some(Token::Drop) => {
-            *pos += 1;
-            "drop".to_string()
-        }
-        Some(Token::Reject) => {
-            *pos += 1;
-            "reject".to_string()
-        }
-        Some(Token::Ident(s)) => {
-            let s = s.clone();
-            *pos += 1;
-            s
-        }
-        other => {
-            return Err(err(
-                tokens,
-                *pos,
-                format!(
-                    "expected firewall policy, found {}",
-                    other.map_or("end of input".to_string(), |t| t.to_string())
-                ),
-            ));
+    expect_kw(tokens, pos, "policy")?;
+    let policy = if eat_kw(tokens, pos, "accept") {
+        "accept".to_string()
+    } else if eat_kw(tokens, pos, "drop") {
+        "drop".to_string()
+    } else if eat_kw(tokens, pos, "reject") {
+        "reject".to_string()
+    } else {
+        match at(tokens, *pos) {
+            Some(Token::Ident(s)) => {
+                let s = s.clone();
+                *pos += 1;
+                s
+            }
+            other => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "expected firewall policy, found {}",
+                        other.map_or("end of input".to_string(), |t| t.to_string())
+                    ),
+                ));
+            }
         }
     };
 
@@ -1104,29 +988,21 @@ fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firewa
 }
 
 fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallRuleDef> {
-    let action = match at(tokens, *pos) {
-        Some(Token::Accept) => {
-            *pos += 1;
-            "accept".to_string()
-        }
-        Some(Token::Drop) => {
-            *pos += 1;
-            "drop".to_string()
-        }
-        Some(Token::Reject) => {
-            *pos += 1;
-            "reject".to_string()
-        }
-        other => {
-            return Err(err(
-                tokens,
-                *pos,
-                format!(
-                    "expected firewall action (accept/drop/reject), found {}",
-                    other.map_or("end of input".to_string(), |t| t.to_string())
-                ),
-            ));
-        }
+    let action = if eat_kw(tokens, pos, "accept") {
+        "accept".to_string()
+    } else if eat_kw(tokens, pos, "drop") {
+        "drop".to_string()
+    } else if eat_kw(tokens, pos, "reject") {
+        "reject".to_string()
+    } else {
+        return Err(err(
+            tokens,
+            *pos,
+            format!(
+                "expected firewall action (accept/drop/reject), found {}",
+                at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+            ),
+        ));
     };
 
     // Parse match expression
@@ -1141,110 +1017,90 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 
     // Parse match components — src/dst can appear before or after protocol matches
     loop {
-        match at(tokens, *pos) {
-            Some(Token::Src) => {
-                *pos += 1;
-                let addr = parse_cidr_or_name(tokens, pos)?;
-                let family = if addr.contains(':') { "ip6" } else { "ip" };
-                parts.insert(0, format!("{family} saddr {addr}")); // saddr first in nftables order
-                matched = true;
-            }
-            Some(Token::Dst) => {
-                *pos += 1;
-                let addr = parse_cidr_or_name(tokens, pos)?;
-                let family = if addr.contains(':') { "ip6" } else { "ip" };
-                // Insert after saddr if present, otherwise at start
-                let insert_pos = parts
-                    .iter()
-                    .position(|p| !p.contains("saddr"))
-                    .unwrap_or(parts.len());
-                parts.insert(insert_pos, format!("{family} daddr {addr}"));
-                matched = true;
-            }
-            Some(Token::Ct) => {
-                *pos += 1;
-                let mut ct = "ct state ".to_string();
+        if check_kw(tokens, *pos, "src") {
+            *pos += 1;
+            let addr = parse_cidr_or_name(tokens, pos)?;
+            let family = if addr.contains(':') { "ip6" } else { "ip" };
+            parts.insert(0, format!("{family} saddr {addr}")); // saddr first in nftables order
+            matched = true;
+        } else if check_kw(tokens, *pos, "dst") {
+            *pos += 1;
+            let addr = parse_cidr_or_name(tokens, pos)?;
+            let family = if addr.contains(':') { "ip6" } else { "ip" };
+            // Insert after saddr if present, otherwise at start
+            let insert_pos = parts
+                .iter()
+                .position(|p| !p.contains("saddr"))
+                .unwrap_or(parts.len());
+            parts.insert(insert_pos, format!("{family} daddr {addr}"));
+            matched = true;
+        } else if check_kw(tokens, *pos, "ct") {
+            *pos += 1;
+            let mut ct = "ct state ".to_string();
+            let state = parse_name(tokens, pos)?;
+            ct.push_str(&state);
+            while eat(tokens, pos, &Token::Comma) {
                 let state = parse_name(tokens, pos)?;
+                ct.push(',');
                 ct.push_str(&state);
-                while eat(tokens, pos, &Token::Comma) {
-                    let state = parse_name(tokens, pos)?;
-                    ct.push(',');
-                    ct.push_str(&state);
-                }
-                parts.push(ct);
-                matched = true;
             }
-            Some(Token::Tcp) => {
-                *pos += 1;
-                let dir = match at(tokens, *pos) {
-                    Some(Token::Dport) => {
-                        *pos += 1;
-                        "dport"
-                    }
-                    Some(Token::Sport) => {
-                        *pos += 1;
-                        "sport"
-                    }
-                    other => {
-                        return Err(err(
-                            tokens,
-                            *pos,
-                            format!(
-                                "expected 'dport' or 'sport' after 'tcp', found {}",
-                                other.map_or("end of input".to_string(), |t| t.to_string())
-                            ),
-                        ));
-                    }
-                };
-                let port = expect_int(tokens, pos)?;
-                parts.push(format!("tcp {dir} {port}"));
-                matched = true;
-            }
-            Some(Token::Udp) => {
-                *pos += 1;
-                let dir = match at(tokens, *pos) {
-                    Some(Token::Dport) => {
-                        *pos += 1;
-                        "dport"
-                    }
-                    Some(Token::Sport) => {
-                        *pos += 1;
-                        "sport"
-                    }
-                    other => {
-                        return Err(err(
-                            tokens,
-                            *pos,
-                            format!(
-                                "expected 'dport' or 'sport' after 'udp', found {}",
-                                other.map_or("end of input".to_string(), |t| t.to_string())
-                            ),
-                        ));
-                    }
-                };
-                let port = expect_int(tokens, pos)?;
-                parts.push(format!("udp {dir} {port}"));
-                matched = true;
-            }
-            Some(Token::Icmp) => {
-                *pos += 1;
-                let icmp_type = expect_int(tokens, pos)?;
-                parts.push(format!("icmp type {icmp_type}"));
-                matched = true;
-            }
-            Some(Token::Icmpv6) => {
-                *pos += 1;
-                let icmp_type = expect_int(tokens, pos)?;
-                parts.push(format!("icmpv6 type {icmp_type}"));
-                matched = true;
-            }
-            Some(Token::Mark) => {
-                *pos += 1;
-                let mark = expect_int(tokens, pos)?;
-                parts.push(format!("mark {mark}"));
-                matched = true;
-            }
-            _ => break,
+            parts.push(ct);
+            matched = true;
+        } else if check_kw(tokens, *pos, "tcp") {
+            *pos += 1;
+            let dir = if eat_kw(tokens, pos, "dport") {
+                "dport"
+            } else if eat_kw(tokens, pos, "sport") {
+                "sport"
+            } else {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "expected 'dport' or 'sport' after 'tcp', found {}",
+                        at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+                    ),
+                ));
+            };
+            let port = expect_int(tokens, pos)?;
+            parts.push(format!("tcp {dir} {port}"));
+            matched = true;
+        } else if check_kw(tokens, *pos, "udp") {
+            *pos += 1;
+            let dir = if eat_kw(tokens, pos, "dport") {
+                "dport"
+            } else if eat_kw(tokens, pos, "sport") {
+                "sport"
+            } else {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "expected 'dport' or 'sport' after 'udp', found {}",
+                        at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+                    ),
+                ));
+            };
+            let port = expect_int(tokens, pos)?;
+            parts.push(format!("udp {dir} {port}"));
+            matched = true;
+        } else if check_kw(tokens, *pos, "icmp") {
+            *pos += 1;
+            let icmp_type = expect_int(tokens, pos)?;
+            parts.push(format!("icmp type {icmp_type}"));
+            matched = true;
+        } else if check_kw(tokens, *pos, "icmpv6") {
+            *pos += 1;
+            let icmp_type = expect_int(tokens, pos)?;
+            parts.push(format!("icmpv6 type {icmp_type}"));
+            matched = true;
+        } else if check_kw(tokens, *pos, "mark") {
+            *pos += 1;
+            let mark = expect_int(tokens, pos)?;
+            parts.push(format!("mark {mark}"));
+            matched = true;
+        } else {
+            break;
         }
     }
 
@@ -1267,7 +1123,7 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 
 fn parse_vrf_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VrfDef> {
     let name = expect_ident(tokens, pos)?;
-    expect(tokens, pos, &Token::Table)?;
+    expect_kw(tokens, pos, "table")?;
     let table = expect_int(tokens, pos)? as u32;
 
     let mut interfaces = Vec::new();
@@ -1279,28 +1135,26 @@ fn parse_vrf_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VrfDef> {
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        match at(tokens, *pos) {
-            Some(Token::Interfaces) => {
-                *pos += 1;
-                interfaces = parse_ident_list(tokens, pos)?;
-            }
-            Some(Token::Route) => {
-                *pos += 1;
-                routes.push(parse_route_def(tokens, pos)?);
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("unexpected {other} in VRF block"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in VRF block".into(),
-                ));
+        if eat_kw(tokens, pos, "interfaces") {
+            interfaces = parse_ident_list(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "route") {
+            routes.push(parse_route_def(tokens, pos)?);
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in VRF block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in VRF block".into(),
+                    ));
+                }
             }
         }
     }
@@ -1329,36 +1183,30 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        match at(tokens, *pos) {
-            Some(Token::Key) => {
-                *pos += 1;
-                key = Some(parse_value(tokens, pos)?);
-            }
-            Some(Token::Listen) => {
-                *pos += 1;
-                listen_port = Some(expect_int(tokens, pos)? as u16);
-            }
-            Some(Token::Address) => {
-                *pos += 1;
-                addresses.push(parse_cidr_or_name(tokens, pos)?);
-            }
-            Some(Token::Peers) => {
-                *pos += 1;
-                peers = parse_ident_list(tokens, pos)?;
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("unexpected {other} in wireguard block"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in wireguard block".into(),
-                ));
+        if eat_kw(tokens, pos, "key") {
+            key = Some(parse_value(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "listen") {
+            listen_port = Some(expect_int(tokens, pos)? as u16);
+        } else if eat_kw(tokens, pos, "address") {
+            addresses.push(parse_cidr_or_name(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "peers") {
+            peers = parse_ident_list(tokens, pos)?;
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in wireguard block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in wireguard block".into(),
+                    ));
+                }
             }
         }
     }
@@ -1389,40 +1237,32 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        match at(tokens, *pos) {
-            Some(Token::Vni) => {
-                *pos += 1;
-                vni = expect_int(tokens, pos)? as u32;
-            }
-            Some(Token::Local) => {
-                *pos += 1;
-                local = Some(parse_cidr_or_name(tokens, pos)?);
-            }
-            Some(Token::Remote) => {
-                *pos += 1;
-                remote = Some(parse_cidr_or_name(tokens, pos)?);
-            }
-            Some(Token::Port) => {
-                *pos += 1;
-                port = Some(expect_int(tokens, pos)? as u16);
-            }
-            Some(Token::Address) => {
-                *pos += 1;
-                addresses.push(parse_cidr_or_name(tokens, pos)?);
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("unexpected {other} in vxlan block"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in vxlan block".into(),
-                ));
+        if eat_kw(tokens, pos, "vni") {
+            vni = expect_int(tokens, pos)? as u32;
+        } else if eat_kw(tokens, pos, "local") {
+            local = Some(parse_cidr_or_name(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "remote") {
+            remote = Some(parse_cidr_or_name(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "port") {
+            port = Some(expect_int(tokens, pos)? as u16);
+        } else if eat_kw(tokens, pos, "address") {
+            addresses.push(parse_cidr_or_name(tokens, pos)?);
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in vxlan block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in vxlan block".into(),
+                    ));
+                }
             }
         }
     }
@@ -1449,24 +1289,24 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Address) => {
-                    *pos += 1;
-                    addresses.push(parse_cidr_or_name(tokens, pos)?);
-                }
-                Some(other) => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!("unexpected {other} in dummy block"),
-                    ));
-                }
-                None => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "unexpected end of input in dummy block".into(),
-                    ));
+            if eat_kw(tokens, pos, "address") {
+                addresses.push(parse_cidr_or_name(tokens, pos)?);
+            } else {
+                match at(tokens, *pos) {
+                    Some(other) => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!("unexpected {other} in dummy block"),
+                        ));
+                    }
+                    None => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            "unexpected end of input in dummy block".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -1480,13 +1320,13 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
 // macvlan IDENT parent STRING (mode IDENT)? block?
 fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::MacvlanDef> {
     let name = expect_ident(tokens, pos)?;
-    expect(tokens, pos, &Token::Parent)?;
+    expect_kw(tokens, pos, "parent")?;
     let parent = parse_value(tokens, pos)?;
     let mut mode = None;
     let mut addresses = Vec::new();
 
     // Inline mode before block
-    if matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == "mode") {
+    if check_kw(tokens, *pos, "mode") {
         *pos += 1;
         mode = Some(expect_ident(tokens, pos)?);
     }
@@ -1497,32 +1337,30 @@ fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Macvlan
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Ident(s)) if s == "mode" => {
-                    *pos += 1;
-                    mode = Some(expect_ident(tokens, pos)?);
-                }
-                Some(Token::Address) => {
-                    *pos += 1;
-                    addresses.push(parse_cidr_or_name(tokens, pos)?);
-                }
-                Some(Token::Cidr(c)) => {
-                    addresses.push(c.clone());
-                    *pos += 1;
-                }
-                Some(other) => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!("unexpected {other} in macvlan block"),
-                    ));
-                }
-                None => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "unexpected end of input in macvlan block".into(),
-                    ));
+            if check_kw(tokens, *pos, "mode") {
+                *pos += 1;
+                mode = Some(expect_ident(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "address") {
+                addresses.push(parse_cidr_or_name(tokens, pos)?);
+            } else if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+                addresses.push(c.clone());
+                *pos += 1;
+            } else {
+                match at(tokens, *pos) {
+                    Some(other) => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!("unexpected {other} in macvlan block"),
+                        ));
+                    }
+                    None => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            "unexpected end of input in macvlan block".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -1541,12 +1379,12 @@ fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Macvlan
 // ipvlan IDENT parent STRING (mode IDENT)? block?
 fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDef> {
     let name = expect_ident(tokens, pos)?;
-    expect(tokens, pos, &Token::Parent)?;
+    expect_kw(tokens, pos, "parent")?;
     let parent = parse_value(tokens, pos)?;
     let mut mode = None;
     let mut addresses = Vec::new();
 
-    if matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == "mode") {
+    if check_kw(tokens, *pos, "mode") {
         *pos += 1;
         mode = Some(expect_ident(tokens, pos)?);
     }
@@ -1557,32 +1395,30 @@ fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDe
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Ident(s)) if s == "mode" => {
-                    *pos += 1;
-                    mode = Some(expect_ident(tokens, pos)?);
-                }
-                Some(Token::Address) => {
-                    *pos += 1;
-                    addresses.push(parse_cidr_or_name(tokens, pos)?);
-                }
-                Some(Token::Cidr(c)) => {
-                    addresses.push(c.clone());
-                    *pos += 1;
-                }
-                Some(other) => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!("unexpected {other} in ipvlan block"),
-                    ));
-                }
-                None => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "unexpected end of input in ipvlan block".into(),
-                    ));
+            if check_kw(tokens, *pos, "mode") {
+                *pos += 1;
+                mode = Some(expect_ident(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "address") {
+                addresses.push(parse_cidr_or_name(tokens, pos)?);
+            } else if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+                addresses.push(c.clone());
+                *pos += 1;
+            } else {
+                match at(tokens, *pos) {
+                    Some(other) => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!("unexpected {other} in ipvlan block"),
+                        ));
+                    }
+                    None => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            "unexpected end of input in ipvlan block".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -1603,7 +1439,7 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
     let name = expect_ident(tokens, pos)?;
 
     // Expect "mode" as a context-sensitive ident
-    if !matches!(at(tokens, *pos), Some(Token::Ident(s)) if s == "mode") {
+    if !check_kw(tokens, *pos, "mode") {
         return Err(err(
             tokens,
             *pos,
@@ -1633,44 +1469,36 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Ssid) => {
-                    *pos += 1;
-                    ssid = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Ident(s)) if s == "channel" => {
-                    *pos += 1;
-                    channel = Some(expect_int(tokens, pos)? as u32);
-                }
-                Some(Token::Wpa2) => {
-                    *pos += 1;
-                    passphrase = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::MeshId) => {
-                    *pos += 1;
-                    mesh_id = Some(expect_string(tokens, pos)?);
-                }
-                Some(Token::Cidr(c)) => {
-                    addresses.push(c.clone());
-                    *pos += 1;
-                }
-                Some(Token::Address) => {
-                    *pos += 1;
-                    addresses.push(parse_cidr_or_name(tokens, pos)?);
-                }
-                Some(other) => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!("unexpected {other} in wifi block"),
-                    ));
-                }
-                None => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "unexpected end of input in wifi block".into(),
-                    ));
+            if eat_kw(tokens, pos, "ssid") {
+                ssid = Some(expect_string(tokens, pos)?);
+            } else if check_kw(tokens, *pos, "channel") {
+                *pos += 1;
+                channel = Some(expect_int(tokens, pos)? as u32);
+            } else if eat_kw(tokens, pos, "wpa2") {
+                passphrase = Some(expect_string(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "mesh-id") {
+                mesh_id = Some(expect_string(tokens, pos)?);
+            } else if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+                addresses.push(c.clone());
+                *pos += 1;
+            } else if eat_kw(tokens, pos, "address") {
+                addresses.push(parse_cidr_or_name(tokens, pos)?);
+            } else {
+                match at(tokens, *pos) {
+                    Some(other) => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!("unexpected {other} in wifi block"),
+                        ));
+                    }
+                    None => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            "unexpected end of input in wifi block".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -1690,7 +1518,7 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
 // ─── Run ──────────────────────────────────────────────────
 
 fn parse_run_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RunDef> {
-    let background = eat(tokens, pos, &Token::Background);
+    let background = eat_kw(tokens, pos, "background");
     let cmd = parse_string_list(tokens, pos)?;
     Ok(ast::RunDef { cmd, background })
 }
@@ -1740,12 +1568,12 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                     link.right_addr = Some(right_addr);
                 }
                 // Subnet auto-assignment: subnet 10.0.0.0/30
-                Some(Token::Subnet) => {
+                Some(Token::Ident(s)) if s == "subnet" => {
                     *pos += 1;
                     link.subnet = Some(parse_cidr_or_name(tokens, pos)?);
                 }
                 // MTU
-                Some(Token::Mtu) => {
+                Some(Token::Ident(s)) if s == "mtu" => {
                     *pos += 1;
                     link.mtu = Some(expect_int(tokens, pos)? as u32);
                 }
@@ -1770,8 +1598,12 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                     link.rate = Some(parse_rate_props(tokens, pos)?);
                 }
                 // Symmetric impairment (delay, jitter, loss, corrupt, reorder)
-                Some(Token::Delay) | Some(Token::Jitter) | Some(Token::Loss)
-                | Some(Token::Corrupt) | Some(Token::Reorder) => {
+                Some(Token::Ident(s))
+                    if matches!(
+                        s.as_str(),
+                        "delay" | "jitter" | "loss" | "corrupt" | "reorder"
+                    ) =>
+                {
                     link.impairment = Some(parse_impair_props(tokens, pos)?);
                 }
                 Some(other) => {
@@ -1801,32 +1633,26 @@ fn parse_impair_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Impair
     let mut props = ast::ImpairProps::default();
 
     loop {
-        match at(tokens, *pos) {
-            Some(Token::Delay) => {
-                *pos += 1;
-                props.delay = Some(expect_duration_or_value(tokens, pos)?);
-            }
-            Some(Token::Jitter) => {
-                *pos += 1;
-                props.jitter = Some(expect_duration_or_value(tokens, pos)?);
-            }
-            Some(Token::Loss) => {
-                *pos += 1;
-                props.loss = Some(expect_percent_or_value(tokens, pos)?);
-            }
-            Some(Token::Rate) => {
-                *pos += 1;
-                props.rate = Some(expect_rate_or_value(tokens, pos)?);
-            }
-            Some(Token::Corrupt) => {
-                *pos += 1;
-                props.corrupt = Some(expect_percent_or_value(tokens, pos)?);
-            }
-            Some(Token::Reorder) => {
-                *pos += 1;
-                props.reorder = Some(expect_percent_or_value(tokens, pos)?);
-            }
-            _ => break,
+        if check_kw(tokens, *pos, "delay") {
+            *pos += 1;
+            props.delay = Some(expect_duration_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "jitter") {
+            *pos += 1;
+            props.jitter = Some(expect_duration_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "loss") {
+            *pos += 1;
+            props.loss = Some(expect_percent_or_value(tokens, pos)?);
+        } else if check(tokens, *pos, &Token::Rate) {
+            *pos += 1;
+            props.rate = Some(expect_rate_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "corrupt") {
+            *pos += 1;
+            props.corrupt = Some(expect_percent_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "reorder") {
+            *pos += 1;
+            props.reorder = Some(expect_percent_or_value(tokens, pos)?);
+        } else {
+            break;
         }
     }
 
@@ -1839,20 +1665,17 @@ fn parse_rate_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RateProp
     let mut props = ast::RateProps::default();
 
     loop {
-        match at(tokens, *pos) {
-            Some(Token::Egress) => {
-                *pos += 1;
-                props.egress = Some(parse_value(tokens, pos)?);
-            }
-            Some(Token::Ingress) => {
-                *pos += 1;
-                props.ingress = Some(parse_value(tokens, pos)?);
-            }
-            Some(Token::Burst) => {
-                *pos += 1;
-                props.burst = Some(parse_value(tokens, pos)?);
-            }
-            _ => break,
+        if check_kw(tokens, *pos, "egress") {
+            *pos += 1;
+            props.egress = Some(parse_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "ingress") {
+            *pos += 1;
+            props.ingress = Some(parse_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "burst") {
+            *pos += 1;
+            props.burst = Some(parse_value(tokens, pos)?);
+        } else {
+            break;
         }
     }
 
@@ -1881,50 +1704,42 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
             break;
         }
 
-        match at(tokens, *pos) {
-            Some(Token::Members) => {
-                *pos += 1;
-                net.members = parse_endpoint_list(tokens, pos)?;
-            }
-            Some(Token::VlanFiltering) => {
-                *pos += 1;
-                net.vlan_filtering = true;
-            }
-            Some(Token::Mtu) => {
-                *pos += 1;
-                net.mtu = Some(expect_int(tokens, pos)? as u32);
-            }
-            Some(Token::Vlan) => {
-                *pos += 1;
-                let id = expect_int(tokens, pos)? as u16;
-                let vlan_name = match at(tokens, *pos) {
-                    Some(Token::String(_)) => Some(expect_string(tokens, pos)?),
-                    _ => None,
-                };
-                net.vlans.push(ast::VlanDef {
-                    id,
-                    name: vlan_name,
-                });
-            }
-            Some(Token::Port) => {
-                *pos += 1;
-                let endpoint = parse_name(tokens, pos)?;
-                let port_def = parse_port_block(tokens, pos, endpoint)?;
-                net.ports.push(port_def);
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("unexpected {other} in network block"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in network block".into(),
-                ));
+        if eat_kw(tokens, pos, "members") {
+            net.members = parse_endpoint_list(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "vlan-filtering") {
+            net.vlan_filtering = true;
+        } else if eat_kw(tokens, pos, "mtu") {
+            net.mtu = Some(expect_int(tokens, pos)? as u32);
+        } else if eat_kw(tokens, pos, "vlan") {
+            let id = expect_int(tokens, pos)? as u16;
+            let vlan_name = match at(tokens, *pos) {
+                Some(Token::String(_)) => Some(expect_string(tokens, pos)?),
+                _ => None,
+            };
+            net.vlans.push(ast::VlanDef {
+                id,
+                name: vlan_name,
+            });
+        } else if eat_kw(tokens, pos, "port") {
+            let endpoint = parse_name(tokens, pos)?;
+            let port_def = parse_port_block(tokens, pos, endpoint)?;
+            net.ports.push(port_def);
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in network block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in network block".into(),
+                    ));
+                }
             }
         }
     }
@@ -1948,36 +1763,30 @@ fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Re
             break;
         }
 
-        match at(tokens, *pos) {
-            Some(Token::Pvid) => {
-                *pos += 1;
-                port.pvid = Some(expect_int(tokens, pos)? as u16);
-            }
-            Some(Token::Vlans) => {
-                *pos += 1;
-                port.vlans = parse_int_list(tokens, pos)?;
-            }
-            Some(Token::Tagged) => {
-                *pos += 1;
-                port.tagged = true;
-            }
-            Some(Token::Untagged) => {
-                *pos += 1;
-                port.untagged = true;
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("unexpected {other} in port block"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in port block".into(),
-                ));
+        if eat_kw(tokens, pos, "pvid") {
+            port.pvid = Some(expect_int(tokens, pos)? as u16);
+        } else if eat_kw(tokens, pos, "vlans") {
+            port.vlans = parse_int_list(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "tagged") {
+            port.tagged = true;
+        } else if eat_kw(tokens, pos, "untagged") {
+            port.untagged = true;
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in port block"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in port block".into(),
+                    ));
+                }
             }
         }
     }
@@ -2051,7 +1860,7 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
         }
 
         match (&kind, at(tokens, *pos)) {
-            (ast::DefaultsKind::Link, Some(Token::Mtu)) => {
+            (ast::DefaultsKind::Link, Some(Token::Ident(s))) if s == "mtu" => {
                 *pos += 1;
                 def.mtu = Some(expect_int(tokens, pos)? as u32);
             }
@@ -2101,35 +1910,24 @@ fn parse_pattern(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PatternDef>
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        match at(tokens, *pos) {
-            Some(Token::Node) => {
-                // nodes [n1, n2, n3]
-                *pos += 1;
-                nodes = parse_ident_list(tokens, pos)?;
-            }
-            Some(Token::Count) => {
-                *pos += 1;
-                count = Some(expect_int(tokens, pos)?);
-            }
-            Some(Token::Pool) => {
-                *pos += 1;
-                pool = Some(expect_ident(tokens, pos)?);
-            }
-            Some(Token::Profile) => {
-                *pos += 1;
-                profile = Some(expect_ident(tokens, pos)?);
-            }
-            Some(Token::Hub) => {
-                *pos += 1;
-                hub = Some(expect_ident(tokens, pos)?);
-            }
-            Some(Token::Spokes) => {
-                *pos += 1;
-                spokes = parse_ident_list(tokens, pos)?;
-            }
-            _ => {
-                *pos += 1;
-            } // skip unknown
+        if check(tokens, *pos, &Token::Node) {
+            // nodes [n1, n2, n3]
+            *pos += 1;
+            nodes = parse_ident_list(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "count") {
+            count = Some(expect_int(tokens, pos)?);
+        } else if check(tokens, *pos, &Token::Pool) {
+            *pos += 1;
+            pool = Some(expect_ident(tokens, pos)?);
+        } else if check(tokens, *pos, &Token::Profile) {
+            *pos += 1;
+            profile = Some(expect_ident(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "hub") {
+            hub = Some(expect_ident(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "spokes") {
+            spokes = parse_ident_list(tokens, pos)?;
+        } else {
+            *pos += 1; // skip unknown
         }
     }
 
@@ -2179,103 +1977,91 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        match at(tokens, *pos) {
-            Some(Token::Reach) => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let to = expect_ident(tokens, pos)?;
-                assertions.push(ast::AssertionDef::Reach { from, to });
-            }
-            Some(Token::NoReach) => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let to = expect_ident(tokens, pos)?;
-                assertions.push(ast::AssertionDef::NoReach { from, to });
-            }
-            Some(Token::TcpConnect) => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let to = expect_ident(tokens, pos)?;
-                let port = expect_int(tokens, pos)? as u16;
-                let timeout = if eat(tokens, pos, &Token::Timeout) {
-                    Some(expect_duration_or_value(tokens, pos)?)
+        if eat_kw(tokens, pos, "reach") {
+            let from = expect_ident(tokens, pos)?;
+            let to = expect_ident(tokens, pos)?;
+            assertions.push(ast::AssertionDef::Reach { from, to });
+        } else if eat_kw(tokens, pos, "no-reach") {
+            let from = expect_ident(tokens, pos)?;
+            let to = expect_ident(tokens, pos)?;
+            assertions.push(ast::AssertionDef::NoReach { from, to });
+        } else if eat_kw(tokens, pos, "tcp-connect") {
+            let from = expect_ident(tokens, pos)?;
+            let to = expect_ident(tokens, pos)?;
+            let port = expect_int(tokens, pos)? as u16;
+            let timeout = if eat_kw(tokens, pos, "timeout") {
+                Some(expect_duration_or_value(tokens, pos)?)
+            } else {
+                None
+            };
+            assertions.push(ast::AssertionDef::TcpConnect {
+                from,
+                to,
+                port,
+                timeout,
+            });
+        } else if eat_kw(tokens, pos, "latency-under") {
+            let from = expect_ident(tokens, pos)?;
+            let to = expect_ident(tokens, pos)?;
+            let max = expect_duration_or_value(tokens, pos)?;
+            let samples = if eat_kw(tokens, pos, "samples") {
+                Some(expect_int(tokens, pos)? as u32)
+            } else {
+                None
+            };
+            assertions.push(ast::AssertionDef::LatencyUnder {
+                from,
+                to,
+                max,
+                samples,
+            });
+        } else if eat_kw(tokens, pos, "route-has") {
+            let node = expect_ident(tokens, pos)?;
+            let destination = parse_value(tokens, pos)?;
+            let mut via = None;
+            let mut dev = None;
+            while check_kw(tokens, *pos, "via") || check_kw(tokens, *pos, "dev") {
+                if check_kw(tokens, *pos, "via") {
+                    *pos += 1;
+                    via = Some(parse_value(tokens, pos)?);
+                } else if check_kw(tokens, *pos, "dev") {
+                    *pos += 1;
+                    dev = Some(expect_ident(tokens, pos)?);
                 } else {
-                    None
-                };
-                assertions.push(ast::AssertionDef::TcpConnect {
-                    from,
-                    to,
-                    port,
-                    timeout,
-                });
-            }
-            Some(Token::LatencyUnder) => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let to = expect_ident(tokens, pos)?;
-                let max = expect_duration_or_value(tokens, pos)?;
-                let samples = if eat(tokens, pos, &Token::Samples) {
-                    Some(expect_int(tokens, pos)? as u32)
-                } else {
-                    None
-                };
-                assertions.push(ast::AssertionDef::LatencyUnder {
-                    from,
-                    to,
-                    max,
-                    samples,
-                });
-            }
-            Some(Token::RouteHas) => {
-                *pos += 1;
-                let node = expect_ident(tokens, pos)?;
-                let destination = parse_value(tokens, pos)?;
-                let mut via = None;
-                let mut dev = None;
-                while matches!(at(tokens, *pos), Some(Token::Via) | Some(Token::Dev)) {
-                    match at(tokens, *pos) {
-                        Some(Token::Via) => {
-                            *pos += 1;
-                            via = Some(parse_value(tokens, pos)?);
-                        }
-                        Some(Token::Dev) => {
-                            *pos += 1;
-                            dev = Some(expect_ident(tokens, pos)?);
-                        }
-                        _ => break,
-                    }
+                    break;
                 }
-                assertions.push(ast::AssertionDef::RouteHas {
-                    node,
-                    destination,
-                    via,
-                    dev,
-                });
             }
-            Some(Token::DnsResolves) => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let name = parse_value(tokens, pos)?;
-                let expected_ip = parse_value(tokens, pos)?;
-                assertions.push(ast::AssertionDef::DnsResolves {
-                    from,
-                    name,
-                    expected_ip,
-                });
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("expected assertion in validate block, found {other}"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in validate block".into(),
-                ));
+            assertions.push(ast::AssertionDef::RouteHas {
+                node,
+                destination,
+                via,
+                dev,
+            });
+        } else if eat_kw(tokens, pos, "dns-resolves") {
+            let from = expect_ident(tokens, pos)?;
+            let name = parse_value(tokens, pos)?;
+            let expected_ip = parse_value(tokens, pos)?;
+            assertions.push(ast::AssertionDef::DnsResolves {
+                from,
+                name,
+                expected_ip,
+            });
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("expected assertion in validate block, found {other}"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in validate block".into(),
+                    ));
+                }
             }
         }
     }
@@ -2295,7 +2081,7 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        expect(tokens, pos, &Token::At)?;
+        expect_kw(tokens, pos, "at")?;
         let time = expect_duration_or_value(tokens, pos)?;
         expect(tokens, pos, &Token::LBrace)?;
 
@@ -2305,56 +2091,47 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            match at(tokens, *pos) {
-                Some(Token::Ident(s)) if s == "down" => {
-                    *pos += 1;
-                    let (node, iface) = parse_endpoint(tokens, pos)?;
-                    actions.push(ast::ScenarioActionDef::Down(format!("{node}:{iface}")));
+            if eat_kw(tokens, pos, "down") {
+                let (node, iface) = parse_endpoint(tokens, pos)?;
+                actions.push(ast::ScenarioActionDef::Down(format!("{node}:{iface}")));
+            } else if eat_kw(tokens, pos, "up") {
+                let (node, iface) = parse_endpoint(tokens, pos)?;
+                actions.push(ast::ScenarioActionDef::Up(format!("{node}:{iface}")));
+            } else if eat_kw(tokens, pos, "clear") {
+                let (node, iface) = parse_endpoint(tokens, pos)?;
+                actions.push(ast::ScenarioActionDef::Clear(format!("{node}:{iface}")));
+            } else if check(tokens, *pos, &Token::Validate) {
+                *pos += 1;
+                let assertions = parse_assertion_block(tokens, pos)?;
+                actions.push(ast::ScenarioActionDef::Validate(assertions));
+            } else if eat_kw(tokens, pos, "exec") {
+                let node = expect_ident(tokens, pos)?;
+                let mut cmd = Vec::new();
+                while matches!(at(tokens, *pos), Some(Token::String(_))) {
+                    cmd.push(expect_string(tokens, pos)?);
                 }
-                Some(Token::Ident(s)) if s == "up" => {
-                    *pos += 1;
-                    let (node, iface) = parse_endpoint(tokens, pos)?;
-                    actions.push(ast::ScenarioActionDef::Up(format!("{node}:{iface}")));
-                }
-                Some(Token::Ident(s)) if s == "clear" => {
-                    *pos += 1;
-                    let (node, iface) = parse_endpoint(tokens, pos)?;
-                    actions.push(ast::ScenarioActionDef::Clear(format!("{node}:{iface}")));
-                }
-                Some(Token::Validate) => {
-                    *pos += 1;
-                    let assertions = parse_assertion_block(tokens, pos)?;
-                    actions.push(ast::ScenarioActionDef::Validate(assertions));
-                }
-                Some(Token::Exec) => {
-                    *pos += 1;
-                    let node = expect_ident(tokens, pos)?;
-                    let mut cmd = Vec::new();
-                    while matches!(at(tokens, *pos), Some(Token::String(_))) {
-                        cmd.push(expect_string(tokens, pos)?);
+                actions.push(ast::ScenarioActionDef::Exec { node, cmd });
+            } else if eat_kw(tokens, pos, "log") {
+                let msg = expect_string(tokens, pos)?;
+                actions.push(ast::ScenarioActionDef::Log(msg));
+            } else {
+                match at(tokens, *pos) {
+                    Some(other) => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!(
+                                "expected scenario action (down, up, clear, validate, exec, log), found {other}"
+                            ),
+                        ));
                     }
-                    actions.push(ast::ScenarioActionDef::Exec { node, cmd });
-                }
-                Some(Token::Ident(s)) if s == "log" => {
-                    *pos += 1;
-                    let msg = expect_string(tokens, pos)?;
-                    actions.push(ast::ScenarioActionDef::Log(msg));
-                }
-                Some(other) => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        format!(
-                            "expected scenario action (down, up, clear, validate, exec, log), found {other}"
-                        ),
-                    ));
-                }
-                None => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "unexpected end of input in scenario step".into(),
-                    ));
+                    None => {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            "unexpected end of input in scenario step".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -2378,39 +2155,31 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        match at(tokens, *pos) {
-            Some(Token::Ident(s)) if s == "iperf3" => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let to = expect_ident(tokens, pos)?;
-                let mut duration = None;
-                let mut streams = None;
-                let mut udp = false;
-                let mut assertions = Vec::new();
+        if check_kw(tokens, *pos, "iperf3") {
+            *pos += 1;
+            let from = expect_ident(tokens, pos)?;
+            let to = expect_ident(tokens, pos)?;
+            let mut duration = None;
+            let mut streams = None;
+            let mut udp = false;
+            let mut assertions = Vec::new();
 
-                if eat(tokens, pos, &Token::LBrace) {
-                    loop {
-                        skip_newlines(tokens, pos);
-                        if eat(tokens, pos, &Token::RBrace) {
-                            break;
-                        }
+            if eat(tokens, pos, &Token::LBrace) {
+                loop {
+                    skip_newlines(tokens, pos);
+                    if eat(tokens, pos, &Token::RBrace) {
+                        break;
+                    }
+                    if eat_kw(tokens, pos, "duration") {
+                        duration = Some(expect_duration_or_value(tokens, pos)?);
+                    } else if eat_kw(tokens, pos, "streams") {
+                        streams = Some(expect_int(tokens, pos)? as u32);
+                    } else if eat_kw(tokens, pos, "udp") {
+                        udp = true;
+                    } else if eat_kw(tokens, pos, "assert") {
+                        assertions.push(parse_benchmark_assertion(tokens, pos)?);
+                    } else {
                         match at(tokens, *pos) {
-                            Some(Token::Ident(s)) if s == "duration" => {
-                                *pos += 1;
-                                duration = Some(expect_duration_or_value(tokens, pos)?);
-                            }
-                            Some(Token::Ident(s)) if s == "streams" => {
-                                *pos += 1;
-                                streams = Some(expect_int(tokens, pos)? as u32);
-                            }
-                            Some(Token::Ident(s)) if s == "udp" => {
-                                *pos += 1;
-                                udp = true;
-                            }
-                            Some(Token::Ident(s)) if s == "assert" => {
-                                *pos += 1;
-                                assertions.push(parse_benchmark_assertion(tokens, pos)?);
-                            }
                             Some(other) => {
                                 return Err(err(
                                     tokens,
@@ -2428,38 +2197,35 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                         }
                     }
                 }
-
-                tests.push(ast::BenchmarkTestDef::Iperf3 {
-                    from,
-                    to,
-                    duration,
-                    streams,
-                    udp,
-                    assertions,
-                });
             }
-            Some(Token::Ident(s)) if s == "ping" => {
-                *pos += 1;
-                let from = expect_ident(tokens, pos)?;
-                let to = expect_ident(tokens, pos)?;
-                let mut count = None;
-                let mut assertions = Vec::new();
 
-                if eat(tokens, pos, &Token::LBrace) {
-                    loop {
-                        skip_newlines(tokens, pos);
-                        if eat(tokens, pos, &Token::RBrace) {
-                            break;
-                        }
+            tests.push(ast::BenchmarkTestDef::Iperf3 {
+                from,
+                to,
+                duration,
+                streams,
+                udp,
+                assertions,
+            });
+        } else if check_kw(tokens, *pos, "ping") {
+            *pos += 1;
+            let from = expect_ident(tokens, pos)?;
+            let to = expect_ident(tokens, pos)?;
+            let mut count = None;
+            let mut assertions = Vec::new();
+
+            if eat(tokens, pos, &Token::LBrace) {
+                loop {
+                    skip_newlines(tokens, pos);
+                    if eat(tokens, pos, &Token::RBrace) {
+                        break;
+                    }
+                    if eat_kw(tokens, pos, "count") {
+                        count = Some(expect_int(tokens, pos)? as u32);
+                    } else if eat_kw(tokens, pos, "assert") {
+                        assertions.push(parse_benchmark_assertion(tokens, pos)?);
+                    } else {
                         match at(tokens, *pos) {
-                            Some(Token::Count) => {
-                                *pos += 1;
-                                count = Some(expect_int(tokens, pos)? as u32);
-                            }
-                            Some(Token::Ident(s)) if s == "assert" => {
-                                *pos += 1;
-                                assertions.push(parse_benchmark_assertion(tokens, pos)?);
-                            }
                             Some(other) => {
                                 return Err(err(
                                     tokens,
@@ -2477,27 +2243,30 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                         }
                     }
                 }
+            }
 
-                tests.push(ast::BenchmarkTestDef::Ping {
-                    from,
-                    to,
-                    count,
-                    assertions,
-                });
-            }
-            Some(other) => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!("expected benchmark test (iperf3, ping), found {other}"),
-                ));
-            }
-            None => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "unexpected end of input in benchmark block".into(),
-                ));
+            tests.push(ast::BenchmarkTestDef::Ping {
+                from,
+                to,
+                count,
+                assertions,
+            });
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("expected benchmark test (iperf3, ping), found {other}"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in benchmark block".into(),
+                    ));
+                }
             }
         }
     }
@@ -2520,7 +2289,7 @@ fn parse_benchmark_assertion(
 fn parse_param(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ParamDef> {
     expect(tokens, pos, &Token::Param)?;
     let name = expect_ident(tokens, pos)?;
-    let default = if eat(tokens, pos, &Token::Default) {
+    let default = if eat_kw(tokens, pos, "default") {
         Some(parse_value(tokens, pos)?)
     } else {
         None

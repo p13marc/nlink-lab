@@ -14,7 +14,7 @@ Implementation plans for nlink-lab.
 | [110](110-integration-tests.md) | Integration test expansion (17 → 32) | Medium | **Implemented** |
 | [111](111-benchmark-block.md) | Benchmark block (iperf3/ping with assertions) | Medium | **Implemented** |
 | [112](112-wifi-emulation.md) | Wi-Fi emulation via mac80211_hwsim | Large | **Implemented** |
-| [113](113-keyword-context-sensitivity.md) | Fix keyword stealing identifiers | Medium | Ready (P0) |
+| [113](113-keyword-context-sensitivity.md) | Fix keyword stealing identifiers | Medium | **Implemented** |
 | [114](114-nat-firewall-dsl.md) | NAT support in firewall DSL | Medium | Ready (P1) |
 | [115](115-network-subnet-addresses.md) | Network subnet + port addresses | Small | Ready (P1) |
 | [116](116-shell-run-syntax.md) | Shell-style `run` syntax | Small | Ready (P2) |

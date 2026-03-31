@@ -1,7 +1,7 @@
 # Plan 113: Context-Sensitive Keywords (Fix Identifier Stealing)
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Medium (1-2 days)
 **Priority:** P0 — blocks any topology using common words as names
 

@@ -142,7 +142,7 @@ link c2-fw:fo2 -- a9-cc:fo {
 }
 
 # C2 ↔ A9: WiFi (low latency, some loss)
-link c2-fw:wfi -- a9-cc:wfi {
+link c2-fw:wifi -- a9-cc:wifi {
   172.100.5.2/24 -- 172.100.5.9/24
   # delay 3ms jitter 2ms loss 0.5%
 }

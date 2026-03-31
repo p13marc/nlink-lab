@@ -1506,8 +1506,7 @@ async fn apply_nat(
     for nat_rule in &nat.rules {
         match nat_rule.action {
             crate::types::NatAction::Masquerade => {
-                let mut rule =
-                    Rule::new(table_name, "postrouting").family(Family::Inet);
+                let mut rule = Rule::new(table_name, "postrouting").family(Family::Inet);
                 if let Some(src) = &nat_rule.src {
                     let (addr, prefix) = parse_v4_cidr(src).map_err(|e| {
                         Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
@@ -1522,8 +1521,7 @@ async fn apply_nat(
                 })?;
             }
             crate::types::NatAction::Dnat => {
-                let mut rule =
-                    Rule::new(table_name, "prerouting").family(Family::Inet);
+                let mut rule = Rule::new(table_name, "prerouting").family(Family::Inet);
                 if let Some(dst) = &nat_rule.dst {
                     let (addr, prefix) = parse_v4_cidr(dst).map_err(|e| {
                         Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
@@ -1537,14 +1535,11 @@ async fn apply_nat(
                     rule = rule.dnat(addr, nat_rule.target_port);
                 }
                 nft_conn.add_rule(rule).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to add DNAT rule on '{node_name}': {e}"
-                    ))
+                    Error::deploy_failed(format!("failed to add DNAT rule on '{node_name}': {e}"))
                 })?;
             }
             crate::types::NatAction::Snat => {
-                let mut rule =
-                    Rule::new(table_name, "postrouting").family(Family::Inet);
+                let mut rule = Rule::new(table_name, "postrouting").family(Family::Inet);
                 if let Some(src) = &nat_rule.src {
                     let (addr, prefix) = parse_v4_cidr(src).map_err(|e| {
                         Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
@@ -1558,9 +1553,7 @@ async fn apply_nat(
                     rule = rule.snat(addr, None);
                 }
                 nft_conn.add_rule(rule).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to add SNAT rule on '{node_name}': {e}"
-                    ))
+                    Error::deploy_failed(format!("failed to add SNAT rule on '{node_name}': {e}"))
                 })?;
             }
         }

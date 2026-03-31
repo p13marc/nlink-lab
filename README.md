@@ -152,6 +152,31 @@ lab "my-lab" {
 After deploy, `ping server` works from any node instead of `ping 10.0.2.2`.
 Multi-homed nodes get per-interface aliases (e.g., `router-eth0`, `router-eth1`).
 
+### NAT (Network Address Translation)
+
+Declarative NAT rules for routers and firewalls:
+
+```nll
+node firewall {
+  forward ipv4
+  nat {
+    masquerade src 10.0.0.0/16
+    dnat dst 144.18.0.0/16 to 172.100.1.18
+  }
+}
+```
+
+### Link Type Profiles
+
+Named impairment presets for different transport types:
+
+```nll
+defaults radio { delay 15ms jitter 10ms loss 2% }
+defaults satellite { delay 300ms jitter 50ms }
+
+link fw:radio -- remote:radio : radio { ... }
+```
+
 ### macvlan / ipvlan
 
 Attach lab nodes directly to host physical interfaces:

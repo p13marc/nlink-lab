@@ -670,7 +670,9 @@ link router:eth0 -- host:eth0 {
 
     #[test]
     fn test_hyphenated_keywords_lex_as_idents() {
-        let tokens = lex_tokens("no-reach tcp-connect latency-under route-has dns-resolves cap-add cap-drop depends-on startup-delay env-file vlan-filtering mesh-id");
+        let tokens = lex_tokens(
+            "no-reach tcp-connect latency-under route-has dns-resolves cap-add cap-drop depends-on startup-delay env-file vlan-filtering mesh-id",
+        );
         assert_eq!(
             tokens,
             vec![

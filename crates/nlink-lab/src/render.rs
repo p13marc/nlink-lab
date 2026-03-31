@@ -132,6 +132,7 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
         || !node.macvlans.is_empty()
         || !node.ipvlans.is_empty()
         || !node.wifi.is_empty()
+        || node.nat.is_some()
         || node.cpu.is_some()
         || node.memory.is_some()
         || node.privileged
@@ -317,6 +318,44 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
             } else {
                 out.push('\n');
             }
+        }
+        if let Some(nat) = &node.nat {
+            out.push_str("  nat {\n");
+            for rule in &nat.rules {
+                match rule.action {
+                    crate::types::NatAction::Masquerade => {
+                        write!(out, "    masquerade").unwrap();
+                        if let Some(src) = &rule.src {
+                            write!(out, " src {src}").unwrap();
+                        }
+                        out.push('\n');
+                    }
+                    crate::types::NatAction::Dnat => {
+                        write!(out, "    dnat").unwrap();
+                        if let Some(dst) = &rule.dst {
+                            write!(out, " dst {dst}").unwrap();
+                        }
+                        if let Some(target) = &rule.target {
+                            write!(out, " to {target}").unwrap();
+                            if let Some(port) = rule.target_port {
+                                write!(out, ":{port}").unwrap();
+                            }
+                        }
+                        out.push('\n');
+                    }
+                    crate::types::NatAction::Snat => {
+                        write!(out, "    snat").unwrap();
+                        if let Some(src) = &rule.src {
+                            write!(out, " src {src}").unwrap();
+                        }
+                        if let Some(target) = &rule.target {
+                            write!(out, " to {target}").unwrap();
+                        }
+                        out.push('\n');
+                    }
+                }
+            }
+            out.push_str("  }\n");
         }
         out.push_str("}\n");
     } else {

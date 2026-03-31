@@ -135,7 +135,10 @@ NLL supports `for` loops (integer ranges and list iteration), `let` variables,
 (`pool fabric 10.0.0.0/16 /30`), topology patterns (`mesh`, `ring`, `star`),
 cross-references (`${node.iface}`), multi-profile inheritance,
 inline impairments (`->` / `<-`), profiles, firewall (with `src`/`dst`
-matching), VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
+matching), NAT (`nat` block with `masquerade`/`snat`/`dnat`),
+link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
+route groups (`route [a, b, c] via gw`),
+VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
 capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
 (`validate { reach a b }`), management network (`mgmt` in lab block),

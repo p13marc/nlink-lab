@@ -128,11 +128,7 @@ fn expect_kw(tokens: &[Spanned], pos: &mut usize, kw: &str) -> Result<()> {
     if eat_kw(tokens, pos, kw) {
         Ok(())
     } else {
-        Err(err(
-            tokens,
-            *pos,
-            format!("expected '{kw}'"),
-        ))
+        Err(err(tokens, *pos, format!("expected '{kw}'")))
     }
 }
 
@@ -2009,7 +2005,9 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
             return Err(err(
                 tokens,
                 *pos,
-                format!("expected link, impair, rate, or profile name after defaults, found {other}"),
+                format!(
+                    "expected link, impair, rate, or profile name after defaults, found {other}"
+                ),
             ));
         }
         None => {

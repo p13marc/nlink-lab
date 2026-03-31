@@ -1796,7 +1796,11 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
             let mut host_num: u32 = 1;
             for member in &net.members {
                 // Skip members that already have explicit port addresses
-                if network.ports.get(member).is_some_and(|p| !p.addresses.is_empty()) {
+                if network
+                    .ports
+                    .get(member)
+                    .is_some_and(|p| !p.addresses.is_empty())
+                {
                     continue;
                 }
                 let ip = increment_ip(base_ip, host_num);
@@ -3176,15 +3180,9 @@ link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 delay 5ms }
             topo.impairments.contains_key("a:eth0"),
             "a:eth0 should have impairment from radio profile"
         );
-        assert_eq!(
-            topo.impairments["a:eth0"].delay.as_deref(),
-            Some("15ms")
-        );
+        assert_eq!(topo.impairments["a:eth0"].delay.as_deref(), Some("15ms"));
         // Link without profile gets its own impairment
-        assert_eq!(
-            topo.impairments["a:eth1"].delay.as_deref(),
-            Some("5ms")
-        );
+        assert_eq!(topo.impairments["a:eth1"].delay.as_deref(), Some("5ms"));
     }
 
     #[test]

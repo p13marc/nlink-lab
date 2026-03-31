@@ -995,11 +995,11 @@ node           = "node" name (":" profile_list)?
                  ("image" STRING ("cmd" (STRING | string_list))?)?
                  container_props? (block | NEWLINE)
 profile_list   = name ("," name)*
-link           = "link" endpoint "--" endpoint (link_block | NEWLINE)
-network        = "network" IDENT block
+link           = "link" endpoint "--" endpoint (":" IDENT)? (link_block | NEWLINE)
+network        = "network" IDENT "{" network_prop* "}"
 impair         = "impair" endpoint impair_props
 rate           = "rate" endpoint rate_props
-defaults       = "defaults" ("link" | "impair" | "rate") block
+defaults       = "defaults" ("link" | "impair" | "rate" | IDENT) block
 pool           = "pool" IDENT CIDR "/" INT
 pattern        = ("mesh" | "ring" | "star") IDENT block
 validate       = "validate" "{" assertion* "}"
@@ -1046,8 +1046,20 @@ link_item      = addr_pair | "subnet" CIDR | "pool" IDENT
 
 # ── Network block ────────────────────────────────
 network_item   = "members" endpoint_list | "vlan-filtering"
-               | "mtu" INT | "vlan" INT STRING?
-               | "port" endpoint block
+               | "mtu" INT | "subnet" CIDR | "vlan" INT STRING?
+               | "port" endpoint port_block
+port_block     = "{" (CIDR | "pvid" INT | "vlans" int_list
+               | "tagged" | "untagged")* "}"
+
+# ── NAT block ───────────────────────────────────
+nat_block      = "nat" "{" nat_rule* "}"
+nat_rule       = "masquerade" ("src" CIDR)?
+               | "dnat" ("dst" CIDR)? "to" IP (":" INT)?
+               | "snat" ("src" CIDR)? "to" IP
+
+# ── Route (supports list destinations) ──────────
+route          = "route" route_dest route_params
+route_dest     = "default" | CIDR | "[" CIDR ("," CIDR)* "]"
 
 # ── Pattern block ────────────────────────────────
 pattern_item   = "node" ident_list | "count" INT | "pool" IDENT

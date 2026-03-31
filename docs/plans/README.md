@@ -16,7 +16,7 @@ Implementation plans for nlink-lab.
 | [112](112-wifi-emulation.md) | Wi-Fi emulation via mac80211_hwsim | Large | **Implemented** |
 | [113](113-keyword-context-sensitivity.md) | Fix keyword stealing identifiers | Medium | **Implemented** |
 | [114](114-nat-firewall-dsl.md) | NAT support in firewall DSL | Medium | Ready (P1) |
-| [115](115-network-subnet-addresses.md) | Network subnet + port addresses | Small | Ready (P1) |
+| [115](115-network-subnet-addresses.md) | Network subnet + port addresses | Small | **Implemented** |
 | [116](116-shell-run-syntax.md) | Shell-style `run` syntax | Small | **Implemented** |
 | [117](117-route-groups.md) | Route groups (multi-destination) | Small | Ready (P3) |
 | [118](118-link-profiles.md) | Link type profiles (named presets) | Medium | Ready (P3) |

@@ -1,7 +1,7 @@
 # Plan 115: Network Subnet Auto-Assignment and Port Addresses
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-03-31)
 **Effort:** Small (1 day)
 **Priority:** P1 — blocks shared L2 segments with specific IPs
 

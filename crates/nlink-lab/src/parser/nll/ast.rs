@@ -392,6 +392,7 @@ pub struct NetworkDef {
     pub members: Vec<String>,
     pub vlan_filtering: bool,
     pub mtu: Option<u32>,
+    pub subnet: Option<String>,
     pub vlans: Vec<VlanDef>,
     pub ports: Vec<PortDef>,
 }
@@ -411,6 +412,7 @@ pub struct PortDef {
     pub vlans: Vec<u16>,
     pub tagged: bool,
     pub untagged: bool,
+    pub addresses: Vec<String>,
 }
 
 /// Standalone impairment.

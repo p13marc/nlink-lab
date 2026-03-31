@@ -23,8 +23,8 @@ profile router { forward ipv4 }
 # Asset C2 — Command & Control
 # ═══════════════════════════════════════════════════════════
 
-node dc1 { route default via 10.2.1.10 }
-node dc2 { route default via 10.2.1.11 }
+node dc1 { route default via 10.2.1.3 }
+node dc2 { route default via 10.2.1.3 }
 
 # DCS: Connectivity Solution — gateway to remote assets
 node dcs : router {
@@ -58,8 +58,8 @@ node c2-fw : router {
 # Asset A18 — Remote Drone
 # ═══════════════════════════════════════════════════════════
 
-node a18-cc { route default via 10.18.1.10 }
-node a18-cu { route default via 10.18.1.11 }
+node a18-cc { route default via 10.18.1.3 }
+node a18-cu { route default via 10.18.1.3 }
 
 # RED: acts as DCS on remote side — routes between internal and BLACK
 node a18-red : router {
@@ -89,16 +89,20 @@ node a9-cc : router {
 # Internal links
 # ═══════════════════════════════════════════════════════════
 
-# C2: DC LAN (point-to-point via DCS acting as switch)
-link dc1:eth0 -- dcs:dc1 { 10.2.1.1/24 -- 10.2.1.10/24 }
-link dc2:eth0 -- dcs:dc2 { 10.2.1.2/24 -- 10.2.1.11/24 }
+# C2: DC shared LAN (DC1 .1, DC2 .2, DCS .3)
+network c2-dc {
+  members [dc1:eth0, dc2:eth0, dcs:eth0]
+  subnet 10.2.1.0/24
+}
 
 # C2: DCS ↔ FIREWALL
 link dcs:eth1 -- c2-fw:eth0 { 10.2.2.1/24 -- 10.2.2.2/24 }
 
-# A18: internal LAN (point-to-point via RED acting as switch)
-link a18-cc:eth0 -- a18-red:cc { 10.18.1.1/24 -- 10.18.1.10/24 }
-link a18-cu:eth0 -- a18-red:cu { 10.18.1.2/24 -- 10.18.1.11/24 }
+# A18: internal LAN (CC .1, CU .2, RED .3)
+network a18-lan {
+  members [a18-cc:eth0, a18-cu:eth0, a18-red:eth0]
+  subnet 10.18.1.0/24
+}
 
 # A18: RED ↔ BLACK
 link a18-red:eth1 -- a18-black:eth0 { 10.18.2.1/24 -- 10.18.2.2/24 }

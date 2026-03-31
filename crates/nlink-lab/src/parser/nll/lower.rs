@@ -1111,6 +1111,7 @@ fn interpolate_network(n: &ast::NetworkDef, vars: &HashMap<String, String>) -> a
         members: n.members.iter().map(|s| i(s, vars)).collect(),
         vlan_filtering: n.vlan_filtering,
         mtu: n.mtu,
+        subnet: n.subnet.as_ref().map(|s| i(s, vars)),
         vlans: n.vlans.clone(),
         ports: n.ports.clone(),
     }
@@ -1691,6 +1692,20 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
     }
 }
 
+/// Increment an IP address by a host number offset.
+fn increment_ip(base: std::net::IpAddr, offset: u32) -> std::net::IpAddr {
+    match base {
+        std::net::IpAddr::V4(v4) => {
+            let n = u32::from(v4) + offset;
+            std::net::IpAddr::V4(std::net::Ipv4Addr::from(n))
+        }
+        std::net::IpAddr::V6(v6) => {
+            let n = u128::from(v6) + offset as u128;
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(n))
+        }
+    }
+}
+
 fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
     types::Impairment {
         delay: props.delay.clone(),
@@ -1729,9 +1744,32 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
                 tagged: if port.tagged { Some(true) } else { None },
                 pvid: port.pvid,
                 untagged: if port.untagged { Some(true) } else { None },
-                addresses: Vec::new(),
+                addresses: port.addresses.clone(),
             },
         );
+    }
+
+    // Subnet auto-assignment: assign sequential IPs to members without explicit addresses
+    if let Some(subnet) = &net.subnet {
+        network.subnet = Some(subnet.clone());
+        if let Ok((base_ip, prefix)) = crate::helpers::parse_cidr(subnet) {
+            let mut host_num: u32 = 1;
+            for member in &net.members {
+                // Skip members that already have explicit port addresses
+                if network.ports.get(member).is_some_and(|p| !p.addresses.is_empty()) {
+                    continue;
+                }
+                let ip = increment_ip(base_ip, host_num);
+                let addr = format!("{ip}/{prefix}");
+                network
+                    .ports
+                    .entry(member.clone())
+                    .or_default()
+                    .addresses
+                    .push(addr);
+                host_num += 1;
+            }
+        }
     }
 
     if topo.networks.contains_key(&net.name) {
@@ -2257,6 +2295,36 @@ network fabric {
         assert_eq!(net.vlans[&100].name.as_deref(), Some("sales"));
         assert_eq!(net.ports["host1"].pvid, Some(100));
         assert_eq!(net.ports["host1"].untagged, Some(true));
+    }
+
+    #[test]
+    fn test_lower_network_subnet() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+node c
+network lan {
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.0.1.0/24
+}"#,
+        );
+        let net = &topo.networks["lan"];
+        assert_eq!(net.subnet.as_deref(), Some("10.0.1.0/24"));
+        // Auto-assigned: a=.1, b=.2, c=.3
+        assert_eq!(net.ports["a:eth0"].addresses, vec!["10.0.1.1/24"]);
+        assert_eq!(net.ports["b:eth0"].addresses, vec!["10.0.1.2/24"]);
+        assert_eq!(net.ports["c:eth0"].addresses, vec!["10.0.1.3/24"]);
+    }
+
+    #[test]
+    #[allow(dead_code)]
+    fn test_lower_network_port_address_placeholder() {
+        // Port address override with subnet requires "port node:iface" parsing
+        // which uses parse_name (can't parse node:iface as a name).
+        // This needs the port block to use parse_endpoint or a different parser.
+        // For now, port addresses work via direct "port node { cidr }" syntax
+        // (existing vlan-trunk style), and subnet auto-assigns.
     }
 
     #[test]

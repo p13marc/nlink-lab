@@ -701,6 +701,32 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // From network (bridge) port configs
+    for network in topology.networks.values() {
+        for (endpoint_str, port) in &network.ports {
+            if port.addresses.is_empty() {
+                continue;
+            }
+            if let Some(ep) = EndpointRef::parse(endpoint_str) {
+                let ep_handle = &node_handles[&ep.node];
+                let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
+                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
+                })?;
+                for addr_str in &port.addresses {
+                    let (ip, prefix) = parse_cidr(addr_str)?;
+                    conn.add_address_by_name(&ep.iface, ip, prefix)
+                        .await
+                        .map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
+                                ep.iface, ep.node
+                            ))
+                        })?;
+                }
+            }
+        }
+    }
+
     // From WireGuard interfaces
     for (node_name, node) in &topology.nodes {
         if node.wireguard.is_empty() {

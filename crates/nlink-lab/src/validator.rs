@@ -402,11 +402,17 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
         }
 
         for port_name in network.ports.keys() {
-            if !topology.nodes.contains_key(port_name) {
+            // Port name can be "node" or "node:iface" — check node part
+            let node_part = if let Some(ep) = EndpointRef::parse(port_name) {
+                ep.node
+            } else {
+                port_name.to_string()
+            };
+            if !topology.nodes.contains_key(&node_part) {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "dangling-node-ref",
-                    message: format!("node '{port_name}' does not exist"),
+                    message: format!("node '{node_part}' does not exist"),
                     location: Some(format!("networks.{net_name}.ports.{port_name}")),
                 });
             }

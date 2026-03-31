@@ -1700,6 +1700,7 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
         members: Vec::new(),
         vlan_filtering: false,
         mtu: None,
+        subnet: None,
         vlans: Vec::new(),
         ports: Vec::new(),
     };
@@ -1715,6 +1716,8 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
             net.members = parse_endpoint_list(tokens, pos)?;
         } else if eat_kw(tokens, pos, "vlan-filtering") {
             net.vlan_filtering = true;
+        } else if eat_kw(tokens, pos, "subnet") {
+            net.subnet = Some(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "mtu") {
             net.mtu = Some(expect_int(tokens, pos)? as u32);
         } else if eat_kw(tokens, pos, "vlan") {
@@ -1761,6 +1764,7 @@ fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Re
         vlans: Vec::new(),
         tagged: false,
         untagged: false,
+        addresses: Vec::new(),
     };
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -1778,6 +1782,11 @@ fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Re
             port.tagged = true;
         } else if eat_kw(tokens, pos, "untagged") {
             port.untagged = true;
+        } else if matches!(at(tokens, *pos), Some(Token::Cidr(_))) {
+            if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+                port.addresses.push(c.clone());
+                *pos += 1;
+            }
         } else {
             match at(tokens, *pos) {
                 Some(other) => {

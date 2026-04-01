@@ -1,10 +1,6 @@
 use std::path::PathBuf;
 
-pub(crate) fn run(
-    lab: String,
-    output: Option<PathBuf>,
-    json: bool,
-) -> nlink_lab::Result<()> {
+pub(crate) fn run(lab: String, output: Option<PathBuf>, json: bool) -> nlink_lab::Result<()> {
     let running = nlink_lab::RunningLab::load(&lab)?;
     let content = if json {
         serde_json::to_string_pretty(running.topology())?

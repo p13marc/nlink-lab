@@ -1,10 +1,6 @@
 use crate::util::check_root;
 
-pub(crate) async fn run(
-    lab: String,
-    node: Option<String>,
-    json: bool,
-) -> nlink_lab::Result<()> {
+pub(crate) async fn run(lab: String, node: Option<String>, json: bool) -> nlink_lab::Result<()> {
     check_root();
     let running = nlink_lab::RunningLab::load(&lab)?;
     let results = running.diagnose(node.as_deref()).await?;

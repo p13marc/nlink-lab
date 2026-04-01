@@ -9,9 +9,7 @@ pub(crate) async fn run(
     if let Some(connect) = &zenoh_connect {
         zenoh_config
             .insert_json5("connect/endpoints", &format!(r#"["{connect}"]"#))
-            .map_err(|e| {
-                nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}"))
-            })?;
+            .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}")))?;
     }
 
     let session = zenoh::open(zenoh_config).await.map_err(|e| {
@@ -19,9 +17,10 @@ pub(crate) async fn run(
     })?;
 
     let topic = nlink_lab_shared::topics::metrics_snapshot(&lab);
-    let subscriber = session.declare_subscriber(&topic).await.map_err(|e| {
-        nlink_lab::Error::deploy_failed(format!("subscribe to '{topic}': {e}"))
-    })?;
+    let subscriber = session
+        .declare_subscriber(&topic)
+        .await
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("subscribe to '{topic}': {e}")))?;
 
     eprintln!("Subscribing to metrics for lab '{lab}'... (Ctrl-C to stop)");
 

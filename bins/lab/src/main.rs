@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 mod cli;
 mod color;
 mod commands;
@@ -6,8 +8,8 @@ mod output;
 mod rendering;
 mod util;
 
-use cli::{Cli, Commands};
 use clap::{CommandFactory, Parser};
+use cli::{Cli, Commands};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {

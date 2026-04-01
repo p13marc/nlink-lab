@@ -1,10 +1,6 @@
 use crate::util::{check_root, force_cleanup};
 
-pub(crate) async fn run(
-    name: Option<String>,
-    force: bool,
-    all: bool,
-) -> nlink_lab::Result<()> {
+pub(crate) async fn run(name: Option<String>, force: bool, all: bool) -> nlink_lab::Result<()> {
     check_root();
     if all {
         let labs = nlink_lab::RunningLab::list()?;
@@ -28,9 +24,8 @@ pub(crate) async fn run(
         println!("{} lab(s) destroyed", labs.len());
         return Ok(());
     }
-    let name = name.ok_or_else(|| {
-        nlink_lab::Error::deploy_failed("lab name required (or use --all)")
-    })?;
+    let name =
+        name.ok_or_else(|| nlink_lab::Error::deploy_failed("lab name required (or use --all)"))?;
     match nlink_lab::RunningLab::load(&name) {
         Ok(lab) => {
             let node_count = lab.namespace_count();

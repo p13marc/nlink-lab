@@ -1,7 +1,7 @@
 # Plan 129: NAT `translate` Shorthand
 
 **Date:** 2026-04-01
-**Status:** Draft
+**Status:** Deferred — for-loop approach is already clean; translate requires deploy-time topology scanning
 **Effort:** Small (half day)
 **Priority:** P3 — nice-to-have simplification for address mapping
 

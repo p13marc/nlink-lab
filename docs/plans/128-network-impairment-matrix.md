@@ -1,7 +1,7 @@
 # Plan 128: Per-Pair Impairment Matrix on Shared Networks
 
 **Date:** 2026-04-01
-**Status:** Draft
+**Status:** Blocked — needs nlink TC filter API (`add_filter`, u32 match support)
 **Effort:** Medium-Large (2-3 days)
 **Priority:** P2 — enables realistic distance-dependent link simulation
 

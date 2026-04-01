@@ -1,7 +1,7 @@
 # Plan 126: Fleet `for_each` Imports
 
 **Date:** 2026-04-01
-**Status:** Ready
+**Status:** Implemented (2026-04-01)
 **Effort:** Small (half day)
 **Priority:** P1 — scales fleet management to N instances
 

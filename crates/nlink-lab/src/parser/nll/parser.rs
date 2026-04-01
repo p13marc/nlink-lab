@@ -13,7 +13,7 @@ pub fn parse_tokens(tokens: &[Spanned], _source: &str) -> Result<ast::File> {
     loop {
         skip_newlines(tokens, &mut pos);
         if pos < tokens.len() && tokens[pos].token == Token::Import {
-            imports.push(parse_import(tokens, &mut pos)?);
+            imports.extend(parse_import(tokens, &mut pos)?);
         } else {
             break;
         }
@@ -39,14 +39,45 @@ pub fn parse_tokens(tokens: &[Spanned], _source: &str) -> Result<ast::File> {
 
 // ─── Import ──────────────────────────────────────────────
 
-fn parse_import(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ImportDef> {
+fn parse_import(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::ImportDef>> {
     expect(tokens, pos, &Token::Import)?;
     let path = expect_string(tokens, pos)?;
+
+    // for_each variant: import "file.nll" for_each { alias1(k=v); alias2(k=v) }
+    if eat_kw(tokens, pos, "for_each") {
+        expect(tokens, pos, &Token::LBrace)?;
+        let mut imports = Vec::new();
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
+            }
+            let alias = expect_ident(tokens, pos)?;
+            let params = parse_import_params(tokens, pos)?;
+            imports.push(ast::ImportDef {
+                path: path.clone(),
+                alias,
+                params,
+            });
+        }
+        return Ok(imports);
+    }
+
+    // Standard: import "file.nll" as alias(k=v)
     expect(tokens, pos, &Token::As)?;
     let alias = expect_ident(tokens, pos)?;
+    let params = parse_import_params(tokens, pos)?;
 
-    // Optional parametric import: (key=value, ...)
-    let params = if eat(tokens, pos, &Token::LParen) {
+    Ok(vec![ast::ImportDef {
+        path,
+        alias,
+        params,
+    }])
+}
+
+/// Parse import parameters: (key=value, key=value, ...)
+fn parse_import_params(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<(String, String)>> {
+    if eat(tokens, pos, &Token::LParen) {
         let mut params = Vec::new();
         loop {
             skip_newlines(tokens, pos);
@@ -62,16 +93,10 @@ fn parse_import(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ImportDef> {
             let value = parse_value(tokens, pos)?;
             params.push((key, value));
         }
-        params
+        Ok(params)
     } else {
-        vec![]
-    };
-
-    Ok(ast::ImportDef {
-        path,
-        alias,
-        params,
-    })
+        Ok(vec![])
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────

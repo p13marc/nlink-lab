@@ -104,12 +104,11 @@ site a18a {
     nat { masquerade src 10.18.0.0/16 }
   }
 
+  network lan {
+    members [cc:eth0, cu:eth0, red:eth0]
+    subnet 10.18.1.0/24
+  }
   link red:eth1 -- black:eth0 { 10.18.2.1/24 -- 10.18.2.2/24 }
-}
-
-network a18a-lan {
-  members [a18a-cc:eth0, a18a-cu:eth0, a18a-red:eth0]
-  subnet 10.18.1.0/24
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -129,12 +128,11 @@ site a18b {
     nat { masquerade src 10.19.0.0/16 }
   }
 
+  network lan {
+    members [cc:eth0, cu:eth0, red:eth0]
+    subnet 10.19.1.0/24
+  }
   link red:eth1 -- black:eth0 { 10.19.2.1/24 -- 10.19.2.2/24 }
-}
-
-network a18b-lan {
-  members [a18b-cc:eth0, a18b-cu:eth0, a18b-red:eth0]
-  subnet 10.19.1.0/24
 }
 
 # ═══════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 # Plan 122: Site Block Improvements (Networks + Cross-References)
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-04-01) — networks inside sites work; cross-refs deferred (IP functions provide alternative)
 **Effort:** Small-Medium (1-2 days)
 **Priority:** P1 — completes site grouping feature
 **Depends on:** Nothing

@@ -8,7 +8,7 @@ Implementation plans for nlink-lab.
 |------|-------------|--------|--------|
 | [120](120-ip-functions.md) | IP computation functions (`subnet`, `host`) | Medium | **Implemented** |
 | [121](121-for-inside-blocks.md) | `for` loops inside blocks (nat, firewall, node) | Medium | **Implemented** |
-| [122](122-site-improvements.md) | Site improvements (networks + cross-refs) | Small-Medium | Ready (P1) |
+| [122](122-site-improvements.md) | Site improvements (networks + cross-refs) | Small-Medium | **Implemented** |
 | [123](123-auto-addressing.md) | Extended auto-addressing (loopback pools) | Small | Ready (P2) |
 | [124](124-conditional-logic.md) | Conditional logic (`if` blocks, `for ... if`) | Medium | Draft (P3) |
 

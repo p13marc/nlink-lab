@@ -29,4 +29,3 @@ Plans 050–127 have been implemented and their plan files removed:
 | [GUIDELINES.md](GUIDELINES.md) | Implementation guidelines |
 | [../NLINK_LAB.md](../NLINK_LAB.md) | Full design document |
 | [../NLL_DSL_DESIGN.md](../NLL_DSL_DESIGN.md) | NLL language specification |
-| [../NLL_DEEP_ANALYSIS_V2.md](../NLL_DEEP_ANALYSIS_V2.md) | Declarative DSL analysis |

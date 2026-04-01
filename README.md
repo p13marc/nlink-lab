@@ -100,10 +100,10 @@ link dc-spine1:mon0 -- monitor:eth0 { 172.16.0.0/30 }
 Fleet management with `for_each` — import the same template N times:
 
 ```nll
-import "imports/drone.nll" for_each {
-  a18(id=18)
-  a19(id=19)
-  a20(id=20)
+import "imports/site.nll" for_each {
+  site1(id=1)
+  site2(id=2)
+  site3(id=3)
 }
 ```
 
@@ -112,14 +112,13 @@ import "imports/drone.nll" for_each {
 Network members auto-match nodes using `*` wildcards:
 
 ```nll
-network radio {
-  members [c2-fw:radio, *-black:radio]    # matches a18-black, a19-black, ...
-  subnet 172.100.3.0/24
+network wan {
+  members [gateway:wan, *-router:wan]    # matches site1-router, site2-router, ...
+  subnet 172.16.0.0/24
 }
 ```
 
-Adding a new drone to the fleet only needs one import line — networks
-auto-adapt.
+Adding a new site only needs one import line — networks auto-adapt.
 
 ### Containers
 
@@ -463,7 +462,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `wifi` | Wi-Fi AP + stations via mac80211_hwsim |
 | `nat` | NAT: masquerade + DNAT firewall |
 | `site-grouping` | Multi-site topology with auto name prefixing |
-| `infra-c2-a18-a9` | Full drone control infrastructure (3 assets, NAT, modem links) |
+| `infra-c2-a18-a9` | Multi-site infrastructure with NAT, modem links, parametric imports |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

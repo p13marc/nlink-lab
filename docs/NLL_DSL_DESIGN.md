@@ -1048,7 +1048,7 @@ link_item      = addr_pair | "subnet" CIDR | "pool" IDENT
                | "mtu" INT | impair_props | dir_impair | rate_props
 
 # ── Network block ────────────────────────────────
-# Members support glob patterns: *-black:fo matches a18-black:fo, a19-black:fo
+# Members support glob patterns: *-router:wan matches site1-router:wan, site2-router:wan
 network_item   = "members" endpoint_list | "vlan-filtering"
                | "mtu" INT | "subnet" CIDR | "vlan" INT STRING?
                | "port" endpoint port_block

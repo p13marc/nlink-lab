@@ -979,6 +979,8 @@ more concise.
 ```
 file           = import* lab_decl statement*
 import         = "import" STRING "as" IDENT ("(" param_list ")")?
+               | "import" STRING "for_each" "{" import_item* "}"
+import_item    = IDENT ("(" param_list ")")?
 param_list     = IDENT "=" value ("," IDENT "=" value)*
 lab_decl       = "lab" STRING ("runtime" STRING)? lab_block?
 lab_block      = "{" lab_prop* "}"
@@ -1046,6 +1048,7 @@ link_item      = addr_pair | "subnet" CIDR | "pool" IDENT
                | "mtu" INT | impair_props | dir_impair | rate_props
 
 # ── Network block ────────────────────────────────
+# Members support glob patterns: *-black:fo matches a18-black:fo, a19-black:fo
 network_item   = "members" endpoint_list | "vlan-filtering"
                | "mtu" INT | "subnet" CIDR | "vlan" INT STRING?
                | "port" endpoint port_block

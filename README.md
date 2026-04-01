@@ -94,8 +94,32 @@ import "spine-leaf.nll" as dc(spines=4, leaves=8)
 
 lab "extended"
 node monitor
-link dc.spine1:mon0 -- monitor:eth0 { 172.16.0.0/30 }
+link dc-spine1:mon0 -- monitor:eth0 { 172.16.0.0/30 }
 ```
+
+Fleet management with `for_each` — import the same template N times:
+
+```nll
+import "imports/drone.nll" for_each {
+  a18(id=18)
+  a19(id=19)
+  a20(id=20)
+}
+```
+
+### Glob Patterns in Networks
+
+Network members auto-match nodes using `*` wildcards:
+
+```nll
+network radio {
+  members [c2-fw:radio, *-black:radio]    # matches a18-black, a19-black, ...
+  subnet 172.100.3.0/24
+}
+```
+
+Adding a new drone to the fleet only needs one import line — networks
+auto-adapt.
 
 ### Containers
 

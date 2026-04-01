@@ -157,7 +157,9 @@ node names), IP computation functions (`subnet()`, `host()`),
 conditional logic (`if` blocks with `==`/`!=`/`<`/`>`/`&&`/`||`),
 `for` loops inside node/nat blocks, loopback pool allocation
 (`lo pool name`), auto-routing (`routing auto` computes static routes
-from topology graph), and network (bridge) blocks.
+from topology graph), fleet `for_each` imports (instantiate templates
+N times), glob patterns in network members (`*-black:fo`),
+and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.

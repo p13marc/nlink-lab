@@ -1,7 +1,7 @@
 # Plan 123: Extended Auto-Addressing (Loopbacks, Management, Pools)
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-04-01)
 **Effort:** Small (1 day)
 **Priority:** P2 — reduces manual IP assignment
 **Depends on:** Nothing (benefits from Plan 120 IP functions)

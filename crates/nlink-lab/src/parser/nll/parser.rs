@@ -871,7 +871,12 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
         Ok(ast::NodeProp::Sysctl(key, value))
     } else if check_kw(tokens, *pos, "lo") {
         *pos += 1;
-        let addr = parse_cidr_or_name(tokens, pos)?;
+        let addr = if eat(tokens, pos, &Token::Pool) {
+            let pool_name = expect_ident(tokens, pos)?;
+            format!("pool:{pool_name}")
+        } else {
+            parse_cidr_or_name(tokens, pos)?
+        };
         Ok(ast::NodeProp::Lo(addr))
     // Note: "route" is handled at the call site (supports list destinations)
     } else if check_kw(tokens, *pos, "firewall") {

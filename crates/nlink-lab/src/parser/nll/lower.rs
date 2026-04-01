@@ -104,7 +104,7 @@ fn lower_with_base_dir(
 
     for stmt in &expanded {
         match stmt {
-            ast::Statement::Node(n) => lower_node(&mut topology, n, &ctx)?,
+            ast::Statement::Node(n) => lower_node(&mut topology, n, &mut ctx)?,
             ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx),
             ast::Statement::Network(n) => lower_network(&mut topology, n)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
@@ -192,7 +192,7 @@ fn lower_with_base_dir(
                         ast::Statement::Node(n) => {
                             let mut prefixed = n.clone();
                             prefixed.name = format!("{}{}", prefix, n.name);
-                            lower_node(&mut topology, &prefixed, &ctx)?;
+                            lower_node(&mut topology, &prefixed, &mut ctx)?;
                         }
                         ast::Statement::Link(l) => {
                             let mut prefixed = l.clone();
@@ -497,6 +497,17 @@ struct PoolState {
     pool_size: u32,   // total addresses in the pool (for exhaustion check)
     alloc_prefix: u8, // allocation prefix size (e.g., 30 for /30)
     next_offset: u32, // next allocation offset from base
+}
+
+impl PoolState {
+    /// Allocate a single address from the pool (for /32 loopback, etc.)
+    fn allocate(&mut self) -> String {
+        let subnet_size = 1u32.checked_shl(32 - self.alloc_prefix as u32).unwrap_or(1);
+        let addr = self.base + self.next_offset;
+        self.next_offset += subnet_size;
+        let ip = std::net::Ipv4Addr::from(addr);
+        format!("{ip}/{}", self.alloc_prefix)
+    }
 }
 
 struct LowerCtx {
@@ -1377,7 +1388,7 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
     }
 }
 
-fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &LowerCtx) -> Result<()> {
+fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCtx) -> Result<()> {
     let mut n = types::Node {
         profile: node.profiles.first().cloned(),
         image: node.image.clone(),
@@ -1421,14 +1432,18 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &LowerCtx) -
     }
 
     // Apply profiles in order (later profiles override earlier ones)
-    for profile_name in &node.profiles {
-        if let Some(profile) = ctx.profiles.get(profile_name) {
-            apply_node_props(&mut n, &profile.props);
-        }
+    // Clone props to release the immutable borrow on ctx before mutating
+    let profile_props: Vec<Vec<ast::NodeProp>> = node
+        .profiles
+        .iter()
+        .filter_map(|name| ctx.profiles.get(name).map(|p| p.props.clone()))
+        .collect();
+    for props in &profile_props {
+        apply_node_props(&mut n, props, ctx);
     }
 
     // Apply node's own properties (overrides profile)
-    apply_node_props(&mut n, &node.props);
+    apply_node_props(&mut n, &node.props, ctx);
 
     if topo.nodes.contains_key(&node.name) {
         return Err(crate::Error::NllParse(format!(
@@ -1440,7 +1455,7 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &LowerCtx) -
     Ok(())
 }
 
-fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
+fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut LowerCtx) {
     for prop in props {
         match prop {
             ast::NodeProp::Forward(version) => {
@@ -1455,7 +1470,18 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
             }
             ast::NodeProp::Lo(addr) => {
                 let lo = node.interfaces.entry("lo".to_string()).or_default();
-                lo.addresses.push(addr.clone());
+                if let Some(pool_name) = addr.strip_prefix("pool:") {
+                    // Allocate from pool
+                    if let Some(pool) = ctx.pools.get_mut(pool_name) {
+                        let allocated = pool.allocate();
+                        lo.addresses.push(allocated);
+                    } else {
+                        tracing::warn!("unknown pool '{pool_name}' for loopback");
+                        lo.addresses.push(addr.clone());
+                    }
+                } else {
+                    lo.addresses.push(addr.clone());
+                }
             }
             ast::NodeProp::Route(r) => {
                 node.routes.insert(
@@ -3438,6 +3464,24 @@ link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 delay 5ms }
         assert_eq!(topo.impairments["a:eth0"].delay.as_deref(), Some("15ms"));
         // Link without profile gets its own impairment
         assert_eq!(topo.impairments["a:eth1"].delay.as_deref(), Some("5ms"));
+    }
+
+    #[test]
+    fn test_lo_pool_allocation() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+pool loopbacks 10.255.0.0/24 /32
+node r1 { lo pool loopbacks }
+node r2 { lo pool loopbacks }
+node r3 { lo pool loopbacks }
+"#,
+        );
+        let r1_lo = &topo.nodes["r1"].interfaces["lo"];
+        let r2_lo = &topo.nodes["r2"].interfaces["lo"];
+        let r3_lo = &topo.nodes["r3"].interfaces["lo"];
+        assert_eq!(r1_lo.addresses[0], "10.255.0.0/32");
+        assert_eq!(r2_lo.addresses[0], "10.255.0.1/32");
+        assert_eq!(r3_lo.addresses[0], "10.255.0.2/32");
     }
 
     #[test]

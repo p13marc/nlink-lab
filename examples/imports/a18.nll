@@ -1,0 +1,32 @@
+# A18 drone template — full: CC, CU, RED (≈DCS), BLACK (≈FIREWALL)
+#
+# param id: asset ID (e.g., 18, 19) — determines IP addressing
+# All IPs computed from asset ID via subnet()/host()
+
+lab "a18-template"
+
+profile router { forward ipv4 }
+param id
+
+let base = subnet("10.0.0.0/8", 16, ${id})
+let lan = subnet(${base}, 24, 1)
+let ptp = subnet(${base}, 24, 2)
+
+node cc { route default via host(${lan}, 3) }
+node cu { route default via host(${lan}, 3) }
+
+node red : router {
+  route 172.100.0.0/16 via host(${ptp}, 2)
+}
+
+node black : router {
+  route ${lan} via host(${ptp}, 1)
+  nat { masquerade src ${base} }
+}
+
+network lan {
+  members [cc:eth0, cu:eth0, red:eth0]
+  subnet ${lan}
+}
+
+link red:eth1 -- black:eth0 { host(${ptp}, 1)/24 -- host(${ptp}, 2)/24 }

@@ -1,6 +1,6 @@
 # Composed topology — imports a base network and adds a host.
 #
-# The imported network's nodes become dc.r1, dc.r2 with their
+# The imported network's nodes become dc-r1, dc-r2 with their
 # link automatically prefixed.
 
 import "base-network.nll" as dc
@@ -9,6 +9,6 @@ lab "composed"
 
 node host { route default via 10.1.0.1 }
 
-link dc.r1:eth1 -- host:eth0 {
+link dc-r1:eth1 -- host:eth0 {
     10.1.0.1/24 -- 10.1.0.10/24
 }

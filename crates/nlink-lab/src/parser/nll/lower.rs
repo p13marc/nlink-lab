@@ -273,7 +273,9 @@ fn resolve_imports(
             crate::Error::NllParse(format!("cannot resolve import '{}': {e}", imp.path))
         })?;
 
-        // Circular import detection
+        // Circular import detection: only flag if we're currently IN this file's
+        // import chain (not if it was imported earlier with a different alias).
+        // Allow re-importing the same file with different parameters.
         if visited.contains(&canonical) {
             return Err(crate::Error::NllParse(format!(
                 "circular import detected: '{}'",
@@ -304,6 +306,9 @@ fn resolve_imports(
 
         // Merge imported topology with alias prefix
         merge_import(topology, &imp.alias, imported);
+
+        // Remove from visited to allow re-importing the same file with different params
+        visited.remove(&canonical);
     }
     Ok(())
 }
@@ -362,9 +367,9 @@ fn resolve_import_params(caller_params: &[(String, String)], ast: &mut ast::File
 }
 
 fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topology) {
-    // Merge nodes with prefixed names
+    // Merge nodes with prefixed names (use - separator for parser compatibility)
     for (name, node) in imported.nodes {
-        main.nodes.insert(format!("{alias}.{name}"), node);
+        main.nodes.insert(format!("{alias}-{name}"), node);
     }
 
     // Merge links with prefixed endpoint references
@@ -380,7 +385,12 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
         for member in &mut network.members {
             *member = prefix_endpoint(alias, member);
         }
-        main.networks.insert(format!("{alias}.{name}"), network);
+        // Prefix port keys
+        let old_ports = std::mem::take(&mut network.ports);
+        for (key, port) in old_ports {
+            network.ports.insert(prefix_endpoint(alias, &key), port);
+        }
+        main.networks.insert(format!("{alias}-{name}"), network);
     }
 
     // Merge impairments with prefixed endpoint keys
@@ -395,15 +405,15 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
 
     // Merge profiles with prefixed names
     for (name, profile) in imported.profiles {
-        main.profiles.insert(format!("{alias}.{name}"), profile);
+        main.profiles.insert(format!("{alias}-{name}"), profile);
     }
 }
 
 fn prefix_endpoint(alias: &str, endpoint: &str) -> String {
     if let Some((node, iface)) = endpoint.split_once(':') {
-        format!("{alias}.{node}:{iface}")
+        format!("{alias}-{node}:{iface}")
     } else {
-        format!("{alias}.{endpoint}")
+        format!("{alias}-{endpoint}")
     }
 }
 
@@ -2806,8 +2816,7 @@ node r1 : nonexistent"#,
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().and_then(|e| e.to_str()) == Some("nll") {
-                let content = std::fs::read_to_string(&path).unwrap();
-                let topo = nll::parse(&content)
+                let topo = crate::parser::parse_file(&path)
                     .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
                 let diags = topo.validate();
                 assert!(
@@ -2833,9 +2842,9 @@ node r1 : nonexistent"#,
         let topo = crate::parser::parse_file(&composed_path).unwrap();
 
         assert_eq!(topo.lab.name, "composed");
-        // Imported nodes are prefixed with "dc."
-        assert!(topo.nodes.contains_key("dc.r1"), "missing dc.r1");
-        assert!(topo.nodes.contains_key("dc.r2"), "missing dc.r2");
+        // Imported nodes are prefixed with "dc-"
+        assert!(topo.nodes.contains_key("dc-r1"), "missing dc.r1");
+        assert!(topo.nodes.contains_key("dc-r2"), "missing dc.r2");
         // Local node is not prefixed
         assert!(topo.nodes.contains_key("host"), "missing host");
         // Total: 2 imported + 1 local
@@ -2845,12 +2854,12 @@ node r1 : nonexistent"#,
         let imported_link = topo
             .links
             .iter()
-            .find(|l| l.endpoints[0].starts_with("dc.") && l.endpoints[1].starts_with("dc."));
+            .find(|l| l.endpoints[0].starts_with("dc-") && l.endpoints[1].starts_with("dc-"));
         assert!(imported_link.is_some(), "imported link not found");
 
         // Local link references the imported node
         let local_link = topo.links.iter().find(|l| {
-            l.endpoints.iter().any(|e| e == "dc.r1:eth1")
+            l.endpoints.iter().any(|e| e == "dc-r1:eth1")
                 && l.endpoints.iter().any(|e| e == "host:eth0")
         });
         assert!(local_link.is_some(), "local→imported link not found");
@@ -2885,9 +2894,9 @@ node a
 
     #[test]
     fn test_import_prefix_endpoint() {
-        assert_eq!(super::prefix_endpoint("dc", "r1:eth0"), "dc.r1:eth0");
-        assert_eq!(super::prefix_endpoint("wan", "pe1:wan0"), "wan.pe1:wan0");
-        assert_eq!(super::prefix_endpoint("dc", "switch:br0"), "dc.switch:br0");
+        assert_eq!(super::prefix_endpoint("dc", "r1:eth0"), "dc-r1:eth0");
+        assert_eq!(super::prefix_endpoint("wan", "pe1:wan0"), "wan-pe1:wan0");
+        assert_eq!(super::prefix_endpoint("dc", "switch:br0"), "dc-switch:br0");
     }
 
     // ─── Expression engine tests ─────────────────────────

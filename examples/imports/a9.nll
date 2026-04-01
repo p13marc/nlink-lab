@@ -1,0 +1,15 @@
+# A9 drone template — simplified: CC = BLACK + RED + CC combined
+#
+# param id: asset ID (e.g., 9, 10) — determines IP addressing
+
+lab "a9-template"
+
+profile router { forward ipv4 }
+param id
+
+let lan = subnet("10.0.0.0/8", 24, ${id * 256 + 1})
+
+node cu { route default via host(${lan}, 1) }
+node cc : router
+
+link cc:eth0 -- cu:eth0 { host(${lan}, 1)/24 -- host(${lan}, 2)/24 }

@@ -6,6 +6,7 @@
 #
 # All IP addressing is computed via subnet()/host() functions.
 # DCS routes and FIREWALL NAT rules generated with for-loops.
+# Modem links modeled as shared networks (not point-to-point).
 
 import "imports/a18.nll" as a18(id=18)
 import "imports/a18.nll" as a19(id=19)
@@ -18,7 +19,6 @@ lab "infra" {
 }
 
 profile router { forward ipv4 }
-defaults fiber { delay 1ms }
 
 # ═══ Asset C2 — Command & Control ════════════════════════
 
@@ -59,31 +59,43 @@ node c2-fw : router {
   }
 }
 
+# ═══ Internal C2 networks ════════════════════════════════
+
 network c2-dc {
   members [dc1:eth0, dc2:eth0, dcs:eth0]
   subnet ${dc-lan}
 }
 link dcs:eth1 -- c2-fw:eth0 { host(${dcs-fw}, 1)/24 -- host(${dcs-fw}, 2)/24 }
 
-# ═══ Modem links (WAN) ═══════════════════════════════════
+# ═══ Modem networks (shared WAN media) ═══════════════════
+#
+# Each transport type is a shared L2 segment (bridge).
+# All assets with that modem type are on the same network.
+# Addresses auto-assigned from subnet: .2=C2, .9=A9, .10=A10, .18=A18, .19=A19
 
-# C2 ↔ A18: FO, SAT, radio
-link c2-fw:fo-a18 -- a18-black:fo : fiber { 172.100.1.2/24 -- 172.100.1.18/24 }
-link c2-fw:sat-a18 -- a18-black:sat { 172.100.2.2/24 -- 172.100.2.18/24 }
-link c2-fw:rad-a18 -- a18-black:radio { 172.100.3.2/24 -- 172.100.3.18/24 }
+# Fiber Optic — all assets
+network fo {
+  members [c2-fw:fo, a18-black:fo, a19-black:fo, a9-cc:fo, a10-cc:fo]
+  subnet 172.100.1.0/24
+}
 
-# C2 ↔ A19: FO, SAT, radio
-link c2-fw:fo-a19 -- a19-black:fo : fiber { 172.100.1.2/24 -- 172.100.1.19/24 }
-link c2-fw:sat-a19 -- a19-black:sat { 172.100.2.2/24 -- 172.100.2.19/24 }
-link c2-fw:rad-a19 -- a19-black:radio { 172.100.3.2/24 -- 172.100.3.19/24 }
+# Satellite — A18s only
+network sat {
+  members [c2-fw:sat, a18-black:sat, a19-black:sat]
+  subnet 172.100.2.0/24
+}
 
-# C2 ↔ A9: FO, wifi
-link c2-fw:fo-a9 -- a9-cc:fo : fiber { 172.100.1.2/24 -- 172.100.1.9/24 }
-link c2-fw:wifi-a9 -- a9-cc:wifi { 172.100.4.2/24 -- 172.100.4.9/24 }
+# Radio — A18s only
+network radio {
+  members [c2-fw:radio, a18-black:radio, a19-black:radio]
+  subnet 172.100.3.0/24
+}
 
-# C2 ↔ A10: FO, wifi
-link c2-fw:fo-a10 -- a10-cc:fo : fiber { 172.100.1.2/24 -- 172.100.1.10/24 }
-link c2-fw:wifi-a10 -- a10-cc:wifi { 172.100.4.2/24 -- 172.100.4.10/24 }
+# WiFi — A9s only
+network wifi {
+  members [c2-fw:wifi, a9-cc:wifi, a10-cc:wifi]
+  subnet 172.100.4.0/24
+}
 
 # ═══ Validation ═══════════════════════════════════════════
 

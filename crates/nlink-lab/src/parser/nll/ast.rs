@@ -59,6 +59,14 @@ pub enum Statement {
     Scenario(ScenarioDef),
     Benchmark(BenchmarkDef),
     Site(SiteDef),
+    If(IfDef),
+}
+
+/// Conditional block.
+#[derive(Debug, Clone)]
+pub struct IfDef {
+    pub condition: String,
+    pub body: Vec<Statement>,
 }
 
 /// Site definition (groups nodes/links with a common prefix).

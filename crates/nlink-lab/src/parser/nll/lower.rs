@@ -221,6 +221,28 @@ fn lower_with_base_dir(
                     }
                 }
             }
+            ast::Statement::If(if_def) => {
+                // Evaluate condition with current variables
+                let resolved_cond = interpolate(&if_def.condition, &ctx.variables);
+                if eval_condition(&resolved_cond, &ctx.variables) {
+                    // Recursively lower the body statements
+                    // (push them onto a queue to process)
+                    for inner in &if_def.body {
+                        match inner {
+                            ast::Statement::Node(n) => {
+                                lower_node(&mut topology, n, &mut ctx)?;
+                            }
+                            ast::Statement::Link(l) => {
+                                lower_link(&mut topology, l, &mut ctx);
+                            }
+                            ast::Statement::Network(n) => {
+                                lower_network(&mut topology, n)?;
+                            }
+                            _ => {} // Other statement types inside if
+                        }
+                    }
+                }
+            }
             ast::Statement::Profile(_)
             | ast::Statement::Let(_)
             | ast::Statement::For(_)
@@ -815,6 +837,92 @@ fn eval_ternary(expr: &str, vars: &HashMap<String, String>) -> Option<String> {
     Some(resolve_var(chosen, vars))
 }
 
+/// Evaluate a boolean condition. Supports:
+/// - `==`, `!=` comparison
+/// - `<`, `>`, `<=`, `>=` numeric comparison
+/// - `&&`, `||` boolean operators
+/// - Numeric literals and variable references
+pub fn eval_condition(expr: &str, vars: &HashMap<String, String>) -> bool {
+    let expr = expr.trim();
+
+    // Handle || (lowest precedence)
+    if let Some(pos) = find_operator(expr, "||") {
+        let left = &expr[..pos];
+        let right = &expr[pos + 2..];
+        return eval_condition(left, vars) || eval_condition(right, vars);
+    }
+
+    // Handle &&
+    if let Some(pos) = find_operator(expr, "&&") {
+        let left = &expr[..pos];
+        let right = &expr[pos + 2..];
+        return eval_condition(left, vars) && eval_condition(right, vars);
+    }
+
+    // Handle comparison operators (order matters: check multi-char first)
+    let comparisons: &[(&str, &str)] = &[
+        ("!=", "ne"),
+        ("==", "eq"),
+        ("<=", "le"),
+        (">=", "ge"),
+        ("<", "lt"),
+        (">", "gt"),
+    ];
+    for &(op, kind) in comparisons {
+        if let Some((left, right)) = expr.split_once(op) {
+            // Don't split on < when it's actually <=
+            if op == "<" && right.starts_with('=') {
+                continue;
+            }
+            if op == ">" && right.starts_with('=') {
+                continue;
+            }
+            let l = resolve_var(left.trim(), vars);
+            let r = resolve_var(right.trim(), vars);
+            return match kind {
+                "eq" => l == r,
+                "ne" => l != r,
+                "lt" | "le" | "gt" | "ge" => {
+                    let li = l.parse::<i64>().unwrap_or(0);
+                    let ri = r.parse::<i64>().unwrap_or(0);
+                    match kind {
+                        "lt" => li < ri,
+                        "le" => li <= ri,
+                        "gt" => li > ri,
+                        "ge" => li >= ri,
+                        _ => false,
+                    }
+                }
+                _ => false,
+            };
+        }
+    }
+
+    // Truthiness: non-empty, non-zero, non-"false"
+    let resolved = resolve_var(expr, vars);
+    !resolved.is_empty() && resolved != "0" && resolved != "false"
+}
+
+/// Find operator position, skipping parenthesized expressions.
+fn find_operator(expr: &str, op: &str) -> Option<usize> {
+    let mut depth = 0;
+    let bytes = expr.as_bytes();
+    let op_bytes = op.as_bytes();
+    for i in 0..bytes.len() {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ if depth == 0 && i + op_bytes.len() <= bytes.len() => {
+                if &bytes[i..i + op_bytes.len()] == op_bytes {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Resolve a value: strip quotes from string literals, look up variables.
 fn resolve_var(s: &str, vars: &HashMap<String, String>) -> String {
     let s = s.trim();
@@ -1068,6 +1176,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) 
         ast::Statement::Scenario(s) => ast::Statement::Scenario(s.clone()),
         ast::Statement::Benchmark(b) => ast::Statement::Benchmark(b.clone()),
         ast::Statement::Site(s) => ast::Statement::Site(s.clone()),
+        ast::Statement::If(f) => ast::Statement::If(f.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
         ast::Statement::Let(l) => ast::Statement::Let(l.clone()),
         ast::Statement::For(f) => ast::Statement::For(f.clone()),
@@ -2226,6 +2335,7 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
 mod tests {
     use std::collections::HashMap;
 
+    use super::eval_condition;
     use crate::parser::nll;
     use crate::types;
 
@@ -3464,6 +3574,69 @@ link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 delay 5ms }
         assert_eq!(topo.impairments["a:eth0"].delay.as_deref(), Some("15ms"));
         // Link without profile gets its own impairment
         assert_eq!(topo.impairments["a:eth1"].delay.as_deref(), Some("5ms"));
+    }
+
+    #[test]
+    fn test_if_true() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let mode = 1
+if ${mode} == 1 {
+  node a
+}
+"#,
+        );
+        assert!(topo.nodes.contains_key("a"));
+    }
+
+    #[test]
+    fn test_if_false() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let mode = 0
+if ${mode} == 1 {
+  node a
+}
+"#,
+        );
+        assert!(!topo.nodes.contains_key("a"));
+    }
+
+    #[test]
+    fn test_if_numeric_comparison() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let count = 5
+if ${count} > 3 {
+  node big
+}
+if ${count} < 3 {
+  node small
+}
+"#,
+        );
+        assert!(topo.nodes.contains_key("big"));
+        assert!(!topo.nodes.contains_key("small"));
+    }
+
+    #[test]
+    fn test_eval_condition_basic() {
+        let vars: HashMap<String, String> = [("x".into(), "5".into())].into_iter().collect();
+        assert!(eval_condition("5 == 5", &vars));
+        assert!(!eval_condition("5 == 6", &vars));
+        assert!(eval_condition("5 != 6", &vars));
+        assert!(eval_condition("5 > 3", &vars));
+        assert!(eval_condition("5 <= 5", &vars));
+        assert!(!eval_condition("5 < 5", &vars));
+    }
+
+    #[test]
+    fn test_eval_condition_boolean() {
+        let vars: HashMap<String, String> = HashMap::new();
+        assert!(eval_condition("1 == 1 && 2 == 2", &vars));
+        assert!(!eval_condition("1 == 1 && 2 == 3", &vars));
+        assert!(eval_condition("1 == 2 || 2 == 2", &vars));
+        assert!(!eval_condition("1 == 2 || 3 == 4", &vars));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 # Plan 124: Conditional Logic (`if` blocks, `for ... if` filtering)
 
 **Date:** 2026-03-31
-**Status:** Draft
+**Status:** Implemented (2026-04-01)
 **Effort:** Medium (1-2 days)
 **Priority:** P3 — flexibility for advanced topologies
 **Depends on:** Nothing

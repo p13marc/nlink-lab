@@ -86,6 +86,22 @@ pub enum Token {
     Comma,
     #[token(":")]
     Colon,
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    NotEq,
+    #[token("<=")]
+    LtEq,
+    #[token(">=")]
+    GtEq,
+    #[token("<")]
+    Lt,
+    #[token(">")]
+    Gt,
+    #[token("&&")]
+    And,
+    #[token("||")]
+    Or,
     #[token("=")]
     Eq,
     #[token("..")]
@@ -182,6 +198,14 @@ impl std::fmt::Display for Token {
             Token::ArrowLeft => write!(f, "<-"),
             Token::Comma => write!(f, ","),
             Token::Colon => write!(f, ":"),
+            Token::EqEq => write!(f, "=="),
+            Token::NotEq => write!(f, "!="),
+            Token::LtEq => write!(f, "<="),
+            Token::GtEq => write!(f, ">="),
+            Token::Lt => write!(f, "<"),
+            Token::Gt => write!(f, ">"),
+            Token::And => write!(f, "&&"),
+            Token::Or => write!(f, "||"),
             Token::Eq => write!(f, "="),
             Token::DotDot => write!(f, ".."),
             Token::Dot => write!(f, "."),

@@ -611,6 +611,7 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
         Token::Ident(s) if s == "site" => parse_site(tokens, pos).map(ast::Statement::Site),
+        Token::Ident(s) if s == "if" => parse_if(tokens, pos).map(ast::Statement::If),
         other => Err(err(
             tokens,
             *pos,
@@ -2580,6 +2581,47 @@ fn parse_benchmark_assertion(
 }
 
 // ─── Site ─────────────────────────────────────────────────
+
+// ─── If ───────────────────────────────────────────────────
+
+fn parse_if(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IfDef> {
+    expect_kw(tokens, pos, "if")?;
+
+    // Collect condition tokens until `{`
+    let mut condition = String::new();
+    while *pos < tokens.len() && !matches!(&tokens[*pos].token, Token::LBrace) {
+        match &tokens[*pos].token {
+            Token::Newline => break,
+            Token::EqEq => condition.push_str(" =="),
+            Token::NotEq => condition.push_str(" !="),
+            Token::LtEq => condition.push_str(" <="),
+            Token::GtEq => condition.push_str(" >="),
+            Token::Lt => condition.push_str(" <"),
+            Token::Gt => condition.push_str(" >"),
+            Token::And => condition.push_str(" &&"),
+            Token::Or => condition.push_str(" ||"),
+            token => {
+                if !condition.is_empty() {
+                    condition.push(' ');
+                }
+                condition.push_str(&format!("{token}"));
+            }
+        }
+        *pos += 1;
+    }
+
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut body = Vec::new();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        body.push(parse_statement(tokens, pos)?);
+    }
+
+    Ok(ast::IfDef { condition, body })
+}
 
 fn parse_site(tokens: &[Spanned], pos: &mut usize) -> Result<ast::SiteDef> {
     expect_kw(tokens, pos, "site")?;

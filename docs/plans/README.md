@@ -8,7 +8,7 @@ Implementation plans for nlink-lab.
 |------|-------------|--------|--------|
 | [125](125-auto-routing.md) | Auto-routing from topology graph | Medium | **Implemented** |
 | [126](126-fleet-imports.md) | Fleet `for_each` imports | Small | **Implemented** |
-| [127](127-glob-members.md) | Glob patterns in network member lists | Medium | Ready (P2) |
+| [127](127-glob-members.md) | Glob patterns in network member lists | Medium | **Implemented** |
 | [128](128-network-impairment-matrix.md) | Per-pair impairment on shared networks | Medium-Large | Draft (P2) |
 | [129](129-nat-translate.md) | NAT `translate` shorthand | Small | Draft (P3) |
 

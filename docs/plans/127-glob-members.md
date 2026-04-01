@@ -1,7 +1,7 @@
 # Plan 127: Glob Patterns in Network Member Lists
 
 **Date:** 2026-04-01
-**Status:** Ready
+**Status:** Implemented (2026-04-01)
 **Effort:** Medium (1 day)
 **Priority:** P2 — network membership auto-adapts to fleet size
 

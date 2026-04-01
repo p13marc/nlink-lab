@@ -2089,12 +2089,62 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
     }
 }
 
+/// Resolve glob patterns in network member lists.
+/// E.g., `*-black:fo` expands to `a18-black:fo`, `a19-black:fo`, etc.
+fn resolve_glob_members(
+    members: &[String],
+    all_nodes: &HashMap<String, types::Node>,
+) -> Vec<String> {
+    let mut resolved = Vec::new();
+    for member in members {
+        if let Some((node_pattern, iface)) = member.split_once(':') {
+            if node_pattern.contains('*') {
+                // Glob: expand against all known node names
+                for node_name in all_nodes.keys() {
+                    if glob_matches(node_pattern, node_name) {
+                        resolved.push(format!("{node_name}:{iface}"));
+                    }
+                }
+            } else {
+                resolved.push(member.clone());
+            }
+        } else if member.contains('*') {
+            // Glob without interface — match bare node names
+            for node_name in all_nodes.keys() {
+                if glob_matches(member, node_name) {
+                    resolved.push(node_name.clone());
+                }
+            }
+        } else {
+            resolved.push(member.clone());
+        }
+    }
+    resolved
+}
+
+/// Simple glob matching: supports single `*` wildcard.
+/// `*-black` matches `a18-black`, `a19-black`.
+/// `c2-*` matches `c2-fw`, `c2-dcs`.
+fn glob_matches(pattern: &str, name: &str) -> bool {
+    if !pattern.contains('*') {
+        return pattern == name;
+    }
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() != 2 {
+        return false; // only single * supported
+    }
+    name.starts_with(parts[0]) && name.ends_with(parts[1])
+}
+
 fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()> {
+    // Resolve glob patterns in member lists (e.g., "*-black:fo" → "a18-black:fo")
+    let resolved_members = resolve_glob_members(&net.members, &topo.nodes);
+
     let mut network = types::Network {
-        kind: Some("bridge".to_string()), // Network kind stays as String
+        kind: Some("bridge".to_string()),
         vlan_filtering: if net.vlan_filtering { Some(true) } else { None },
         mtu: net.mtu,
-        members: net.members.clone(),
+        members: resolved_members,
         ..Default::default()
     };
 
@@ -2126,7 +2176,7 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
         network.subnet = Some(subnet.clone());
         if let Ok((base_ip, prefix)) = crate::helpers::parse_cidr(subnet) {
             let mut host_num: u32 = 1;
-            for member in &net.members {
+            for member in &network.members {
                 // Skip members that already have explicit port addresses
                 if network
                     .ports

@@ -304,6 +304,18 @@ fn parse_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 *pos += 1;
                 started = true;
             }
+            Token::Asterisk => {
+                name.push('*');
+                prev_end = tokens[*pos].span.end;
+                *pos += 1;
+                started = true;
+            }
+            Token::Dash if started => {
+                // Dash in names: allows `*-black`, `node-name`, etc.
+                name.push('-');
+                prev_end = tokens[*pos].span.end;
+                *pos += 1;
+            }
             Token::Int(s) if started => {
                 // Integers only allowed after an ident/interp (e.g. `spine1`)
                 name.push_str(s);

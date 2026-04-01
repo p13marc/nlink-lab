@@ -108,6 +108,10 @@ pub enum Token {
     DotDot,
     #[token(".")]
     Dot,
+    #[token("*")]
+    Asterisk,
+    #[token("-", priority = 0)]
+    Dash,
     #[token("/")]
     Slash,
 
@@ -209,6 +213,8 @@ impl std::fmt::Display for Token {
             Token::Eq => write!(f, "="),
             Token::DotDot => write!(f, ".."),
             Token::Dot => write!(f, "."),
+            Token::Asterisk => write!(f, "*"),
+            Token::Dash => write!(f, "-"),
             Token::Slash => write!(f, "/"),
             Token::Newline => write!(f, "newline"),
             Token::Int(v) => write!(f, "{v}"),

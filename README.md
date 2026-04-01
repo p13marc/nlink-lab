@@ -275,6 +275,42 @@ node dcs {
 }
 ```
 
+### IP Computation Functions
+
+Computed addressing with `subnet()` and `host()` — no more manual IPs:
+
+```nll
+let base = subnet("10.0.0.0/8", 16, 2)        # 10.2.0.0/16
+let lan = subnet(${base}, 24, 1)                # 10.2.1.0/24
+
+node server { route default via host(${lan}, 1) }
+link a:eth0 -- b:eth0 { host(${lan}, 1)/24 -- host(${lan}, 2)/24 }
+```
+
+### Conditional Logic
+
+Include nodes/links conditionally:
+
+```nll
+let simplified = 0
+if ${simplified} == 0 {
+  node red : router
+  node black : router
+}
+```
+
+Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`.
+
+### Loopback Pool Allocation
+
+Auto-assign loopback addresses from a pool:
+
+```nll
+pool loopbacks 10.255.0.0/24 /32
+node r1 { lo pool loopbacks }     # 10.255.0.0/32
+node r2 { lo pool loopbacks }     # 10.255.0.1/32
+```
+
 ### Site Grouping
 
 Group nodes by physical location with automatic name prefixing:

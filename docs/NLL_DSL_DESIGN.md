@@ -1090,6 +1090,22 @@ bench_block    = "{" bench_prop* "}"
 bench_prop     = "duration" DURATION | "streams" INT | "udp"
                | "count" INT | "assert" IDENT ("above"|"below") value
 
+# ── IP computation functions ────────────────────
+# Built-in functions evaluated at lowering time:
+#   subnet(base_cidr, new_prefix, index) → CIDR
+#   host(cidr, host_number) → IP
+# Example: host(subnet("10.0.0.0/16", 24, 18), 1) → "10.0.18.1"
+
+# ── Conditional logic ───────────────────────────
+if_block       = "if" condition "{" statement* "}"
+condition      = expr ("==" | "!=" | "<" | ">" | "<=" | ">=") expr
+               | condition ("&&" | "||") condition
+
+# ── Loopback pool allocation ────────────────────
+# lo pool IDENT — allocate from named pool
+# Example: pool loopbacks 10.255.0.0/24 /32
+#          node r1 { lo pool loopbacks }  → 10.255.0.0/32
+
 # ── Wi-Fi ───────────────────────────────────────
 wifi_prop      = "wifi" IDENT "mode" ("ap" | "station" | "mesh") wifi_block?
 wifi_block     = "{" wifi_setting* "}"

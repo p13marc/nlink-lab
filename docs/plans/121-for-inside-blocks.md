@@ -1,7 +1,7 @@
 # Plan 121: `for` Loops Inside Blocks
 
 **Date:** 2026-03-31
-**Status:** Ready
+**Status:** Implemented (2026-04-01)
 **Effort:** Medium (1-2 days)
 **Priority:** P0 — eliminates repetitive NAT/firewall/route rules
 **Depends on:** Plan 120 (IP functions) for full value, but independently useful

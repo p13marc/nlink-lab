@@ -1143,6 +1143,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
             addresses: w.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
         ast::NodeProp::Run(r) => ast::NodeProp::Run(r.clone()),
+        ast::NodeProp::ForLoop(f) => ast::NodeProp::ForLoop(f.clone()),
     }
 }
 
@@ -1604,7 +1605,62 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp]) {
                     background: r.background,
                 });
             }
+            ast::NodeProp::ForLoop(f) => {
+                // Expand the for loop: for each value, interpolate and process props
+                let values = expand_range(&f.range);
+                for val in &values {
+                    let mut vars = std::collections::HashMap::new();
+                    vars.insert(f.var.clone(), val.clone());
+                    for inner_prop in &f.body {
+                        let expanded = interpolate_prop(inner_prop, &vars);
+                        // Recursively process the expanded prop (handles nested for loops too)
+                        // We need to call the same match logic, so use a small vec and re-iterate
+                        match &expanded {
+                            ast::NodeProp::Route(r) => {
+                                node.routes.insert(
+                                    r.destination.clone(),
+                                    types::RouteConfig {
+                                        via: r.via.clone(),
+                                        dev: r.dev.clone(),
+                                        metric: r.metric,
+                                    },
+                                );
+                            }
+                            ast::NodeProp::Nat(nat) => {
+                                node.nat = Some(types::NatConfig {
+                                    rules: nat
+                                        .rules
+                                        .iter()
+                                        .map(|r| types::NatRule {
+                                            action: match r.action.as_str() {
+                                                "masquerade" => types::NatAction::Masquerade,
+                                                "snat" => types::NatAction::Snat,
+                                                "dnat" => types::NatAction::Dnat,
+                                                _ => types::NatAction::Masquerade,
+                                            },
+                                            src: r.src.clone(),
+                                            dst: r.dst.clone(),
+                                            target: r.target.clone(),
+                                            target_port: r.target_port,
+                                        })
+                                        .collect(),
+                                });
+                            }
+                            // For other prop types, just ignore in for-loop context
+                            _ => {}
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+/// Expand a ForRange into a list of string values.
+fn expand_range(range: &ast::ForRange) -> Vec<String> {
+    match range {
+        ast::ForRange::IntRange { start, end } => (*start..=*end).map(|i| i.to_string()).collect(),
+        ast::ForRange::List(items) => items.clone(),
     }
 }
 
@@ -3382,6 +3438,48 @@ link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 delay 5ms }
         assert_eq!(topo.impairments["a:eth0"].delay.as_deref(), Some("15ms"));
         // Link without profile gets its own impairment
         assert_eq!(topo.impairments["a:eth1"].delay.as_deref(), Some("5ms"));
+    }
+
+    #[test]
+    fn test_for_inside_node_routes() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node dcs {
+  forward ipv4
+  for asset in [18, 19] {
+    route 144.0.1.${asset}/32 via 10.2.2.2
+  }
+}
+"#,
+        );
+        let routes = &topo.nodes["dcs"].routes;
+        let keys: Vec<_> = routes.keys().collect();
+        assert_eq!(routes.len(), 2, "routes: {:?}", keys);
+        assert!(routes.contains_key("144.0.1.18/32"), "routes: {:?}", keys);
+        assert!(routes.contains_key("144.0.1.19/32"));
+        assert_eq!(routes["144.0.1.18/32"].via.as_deref(), Some("10.2.2.2"));
+    }
+
+    #[test]
+    fn test_for_inside_nat() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node fw {
+  forward ipv4
+  nat {
+    masquerade src 10.0.0.0/16
+    for asset in [18, 19] {
+      dnat dst 144.0.1.0/24 to 10.0.0.${asset}
+    }
+  }
+}
+"#,
+        );
+        let nat = topo.nodes["fw"].nat.as_ref().unwrap();
+        assert_eq!(nat.rules.len(), 3, "rules: {:?}", nat.rules); // masquerade + 2 dnat
+        assert_eq!(nat.rules[0].action, types::NatAction::Masquerade);
+        assert_eq!(nat.rules[1].target.as_deref(), Some("10.0.0.18"));
+        assert_eq!(nat.rules[2].target.as_deref(), Some("10.0.0.19"));
     }
 
     #[test]

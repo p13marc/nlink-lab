@@ -255,6 +255,16 @@ pub enum NodeProp {
     Ipvlan(IpvlanDef),
     Wifi(WifiDef),
     Run(RunDef),
+    /// For loop that generates node properties.
+    ForLoop(PropForLoop),
+}
+
+/// A `for` loop inside a node/profile block that generates properties.
+#[derive(Debug, Clone)]
+pub struct PropForLoop {
+    pub var: String,
+    pub range: ForRange,
+    pub body: Vec<NodeProp>,
 }
 
 /// Wi-Fi interface definition.

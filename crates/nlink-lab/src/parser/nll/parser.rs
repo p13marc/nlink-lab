@@ -758,6 +758,9 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                 overlay = Some(expect_string(tokens, pos)?);
             } else if eat_kw(tokens, pos, "depends-on") {
                 depends_on = parse_ident_list(tokens, pos)?;
+            } else if matches!(at(tokens, *pos), Some(Token::For)) {
+                let prop_loop = parse_prop_for_loop(tokens, pos)?;
+                props.push(ast::NodeProp::ForLoop(prop_loop));
             } else if check_kw(tokens, *pos, "route") {
                 *pos += 1;
                 let routes = parse_route_defs(tokens, pos)?;
@@ -812,6 +815,12 @@ fn parse_node_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Node
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
+        // Support `for` loops inside node blocks
+        if matches!(at(tokens, *pos), Some(Token::For)) {
+            let prop_loop = parse_prop_for_loop(tokens, pos)?;
+            props.push(ast::NodeProp::ForLoop(prop_loop));
+            continue;
+        }
         if check_kw(tokens, *pos, "route") {
             *pos += 1;
             let routes = parse_route_defs(tokens, pos)?;
@@ -824,6 +833,17 @@ fn parse_node_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Node
     }
 
     Ok(props)
+}
+
+/// Parse a `for` loop inside a node/profile block.
+/// Body contains node properties (routes, firewall rules, etc.).
+fn parse_prop_for_loop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PropForLoop> {
+    expect(tokens, pos, &Token::For)?;
+    let var = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::In)?;
+    let range = parse_for_range(tokens, pos)?;
+    let body = parse_node_block(tokens, pos)?;
+    Ok(ast::PropForLoop { var, range, body })
 }
 
 fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp> {
@@ -930,10 +950,6 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 break;
             }
             Token::Interp(s) => {
-                val.push_str(s);
-                *pos += 1;
-            }
-            Token::Ident(s) => {
                 val.push_str(s);
                 *pos += 1;
             }
@@ -1063,6 +1079,38 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             break;
         }
 
+        // Support `for` loops inside NAT blocks
+        if matches!(at(tokens, *pos), Some(Token::For)) {
+            expect(tokens, pos, &Token::For)?;
+            let var = expect_ident(tokens, pos)?;
+            expect(tokens, pos, &Token::In)?;
+            let range = parse_for_range(tokens, pos)?;
+            // Parse the for-loop body as a NAT block
+            let inner = parse_nat_def(tokens, pos)?;
+            // Expand: for each value, interpolate and add rules
+            let values = match &range {
+                ast::ForRange::IntRange { start, end } => {
+                    (*start..=*end).map(|i| i.to_string()).collect::<Vec<_>>()
+                }
+                ast::ForRange::List(items) => items.clone(),
+            };
+            for val in &values {
+                for rule in &inner.rules {
+                    let interp = |s: &Option<String>| -> Option<String> {
+                        s.as_ref().map(|v| v.replace(&format!("${{{var}}}"), val))
+                    };
+                    rules.push(ast::NatRuleDef {
+                        action: rule.action.clone(),
+                        src: interp(&rule.src),
+                        dst: interp(&rule.dst),
+                        target: interp(&rule.target),
+                        target_port: rule.target_port,
+                    });
+                }
+            }
+            continue;
+        }
+
         if eat_kw(tokens, pos, "masquerade") {
             let src = if eat_kw(tokens, pos, "src") {
                 Some(parse_cidr_or_name(tokens, pos)?)
@@ -1083,8 +1131,8 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 None
             };
             expect_kw(tokens, pos, "to")?;
-            let target = parse_value(tokens, pos)?;
-            // Optional :port
+            let target = parse_cidr_or_name(tokens, pos)?;
+            // Optional :port (only if Colon follows, not already consumed by CIDR)
             let target_port = if eat(tokens, pos, &Token::Colon) {
                 Some(expect_int(tokens, pos)? as u16)
             } else {
@@ -1104,7 +1152,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 None
             };
             expect_kw(tokens, pos, "to")?;
-            let target = parse_value(tokens, pos)?;
+            let target = parse_cidr_or_name(tokens, pos)?;
             rules.push(ast::NatRuleDef {
                 action: "snat".into(),
                 src,
@@ -2573,12 +2621,8 @@ fn parse_let(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LetDef> {
     Ok(ast::LetDef { name, value })
 }
 
-fn parse_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForLoop> {
-    expect(tokens, pos, &Token::For)?;
-    let var = expect_ident(tokens, pos)?;
-    expect(tokens, pos, &Token::In)?;
-
-    let range = if check(tokens, *pos, &Token::LBracket) {
+fn parse_for_range(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForRange> {
+    if check(tokens, *pos, &Token::LBracket) {
         // List iteration: for x in [a, b, c]
         *pos += 1;
         let mut items = Vec::new();
@@ -2591,14 +2635,22 @@ fn parse_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForLoop> {
             items.push(parse_value(tokens, pos)?);
             eat(tokens, pos, &Token::Comma);
         }
-        ast::ForRange::List(items)
+        Ok(ast::ForRange::List(items))
     } else {
         // Integer range: for i in 1..4
         let start = expect_int(tokens, pos)?;
         expect(tokens, pos, &Token::DotDot)?;
         let end = expect_int(tokens, pos)?;
-        ast::ForRange::IntRange { start, end }
-    };
+        Ok(ast::ForRange::IntRange { start, end })
+    }
+}
+
+fn parse_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForLoop> {
+    expect(tokens, pos, &Token::For)?;
+    let var = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::In)?;
+
+    let range = parse_for_range(tokens, pos)?;
 
     expect(tokens, pos, &Token::LBrace)?;
     let mut body = Vec::new();

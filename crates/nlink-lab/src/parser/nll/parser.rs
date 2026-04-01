@@ -518,6 +518,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut tags = Vec::new();
     let mut mgmt = None;
     let mut dns = None;
+    let mut routing = None;
 
     // Parse optional inline runtime before block
     if eat_kw(tokens, pos, "runtime") {
@@ -546,6 +547,8 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                 mgmt = Some(parse_cidr_or_name(tokens, pos)?);
             } else if eat_kw(tokens, pos, "dns") {
                 dns = Some(expect_ident(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "routing") {
+                routing = Some(expect_ident(tokens, pos)?);
             } else {
                 match at(tokens, *pos) {
                     Some(other) => {
@@ -577,6 +580,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         tags,
         mgmt,
         dns,
+        routing,
     })
 }
 

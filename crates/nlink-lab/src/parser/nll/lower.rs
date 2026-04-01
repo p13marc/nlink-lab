@@ -1504,6 +1504,10 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
             Some("hosts") => types::DnsMode::Hosts,
             _ => types::DnsMode::Off,
         },
+        routing: match lab.routing.as_deref() {
+            Some("auto") => types::RoutingMode::Auto,
+            _ => types::RoutingMode::Manual,
+        },
     }
 }
 

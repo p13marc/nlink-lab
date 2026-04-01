@@ -16,6 +16,7 @@ import "imports/a9.nll" as a10(id=10)
 lab "infra" {
   description "C2 + 2xA18 + 2xA9 drone control infrastructure"
   dns hosts
+  routing auto
 }
 
 profile router { forward ipv4 }
@@ -26,8 +27,8 @@ let c2 = subnet("10.0.0.0/8", 16, 2)
 let dc-lan = subnet(${c2}, 24, 1)
 let dcs-fw = subnet(${c2}, 24, 2)
 
-node dc1 { route default via host(${dc-lan}, 3) }
-node dc2 { route default via host(${dc-lan}, 3) }
+node dc1
+node dc2
 
 node dcs : router {
   for asset in [18, 19] {
@@ -43,7 +44,6 @@ node dcs : router {
 }
 
 node c2-fw : router {
-  route ${dc-lan} via host(${dcs-fw}, 1)
   nat {
     masquerade src ${c2}
     for asset in [18, 19] {

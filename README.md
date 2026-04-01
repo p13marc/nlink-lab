@@ -301,6 +301,24 @@ if ${simplified} == 0 {
 
 Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`.
 
+### Auto-Routing
+
+Compute static routes from topology graph — no manual route statements:
+
+```nll
+lab "example" { routing auto }
+
+node router : router
+node host
+
+link router:eth0 -- host:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+# host automatically gets: route default via 10.0.0.1
+# router knows host subnet is directly connected
+```
+
+Stub nodes get default routes. Transit routers get shortest-path routes to
+all remote subnets. Manual routes are preserved and not overridden.
+
 ### Loopback Pool Allocation
 
 Auto-assign loopback addresses from a pool:

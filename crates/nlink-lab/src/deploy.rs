@@ -1034,6 +1034,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 11b: Auto-generate routes from topology graph ──────────
+    let auto_routes = if topology.lab.routing == crate::types::RoutingMode::Auto {
+        tracing::info!("step 11b: auto-generating routes from topology");
+        auto_generate_routes(topology)
+    } else {
+        HashMap::new()
+    };
+
     // ── Step 12: Add routes ────────────────────────────────────────
     tracing::info!("step 12/18: adding routes");
     for (node_name, node) in &topology.nodes {
@@ -1047,6 +1055,14 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
         for (dest, route_config) in &node.routes {
             add_route(&conn, node_name, dest, route_config).await?;
+        }
+        // Apply auto-generated routes (don't duplicate manual ones)
+        if let Some(node_auto_routes) = auto_routes.get(node_name) {
+            for (dest, route_config) in node_auto_routes {
+                if !node.routes.contains_key(dest) {
+                    add_route(&conn, node_name, dest, route_config).await?;
+                }
+            }
         }
     }
 
@@ -1716,6 +1732,198 @@ fn parse_v4_cidr(s: &str) -> std::result::Result<(std::net::Ipv4Addr, u8), Strin
 }
 
 /// Add a single route in a namespace.
+/// Auto-generate static routes from the topology graph.
+///
+/// For stub nodes (single neighbor): adds a default route.
+/// For transit nodes: runs BFS to find shortest paths to all remote subnets.
+/// Manual routes are preserved — auto routes only fill gaps.
+fn auto_generate_routes(
+    topology: &Topology,
+) -> HashMap<String, HashMap<String, crate::types::RouteConfig>> {
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+    // 1. Build adjacency: node_name → Vec<(neighbor_name, gateway_ip)>
+    let mut adjacency: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    // Also collect subnets per node: node_name → Vec<CIDR>
+    let mut node_subnets: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
+    // From point-to-point links
+    for link in &topology.links {
+        if let Some(addrs) = &link.addresses
+            && let (Some(ep_a), Some(ep_b)) = (
+                EndpointRef::parse(&link.endpoints[0]),
+                EndpointRef::parse(&link.endpoints[1]),
+            )
+        {
+            let ip_a = addrs[0].split('/').next().unwrap_or(&addrs[0]);
+            let ip_b = addrs[1].split('/').next().unwrap_or(&addrs[1]);
+            adjacency
+                .entry(ep_a.node.clone())
+                .or_default()
+                .push((ep_b.node.clone(), ip_b.to_string()));
+            adjacency
+                .entry(ep_b.node.clone())
+                .or_default()
+                .push((ep_a.node.clone(), ip_a.to_string()));
+            node_subnets
+                .entry(ep_a.node.clone())
+                .or_default()
+                .insert(addrs[0].clone());
+            node_subnets
+                .entry(ep_b.node.clone())
+                .or_default()
+                .insert(addrs[1].clone());
+        }
+    }
+
+    // From network (bridge) memberships
+    for network in topology.networks.values() {
+        let mut net_members: Vec<(String, String)> = Vec::new(); // (node, ip)
+        for (ep_str, port) in &network.ports {
+            if let Some(ep) = EndpointRef::parse(ep_str)
+                && let Some(addr) = port.addresses.first()
+            {
+                let ip = addr.split('/').next().unwrap_or(addr);
+                net_members.push((ep.node.clone(), ip.to_string()));
+                node_subnets
+                    .entry(ep.node.clone())
+                    .or_default()
+                    .insert(addr.clone());
+            }
+        }
+        // All members of the same network are adjacent to each other
+        for i in 0..net_members.len() {
+            for j in 0..net_members.len() {
+                if i != j {
+                    adjacency
+                        .entry(net_members[i].0.clone())
+                        .or_default()
+                        .push((net_members[j].0.clone(), net_members[j].1.clone()));
+                }
+            }
+        }
+    }
+
+    // Ensure all nodes are in adjacency (even isolated ones)
+    for node_name in topology.nodes.keys() {
+        adjacency.entry(node_name.clone()).or_default();
+    }
+
+    // 2. For each node, compute routes
+    let all_node_names: Vec<String> = topology.nodes.keys().cloned().collect();
+    let mut auto_routes: BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>> =
+        BTreeMap::new();
+
+    for node_name in &all_node_names {
+        let neighbors = adjacency.get(node_name).cloned().unwrap_or_default();
+        let existing_routes = &topology.nodes[node_name].routes;
+
+        if neighbors.is_empty() {
+            continue;
+        }
+
+        // Stub node: single neighbor → default route
+        if neighbors.len() == 1 || neighbors.iter().all(|(n, _)| n == &neighbors[0].0) {
+            if !existing_routes.contains_key("default") {
+                auto_routes.entry(node_name.clone()).or_default().insert(
+                    "default".to_string(),
+                    crate::types::RouteConfig {
+                        via: Some(neighbors[0].1.clone()),
+                        dev: None,
+                        metric: None,
+                    },
+                );
+            }
+            continue;
+        }
+
+        // Transit node: BFS to find next-hop for remote subnets
+        // Only if this node has ip_forward enabled (is a router)
+        let is_router = topology.nodes[node_name]
+            .sysctls
+            .get("net.ipv4.ip_forward")
+            .is_some_and(|v| v == "1");
+
+        if !is_router {
+            // Non-router with multiple neighbors: just add default via first
+            if !existing_routes.contains_key("default") {
+                auto_routes.entry(node_name.clone()).or_default().insert(
+                    "default".to_string(),
+                    crate::types::RouteConfig {
+                        via: Some(neighbors[0].1.clone()),
+                        dev: None,
+                        metric: None,
+                    },
+                );
+            }
+            continue;
+        }
+
+        // Router: BFS to find all reachable nodes and their next-hops
+        let mut visited: BTreeSet<String> = BTreeSet::new();
+        let mut queue: VecDeque<(String, String)> = VecDeque::new(); // (node, next_hop_ip)
+        visited.insert(node_name.clone());
+
+        // Seed with direct neighbors
+        for (neighbor, gateway_ip) in &neighbors {
+            if !visited.contains(neighbor) {
+                visited.insert(neighbor.clone());
+                queue.push_back((neighbor.clone(), gateway_ip.clone()));
+            }
+        }
+
+        while let Some((current, next_hop_ip)) = queue.pop_front() {
+            // Add routes for current node's subnets via next_hop_ip
+            if let Some(subnets) = node_subnets.get(&current) {
+                for subnet in subnets {
+                    // Skip if directly connected
+                    let my_subnets = node_subnets.get(node_name);
+                    let is_direct = my_subnets.is_some_and(|s| s.contains(subnet));
+                    if is_direct {
+                        continue;
+                    }
+                    // Skip if manual route exists
+                    if existing_routes.contains_key(subnet) {
+                        continue;
+                    }
+                    // Derive the network CIDR from the address
+                    if let Ok((ip, prefix)) = crate::helpers::parse_cidr(subnet) {
+                        let net_addr = crate::helpers::network_address(ip, prefix);
+                        let net_cidr = format!("{net_addr}/{prefix}");
+                        if !existing_routes.contains_key(&net_cidr) {
+                            auto_routes
+                                .entry(node_name.clone())
+                                .or_default()
+                                .entry(net_cidr)
+                                .or_insert(crate::types::RouteConfig {
+                                    via: Some(next_hop_ip.clone()),
+                                    dev: None,
+                                    metric: None,
+                                });
+                        }
+                    }
+                }
+            }
+
+            // Continue BFS
+            if let Some(next_neighbors) = adjacency.get(&current) {
+                for (next, _) in next_neighbors {
+                    if !visited.contains(next) {
+                        visited.insert(next.clone());
+                        queue.push_back((next.clone(), next_hop_ip.clone()));
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Convert to HashMap and return
+    auto_routes
+        .into_iter()
+        .map(|(k, v)| (k, v.into_iter().collect()))
+        .collect()
+}
+
 async fn add_route(
     conn: &Connection<Route>,
     node_name: &str,
@@ -2610,6 +2818,68 @@ impl Drop for Cleanup {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_auto_route_stub_node() {
+        let mut topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4 }
+node router : router
+node host
+link router:eth0 -- host:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        // host is a stub node → default route via router
+        assert!(routes.contains_key("host"), "host should get auto-route");
+        assert!(routes["host"].contains_key("default"));
+        assert_eq!(routes["host"]["default"].via.as_deref(), Some("10.0.0.1"));
+    }
+
+    #[test]
+    fn test_auto_route_no_override() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4 }
+node router : router
+node host { route default via 10.0.0.99 }
+link router:eth0 -- host:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        // host already has a manual default route — auto shouldn't override
+        let host_routes = routes.get("host");
+        assert!(
+            host_routes.is_none() || !host_routes.unwrap().contains_key("default"),
+            "auto-route should not override manual default"
+        );
+    }
+
+    #[test]
+    fn test_auto_route_multi_hop() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4 }
+node r1 : router
+node r2 : router
+node host
+link r1:eth0 -- r2:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        // host → default via r2
+        assert_eq!(routes["host"]["default"].via.as_deref(), Some("10.0.2.1"));
+        // r1 has single neighbor (r2) → gets default route via r2
+        assert_eq!(
+            routes["r1"]["default"].via.as_deref(),
+            Some("10.0.1.2"),
+            "r1 should default via r2"
+        );
+    }
 
     #[test]
     fn test_parse_ping_avg() {

@@ -196,6 +196,17 @@ pub enum DnsMode {
     Hosts,
 }
 
+/// Routing mode for automatic static route generation.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RoutingMode {
+    /// No auto-routing (default).
+    #[default]
+    Manual,
+    /// Compute static routes from topology graph.
+    Auto,
+}
+
 /// Container runtime selection.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -243,10 +254,18 @@ pub struct LabConfig {
     /// DNS resolution mode.
     #[serde(default, skip_serializing_if = "is_dns_off")]
     pub dns: DnsMode,
+
+    /// Routing mode.
+    #[serde(default, skip_serializing_if = "is_routing_manual")]
+    pub routing: RoutingMode,
 }
 
 fn is_dns_off(mode: &DnsMode) -> bool {
     *mode == DnsMode::Off
+}
+
+fn is_routing_manual(mode: &RoutingMode) -> bool {
+    *mode == RoutingMode::Manual
 }
 
 impl LabConfig {

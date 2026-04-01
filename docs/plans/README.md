@@ -6,7 +6,7 @@ Implementation plans for nlink-lab.
 
 | Plan | Description | Effort | Status |
 |------|-------------|--------|--------|
-| [125](125-auto-routing.md) | Auto-routing from topology graph | Medium | Ready (P0) |
+| [125](125-auto-routing.md) | Auto-routing from topology graph | Medium | **Implemented** |
 | [126](126-fleet-imports.md) | Fleet `for_each` imports | Small | Ready (P1) |
 | [127](127-glob-members.md) | Glob patterns in network member lists | Medium | Ready (P2) |
 | [128](128-network-impairment-matrix.md) | Per-pair impairment on shared networks | Medium-Large | Draft (P2) |

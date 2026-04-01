@@ -1,7 +1,7 @@
 # Plan 125: Auto-Routing from Topology Graph
 
 **Date:** 2026-04-01
-**Status:** Ready
+**Status:** Implemented (2026-04-01)
 **Effort:** Medium (2-3 days)
 **Priority:** P0 — eliminates ~30 lines of manual routes across infra topology
 

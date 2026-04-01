@@ -28,6 +28,29 @@ pub fn parse_cidr(s: &str) -> Result<(IpAddr, u8)> {
     Ok((addr, prefix))
 }
 
+/// Compute the network address from an IP and prefix length.
+/// E.g., network_address(10.0.1.5, 24) → 10.0.1.0
+pub fn network_address(ip: IpAddr, prefix: u8) -> IpAddr {
+    match ip {
+        IpAddr::V4(v4) => {
+            let mask = if prefix == 0 {
+                0u32
+            } else {
+                !0u32 << (32 - prefix)
+            };
+            IpAddr::V4(std::net::Ipv4Addr::from(u32::from(v4) & mask))
+        }
+        IpAddr::V6(v6) => {
+            let mask = if prefix == 0 {
+                0u128
+            } else {
+                !0u128 << (128 - prefix)
+            };
+            IpAddr::V6(std::net::Ipv6Addr::from(u128::from(v6) & mask))
+        }
+    }
+}
+
 /// Parse a duration string like "10ms", "100us", "1s", "500ns".
 pub fn parse_duration(s: &str) -> Result<Duration> {
     let s = s.trim();

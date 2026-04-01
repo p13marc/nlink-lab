@@ -985,6 +985,7 @@ lab_block      = "{" lab_prop* "}"
 lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
                | "version" STRING | "author" STRING | "tags" ident_list
                | "mgmt" CIDR | "dns" ("hosts" | "off")
+               | "routing" ("auto" | "manual")
 
 statement      = profile | node | link | network
                | impair | rate | defaults | pool | pattern

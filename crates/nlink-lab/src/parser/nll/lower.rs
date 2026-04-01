@@ -3815,6 +3815,101 @@ node sta {
     }
 
     #[test]
+    fn test_glob_member_resolution() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node gw
+node site1-router
+node site2-router
+node site3-host
+
+network wan {
+  members [gw:wan, *-router:wan]
+  subnet 172.16.0.0/24
+}
+"#,
+        );
+        let net = &topo.networks["wan"];
+        // Glob *-router:wan should match site1-router and site2-router
+        assert!(
+            net.members.contains(&"site1-router:wan".to_string()),
+            "members: {:?}",
+            net.members
+        );
+        assert!(
+            net.members.contains(&"site2-router:wan".to_string()),
+            "members: {:?}",
+            net.members
+        );
+        // site3-host should NOT match *-router
+        assert!(
+            !net.members.contains(&"site3-host:wan".to_string()),
+            "site3-host should not match *-router"
+        );
+        // gw is literal, should be present
+        assert!(net.members.contains(&"gw:wan".to_string()));
+    }
+
+    #[test]
+    fn test_glob_member_with_subnet() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node gw
+node s1-router
+node s2-router
+
+network wan {
+  members [gw:wan, *-router:wan]
+  subnet 10.0.0.0/24
+}
+"#,
+        );
+        let net = &topo.networks["wan"];
+        // All 3 members should have auto-assigned addresses
+        assert_eq!(
+            net.ports.len(),
+            3,
+            "ports: {:?}",
+            net.ports.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_nat_dnat_lower() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node fw {
+  nat {
+    masquerade src 10.0.0.0/16
+    dnat dst 192.168.1.0/24 to 10.0.1.100
+    snat src 10.0.0.0/8 to 203.0.113.1
+  }
+}
+"#,
+        );
+        let nat = topo.nodes["fw"].nat.as_ref().unwrap();
+        assert_eq!(nat.rules.len(), 3);
+        assert_eq!(nat.rules[0].action, types::NatAction::Masquerade);
+        assert_eq!(nat.rules[1].action, types::NatAction::Dnat);
+        assert_eq!(nat.rules[1].target.as_deref(), Some("10.0.1.100"));
+        assert_eq!(nat.rules[2].action, types::NatAction::Snat);
+        assert_eq!(nat.rules[2].target.as_deref(), Some("203.0.113.1"));
+    }
+
+    #[test]
+    fn test_shell_style_run() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node server {
+  run "echo hello world"
+}
+"#,
+        );
+        let exec = &topo.nodes["server"].exec[0];
+        assert_eq!(exec.cmd, vec!["sh", "-c", "echo hello world"]);
+    }
+
+    #[test]
     fn test_lower_benchmark() {
         let topo = parse_and_lower(
             r#"lab "t"

@@ -3315,6 +3315,48 @@ node gw {
     }
 
     #[test]
+    fn test_parse_for_each_import() {
+        let ast = parse_nll(
+            r#"import "site.nll" for_each {
+  s1(id=1)
+  s2(id=2)
+}
+
+lab "t""#,
+        );
+        assert_eq!(ast.imports.len(), 2);
+        assert_eq!(ast.imports[0].alias, "s1");
+        assert_eq!(ast.imports[0].path, "site.nll");
+        assert_eq!(
+            ast.imports[0].params,
+            vec![("id".to_string(), "1".to_string())]
+        );
+        assert_eq!(ast.imports[1].alias, "s2");
+        assert_eq!(
+            ast.imports[1].params,
+            vec![("id".to_string(), "2".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_parse_glob_in_endpoint() {
+        let ast = parse_nll(
+            r#"lab "t"
+network wan {
+  members [gw:eth0, *-router:wan]
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Network(n) => {
+                assert_eq!(n.members.len(), 2);
+                assert_eq!(n.members[0], "gw:eth0");
+                assert_eq!(n.members[1], "*-router:wan");
+            }
+            _ => panic!("expected Network"),
+        }
+    }
+
+    #[test]
     fn test_parse_macvlan() {
         let ast = parse_nll(
             r#"lab "t"

@@ -462,7 +462,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `wifi` | Wi-Fi AP + stations via mac80211_hwsim |
 | `nat` | NAT: masquerade + DNAT firewall |
 | `site-grouping` | Multi-site topology with auto name prefixing |
-| `infra-c2-a18-a9` | Multi-site infrastructure with NAT, modem links, parametric imports |
+| `multi-site` | Multi-site infrastructure with NAT, modem links, parametric imports |
 | `management-network` | OOB management bridge with `mgmt` subnet |
 | `imports/base-network` | Reusable base network module |
 

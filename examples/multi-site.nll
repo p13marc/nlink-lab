@@ -1,18 +1,17 @@
-# Infrastructure: 1x C2, 2x A18, 2x A9 drone control network.
+# Multi-site infrastructure with NAT, modem links, parametric imports.
 #
-# Uses parametric imports to avoid duplication:
-#   - imports/a18.nll: full drone (CC, CU, RED, BLACK)
-#   - imports/a9.nll:  simplified drone (CC combined, CU)
+# Demonstrates: subnet()/host() IP functions, for-inside-blocks,
+# for_each fleet imports, glob network members, auto-routing, NAT.
 #
-# All IP addressing is computed via subnet()/host() functions.
-# DCS routes and FIREWALL NAT rules generated with for-loops.
-# Modem links modeled as shared networks (not point-to-point).
+# Uses parametric imports:
+#   - imports/full-site.nll: full site (4 nodes, internal LAN, NAT)
+#   - imports/simple-site.nll: simplified site (2 nodes)
 
-import "imports/a18.nll" for_each {
+import "imports/full-site.nll" for_each {
   a18(id=18)
   a19(id=19)
 }
-import "imports/a9.nll" for_each {
+import "imports/simple-site.nll" for_each {
   a9(id=9)
   a10(id=10)
 }

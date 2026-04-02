@@ -28,7 +28,7 @@ pub async fn open_session(config: zenoh::Config) -> Option<Arc<zenoh::Session>> 
 
 // ─── Subscription identity ───────────────────────────────
 
-/// Wrapper to carry an Arc<Session> through Subscription::run_with.
+/// Wrapper to carry an `Arc<Session>` through `Subscription::run_with`.
 /// Hashes by the string key only (session identity is irrelevant for dedup).
 struct SubKey {
     key: String,

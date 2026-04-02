@@ -4,49 +4,108 @@ on:
   push:
     branches: [main, master]
   pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: cargo build --all-targets
-
-      - name: Unit tests
-        run: cargo test -p nlink-lab --lib
-
-      - name: Stress tests
-        run: cargo test -p nlink-lab --test stress
-
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-
   fmt:
+    name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
-      - name: Format check
+      - name: cargo fmt --check
         run: cargo +nightly fmt --check
 
-  integration:
+  clippy:
+    name: Clippy
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo build
+        run: cargo build --all-targets --workspace
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: build
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Load kernel modules for integration tests
+      - name: Unit tests
+        run: cargo test -p nlink-lab --lib
+
+      - name: All workspace tests
+        run: cargo test --workspace --exclude nlink-lab
+
+      - name: Stress tests
+        run: cargo test -p nlink-lab --test stress
+
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # Summary job for branch protection rules — require only this job
+  ci-pass:
+    name: CI passed
+    if: always()
+    needs: [fmt, clippy, build, test, doc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide outcome
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "::error::One or more CI jobs failed or were cancelled"
+            exit 1
+          fi
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Load kernel modules
         run: |
           sudo modprobe nf_tables || true
           sudo modprobe vrf || true

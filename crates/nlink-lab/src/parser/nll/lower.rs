@@ -516,7 +516,8 @@ fn expand_translate_rules(topology: &mut types::Topology) {
             };
             for &addr in &assigned {
                 if in_prefix(addr, dst_net, dst_prefix) {
-                    let mapped = map_translate_address(addr, dst_net, dst_prefix, src_net, src_prefix);
+                    let mapped =
+                        map_translate_address(addr, dst_net, dst_prefix, src_net, src_prefix);
                     expanded.push(types::NatRule {
                         action: types::NatAction::Dnat,
                         src: None,
@@ -4287,7 +4288,10 @@ link fw:eth1 -- b:eth0 { 172.100.2.2/24 -- 172.100.2.20/24 }
             assert_eq!(rule.action, types::NatAction::Dnat);
             // Each generated rule should have dst in 144.0.x.x/32 and target in 172.100.x.x
             let dst = rule.dst.as_ref().unwrap();
-            assert!(dst.starts_with("144.0."), "dst should be in source range: {dst}");
+            assert!(
+                dst.starts_with("144.0."),
+                "dst should be in source range: {dst}"
+            );
             assert!(dst.ends_with("/32"));
             let target = rule.target.as_ref().unwrap();
             assert!(
@@ -4296,7 +4300,11 @@ link fw:eth1 -- b:eth0 { 172.100.2.2/24 -- 172.100.2.20/24 }
             );
         }
         // Verify specific mappings: 172.100.1.10 → 144.0.1.10, 172.100.2.20 → 144.0.2.20
-        let dsts: Vec<&str> = nat.rules.iter().map(|r| r.dst.as_deref().unwrap()).collect();
+        let dsts: Vec<&str> = nat
+            .rules
+            .iter()
+            .map(|r| r.dst.as_deref().unwrap())
+            .collect();
         assert!(dsts.contains(&"144.0.1.10/32"));
         assert!(dsts.contains(&"144.0.2.20/32"));
     }

@@ -2824,7 +2824,7 @@ mod tests {
 
     #[test]
     fn test_auto_route_stub_node() {
-        let mut topo = crate::parser::parse(
+        let topo = crate::parser::parse(
             r#"lab "t" { routing auto }
 profile router { forward ipv4 }
 node router : router

@@ -9,5 +9,5 @@ languages = ["languages/nll"]
 
 [grammars.nll]
 repository = "https://github.com/p13marc/nlink-lab"
-rev = "main"
+rev = "master"
 path = "editors/tree-sitter-nll"

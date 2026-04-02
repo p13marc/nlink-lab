@@ -2,34 +2,11 @@ name = "NLL"
 grammar = "nll"
 path_suffixes = ["nll"]
 line_comments = ["# "]
-
-[block_comment]
-start = "/*"
-end = "*/"
-
-[[brackets]]
-start = "{"
-end = "}"
-close = true
-newline = true
-
-[[brackets]]
-start = "["
-end = "]"
-close = true
-newline = true
-
-[[brackets]]
-start = "("
-end = ")"
-close = true
-newline = true
-
-[[brackets]]
-start = "\""
-end = "\""
-close = true
-newline = false
-not_in = ["string"]
-
+block_comment = { start = "/*", prefix = "", end = "*/", tab_size = 0 }
 autoclose_before = ",]})"
+brackets = [
+    { start = "{", end = "}", close = true, newline = true },
+    { start = "[", end = "]", close = true, newline = true },
+    { start = "(", end = ")", close = true, newline = true },
+    { start = "\"", end = "\"", close = true, newline = false, not_in = ["string"] },
+]

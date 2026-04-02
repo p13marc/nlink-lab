@@ -1207,13 +1207,26 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 target: Some(target),
                 target_port: None,
             });
+        } else if eat_kw(tokens, pos, "translate") {
+            let src_range = parse_cidr_or_name(tokens, pos)?;
+            expect_kw(tokens, pos, "to")?;
+            let dst_range = parse_cidr_or_name(tokens, pos)?;
+            rules.push(ast::NatRuleDef {
+                action: "translate".into(),
+                src: Some(src_range),
+                dst: None,
+                target: Some(dst_range),
+                target_port: None,
+            });
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
                     return Err(err(
                         tokens,
                         *pos,
-                        format!("expected NAT rule (masquerade, dnat, snat), found {other}"),
+                        format!(
+                            "expected NAT rule (masquerade, dnat, snat, translate), found {other}"
+                        ),
                     ));
                 }
                 None => {
@@ -3520,5 +3533,57 @@ link router:eth0 -- host:eth0 {
         let ast = parse_nll(input);
         assert_eq!(ast.lab.name, "simple");
         assert_eq!(ast.statements.len(), 3); // 2 nodes + 1 link
+    }
+
+    #[test]
+    fn test_parse_nat_translate() {
+        let input = r#"lab "t"
+node fw {
+  nat {
+    masquerade src 10.0.0.0/16
+    translate 144.0.0.0/8 to 172.100.0.0/16
+  }
+}"#;
+        let ast = parse_nll(input);
+        let node = match &ast.statements[0] {
+            super::ast::Statement::Node(n) => n,
+            _ => panic!("expected node"),
+        };
+        let nat = node.props.iter().find_map(|p| match p {
+            super::ast::NodeProp::Nat(n) => Some(n),
+            _ => None,
+        });
+        let nat = nat.unwrap();
+        assert_eq!(nat.rules.len(), 2);
+        assert_eq!(nat.rules[1].action, "translate");
+        assert_eq!(nat.rules[1].src.as_deref(), Some("144.0.0.0/8"));
+        assert_eq!(nat.rules[1].target.as_deref(), Some("172.100.0.0/16"));
+    }
+
+    #[test]
+    fn test_parse_nat_translate_in_for() {
+        let input = r#"lab "t"
+node fw {
+  nat {
+    for i in 1..2 {
+      translate 144.0.${i}.0/24 to 172.100.${i}.0/24
+    }
+  }
+}"#;
+        let ast = parse_nll(input);
+        let node = match &ast.statements[0] {
+            super::ast::Statement::Node(n) => n,
+            _ => panic!("expected node"),
+        };
+        let nat = node.props.iter().find_map(|p| match p {
+            super::ast::NodeProp::Nat(n) => Some(n),
+            _ => None,
+        });
+        let nat = nat.unwrap();
+        assert_eq!(nat.rules.len(), 2);
+        assert_eq!(nat.rules[0].src.as_deref(), Some("144.0.1.0/24"));
+        assert_eq!(nat.rules[0].target.as_deref(), Some("172.100.1.0/24"));
+        assert_eq!(nat.rules[1].src.as_deref(), Some("144.0.2.0/24"));
+        assert_eq!(nat.rules[1].target.as_deref(), Some("172.100.2.0/24"));
     }
 }

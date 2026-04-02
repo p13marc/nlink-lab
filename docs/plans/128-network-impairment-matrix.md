@@ -11,9 +11,9 @@
 
 Shared modem networks apply uniform characteristics to all members. But
 in reality, radio/satellite links have different quality per pair:
-- C2 ↔ A18 at 5km: low delay, low loss
-- C2 ↔ A19 at 50km: higher delay, higher loss
-- A18 ↔ A19 direct: even higher delay
+- HQ ↔ Alpha at 5km: low delay, low loss
+- HQ ↔ Bravo at 50km: higher delay, higher loss
+- Alpha ↔ Bravo direct: even higher delay
 
 Currently nlink-lab can only impair per-interface (netem on one end) or
 per-link (netem on both ends of a point-to-point veth). There's no way
@@ -23,13 +23,13 @@ to apply different impairment per source-destination pair on a bridge.
 
 ```nll
 network radio {
-  members [c2-fw:radio, a18-black:radio, a19-black:radio]
+  members [hq-fw:radio, alpha-black:radio, bravo-black:radio]
   subnet 172.100.3.0/24
 
   # Per-pair impairment (inside network block)
-  impair c2-fw -- a18-black { delay 15ms jitter 5ms loss 1% }
-  impair c2-fw -- a19-black { delay 40ms jitter 20ms loss 5% }
-  impair a18-black -- a19-black { delay 60ms jitter 30ms loss 8% }
+  impair hq-fw -- alpha-black { delay 15ms jitter 5ms loss 1% }
+  impair hq-fw -- bravo-black { delay 40ms jitter 20ms loss 5% }
+  impair alpha-black -- bravo-black { delay 60ms jitter 30ms loss 8% }
 }
 ```
 
@@ -42,18 +42,18 @@ Pairs without explicit impairment get zero impairment (direct bridge path).
 For each bridge port, create TC classes with u32 filters matching by
 destination IP. Each class gets its own netem qdisc.
 
-**Per bridge port (e.g., veth connected to c2-fw:radio):**
+**Per bridge port (e.g., veth connected to hq-fw:radio):**
 
 ```bash
-# On the bridge-side veth for c2-fw:radio
-tc qdisc add dev veth-c2fw-radio root handle 1: prio bands 3
-# Class for traffic to a18-black (172.100.3.18)
-tc qdisc add dev veth-c2fw-radio parent 1:1 netem delay 15ms jitter 5ms loss 1%
-tc filter add dev veth-c2fw-radio parent 1: protocol ip u32 \
+# On the bridge-side veth for hq-fw:radio
+tc qdisc add dev veth-hqfw-radio root handle 1: prio bands 3
+# Class for traffic to alpha-black (172.100.3.18)
+tc qdisc add dev veth-hqfw-radio parent 1:1 netem delay 15ms jitter 5ms loss 1%
+tc filter add dev veth-hqfw-radio parent 1: protocol ip u32 \
   match ip dst 172.100.3.18/32 flowid 1:1
-# Class for traffic to a19-black (172.100.3.19)
-tc qdisc add dev veth-c2fw-radio parent 1:2 netem delay 40ms jitter 20ms loss 5%
-tc filter add dev veth-c2fw-radio parent 1: protocol ip u32 \
+# Class for traffic to bravo-black (172.100.3.19)
+tc qdisc add dev veth-hqfw-radio parent 1:2 netem delay 40ms jitter 20ms loss 5%
+tc filter add dev veth-hqfw-radio parent 1: protocol ip u32 \
   match ip dst 172.100.3.19/32 flowid 1:2
 ```
 
@@ -117,7 +117,7 @@ Check nlink for: `TcFilter`, `TcClass`, `PrioQdisc` support.
 | **README.md** | Add "Per-Pair Network Impairment" section |
 | **CLAUDE.md** | Add `NetworkImpairment` to types; mention in features |
 | **NLL_DSL_DESIGN.md** | Add `impair` syntax inside network blocks |
-| **examples/infra-c2-a18-a9.nll** | Add impairment matrix to radio network |
+| **examples/multi-site.nll** | Add impairment matrix to radio network |
 
 ## File Changes
 

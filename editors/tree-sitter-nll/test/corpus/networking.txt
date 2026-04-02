@@ -1,0 +1,93 @@
+================
+Network definition
+================
+network lan {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+}
+---
+(source_file
+  (network_definition
+    (identifier)
+    (list
+      (endpoint (identifier) (identifier))
+      (endpoint (identifier) (identifier)))
+    (cidr)))
+
+================
+NAT block
+================
+node fw {
+  nat {
+    masquerade src 10.0.0.0/16
+    dnat dst 192.168.1.0/24 to 10.0.1.100
+    snat src 10.0.0.0/8 to 203.0.113.1
+    translate 144.0.0.0/8 to 172.100.0.0/16
+  }
+}
+---
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (nat_block
+        (nat_rule (cidr))
+        (nat_rule (cidr) (ipv4_address))
+        (nat_rule (cidr) (ipv4_address))
+        (nat_rule (cidr) (cidr))))))
+
+================
+Firewall block
+================
+node fw {
+  firewall policy drop {
+    accept tcp dport 80
+    accept src 10.0.0.0/8
+  }
+}
+---
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_rule
+          (match_expression (integer)))
+        (firewall_rule
+          (match_expression (cidr)))))))
+
+================
+Validate block
+================
+validate {
+  reach a b
+  no-reach c d
+}
+---
+(source_file
+  (validate_block
+    (assertion (identifier) (identifier))
+    (assertion (identifier) (identifier))))
+
+================
+Container node
+================
+node web image "nginx:latest" cmd "nginx -g daemon off"
+---
+(source_file
+  (node_definition
+    (identifier)
+    (image_property
+      (string)
+      (string))))
+
+================
+Impairment statement
+================
+impair router:eth0 delay 10ms jitter 2ms loss 0.1%
+---
+(source_file
+  (impairment_statement
+    (endpoint (identifier) (identifier))
+    (impairment_properties
+      (duration) (duration) (percent))))

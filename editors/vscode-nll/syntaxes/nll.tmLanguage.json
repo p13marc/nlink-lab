@@ -1,0 +1,153 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "NLL",
+  "scopeName": "source.nll",
+  "fileTypes": ["nll"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#interpolation" },
+    { "include": "#keywords" },
+    { "include": "#literals" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.nll",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.block.nll",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            { "include": "#comments" }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.nll",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#interpolation" }
+          ]
+        }
+      ]
+    },
+    "interpolation": {
+      "patterns": [
+        {
+          "name": "variable.other.interpolated.nll",
+          "match": "\\$\\{[^}]+\\}"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nll",
+          "match": "\\b(lab|node|link|network|profile|for|in|let|import|as|if|site|param|defaults|pool|validate|scenario|benchmark|for_each|with)\\b"
+        },
+        {
+          "name": "keyword.other.nll",
+          "match": "\\b(forward|ipv4|ipv6|route|via|dev|default|firewall|policy|accept|drop|nat|masquerade|dnat|snat|translate|delay|jitter|loss|rate|corrupt|reorder|src|dst|to|vrf|table|wireguard|vxlan|macvlan|ipvlan|wifi|dummy|mode|ssid|channel|passphrase|run|background|image|cmd|cpu|memory|privileged|dns|hosts|routing|auto|manual|mesh|ring|star|members|subnet|lo|sysctl|mtu|container|egress|ingress|vlan|port|pvid|tagged|untagged|parent|reach|no-reach|tcp-connect|latency-under|route-has|dns-resolves|at|down|up|clear|exec|log|ping|iperf3|duration|streams|udp|count|assert|above|below|healthcheck|depends-on|startup-delay|env-file|config|overlay|env|volumes|cap-add|cap-drop|entrypoint|hostname|workdir|labels|pull|metric|description|prefix|version|author|tags|mgmt|off|vlan-filtering|ct|mark|sport|dport|icmp|type|state)\\b"
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "constant.numeric.cidr.nll",
+          "match": "\\b[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.ipv6-cidr.nll",
+          "match": "[0-9a-fA-F]*:[0-9a-fA-F:]+/[0-9]+"
+        },
+        {
+          "name": "constant.numeric.ipv6.nll",
+          "match": "[0-9a-fA-F]*:[0-9a-fA-F:]+"
+        },
+        {
+          "name": "constant.numeric.ip.nll",
+          "match": "\\b[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.duration.nll",
+          "match": "\\b[0-9]+(ms|s|m|h)\\b"
+        },
+        {
+          "name": "constant.numeric.rate.nll",
+          "match": "\\b[0-9]+(kbit|mbit|gbit|kbps|mbps|gbps)\\b"
+        },
+        {
+          "name": "constant.numeric.percent.nll",
+          "match": "\\b[0-9]+(\\.[0-9]+)?%"
+        },
+        {
+          "name": "constant.numeric.nll",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.link.nll",
+          "match": "--"
+        },
+        {
+          "name": "keyword.operator.directional.nll",
+          "match": "->|<-"
+        },
+        {
+          "name": "keyword.operator.range.nll",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.comparison.nll",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.nll",
+          "match": "&&|\\|\\|"
+        },
+        {
+          "name": "keyword.operator.assignment.nll",
+          "match": "="
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.block.begin.nll",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.block.end.nll",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.list.begin.nll",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.list.end.nll",
+          "match": "\\]"
+        },
+        {
+          "name": "punctuation.separator.nll",
+          "match": ":"
+        }
+      ]
+    }
+  }
+}

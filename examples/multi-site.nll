@@ -3,100 +3,91 @@
 # Demonstrates: subnet()/host() IP functions, for-inside-blocks,
 # for_each fleet imports, glob network members, auto-routing, NAT.
 #
-# Uses parametric imports:
-#   - imports/full-site.nll: full site (4 nodes, internal LAN, NAT)
-#   - imports/simple-site.nll: simplified site (2 nodes)
+# Parametric imports:
+#   - imports/full-site.nll: full site (4 nodes, internal LAN, NAT gateway)
+#   - imports/simple-site.nll: simple site (2 nodes)
 
 import "imports/full-site.nll" for_each {
-  a18(id=18)
-  a19(id=19)
+  alpha(id=18)
+  bravo(id=19)
 }
 import "imports/simple-site.nll" for_each {
-  a9(id=9)
-  a10(id=10)
+  charlie(id=9)
+  delta(id=10)
 }
 
 lab "infra" {
-  description "C2 + 2xA18 + 2xA9 drone control infrastructure"
+  description "HQ + 2 full sites + 2 simple sites — multi-transport infrastructure"
   dns hosts
   routing auto
 }
 
 profile router { forward ipv4 }
 
-# ═══ Asset C2 — Command & Control ════════════════════════
+# ═══ HQ — Headquarters ═══════════════════════════════════
 
-let c2 = subnet("10.0.0.0/8", 16, 2)
-let dc-lan = subnet(${c2}, 24, 1)
-let dcs-fw = subnet(${c2}, 24, 2)
+let hq = subnet("10.0.0.0/8", 16, 2)
+let dc-lan = subnet(${hq}, 24, 1)
+let dcs-fw = subnet(${hq}, 24, 2)
 
 node dc1
 node dc2
 
 node dcs : router {
-  for asset in [18, 19] {
+  for site in [18, 19] {
     for lt in [1, 2, 3] {
-      route 144.0.${lt}.${asset}/32 via host(${dcs-fw}, 2)
+      route 144.0.${lt}.${site}/32 via host(${dcs-fw}, 2)
     }
   }
-  for asset in [9, 10] {
+  for site in [9, 10] {
     for lt in [1, 4] {
-      route 144.0.${lt}.${asset}/32 via host(${dcs-fw}, 2)
+      route 144.0.${lt}.${site}/32 via host(${dcs-fw}, 2)
     }
   }
 }
 
-node c2-fw : router {
+node hq-fw : router {
   nat {
-    masquerade src ${c2}
-    for asset in [18, 19] {
-      for lt in [1, 2, 3] {
-        dnat dst 144.0.${lt}.${asset}/32 to host(subnet("172.100.0.0/16", 24, ${lt}), ${asset})
-      }
-    }
-    for asset in [9, 10] {
-      for lt in [1, 4] {
-        dnat dst 144.0.${lt}.${asset}/32 to host(subnet("172.100.0.0/16", 24, ${lt}), ${asset})
-      }
-    }
+    masquerade src ${hq}
+    translate 144.0.0.0/8 to 172.100.0.0/16
   }
 }
 
-# ═══ Internal C2 networks ════════════════════════════════
+# ═══ Internal HQ networks ════════════════════════════════
 
-network c2-dc {
+network hq-dc {
   members [dc1:eth0, dc2:eth0, dcs:eth0]
   subnet ${dc-lan}
 }
-link dcs:eth1 -- c2-fw:eth0 { host(${dcs-fw}, 1)/24 -- host(${dcs-fw}, 2)/24 }
+link dcs:eth1 -- hq-fw:eth0 { host(${dcs-fw}, 1)/24 -- host(${dcs-fw}, 2)/24 }
 
 # ═══ Modem networks (shared WAN media) ═══════════════════
 #
 # Each transport type is a shared L2 segment (bridge).
-# All assets with that modem type are on the same network.
-# Addresses auto-assigned from subnet: .2=C2, .9=A9, .10=A10, .18=A18, .19=A19
+# All sites with that modem type are on the same network.
+# Addresses auto-assigned from subnet.
 
-# Fiber Optic — all assets (glob: *-black + *-cc)
+# Fiber Optic — all sites (glob: *-black + *-cc)
 network fo {
-  members [c2-fw:fo, *-black:fo, *-cc:fo]
+  members [hq-fw:fo, *-black:fo, *-cc:fo]
   subnet 172.100.1.0/24
 }
 
-# Satellite — A18s only (glob: *-black)
+# Satellite — full sites only (glob: *-black)
 network sat {
-  members [c2-fw:sat, *-black:sat]
+  members [hq-fw:sat, *-black:sat]
   subnet 172.100.2.0/24
 }
 
-# Radio — A18s only
+# Radio — full sites only
 network radio {
-  members [c2-fw:radio, *-black:radio]
+  members [hq-fw:radio, *-black:radio]
   subnet 172.100.3.0/24
 }
 
-# WiFi — A9s only (glob: *-cc)
+# WiFi — simple sites only (glob: *-cc)
 network wifi {
-  members [c2-fw:wifi, *-cc:wifi]
+  members [hq-fw:wifi, *-cc:wifi]
   subnet 172.100.4.0/24
 }
 
@@ -104,13 +95,13 @@ network wifi {
 
 validate {
   reach dc1 dcs
-  reach dcs c2-fw
-  reach a18-cc a18-red
-  reach a19-cc a19-red
-  reach a9-cc a9-cu
-  reach a10-cc a10-cu
-  reach c2-fw a18-black
-  reach c2-fw a19-black
-  reach c2-fw a9-cc
-  reach c2-fw a10-cc
+  reach dcs hq-fw
+  reach alpha-cc alpha-red
+  reach bravo-cc bravo-red
+  reach charlie-cc charlie-cu
+  reach delta-cc delta-cu
+  reach hq-fw alpha-black
+  reach hq-fw bravo-black
+  reach hq-fw charlie-cc
+  reach hq-fw delta-cc
 }

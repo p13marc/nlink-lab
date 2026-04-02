@@ -1,0 +1,13 @@
+id = "nll"
+name = "NLL"
+version = "0.1.0"
+schema_version = 1
+description = "Syntax highlighting for NLL (nlink-lab Language) topology files"
+repository = "https://github.com/p13marc/nlink-lab"
+authors = ["nlink-lab contributors"]
+languages = ["languages/nll"]
+
+[grammars.nll]
+repository = "https://github.com/p13marc/nlink-lab"
+rev = "main"
+path = "editors/tree-sitter-nll"

@@ -256,6 +256,9 @@ fn lower_with_base_dir(
     resolve_cross_refs(&mut topology)?;
     warn_unresolved_refs(&topology);
 
+    // Post-lowering pass: expand `translate` NAT rules using topology addresses
+    expand_translate_rules(&mut topology);
+
     Ok(topology)
 }
 
@@ -442,6 +445,122 @@ fn build_address_map(topology: &types::Topology) -> HashMap<String, String> {
         }
     }
     map
+}
+
+// ─── NAT Translate Expansion ────────────────────────────
+
+/// Expand `Translate` NAT rules into per-host DNAT rules by scanning
+/// the topology for addresses in the destination range.
+fn expand_translate_rules(topology: &mut types::Topology) {
+    // Collect all assigned IPv4 addresses from links and node interfaces.
+    let mut assigned: Vec<std::net::Ipv4Addr> = Vec::new();
+    for link in &topology.links {
+        if let Some(addrs) = &link.addresses {
+            for addr in addrs {
+                if let Some(ip) = addr.split('/').next()
+                    && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>()
+                {
+                    assigned.push(v4);
+                }
+            }
+        }
+    }
+    for node in topology.nodes.values() {
+        for iface_cfg in node.interfaces.values() {
+            for addr in &iface_cfg.addresses {
+                if let Some(ip) = addr.split('/').next()
+                    && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>()
+                {
+                    assigned.push(v4);
+                }
+            }
+        }
+    }
+
+    // For each node with NAT rules, expand Translate rules.
+    for node in topology.nodes.values_mut() {
+        let nat = match &mut node.nat {
+            Some(n) => n,
+            None => continue,
+        };
+        let mut has_translate = false;
+        for rule in &nat.rules {
+            if rule.action == types::NatAction::Translate {
+                has_translate = true;
+                break;
+            }
+        }
+        if !has_translate {
+            continue;
+        }
+
+        let mut expanded = Vec::new();
+        for rule in &nat.rules {
+            if rule.action != types::NatAction::Translate {
+                expanded.push(rule.clone());
+                continue;
+            }
+            let src_cidr = match &rule.src {
+                Some(s) => s.as_str(),
+                None => continue,
+            };
+            let dst_cidr = match &rule.target {
+                Some(s) => s.as_str(),
+                None => continue,
+            };
+            let Some((src_net, src_prefix)) = parse_v4_cidr_pair(src_cidr) else {
+                continue;
+            };
+            let Some((dst_net, dst_prefix)) = parse_v4_cidr_pair(dst_cidr) else {
+                continue;
+            };
+            for &addr in &assigned {
+                if in_prefix(addr, dst_net, dst_prefix) {
+                    let mapped = map_translate_address(addr, dst_net, dst_prefix, src_net, src_prefix);
+                    expanded.push(types::NatRule {
+                        action: types::NatAction::Dnat,
+                        src: None,
+                        dst: Some(format!("{mapped}/32")),
+                        target: Some(addr.to_string()),
+                        target_port: None,
+                    });
+                }
+            }
+        }
+        nat.rules = expanded;
+    }
+}
+
+/// Parse "A.B.C.D/N" into (Ipv4Addr, u8).
+fn parse_v4_cidr_pair(s: &str) -> Option<(std::net::Ipv4Addr, u8)> {
+    let (ip_str, prefix_str) = s.split_once('/')?;
+    let ip: std::net::Ipv4Addr = ip_str.parse().ok()?;
+    let prefix: u8 = prefix_str.parse().ok()?;
+    Some((ip, prefix))
+}
+
+/// Check whether `addr` is inside the network defined by `net/prefix`.
+fn in_prefix(addr: std::net::Ipv4Addr, net: std::net::Ipv4Addr, prefix: u8) -> bool {
+    if prefix == 0 {
+        return true;
+    }
+    let mask = !0u32 << (32 - prefix);
+    (u32::from(addr) & mask) == (u32::from(net) & mask)
+}
+
+/// Map an address from the destination range to the source range,
+/// preserving host bits. E.g., 172.100.1.18 with dst /16 → src /8
+/// yields 144.0.1.18.
+fn map_translate_address(
+    addr: std::net::Ipv4Addr,
+    _dst_net: std::net::Ipv4Addr,
+    dst_prefix: u8,
+    src_net: std::net::Ipv4Addr,
+    src_prefix: u8,
+) -> std::net::Ipv4Addr {
+    let host_bits = u32::from(addr) & !(!0u32 << (32 - dst_prefix));
+    let src_masked = u32::from(src_net) & (!0u32 << (32 - src_prefix));
+    std::net::Ipv4Addr::from(src_masked | host_bits)
 }
 
 /// Replace `${node.iface}` references with resolved IP addresses.
@@ -1639,6 +1758,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                                 "masquerade" => types::NatAction::Masquerade,
                                 "snat" => types::NatAction::Snat,
                                 "dnat" => types::NatAction::Dnat,
+                                "translate" => types::NatAction::Translate,
                                 _ => types::NatAction::Masquerade,
                             },
                             src: r.src.clone(),
@@ -2090,7 +2210,7 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
 }
 
 /// Resolve glob patterns in network member lists.
-/// E.g., `*-black:fo` expands to `a18-black:fo`, `a19-black:fo`, etc.
+/// E.g., `*-black:fo` expands to `alpha-black:fo`, `bravo-black:fo`, etc.
 fn resolve_glob_members(
     members: &[String],
     all_nodes: &HashMap<String, types::Node>,
@@ -2123,8 +2243,8 @@ fn resolve_glob_members(
 }
 
 /// Simple glob matching: supports single `*` wildcard.
-/// `*-black` matches `a18-black`, `a19-black`.
-/// `c2-*` matches `c2-fw`, `c2-dcs`.
+/// `*-black` matches `alpha-black`, `bravo-black`.
+/// `hq-*` matches `hq-fw`, `hq-dcs`.
 fn glob_matches(pattern: &str, name: &str) -> bool {
     if !pattern.contains('*') {
         return pattern == name;
@@ -2137,7 +2257,7 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
 }
 
 fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()> {
-    // Resolve glob patterns in member lists (e.g., "*-black:fo" → "a18-black:fo")
+    // Resolve glob patterns in member lists (e.g., "*-black:fo" → "alpha-black:fo")
     let resolved_members = resolve_glob_members(&net.members, &topo.nodes);
 
     let mut network = types::Network {
@@ -3590,31 +3710,31 @@ node a { route default via host(${lan}, 254) }
             r#"lab "t"
 profile router { forward ipv4 }
 
-site c2 {
+site hq {
   node dc1 { route default via 10.2.1.3 }
   node dcs : router
   link dc1:eth0 -- dcs:eth0 { 10.2.1.1/24 -- 10.2.1.3/24 }
 }
 
-site a18 {
+site alpha {
   node cc { route default via 10.18.1.3 }
   node red : router
   link cc:eth0 -- red:eth0 { 10.18.1.1/24 -- 10.18.1.3/24 }
 }
 
 # Cross-site link (uses prefixed names)
-link c2-dcs:eth1 -- a18-red:eth1 { 172.100.1.2/24 -- 172.100.1.18/24 }
+link hq-dcs:eth1 -- alpha-red:eth1 { 172.100.1.2/24 -- 172.100.1.18/24 }
 "#,
         );
         // Nodes should be prefixed with site name
-        assert!(topo.nodes.contains_key("c2-dc1"), "expected c2-dc1");
-        assert!(topo.nodes.contains_key("c2-dcs"), "expected c2-dcs");
-        assert!(topo.nodes.contains_key("a18-cc"), "expected a18-cc");
-        assert!(topo.nodes.contains_key("a18-red"), "expected a18-red");
+        assert!(topo.nodes.contains_key("hq-dc1"), "expected hq-dc1");
+        assert!(topo.nodes.contains_key("hq-dcs"), "expected hq-dcs");
+        assert!(topo.nodes.contains_key("alpha-cc"), "expected alpha-cc");
+        assert!(topo.nodes.contains_key("alpha-red"), "expected alpha-red");
         // Links should reference prefixed names
         assert_eq!(topo.links.len(), 3);
-        assert_eq!(topo.links[0].endpoints[0], "c2-dc1:eth0");
-        assert_eq!(topo.links[0].endpoints[1], "c2-dcs:eth0");
+        assert_eq!(topo.links[0].endpoints[0], "hq-dc1:eth0");
+        assert_eq!(topo.links[0].endpoints[1], "hq-dcs:eth0");
     }
 
     #[test]
@@ -4142,5 +4262,135 @@ link b:eth1 -- c:eth0 { 192.168.0.1/24 -- 192.168.0.2/24 }
         // Second link explicit
         let a2 = topo.links[1].addresses.as_ref().unwrap();
         assert_eq!(a2[0], "192.168.0.1/24");
+    }
+
+    #[test]
+    fn test_lower_translate_basic() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+profile router { forward ipv4 }
+node fw : router {
+  nat {
+    translate 144.0.0.0/8 to 172.100.0.0/16
+  }
+}
+node a
+node b
+link fw:eth0 -- a:eth0 { 172.100.1.2/24 -- 172.100.1.10/24 }
+link fw:eth1 -- b:eth0 { 172.100.2.2/24 -- 172.100.2.20/24 }
+"#,
+        );
+        let nat = topo.nodes["fw"].nat.as_ref().unwrap();
+        // Translate should have been expanded to DNAT rules for addresses in 172.100.x.x
+        assert!(!nat.rules.is_empty());
+        for rule in &nat.rules {
+            assert_eq!(rule.action, types::NatAction::Dnat);
+            // Each generated rule should have dst in 144.0.x.x/32 and target in 172.100.x.x
+            let dst = rule.dst.as_ref().unwrap();
+            assert!(dst.starts_with("144.0."), "dst should be in source range: {dst}");
+            assert!(dst.ends_with("/32"));
+            let target = rule.target.as_ref().unwrap();
+            assert!(
+                target.starts_with("172.100."),
+                "target should be in dst range: {target}"
+            );
+        }
+        // Verify specific mappings: 172.100.1.10 → 144.0.1.10, 172.100.2.20 → 144.0.2.20
+        let dsts: Vec<&str> = nat.rules.iter().map(|r| r.dst.as_deref().unwrap()).collect();
+        assert!(dsts.contains(&"144.0.1.10/32"));
+        assert!(dsts.contains(&"144.0.2.20/32"));
+    }
+
+    #[test]
+    fn test_lower_translate_sparse() {
+        // Only addresses actually in the topology should generate rules
+        let topo = parse_and_lower(
+            r#"lab "t"
+node fw {
+  nat {
+    translate 10.0.0.0/8 to 192.168.0.0/16
+  }
+}
+node a
+link fw:eth0 -- a:eth0 { 192.168.1.1/24 -- 192.168.1.2/24 }
+"#,
+        );
+        let nat = topo.nodes["fw"].nat.as_ref().unwrap();
+        // Only addresses in 192.168.x.x that exist in links should produce rules
+        // The fw's own address 192.168.1.1 and a's address 192.168.1.2
+        let targets: Vec<&str> = nat
+            .rules
+            .iter()
+            .map(|r| r.target.as_deref().unwrap())
+            .collect();
+        assert!(targets.contains(&"192.168.1.1"));
+        assert!(targets.contains(&"192.168.1.2"));
+        assert_eq!(nat.rules.len(), 2);
+    }
+
+    #[test]
+    fn test_lower_translate_no_matches() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node fw {
+  nat {
+    translate 10.0.0.0/8 to 192.168.0.0/16
+  }
+}
+node a
+link fw:eth0 -- a:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
+"#,
+        );
+        let nat = topo.nodes["fw"].nat.as_ref().unwrap();
+        // No addresses in 192.168.x.x range → no rules generated
+        assert_eq!(nat.rules.len(), 0);
+    }
+
+    #[test]
+    fn test_map_translate_address() {
+        use std::net::Ipv4Addr;
+        // 172.100.1.18 with dst=/16 → src=/8 should yield 144.0.1.18
+        let result = super::map_translate_address(
+            Ipv4Addr::new(172, 100, 1, 18),
+            Ipv4Addr::new(172, 100, 0, 0),
+            16,
+            Ipv4Addr::new(144, 0, 0, 0),
+            8,
+        );
+        assert_eq!(result, Ipv4Addr::new(144, 0, 1, 18));
+    }
+
+    #[test]
+    fn test_map_translate_address_same_prefix() {
+        use std::net::Ipv4Addr;
+        // Same prefix length: 10.1.2.3 with /16 → /16 yields 192.168.2.3
+        let result = super::map_translate_address(
+            Ipv4Addr::new(10, 1, 2, 3),
+            Ipv4Addr::new(10, 1, 0, 0),
+            16,
+            Ipv4Addr::new(192, 168, 0, 0),
+            16,
+        );
+        assert_eq!(result, Ipv4Addr::new(192, 168, 2, 3));
+    }
+
+    #[test]
+    fn test_in_prefix() {
+        use std::net::Ipv4Addr;
+        assert!(super::in_prefix(
+            Ipv4Addr::new(172, 100, 1, 18),
+            Ipv4Addr::new(172, 100, 0, 0),
+            16
+        ));
+        assert!(!super::in_prefix(
+            Ipv4Addr::new(10, 0, 1, 1),
+            Ipv4Addr::new(172, 100, 0, 0),
+            16
+        ));
+        assert!(super::in_prefix(
+            Ipv4Addr::new(10, 1, 2, 3),
+            Ipv4Addr::new(10, 0, 0, 0),
+            8
+        ));
     }
 }

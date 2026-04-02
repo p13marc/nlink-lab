@@ -1,0 +1,75 @@
+================
+Let binding
+================
+let x = 10
+---
+(source_file
+  (let_binding (identifier) (integer)))
+
+================
+For loop with range
+================
+for i in 1..4 {
+  node a
+}
+---
+(source_file
+  (for_loop
+    (identifier)
+    (for_range (integer) (integer))
+    (node_definition (identifier))))
+
+================
+For loop with list
+================
+for name in [alpha, bravo, charlie] {
+  node name
+}
+---
+(source_file
+  (for_loop
+    (identifier)
+    (for_range (list (identifier) (identifier) (identifier)))
+    (node_definition (identifier))))
+
+================
+Import with alias
+================
+import "site.nll" as mysite
+---
+(source_file
+  (import_statement
+    (string)
+    (identifier)))
+
+================
+Import for_each
+================
+import "site.nll" for_each {
+  alpha(id=1)
+  bravo(id=2)
+}
+---
+(source_file
+  (import_statement
+    (string)
+    (import_item
+      (identifier)
+      (param_list (param_assign (identifier) (integer))))
+    (import_item
+      (identifier)
+      (param_list (param_assign (identifier) (integer))))))
+
+================
+Site block
+================
+site dc1 {
+  node server
+  node router
+}
+---
+(source_file
+  (site_block
+    (identifier)
+    (node_definition (identifier))
+    (node_definition (identifier))))

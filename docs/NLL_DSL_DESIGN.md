@@ -1064,6 +1064,7 @@ site           = "site" IDENT STRING? "{" statement* "}"
 nat_rule       = "masquerade" ("src" CIDR)?
                | "dnat" ("dst" CIDR)? "to" IP (":" INT)?
                | "snat" ("src" CIDR)? "to" IP
+               | "translate" CIDR "to" CIDR
 
 # ── Route (supports list destinations) ──────────
 route          = "route" route_dest route_params

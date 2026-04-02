@@ -98,7 +98,7 @@ examples/
 | `Impairment` | Netem config (delay, jitter, loss, rate) |
 | `RateLimit` | Per-interface traffic shaping |
 | `FirewallConfig` | nftables rules (with src/dst matching) |
-| `NatConfig` | NAT rules (masquerade, snat, dnat) |
+| `NatConfig` | NAT rules (masquerade, snat, dnat, translate) |
 | `ExecConfig` | Process to spawn in namespace |
 | `EndpointRef` | Parsed "node:interface" reference |
 | `VrfConfig` | VRF routing table configuration |
@@ -138,7 +138,7 @@ NLL supports `for` loops (integer ranges and list iteration), `let` variables,
 (`pool fabric 10.0.0.0/16 /30`), topology patterns (`mesh`, `ring`, `star`),
 cross-references (`${node.iface}`), multi-profile inheritance,
 inline impairments (`->` / `<-`), profiles, firewall (with `src`/`dst`
-matching), NAT (`nat` block with `masquerade`/`snat`/`dnat`),
+matching), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
 link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
 route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,

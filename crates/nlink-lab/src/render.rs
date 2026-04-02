@@ -353,6 +353,11 @@ fn render_node(out: &mut String, name: &str, node: &Node) {
                         }
                         out.push('\n');
                     }
+                    crate::types::NatAction::Translate => {
+                        if let (Some(src), Some(target)) = (&rule.src, &rule.target) {
+                            writeln!(out, "    translate {src} to {target}").unwrap();
+                        }
+                    }
                 }
             }
             out.push_str("  }\n");
@@ -677,6 +682,29 @@ node a
         assert!(
             !rendered.contains("dns"),
             "dns off should not be rendered: {rendered}"
+        );
+    }
+
+    #[test]
+    fn test_render_nat_translate() {
+        // Build a topology with a translate rule directly (before expansion)
+        let mut topo = crate::types::Topology::default();
+        topo.lab.name = "t".into();
+        let mut fw = crate::types::Node::default();
+        fw.nat = Some(crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Translate,
+                src: Some("144.0.0.0/8".into()),
+                dst: None,
+                target: Some("172.100.0.0/16".into()),
+                target_port: None,
+            }],
+        });
+        topo.nodes.insert("fw".into(), fw);
+        let rendered = render(&topo);
+        assert!(
+            rendered.contains("translate 144.0.0.0/8 to 172.100.0.0/16"),
+            "translate should render: {rendered}"
         );
     }
 }

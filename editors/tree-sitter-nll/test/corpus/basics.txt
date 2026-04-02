@@ -1,0 +1,123 @@
+================
+Lab declaration
+================
+lab "simple"
+---
+(source_file
+  (lab_declaration
+    (string)))
+
+================
+Lab with properties
+================
+lab "test" {
+  description "A test lab"
+  dns hosts
+  routing auto
+}
+---
+(source_file
+  (lab_declaration
+    (string)
+    (lab_property (string))
+    (lab_property)
+    (lab_property)))
+
+================
+Profile
+================
+profile router { forward ipv4 }
+---
+(source_file
+  (profile_definition
+    (identifier)
+    (forward_property)))
+
+================
+Simple node
+================
+node router
+---
+(source_file
+  (node_definition
+    (identifier)))
+
+================
+Node with profile
+================
+node router : router
+---
+(source_file
+  (node_definition
+    (identifier)
+    (profile_list
+      (identifier))))
+
+================
+Node with body
+================
+node host {
+  route default via 10.0.0.1
+}
+---
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (route_property
+        (route_destination)
+        (route_params
+          (ipv4_address))))))
+
+================
+Link definition
+================
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+---
+(source_file
+  (link_definition
+    (endpoint (identifier) (identifier))
+    (endpoint (identifier) (identifier))
+    (link_body
+      (address_pair (cidr) (cidr)))))
+
+================
+Link with impairment
+================
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  delay 10ms jitter 2ms
+}
+---
+(source_file
+  (link_definition
+    (endpoint (identifier) (identifier))
+    (endpoint (identifier) (identifier))
+    (link_body
+      (address_pair (cidr) (cidr))
+      (impairment_properties
+        (duration))
+      (impairment_properties
+        (duration)))))
+
+================
+Line comment
+================
+# this is a comment
+lab "t"
+---
+(source_file
+  (line_comment)
+  (lab_declaration (string)))
+
+================
+Block comment
+================
+/* block comment */
+lab "t"
+---
+(source_file
+  (block_comment)
+  (lab_declaration (string)))

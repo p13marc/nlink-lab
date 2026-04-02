@@ -1,0 +1,29 @@
+{
+  "grammars": [
+    {
+      "name": "nll",
+      "camelcase": "Nll",
+      "scope": "source.nll",
+      "path": ".",
+      "file-types": ["nll"],
+      "injection-regex": "^nll$",
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for NLL (nlink-lab Language)",
+    "authors": [
+      { "name": "nlink-lab contributors" }
+    ],
+    "links": {
+      "repository": "https://github.com/p13marc/nlink-lab"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "rust": true,
+    "node": true
+  }
+}

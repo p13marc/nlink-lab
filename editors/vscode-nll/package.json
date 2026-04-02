@@ -1,0 +1,29 @@
+{
+  "name": "nll",
+  "displayName": "NLL — nlink-lab Language",
+  "description": "Syntax highlighting for NLL network topology files",
+  "version": "0.1.0",
+  "publisher": "nlink-lab",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nll",
+        "aliases": ["NLL", "nlink-lab"],
+        "extensions": [".nll"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nll",
+        "scopeName": "source.nll",
+        "path": "./syntaxes/nll.tmLanguage.json"
+      }
+    ]
+  }
+}

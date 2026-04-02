@@ -1,0 +1,3135 @@
+[
+  {
+    "type": "address_pair",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "assertion",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "benchmark_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "benchmark_test",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "benchmark_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "benchmark_test",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "benchmark_property",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "condition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "container_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "defaults_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "directional_impairment",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "impairment_properties",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "dummy_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "endpoint",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "firewall_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "firewall_rule",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "firewall_rule",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "match_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "for_loop",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "benchmark_block",
+          "named": true
+        },
+        {
+          "type": "container_property",
+          "named": true
+        },
+        {
+          "type": "defaults_definition",
+          "named": true
+        },
+        {
+          "type": "dummy_block",
+          "named": true
+        },
+        {
+          "type": "firewall_block",
+          "named": true
+        },
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "for_range",
+          "named": true
+        },
+        {
+          "type": "forward_property",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "if_block",
+          "named": true
+        },
+        {
+          "type": "image_property",
+          "named": true
+        },
+        {
+          "type": "impairment_statement",
+          "named": true
+        },
+        {
+          "type": "import_statement",
+          "named": true
+        },
+        {
+          "type": "ipvlan_block",
+          "named": true
+        },
+        {
+          "type": "lab_declaration",
+          "named": true
+        },
+        {
+          "type": "let_binding",
+          "named": true
+        },
+        {
+          "type": "link_definition",
+          "named": true
+        },
+        {
+          "type": "loopback_property",
+          "named": true
+        },
+        {
+          "type": "macvlan_block",
+          "named": true
+        },
+        {
+          "type": "nat_block",
+          "named": true
+        },
+        {
+          "type": "network_definition",
+          "named": true
+        },
+        {
+          "type": "node_definition",
+          "named": true
+        },
+        {
+          "type": "param_definition",
+          "named": true
+        },
+        {
+          "type": "pattern_definition",
+          "named": true
+        },
+        {
+          "type": "pool_definition",
+          "named": true
+        },
+        {
+          "type": "profile_definition",
+          "named": true
+        },
+        {
+          "type": "rate_statement",
+          "named": true
+        },
+        {
+          "type": "route_property",
+          "named": true
+        },
+        {
+          "type": "run_property",
+          "named": true
+        },
+        {
+          "type": "scenario_block",
+          "named": true
+        },
+        {
+          "type": "site_block",
+          "named": true
+        },
+        {
+          "type": "sysctl_property",
+          "named": true
+        },
+        {
+          "type": "validate_block",
+          "named": true
+        },
+        {
+          "type": "vrf_block",
+          "named": true
+        },
+        {
+          "type": "vxlan_block",
+          "named": true
+        },
+        {
+          "type": "wifi_block",
+          "named": true
+        },
+        {
+          "type": "wireguard_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "for_range",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "forward_property",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "function_call",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "generic_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "route_property",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "if_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "benchmark_block",
+          "named": true
+        },
+        {
+          "type": "condition",
+          "named": true
+        },
+        {
+          "type": "container_property",
+          "named": true
+        },
+        {
+          "type": "defaults_definition",
+          "named": true
+        },
+        {
+          "type": "dummy_block",
+          "named": true
+        },
+        {
+          "type": "firewall_block",
+          "named": true
+        },
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "forward_property",
+          "named": true
+        },
+        {
+          "type": "if_block",
+          "named": true
+        },
+        {
+          "type": "image_property",
+          "named": true
+        },
+        {
+          "type": "impairment_statement",
+          "named": true
+        },
+        {
+          "type": "import_statement",
+          "named": true
+        },
+        {
+          "type": "ipvlan_block",
+          "named": true
+        },
+        {
+          "type": "lab_declaration",
+          "named": true
+        },
+        {
+          "type": "let_binding",
+          "named": true
+        },
+        {
+          "type": "link_definition",
+          "named": true
+        },
+        {
+          "type": "loopback_property",
+          "named": true
+        },
+        {
+          "type": "macvlan_block",
+          "named": true
+        },
+        {
+          "type": "nat_block",
+          "named": true
+        },
+        {
+          "type": "network_definition",
+          "named": true
+        },
+        {
+          "type": "node_definition",
+          "named": true
+        },
+        {
+          "type": "param_definition",
+          "named": true
+        },
+        {
+          "type": "pattern_definition",
+          "named": true
+        },
+        {
+          "type": "pool_definition",
+          "named": true
+        },
+        {
+          "type": "profile_definition",
+          "named": true
+        },
+        {
+          "type": "rate_statement",
+          "named": true
+        },
+        {
+          "type": "route_property",
+          "named": true
+        },
+        {
+          "type": "run_property",
+          "named": true
+        },
+        {
+          "type": "scenario_block",
+          "named": true
+        },
+        {
+          "type": "site_block",
+          "named": true
+        },
+        {
+          "type": "sysctl_property",
+          "named": true
+        },
+        {
+          "type": "validate_block",
+          "named": true
+        },
+        {
+          "type": "vrf_block",
+          "named": true
+        },
+        {
+          "type": "vxlan_block",
+          "named": true
+        },
+        {
+          "type": "wifi_block",
+          "named": true
+        },
+        {
+          "type": "wireguard_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "image_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "impairment_properties",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "impairment_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "impairment_properties",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "import_item",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "param_list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "import_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "import_item",
+          "named": true
+        },
+        {
+          "type": "param_list",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "ipvlan_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "lab_declaration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "lab_property",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "lab_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "let_binding",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "link_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "address_pair",
+          "named": true
+        },
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "directional_impairment",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "impairment_properties",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "rate_properties",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "link_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "link_body",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "loopback_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macvlan_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "match_expression",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "nat_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "nat_rule",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "nat_rule",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "network_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "port_definition",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "node_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "container_property",
+          "named": true
+        },
+        {
+          "type": "dummy_block",
+          "named": true
+        },
+        {
+          "type": "firewall_block",
+          "named": true
+        },
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "forward_property",
+          "named": true
+        },
+        {
+          "type": "if_block",
+          "named": true
+        },
+        {
+          "type": "image_property",
+          "named": true
+        },
+        {
+          "type": "ipvlan_block",
+          "named": true
+        },
+        {
+          "type": "loopback_property",
+          "named": true
+        },
+        {
+          "type": "macvlan_block",
+          "named": true
+        },
+        {
+          "type": "nat_block",
+          "named": true
+        },
+        {
+          "type": "route_property",
+          "named": true
+        },
+        {
+          "type": "run_property",
+          "named": true
+        },
+        {
+          "type": "sysctl_property",
+          "named": true
+        },
+        {
+          "type": "vrf_block",
+          "named": true
+        },
+        {
+          "type": "vxlan_block",
+          "named": true
+        },
+        {
+          "type": "wifi_block",
+          "named": true
+        },
+        {
+          "type": "wireguard_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "node_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "image_property",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "node_body",
+          "named": true
+        },
+        {
+          "type": "profile_list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "param_assign",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "param_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "param_list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "param_assign",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pattern_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pool_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "port_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "profile_definition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "container_property",
+          "named": true
+        },
+        {
+          "type": "dummy_block",
+          "named": true
+        },
+        {
+          "type": "firewall_block",
+          "named": true
+        },
+        {
+          "type": "forward_property",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "image_property",
+          "named": true
+        },
+        {
+          "type": "ipvlan_block",
+          "named": true
+        },
+        {
+          "type": "loopback_property",
+          "named": true
+        },
+        {
+          "type": "macvlan_block",
+          "named": true
+        },
+        {
+          "type": "nat_block",
+          "named": true
+        },
+        {
+          "type": "route_property",
+          "named": true
+        },
+        {
+          "type": "run_property",
+          "named": true
+        },
+        {
+          "type": "sysctl_property",
+          "named": true
+        },
+        {
+          "type": "vrf_block",
+          "named": true
+        },
+        {
+          "type": "vxlan_block",
+          "named": true
+        },
+        {
+          "type": "wifi_block",
+          "named": true
+        },
+        {
+          "type": "wireguard_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "profile_list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "rate_properties",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "rate",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "rate_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "rate_properties",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "route_destination",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "route_params",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "route_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "route_destination",
+          "named": true
+        },
+        {
+          "type": "route_params",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "run_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "scenario_action",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "assertion",
+          "named": true
+        },
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "scenario_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "scenario_step",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "scenario_step",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "scenario_action",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "site_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "benchmark_block",
+          "named": true
+        },
+        {
+          "type": "defaults_definition",
+          "named": true
+        },
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "if_block",
+          "named": true
+        },
+        {
+          "type": "impairment_statement",
+          "named": true
+        },
+        {
+          "type": "import_statement",
+          "named": true
+        },
+        {
+          "type": "lab_declaration",
+          "named": true
+        },
+        {
+          "type": "let_binding",
+          "named": true
+        },
+        {
+          "type": "link_definition",
+          "named": true
+        },
+        {
+          "type": "network_definition",
+          "named": true
+        },
+        {
+          "type": "node_definition",
+          "named": true
+        },
+        {
+          "type": "param_definition",
+          "named": true
+        },
+        {
+          "type": "pattern_definition",
+          "named": true
+        },
+        {
+          "type": "pool_definition",
+          "named": true
+        },
+        {
+          "type": "profile_definition",
+          "named": true
+        },
+        {
+          "type": "rate_statement",
+          "named": true
+        },
+        {
+          "type": "scenario_block",
+          "named": true
+        },
+        {
+          "type": "site_block",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        },
+        {
+          "type": "validate_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "source_file",
+    "named": true,
+    "root": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "benchmark_block",
+          "named": true
+        },
+        {
+          "type": "defaults_definition",
+          "named": true
+        },
+        {
+          "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "if_block",
+          "named": true
+        },
+        {
+          "type": "impairment_statement",
+          "named": true
+        },
+        {
+          "type": "import_statement",
+          "named": true
+        },
+        {
+          "type": "lab_declaration",
+          "named": true
+        },
+        {
+          "type": "let_binding",
+          "named": true
+        },
+        {
+          "type": "link_definition",
+          "named": true
+        },
+        {
+          "type": "network_definition",
+          "named": true
+        },
+        {
+          "type": "node_definition",
+          "named": true
+        },
+        {
+          "type": "param_definition",
+          "named": true
+        },
+        {
+          "type": "pattern_definition",
+          "named": true
+        },
+        {
+          "type": "pool_definition",
+          "named": true
+        },
+        {
+          "type": "profile_definition",
+          "named": true
+        },
+        {
+          "type": "rate_statement",
+          "named": true
+        },
+        {
+          "type": "scenario_block",
+          "named": true
+        },
+        {
+          "type": "site_block",
+          "named": true
+        },
+        {
+          "type": "validate_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "sysctl_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "validate_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "assertion",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "vrf_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "vxlan_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "wifi_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "wireguard_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "!=",
+    "named": false
+  },
+  {
+    "type": "&&",
+    "named": false
+  },
+  {
+    "type": "(",
+    "named": false
+  },
+  {
+    "type": ")",
+    "named": false
+  },
+  {
+    "type": ",",
+    "named": false
+  },
+  {
+    "type": "--",
+    "named": false
+  },
+  {
+    "type": "->",
+    "named": false
+  },
+  {
+    "type": "..",
+    "named": false
+  },
+  {
+    "type": "/",
+    "named": false
+  },
+  {
+    "type": ":",
+    "named": false
+  },
+  {
+    "type": "<",
+    "named": false
+  },
+  {
+    "type": "<-",
+    "named": false
+  },
+  {
+    "type": "<=",
+    "named": false
+  },
+  {
+    "type": "=",
+    "named": false
+  },
+  {
+    "type": "==",
+    "named": false
+  },
+  {
+    "type": ">",
+    "named": false
+  },
+  {
+    "type": ">=",
+    "named": false
+  },
+  {
+    "type": "[",
+    "named": false
+  },
+  {
+    "type": "]",
+    "named": false
+  },
+  {
+    "type": "above",
+    "named": false
+  },
+  {
+    "type": "accept",
+    "named": false
+  },
+  {
+    "type": "as",
+    "named": false
+  },
+  {
+    "type": "assert",
+    "named": false
+  },
+  {
+    "type": "at",
+    "named": false
+  },
+  {
+    "type": "author",
+    "named": false
+  },
+  {
+    "type": "auto",
+    "named": false
+  },
+  {
+    "type": "background",
+    "named": false
+  },
+  {
+    "type": "below",
+    "named": false
+  },
+  {
+    "type": "benchmark",
+    "named": false
+  },
+  {
+    "type": "block_comment",
+    "named": true,
+    "extra": true
+  },
+  {
+    "type": "cap-add",
+    "named": false
+  },
+  {
+    "type": "cap-drop",
+    "named": false
+  },
+  {
+    "type": "cidr",
+    "named": true
+  },
+  {
+    "type": "clear",
+    "named": false
+  },
+  {
+    "type": "cmd",
+    "named": false
+  },
+  {
+    "type": "config",
+    "named": false
+  },
+  {
+    "type": "corrupt",
+    "named": false
+  },
+  {
+    "type": "count",
+    "named": false
+  },
+  {
+    "type": "cpu",
+    "named": false
+  },
+  {
+    "type": "ct",
+    "named": false
+  },
+  {
+    "type": "default",
+    "named": false
+  },
+  {
+    "type": "defaults",
+    "named": false
+  },
+  {
+    "type": "delay",
+    "named": false
+  },
+  {
+    "type": "depends-on",
+    "named": false
+  },
+  {
+    "type": "description",
+    "named": false
+  },
+  {
+    "type": "dev",
+    "named": false
+  },
+  {
+    "type": "dnat",
+    "named": false
+  },
+  {
+    "type": "dns",
+    "named": false
+  },
+  {
+    "type": "dns-resolves",
+    "named": false
+  },
+  {
+    "type": "down",
+    "named": false
+  },
+  {
+    "type": "dport",
+    "named": false
+  },
+  {
+    "type": "drop",
+    "named": false
+  },
+  {
+    "type": "dst",
+    "named": false
+  },
+  {
+    "type": "dummy",
+    "named": false
+  },
+  {
+    "type": "duration",
+    "named": false
+  },
+  {
+    "type": "duration",
+    "named": true
+  },
+  {
+    "type": "egress",
+    "named": false
+  },
+  {
+    "type": "entrypoint",
+    "named": false
+  },
+  {
+    "type": "env",
+    "named": false
+  },
+  {
+    "type": "env-file",
+    "named": false
+  },
+  {
+    "type": "exec",
+    "named": false
+  },
+  {
+    "type": "firewall",
+    "named": false
+  },
+  {
+    "type": "for",
+    "named": false
+  },
+  {
+    "type": "for_each",
+    "named": false
+  },
+  {
+    "type": "forward",
+    "named": false
+  },
+  {
+    "type": "healthcheck",
+    "named": false
+  },
+  {
+    "type": "hostname",
+    "named": false
+  },
+  {
+    "type": "hosts",
+    "named": false
+  },
+  {
+    "type": "hub",
+    "named": false
+  },
+  {
+    "type": "icmp",
+    "named": false
+  },
+  {
+    "type": "identifier",
+    "named": true
+  },
+  {
+    "type": "if",
+    "named": false
+  },
+  {
+    "type": "image",
+    "named": false
+  },
+  {
+    "type": "impair",
+    "named": false
+  },
+  {
+    "type": "import",
+    "named": false
+  },
+  {
+    "type": "in",
+    "named": false
+  },
+  {
+    "type": "ingress",
+    "named": false
+  },
+  {
+    "type": "integer",
+    "named": true
+  },
+  {
+    "type": "interpolation",
+    "named": true
+  },
+  {
+    "type": "iperf3",
+    "named": false
+  },
+  {
+    "type": "ipv4",
+    "named": false
+  },
+  {
+    "type": "ipv4_address",
+    "named": true
+  },
+  {
+    "type": "ipv6",
+    "named": false
+  },
+  {
+    "type": "ipv6_address",
+    "named": true
+  },
+  {
+    "type": "ipv6_cidr",
+    "named": true
+  },
+  {
+    "type": "ipvlan",
+    "named": false
+  },
+  {
+    "type": "jitter",
+    "named": false
+  },
+  {
+    "type": "lab",
+    "named": false
+  },
+  {
+    "type": "labels",
+    "named": false
+  },
+  {
+    "type": "latency-under",
+    "named": false
+  },
+  {
+    "type": "let",
+    "named": false
+  },
+  {
+    "type": "line_comment",
+    "named": true,
+    "extra": true
+  },
+  {
+    "type": "link",
+    "named": false
+  },
+  {
+    "type": "lo",
+    "named": false
+  },
+  {
+    "type": "log",
+    "named": false
+  },
+  {
+    "type": "loss",
+    "named": false
+  },
+  {
+    "type": "macvlan",
+    "named": false
+  },
+  {
+    "type": "manual",
+    "named": false
+  },
+  {
+    "type": "mark",
+    "named": false
+  },
+  {
+    "type": "masquerade",
+    "named": false
+  },
+  {
+    "type": "members",
+    "named": false
+  },
+  {
+    "type": "memory",
+    "named": false
+  },
+  {
+    "type": "mesh",
+    "named": false
+  },
+  {
+    "type": "metric",
+    "named": false
+  },
+  {
+    "type": "mgmt",
+    "named": false
+  },
+  {
+    "type": "mtu",
+    "named": false
+  },
+  {
+    "type": "nat",
+    "named": false
+  },
+  {
+    "type": "network",
+    "named": false
+  },
+  {
+    "type": "no-reach",
+    "named": false
+  },
+  {
+    "type": "node",
+    "named": false
+  },
+  {
+    "type": "off",
+    "named": false
+  },
+  {
+    "type": "overlay",
+    "named": false
+  },
+  {
+    "type": "param",
+    "named": false
+  },
+  {
+    "type": "percent",
+    "named": true
+  },
+  {
+    "type": "ping",
+    "named": false
+  },
+  {
+    "type": "policy",
+    "named": false
+  },
+  {
+    "type": "pool",
+    "named": false
+  },
+  {
+    "type": "port",
+    "named": false
+  },
+  {
+    "type": "prefix",
+    "named": false
+  },
+  {
+    "type": "privileged",
+    "named": false
+  },
+  {
+    "type": "profile",
+    "named": false
+  },
+  {
+    "type": "pull",
+    "named": false
+  },
+  {
+    "type": "pvid",
+    "named": false
+  },
+  {
+    "type": "rate",
+    "named": false
+  },
+  {
+    "type": "rate",
+    "named": true
+  },
+  {
+    "type": "reach",
+    "named": false
+  },
+  {
+    "type": "reorder",
+    "named": false
+  },
+  {
+    "type": "ring",
+    "named": false
+  },
+  {
+    "type": "route",
+    "named": false
+  },
+  {
+    "type": "route-has",
+    "named": false
+  },
+  {
+    "type": "routing",
+    "named": false
+  },
+  {
+    "type": "run",
+    "named": false
+  },
+  {
+    "type": "runtime",
+    "named": false
+  },
+  {
+    "type": "samples",
+    "named": false
+  },
+  {
+    "type": "scenario",
+    "named": false
+  },
+  {
+    "type": "site",
+    "named": false
+  },
+  {
+    "type": "snat",
+    "named": false
+  },
+  {
+    "type": "spokes",
+    "named": false
+  },
+  {
+    "type": "sport",
+    "named": false
+  },
+  {
+    "type": "src",
+    "named": false
+  },
+  {
+    "type": "star",
+    "named": false
+  },
+  {
+    "type": "startup-delay",
+    "named": false
+  },
+  {
+    "type": "state",
+    "named": false
+  },
+  {
+    "type": "streams",
+    "named": false
+  },
+  {
+    "type": "string",
+    "named": true
+  },
+  {
+    "type": "subnet",
+    "named": false
+  },
+  {
+    "type": "sysctl",
+    "named": false
+  },
+  {
+    "type": "table",
+    "named": false
+  },
+  {
+    "type": "tagged",
+    "named": false
+  },
+  {
+    "type": "tags",
+    "named": false
+  },
+  {
+    "type": "tcp",
+    "named": false
+  },
+  {
+    "type": "tcp-connect",
+    "named": false
+  },
+  {
+    "type": "timeout",
+    "named": false
+  },
+  {
+    "type": "to",
+    "named": false
+  },
+  {
+    "type": "translate",
+    "named": false
+  },
+  {
+    "type": "type",
+    "named": false
+  },
+  {
+    "type": "udp",
+    "named": false
+  },
+  {
+    "type": "untagged",
+    "named": false
+  },
+  {
+    "type": "up",
+    "named": false
+  },
+  {
+    "type": "validate",
+    "named": false
+  },
+  {
+    "type": "version",
+    "named": false
+  },
+  {
+    "type": "via",
+    "named": false
+  },
+  {
+    "type": "vlan",
+    "named": false
+  },
+  {
+    "type": "vlan-filtering",
+    "named": false
+  },
+  {
+    "type": "vlans",
+    "named": false
+  },
+  {
+    "type": "volumes",
+    "named": false
+  },
+  {
+    "type": "vrf",
+    "named": false
+  },
+  {
+    "type": "vxlan",
+    "named": false
+  },
+  {
+    "type": "wifi",
+    "named": false
+  },
+  {
+    "type": "wireguard",
+    "named": false
+  },
+  {
+    "type": "workdir",
+    "named": false
+  },
+  {
+    "type": "{",
+    "named": false
+  },
+  {
+    "type": "||",
+    "named": false
+  },
+  {
+    "type": "}",
+    "named": false
+  }
+]

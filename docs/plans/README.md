@@ -7,7 +7,8 @@ Implementation plans for nlink-lab.
 | Plan | Description | Effort | Status |
 |------|-------------|--------|--------|
 | [128](128-network-impairment-matrix.md) | Per-pair impairment on shared networks | Medium-Large | Blocked (needs nlink TC filter API) |
-| [129](129-nat-translate.md) | NAT `translate` shorthand | Small | Deferred (for-loop approach sufficient) |
+| [129](129-nat-translate.md) | NAT `translate` shorthand | Small | Done |
+| [130](130-editor-ide-support.md) | Editor/IDE support (tree-sitter + VS Code + Neovim/Helix) | Large | Done |
 
 ## Completed
 

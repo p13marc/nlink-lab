@@ -497,6 +497,71 @@ All examples use the `.nll` format. Use `nlink-lab init --list` to create from t
 - Root or `CAP_NET_ADMIN` capability
 - Rust 1.85+ (edition 2024)
 
+## Editor Support
+
+NLL files (`.nll`) have editor support for syntax highlighting, bracket matching,
+comment toggling, and code folding.
+
+### VS Code
+
+Install the extension from the `editors/vscode-nll/` directory:
+
+```bash
+cd editors/vscode-nll
+code --install-extension .
+```
+
+### Neovim (tree-sitter)
+
+Add to your nvim-treesitter config:
+
+```lua
+local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+parser_config.nll = {
+  install_info = {
+    url = "/path/to/nlink-lab/editors/tree-sitter-nll",
+    files = { "src/parser.c" },
+  },
+  filetype = "nll",
+}
+vim.filetype.add({ extension = { nll = "nll" } })
+```
+
+Then run `:TSInstall nll`. Copy `editors/tree-sitter-nll/queries/highlights.scm`
+to `~/.config/nvim/after/queries/nll/highlights.scm`.
+
+### Helix
+
+Add to `~/.config/helix/languages.toml`:
+
+```toml
+[[language]]
+name = "nll"
+scope = "source.nll"
+file-types = ["nll"]
+comment-token = "#"
+block-comment-tokens = { start = "/*", end = "*/" }
+indent = { tab-width = 2, unit = "  " }
+
+[[grammar]]
+name = "nll"
+source = { path = "/path/to/nlink-lab/editors/tree-sitter-nll" }
+```
+
+Then `hx --grammar fetch && hx --grammar build`. Copy query files to
+`~/.config/helix/runtime/queries/nll/`.
+
+### Zed
+
+Install as a dev extension:
+
+```bash
+ln -s /path/to/nlink-lab/editors/zed-nll ~/.local/share/zed/extensions/installed/nll
+```
+
+Then restart Zed. NLL files will have syntax highlighting, bracket matching,
+comment toggling, and code folding.
+
 ## License
 
 MIT OR Apache-2.0

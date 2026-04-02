@@ -1572,6 +1572,9 @@ async fn apply_nat(
                     Error::deploy_failed(format!("failed to add SNAT rule on '{node_name}': {e}"))
                 })?;
             }
+            crate::types::NatAction::Translate => {
+                unreachable!("translate rules should be expanded during lowering");
+            }
         }
     }
 

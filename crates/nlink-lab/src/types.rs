@@ -648,6 +648,7 @@ pub enum NatAction {
     Masquerade,
     Snat,
     Dnat,
+    Translate,
 }
 
 /// Process to execute in a node.

@@ -1354,10 +1354,23 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     // Capture stdout/stderr to log files
                     let log_dir = state::logs_dir(&topology.lab.name);
                     std::fs::create_dir_all(&log_dir)?;
-                    let cmd_basename = std::path::Path::new(&exec_config.cmd[0])
-                        .file_name()
-                        .and_then(|f| f.to_str())
-                        .unwrap_or("cmd");
+                    // For shell-wrapped commands (sh -c "actual cmd"), extract
+                    // the actual command name for readable log filenames.
+                    let cmd_basename = if exec_config.cmd.len() >= 3
+                        && (exec_config.cmd[0] == "sh" || exec_config.cmd[0] == "/bin/sh")
+                        && exec_config.cmd[1] == "-c"
+                    {
+                        exec_config.cmd[2]
+                            .split_whitespace()
+                            .next()
+                            .and_then(|s| std::path::Path::new(s).file_name()?.to_str())
+                            .unwrap_or("cmd")
+                    } else {
+                        std::path::Path::new(&exec_config.cmd[0])
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or("cmd")
+                    };
                     let stdout_path =
                         log_dir.join(format!("{node_name}-{cmd_basename}-{i}.stdout"));
                     let stderr_path =

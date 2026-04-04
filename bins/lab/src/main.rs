@@ -666,36 +666,48 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let lab = topo.deploy().await?;
             let elapsed = start.elapsed();
 
-            println!(
-                "{} Lab {:?} deployed in {:.0?}",
-                green("OK"),
-                topo.lab.name,
-                elapsed
-            );
-            print_deploy_summary(&topo);
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "name": topo.lab.name,
+                        "nodes": topo.nodes.len(),
+                        "links": topo.links.len(),
+                        "deploy_time_ms": elapsed.as_millis() as u64,
+                    })
+                );
+            } else {
+                println!(
+                    "{} Lab {:?} deployed in {:.0?}",
+                    green("OK"),
+                    topo.lab.name,
+                    elapsed
+                );
+                print_deploy_summary(&topo);
 
-            if !quiet {
-                let first_node = topo
-                    .nodes
-                    .keys()
-                    .next()
-                    .map(|s| s.as_str())
-                    .unwrap_or("node");
-                println!();
-                println!("Next steps:");
-                println!(
-                    "  nlink-lab status {}          # inspect lab",
-                    topo.lab.name
-                );
-                println!(
-                    "  nlink-lab exec {} {} -- ip addr",
-                    topo.lab.name, first_node
-                );
-                println!(
-                    "  nlink-lab shell {} {}        # interactive shell",
-                    topo.lab.name, first_node
-                );
-                println!("  nlink-lab destroy {}         # tear down", topo.lab.name);
+                if !quiet {
+                    let first_node = topo
+                        .nodes
+                        .keys()
+                        .next()
+                        .map(|s| s.as_str())
+                        .unwrap_or("node");
+                    println!();
+                    println!("Next steps:");
+                    println!(
+                        "  nlink-lab status {}          # inspect lab",
+                        topo.lab.name
+                    );
+                    println!(
+                        "  nlink-lab exec {} {} -- ip addr",
+                        topo.lab.name, first_node
+                    );
+                    println!(
+                        "  nlink-lab shell {} {}        # interactive shell",
+                        topo.lab.name, first_node
+                    );
+                    println!("  nlink-lab destroy {}         # tear down", topo.lab.name);
+                }
             }
 
             if daemon {

@@ -1438,8 +1438,30 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
         ast::NodeProp::Sysctl(k, v) => ast::NodeProp::Sysctl(i(k, vars), i(v, vars)),
         ast::NodeProp::Lo(addr) => ast::NodeProp::Lo(i(addr, vars)),
         ast::NodeProp::Route(r) => ast::NodeProp::Route(interpolate_route(r, vars)),
-        ast::NodeProp::Firewall(fw) => ast::NodeProp::Firewall(fw.clone()),
-        ast::NodeProp::Nat(nat) => ast::NodeProp::Nat(nat.clone()),
+        ast::NodeProp::Firewall(fw) => ast::NodeProp::Firewall(ast::FirewallDef {
+            policy: i(&fw.policy, vars),
+            rules: fw
+                .rules
+                .iter()
+                .map(|r| ast::FirewallRuleDef {
+                    match_expr: i(&r.match_expr, vars),
+                    action: i(&r.action, vars),
+                })
+                .collect(),
+        }),
+        ast::NodeProp::Nat(nat) => ast::NodeProp::Nat(ast::NatDef {
+            rules: nat
+                .rules
+                .iter()
+                .map(|r| ast::NatRuleDef {
+                    action: r.action.clone(),
+                    src: r.src.as_ref().map(|s| i(s, vars)),
+                    dst: r.dst.as_ref().map(|s| i(s, vars)),
+                    target: r.target.as_ref().map(|s| i(s, vars)),
+                    target_port: r.target_port,
+                })
+                .collect(),
+        }),
         ast::NodeProp::Vrf(v) => ast::NodeProp::Vrf(interpolate_vrf(v, vars)),
         ast::NodeProp::Wireguard(wg) => ast::NodeProp::Wireguard(interpolate_wg(wg, vars)),
         ast::NodeProp::Vxlan(vx) => ast::NodeProp::Vxlan(interpolate_vxlan(vx, vars)),
@@ -1814,19 +1836,21 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                 );
             }
             ast::NodeProp::Firewall(fw) => {
+                let vars = &ctx.variables;
                 node.firewall = Some(types::FirewallConfig {
-                    policy: Some(fw.policy.clone()),
+                    policy: Some(interpolate(&fw.policy, vars)),
                     rules: fw
                         .rules
                         .iter()
                         .map(|r| types::FirewallRule {
-                            match_expr: Some(r.match_expr.clone()),
-                            action: Some(r.action.clone()),
+                            match_expr: Some(interpolate(&r.match_expr, vars)),
+                            action: Some(interpolate(&r.action, vars)),
                         })
                         .collect(),
                 });
             }
             ast::NodeProp::Nat(nat) => {
+                let vars = &ctx.variables;
                 node.nat = Some(types::NatConfig {
                     rules: nat
                         .rules
@@ -1839,9 +1863,9 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                                 "translate" => types::NatAction::Translate,
                                 _ => types::NatAction::Masquerade,
                             },
-                            src: r.src.clone(),
-                            dst: r.dst.clone(),
-                            target: r.target.clone(),
+                            src: r.src.as_ref().map(|s| interpolate(s, vars)),
+                            dst: r.dst.as_ref().map(|s| interpolate(s, vars)),
+                            target: r.target.as_ref().map(|s| interpolate(s, vars)),
                             target_port: r.target_port,
                         })
                         .collect(),
@@ -1974,6 +1998,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                                 );
                             }
                             ast::NodeProp::Nat(nat) => {
+                                let vars = &ctx.variables;
                                 node.nat = Some(types::NatConfig {
                                     rules: nat
                                         .rules
@@ -1985,9 +2010,9 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                                                 "dnat" => types::NatAction::Dnat,
                                                 _ => types::NatAction::Masquerade,
                                             },
-                                            src: r.src.clone(),
-                                            dst: r.dst.clone(),
-                                            target: r.target.clone(),
+                                            src: r.src.as_ref().map(|s| interpolate(s, vars)),
+                                            dst: r.dst.as_ref().map(|s| interpolate(s, vars)),
+                                            target: r.target.as_ref().map(|s| interpolate(s, vars)),
                                             target_port: r.target_port,
                                         })
                                         .collect(),

@@ -311,8 +311,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             let mgmt_iface = "mgmt0";
-            // Peer name in root ns: nm{node_name}, truncated to 15 chars
-            let peer_name = format!("nm{}", &node_name[..node_name.len().min(13)]);
+            // Peer name in root ns: nm{lab_prefix_short}{idx}
+            // Uses lab prefix + index to avoid collision between labs with same node names.
+            let lab_short = &topology.lab.prefix()[..topology.lab.prefix().len().min(10)];
+            let peer_name = format!("nm{lab_short}{idx}");
             let peer_name = if peer_name.len() > 15 {
                 peer_name[..15].to_string()
             } else {

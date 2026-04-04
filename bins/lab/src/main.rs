@@ -2414,8 +2414,28 @@ async fn force_cleanup(name: &str) {
         }
     }
 
+    // Clean up root-namespace mgmt veth peers (nm{name}* pattern)
+    // Must delete veths BEFORE the bridge, in case some are orphaned (not attached).
+    let veth_prefix = format!("nm{name}");
+    if let Ok(output) = std::process::Command::new("ip")
+        .args(["-o", "link", "show"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if let Some(ifname) = line.split(':').nth(1).map(|s| s.trim()) {
+                let ifname = ifname.split('@').next().unwrap_or(ifname);
+                if ifname.starts_with(&veth_prefix) {
+                    let _ = std::process::Command::new("ip")
+                        .args(["link", "delete", ifname])
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                }
+            }
+        }
+    }
+
     // Clean up root-namespace management bridge (nlab-{name})
-    // Deleting the bridge also removes all attached veth peers.
     let bridge_name = format!("nlab-{name}");
     let bridge_name = if bridge_name.len() > 15 {
         bridge_name[..15].to_string()

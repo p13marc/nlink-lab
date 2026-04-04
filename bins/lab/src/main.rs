@@ -2414,6 +2414,24 @@ async fn force_cleanup(name: &str) {
         }
     }
 
+    // Clean up root-namespace management bridge (nlab-{name})
+    // Deleting the bridge also removes all attached veth peers.
+    let bridge_name = format!("nlab-{name}");
+    let bridge_name = if bridge_name.len() > 15 {
+        bridge_name[..15].to_string()
+    } else {
+        bridge_name
+    };
+    let result = std::process::Command::new("ip")
+        .args(["link", "delete", &bridge_name])
+        .stderr(std::process::Stdio::null())
+        .status();
+    if let Ok(s) = result
+        && s.success()
+    {
+        eprintln!("  deleted mgmt bridge '{bridge_name}'");
+    }
+
     // Also clean up state directory
     let _ = nlink_lab::state::remove(name);
 }

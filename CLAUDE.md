@@ -53,8 +53,9 @@ sudo nlink-lab spawn simple server -- /usr/bin/my-service --port 8080
 # Wait for a service to be ready
 sudo nlink-lab wait-for simple server --tcp 127.0.0.1:8080 --timeout 30
 
-# Show node IP addresses
+# Show node IP addresses (including mgmt0 for host-reachable labs)
 nlink-lab ip simple server --iface eth0
+nlink-lab ip simple server --iface mgmt0
 
 # Show running labs
 nlink-lab status
@@ -62,7 +63,7 @@ nlink-lab status
 # Expand loops/variables and print flat NLL
 nlink-lab render examples/spine-leaf.nll
 
-# Show process logs
+# Show process logs (captured automatically for all background processes)
 nlink-lab logs simple --pid 12345
 nlink-lab logs simple --pid 12345 --stderr --tail 50
 ```
@@ -226,7 +227,7 @@ The deployer executes these steps in order:
 14. Apply TC qdiscs/impairments per interface
 15. Apply rate limits
 15b. Inject /etc/hosts entries (if `dns hosts`)
-16. Spawn background processes (topo-sorted by depends_on, with healthcheck polling)
+16. Spawn background processes (topo-sorted by depends_on, with healthcheck polling, stdout/stderr captured to log files)
 17. Run validation (connectivity checks, tcp-connect with retries)
 18. Write state file
 ```

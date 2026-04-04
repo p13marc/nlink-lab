@@ -599,7 +599,9 @@ sudo nlink-lab wait-for mylab server --exec "curl -sf http://localhost:8080/heal
 sudo nlink-lab wait-for mylab server --file /var/run/service.pid
 ```
 
-Use `--log-dir` on spawn to capture stdout/stderr:
+All background processes (both `run background` in NLL and `nlink-lab spawn`)
+automatically capture stdout/stderr to log files. Use `--log-dir` to override
+the default location:
 
 ```bash
 sudo nlink-lab spawn mylab server --log-dir /tmp/logs -- my-service
@@ -625,6 +627,7 @@ Query node addresses without parsing topology JSON:
 nlink-lab ip mylab server                      # all interfaces
 nlink-lab ip mylab server --iface eth0         # bare IP (10.0.0.1)
 nlink-lab ip mylab server --iface eth0 --cidr  # with prefix (10.0.0.1/24)
+nlink-lab ip mylab server --iface mgmt0        # management IP (host-reachable)
 nlink-lab ip --json mylab server               # JSON output
 ```
 

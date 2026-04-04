@@ -440,8 +440,9 @@ sudo nlink-lab wait-for my-lab server --tcp 127.0.0.1:8080 --timeout 30
 # Run client against the service
 sudo nlink-lab exec --json my-lab client -- curl http://172.20.0.2:8080/health
 
-# Query node IPs dynamically
+# Query node IPs dynamically (including mgmt0 for host-reachable labs)
 ADDR=$(nlink-lab ip my-lab server --iface eth0)
+MGMT=$(nlink-lab ip my-lab server --iface mgmt0)
 
 # Simulate network partitions
 sudo nlink-lab impair my-lab router:wan0 --partition
@@ -451,7 +452,7 @@ sudo nlink-lab impair my-lab router:wan0 --heal
 # Asymmetric impairments (satellite/mobile simulation)
 sudo nlink-lab impair my-lab router:wan0 --out-delay 50ms --in-delay 200ms
 
-# Check process logs on failure
+# Check process logs on failure (captured automatically for all background processes)
 nlink-lab logs my-lab --pid 12345 --tail 50
 
 # Parameterize topologies for different test scenarios

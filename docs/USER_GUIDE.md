@@ -599,6 +599,9 @@ sudo nlink-lab spawn mylab server -- /usr/bin/my-service --port 8080
 
 # Wait for TCP port to accept connections
 sudo nlink-lab wait-for mylab server --tcp 127.0.0.1:8080 --timeout 30
+# Port-only shorthand resolves to 127.0.0.1 inside the namespace
+# Use the full IP if the service binds to a specific interface address
+sudo nlink-lab wait-for mylab server --tcp 8080 --timeout 30
 
 # Wait for a command to succeed
 sudo nlink-lab wait-for mylab server --exec "curl -sf http://localhost:8080/health"
@@ -608,8 +611,12 @@ sudo nlink-lab wait-for mylab server --file /var/run/service.pid
 ```
 
 All background processes (both `run background` in NLL and `nlink-lab spawn`)
-automatically capture stdout/stderr to log files. Use `--log-dir` to override
-the default location:
+automatically capture stdout/stderr to log files.
+
+**Default log location:** `~/.local/state/nlink-lab/labs/{lab}/logs/`
+**File naming:** `{node}-{command}-{pid}.stdout` and `.stderr`
+
+Use `--log-dir` to override the default location:
 
 ```bash
 sudo nlink-lab spawn mylab server --log-dir /tmp/logs -- my-service
@@ -617,6 +624,8 @@ nlink-lab logs mylab --pid 12345                # view stdout
 nlink-lab logs mylab --pid 12345 --stderr       # view stderr
 nlink-lab logs mylab --pid 12345 --tail 50      # last 50 lines
 ```
+
+Log paths are also included in `nlink-lab ps --json` output (`stdout_log`, `stderr_log` fields).
 
 ### Exec with JSON Output
 
@@ -657,6 +666,12 @@ sudo nlink-lab impair mylab router:wan0 --partition  # 100% loss, saves baseline
 # ... test failure detection ...
 sudo nlink-lab impair mylab router:wan0 --heal       # restores original impairments
 ```
+
+**Semantics:**
+- `--partition` saves the current netem config for the endpoint to the state file, then replaces it with 100% packet loss
+- `--heal` restores the saved config (e.g., original `delay 50ms` from the NLL file). If no impairment existed before partition, heal clears the qdisc entirely
+- Double partition is a no-op — the original saved config is preserved, not overwritten
+- Partition/heal operates on a single endpoint (unidirectional). For bidirectional partition, call it on both endpoints
 
 ### CLI Parameter Passing
 

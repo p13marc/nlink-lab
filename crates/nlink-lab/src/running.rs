@@ -56,6 +56,12 @@ pub struct ProcessInfo {
     pub pid: u32,
     /// Whether the process is still alive.
     pub alive: bool,
+    /// Path to stdout log file (if captured).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdout_log: Option<String>,
+    /// Path to stderr log file (if captured).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr_log: Option<String>,
 }
 
 /// Diagnostic results for a single node.
@@ -345,6 +351,29 @@ impl RunningLab {
                         .entry(iface_name.clone())
                         .or_default()
                         .push(addr.clone());
+                }
+            }
+        }
+
+        // From network bridge port addresses (subnet auto-allocation)
+        for network in self.topology.networks.values() {
+            for member in &network.members {
+                if let Some(ep) = EndpointRef::parse(member)
+                    && ep.node == node
+                {
+                    // Port keys can be either "node:iface" or "node"
+                    let port = network
+                        .ports
+                        .get(member)
+                        .or_else(|| network.ports.get(&ep.node));
+                    if let Some(port) = port {
+                        for addr in &port.addresses {
+                            addrs
+                                .entry(ep.iface.to_string())
+                                .or_default()
+                                .push(addr.clone());
+                        }
+                    }
                 }
             }
         }
@@ -715,10 +744,13 @@ impl RunningLab {
             .iter()
             .map(|(node, pid)| {
                 let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
+                let logs = self.process_logs.get(pid);
                 ProcessInfo {
                     node: node.clone(),
                     pid: *pid,
                     alive,
+                    stdout_log: logs.map(|(s, _)| s.clone()),
+                    stderr_log: logs.map(|(_, s)| s.clone()),
                 }
             })
             .collect()

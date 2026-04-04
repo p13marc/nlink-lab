@@ -88,6 +88,14 @@ enum Commands {
         /// Set NLL parameters (can be repeated: --set key=value).
         #[arg(long = "set", value_name = "KEY=VALUE")]
         params: Vec<String>,
+
+        /// Append suffix to lab name (for parallel test safety).
+        #[arg(long)]
+        suffix: Option<String>,
+
+        /// Auto-generate unique lab name suffix (appends PID).
+        #[arg(long)]
+        unique: bool,
     },
 
     /// Apply topology changes to a running lab.
@@ -158,6 +166,10 @@ enum Commands {
         /// Set NLL parameters (can be repeated: --set key=value).
         #[arg(long = "set", value_name = "KEY=VALUE")]
         params: Vec<String>,
+
+        /// Show resolved IP addresses for all interfaces.
+        #[arg(long)]
+        show_ips: bool,
     },
 
     /// Run topology tests: deploy, validate, destroy.
@@ -609,8 +621,15 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             daemon,
             skip_validate,
             params,
+            suffix,
+            unique,
         } => {
             let mut topo = parse_topology(&topology, &params)?;
+            if unique {
+                topo.lab.name = format!("{}-{}", topo.lab.name, std::process::id());
+            } else if let Some(ref sfx) = suffix {
+                topo.lab.name = format!("{}-{sfx}", topo.lab.name);
+            }
             if skip_validate {
                 topo.assertions.clear();
             }
@@ -787,6 +806,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     force_cleanup(&name).await;
                     println!("Lab {name:?} force-cleaned");
                 }
+                Err(nlink_lab::Error::NotFound { .. }) => {
+                    // Idempotent: destroying a non-existent lab is a no-op
+                }
                 Err(e) => return Err(e),
             }
             Ok(())
@@ -844,8 +866,46 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
         Commands::Exec { lab, node, cmd } => {
             check_root();
+
+            if cli.json {
+                // In JSON mode, wrap ALL errors as JSON output
+                let result = (|| -> nlink_lab::Result<serde_json::Value> {
+                    let running = nlink_lab::RunningLab::load(&lab)?;
+                    let node_names: Vec<&str> = running.node_names().collect();
+                    if !node_names.contains(&node.as_str()) {
+                        return Err(nlink_lab::Error::NodeNotFound { name: node.clone() });
+                    }
+                    let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
+                    let start = Instant::now();
+                    let output = running.exec(&node, &cmd[0], &args)?;
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    Ok(serde_json::json!({
+                        "exit_code": output.exit_code,
+                        "stdout": output.stdout,
+                        "stderr": output.stderr,
+                        "duration_ms": duration_ms,
+                    }))
+                })();
+                match result {
+                    Ok(json) => println!("{json}"),
+                    Err(e) => {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "error": e.to_string(),
+                                "exit_code": null,
+                                "stdout": "",
+                                "stderr": "",
+                                "duration_ms": 0,
+                            })
+                        );
+                    }
+                }
+                return Ok(());
+            }
+
+            // Non-JSON path
             let running = nlink_lab::RunningLab::load(&lab)?;
-            // Validate node exists
             let node_names: Vec<&str> = running.node_names().collect();
             if !node_names.contains(&node.as_str()) {
                 eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
@@ -853,28 +913,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
-            let start = Instant::now();
             let output = running.exec(&node, &cmd[0], &args)?;
-            let duration_ms = start.elapsed().as_millis() as u64;
-
-            if cli.json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "exit_code": output.exit_code,
-                        "stdout": output.stdout,
-                        "stderr": output.stderr,
-                        "duration_ms": duration_ms,
-                    })
-                );
-            } else {
-                print!("{}", output.stdout);
-                if !output.stderr.is_empty() {
-                    eprint!("{}", output.stderr);
-                }
-                if output.exit_code != 0 {
-                    std::process::exit(output.exit_code);
-                }
+            print!("{}", output.stdout);
+            if !output.stderr.is_empty() {
+                eprint!("{}", output.stderr);
+            }
+            if output.exit_code != 0 {
+                std::process::exit(output.exit_code);
             }
             Ok(())
         }
@@ -913,7 +958,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Validate { topology, params } => {
+        Commands::Validate {
+            topology,
+            params,
+            show_ips,
+        } => {
             let topo = parse_topology(&topology, &params)?;
             let result = topo.validate();
 
@@ -931,6 +980,46 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             println!("Topology {:?} is valid", topo.lab.name);
             print_topology_summary(&topo);
+
+            if show_ips {
+                println!("\n  Addresses:");
+                // From links
+                for link in &topo.links {
+                    if let Some(ref addrs) = link.addresses {
+                        for (i, ep_str) in link.endpoints.iter().enumerate() {
+                            println!("    {:<24} {} (link)", ep_str, addrs[i]);
+                        }
+                    }
+                }
+                // From network ports
+                for (net_name, network) in &topo.networks {
+                    for member in &network.members {
+                        if let Some(ep) = nlink_lab::EndpointRef::parse(member) {
+                            // Port keys can be either "node:iface" or "node"
+                            let port = network
+                                .ports
+                                .get(member)
+                                .or_else(|| network.ports.get(&ep.node));
+                            if let Some(port) = port {
+                                for addr in &port.addresses {
+                                    println!(
+                                        "    {:<24} {} (network {:?})",
+                                        member, addr, net_name
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                // From node interfaces (loopback, etc.)
+                for (name, node) in &topo.nodes {
+                    for (iface, cfg) in &node.interfaces {
+                        for addr in &cfg.addresses {
+                            println!("    {name}:{iface:<18} {addr} (interface)");
+                        }
+                    }
+                }
+            }
             Ok(())
         }
 

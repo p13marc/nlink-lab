@@ -349,6 +349,26 @@ impl RunningLab {
             }
         }
 
+        // From host-reachable management network (mgmt0)
+        if self.topology.lab.mgmt_host_reachable
+            && let Some(ref mgmt_subnet) = self.topology.lab.mgmt_subnet
+            && let Ok((base_ip, prefix)) = crate::helpers::parse_cidr(mgmt_subnet)
+            && let std::net::IpAddr::V4(base_v4) = base_ip
+        {
+            let base_u32 = u32::from(base_v4);
+            // Nodes get .2, .3, ... in sorted order (same as deploy)
+            let mut sorted_nodes: Vec<&str> =
+                self.namespace_names.keys().map(|s| s.as_str()).collect();
+            sorted_nodes.sort();
+            if let Some(idx) = sorted_nodes.iter().position(|&n| n == node) {
+                let node_ip = std::net::Ipv4Addr::from(base_u32 + 2 + idx as u32);
+                addrs
+                    .entry("mgmt0".to_string())
+                    .or_default()
+                    .push(format!("{node_ip}/{prefix}"));
+            }
+        }
+
         Ok(addrs)
     }
 

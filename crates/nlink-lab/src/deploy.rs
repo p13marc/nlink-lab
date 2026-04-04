@@ -118,6 +118,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     let mut namespace_names: HashMap<String, String> = HashMap::new();
     let mut container_states: HashMap<String, ContainerState> = HashMap::new();
     let mut pids: Vec<(String, u32)> = Vec::new();
+    let mut process_logs: HashMap<u32, (String, String)> = HashMap::new();
 
     // Detect container runtime if any node uses an image
     let has_container_nodes = topology.nodes.values().any(|n| n.image.is_some());
@@ -1350,12 +1351,44 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 cmd.args(&exec_config.cmd[1..]);
 
                 if exec_config.background {
+                    // Capture stdout/stderr to log files
+                    let log_dir = state::logs_dir(&topology.lab.name);
+                    std::fs::create_dir_all(&log_dir)?;
+                    let cmd_basename = std::path::Path::new(&exec_config.cmd[0])
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .unwrap_or("cmd");
+                    let stdout_path =
+                        log_dir.join(format!("{node_name}-{cmd_basename}-{i}.stdout"));
+                    let stderr_path =
+                        log_dir.join(format!("{node_name}-{cmd_basename}-{i}.stderr"));
+                    let stdout_file = std::fs::File::create(&stdout_path)?;
+                    let stderr_file = std::fs::File::create(&stderr_path)?;
+                    cmd.stdout(stdout_file);
+                    cmd.stderr(stderr_file);
+
                     let child = node_handle.spawn(cmd).map_err(|e| {
                         Error::deploy_failed(format!(
                             "failed to spawn background process on '{node_name}' exec[{i}]: {e}"
                         ))
                     })?;
-                    pids.push((node_name.clone(), child.id()));
+                    let pid = child.id();
+                    pids.push((node_name.clone(), pid));
+
+                    // Rename log files to include actual PID
+                    let final_stdout =
+                        log_dir.join(format!("{node_name}-{cmd_basename}-{pid}.stdout"));
+                    let final_stderr =
+                        log_dir.join(format!("{node_name}-{cmd_basename}-{pid}.stderr"));
+                    let _ = std::fs::rename(&stdout_path, &final_stdout);
+                    let _ = std::fs::rename(&stderr_path, &final_stderr);
+                    process_logs.insert(
+                        pid,
+                        (
+                            final_stdout.to_string_lossy().to_string(),
+                            final_stderr.to_string_lossy().to_string(),
+                        ),
+                    );
                 } else {
                     let output = node_handle.spawn_output(cmd).map_err(|e| {
                         Error::deploy_failed(format!(
@@ -1518,7 +1551,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         dns_injected,
         wifi_loaded,
         saved_impairments: HashMap::new(),
-        process_logs: HashMap::new(),
+        process_logs: process_logs.clone(),
     };
     state::save(&lab_state, topology)?;
 

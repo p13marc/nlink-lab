@@ -658,21 +658,29 @@ impl RunningLab {
             }
         }
 
-        // 3. Delete namespaces
+        // 3. Delete root-namespace mgmt bridge + veth peers explicitly.
+        // We must delete each veth peer individually — bridge cascade doesn't
+        // reliably remove veths whose peers are in active namespaces.
+        if self.topology.lab.mgmt_host_reachable {
+            if let Ok(root_conn) = Connection::<Route>::new() {
+                let mut sorted_nodes: Vec<&str> =
+                    self.namespace_names.keys().map(|s| s.as_str()).collect();
+                sorted_nodes.sort();
+                for (idx, _) in sorted_nodes.iter().enumerate() {
+                    let peer = self.topology.lab.mgmt_peer_name(idx);
+                    let _ = root_conn.del_link(&peer).await;
+                }
+                let bridge_name = self.topology.lab.mgmt_bridge_name();
+                let _ = root_conn.del_link(&bridge_name).await;
+            }
+        }
+
+        // 4. Delete namespaces
         for ns_name in self.namespace_names.values() {
             if namespace::exists(ns_name)
                 && let Err(e) = namespace::delete(ns_name)
             {
                 tracing::warn!("failed to delete namespace '{ns_name}': {e}");
-            }
-        }
-
-        // 4a. Delete root-namespace management bridge if host-reachable
-        // Deleting the bridge also removes all attached veth peers.
-        if self.topology.lab.mgmt_host_reachable {
-            let bridge_name = self.topology.lab.mgmt_bridge_name();
-            if let Ok(root_conn) = Connection::<Route>::new() {
-                let _ = root_conn.del_link(&bridge_name).await;
             }
         }
 

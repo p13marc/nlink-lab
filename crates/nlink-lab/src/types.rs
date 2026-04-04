@@ -292,8 +292,8 @@ impl LabConfig {
     /// Root-namespace management veth peer name for a node at the given index.
     pub fn mgmt_peer_name(&self, idx: usize) -> String {
         let h = self.name_hash();
-        // nm{hash_6chars}{idx} — fits 15 chars for idx up to 99999
-        format!("nm{}{idx}", &h[..6])
+        // nm{hash_8chars}{idx} — fits 15 chars for idx up to 99999
+        format!("nm{h}{idx}")
     }
 }
 

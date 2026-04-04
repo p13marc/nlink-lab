@@ -2504,9 +2504,31 @@ async fn force_cleanup(name: &str) {
         }
     }
 
-    // Clean up root-namespace management bridge and attached veths.
-    // Uses the same hash-based naming as deploy.
+    // Clean up root-namespace mgmt veth peers first (may be orphaned if bridge
+    // was already deleted or namespaces were deleted before the bridge).
+    // Veth peers are named nm{hash6}{idx} where hash is from mgmt_bridge_name.
     let bridge_name = nlink_lab::mgmt_bridge_name_for(name);
+    // Veth peers are named nm{hash8}{idx} — same hash as bridge (strip "nl" prefix)
+    let veth_prefix = format!("nm{}", &bridge_name[2..]);
+    if let Ok(output) = std::process::Command::new("ip")
+        .args(["-o", "link", "show"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if let Some(ifname) = line.split(':').nth(1).map(|s| s.trim()) {
+                let ifname = ifname.split('@').next().unwrap_or(ifname);
+                if ifname.starts_with(veth_prefix.as_str()) {
+                    let _ = std::process::Command::new("ip")
+                        .args(["link", "delete", ifname])
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                }
+            }
+        }
+    }
+
+    // Clean up root-namespace management bridge.
     let result = std::process::Command::new("ip")
         .args(["link", "delete", &bridge_name])
         .stderr(std::process::Stdio::null())

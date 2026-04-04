@@ -35,17 +35,36 @@ nlink-lab validate examples/simple.nll
 # Deploy a lab (requires root)
 sudo nlink-lab deploy examples/simple.nll
 
+# Deploy with CLI parameters
+sudo nlink-lab deploy topology.nll --set wan_delay=50ms --set wan_loss=0.1%
+
 # Destroy a lab
 sudo nlink-lab destroy simple
 
 # Execute in a lab node
 sudo nlink-lab exec simple router -- ip addr
 
+# Execute with JSON output (exit_code, stdout, stderr, duration_ms)
+sudo nlink-lab exec --json simple router -- ip addr
+
+# Spawn a background process (tracked by ps/kill)
+sudo nlink-lab spawn simple server -- /usr/bin/my-service --port 8080
+
+# Wait for a service to be ready
+sudo nlink-lab wait-for simple server --tcp 127.0.0.1:8080 --timeout 30
+
+# Show node IP addresses
+nlink-lab ip simple server --iface eth0
+
 # Show running labs
 nlink-lab status
 
 # Expand loops/variables and print flat NLL
 nlink-lab render examples/spine-leaf.nll
+
+# Show process logs
+nlink-lab logs simple --pid 12345
+nlink-lab logs simple --pid 12345 --stderr --tail 50
 ```
 
 ## Architecture
@@ -144,11 +163,13 @@ route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
 capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
-(`validate { reach a b }`), management network (`mgmt` in lab block),
+(`validate { reach a b }`), management network (`mgmt` in lab block,
+with optional `host-reachable` for root-namespace bridge),
 DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
 macvlan/ipvlan (attach nodes to host physical interfaces),
-rich validation assertions (`tcp-connect`, `latency-under`, `route-has`,
-`dns-resolves`), timed scenarios for fault injection (`scenario` block
+rich validation assertions (`tcp-connect` with `retries`/`interval`,
+`latency-under`, `route-has`, `dns-resolves`),
+timed scenarios for fault injection (`scenario` block
 with `at`, `down`, `up`, `clear`, `validate`), performance benchmarks
 (`benchmark` block with `ping`/`iperf3` and `assert` thresholds),
 Wi-Fi emulation (`wifi` block with `mode ap`/`station`/`mesh`,
@@ -159,19 +180,25 @@ conditional logic (`if` blocks with `==`/`!=`/`<`/`>`/`&&`/`||`),
 (`lo pool name`), auto-routing (`routing auto` computes static routes
 from topology graph), fleet `for_each` imports (instantiate templates
 N times), glob patterns in network members (`*-black:fo`),
+`param` declarations with CLI `--set` for parameterized topologies,
 and network (bridge) blocks.
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (29 total): `deploy`, `destroy` (with `--all`), `apply`,
-`status`, `exec`, `shell` (interactive TTY), `validate`, `test`
+CLI commands (32 total): `deploy` (with `--set`), `destroy` (with `--all`), `apply`,
+`status`, `exec` (`--json`), `spawn` (`--log-dir`),
+`shell` (interactive TTY), `validate` (with `--set`), `test`
 (`--junit`, `--tap`, `--fail-fast`), `render`
-(`--json`, `--dot`, `--ascii`), `inspect` (combined view), `impair`,
-`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`, `wait`,
+(`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),
+`impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
+`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`,
+`wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
+`ip` (`--iface`, `--cidr`),
 `ps`, `kill`, `init`, `completions`, `daemon`, `metrics`,
-`containers`, `logs` (`--follow`, `--tail`), `pull`, `stats`, `restart`.
+`containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
+`pull`, `stats`, `restart`.
 
 Global flags: `--json`, `--verbose`, `--quiet`, `--skip-validate`.
 
@@ -185,6 +212,7 @@ The deployer executes these steps in order:
  1. Parse topology file → Topology
  2. Validate (bail on errors)
  3. Create namespaces
+ 3d. Create host-reachable mgmt bridge (if `mgmt ... host-reachable`)
  4. Create bridge networks (if any)
  5. Create veth pairs spanning namespaces
  6. Create additional interfaces (vxlan, bond, vlan, wireguard)
@@ -198,8 +226,8 @@ The deployer executes these steps in order:
 14. Apply TC qdiscs/impairments per interface
 15. Apply rate limits
 15b. Inject /etc/hosts entries (if `dns hosts`)
-16. Spawn background processes
-17. Run validation (connectivity checks)
+16. Spawn background processes (topo-sorted by depends_on, with healthcheck polling)
+17. Run validation (connectivity checks, tcp-connect with retries)
 18. Write state file
 ```
 

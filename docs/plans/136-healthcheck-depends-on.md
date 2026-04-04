@@ -1,7 +1,7 @@
 # Plan 136: Health Checks and `depends_on` Enforcement
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Medium (1–2 days)
 **Priority:** P1 — parsed fields are silently ignored, creating a correctness trap
 

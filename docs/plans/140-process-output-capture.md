@@ -1,7 +1,7 @@
 # Plan 140: Process Output Capture
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Medium (1 day)
 **Priority:** P3 — debugging aid for test failures
 

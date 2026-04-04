@@ -1,7 +1,7 @@
 # Plan 133: `wait-for` Port/Service Readiness
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (half day)
 **Priority:** P1 — eliminates flaky sleep-based polling in test scripts
 

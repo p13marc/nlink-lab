@@ -82,7 +82,7 @@ Optional lab properties:
 - `prefix` — namespace prefix (defaults to lab name)
 - `runtime` — container runtime (`"docker"` or `"podman"`)
 - `version`, `author`, `tags` — metadata
-- `mgmt` — management network subnet (auto-creates OOB bridge)
+- `mgmt` — management network subnet (auto-creates OOB bridge); add `host-reachable` to create the bridge in the root namespace for direct host connectivity
 - `dns hosts` — auto-generate `/etc/hosts` entries so nodes can resolve
   each other by name (e.g., `ping server` instead of `ping 10.0.2.2`)
 
@@ -986,7 +986,8 @@ lab_decl       = "lab" STRING ("runtime" STRING)? lab_block?
 lab_block      = "{" lab_prop* "}"
 lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
                | "version" STRING | "author" STRING | "tags" ident_list
-               | "mgmt" CIDR | "dns" ("hosts" | "off")
+               | "mgmt" CIDR ("host-reachable")?
+               | "dns" ("hosts" | "off")
                | "routing" ("auto" | "manual")
 
 statement      = profile | node | link | network
@@ -1077,6 +1078,7 @@ pattern_item   = "node" ident_list | "count" INT | "pool" IDENT
 # ── Assertion ────────────────────────────────────
 assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
                | "tcp-connect" IDENT IDENT INT ("timeout" DURATION)?
+                 ("retries" INT)? ("interval" DURATION)?
                | "latency-under" IDENT IDENT DURATION ("samples" INT)?
                | "route-has" IDENT value ("via" value)? ("dev" IDENT)?
                | "dns-resolves" IDENT value value

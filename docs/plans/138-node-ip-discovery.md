@@ -1,7 +1,7 @@
 # Plan 138: Node IP Discovery CLI
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (2–3 hours)
 **Priority:** P2 — enables dynamic address construction in test scripts
 

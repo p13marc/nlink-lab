@@ -1,7 +1,7 @@
 # Plan 141: `tcp-connect` Validate Assertion with Retry
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (2–3 hours)
 **Priority:** P3 — reduces flaky validate failures on slow service startup
 

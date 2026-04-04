@@ -1,7 +1,7 @@
 # Plan 134: `exec --json` Structured Output
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (2–3 hours)
 **Priority:** P1 — enables clean assertion scripting in test harnesses
 

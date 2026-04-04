@@ -1,7 +1,7 @@
 # Plan 137: Partition/Heal Shortcuts
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (half day)
 **Priority:** P2 — core test pattern for distributed systems
 

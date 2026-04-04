@@ -223,6 +223,7 @@ validate {
     reach host1 host2              # ICMP ping
     no-reach host1 host3           # firewall blocks this path
     tcp-connect client server 80   # TCP port reachable
+    tcp-connect client server 8080 timeout 5s retries 10 interval 1s  # with retry
     latency-under client server 50ms samples 10
     route-has router default via 10.0.0.1
     dns-resolves client "server" "10.0.2.2"
@@ -424,6 +425,51 @@ Tests automatically skip when not running as root.
 
 Run with: `sudo cargo test -p nlink-lab --test integration`
 
+### CLI-Based Integration Testing
+
+For testing external applications (any language), use the CLI:
+
+```bash
+# Deploy with host-reachable management network
+sudo nlink-lab deploy topology.nll
+
+# Spawn services in controlled order
+sudo nlink-lab spawn my-lab server -- /usr/bin/my-service --port 8080
+sudo nlink-lab wait-for my-lab server --tcp 127.0.0.1:8080 --timeout 30
+
+# Run client against the service
+sudo nlink-lab exec --json my-lab client -- curl http://172.20.0.2:8080/health
+
+# Query node IPs dynamically
+ADDR=$(nlink-lab ip my-lab server --iface eth0)
+
+# Simulate network partitions
+sudo nlink-lab impair my-lab router:wan0 --partition
+# ... test failure detection ...
+sudo nlink-lab impair my-lab router:wan0 --heal
+
+# Asymmetric impairments (satellite/mobile simulation)
+sudo nlink-lab impair my-lab router:wan0 --out-delay 50ms --in-delay 200ms
+
+# Check process logs on failure
+nlink-lab logs my-lab --pid 12345 --tail 50
+
+# Parameterize topologies for different test scenarios
+sudo nlink-lab deploy wan.nll --set latency=50ms --set loss=0.1%
+
+# Tear down
+sudo nlink-lab destroy my-lab
+```
+
+Management network with `host-reachable` creates a bridge in the root namespace,
+allowing test processes to connect directly to services inside lab nodes:
+
+```nll
+lab "my-lab" {
+    mgmt 172.20.0.0/24 host-reachable
+}
+```
+
 ## Examples
 
 | Example | Description |
@@ -464,6 +510,7 @@ Run with: `sudo cargo test -p nlink-lab --test integration`
 | `site-grouping` | Multi-site topology with auto name prefixing |
 | `multi-site` | Multi-site infrastructure with NAT, modem links, parametric imports |
 | `management-network` | OOB management bridge with `mgmt` subnet |
+| `integration-testing` | Host-reachable mgmt, healthcheck, depends-on, tcp-connect retry |
 | `imports/base-network` | Reusable base network module |
 
 All examples use the `.nll` format. Use `nlink-lab init --list` to create from templates.

@@ -1,7 +1,7 @@
 # Plan 139: CLI Parameter Passing to NLL
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (half day)
 **Priority:** P2 — reuse one topology across test scenarios
 

@@ -1,7 +1,7 @@
 # Plan 132: `spawn` CLI Command
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (half day)
 **Priority:** P0 — blocks post-deploy service orchestration
 

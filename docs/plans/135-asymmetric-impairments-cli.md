@@ -1,7 +1,7 @@
 # Plan 135: Asymmetric Impairments via CLI
 
 **Date:** 2026-04-04
-**Status:** Pending
+**Status:** Done
 **Effort:** Small (half day)
 **Priority:** P2 — enables satellite/mobile WAN simulation from CLI
 

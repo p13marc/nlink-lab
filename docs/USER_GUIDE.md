@@ -581,6 +581,105 @@ sudo nlink-lab kill mylab <pid>               # kill a specific process
 
 Background processes are those started with `run background [...]` in the topology.
 
+### Spawn and Wait-For
+
+Start services after deployment and wait for readiness:
+
+```bash
+# Spawn a background process (tracked by ps/kill)
+sudo nlink-lab spawn mylab server -- /usr/bin/my-service --port 8080
+
+# Wait for TCP port to accept connections
+sudo nlink-lab wait-for mylab server --tcp 127.0.0.1:8080 --timeout 30
+
+# Wait for a command to succeed
+sudo nlink-lab wait-for mylab server --exec "curl -sf http://localhost:8080/health"
+
+# Wait for a file to exist
+sudo nlink-lab wait-for mylab server --file /var/run/service.pid
+```
+
+Use `--log-dir` on spawn to capture stdout/stderr:
+
+```bash
+sudo nlink-lab spawn mylab server --log-dir /tmp/logs -- my-service
+nlink-lab logs mylab --pid 12345                # view stdout
+nlink-lab logs mylab --pid 12345 --stderr       # view stderr
+nlink-lab logs mylab --pid 12345 --tail 50      # last 50 lines
+```
+
+### Exec with JSON Output
+
+Get structured output from commands:
+
+```bash
+sudo nlink-lab exec --json mylab host -- ping -c1 10.0.0.1
+# {"exit_code": 0, "stdout": "...", "stderr": "", "duration_ms": 1023}
+```
+
+### Node IP Discovery
+
+Query node addresses without parsing topology JSON:
+
+```bash
+nlink-lab ip mylab server                      # all interfaces
+nlink-lab ip mylab server --iface eth0         # bare IP (10.0.0.1)
+nlink-lab ip mylab server --iface eth0 --cidr  # with prefix (10.0.0.1/24)
+nlink-lab ip --json mylab server               # JSON output
+```
+
+### Asymmetric Impairments
+
+Apply different impairments per direction:
+
+```bash
+sudo nlink-lab impair mylab router:wan0 --out-delay 50ms --in-delay 200ms
+sudo nlink-lab impair mylab router:wan0 --out-loss 0% --in-loss 5%
+```
+
+### Partition and Heal
+
+Simulate network partitions with automatic baseline preservation:
+
+```bash
+sudo nlink-lab impair mylab router:wan0 --partition  # 100% loss, saves baseline
+# ... test failure detection ...
+sudo nlink-lab impair mylab router:wan0 --heal       # restores original impairments
+```
+
+### CLI Parameter Passing
+
+Parameterize topologies without separate files per scenario:
+
+```nll
+param wan_delay default 10ms
+param wan_loss default 0%
+
+link a:eth0 -- b:eth0 { delay ${wan_delay} loss ${wan_loss} }
+```
+
+```bash
+nlink-lab deploy topology.nll --set wan_delay=50ms --set wan_loss=0.1%
+nlink-lab validate topology.nll --set wan_delay=100ms
+nlink-lab render topology.nll --set wan_delay=300ms
+```
+
+### Host-Reachable Management Network
+
+Create a management bridge in the root namespace so host processes can reach lab nodes directly:
+
+```nll
+lab "my-lab" {
+    mgmt 172.20.0.0/24 host-reachable
+}
+```
+
+After deploy, the bridge IP is `.1` and nodes get `.2`, `.3`, etc.:
+
+```bash
+curl http://172.20.0.2:8080/health  # connect from host to lab node
+```
+
 ---
 
 ## Templates

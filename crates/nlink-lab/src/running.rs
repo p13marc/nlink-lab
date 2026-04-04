@@ -662,17 +662,18 @@ impl RunningLab {
         // We must delete each veth peer individually — bridge cascade doesn't
         // reliably remove veths whose peers are in active namespaces.
         if self.topology.lab.mgmt_host_reachable
-            && let Ok(root_conn) = Connection::<Route>::new() {
-                let mut sorted_nodes: Vec<&str> =
-                    self.namespace_names.keys().map(|s| s.as_str()).collect();
-                sorted_nodes.sort();
-                for (idx, _) in sorted_nodes.iter().enumerate() {
-                    let peer = self.topology.lab.mgmt_peer_name(idx);
-                    let _ = root_conn.del_link(&peer).await;
-                }
-                let bridge_name = self.topology.lab.mgmt_bridge_name();
-                let _ = root_conn.del_link(&bridge_name).await;
+            && let Ok(root_conn) = Connection::<Route>::new()
+        {
+            let mut sorted_nodes: Vec<&str> =
+                self.namespace_names.keys().map(|s| s.as_str()).collect();
+            sorted_nodes.sort();
+            for (idx, _) in sorted_nodes.iter().enumerate() {
+                let peer = self.topology.lab.mgmt_peer_name(idx);
+                let _ = root_conn.del_link(&peer).await;
             }
+            let bridge_name = self.topology.lab.mgmt_bridge_name();
+            let _ = root_conn.del_link(&bridge_name).await;
+        }
 
         // 4. Delete namespaces
         for ns_name in self.namespace_names.values() {

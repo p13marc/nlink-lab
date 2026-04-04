@@ -82,7 +82,7 @@ pub use running::{ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab};
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,
-    RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig,
+    RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig, mgmt_bridge_name_for,
 };
 pub use validator::{Severity, ValidationIssue, ValidationResult};
 

@@ -269,13 +269,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         };
         let base_u32 = u32::from(base_v4);
 
-        // Bridge name: nlab-{prefix}, truncated to 15 chars
-        let bridge_name = format!("nlab-{}", topology.lab.prefix());
-        let bridge_name = if bridge_name.len() > 15 {
-            bridge_name[..15].to_string()
-        } else {
-            bridge_name
-        };
+        let bridge_name = topology.lab.mgmt_bridge_name();
 
         // Create bridge in root namespace
         let root_conn: Connection<Route> = Connection::<Route>::new()
@@ -311,15 +305,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             let mgmt_iface = "mgmt0";
-            // Peer name in root ns: nm{lab_prefix_short}{idx}
-            // Uses lab prefix + index to avoid collision between labs with same node names.
-            let lab_short = &topology.lab.prefix()[..topology.lab.prefix().len().min(10)];
-            let peer_name = format!("nm{lab_short}{idx}");
-            let peer_name = if peer_name.len() > 15 {
-                peer_name[..15].to_string()
-            } else {
-                peer_name
-            };
+            let peer_name = topology.lab.mgmt_peer_name(idx);
 
             // Create veth pair in root ns, peer goes to node ns
             let veth = nlink::netlink::link::VethLink::new(&peer_name, mgmt_iface)

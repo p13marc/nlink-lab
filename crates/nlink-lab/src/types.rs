@@ -279,6 +279,37 @@ impl LabConfig {
     pub fn prefix(&self) -> &str {
         self.prefix.as_deref().unwrap_or(&self.name)
     }
+
+    fn name_hash(&self) -> String {
+        name_hash_str(&self.name)
+    }
+
+    /// Root-namespace management bridge name: `nl{hash}` (10 chars, always unique).
+    pub fn mgmt_bridge_name(&self) -> String {
+        mgmt_bridge_name_for(&self.name)
+    }
+
+    /// Root-namespace management veth peer name for a node at the given index.
+    pub fn mgmt_peer_name(&self, idx: usize) -> String {
+        let h = self.name_hash();
+        // nm{hash_6chars}{idx} — fits 15 chars for idx up to 99999
+        format!("nm{}{idx}", &h[..6])
+    }
+}
+
+/// DJB2 hash of a string, returned as 8 hex chars.
+fn name_hash_str(name: &str) -> String {
+    let mut hash: u32 = 5381;
+    for b in name.as_bytes() {
+        hash = hash.wrapping_mul(33).wrapping_add(*b as u32);
+    }
+    format!("{hash:08x}")
+}
+
+/// Compute the root-namespace management bridge name for a lab name.
+/// Uses a deterministic hash to avoid 15-char Linux interface name truncation.
+pub fn mgmt_bridge_name_for(lab_name: &str) -> String {
+    format!("nl{}", name_hash_str(lab_name))
 }
 
 /// Reusable node template.

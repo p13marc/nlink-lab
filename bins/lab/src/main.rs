@@ -136,6 +136,10 @@ enum Commands {
         /// Node name.
         node: String,
 
+        /// Set environment variables (can be repeated: --env KEY=VALUE).
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env_vars: Vec<String>,
+
         /// Command and arguments.
         #[arg(trailing_var_arg = true, required = true)]
         cmd: Vec<String>,
@@ -152,6 +156,18 @@ enum Commands {
         /// Directory for stdout/stderr log files (default: lab state dir).
         #[arg(long)]
         log_dir: Option<PathBuf>,
+
+        /// Set environment variables (can be repeated: --env KEY=VALUE).
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env_vars: Vec<String>,
+
+        /// Wait for TCP port after spawn (e.g., "127.0.0.1:8080" or "8080").
+        #[arg(long)]
+        wait_tcp: Option<String>,
+
+        /// Timeout for --wait-tcp in seconds (default: 30).
+        #[arg(long, default_value = "30")]
+        wait_timeout: u64,
 
         /// Command and arguments.
         #[arg(trailing_var_arg = true, required = true)]
@@ -655,9 +671,14 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
 
             // Handle --force: destroy existing lab first
-            if force && nlink_lab::state::exists(&topo.lab.name) {
-                let lab = nlink_lab::RunningLab::load(&topo.lab.name)?;
-                lab.destroy().await?;
+            if force {
+                if nlink_lab::state::exists(&topo.lab.name) {
+                    let lab = nlink_lab::RunningLab::load(&topo.lab.name)?;
+                    lab.destroy().await?;
+                } else {
+                    // Best-effort cleanup of orphaned resources (no state file)
+                    force_cleanup(&topo.lab.name).await;
+                }
             }
 
             check_root();
@@ -847,7 +868,22 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Some(name) => {
                 let lab = nlink_lab::RunningLab::load(&name)?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(lab.topology())?);
+                    let mut output = serde_json::to_value(lab.topology())?;
+                    // Add resolved addresses per node (including mgmt0)
+                    if let Some(nodes) = output.get_mut("nodes")
+                        && let Some(nodes_obj) = nodes.as_object_mut()
+                    {
+                        for node_name in nodes_obj.keys().cloned().collect::<Vec<_>>() {
+                            if let Ok(addrs) = lab.node_addresses(&node_name)
+                                && !addrs.is_empty()
+                                && let Some(n) = nodes_obj.get_mut(&node_name)
+                                && let Some(o) = n.as_object_mut()
+                            {
+                                o.insert("addresses".to_string(), serde_json::json!(addrs));
+                            }
+                        }
+                    }
+                    println!("{}", serde_json::to_string_pretty(&output)?);
                 } else {
                     let topo = lab.topology();
                     println!("Lab: {}", lab.name());
@@ -876,8 +912,22 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
         },
 
-        Commands::Exec { lab, node, cmd } => {
+        Commands::Exec {
+            lab,
+            node,
+            env_vars,
+            cmd,
+        } => {
             check_root();
+            // Prepend env vars to command: env K=V K=V ... cmd args
+            let cmd = if env_vars.is_empty() {
+                cmd
+            } else {
+                let mut full = vec!["env".to_string()];
+                full.extend(env_vars);
+                full.extend(cmd);
+                full
+            };
 
             if cli.json {
                 // In JSON mode, wrap ALL errors as JSON output
@@ -940,9 +990,21 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             lab,
             node,
             log_dir,
+            env_vars,
+            wait_tcp,
+            wait_timeout,
             cmd,
         } => {
             check_root();
+            // Prepend env vars to command
+            let cmd = if env_vars.is_empty() {
+                cmd
+            } else {
+                let mut full = vec!["env".to_string()];
+                full.extend(env_vars);
+                full.extend(cmd);
+                full
+            };
             let mut running = nlink_lab::RunningLab::load(&lab)?;
             // Validate node exists
             let node_names: Vec<&str> = running.node_names().collect();
@@ -967,6 +1029,34 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             } else {
                 println!("PID: {pid}");
             }
+
+            // Wait for TCP port if requested
+            if let Some(ref tcp_addr) = wait_tcp {
+                let timeout = std::time::Duration::from_secs(wait_timeout);
+                let interval = std::time::Duration::from_millis(500);
+                let (ip, port) = if let Some((ip, port_str)) = tcp_addr.rsplit_once(':') {
+                    (
+                        ip.to_string(),
+                        port_str.parse::<u16>().map_err(|e| {
+                            nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
+                        })?,
+                    )
+                } else {
+                    (
+                        "127.0.0.1".to_string(),
+                        tcp_addr.parse::<u16>().map_err(|e| {
+                            nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
+                        })?,
+                    )
+                };
+                running
+                    .wait_for_tcp(&node, &ip, port, timeout, interval)
+                    .await?;
+                if !cli.quiet {
+                    eprintln!("ready");
+                }
+            }
+
             Ok(())
         }
 
@@ -2414,34 +2504,9 @@ async fn force_cleanup(name: &str) {
         }
     }
 
-    // Clean up root-namespace mgmt veth peers (nm{name}* pattern)
-    // Must delete veths BEFORE the bridge, in case some are orphaned (not attached).
-    let veth_prefix = format!("nm{name}");
-    if let Ok(output) = std::process::Command::new("ip")
-        .args(["-o", "link", "show"])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if let Some(ifname) = line.split(':').nth(1).map(|s| s.trim()) {
-                let ifname = ifname.split('@').next().unwrap_or(ifname);
-                if ifname.starts_with(&veth_prefix) {
-                    let _ = std::process::Command::new("ip")
-                        .args(["link", "delete", ifname])
-                        .stderr(std::process::Stdio::null())
-                        .status();
-                }
-            }
-        }
-    }
-
-    // Clean up root-namespace management bridge (nlab-{name})
-    let bridge_name = format!("nlab-{name}");
-    let bridge_name = if bridge_name.len() > 15 {
-        bridge_name[..15].to_string()
-    } else {
-        bridge_name
-    };
+    // Clean up root-namespace management bridge and attached veths.
+    // Uses the same hash-based naming as deploy.
+    let bridge_name = nlink_lab::mgmt_bridge_name_for(name);
     let result = std::process::Command::new("ip")
         .args(["link", "delete", &bridge_name])
         .stderr(std::process::Stdio::null())

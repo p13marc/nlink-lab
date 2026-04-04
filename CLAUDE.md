@@ -194,9 +194,10 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (32 total): `deploy` (with `--set`), `destroy` (with `--all`), `apply`,
-`status`, `exec` (`--json`), `spawn` (`--log-dir`),
-`shell` (interactive TTY), `validate` (with `--set`), `test`
+CLI commands (32 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+`destroy` (with `--all`), `apply`,
+`status`, `exec` (`--json`, `--env`), `spawn` (`--log-dir`, `--env`, `--wait-tcp`),
+`shell` (interactive TTY), `validate` (with `--set`, `--show-ips`), `test`
 (`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),
 `impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),

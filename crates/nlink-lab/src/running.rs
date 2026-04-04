@@ -668,14 +668,9 @@ impl RunningLab {
         }
 
         // 4a. Delete root-namespace management bridge if host-reachable
+        // Deleting the bridge also removes all attached veth peers.
         if self.topology.lab.mgmt_host_reachable {
-            let bridge_name = format!("nlab-{}", self.topology.lab.prefix());
-            let bridge_name = if bridge_name.len() > 15 {
-                bridge_name[..15].to_string()
-            } else {
-                bridge_name
-            };
-            // Deleting the bridge also removes all attached veth peers
+            let bridge_name = self.topology.lab.mgmt_bridge_name();
             if let Ok(root_conn) = Connection::<Route>::new() {
                 let _ = root_conn.del_link(&bridge_name).await;
             }

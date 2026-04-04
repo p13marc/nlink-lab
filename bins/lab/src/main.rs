@@ -81,6 +81,10 @@ enum Commands {
         /// Skip validate block assertions after deploy.
         #[arg(long)]
         skip_validate: bool,
+
+        /// Set NLL parameters (can be repeated: --set key=value).
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
     },
 
     /// Apply topology changes to a running lab.
@@ -126,10 +130,31 @@ enum Commands {
         cmd: Vec<String>,
     },
 
+    /// Spawn a background process in a lab node.
+    Spawn {
+        /// Lab name.
+        lab: String,
+
+        /// Node name.
+        node: String,
+
+        /// Directory for stdout/stderr log files (default: lab state dir).
+        #[arg(long)]
+        log_dir: Option<PathBuf>,
+
+        /// Command and arguments.
+        #[arg(trailing_var_arg = true, required = true)]
+        cmd: Vec<String>,
+    },
+
     /// Validate a topology file without deploying.
     Validate {
         /// Path to the topology file (.nll).
         topology: PathBuf,
+
+        /// Set NLL parameters (can be repeated: --set key=value).
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
     },
 
     /// Run topology tests: deploy, validate, destroy.
@@ -181,6 +206,46 @@ enum Commands {
         /// Remove impairment.
         #[arg(long)]
         clear: bool,
+
+        /// Egress delay (applied to named endpoint).
+        #[arg(long)]
+        out_delay: Option<String>,
+
+        /// Egress jitter.
+        #[arg(long)]
+        out_jitter: Option<String>,
+
+        /// Egress packet loss.
+        #[arg(long)]
+        out_loss: Option<String>,
+
+        /// Egress rate limit.
+        #[arg(long)]
+        out_rate: Option<String>,
+
+        /// Ingress delay (applied to peer endpoint).
+        #[arg(long)]
+        in_delay: Option<String>,
+
+        /// Ingress jitter.
+        #[arg(long)]
+        in_jitter: Option<String>,
+
+        /// Ingress packet loss.
+        #[arg(long)]
+        in_loss: Option<String>,
+
+        /// Ingress rate limit.
+        #[arg(long)]
+        in_rate: Option<String>,
+
+        /// Simulate a network partition (save impairments, apply 100% loss).
+        #[arg(long)]
+        partition: bool,
+
+        /// Restore pre-partition impairments.
+        #[arg(long)]
+        heal: bool,
     },
 
     /// Print topology as DOT graph.
@@ -199,6 +264,10 @@ enum Commands {
         /// Output as ASCII diagram.
         #[arg(long)]
         ascii: bool,
+
+        /// Set NLL parameters (can be repeated: --set key=value).
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
     },
 
     /// Open an interactive shell in a lab node.
@@ -269,6 +338,52 @@ enum Commands {
         timeout: u64,
     },
 
+    /// Wait for a service or condition inside a lab node.
+    WaitFor {
+        /// Lab name.
+        lab: String,
+
+        /// Node name.
+        node: String,
+
+        /// Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost).
+        #[arg(long)]
+        tcp: Option<String>,
+
+        /// Wait for command to succeed (exit 0).
+        #[arg(long = "exec")]
+        exec_cmd: Option<String>,
+
+        /// Wait for file to exist.
+        #[arg(long)]
+        file: Option<String>,
+
+        /// Timeout in seconds (default: 30).
+        #[arg(short, long, default_value = "30")]
+        timeout: u64,
+
+        /// Poll interval in milliseconds (default: 500).
+        #[arg(long, default_value = "500")]
+        interval: u64,
+    },
+
+    /// Show IP addresses assigned to a node.
+    Ip {
+        /// Lab name.
+        lab: String,
+
+        /// Node name.
+        node: String,
+
+        /// Filter by interface name.
+        #[arg(long)]
+        iface: Option<String>,
+
+        /// Show CIDR notation (include prefix length).
+        #[arg(long)]
+        cidr: bool,
+    },
+
     /// Compare two topology files and show differences.
     Diff {
         /// First topology file (or lab name with --lab).
@@ -304,9 +419,15 @@ enum Commands {
     Logs {
         /// Lab name.
         lab: String,
-        /// Node name (must be a container node).
-        node: String,
-        /// Stream logs (tail -f style).
+        /// Node name (for container logs).
+        node: Option<String>,
+        /// Process ID (for background process logs).
+        #[arg(long)]
+        pid: Option<u32>,
+        /// Show stderr instead of stdout (with --pid).
+        #[arg(long)]
+        stderr: bool,
+        /// Stream logs (tail -f style, container only).
         #[arg(long)]
         follow: bool,
         /// Show last N lines.
@@ -449,6 +570,30 @@ fn main() -> ExitCode {
     }
 }
 
+/// Parse a topology file, optionally with CLI `--set` parameters.
+fn parse_topology(
+    path: &std::path::Path,
+    params: &[String],
+) -> nlink_lab::Result<nlink_lab::Topology> {
+    let cli_params: Vec<(String, String)> = params
+        .iter()
+        .map(|p| {
+            let (key, value) = p.split_once('=').ok_or_else(|| {
+                nlink_lab::Error::invalid_topology(format!(
+                    "invalid --set format: '{p}' (expected KEY=VALUE)"
+                ))
+            })?;
+            Ok((key.to_string(), value.to_string()))
+        })
+        .collect::<nlink_lab::Result<Vec<_>>>()?;
+
+    if cli_params.is_empty() {
+        nlink_lab::parser::parse_file(path)
+    } else {
+        nlink_lab::parser::parse_file_with_params(path, &cli_params)
+    }
+}
+
 async fn run(cli: Cli) -> nlink_lab::Result<()> {
     let json = cli.json;
     let quiet = cli.quiet;
@@ -460,8 +605,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             force,
             daemon,
             skip_validate,
+            params,
         } => {
-            let mut topo = nlink_lab::parser::parse_file(&topology)?;
+            let mut topo = parse_topology(&topology, &params)?;
             if skip_validate {
                 topo.assertions.clear();
             }
@@ -704,21 +850,68 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
+            let start = Instant::now();
             let output = running.exec(&node, &cmd[0], &args)?;
+            let duration_ms = start.elapsed().as_millis() as u64;
 
-            print!("{}", output.stdout);
-            if !output.stderr.is_empty() {
-                eprint!("{}", output.stderr);
-            }
-
-            if output.exit_code != 0 {
-                std::process::exit(output.exit_code);
+            if cli.json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "exit_code": output.exit_code,
+                        "stdout": output.stdout,
+                        "stderr": output.stderr,
+                        "duration_ms": duration_ms,
+                    })
+                );
+            } else {
+                print!("{}", output.stdout);
+                if !output.stderr.is_empty() {
+                    eprint!("{}", output.stderr);
+                }
+                if output.exit_code != 0 {
+                    std::process::exit(output.exit_code);
+                }
             }
             Ok(())
         }
 
-        Commands::Validate { topology } => {
-            let topo = nlink_lab::parser::parse_file(&topology)?;
+        Commands::Spawn {
+            lab,
+            node,
+            log_dir,
+            cmd,
+        } => {
+            check_root();
+            let mut running = nlink_lab::RunningLab::load(&lab)?;
+            // Validate node exists
+            let node_names: Vec<&str> = running.node_names().collect();
+            if !node_names.contains(&node.as_str()) {
+                eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
+                eprintln!("Available nodes: {}", node_names.join(", "));
+                std::process::exit(1);
+            }
+            let args: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
+            let pid = running.spawn_with_logs(&node, &args, log_dir.as_deref())?;
+            running.save_state()?;
+
+            if cli.json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "pid": pid,
+                        "node": node,
+                        "command": cmd.join(" "),
+                    })
+                );
+            } else {
+                println!("PID: {pid}");
+            }
+            Ok(())
+        }
+
+        Commands::Validate { topology, params } => {
+            let topo = parse_topology(&topology, &params)?;
             let result = topo.validate();
 
             for w in result.warnings() {
@@ -841,9 +1034,19 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             loss,
             rate,
             clear,
+            out_delay,
+            out_jitter,
+            out_loss,
+            out_rate,
+            in_delay,
+            in_jitter,
+            in_loss,
+            in_rate,
+            partition,
+            heal,
         } => {
             check_root();
-            let running = nlink_lab::RunningLab::load(&lab)?;
+            let mut running = nlink_lab::RunningLab::load(&lab)?;
 
             if show {
                 for node_name in running.node_names() {
@@ -860,19 +1063,69 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 nlink_lab::Error::invalid_topology("endpoint required (use --show to inspect)")
             })?;
 
-            if clear {
+            if partition {
+                running.partition(&endpoint).await?;
+                println!("Partitioned {endpoint}");
+            } else if heal {
+                running.heal(&endpoint).await?;
+                println!("Healed {endpoint}");
+            } else if clear {
                 running.clear_impairment(&endpoint).await?;
                 println!("Cleared impairment on {endpoint}");
             } else {
-                let impairment = nlink_lab::Impairment {
-                    delay,
-                    jitter,
-                    loss,
-                    rate,
-                    ..Default::default()
-                };
-                running.set_impairment(&endpoint, &impairment).await?;
-                println!("Updated impairment on {endpoint}");
+                let has_directional = out_delay.is_some()
+                    || out_jitter.is_some()
+                    || out_loss.is_some()
+                    || out_rate.is_some()
+                    || in_delay.is_some()
+                    || in_jitter.is_some()
+                    || in_loss.is_some()
+                    || in_rate.is_some();
+                let has_symmetric =
+                    delay.is_some() || jitter.is_some() || loss.is_some() || rate.is_some();
+
+                if has_directional && has_symmetric {
+                    return Err(nlink_lab::Error::invalid_topology(
+                        "cannot mix --delay/--loss with --out-delay/--in-delay",
+                    ));
+                }
+
+                if has_directional {
+                    let egress = nlink_lab::Impairment {
+                        delay: out_delay,
+                        jitter: out_jitter,
+                        loss: out_loss,
+                        rate: out_rate,
+                        ..Default::default()
+                    };
+                    let ingress = nlink_lab::Impairment {
+                        delay: in_delay,
+                        jitter: in_jitter,
+                        loss: in_loss,
+                        rate: in_rate,
+                        ..Default::default()
+                    };
+
+                    if egress != nlink_lab::Impairment::default() {
+                        running.set_impairment(&endpoint, &egress).await?;
+                        println!("Updated egress impairment on {endpoint}");
+                    }
+                    if ingress != nlink_lab::Impairment::default() {
+                        let peer = running.peer_endpoint(&endpoint)?;
+                        running.set_impairment(&peer, &ingress).await?;
+                        println!("Updated ingress impairment on {endpoint} (via {peer})");
+                    }
+                } else {
+                    let impairment = nlink_lab::Impairment {
+                        delay,
+                        jitter,
+                        loss,
+                        rate,
+                        ..Default::default()
+                    };
+                    running.set_impairment(&endpoint, &impairment).await?;
+                    println!("Updated impairment on {endpoint}");
+                }
             }
             Ok(())
         }
@@ -887,8 +1140,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             topology,
             dot,
             ascii,
+            params,
         } => {
-            let topo = nlink_lab::parser::parse_file(&topology)?;
+            let topo = parse_topology(&topology, &params)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&topo)?);
             } else if dot {
@@ -1280,6 +1534,104 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
         }
 
+        Commands::WaitFor {
+            lab,
+            node,
+            tcp,
+            exec_cmd,
+            file,
+            timeout,
+            interval,
+        } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let timeout = std::time::Duration::from_secs(timeout);
+            let interval = std::time::Duration::from_millis(interval);
+
+            let result = if let Some(ref tcp_addr) = tcp {
+                let (ip, port) = if let Some((ip, port_str)) = tcp_addr.rsplit_once(':') {
+                    (
+                        ip.to_string(),
+                        port_str.parse::<u16>().map_err(|e| {
+                            nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
+                        })?,
+                    )
+                } else {
+                    (
+                        "127.0.0.1".to_string(),
+                        tcp_addr.parse::<u16>().map_err(|e| {
+                            nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
+                        })?,
+                    )
+                };
+                running
+                    .wait_for_tcp(&node, &ip, port, timeout, interval)
+                    .await
+            } else if let Some(ref cmd) = exec_cmd {
+                running.wait_for_exec(&node, cmd, timeout, interval).await
+            } else if let Some(ref path) = file {
+                running.wait_for_file(&node, path, timeout, interval).await
+            } else {
+                return Err(nlink_lab::Error::invalid_topology(
+                    "one of --tcp, --exec, or --file is required".to_string(),
+                ));
+            };
+
+            match result {
+                Ok(()) => {
+                    if !cli.quiet {
+                        eprintln!("ready");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+            Ok(())
+        }
+
+        Commands::Ip {
+            lab,
+            node,
+            iface,
+            cidr,
+        } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let addrs = running.node_addresses(&node)?;
+
+            if let Some(ref iface_name) = iface {
+                let iface_addrs = addrs.get(iface_name).ok_or_else(|| {
+                    nlink_lab::Error::invalid_topology(format!(
+                        "interface '{iface_name}' not found on node '{node}'"
+                    ))
+                })?;
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&iface_addrs)?);
+                } else if let Some(first) = iface_addrs.first() {
+                    if cidr {
+                        println!("{first}");
+                    } else {
+                        println!("{}", first.split('/').next().unwrap_or(first));
+                    }
+                }
+            } else if json {
+                println!("{}", serde_json::to_string_pretty(&addrs)?);
+            } else {
+                for (iface_name, iface_addrs) in &addrs {
+                    for addr in iface_addrs {
+                        if cidr {
+                            println!("{iface_name}: {addr}");
+                        } else {
+                            println!("{iface_name}: {}", addr.split('/').next().unwrap_or(addr));
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
         Commands::Inspect { lab } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let topo = running.topology();
@@ -1407,10 +1759,38 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Logs {
             lab,
             node,
+            pid,
+            stderr,
             follow,
             tail,
         } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
+
+            // Process logs mode (--pid)
+            if let Some(pid) = pid {
+                let (stdout_path, stderr_path) = running.log_paths(pid).ok_or_else(|| {
+                    nlink_lab::Error::deploy_failed(format!("no log files found for PID {pid}"))
+                })?;
+                let path = if stderr { stderr_path } else { stdout_path };
+                let content = std::fs::read_to_string(path).map_err(|e| {
+                    nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
+                })?;
+                if let Some(n) = tail {
+                    let lines: Vec<&str> = content.lines().collect();
+                    let start = lines.len().saturating_sub(n as usize);
+                    for line in &lines[start..] {
+                        println!("{line}");
+                    }
+                } else {
+                    print!("{content}");
+                }
+                return Ok(());
+            }
+
+            // Container logs mode (node name)
+            let node = node.ok_or_else(|| {
+                nlink_lab::Error::invalid_topology("either a node name or --pid is required")
+            })?;
             let container = running.container_for(&node).ok_or_else(|| {
                 nlink_lab::Error::deploy_failed(format!(
                     "node '{node}' is not a container. Logs are only available for container nodes."
@@ -1833,12 +2213,19 @@ fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
                     to,
                     port,
                     timeout,
+                    retries,
+                    interval,
                 } => {
                     let t = timeout
                         .as_deref()
                         .map(|t| format!(" timeout {t}"))
                         .unwrap_or_default();
-                    out.push_str(&format!("  tcp-connect {from} -> {to}:{port}{t}\n"));
+                    let r = retries.map(|r| format!(" retries {r}")).unwrap_or_default();
+                    let i = interval
+                        .as_deref()
+                        .map(|i| format!(" interval {i}"))
+                        .unwrap_or_default();
+                    out.push_str(&format!("  tcp-connect {from} -> {to}:{port}{t}{r}{i}\n"));
                 }
                 nlink_lab::types::Assertion::LatencyUnder {
                     from,

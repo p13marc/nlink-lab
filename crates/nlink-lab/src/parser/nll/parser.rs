@@ -554,6 +554,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut author = None;
     let mut tags = Vec::new();
     let mut mgmt = None;
+    let mut mgmt_host_reachable = false;
     let mut dns = None;
     let mut routing = None;
 
@@ -582,6 +583,9 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                 tags = parse_ident_list(tokens, pos)?;
             } else if eat_kw(tokens, pos, "mgmt") {
                 mgmt = Some(parse_cidr_or_name(tokens, pos)?);
+                if eat_kw(tokens, pos, "host-reachable") {
+                    mgmt_host_reachable = true;
+                }
             } else if eat_kw(tokens, pos, "dns") {
                 dns = Some(expect_ident(tokens, pos)?);
             } else if eat_kw(tokens, pos, "routing") {
@@ -616,6 +620,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         author,
         tags,
         mgmt,
+        mgmt_host_reachable,
         dns,
         routing,
     })
@@ -2342,11 +2347,23 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
             } else {
                 None
             };
+            let retries = if eat_kw(tokens, pos, "retries") {
+                Some(expect_int(tokens, pos)? as u32)
+            } else {
+                None
+            };
+            let interval = if eat_kw(tokens, pos, "interval") {
+                Some(expect_duration_or_value(tokens, pos)?)
+            } else {
+                None
+            };
             assertions.push(ast::AssertionDef::TcpConnect {
                 from,
                 to,
                 port,
                 timeout,
+                retries,
+                interval,
             });
         } else if eat_kw(tokens, pos, "latency-under") {
             let from = expect_ident(tokens, pos)?;

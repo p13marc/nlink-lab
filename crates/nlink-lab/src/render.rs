@@ -54,7 +54,11 @@ fn render_lab(out: &mut String, lab: &LabConfig) {
             writeln!(out, "  tags [{}]", tags.join(", ")).unwrap();
         }
         if let Some(mgmt) = &lab.mgmt_subnet {
-            writeln!(out, "  mgmt {mgmt}").unwrap();
+            if lab.mgmt_host_reachable {
+                writeln!(out, "  mgmt {mgmt} host-reachable").unwrap();
+            } else {
+                writeln!(out, "  mgmt {mgmt}").unwrap();
+            }
         }
         if lab.dns != DnsMode::Off {
             let mode = match lab.dns {
@@ -457,10 +461,18 @@ fn render_assertions(out: &mut String, topo: &Topology) {
                 to,
                 port,
                 timeout,
+                retries,
+                interval,
             } => {
                 write!(out, "  tcp-connect {from} {to} {port}").unwrap();
                 if let Some(t) = timeout {
                     write!(out, " timeout {t}").unwrap();
+                }
+                if let Some(r) = retries {
+                    write!(out, " retries {r}").unwrap();
+                }
+                if let Some(i) = interval {
+                    write!(out, " interval {i}").unwrap();
                 }
                 out.push('\n');
             }

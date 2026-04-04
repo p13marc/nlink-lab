@@ -39,6 +39,19 @@ pub struct LabState {
     /// Whether mac80211_hwsim was loaded for this lab.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wifi_loaded: bool,
+
+    /// Saved impairments before partition (endpoint → Impairment).
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub saved_impairments: std::collections::HashMap<String, crate::types::Impairment>,
+
+    /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub process_logs: std::collections::HashMap<u32, (String, String)>,
+}
+
+/// Get the logs directory for a specific lab.
+pub fn logs_dir(name: &str) -> PathBuf {
+    state_dir(name).join("logs")
 }
 
 /// Persisted state for a container node.
@@ -241,6 +254,8 @@ mod tests {
             runtime: None,
             dns_injected: false,
             wifi_loaded: false,
+            saved_impairments: HashMap::new(),
+            process_logs: HashMap::new(),
         };
 
         let topology = crate::parser::parse(

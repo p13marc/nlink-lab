@@ -162,6 +162,8 @@ pub enum Assertion {
         to: String,
         port: u16,
         timeout: Option<String>,
+        retries: Option<u32>,
+        interval: Option<String>,
     },
     /// Assert that latency from `from` to `to` is under `max`.
     LatencyUnder {
@@ -250,6 +252,10 @@ pub struct LabConfig {
     /// Management network subnet (auto-creates OOB bridge connecting all nodes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mgmt_subnet: Option<String>,
+
+    /// Whether the management bridge lives in the root namespace (host-reachable).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mgmt_host_reachable: bool,
 
     /// DNS resolution mode.
     #[serde(default, skip_serializing_if = "is_dns_off")]
@@ -562,7 +568,7 @@ pub struct PortConfig {
 }
 
 /// Network impairment configuration (netem).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Impairment {
     /// Delay (e.g., "10ms", "100us").
     pub delay: Option<String>,

@@ -37,6 +37,7 @@ pub struct LabDecl {
     pub author: Option<String>,
     pub tags: Vec<String>,
     pub mgmt: Option<String>,
+    pub mgmt_host_reachable: bool,
     pub dns: Option<String>,
     pub routing: Option<String>,
 }
@@ -142,6 +143,8 @@ pub enum AssertionDef {
         to: String,
         port: u16,
         timeout: Option<String>,
+        retries: Option<u32>,
+        interval: Option<String>,
     },
     LatencyUnder {
         from: String,

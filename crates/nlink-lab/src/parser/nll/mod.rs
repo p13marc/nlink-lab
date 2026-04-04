@@ -36,6 +36,20 @@ pub fn parse_file_with_imports(input: &str, file_path: &Path) -> Result<Topology
     }
 }
 
+/// Parse an NLL string from a file path, with import resolution and CLI parameters.
+///
+/// Parameters are matched against `param` declarations in the top-level file.
+pub fn parse_file_with_params(
+    input: &str,
+    file_path: &Path,
+    params: &[(String, String)],
+) -> Result<Topology> {
+    let tokens = lexer::lex(input)?;
+    let ast = parser::parse_tokens(&tokens, input)?;
+    let base_dir = file_path.parent().unwrap_or(Path::new("."));
+    lower::lower_with_params(&ast, Some(base_dir), params)
+}
+
 /// Parse an NLL string, producing rich diagnostics with source context on error.
 pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
     match parse(input) {

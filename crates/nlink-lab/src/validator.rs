@@ -951,6 +951,62 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
             }
         }
     }
+
+    // Validate depends-on cycle detection (Kahn's algorithm)
+    validate_depends_on_cycle(topology, issues);
+}
+
+/// Detect cycles in depends_on using Kahn's algorithm (BFS-based topological sort).
+fn validate_depends_on_cycle(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    let mut in_degree: HashMap<&str, usize> = HashMap::new();
+    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+
+    for (name, node) in &topology.nodes {
+        in_degree.entry(name.as_str()).or_insert(0);
+        for dep in &node.depends_on {
+            adj.entry(dep.as_str()).or_default().push(name.as_str());
+            *in_degree.entry(name.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    let mut queue: Vec<&str> = in_degree
+        .iter()
+        .filter(|(_, d)| **d == 0)
+        .map(|(n, _)| *n)
+        .collect();
+    let mut visited = 0usize;
+
+    while let Some(n) = queue.pop() {
+        visited += 1;
+        if let Some(dependents) = adj.get(n) {
+            for dep in dependents {
+                if let Some(d) = in_degree.get_mut(dep) {
+                    *d -= 1;
+                    if *d == 0 {
+                        queue.push(dep);
+                    }
+                }
+            }
+        }
+    }
+
+    if visited < topology.nodes.len() {
+        // Find the nodes in the cycle (those with in_degree > 0)
+        let cycle_nodes: Vec<&str> = in_degree
+            .iter()
+            .filter(|(_, d)| **d > 0)
+            .map(|(n, _)| *n)
+            .collect();
+        issues.push(ValidationIssue {
+            severity: Severity::Error,
+            rule: "depends-on-cycle",
+            message: format!(
+                "depends-on cycle detected involving nodes: {}",
+                cycle_nodes.join(", ")
+            ),
+            location: None,
+        });
+    }
 }
 
 #[cfg(test)]

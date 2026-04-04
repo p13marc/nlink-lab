@@ -25,12 +25,84 @@ pub fn lower_with_imports(file: &ast::File, base_dir: &Path) -> Result<types::To
     lower_with_base_dir(file, Some(base_dir), &mut visited)
 }
 
+/// Lower an NLL AST with external CLI parameters.
+///
+/// Parameters are matched against `param` declarations in the top-level file,
+/// using the same resolution mechanism as parametric imports.
+pub fn lower_with_params(
+    file: &ast::File,
+    base_dir: Option<&Path>,
+    cli_params: &[(String, String)],
+) -> Result<types::Topology> {
+    let mut visited = HashSet::new();
+    if let Some(bd) = base_dir
+        && let Ok(canonical) = std::fs::canonicalize(bd)
+    {
+        visited.insert(canonical);
+    }
+    lower_with_base_dir_and_params(file, base_dir, &mut visited, cli_params)
+}
+
 fn lower_with_base_dir(
     file: &ast::File,
     base_dir: Option<&Path>,
     visited: &mut HashSet<std::path::PathBuf>,
 ) -> Result<types::Topology> {
+    lower_with_base_dir_and_params(file, base_dir, visited, &[])
+}
+
+fn lower_with_base_dir_and_params(
+    file: &ast::File,
+    base_dir: Option<&Path>,
+    visited: &mut HashSet<std::path::PathBuf>,
+    cli_params: &[(String, String)],
+) -> Result<types::Topology> {
     let mut ctx = LowerCtx::new();
+
+    // Resolve CLI params: match against param declarations and inject as variables
+    if !cli_params.is_empty() {
+        let module_params: Vec<&ast::ParamDef> = file
+            .statements
+            .iter()
+            .filter_map(|s| match s {
+                ast::Statement::Param(p) => Some(p),
+                _ => None,
+            })
+            .collect();
+
+        for param in &module_params {
+            let value = cli_params
+                .iter()
+                .find(|(k, _)| k == &param.name)
+                .map(|(_, v)| v.clone())
+                .or_else(|| param.default.clone())
+                .ok_or_else(|| {
+                    crate::Error::NllParse(format!(
+                        "required parameter '{}' not provided (use --set {}=<value>)",
+                        param.name, param.name
+                    ))
+                })?;
+            ctx.variables.insert(param.name.clone(), value);
+        }
+
+        // Warn about unknown CLI params
+        for (key, _) in cli_params {
+            if !module_params.iter().any(|p| &p.name == key) {
+                tracing::warn!("unknown parameter '{key}' passed via --set");
+            }
+        }
+    } else {
+        // Without CLI params, check that no required params are missing
+        for stmt in &file.statements {
+            if let ast::Statement::Param(p) = stmt
+                && let Some(ref default) = p.default
+            {
+                ctx.variables.insert(p.name.clone(), default.clone());
+                // If no default and no CLI value, it will fail during interpolation
+                // (unresolved variable) — which gives a decent error message.
+            }
+        }
+    }
 
     // First pass: collect profiles, variables, and defaults
     for stmt in &file.statements {
@@ -130,12 +202,16 @@ fn lower_with_base_dir(
                             to,
                             port,
                             timeout,
+                            retries,
+                            interval,
                         } => {
                             topology.assertions.push(types::Assertion::TcpConnect {
                                 from: from.clone(),
                                 to: to.clone(),
                                 port: *port,
                                 timeout: timeout.clone(),
+                                retries: *retries,
+                                interval: interval.clone(),
                             });
                         }
                         ast::AssertionDef::LatencyUnder {
@@ -1620,6 +1696,7 @@ fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
         author: lab.author.clone(),
         tags: lab.tags.clone(),
         mgmt_subnet: lab.mgmt.clone(),
+        mgmt_host_reachable: lab.mgmt_host_reachable,
         dns: match lab.dns.as_deref() {
             Some("hosts") => types::DnsMode::Hosts,
             _ => types::DnsMode::Off,
@@ -2460,11 +2537,15 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                                 to,
                                 port,
                                 timeout,
+                                retries,
+                                interval,
                             } => types::Assertion::TcpConnect {
                                 from: from.clone(),
                                 to: to.clone(),
                                 port: *port,
                                 timeout: timeout.clone(),
+                                retries: *retries,
+                                interval: interval.clone(),
                             },
                             ast::AssertionDef::LatencyUnder {
                                 from,

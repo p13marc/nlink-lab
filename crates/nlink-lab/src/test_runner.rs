@@ -157,6 +157,8 @@ fn eval_assertion(
             to,
             port,
             timeout,
+            retries,
+            interval,
         } => {
             let desc = format!("tcp-connect {from} {to}:{port}");
             if let Some(ip) = ip_map.get(to) {
@@ -165,11 +167,35 @@ fn eval_assertion(
                     .map(|d| d.as_secs().max(1))
                     .unwrap_or(3);
                 let cmd = format!("timeout {secs} bash -c 'echo > /dev/tcp/{ip}/{port}'");
-                match lab.exec(from, "bash", &["-c", &cmd]) {
-                    Ok(out) if out.exit_code == 0 => (desc, true, None),
-                    Ok(out) => (desc, false, Some(format!("exit code {}", out.exit_code))),
-                    Err(e) => (desc, false, Some(e.to_string())),
+                let max_attempts = retries.unwrap_or(1);
+                let retry_interval = interval
+                    .as_deref()
+                    .and_then(|i| crate::helpers::parse_duration(i).ok())
+                    .unwrap_or(std::time::Duration::from_millis(500));
+
+                let mut result = (desc.clone(), false, None);
+                for attempt in 0..max_attempts {
+                    match lab.exec(from, "bash", &["-c", &cmd]) {
+                        Ok(out) if out.exit_code == 0 => {
+                            result = (desc.clone(), true, None);
+                            break;
+                        }
+                        Ok(out) => {
+                            result = (
+                                desc.clone(),
+                                false,
+                                Some(format!("exit code {}", out.exit_code)),
+                            );
+                        }
+                        Err(e) => {
+                            result = (desc.clone(), false, Some(e.to_string()));
+                        }
+                    }
+                    if attempt + 1 < max_attempts {
+                        std::thread::sleep(retry_interval);
+                    }
                 }
+                result
             } else {
                 (desc, false, Some(format!("no IP found for node '{to}'")))
             }

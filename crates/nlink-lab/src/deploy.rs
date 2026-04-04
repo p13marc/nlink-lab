@@ -257,6 +257,107 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
+    // ── Step 3d: Create host-reachable management bridge ──────────────
+    if topology.lab.mgmt_host_reachable
+        && let Some(ref mgmt_subnet) = topology.lab.mgmt_subnet
+    {
+        tracing::info!("step 3d: creating host-reachable management bridge");
+        let (base_ip, prefix) = parse_cidr(mgmt_subnet)?;
+        let std::net::IpAddr::V4(base_v4) = base_ip else {
+            return Err(Error::deploy_failed("mgmt subnet must be IPv4"));
+        };
+        let base_u32 = u32::from(base_v4);
+
+        // Bridge name: nlab-{prefix}, truncated to 15 chars
+        let bridge_name = format!("nlab-{}", topology.lab.prefix());
+        let bridge_name = if bridge_name.len() > 15 {
+            bridge_name[..15].to_string()
+        } else {
+            bridge_name
+        };
+
+        // Create bridge in root namespace
+        let root_conn: Connection<Route> = Connection::<Route>::new()
+            .map_err(|e| Error::deploy_failed(format!("root connection: {e}")))?;
+
+        let bridge = nlink::netlink::link::BridgeLink::new(&bridge_name);
+        root_conn.add_link(bridge).await.map_err(|e| {
+            Error::deploy_failed(format!("failed to create mgmt bridge '{bridge_name}': {e}"))
+        })?;
+        root_conn.set_link_up(&bridge_name).await.map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to bring up mgmt bridge '{bridge_name}': {e}"
+            ))
+        })?;
+
+        // Assign .1 to the bridge
+        let bridge_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::from(base_u32 + 1));
+        root_conn
+            .add_address_by_name(&bridge_name, bridge_ip, prefix)
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!("failed to assign IP to mgmt bridge: {e}"))
+            })?;
+
+        // For each node (sorted by name for deterministic IP assignment), create veth pair
+        let mut sorted_nodes: Vec<&str> = node_handles.keys().map(|s| s.as_str()).collect();
+        sorted_nodes.sort();
+
+        for (idx, node_name) in sorted_nodes.iter().enumerate() {
+            let node_handle = &node_handles[*node_name];
+            let node_ns_fd = node_handle
+                .open_ns_fd()
+                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
+
+            let mgmt_iface = "mgmt0";
+            // Peer name in root ns: nm{node_name}, truncated to 15 chars
+            let peer_name = format!("nm{}", &node_name[..node_name.len().min(13)]);
+            let peer_name = if peer_name.len() > 15 {
+                peer_name[..15].to_string()
+            } else {
+                peer_name
+            };
+
+            // Create veth pair in root ns, peer goes to node ns
+            let veth = nlink::netlink::link::VethLink::new(&peer_name, mgmt_iface)
+                .peer_netns_fd(node_ns_fd.as_raw_fd());
+
+            root_conn.add_link(veth).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to create mgmt veth for node '{node_name}': {e}"
+                ))
+            })?;
+
+            // Attach our end (peer_name) to the bridge
+            root_conn
+                .set_link_master(&peer_name, &bridge_name)
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to attach '{peer_name}' to mgmt bridge: {e}"
+                    ))
+                })?;
+            root_conn.set_link_up(&peer_name).await.map_err(|e| {
+                Error::deploy_failed(format!("failed to bring up '{peer_name}': {e}"))
+            })?;
+
+            // Assign IP to mgmt0 in node ns: .2, .3, .4, ...
+            let node_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::from(base_u32 + 2 + idx as u32));
+            let node_conn: Connection<Route> = node_handle
+                .connection()
+                .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
+            node_conn
+                .add_address_by_name(mgmt_iface, node_ip, prefix)
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!("failed to assign mgmt IP to '{node_name}': {e}"))
+                })?;
+            node_conn.set_link_up(mgmt_iface).await.map_err(|e| {
+                Error::deploy_failed(format!("failed to bring up mgmt0 on '{node_name}': {e}"))
+            })?;
+        }
+    }
+
     // ── Step 4: Create bridge networks ───────────────────────────────
     // Bridges live in a management namespace. For each network, create the bridge
     // in a dedicated namespace, then create veth pairs from member nodes.
@@ -1183,10 +1284,23 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
-    // ── Step 16: Spawn background processes ────────────────────────
+    // ── Step 16: Spawn background processes (dependency-ordered) ───
     tracing::info!("step 16/18: spawning background processes");
-    for (node_name, node) in &topology.nodes {
+
+    // Topologically sort nodes by depends_on for ordered startup
+    let spawn_order = topo_sort_nodes(&topology.nodes);
+
+    for node_name in &spawn_order {
+        let node = &topology.nodes[node_name.as_str()];
         let node_handle = &node_handles[node_name];
+
+        // Apply startup_delay before spawning
+        if let Some(ref delay_str) = node.startup_delay
+            && let Ok(delay) = crate::helpers::parse_duration(delay_str)
+        {
+            tracing::debug!("startup-delay {delay_str} for node '{node_name}'");
+            std::thread::sleep(delay);
+        }
 
         for (i, exec_config) in node.exec.iter().enumerate() {
             if exec_config.cmd.is_empty() {
@@ -1256,6 +1370,38 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         )));
                     }
                 }
+            }
+        }
+
+        // Poll healthcheck until healthy (or timeout)
+        if let Some(ref hc_cmd) = node.healthcheck {
+            let hc_interval = node
+                .healthcheck_interval
+                .as_deref()
+                .and_then(|s| crate::helpers::parse_duration(s).ok())
+                .unwrap_or(std::time::Duration::from_secs(1));
+            let hc_timeout = node
+                .healthcheck_timeout
+                .as_deref()
+                .and_then(|s| crate::helpers::parse_duration(s).ok())
+                .unwrap_or(std::time::Duration::from_secs(30));
+
+            tracing::info!("waiting for healthcheck on '{node_name}': {hc_cmd}");
+            let deadline = std::time::Instant::now() + hc_timeout;
+            loop {
+                let mut probe = std::process::Command::new("sh");
+                probe.args(["-c", hc_cmd]);
+                let result = node_handle.spawn_output(probe);
+                if result.is_ok_and(|o| o.status.success()) {
+                    tracing::info!("healthcheck passed for '{node_name}'");
+                    break;
+                }
+                if std::time::Instant::now() >= deadline {
+                    return Err(Error::deploy_failed(format!(
+                        "healthcheck timeout for node '{node_name}': {hc_cmd}"
+                    )));
+                }
+                std::thread::sleep(hc_interval);
             }
         }
     }
@@ -1371,6 +1517,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         runtime: container_runtime.as_ref().map(|rt| rt.binary().to_string()),
         dns_injected,
         wifi_loaded,
+        saved_impairments: HashMap::new(),
+        process_logs: HashMap::new(),
     };
     state::save(&lab_state, topology)?;
 
@@ -2451,6 +2599,8 @@ pub async fn apply_diff(
         runtime: running.runtime_binary().map(|s| s.to_string()),
         dns_injected: running.dns_injected(),
         wifi_loaded: running.wifi_loaded(),
+        saved_impairments: HashMap::new(),
+        process_logs: HashMap::new(),
     };
     state::save(&lab_state, desired)?;
 
@@ -2514,6 +2664,8 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
                 to,
                 port,
                 timeout,
+                retries,
+                interval,
             } => {
                 if let Some(target_ip) = ip_map.get(to) {
                     let timeout_secs = timeout
@@ -2521,22 +2673,39 @@ fn run_assertions(running: &RunningLab, topology: &Topology) {
                         .and_then(|t| crate::helpers::parse_duration(t).ok())
                         .map(|d| d.as_secs().max(1).to_string())
                         .unwrap_or_else(|| "3".to_string());
-                    match running.exec(
-                        from,
-                        "bash",
-                        &[
-                            "-c",
-                            &format!(
-                                "timeout {timeout_secs} bash -c 'echo > /dev/tcp/{target_ip}/{port}'"
-                            ),
-                        ],
-                    ) {
-                        Ok(out) if out.exit_code == 0 => {
-                            tracing::info!("PASS: {from} tcp-connect {to}:{port}");
+                    let max_attempts = retries.unwrap_or(1);
+                    let retry_interval = interval
+                        .as_deref()
+                        .and_then(|i| crate::helpers::parse_duration(i).ok())
+                        .unwrap_or(std::time::Duration::from_millis(500));
+
+                    let mut passed = false;
+                    for attempt in 0..max_attempts {
+                        match running.exec(
+                            from,
+                            "bash",
+                            &[
+                                "-c",
+                                &format!(
+                                    "timeout {timeout_secs} bash -c 'echo > /dev/tcp/{target_ip}/{port}'"
+                                ),
+                            ],
+                        ) {
+                            Ok(out) if out.exit_code == 0 => {
+                                passed = true;
+                                break;
+                            }
+                            _ => {
+                                if attempt + 1 < max_attempts {
+                                    std::thread::sleep(retry_interval);
+                                }
+                            }
                         }
-                        _ => {
-                            tracing::warn!("FAIL: {from} cannot tcp-connect {to}:{port}");
-                        }
+                    }
+                    if passed {
+                        tracing::info!("PASS: {from} tcp-connect {to}:{port}");
+                    } else {
+                        tracing::warn!("FAIL: {from} cannot tcp-connect {to}:{port}");
                     }
                 } else {
                     tracing::warn!("SKIP: no IP found for node '{to}'");
@@ -2816,6 +2985,62 @@ impl Drop for Cleanup {
             }
         }
     }
+}
+
+/// Topologically sort nodes by `depends_on` (Kahn's algorithm).
+///
+/// Returns node names in dependency order: nodes with no dependencies first,
+/// then nodes whose dependencies have all been visited, etc.
+/// Nodes within the same level are sorted by name for determinism.
+fn topo_sort_nodes(nodes: &HashMap<String, crate::types::Node>) -> Vec<String> {
+    let mut in_degree: HashMap<&str, usize> = HashMap::new();
+    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+
+    for (name, node) in nodes {
+        in_degree.entry(name.as_str()).or_insert(0);
+        for dep in &node.depends_on {
+            adj.entry(dep.as_str()).or_default().push(name.as_str());
+            *in_degree.entry(name.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    let mut result = Vec::with_capacity(nodes.len());
+    let mut queue: Vec<&str> = in_degree
+        .iter()
+        .filter(|(_, d)| **d == 0)
+        .map(|(n, _)| *n)
+        .collect();
+    queue.sort(); // Deterministic order within each level
+
+    while let Some(n) = queue.pop() {
+        result.push(n.to_string());
+        if let Some(dependents) = adj.get(n) {
+            let mut ready = Vec::new();
+            for dep in dependents {
+                if let Some(d) = in_degree.get_mut(dep) {
+                    *d -= 1;
+                    if *d == 0 {
+                        ready.push(*dep);
+                    }
+                }
+            }
+            ready.sort();
+            // Push in reverse so pop() yields alphabetical order
+            for r in ready.into_iter().rev() {
+                queue.push(r);
+            }
+        }
+    }
+
+    // Any nodes not visited (cycle) — add them anyway to avoid silent skip
+    // (validator should catch cycles before deployment)
+    for name in nodes.keys() {
+        if !result.contains(name) {
+            result.push(name.clone());
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]

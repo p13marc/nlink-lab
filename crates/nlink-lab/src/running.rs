@@ -30,6 +30,10 @@ pub struct RunningLab {
     dns_injected: bool,
     /// Whether mac80211_hwsim was loaded.
     wifi_loaded: bool,
+    /// Saved impairments before partition (endpoint → Impairment).
+    saved_impairments: HashMap<String, crate::types::Impairment>,
+    /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
+    process_logs: HashMap<u32, (String, String)>,
 }
 
 /// Output from executing a command in a lab node.
@@ -84,6 +88,8 @@ impl RunningLab {
             pids,
             dns_injected,
             wifi_loaded,
+            saved_impairments: HashMap::new(),
+            process_logs: HashMap::new(),
         }
     }
 
@@ -228,6 +234,217 @@ impl RunningLab {
         Ok(pid)
     }
 
+    /// Re-save the current state to disk (e.g., after spawning a new process).
+    pub fn save_state(&self) -> Result<()> {
+        let (mut lab_state, _) = state::load(self.name())?;
+        lab_state.pids = self.pids.clone();
+        lab_state.saved_impairments = self.saved_impairments.clone();
+        lab_state.process_logs = self.process_logs.clone();
+        state::save(&lab_state, &self.topology)
+    }
+
+    /// Spawn a background process with stdout/stderr captured to log files.
+    pub fn spawn_with_logs(
+        &mut self,
+        node: &str,
+        cmd: &[&str],
+        log_dir: Option<&std::path::Path>,
+    ) -> Result<u32> {
+        if cmd.is_empty() {
+            return Err(Error::invalid_topology("empty command"));
+        }
+        let ns_name = self.namespace_for(node)?.to_string();
+
+        let log_dir = log_dir
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| state::logs_dir(self.name()));
+        std::fs::create_dir_all(&log_dir)?;
+
+        let cmd_basename = std::path::Path::new(cmd[0])
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("cmd");
+
+        let stdout_path = log_dir.join(format!("{node}-{cmd_basename}.stdout"));
+        let stderr_path = log_dir.join(format!("{node}-{cmd_basename}.stderr"));
+
+        let stdout_file = std::fs::File::create(&stdout_path)?;
+        let stderr_file = std::fs::File::create(&stderr_path)?;
+
+        let mut command = std::process::Command::new(cmd[0]);
+        command.args(&cmd[1..]);
+        command.stdout(stdout_file);
+        command.stderr(stderr_file);
+
+        let child = nlink::netlink::namespace::spawn_with_etc(&ns_name, command)
+            .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
+        let pid = child.id();
+        self.pids.push((node.to_string(), pid));
+        self.process_logs.insert(
+            pid,
+            (
+                stdout_path.to_string_lossy().to_string(),
+                stderr_path.to_string_lossy().to_string(),
+            ),
+        );
+
+        // Rename files to include PID
+        let final_stdout = log_dir.join(format!("{node}-{cmd_basename}-{pid}.stdout"));
+        let final_stderr = log_dir.join(format!("{node}-{cmd_basename}-{pid}.stderr"));
+        let _ = std::fs::rename(&stdout_path, &final_stdout);
+        let _ = std::fs::rename(&stderr_path, &final_stderr);
+        self.process_logs.insert(
+            pid,
+            (
+                final_stdout.to_string_lossy().to_string(),
+                final_stderr.to_string_lossy().to_string(),
+            ),
+        );
+
+        Ok(pid)
+    }
+
+    /// Get log file paths for a tracked process.
+    pub fn log_paths(&self, pid: u32) -> Option<(&str, &str)> {
+        self.process_logs
+            .get(&pid)
+            .map(|(stdout, stderr)| (stdout.as_str(), stderr.as_str()))
+    }
+
+    /// Collect all IP addresses for a node, grouped by interface name.
+    pub fn node_addresses(
+        &self,
+        node: &str,
+    ) -> Result<std::collections::BTreeMap<String, Vec<String>>> {
+        // Verify node exists
+        self.namespace_for(node)?;
+
+        let mut addrs: std::collections::BTreeMap<String, Vec<String>> =
+            std::collections::BTreeMap::new();
+
+        // From links
+        for link in &self.topology.links {
+            for (i, ep_str) in link.endpoints.iter().enumerate() {
+                if let Some(ep) = EndpointRef::parse(ep_str)
+                    && ep.node == node
+                    && let Some(ref link_addrs) = link.addresses
+                {
+                    addrs
+                        .entry(ep.iface.to_string())
+                        .or_default()
+                        .push(link_addrs[i].clone());
+                }
+            }
+        }
+
+        // From node interfaces (loopback, vxlan, bond, etc.)
+        if let Some(n) = self.topology.nodes.get(node) {
+            for (iface_name, iface_cfg) in &n.interfaces {
+                for addr in &iface_cfg.addresses {
+                    addrs
+                        .entry(iface_name.clone())
+                        .or_default()
+                        .push(addr.clone());
+                }
+            }
+        }
+
+        Ok(addrs)
+    }
+
+    /// Wait for a TCP port to accept connections inside a node's namespace.
+    pub async fn wait_for_tcp(
+        &self,
+        node: &str,
+        ip: &str,
+        port: u16,
+        timeout: std::time::Duration,
+        interval: std::time::Duration,
+    ) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let probe = self.exec(
+                node,
+                "bash",
+                &["-c", &format!("echo > /dev/tcp/{ip}/{port}")],
+            );
+            if probe.is_ok_and(|o| o.exit_code == 0) {
+                return Ok(());
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::deploy_failed(format!(
+                    "timeout waiting for {ip}:{port} on node '{node}'"
+                )));
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
+
+    /// Wait for a command to succeed (exit 0) inside a node's namespace.
+    pub async fn wait_for_exec(
+        &self,
+        node: &str,
+        cmd: &str,
+        timeout: std::time::Duration,
+        interval: std::time::Duration,
+    ) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let probe = self.exec(node, "sh", &["-c", cmd]);
+            if probe.is_ok_and(|o| o.exit_code == 0) {
+                return Ok(());
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::deploy_failed(format!(
+                    "timeout waiting for command to succeed on node '{node}': {cmd}"
+                )));
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
+
+    /// Wait for a file to exist inside a node's namespace.
+    pub async fn wait_for_file(
+        &self,
+        node: &str,
+        path: &str,
+        timeout: std::time::Duration,
+        interval: std::time::Duration,
+    ) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let probe = self.exec(node, "test", &["-e", path]);
+            if probe.is_ok_and(|o| o.exit_code == 0) {
+                return Ok(());
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::deploy_failed(format!(
+                    "timeout waiting for file '{path}' on node '{node}'"
+                )));
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
+
+    /// Given "nodeA:eth0", find the other end of the link → "nodeB:eth0".
+    pub fn peer_endpoint(&self, endpoint: &str) -> Result<String> {
+        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: endpoint.to_string(),
+        })?;
+        let needle = format!("{}:{}", ep.node, ep.iface);
+        for link in &self.topology.links {
+            if link.endpoints[0] == needle {
+                return Ok(link.endpoints[1].clone());
+            }
+            if link.endpoints[1] == needle {
+                return Ok(link.endpoints[0].clone());
+            }
+        }
+        Err(Error::deploy_failed(format!(
+            "no link found for endpoint '{endpoint}'"
+        )))
+    }
+
     /// Modify the netem impairment on an interface at runtime.
     pub async fn set_impairment(
         &self,
@@ -266,6 +483,48 @@ impl RunningLab {
         conn.del_qdisc(&ep.iface, "root")
             .await
             .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
+        Ok(())
+    }
+
+    /// Partition an endpoint: save current impairment, apply 100% loss.
+    pub async fn partition(&mut self, endpoint: &str) -> Result<()> {
+        // Don't double-partition (preserve original saved config)
+        if self.saved_impairments.contains_key(endpoint) {
+            return Ok(());
+        }
+
+        // Read current impairment from topology (or default if none)
+        let current = self
+            .topology
+            .impairments
+            .get(endpoint)
+            .cloned()
+            .unwrap_or_default();
+
+        self.saved_impairments.insert(endpoint.to_string(), current);
+
+        // Apply 100% loss
+        let partition_imp = crate::types::Impairment {
+            loss: Some("100%".to_string()),
+            ..Default::default()
+        };
+        self.set_impairment(endpoint, &partition_imp).await?;
+        self.save_state()?;
+        Ok(())
+    }
+
+    /// Heal an endpoint: restore saved impairment from before partition.
+    pub async fn heal(&mut self, endpoint: &str) -> Result<()> {
+        let saved = self.saved_impairments.remove(endpoint).ok_or_else(|| {
+            Error::deploy_failed(format!("endpoint '{endpoint}' is not partitioned"))
+        })?;
+
+        if saved == crate::types::Impairment::default() {
+            self.clear_impairment(endpoint).await?;
+        } else {
+            self.set_impairment(endpoint, &saved).await?;
+        }
+        self.save_state()?;
         Ok(())
     }
 
@@ -359,7 +618,21 @@ impl RunningLab {
             }
         }
 
-        // 4. Delete management namespace (bridges) if it exists
+        // 4a. Delete root-namespace management bridge if host-reachable
+        if self.topology.lab.mgmt_host_reachable {
+            let bridge_name = format!("nlab-{}", self.topology.lab.prefix());
+            let bridge_name = if bridge_name.len() > 15 {
+                bridge_name[..15].to_string()
+            } else {
+                bridge_name
+            };
+            // Deleting the bridge also removes all attached veth peers
+            if let Ok(root_conn) = Connection::<Route>::new() {
+                let _ = root_conn.del_link(&bridge_name).await;
+            }
+        }
+
+        // 4b. Delete management namespace (bridges) if it exists
         if !self.topology.networks.is_empty() {
             let mgmt_ns = format!("{}-mgmt", self.topology.lab.prefix());
             if namespace::exists(&mgmt_ns)
@@ -406,6 +679,8 @@ impl RunningLab {
             pids: lab_state.pids,
             dns_injected: lab_state.dns_injected,
             wifi_loaded: lab_state.wifi_loaded,
+            saved_impairments: lab_state.saved_impairments,
+            process_logs: lab_state.process_logs,
         })
     }
 

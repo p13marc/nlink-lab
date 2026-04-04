@@ -57,8 +57,14 @@ sudo nlink-lab wait-for simple server --tcp 127.0.0.1:8080 --timeout 30
 nlink-lab ip simple server --iface eth0
 nlink-lab ip simple server --iface mgmt0
 
+# Deploy with JSON output (machine-parseable)
+sudo nlink-lab deploy --json examples/simple.nll
+
 # Show running labs
 nlink-lab status
+
+# Validate with resolved IP addresses
+nlink-lab validate --show-ips examples/multi-site.nll
 
 # Expand loops/variables and print flat NLL
 nlink-lab render examples/spine-leaf.nll

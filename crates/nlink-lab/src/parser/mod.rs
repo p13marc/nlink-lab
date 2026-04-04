@@ -35,13 +35,15 @@ pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<Topology> {
         Ok(topo) => Ok(topo),
         Err(crate::Error::NllParse(msg)) => {
             let span = nll::extract_span(&msg, &contents);
-            Err(crate::Error::NllDiagnostic(crate::error::NllDiagnostic {
-                message: msg.split(" [at byte ").next().unwrap_or(&msg).to_string(),
-                src: miette::NamedSource::new(&filename, contents),
-                span: span.into(),
-                label: "here".to_string(),
-                help: None,
-            }))
+            Err(crate::Error::NllDiagnostic(Box::new(
+                crate::error::NllDiagnostic {
+                    message: msg.split(" [at byte ").next().unwrap_or(&msg).to_string(),
+                    src: miette::NamedSource::new(&filename, contents),
+                    span: span.into(),
+                    label: "here".to_string(),
+                    help: None,
+                },
+            )))
         }
         Err(e) => Err(e),
     }
@@ -63,13 +65,15 @@ pub fn parse_file_with_params<P: AsRef<Path>>(
         Ok(topo) => Ok(topo),
         Err(crate::Error::NllParse(msg)) => {
             let span = nll::extract_span(&msg, &contents);
-            Err(crate::Error::NllDiagnostic(crate::error::NllDiagnostic {
-                message: msg.split(" [at byte ").next().unwrap_or(&msg).to_string(),
-                src: miette::NamedSource::new(&filename, contents),
-                span: span.into(),
-                label: "here".to_string(),
-                help: None,
-            }))
+            Err(crate::Error::NllDiagnostic(Box::new(
+                crate::error::NllDiagnostic {
+                    message: msg.split(" [at byte ").next().unwrap_or(&msg).to_string(),
+                    src: miette::NamedSource::new(&filename, contents),
+                    span: span.into(),
+                    label: "here".to_string(),
+                    help: None,
+                },
+            )))
         }
         Err(e) => Err(e),
     }

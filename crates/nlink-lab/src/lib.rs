@@ -1,4 +1,3 @@
-#![allow(clippy::result_large_err)]
 #![allow(clippy::field_reassign_with_default)]
 //! nlink-lab: Network lab engine for Linux.
 //!

@@ -51,7 +51,7 @@ pub enum Error {
 
     /// NLL parse error with source context for rich diagnostics.
     #[error("{}", .0)]
-    NllDiagnostic(#[from] NllDiagnostic),
+    NllDiagnostic(Box<NllDiagnostic>),
 
     /// Invalid topology file.
     #[error("invalid topology: {0}")]
@@ -118,6 +118,12 @@ pub struct NllDiagnostic {
     pub label: String,
     #[help]
     pub help: Option<String>,
+}
+
+impl From<NllDiagnostic> for Error {
+    fn from(diag: NllDiagnostic) -> Self {
+        Self::NllDiagnostic(Box::new(diag))
+    }
 }
 
 impl Error {

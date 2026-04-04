@@ -57,13 +57,15 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
         Err(crate::Error::NllParse(msg)) => {
             let span = extract_span(&msg, input);
             let clean_msg = msg.split(" [at byte ").next().unwrap_or(&msg).to_string();
-            Err(crate::Error::NllDiagnostic(crate::error::NllDiagnostic {
-                message: clean_msg,
-                src: miette::NamedSource::new(filename, input.to_string()),
-                span: span.into(),
-                label: "here".to_string(),
-                help: None,
-            }))
+            Err(crate::Error::NllDiagnostic(Box::new(
+                crate::error::NllDiagnostic {
+                    message: clean_msg,
+                    src: miette::NamedSource::new(filename, input.to_string()),
+                    span: span.into(),
+                    label: "here".to_string(),
+                    help: None,
+                },
+            )))
         }
         Err(e) => Err(e),
     }

@@ -1,3 +1,6 @@
+#![allow(clippy::result_large_err)]
+#![allow(clippy::large_enum_variant)]
+
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -559,7 +562,7 @@ fn main() -> ExitCode {
     match rt.block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(nlink_lab::Error::NllDiagnostic(diag)) => {
-            let report = miette::Report::new(diag);
+            let report = miette::Report::new(*diag);
             eprintln!("{report:?}");
             ExitCode::FAILURE
         }
@@ -2272,12 +2275,10 @@ fn check_root() {
         let has_caps = std::fs::read_to_string("/proc/self/status")
             .ok()
             .and_then(|s| {
-                s.lines()
-                    .find(|l| l.starts_with("CapEff:"))
-                    .map(|l| {
-                        let hex = l.split_whitespace().nth(1).unwrap_or("0");
-                        u64::from_str_radix(hex, 16).unwrap_or(0) != 0
-                    })
+                s.lines().find(|l| l.starts_with("CapEff:")).map(|l| {
+                    let hex = l.split_whitespace().nth(1).unwrap_or("0");
+                    u64::from_str_radix(hex, 16).unwrap_or(0) != 0
+                })
             })
             .unwrap_or(false);
         if !has_caps {

@@ -9,7 +9,8 @@ programmatic Rust API.
 
 ```bash
 # Install system-wide (with just)
-just install                # builds + installs to /usr/local/bin + sets CAP_NET_ADMIN
+just install                # builds + installs SUID root (full feature support)
+just install-caps           # alternative: capabilities only (no SUID)
 
 # Create a topology from a template
 nlink-lab init router
@@ -542,7 +543,7 @@ All examples use the `.nll` format. Use `nlink-lab init --list` to create from t
 ## Requirements
 
 - Linux (kernel 4.19+)
-- Root or `CAP_NET_ADMIN` capability
+- Root, SUID, or capabilities (`CAP_NET_ADMIN` + `CAP_SYS_ADMIN`; `CAP_DAC_OVERRIDE` for DNS; `CAP_SYS_MODULE` for WiFi)
 - Rust 1.85+ (edition 2024)
 
 ## Editor Support

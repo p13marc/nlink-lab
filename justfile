@@ -31,12 +31,19 @@ fmt-check:
 fmt:
     cargo +nightly fmt
 
-# Install nlink-lab system-wide with NET_ADMIN capability
+# Install nlink-lab system-wide (SUID root — full feature support)
 install:
     cargo build --release -p nlink-lab-cli
+    sudo install -o root -g root -m 4755 target/release/nlink-lab /usr/local/bin/nlink-lab
+    @echo "Installed /usr/local/bin/nlink-lab (SUID root)"
+
+# Install with capabilities only (no SUID — some features may require sudo)
+install-caps:
+    cargo build --release -p nlink-lab-cli
     sudo install -m 755 target/release/nlink-lab /usr/local/bin/nlink-lab
-    sudo setcap cap_net_admin+ep /usr/local/bin/nlink-lab
-    @echo "Installed /usr/local/bin/nlink-lab with CAP_NET_ADMIN"
+    sudo setcap cap_net_admin,cap_sys_admin,cap_dac_override+ep /usr/local/bin/nlink-lab
+    @echo "Installed /usr/local/bin/nlink-lab with CAP_NET_ADMIN,CAP_SYS_ADMIN,CAP_DAC_OVERRIDE"
+    @echo "Note: WiFi features require CAP_SYS_MODULE (add it or use 'just install' for SUID)"
 
 # Generate and install man page
 man:

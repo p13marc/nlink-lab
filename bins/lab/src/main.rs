@@ -2268,7 +2268,23 @@ fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
 
 fn check_root() {
     if unsafe { libc::geteuid() } != 0 {
-        eprintln!("warning: nlink-lab typically requires root or CAP_NET_ADMIN");
+        // Check if we have effective capabilities via /proc/self/status
+        let has_caps = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("CapEff:"))
+                    .map(|l| {
+                        let hex = l.split_whitespace().nth(1).unwrap_or("0");
+                        u64::from_str_radix(hex, 16).unwrap_or(0) != 0
+                    })
+            })
+            .unwrap_or(false);
+        if !has_caps {
+            eprintln!(
+                "warning: nlink-lab requires root, SUID, or capabilities (CAP_NET_ADMIN+CAP_SYS_ADMIN)"
+            );
+        }
     }
 }
 

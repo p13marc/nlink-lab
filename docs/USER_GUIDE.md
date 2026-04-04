@@ -5,16 +5,24 @@
 Requirements:
 
 - Linux kernel 4.19 or later
-- Root privileges or `CAP_NET_ADMIN` capability
+- Root, SUID, or capabilities (`CAP_NET_ADMIN` + `CAP_SYS_ADMIN`)
 - Rust 1.85+ toolchain
 
-Build from source:
+Build and install:
 
 ```bash
 git clone https://github.com/p13marc/nlink-lab.git
 cd nlink-lab
+
+# Option 1: SUID root (recommended — full feature support)
+just install
+
+# Option 2: Capabilities only (no SUID)
+just install-caps
+
+# Option 3: Manual install
 cargo build --release -p nlink-lab-cli
-sudo install target/release/nlink-lab /usr/local/bin/
+sudo install -o root -g root -m 4755 target/release/nlink-lab /usr/local/bin/
 ```
 
 Generate shell completions:

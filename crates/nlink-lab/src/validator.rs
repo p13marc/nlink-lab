@@ -897,17 +897,17 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
                     location: Some(format!("nodes.{node_name}.volumes")),
                 });
             }
-            // All container properties require image
+            // Container-only properties require image.
+            // Note: healthcheck, startup-delay, and depends-on work on
+            // namespace nodes too (for integration testing orchestration).
             let container_checks: &[(&str, bool)] = &[
                 ("cpu", node.cpu.is_some()),
                 ("memory", node.memory.is_some()),
                 ("entrypoint", node.entrypoint.is_some()),
                 ("hostname", node.hostname.is_some()),
                 ("workdir", node.workdir.is_some()),
-                ("healthcheck", node.healthcheck.is_some()),
                 ("privileged", node.privileged),
                 ("pull", node.pull.is_some()),
-                ("startup-delay", node.startup_delay.is_some()),
                 ("env-file", node.env_file.is_some()),
                 ("overlay", node.overlay.is_some()),
                 ("cap-add", !node.cap_add.is_empty()),

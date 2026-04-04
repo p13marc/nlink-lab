@@ -1,12 +1,13 @@
 # Integration testing topology.
 #
 # Demonstrates features for external integration testing:
+# - param declarations before lab (CLI parameterization)
 # - host-reachable management bridge (root namespace connectivity)
-# - healthcheck with interval/timeout
+# - healthcheck on namespace nodes with standalone interval/timeout
 # - depends-on for ordered startup
 # - startup-delay for timing control
+# - run "cmd" background (postfix syntax)
 # - tcp-connect validation with retries
-# - param declarations for CLI parameterization
 #
 # Deploy with:
 #   sudo nlink-lab deploy examples/integration-testing.nll --set wan_delay=50ms
@@ -14,25 +15,31 @@
 # From host, connect directly to services:
 #   curl http://172.20.0.3:8080/health
 
+param wan_delay default 10ms
+param wan_loss default 0%
+
 lab "inttest" {
     description "Integration testing lab with host-reachable management"
     mgmt 172.20.0.0/24 host-reachable
     dns hosts
 }
 
-param wan_delay default 10ms
-param wan_loss default 0%
-
 profile router { forward ipv4 }
 
 node router : router
 
 node server {
-    run background "python3 -m http.server 8080"
+    depends-on [router]
+    run "python3 -m http.server 8080" background
+    healthcheck "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"
+    healthcheck-interval 500ms
+    healthcheck-timeout 10s
     route default via ${router.eth0}
 }
 
 node client {
+    depends-on [router]
+    startup-delay 1s
     route default via ${router.eth1}
 }
 

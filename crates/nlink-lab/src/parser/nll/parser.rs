@@ -8,19 +8,28 @@ use crate::error::Result;
 pub fn parse_tokens(tokens: &[Spanned], _source: &str) -> Result<ast::File> {
     let mut pos = 0;
 
-    // Parse optional imports before the lab declaration
+    // Parse optional imports and params before the lab declaration
     let mut imports = Vec::new();
+    let mut pre_lab_statements = Vec::new();
     loop {
         skip_newlines(tokens, &mut pos);
         if pos < tokens.len() && tokens[pos].token == Token::Import {
             imports.extend(parse_import(tokens, &mut pos)?);
+        } else if eat(tokens, &mut pos, &Token::Param) {
+            let name = expect_ident(tokens, &mut pos)?;
+            let default = if eat_kw(tokens, &mut pos, "default") {
+                Some(parse_value(tokens, &mut pos)?)
+            } else {
+                None
+            };
+            pre_lab_statements.push(ast::Statement::Param(ast::ParamDef { name, default }));
         } else {
             break;
         }
     }
 
     let lab = parse_lab_decl(tokens, &mut pos)?;
-    let mut statements = Vec::new();
+    let mut statements = pre_lab_statements;
 
     while pos < tokens.len() {
         skip_newlines(tokens, &mut pos);
@@ -793,6 +802,10 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                         }
                     }
                 }
+            } else if eat_kw(tokens, pos, "healthcheck-interval") {
+                healthcheck_interval = Some(parse_value(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "healthcheck-timeout") {
+                healthcheck_timeout = Some(parse_value(tokens, pos)?);
             } else if eat_kw(tokens, pos, "startup-delay") {
                 startup_delay = Some(parse_value(tokens, pos)?);
             } else if eat_kw(tokens, pos, "env-file") {
@@ -1821,7 +1834,7 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
 // ─── Run ──────────────────────────────────────────────────
 
 fn parse_run_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RunDef> {
-    let background = eat_kw(tokens, pos, "background");
+    let mut background = eat_kw(tokens, pos, "background");
     // Shell-style: run "cmd arg1 arg2" → ["sh", "-c", "cmd arg1 arg2"]
     // List-style:  run ["cmd", "arg1"] → ["cmd", "arg1"]
     let cmd = if matches!(at(tokens, *pos), Some(Token::String(_))) {
@@ -1830,6 +1843,10 @@ fn parse_run_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RunDef> {
     } else {
         parse_string_list(tokens, pos)?
     };
+    // Also accept postfix: run "cmd" background
+    if !background {
+        background = eat_kw(tokens, pos, "background");
+    }
     Ok(ast::RunDef { cmd, background })
 }
 

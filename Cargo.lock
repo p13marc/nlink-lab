@@ -2915,6 +2915,8 @@ dependencies = [
 [[package]]
 name = "netring"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40976857613feff0c1aff488c1e76ee6445a597b83df1feb089fa90fc88825e9"
 dependencies = [
  "bitflags 2.11.0",
  "libc",

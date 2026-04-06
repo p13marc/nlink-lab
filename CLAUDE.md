@@ -69,6 +69,11 @@ nlink-lab validate --show-ips examples/multi-site.nll
 # Expand loops/variables and print flat NLL
 nlink-lab render examples/spine-leaf.nll
 
+# Capture packets on an interface (uses netring, zero-copy AF_PACKET)
+sudo nlink-lab capture simple router:eth0
+sudo nlink-lab capture simple router:eth0 -w trace.pcap
+sudo nlink-lab capture simple router:eth0 -f "tcp port 80" -c 100 --duration 30
+
 # Show process logs (captured automatically for all background processes)
 nlink-lab logs simple --pid 12345
 nlink-lab logs simple --pid 12345 --stderr --tail 50
@@ -95,6 +100,7 @@ crates/nlink-lab/src/
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
   scenario.rs       # Timed scenario execution engine (fault injection + validation)
   benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
+  capture.rs        # Packet capture using netring (pcap output, BPF filters)
   wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim mgmt)
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
@@ -242,6 +248,7 @@ The deployer executes these steps in order:
 ## Dependencies
 
 - **nlink** — Linux netlink library (namespaces, links, TC, nftables, routing)
+- **netring** — Zero-copy packet capture (AF_PACKET TPACKET_V3 ring buffers)
 - **serde + toml** — State serialization (toml for state files, not topology input)
 - **logos** — NLL lexer (derive-macro lexer with typed tokens)
 - **miette** — Rich error diagnostics for NLL parse errors

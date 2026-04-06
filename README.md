@@ -453,6 +453,10 @@ sudo nlink-lab impair my-lab router:wan0 --heal
 # Asymmetric impairments (satellite/mobile simulation)
 sudo nlink-lab impair my-lab router:wan0 --out-delay 50ms --in-delay 200ms
 
+# Capture packets (native zero-copy via netring, writes pcap)
+sudo nlink-lab capture my-lab router:eth0 -w trace.pcap
+sudo nlink-lab capture my-lab router:eth0 -f "tcp port 80" -c 100
+
 # Check process logs on failure (captured automatically for all background processes)
 nlink-lab logs my-lab --pid 12345 --tail 50
 

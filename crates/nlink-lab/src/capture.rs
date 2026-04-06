@@ -39,11 +39,19 @@ impl<W: Write> PcapWriter<W> {
         w.write_all(&0u32.to_le_bytes())?; // sigfigs
         w.write_all(&snap_len.to_le_bytes())?;
         w.write_all(&LINKTYPE_ETHERNET.to_le_bytes())?;
-        Ok(Self { writer: w, snap_len })
+        Ok(Self {
+            writer: w,
+            snap_len,
+        })
     }
 
     /// Write a single packet record (16-byte header + data).
-    fn write_packet(&mut self, ts: netring::Timestamp, data: &[u8], orig_len: u32) -> io::Result<()> {
+    fn write_packet(
+        &mut self,
+        ts: netring::Timestamp,
+        data: &[u8],
+        orig_len: u32,
+    ) -> io::Result<()> {
         let incl_len = (data.len() as u32).min(self.snap_len);
         self.writer.write_all(&ts.sec.to_le_bytes())?;
         self.writer.write_all(&ts.nsec.to_le_bytes())?;
@@ -81,7 +89,10 @@ pub fn compile_bpf_filter(expression: &str) -> Result<Vec<BpfInsn>> {
     let mut insns = Vec::new();
     for line in stdout.lines() {
         // Lines look like: { 0x28, 0, 0, 0x0000000c },
-        let trimmed = line.trim().trim_start_matches('{').trim_end_matches([',', '}', ' ']);
+        let trimmed = line
+            .trim()
+            .trim_start_matches('{')
+            .trim_end_matches([',', '}', ' ']);
         let parts: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
         if parts.len() == 4 {
             let code = parse_hex_or_dec(parts[0])?;
@@ -191,10 +202,10 @@ pub fn run_capture<W: Write + Send + 'static>(
             break;
         }
 
-        if let Some(max_duration) = config.duration {
-            if start.elapsed() >= max_duration {
-                break;
-            }
+        if let Some(max_duration) = config.duration
+            && start.elapsed() >= max_duration
+        {
+            break;
         }
 
         let ts = pkt.timestamp();
@@ -204,19 +215,15 @@ pub fn run_capture<W: Write + Send + 'static>(
         if let Some(ref mut w) = pcap {
             w.write_packet(ts, data, orig_len)?;
         } else {
-            println!(
-                "{}.{:09}  {} bytes",
-                ts.sec, ts.nsec,
-                data.len(),
-            );
+            println!("{}.{:09}  {} bytes", ts.sec, ts.nsec, data.len(),);
         }
 
         count += 1;
 
-        if let Some(max_count) = config.count {
-            if count >= max_count {
-                break;
-            }
+        if let Some(max_count) = config.count
+            && count >= max_count
+        {
+            break;
         }
     }
 

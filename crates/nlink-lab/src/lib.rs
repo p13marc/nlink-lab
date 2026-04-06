@@ -56,6 +56,7 @@
 
 pub mod benchmark;
 pub mod builder;
+pub mod capture;
 pub mod container;
 pub mod deploy;
 pub mod diff;

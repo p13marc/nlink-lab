@@ -93,6 +93,10 @@ pub enum Error {
         detail: String,
     },
 
+    /// Packet capture error.
+    #[error("capture failed: {0}")]
+    Capture(String),
+
     /// Generic deploy failure (for cases that don't fit specific variants).
     #[error("deploy failed: {0}")]
     DeployFailed(String),

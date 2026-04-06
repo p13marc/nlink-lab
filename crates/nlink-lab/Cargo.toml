@@ -30,6 +30,8 @@ winnow = "0.7"
 miette = { version = "7", features = ["fancy"] }
 nlink-lab-macros = { workspace = true }
 
+netring = { workspace = true }
+
 # Feature-gated dependencies
 x25519-dalek = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }

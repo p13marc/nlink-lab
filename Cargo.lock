@@ -2913,6 +2913,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "netring"
+version = "0.2.0"
+dependencies = [
+ "bitflags 2.11.0",
+ "libc",
+ "nix 0.31.2",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "nix"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2922,6 +2933,19 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.31.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+dependencies = [
+ "bitflags 2.11.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -2953,6 +2977,7 @@ dependencies = [
  "libc",
  "logos",
  "miette",
+ "netring",
  "nlink",
  "nlink-lab-macros",
  "serde",
@@ -2995,6 +3020,7 @@ dependencies = [
  "clap_complete",
  "libc",
  "miette",
+ "netring",
  "nlink-lab",
  "nlink-lab-shared",
  "serde_json",
@@ -7431,7 +7457,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf7c5144802d0fdda1123484a79d944265947e528ba0763784e05ae0bd40db40"
 dependencies = [
  "async-trait",
- "nix",
+ "nix 0.29.0",
  "tokio",
  "tokio-util",
  "tracing",

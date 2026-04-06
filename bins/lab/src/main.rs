@@ -338,7 +338,7 @@ enum Commands {
         node: Option<String>,
     },
 
-    /// Capture packets on an interface (tcpdump).
+    /// Capture packets on an interface using netring.
     Capture {
         /// Lab name.
         lab: String,
@@ -346,17 +346,25 @@ enum Commands {
         /// Endpoint (e.g., "router:eth0").
         endpoint: String,
 
-        /// Write to pcap file.
+        /// Write to pcap file (default: print summaries to stdout).
         #[arg(short, long)]
         write: Option<PathBuf>,
 
         /// Capture N packets then stop.
         #[arg(short, long)]
-        count: Option<u32>,
+        count: Option<u64>,
 
         /// BPF filter expression (e.g., "tcp port 80").
         #[arg(short, long)]
         filter: Option<String>,
+
+        /// Stop after N seconds.
+        #[arg(long)]
+        duration: Option<f64>,
+
+        /// Snap length -- truncate packets to N bytes.
+        #[arg(long, default_value = "262144")]
+        snap_len: u32,
     },
 
     /// Wait for a lab to be ready.
@@ -1465,6 +1473,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             write,
             count,
             filter,
+            duration,
+            snap_len,
         } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
@@ -1474,27 +1484,51 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 }
             })?;
 
-            let mut args = vec!["-i".to_string(), ep.iface.clone(), "-nn".to_string()];
-            if let Some(file) = &write {
-                args.push("-w".to_string());
-                args.push(file.to_string_lossy().into_owned());
-            }
-            if let Some(n) = count {
-                args.push("-c".to_string());
-                args.push(n.to_string());
-            }
-            if let Some(f) = &filter {
-                args.push(f.clone());
+            let ns_name = running.namespace_for(&ep.node)?.to_string();
+
+            let bpf = match &filter {
+                Some(expr) => Some(nlink_lab::capture::compile_bpf_filter(expr)?),
+                None => None,
+            };
+
+            let config = nlink_lab::capture::CaptureConfig {
+                interface: ep.iface.clone(),
+                snap_len,
+                count,
+                duration: duration.map(std::time::Duration::from_secs_f64),
+                bpf_filter: bpf,
+                profile: netring::RingProfile::LowMemory,
+            };
+
+            static CAPTURE_SHUTDOWN: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            CAPTURE_SHUTDOWN.store(false, std::sync::atomic::Ordering::Relaxed);
+            unsafe {
+                libc::signal(libc::SIGINT, {
+                    extern "C" fn handler(_: libc::c_int) {
+                        CAPTURE_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    handler as *const () as libc::sighandler_t
+                });
             }
 
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let output = running.exec(&ep.node, "tcpdump", &arg_refs)?;
-            print!("{}", output.stdout);
-            if !output.stderr.is_empty() {
-                eprint!("{}", output.stderr);
-            }
-            if output.exit_code != 0 {
-                std::process::exit(output.exit_code);
+            let result = if let Some(path) = write {
+                let file = std::fs::File::create(&path)?;
+                nlink_lab::capture::run_capture(&ns_name, &config, Some(file), &CAPTURE_SHUTDOWN)?
+            } else {
+                nlink_lab::capture::run_capture::<std::fs::File>(
+                    &ns_name,
+                    &config,
+                    None,
+                    &CAPTURE_SHUTDOWN,
+                )?
+            };
+
+            if !cli.quiet {
+                eprintln!(
+                    "\n{} packets captured ({} received by kernel, {} dropped)",
+                    result.packets_captured, result.stats.packets, result.stats.drops,
+                );
             }
             Ok(())
         }

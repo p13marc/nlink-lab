@@ -1,0 +1,3 @@
+# Tree-sitter generated code — exclude from GitHub language stats
+editors/tree-sitter-nll/src/parser.c linguist-generated
+editors/tree-sitter-nll/src/tree_sitter/*.h linguist-generated

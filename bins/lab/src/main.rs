@@ -2059,14 +2059,23 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 let content = std::fs::read_to_string(path).map_err(|e| {
                     nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
                 })?;
-                if let Some(n) = tail {
+                let initial: String = if let Some(n) = tail {
                     let lines: Vec<&str> = content.lines().collect();
                     let start = lines.len().saturating_sub(n as usize);
-                    for line in &lines[start..] {
-                        println!("{line}");
-                    }
+                    lines[start..].join("\n")
                 } else {
-                    print!("{content}");
+                    content.clone()
+                };
+                if !initial.is_empty() {
+                    print!("{initial}");
+                    if !initial.ends_with('\n') {
+                        println!();
+                    }
+                }
+                if follow {
+                    // tail -F semantics: resume reading from current EOF,
+                    // poll, and reopen if the file is rotated/truncated.
+                    tail_follow(std::path::Path::new(path), content.len() as u64)?;
                 }
                 return Ok(());
             }
@@ -2791,6 +2800,67 @@ async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
     }
 }
 
+/// Follow `path` from `start_offset`, writing each new chunk to `out`
+/// until `should_continue()` returns false or an I/O error occurs.
+/// Handles file truncation/rotation by reopening from offset 0 when the
+/// file shrinks below the last-read position.
+///
+/// Production callers use `|| true` for `should_continue` and exit on
+/// SIGINT (Ctrl-C terminates the process as usual). Tests can pass a
+/// closure that stops after a deterministic number of iterations.
+fn tail_follow_to<W: std::io::Write>(
+    path: &std::path::Path,
+    start_offset: u64,
+    out: &mut W,
+    should_continue: impl Fn() -> bool,
+) -> nlink_lab::Result<()> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        nlink_lab::Error::deploy_failed(format!("failed to open log file: {e}"))
+    })?;
+    file.seek(SeekFrom::Start(start_offset)).map_err(|e| {
+        nlink_lab::Error::deploy_failed(format!("seek on log file: {e}"))
+    })?;
+    let mut pos = start_offset;
+    let mut buf = [0u8; 8192];
+    while should_continue() {
+        match file.read(&mut buf) {
+            Ok(0) => {
+                let meta = std::fs::metadata(path).ok();
+                if let Some(m) = meta
+                    && m.len() < pos
+                {
+                    file = std::fs::File::open(path).map_err(|e| {
+                        nlink_lab::Error::deploy_failed(format!("reopen log file: {e}"))
+                    })?;
+                    pos = 0;
+                    continue;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            Ok(n) => {
+                out.write_all(&buf[..n]).ok();
+                out.flush().ok();
+                pos += n as u64;
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                return Err(nlink_lab::Error::deploy_failed(format!(
+                    "read from log file: {e}"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Wrapper used by the CLI: runs forever (until Ctrl-C) and writes to
+/// stdout.
+fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<()> {
+    let mut stdout = std::io::stdout();
+    tail_follow_to(path, start_offset, &mut stdout, || true)
+}
+
 /// Build the argv to pass to `nsenter` for entering a lab node's network
 /// namespace and exec'ing a shell.
 ///
@@ -2882,6 +2952,86 @@ mod tests {
         assert_eq!(orphans.netns.len(), 2);
         assert!(orphans.netns.contains(&"stale-mgmt".to_string()));
         assert!(orphans.netns.contains(&"stale-node1".to_string()));
+    }
+
+    #[test]
+    fn tail_follow_reads_appended_data() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("nlink-lab-tail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("log.txt");
+
+        std::fs::write(&path, b"initial\n").unwrap();
+        let start = std::fs::metadata(&path).unwrap().len();
+
+        // Append after a short delay from a background thread.
+        let path_w = path.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path_w)
+                .unwrap();
+            f.write_all(b"appended\n").unwrap();
+        });
+
+        let counter = std::sync::atomic::AtomicUsize::new(0);
+        let mut out = Vec::new();
+        tail_follow_to(&path, start, &mut out, || {
+            // Stop after roughly 1 second of polling (4×250ms sleeps).
+            let c = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            c < 6
+        })
+        .unwrap();
+
+        let captured = String::from_utf8(out).unwrap();
+        assert!(
+            captured.contains("appended"),
+            "expected appended content, got: {captured:?}"
+        );
+        assert!(
+            !captured.contains("initial"),
+            "should not re-read data before start_offset: {captured:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_follow_handles_truncation() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("nlink-lab-trunc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("log.txt");
+
+        std::fs::write(&path, b"old content that will be truncated\n").unwrap();
+        let start = std::fs::metadata(&path).unwrap().len();
+
+        // Truncate then write fresh content.
+        let path_w = path.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut f = std::fs::File::create(&path_w).unwrap(); // truncates
+            f.write_all(b"fresh\n").unwrap();
+        });
+
+        let counter = std::sync::atomic::AtomicUsize::new(0);
+        let mut out = Vec::new();
+        tail_follow_to(&path, start, &mut out, || {
+            let c = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            c < 8
+        })
+        .unwrap();
+
+        let captured = String::from_utf8(out).unwrap();
+        assert!(
+            captured.contains("fresh"),
+            "expected post-truncation content, got: {captured:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

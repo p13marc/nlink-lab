@@ -31,6 +31,12 @@ All notable changes to this project will be documented in this file.
 - Atomic state file writes (temp + rename)
 
 ### Changed
+- `nlink-lab logs --pid <pid> --follow` now actually follows. Previously
+  `--follow` was silently dropped on the `--pid` path (container logs
+  were the only case it worked for). The CLI now implements `tail -F`
+  semantics: print the existing tail, then poll the log file for new
+  bytes, reopening from offset 0 if truncation/rotation is detected.
+  `--tail N` is honoured for the initial dump as before.
 - `nlink-lab exec` (non-JSON mode) now streams stdio live. Previously it
   captured the full stdout/stderr into buffers and printed them only
   after the child exited, which made it unusable for services,

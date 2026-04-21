@@ -7,6 +7,7 @@ Implementation plans for nlink-lab.
 | Plan | Description | Effort | Status |
 |------|-------------|--------|--------|
 | [128](128-network-impairment-matrix.md) | Per-pair impairment on shared networks | Medium-Large | Blocked (needs nlink TC filter API) |
+| [149](149-feedback-triage.md) | External feedback triage + nlink 0.13.0 upgrade | Medium | Implemented 2026-04-21 |
 
 ## Completed
 

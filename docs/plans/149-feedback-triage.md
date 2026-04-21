@@ -1,9 +1,25 @@
 # Plan 149: External Feedback Triage + nlink 0.13.0 Upgrade
 
 **Date:** 2026-04-20
-**Status:** Proposed — awaiting review
+**Status:** Implemented 2026-04-21 — all confirmed fixes + nlink 0.13.0 upgrade landed
 **Effort:** Medium (2–3 days if done as one batch; or shippable as 3 independent PRs)
 **Priority:** P1 — two high-severity correctness bugs block common workflows
+
+## Status — Landed
+
+| # | Fix | Commit | Tests |
+|---|-----|--------|-------|
+| 1 | shell nsenter `--net=<path>` | df44ac9 | unit: `nsenter_shell_args_uses_equals_form` |
+| 2 | Bridge peer-name hash (`np{hash8}{idx}`) | df44ac9 | unit × 4 in `types::name_hash_tests`; integration: `deploy_networks_with_shared_prefix` |
+| 3 | Veth EEXIST names the mgmt peer | df44ac9 | covered by #2 integration |
+| 4 | `destroy --orphans` | 6510369 | unit × 4 on `classify_orphans` |
+| 5 | `status --scan` | 6510369 | same classifier |
+| 6 | Streaming `exec` | 479bfc4 | integration: `exec_attached_forwards_exit_code` |
+| 7 | `logs --pid --follow` | 118eb5a | unit × 2 on `tail_follow_to` |
+| – | nlink 0.13.0 upgrade | a065243 | existing tests |
+
+Follow-ups noted but deferred (see below): bridge-name truncation
+collision (related to #2, not in scope for this plan); features #9–13.
 
 ---
 

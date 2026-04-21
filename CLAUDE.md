@@ -85,6 +85,7 @@ sudo nlink-lab capture simple router:eth0 -f "tcp port 80" -c 100 --duration 30
 # Show process logs (captured automatically for all background processes)
 nlink-lab logs simple --pid 12345
 nlink-lab logs simple --pid 12345 --stderr --tail 50
+nlink-lab logs simple --pid 12345 --follow          # tail -F a spawned process
 ```
 
 ## Architecture

@@ -211,7 +211,9 @@ State locking via flock prevents concurrent deploy/destroy on the same lab.
 
 CLI commands (32 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply`,
-`status` (with `--scan`), `exec` (`--json`, `--env`), `spawn` (`--log-dir`, `--env`, `--wait-tcp`),
+`status` (with `--scan`, reports orphans + stale labs),
+`exec` (`--json`, `--env`, `--workdir`),
+`spawn` (`--log-dir`, `--env`, `--workdir`, `--wait-tcp`),
 `shell` (interactive TTY), `validate` (with `--set`, `--show-ips`), `test`
 (`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),

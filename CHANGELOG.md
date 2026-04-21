@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab exec --workdir <dir>` and `nlink-lab spawn --workdir <dir>`
+  — set the working directory of the child. For namespace nodes this is
+  `chdir()` on the host filesystem (namespace nodes share the host mount
+  namespace); for container nodes it's passed as `-w` to the runtime.
+  Library: new `exec_in`, `exec_attached_in`, `spawn_with_logs_in`
+  methods on `RunningLab`; the existing zero-workdir methods delegate
+  to these with `None`.
+- `nlink-lab status --scan` now also reports **stale** labs — state files
+  claiming namespaces that no longer exist on the host (typical after a
+  reboot or WSL restart). Human output lists missing namespaces and
+  suggests `destroy <lab>`; `--json` adds a `stale` array alongside
+  `bridges`/`veths`/`netns`.
 - `nlink-lab destroy --orphans` — reap host resources (mgmt bridges,
   veth peers, named namespaces) that match the lab naming scheme but
   have no `state.json`. Left behind by crashed deploys. Composes with

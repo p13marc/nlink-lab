@@ -190,13 +190,36 @@ impl RunningLab {
 
     /// Execute a command in a lab node and collect output.
     pub fn exec(&self, node: &str, cmd: &str, args: &[&str]) -> Result<ExecOutput> {
+        self.exec_in(node, cmd, args, None)
+    }
+
+    /// Execute a command in a lab node with an optional working directory.
+    ///
+    /// For namespace nodes, `workdir` is applied via `chdir()` on the host
+    /// filesystem (namespace nodes share the host mount namespace). For
+    /// container nodes it's passed as `-w <path>` to the runtime, resolved
+    /// inside the container's filesystem.
+    pub fn exec_in(
+        &self,
+        node: &str,
+        cmd: &str,
+        args: &[&str],
+        workdir: Option<&std::path::Path>,
+    ) -> Result<ExecOutput> {
         if let Some(container) = self.containers.get(node) {
             // Use docker/podman exec for container nodes
             let rt_binary = self
                 .runtime_binary
                 .as_deref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
-            let mut all_args = vec!["exec", &container.id, cmd];
+            let wd_str = workdir.map(|p| p.to_string_lossy().into_owned());
+            let mut all_args: Vec<&str> = vec!["exec"];
+            if let Some(ref wd) = wd_str {
+                all_args.push("-w");
+                all_args.push(wd.as_str());
+            }
+            all_args.push(&container.id);
+            all_args.push(cmd);
             all_args.extend(args);
             let output = std::process::Command::new(rt_binary)
                 .args(&all_args)
@@ -213,6 +236,9 @@ impl RunningLab {
             let ns_name = self.namespace_for(node)?;
             let mut command = std::process::Command::new(cmd);
             command.args(args);
+            if let Some(wd) = workdir {
+                command.current_dir(wd);
+            }
             let output = namespace::spawn_output_with_etc(ns_name, command)
                 .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
             Ok(ExecOutput {
@@ -233,12 +259,33 @@ impl RunningLab {
     ///
     /// [`exec`]: Self::exec
     pub fn exec_attached(&self, node: &str, cmd: &str, args: &[&str]) -> Result<i32> {
+        self.exec_attached_in(node, cmd, args, None)
+    }
+
+    /// Streaming exec with an optional working directory. See [`exec_in`] for
+    /// workdir semantics (chdir for namespace nodes, `-w` for containers).
+    ///
+    /// [`exec_in`]: Self::exec_in
+    pub fn exec_attached_in(
+        &self,
+        node: &str,
+        cmd: &str,
+        args: &[&str],
+        workdir: Option<&std::path::Path>,
+    ) -> Result<i32> {
         if let Some(container) = self.containers.get(node) {
             let rt_binary = self
                 .runtime_binary
                 .as_deref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
-            let mut all_args = vec!["exec", "-i", &container.id, cmd];
+            let wd_str = workdir.map(|p| p.to_string_lossy().into_owned());
+            let mut all_args: Vec<&str> = vec!["exec", "-i"];
+            if let Some(ref wd) = wd_str {
+                all_args.push("-w");
+                all_args.push(wd.as_str());
+            }
+            all_args.push(&container.id);
+            all_args.push(cmd);
             all_args.extend(args);
             let status = std::process::Command::new(rt_binary)
                 .args(&all_args)
@@ -258,18 +305,21 @@ impl RunningLab {
             // Uses the `--net=<path>` single-argv form (see the same pattern
             // used by the `shell` subcommand).
             let ns_path = format!("/var/run/netns/{ns_name}");
-            let status = std::process::Command::new("nsenter")
+            let mut command = std::process::Command::new("nsenter");
+            command
                 .arg(format!("--net={ns_path}"))
                 .arg("--")
                 .arg(cmd)
                 .args(args)
                 .stdin(std::process::Stdio::inherit())
                 .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .status()
-                .map_err(|e| {
-                    Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
-                })?;
+                .stderr(std::process::Stdio::inherit());
+            if let Some(wd) = workdir {
+                command.current_dir(wd);
+            }
+            let status = command.status().map_err(|e| {
+                Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
+            })?;
             Ok(status.code().unwrap_or(-1))
         }
     }
@@ -307,6 +357,20 @@ impl RunningLab {
         cmd: &[&str],
         log_dir: Option<&std::path::Path>,
     ) -> Result<u32> {
+        self.spawn_with_logs_in(node, cmd, log_dir, None)
+    }
+
+    /// Spawn a background process with logs and an optional working directory.
+    ///
+    /// Namespace nodes share the host mount namespace, so `workdir` is an
+    /// absolute path on the host's filesystem.
+    pub fn spawn_with_logs_in(
+        &mut self,
+        node: &str,
+        cmd: &[&str],
+        log_dir: Option<&std::path::Path>,
+        workdir: Option<&std::path::Path>,
+    ) -> Result<u32> {
         if cmd.is_empty() {
             return Err(Error::invalid_topology("empty command"));
         }
@@ -332,6 +396,9 @@ impl RunningLab {
         command.args(&cmd[1..]);
         command.stdout(stdout_file);
         command.stderr(stderr_file);
+        if let Some(wd) = workdir {
+            command.current_dir(wd);
+        }
 
         let child = nlink::netlink::namespace::spawn_with_etc(&ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;

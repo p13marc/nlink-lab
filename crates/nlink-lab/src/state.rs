@@ -224,6 +224,27 @@ pub fn remove(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Load only the `namespaces` map from a lab's state.json.
+///
+/// Cheaper than [`load`] (no topology parse) — used by `status --scan` to
+/// cross-check that resources the state claims exist are still present on
+/// the host.
+pub fn load_namespace_names(name: &str) -> Result<Vec<String>> {
+    let state_path = state_dir(name).join("state.json");
+    if !state_path.exists() {
+        return Err(Error::NotFound {
+            name: name.to_string(),
+        });
+    }
+    let state_json = std::fs::read_to_string(&state_path)?;
+    let state: LabState = serde_json::from_str(&state_json).map_err(|e| Error::State {
+        op: "parse",
+        detail: format!("failed to parse state: {e}"),
+        path: state_path,
+    })?;
+    Ok(state.namespaces.into_values().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

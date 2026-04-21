@@ -152,6 +152,28 @@ async fn exec_attached_forwards_exit_code(lab: RunningLab) {
     assert_ne!(lab.exec_attached("host", "false", &[]).unwrap(), 0);
 }
 
+// `exec_in` with an explicit workdir should land the child there. Uses
+// /tmp since namespace nodes share the host mount namespace — an
+// absolute host path is the meaningful case.
+#[lab_test("examples/simple.nll")]
+async fn exec_in_respects_workdir(lab: RunningLab) {
+    let output = lab
+        .exec_in(
+            "host",
+            "pwd",
+            &[],
+            Some(std::path::Path::new("/tmp")),
+        )
+        .unwrap();
+    assert_eq!(output.exit_code, 0, "pwd failed: {}", output.stderr);
+    assert_eq!(
+        output.stdout.trim(),
+        "/tmp",
+        "expected cwd=/tmp, got: {:?}",
+        output.stdout
+    );
+}
+
 // ─── Builder-based test ───────────────────────────────────
 
 #[lab_test(topology = builder_topology)]

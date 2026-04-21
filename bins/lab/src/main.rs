@@ -151,6 +151,12 @@ enum Commands {
         #[arg(long = "env", value_name = "KEY=VALUE")]
         env_vars: Vec<String>,
 
+        /// Working directory for the command. For namespace nodes this is
+        /// `chdir()` on the host filesystem; for container nodes it's passed
+        /// as `-w <path>` to docker/podman.
+        #[arg(long, value_name = "DIR")]
+        workdir: Option<PathBuf>,
+
         /// Command and arguments.
         #[arg(trailing_var_arg = true, required = true)]
         cmd: Vec<String>,
@@ -172,7 +178,16 @@ enum Commands {
         #[arg(long = "env", value_name = "KEY=VALUE")]
         env_vars: Vec<String>,
 
+        /// Working directory for the spawned process (chdir before exec).
+        #[arg(long, value_name = "DIR")]
+        workdir: Option<PathBuf>,
+
         /// Wait for TCP port after spawn (e.g., "127.0.0.1:8080" or "8080").
+        ///
+        /// The probe runs inside the node's namespace, so `127.0.0.1:<port>`
+        /// only matches a service that bound to the loopback interface. If
+        /// your service binds to a specific node IP (e.g., the interface
+        /// address), pass that address here instead of `127.0.0.1`.
         #[arg(long)]
         wait_tcp: Option<String>,
 
@@ -914,19 +929,37 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     }
                 }
                 if scan && !json && !orphans.is_empty() {
-                    println!();
-                    println!("Orphans detected (no matching state file):");
-                    for b in &orphans.bridges {
-                        println!("  bridge {b}");
+                    let has_orphans = !orphans.bridges.is_empty()
+                        || !orphans.veths.is_empty()
+                        || !orphans.netns.is_empty();
+                    if has_orphans {
+                        println!();
+                        println!("Orphans detected (no matching state file):");
+                        for b in &orphans.bridges {
+                            println!("  bridge {b}");
+                        }
+                        for v in &orphans.veths {
+                            println!("  veth   {v}");
+                        }
+                        for n in &orphans.netns {
+                            println!("  netns  {n}");
+                        }
+                        println!();
+                        println!("Run `nlink-lab destroy --orphans` to clean up.");
                     }
-                    for v in &orphans.veths {
-                        println!("  veth   {v}");
+                    if !orphans.stale.is_empty() {
+                        println!();
+                        println!("Stale labs detected (state file with missing resources):");
+                        for s in &orphans.stale {
+                            println!(
+                                "  {}  (missing: {})",
+                                s.name,
+                                s.missing_namespaces.join(", ")
+                            );
+                        }
+                        println!();
+                        println!("Run `nlink-lab destroy <lab>` to clean up each stale state file.");
                     }
-                    for n in &orphans.netns {
-                        println!("  netns  {n}");
-                    }
-                    println!();
-                    println!("Run `nlink-lab destroy --orphans` to clean up.");
                 }
                 Ok(())
             }
@@ -981,6 +1014,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             lab,
             node,
             env_vars,
+            workdir,
             cmd,
         } => {
             check_root();
@@ -1004,7 +1038,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     }
                     let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
                     let start = Instant::now();
-                    let output = running.exec(&node, &cmd[0], &args)?;
+                    let output =
+                        running.exec_in(&node, &cmd[0], &args, workdir.as_deref())?;
                     let duration_ms = start.elapsed().as_millis() as u64;
                     Ok(serde_json::json!({
                         "exit_code": output.exit_code,
@@ -1043,7 +1078,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
-            let code = running.exec_attached(&node, &cmd[0], &args)?;
+            let code =
+                running.exec_attached_in(&node, &cmd[0], &args, workdir.as_deref())?;
             if code != 0 {
                 std::process::exit(code);
             }
@@ -1055,6 +1091,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             node,
             log_dir,
             env_vars,
+            workdir,
             wait_tcp,
             wait_timeout,
             cmd,
@@ -1078,7 +1115,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
-            let pid = running.spawn_with_logs(&node, &args, log_dir.as_deref())?;
+            let pid = running.spawn_with_logs_in(
+                &node,
+                &args,
+                log_dir.as_deref(),
+                workdir.as_deref(),
+            )?;
             running.save_state()?;
 
             if cli.json {
@@ -2652,27 +2694,92 @@ struct Orphans {
     veths: Vec<String>,
     /// Named network namespaces whose prefix doesn't match any known lab.
     netns: Vec<String>,
+    /// Labs whose state file claims namespaces that no longer exist on the
+    /// host — the mirror case of the above (state with no resources). Most
+    /// commonly caused by a reboot.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    stale: Vec<StaleLab>,
+}
+
+/// A state-backed lab with one or more namespaces missing from the host.
+#[derive(Debug, Clone, serde::Serialize)]
+struct StaleLab {
+    /// Lab name.
+    name: String,
+    /// Namespaces claimed by `state.json` that are absent from `ip netns list`.
+    missing_namespaces: Vec<String>,
 }
 
 impl Orphans {
     fn is_empty(&self) -> bool {
-        self.bridges.is_empty() && self.veths.is_empty() && self.netns.is_empty()
+        self.bridges.is_empty()
+            && self.veths.is_empty()
+            && self.netns.is_empty()
+            && self.stale.is_empty()
     }
 }
 
-/// Scan the host for lab-owned resources without a matching state file.
+/// Scan the host for lab-owned resources without a matching state file, and
+/// state-backed labs whose resources are gone from the host.
 ///
-/// Detection rules:
+/// Detection rules for *orphans* (resource with no state):
 /// - Interfaces matching `^nl[0-9a-f]{8}$` are mgmt bridges; orphan if the
 ///   hash doesn't match any known lab's `mgmt_bridge_name_for`.
 /// - Interfaces starting with `nm` + 8 hex + digits are mgmt veth peers;
 ///   orphan if the hash portion doesn't match any known lab.
 /// - Named netns whose prefix matches a known lab are skipped; remaining
 ///   lab-shaped names (containing a hyphen) are reported.
+///
+/// Detection rule for *stale* (state with no resources): for each known lab,
+/// compare the namespaces it claims in `state.json` against the host's
+/// current `ip netns list`. Any missing namespace marks the lab stale.
 fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
     let ifnames: Vec<String> = list_ip_links();
     let netns: Vec<String> = list_netns();
-    classify_orphans(&ifnames, &netns, known)
+    let mut orphans = classify_orphans(&ifnames, &netns, known);
+
+    let lab_namespaces: Vec<(String, Vec<String>)> = known
+        .iter()
+        .filter_map(|info| {
+            nlink_lab::state::load_namespace_names(&info.name)
+                .ok()
+                .map(|ns| (info.name.clone(), ns))
+        })
+        .collect();
+    orphans.stale = classify_stale(&lab_namespaces, &netns);
+    orphans
+}
+
+/// Pure stale-lab classifier.
+///
+/// For each `(lab_name, claimed_namespaces)` pair, return a [`StaleLab`] if
+/// any claimed namespace is absent from `netns_present`. Labs with all
+/// namespaces present are omitted. Claimed namespaces are deduplicated and
+/// sorted in the output so results are stable for tests.
+fn classify_stale(
+    labs: &[(String, Vec<String>)],
+    netns_present: &[String],
+) -> Vec<StaleLab> {
+    let present: std::collections::HashSet<&str> =
+        netns_present.iter().map(|s| s.as_str()).collect();
+    let mut out = Vec::new();
+    for (name, claimed) in labs {
+        let mut missing: Vec<String> = claimed
+            .iter()
+            .filter(|ns| !present.contains(ns.as_str()))
+            .cloned()
+            .collect();
+        missing.sort();
+        missing.dedup();
+        if !missing.is_empty() {
+            out.push(StaleLab {
+                name: name.clone(),
+                missing_namespaces: missing,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
 }
 
 fn list_ip_links() -> Vec<String> {
@@ -3032,6 +3139,66 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn classify_stale_flags_lab_with_missing_namespace() {
+        let labs = vec![(
+            "des-3m".into(),
+            vec![
+                "des-3m-router".to_string(),
+                "des-3m-site_a".to_string(),
+                "des-3m-site_b".to_string(),
+            ],
+        )];
+        // Host sees nothing — classic WSL-restart case.
+        let stale = classify_stale(&labs, &[]);
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].name, "des-3m");
+        assert_eq!(
+            stale[0].missing_namespaces,
+            vec![
+                "des-3m-router".to_string(),
+                "des-3m-site_a".to_string(),
+                "des-3m-site_b".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn classify_stale_ignores_healthy_labs() {
+        let labs = vec![(
+            "healthy".into(),
+            vec!["healthy-a".to_string(), "healthy-b".to_string()],
+        )];
+        let present = vec!["healthy-a".into(), "healthy-b".into()];
+        assert!(classify_stale(&labs, &present).is_empty());
+    }
+
+    #[test]
+    fn classify_stale_reports_partial_loss() {
+        let labs = vec![(
+            "partial".into(),
+            vec!["partial-a".to_string(), "partial-b".to_string()],
+        )];
+        let present = vec!["partial-a".into()];
+        let stale = classify_stale(&labs, &present);
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].missing_namespaces, vec!["partial-b".to_string()]);
+    }
+
+    #[test]
+    fn classify_stale_orders_deterministically() {
+        // Two stale labs provided out of alphabetical order — output should
+        // be sorted so test assertions and `--json` output are stable.
+        let labs = vec![
+            ("zebra".into(), vec!["zebra-a".to_string()]),
+            ("alpha".into(), vec!["alpha-a".to_string()]),
+        ];
+        let stale = classify_stale(&labs, &[]);
+        assert_eq!(stale.len(), 2);
+        assert_eq!(stale[0].name, "alpha");
+        assert_eq!(stale[1].name, "zebra");
     }
 
     #[test]

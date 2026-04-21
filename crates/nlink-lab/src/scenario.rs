@@ -235,7 +235,7 @@ async fn clear_impairment(lab: &RunningLab, endpoint: &str) -> Result<()> {
     let conn: Connection<Route> = nlink::netlink::namespace::connection_for(ns_name)
         .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
     // Delete root qdisc — this removes all child qdiscs too
-    let _ = conn.del_qdisc(&ep.iface, "root").await;
+    let _ = conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT).await;
     Ok(())
 }
 

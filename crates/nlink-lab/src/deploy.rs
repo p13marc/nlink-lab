@@ -1235,14 +1235,16 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
         let mut limiter = RateLimiter::new(&ep.iface);
         if let Some(egress) = &rate_limit.egress {
-            limiter = limiter.egress(egress).map_err(|e| {
+            let bits = parse_rate_bps(egress).map_err(|e| {
                 Error::deploy_failed(format!("bad egress rate on '{endpoint_str}': {e}"))
             })?;
+            limiter = limiter.egress(nlink::util::Rate::bits_per_sec(bits));
         }
         if let Some(ingress) = &rate_limit.ingress {
-            limiter = limiter.ingress(ingress).map_err(|e| {
+            let bits = parse_rate_bps(ingress).map_err(|e| {
                 Error::deploy_failed(format!("bad ingress rate on '{endpoint_str}': {e}"))
             })?;
+            limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
         }
         limiter.apply(&conn).await.map_err(|e| {
             Error::deploy_failed(format!(
@@ -2887,6 +2889,8 @@ fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NodeHandle> 
 
 /// Build a NetemConfig from an Impairment.
 pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<NetemConfig> {
+    use nlink::util::{Percent, Rate};
+
     let mut netem = NetemConfig::new();
 
     if let Some(delay) = &impairment.delay {
@@ -2896,16 +2900,16 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
         netem = netem.jitter(parse_duration(jitter)?);
     }
     if let Some(loss) = &impairment.loss {
-        netem = netem.loss(parse_percent(loss)?);
+        netem = netem.loss(Percent::new(parse_percent(loss)?));
     }
     if let Some(rate) = &impairment.rate {
-        netem = netem.rate_bps(parse_rate_bps(rate)?);
+        netem = netem.rate(Rate::bits_per_sec(parse_rate_bps(rate)?));
     }
     if let Some(corrupt) = &impairment.corrupt {
-        netem = netem.corrupt(parse_percent(corrupt)?);
+        netem = netem.corrupt(Percent::new(parse_percent(corrupt)?));
     }
     if let Some(reorder) = &impairment.reorder {
-        netem = netem.reorder(parse_percent(reorder)?);
+        netem = netem.reorder(Percent::new(parse_percent(reorder)?));
     }
 
     Ok(netem)

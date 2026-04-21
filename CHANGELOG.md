@@ -31,6 +31,12 @@ All notable changes to this project will be documented in this file.
 - Atomic state file writes (temp + rename)
 
 ### Changed
+- Upgraded `nlink` dependency from 0.12.2 to 0.13.0. Internal only —
+  no behavioural change. `NetemConfig::rate_bps(u64)` was removed in
+  favour of `rate(Rate)`; `NetemConfig::{loss,corrupt,reorder}` and
+  `RateLimiter::{egress,ingress}` now take typed `Percent`/`Rate`
+  wrappers instead of `f64`/`&str`. `del_qdisc`/`change_qdisc` take
+  `TcHandle` (use `TcHandle::ROOT` in place of `"root"`).
 - `nlink-lab logs --pid <pid> --follow` now actually follows. Previously
   `--follow` was silently dropped on the `--pid` path (container logs
   were the only case it worked for). The CLI now implements `tail -F`

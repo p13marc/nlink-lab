@@ -561,7 +561,10 @@ impl RunningLab {
         let netem = crate::deploy::build_netem(impairment)?;
 
         // Try change first (update existing qdisc), fall back to add
-        match conn.change_qdisc(&ep.iface, "root", netem.clone()).await {
+        match conn
+            .change_qdisc(&ep.iface, nlink::TcHandle::ROOT, netem.clone())
+            .await
+        {
             Ok(()) => Ok(()),
             Err(_) => conn
                 .add_qdisc(&ep.iface, netem)
@@ -580,7 +583,7 @@ impl RunningLab {
             .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
 
         // Delete the root qdisc (removes all netem config)
-        conn.del_qdisc(&ep.iface, "root")
+        conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT)
             .await
             .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
         Ok(())

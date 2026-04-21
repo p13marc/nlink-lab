@@ -1031,7 +1031,10 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 return Ok(());
             }
 
-            // Non-JSON path
+            // Non-JSON path: stream stdio live so long-running commands
+            // (services, tail -f, ping) show output as it's produced.
+            // Scripts that want captured/structured output should use
+            // `--json`, which still buffers into the structured response.
             let running = nlink_lab::RunningLab::load(&lab)?;
             let node_names: Vec<&str> = running.node_names().collect();
             if !node_names.contains(&node.as_str()) {
@@ -1040,13 +1043,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
-            let output = running.exec(&node, &cmd[0], &args)?;
-            print!("{}", output.stdout);
-            if !output.stderr.is_empty() {
-                eprint!("{}", output.stderr);
-            }
-            if output.exit_code != 0 {
-                std::process::exit(output.exit_code);
+            let code = running.exec_attached(&node, &cmd[0], &args)?;
+            if code != 0 {
+                std::process::exit(code);
             }
             Ok(())
         }

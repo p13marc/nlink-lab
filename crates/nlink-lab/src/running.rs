@@ -223,6 +223,57 @@ impl RunningLab {
         }
     }
 
+    /// Execute a command in a lab node and inherit stdio so stdout/stderr
+    /// stream live to the caller's terminal.
+    ///
+    /// Use this for commands that produce output over time (a service, a
+    /// `tail -f`, a `ping`) — the buffered [`exec`] path only prints after
+    /// the child exits. Returns the child's exit code; output is not
+    /// captured.
+    ///
+    /// [`exec`]: Self::exec
+    pub fn exec_attached(&self, node: &str, cmd: &str, args: &[&str]) -> Result<i32> {
+        if let Some(container) = self.containers.get(node) {
+            let rt_binary = self
+                .runtime_binary
+                .as_deref()
+                .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
+            let mut all_args = vec!["exec", "-i", &container.id, cmd];
+            all_args.extend(args);
+            let status = std::process::Command::new(rt_binary)
+                .args(&all_args)
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "attached exec in container '{node}' failed: {e}"
+                    ))
+                })?;
+            Ok(status.code().unwrap_or(-1))
+        } else {
+            let ns_name = self.namespace_for(node)?;
+            // Enter the namespace via nsenter so stdio inherits naturally.
+            // Uses the `--net=<path>` single-argv form (see the same pattern
+            // used by the `shell` subcommand).
+            let ns_path = format!("/var/run/netns/{ns_name}");
+            let status = std::process::Command::new("nsenter")
+                .arg(format!("--net={ns_path}"))
+                .arg("--")
+                .arg(cmd)
+                .args(args)
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .map_err(|e| {
+                    Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
+                })?;
+            Ok(status.code().unwrap_or(-1))
+        }
+    }
+
     /// Spawn a background process in a lab node.
     pub fn spawn(&mut self, node: &str, cmd: &[&str]) -> Result<u32> {
         if cmd.is_empty() {

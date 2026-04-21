@@ -30,6 +30,15 @@ All notable changes to this project will be documented in this file.
 - `time` crate for ISO 8601 timestamps
 - Atomic state file writes (temp + rename)
 
+### Changed
+- `nlink-lab exec` (non-JSON mode) now streams stdio live. Previously it
+  captured the full stdout/stderr into buffers and printed them only
+  after the child exited, which made it unusable for services,
+  `tail -f`, `ping`, and any other long-running command. `--json` still
+  returns structured `{ exit_code, stdout, stderr, duration_ms }`.
+  `RunningLab::exec_attached(node, cmd, args)` exposes the streaming
+  path for library callers.
+
 ### Fixed
 - `nlink-lab shell` no longer fails with
   `nsenter: neither filename nor target pid supplied for ns/net` — the

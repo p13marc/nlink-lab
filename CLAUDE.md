@@ -49,10 +49,10 @@ sudo nlink-lab destroy --orphans
 nlink-lab status
 nlink-lab status --scan
 
-# Execute in a lab node
+# Execute in a lab node (stdio streams live — good for services, tail -f, ping)
 sudo nlink-lab exec simple router -- ip addr
 
-# Execute with JSON output (exit_code, stdout, stderr, duration_ms)
+# Execute with JSON output (buffered; exit_code, stdout, stderr, duration_ms)
 sudo nlink-lab exec --json simple router -- ip addr
 
 # Spawn a background process (tracked by ps/kill)

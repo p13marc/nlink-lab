@@ -143,6 +143,15 @@ async fn exit_code_forwarded(lab: RunningLab) {
     assert_ne!(output.exit_code, 0);
 }
 
+// `exec_attached` inherits stdio so the child prints to the caller's
+// terminal. Test only covers exit-code propagation — streaming behaviour
+// is visible manually but awkward to assert in a non-TTY test harness.
+#[lab_test("examples/simple.nll")]
+async fn exec_attached_forwards_exit_code(lab: RunningLab) {
+    assert_eq!(lab.exec_attached("host", "true", &[]).unwrap(), 0);
+    assert_ne!(lab.exec_attached("host", "false", &[]).unwrap(), 0);
+}
+
 // ─── Builder-based test ───────────────────────────────────
 
 #[lab_test(topology = builder_topology)]

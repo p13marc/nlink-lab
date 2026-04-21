@@ -164,6 +164,52 @@ fn builder_topology() -> nlink_lab::Topology {
         .build()
 }
 
+// Regression test for the peer-name collision bug: two networks that
+// share a 4-char prefix used to produce the same mgmt-ns peer interface
+// name (`brlan_p{idx}`) and fail the second veth create with EEXIST.
+// Hash-based naming should disambiguate them.
+#[lab_test(topology = prefix_collision_topology)]
+async fn deploy_networks_with_shared_prefix(lab: RunningLab) {
+    // Success = both networks came up.
+    let out_a = lab
+        .exec("host_a", "ip", &["addr", "show", "eth0"])
+        .unwrap();
+    assert_eq!(out_a.exit_code, 0);
+    assert!(
+        out_a.stdout.contains("10.1.0.2/24"),
+        "host_a missing address on lan_a: {}",
+        out_a.stdout
+    );
+
+    let out_b = lab
+        .exec("host_b", "ip", &["addr", "show", "eth0"])
+        .unwrap();
+    assert_eq!(out_b.exit_code, 0);
+    assert!(
+        out_b.stdout.contains("10.2.0.2/24"),
+        "host_b missing address on lan_b: {}",
+        out_b.stdout
+    );
+}
+
+fn prefix_collision_topology() -> nlink_lab::Topology {
+    // Lab name must be short enough that `{prefix}-{net_name}` stays under
+    // 15 chars (Linux IFNAMSIZ) for both networks, otherwise the bridge
+    // names collide — unrelated to the peer-name bug under test.
+    nlink_lab::Lab::new("pcol")
+        .node("host_a", |n| n)
+        .node("host_b", |n| n)
+        .network("lan_a", |net| {
+            net.subnet("10.1.0.0/24")
+                .port("host_a", |p| p.interface("eth0").address("10.1.0.2/24"))
+        })
+        .network("lan_b", |net| {
+            net.subnet("10.2.0.0/24")
+                .port("host_b", |p| p.interface("eth0").address("10.2.0.2/24"))
+        })
+        .build()
+}
+
 // ─── Firewall test ────────────────────────────────────────
 
 #[tokio::test]

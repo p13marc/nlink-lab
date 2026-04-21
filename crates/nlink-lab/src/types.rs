@@ -312,6 +312,20 @@ pub fn mgmt_bridge_name_for(lab_name: &str) -> String {
     format!("nl{}", name_hash_str(lab_name))
 }
 
+/// Compute the mgmt-namespace veth peer name for a bridge network port.
+///
+/// Format: `np{hash8}{idx}` (11–14 chars, fits the 15-char Linux ifname
+/// budget for idx < 10_000). The hash is over `net_name` only — collisions
+/// across different labs are not a concern because the network bridge lives
+/// in the lab's mgmt namespace.
+///
+/// Replaces an earlier scheme (`br{prefix4}p{idx}`) that truncated
+/// `net_name` to 4 characters and silently collided whenever two networks
+/// shared a 4-char prefix (e.g. `lan_a`/`lan_b` both → `brlan_p{idx}`).
+pub fn network_peer_name_for(net_name: &str, idx: usize) -> String {
+    format!("np{}{}", name_hash_str(net_name), idx)
+}
+
 /// Reusable node template.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Profile {
@@ -912,5 +926,51 @@ impl Topology {
             return profile.firewall.as_ref();
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod name_hash_tests {
+    use super::*;
+
+    #[test]
+    fn network_peer_name_fits_ifname_budget() {
+        // Linux IFNAMSIZ is 16 (15 + NUL). Names must be ≤ 15 chars.
+        for idx in 0..10_000usize {
+            let n = network_peer_name_for("anything", idx);
+            assert!(
+                n.len() <= 15,
+                "peer name {n:?} ({} chars) exceeds 15-char ifname budget",
+                n.len()
+            );
+        }
+    }
+
+    #[test]
+    fn network_peer_name_disambiguates_shared_prefixes() {
+        // Regression test: before the hash migration, `lan_a` and `lan_b`
+        // both truncated to `lan_` and produced colliding `brlan_p{idx}`
+        // peer names, causing the second veth create to EEXIST. Hash-based
+        // names must differ.
+        let a0 = network_peer_name_for("lan_a", 0);
+        let b0 = network_peer_name_for("lan_b", 0);
+        let c0 = network_peer_name_for("lan_c", 0);
+        assert_ne!(a0, b0);
+        assert_ne!(a0, c0);
+        assert_ne!(b0, c0);
+    }
+
+    #[test]
+    fn network_peer_name_is_deterministic() {
+        assert_eq!(
+            network_peer_name_for("radio", 3),
+            network_peer_name_for("radio", 3)
+        );
+    }
+
+    #[test]
+    fn network_peer_name_uses_np_prefix() {
+        let n = network_peer_name_for("mynet", 0);
+        assert!(n.starts_with("np"), "expected np prefix, got {n}");
     }
 }

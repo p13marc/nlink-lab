@@ -23,6 +23,21 @@ All notable changes to this project will be documented in this file.
 - Atomic state file writes (temp + rename)
 
 ### Fixed
+- `nlink-lab shell` no longer fails with
+  `nsenter: neither filename nor target pid supplied for ns/net` — the
+  nsenter invocation now passes `--net=<path>` as a single argv entry
+  instead of two entries, which nsenter was misparsing as the bare
+  `--net` flag with a stray command argument.
+- Bridge-network peer names no longer collide when two networks share a
+  4-char prefix (e.g. `lan_a` / `lan_b`). Previously the mgmt-side veth
+  peer was named `br{net_name[..4]}p{idx}`, which collapsed both names
+  to `brlan_p{idx}` and failed the second `add_link` with EEXIST. Peer
+  names are now `np{hash8}{idx}`, derived from a DJB2 hash of the
+  network name — deterministic, within the 15-char IFNAMSIZ budget, and
+  exposed as `nlink_lab::network_peer_name_for`.
+- Veth-creation errors for bridge networks now name the mgmt-side peer
+  interface as well as the node-side endpoint, so an EEXIST is no
+  longer misattributed to whichever name the user typed.
 - Rate limiting now applies to both link endpoints (was left-only)
 - Bare integer tokens rejected as node names
 - Division by zero in interpolation now logs error

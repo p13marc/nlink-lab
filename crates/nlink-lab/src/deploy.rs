@@ -406,13 +406,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                             name: ep.node.clone(),
                         })?;
 
-                // The peer end in mgmt ns gets a generated name
-                let peer_name = format!("br{}p{}", net_name.chars().take(4).collect::<String>(), k);
-                let peer_name = if peer_name.len() > 15 {
-                    peer_name[..15].to_string()
-                } else {
-                    peer_name
-                };
+                // The peer end in mgmt ns gets a generated name.
+                // Uses a hash of `net_name` so networks sharing a prefix
+                // (e.g. `lan_a`/`lan_b`) don't collide in the mgmt ns.
+                let peer_name = crate::types::network_peer_name_for(net_name, k);
 
                 let node_conn: Connection<Route> = node_handle.connection().map_err(|e| {
                     Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
@@ -423,7 +420,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
                 node_conn.add_link(veth).await.map_err(|e| {
                     Error::deploy_failed(format!(
-                        "failed to create veth for network '{net_name}' member '{member}': {e}"
+                        "failed to create veth for network '{net_name}' member '{member}' \
+                         (node iface '{node_iface}' in ns '{node_ns}', mgmt peer '{peer_name}'): {e}",
+                        node_iface = ep.iface,
+                        node_ns = ep.node,
                     ))
                 })?;
 

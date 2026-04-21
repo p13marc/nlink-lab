@@ -1379,9 +1379,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(status.code().unwrap_or(1));
             } else {
                 let ns = running.namespace_for(&node)?;
-                let ns_path = format!("/var/run/netns/{ns}");
+                let args = nsenter_shell_args(ns, &shell);
                 let status = std::process::Command::new("nsenter")
-                    .args(["--net", &ns_path, "--", &shell])
+                    .args(&args)
                     .stdin(std::process::Stdio::inherit())
                     .stdout(std::process::Stdio::inherit())
                     .stderr(std::process::Stdio::inherit())
@@ -2575,4 +2575,39 @@ async fn force_cleanup(name: &str) {
 
     // Also clean up state directory
     let _ = nlink_lab::state::remove(name);
+}
+
+/// Build the argv to pass to `nsenter` for entering a lab node's network
+/// namespace and exec'ing a shell.
+///
+/// Must emit `--net=<path>` as a single argument; splitting it into two
+/// (`--net`, `<path>`) makes nsenter treat `--net` as "enter target's netns"
+/// and then look for a target it never got, failing with
+/// "neither filename nor target pid supplied for ns/net".
+fn nsenter_shell_args(ns: &str, shell: &str) -> Vec<String> {
+    vec![format!("--net=/var/run/netns/{ns}"), "--".into(), shell.into()]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nsenter_shell_args_uses_equals_form() {
+        let args = nsenter_shell_args("mylab-router", "/bin/bash");
+        assert_eq!(
+            args,
+            vec![
+                "--net=/var/run/netns/mylab-router".to_string(),
+                "--".to_string(),
+                "/bin/bash".to_string(),
+            ]
+        );
+        // Guard against the split `--net` regression: no argument may be
+        // exactly `--net`, which nsenter interprets as the flag alone.
+        assert!(
+            !args.iter().any(|a| a == "--net"),
+            "bare --net would be misparsed by nsenter"
+        );
+    }
 }

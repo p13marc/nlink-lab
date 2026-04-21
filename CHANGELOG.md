@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab destroy --orphans` — reap host resources (mgmt bridges,
+  veth peers, named namespaces) that match the lab naming scheme but
+  have no `state.json`. Left behind by crashed deploys. Composes with
+  `--all` (clean state-backed labs + orphans) or runs standalone.
+- `nlink-lab status --scan` — scan the host for the same set and report
+  anything unaccounted for. Prints nothing when clean; otherwise names
+  each resource and suggests `destroy --orphans`. `--json` emits
+  `{ labs, orphans }` instead of the labs list alone.
 - NLL DSL as sole topology format (TOML removed)
 - `InterfaceKind` enum replacing string-based interface types
 - Shell completions for bash, zsh, fish, powershell

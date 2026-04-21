@@ -41,6 +41,14 @@ sudo nlink-lab deploy topology.nll --set wan_delay=50ms --set wan_loss=0.1%
 # Destroy a lab
 sudo nlink-lab destroy simple
 
+# Reap host resources left by a crashed deploy (mgmt bridges/veths/ns
+# with no state file). Can also be combined with --all.
+sudo nlink-lab destroy --orphans
+
+# List running labs; --scan also reports orphans detected on the host
+nlink-lab status
+nlink-lab status --scan
+
 # Execute in a lab node
 sudo nlink-lab exec simple router -- ip addr
 
@@ -201,8 +209,8 @@ Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
 CLI commands (32 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
-`destroy` (with `--all`), `apply`,
-`status`, `exec` (`--json`, `--env`), `spawn` (`--log-dir`, `--env`, `--wait-tcp`),
+`destroy` (with `--all`, `--orphans`), `apply`,
+`status` (with `--scan`), `exec` (`--json`, `--env`), `spawn` (`--log-dir`, `--env`, `--wait-tcp`),
 `shell` (interactive TTY), `validate` (with `--set`, `--show-ips`), `test`
 (`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),

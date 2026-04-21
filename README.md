@@ -41,6 +41,8 @@ sudo nlink-lab test --tap tests/         # TAP output
 # Tear down
 sudo nlink-lab destroy router            # single lab
 sudo nlink-lab destroy --all             # all labs
+sudo nlink-lab destroy --orphans         # reap resources left by a crashed deploy
+nlink-lab status --scan                  # list orphans without deleting
 ```
 
 ## NLL — nlink-lab Language

@@ -110,7 +110,7 @@ enum Commands {
 
     /// Tear down a running lab.
     Destroy {
-        /// Lab name (omit with --all to destroy all labs).
+        /// Lab name (omit with --all or --orphans).
         name: Option<String>,
 
         /// Continue cleanup even if some resources are already gone.
@@ -120,12 +120,23 @@ enum Commands {
         /// Destroy all running labs.
         #[arg(long)]
         all: bool,
+
+        /// Also reap mgmt bridges / veths / namespaces with no state file
+        /// (left behind by a crashed deploy). Implies best-effort cleanup;
+        /// can be combined with --all or used on its own.
+        #[arg(long)]
+        orphans: bool,
     },
 
     /// Show running labs or details of a specific lab.
     Status {
         /// Lab name (omit to list all).
         name: Option<String>,
+
+        /// Also scan the host for mgmt bridges / namespaces with no
+        /// matching state file, and report them as orphans.
+        #[arg(long)]
+        scan: bool,
     },
 
     /// Run a command in a lab node.
@@ -797,11 +808,16 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Destroy { name, force, all } => {
+        Commands::Destroy {
+            name,
+            force,
+            all,
+            orphans,
+        } => {
             check_root();
             if all {
                 let labs = nlink_lab::RunningLab::list()?;
-                if labs.is_empty() {
+                if labs.is_empty() && !orphans {
                     println!("No running labs.");
                     return Ok(());
                 }
@@ -818,11 +834,22 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                         Err(e) => eprintln!("Failed to destroy '{}': {e}", info.name),
                     }
                 }
-                println!("{} lab(s) destroyed", labs.len());
+                if !labs.is_empty() {
+                    println!("{} lab(s) destroyed", labs.len());
+                }
+                if orphans {
+                    reap_orphans(&labs).await;
+                }
+                return Ok(());
+            }
+            if orphans && name.is_none() {
+                // `destroy --orphans` alone: reap without touching state-backed labs.
+                let labs = nlink_lab::RunningLab::list()?;
+                reap_orphans(&labs).await;
                 return Ok(());
             }
             let name = name.ok_or_else(|| {
-                nlink_lab::Error::deploy_failed("lab name required (or use --all)")
+                nlink_lab::Error::deploy_failed("lab name required (or use --all/--orphans)")
             })?;
             match nlink_lab::RunningLab::load(&name) {
                 Ok(lab) => {
@@ -855,11 +882,26 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Status { name } => match name {
+        Commands::Status { name, scan } => match name {
             None => {
                 let labs = nlink_lab::RunningLab::list()?;
+                let orphans = if scan {
+                    find_orphans(&labs)
+                } else {
+                    Orphans::default()
+                };
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&labs)?);
+                    if scan {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "labs": labs,
+                                "orphans": orphans,
+                            }))?
+                        );
+                    } else {
+                        println!("{}", serde_json::to_string_pretty(&labs)?);
+                    }
                 } else if labs.is_empty() {
                     println!("No running labs.");
                 } else {
@@ -870,6 +912,21 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                             info.name, info.node_count, info.created_at
                         );
                     }
+                }
+                if scan && !json && !orphans.is_empty() {
+                    println!();
+                    println!("Orphans detected (no matching state file):");
+                    for b in &orphans.bridges {
+                        println!("  bridge {b}");
+                    }
+                    for v in &orphans.veths {
+                        println!("  veth   {v}");
+                    }
+                    for n in &orphans.netns {
+                        println!("  netns  {n}");
+                    }
+                    println!();
+                    println!("Run `nlink-lab destroy --orphans` to clean up.");
                 }
                 Ok(())
             }
@@ -2577,6 +2634,164 @@ async fn force_cleanup(name: &str) {
     let _ = nlink_lab::state::remove(name);
 }
 
+/// Resources on the host that look like lab-owned state but have no matching
+/// `state.json` — usually left behind by a crashed deploy.
+#[derive(Debug, Default, serde::Serialize)]
+struct Orphans {
+    /// Root-namespace mgmt bridges (`nl{hash8}`).
+    bridges: Vec<String>,
+    /// Root-namespace mgmt veth peers (`nm{hash8}{idx}`).
+    veths: Vec<String>,
+    /// Named network namespaces whose prefix doesn't match any known lab.
+    netns: Vec<String>,
+}
+
+impl Orphans {
+    fn is_empty(&self) -> bool {
+        self.bridges.is_empty() && self.veths.is_empty() && self.netns.is_empty()
+    }
+}
+
+/// Scan the host for lab-owned resources without a matching state file.
+///
+/// Detection rules:
+/// - Interfaces matching `^nl[0-9a-f]{8}$` are mgmt bridges; orphan if the
+///   hash doesn't match any known lab's `mgmt_bridge_name_for`.
+/// - Interfaces starting with `nm` + 8 hex + digits are mgmt veth peers;
+///   orphan if the hash portion doesn't match any known lab.
+/// - Named netns whose prefix matches a known lab are skipped; remaining
+///   lab-shaped names (containing a hyphen) are reported.
+fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
+    let ifnames: Vec<String> = list_ip_links();
+    let netns: Vec<String> = list_netns();
+    classify_orphans(&ifnames, &netns, known)
+}
+
+fn list_ip_links() -> Vec<String> {
+    let output = match std::process::Command::new("ip")
+        .args(["-o", "link", "show"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return Vec::new(),
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter_map(|line| {
+            line.split(':')
+                .nth(1)
+                .map(|s| s.trim().split('@').next().unwrap_or("").to_string())
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn list_netns() -> Vec<String> {
+    let output = match std::process::Command::new("ip")
+        .args(["netns", "list"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return Vec::new(),
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter_map(|line| line.split_whitespace().next().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Pure classification — given host state and known labs, emit orphans.
+fn classify_orphans(
+    ifnames: &[String],
+    netns: &[String],
+    known: &[nlink_lab::state::LabInfo],
+) -> Orphans {
+    let mut known_bridges: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut known_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut known_prefixes: Vec<String> = Vec::new();
+    for info in known {
+        let bridge = nlink_lab::mgmt_bridge_name_for(&info.name);
+        if bridge.len() > 2 {
+            known_hashes.insert(bridge[2..].to_string());
+        }
+        known_bridges.insert(bridge);
+        known_prefixes.push(format!("{}-", info.name));
+    }
+
+    let mut orphans = Orphans::default();
+    for ifname in ifnames {
+        // Mgmt bridge: `nl` + 8 hex chars, total 10.
+        if ifname.len() == 10
+            && ifname.starts_with("nl")
+            && ifname[2..].chars().all(|c| c.is_ascii_hexdigit())
+            && !known_bridges.contains(ifname)
+        {
+            orphans.bridges.push(ifname.clone());
+            continue;
+        }
+        // Mgmt veth peer: `nm` + 8 hex + 1+ digits.
+        if ifname.len() >= 11
+            && ifname.starts_with("nm")
+            && ifname[2..10].chars().all(|c| c.is_ascii_hexdigit())
+            && ifname[10..].chars().all(|c| c.is_ascii_digit())
+            && !known_hashes.contains(&ifname[2..10])
+        {
+            orphans.veths.push(ifname.clone());
+        }
+    }
+
+    for ns in netns {
+        if known_prefixes.iter().any(|p| ns.starts_with(p.as_str())) {
+            continue;
+        }
+        if ns.contains('-') {
+            orphans.netns.push(ns.clone());
+        }
+    }
+
+    orphans
+}
+
+/// Best-effort cleanup of orphan resources found by [`find_orphans`].
+async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
+    let orphans = find_orphans(known);
+    if orphans.is_empty() {
+        println!("No orphans detected.");
+        return;
+    }
+    // Netns first: deleting a namespace reaps the veths inside it.
+    for ns in &orphans.netns {
+        let r = std::process::Command::new("ip")
+            .args(["netns", "delete", ns])
+            .status();
+        match r {
+            Ok(s) if s.success() => println!("  deleted namespace '{ns}'"),
+            _ => eprintln!("  warning: failed to delete namespace '{ns}'"),
+        }
+    }
+    for v in &orphans.veths {
+        let _ = std::process::Command::new("ip")
+            .args(["link", "delete", v])
+            .stderr(std::process::Stdio::null())
+            .status();
+        println!("  deleted veth '{v}'");
+    }
+    for b in &orphans.bridges {
+        let r = std::process::Command::new("ip")
+            .args(["link", "delete", b])
+            .stderr(std::process::Stdio::null())
+            .status();
+        if let Ok(s) = r
+            && s.success()
+        {
+            println!("  deleted mgmt bridge '{b}'");
+        }
+    }
+}
+
 /// Build the argv to pass to `nsenter` for entering a lab node's network
 /// namespace and exec'ing a shell.
 ///
@@ -2591,6 +2806,7 @@ fn nsenter_shell_args(ns: &str, shell: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nlink_lab::state::LabInfo;
 
     #[test]
     fn nsenter_shell_args_uses_equals_form() {
@@ -2608,6 +2824,85 @@ mod tests {
         assert!(
             !args.iter().any(|a| a == "--net"),
             "bare --net would be misparsed by nsenter"
+        );
+    }
+
+    fn info(name: &str) -> LabInfo {
+        LabInfo {
+            name: name.to_string(),
+            node_count: 0,
+            created_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn classify_orphans_reports_unknown_mgmt_bridge() {
+        let known = vec![info("keep")];
+        let keep_bridge = nlink_lab::mgmt_bridge_name_for("keep");
+        let orphan_bridge = nlink_lab::mgmt_bridge_name_for("gone");
+        let ifnames = vec![keep_bridge.clone(), orphan_bridge.clone(), "eth0".into()];
+        let orphans = classify_orphans(&ifnames, &[], &known);
+        assert_eq!(orphans.bridges, vec![orphan_bridge]);
+        assert!(orphans.veths.is_empty());
+    }
+
+    #[test]
+    fn classify_orphans_skips_known_mgmt_veths() {
+        let known = vec![info("keep")];
+        let keep_hash = &nlink_lab::mgmt_bridge_name_for("keep")[2..];
+        let gone_hash = &nlink_lab::mgmt_bridge_name_for("gone")[2..];
+        let ifnames = vec![
+            format!("nm{keep_hash}0"),
+            format!("nm{gone_hash}0"),
+            format!("nm{gone_hash}42"),
+            "lo".into(),
+            "eth0".into(),
+        ];
+        let orphans = classify_orphans(&ifnames, &[], &known);
+        assert_eq!(orphans.veths.len(), 2);
+        assert!(orphans.veths.iter().all(|v| v.contains(gone_hash)));
+    }
+
+    #[test]
+    fn classify_orphans_ignores_system_netns() {
+        // Bare system netns names (no hyphen) are never flagged.
+        let orphans = classify_orphans(&[], &["default".into(), "init".into()], &[]);
+        assert!(orphans.netns.is_empty());
+    }
+
+    #[test]
+    fn classify_orphans_reports_unknown_netns() {
+        let known = vec![info("keep")];
+        let netns = vec![
+            "keep-router".into(),
+            "keep-mgmt".into(),
+            "stale-mgmt".into(),
+            "stale-node1".into(),
+        ];
+        let orphans = classify_orphans(&[], &netns, &known);
+        assert_eq!(orphans.netns.len(), 2);
+        assert!(orphans.netns.contains(&"stale-mgmt".to_string()));
+        assert!(orphans.netns.contains(&"stale-node1".to_string()));
+    }
+
+    #[test]
+    fn classify_orphans_ignores_non_lab_interfaces() {
+        // Random interface names should not trigger detection.
+        let ifnames = vec![
+            "eth0".into(),
+            "docker0".into(),
+            "br-abc".into(),
+            "wlp3s0".into(),
+            // nl-prefixed but wrong length / non-hex — not a mgmt bridge.
+            "nlmonitor".into(),
+            "nl1234".into(),
+            // nm-prefixed but no trailing digits.
+            "nmabcdef01".into(),
+        ];
+        let orphans = classify_orphans(&ifnames, &[], &[]);
+        assert!(
+            orphans.bridges.is_empty() && orphans.veths.is_empty(),
+            "false positives: {orphans:?}"
         );
     }
 }

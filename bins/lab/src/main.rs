@@ -958,7 +958,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                             );
                         }
                         println!();
-                        println!("Run `nlink-lab destroy <lab>` to clean up each stale state file.");
+                        println!(
+                            "Run `nlink-lab destroy <lab>` to clean up each stale state file."
+                        );
                     }
                 }
                 Ok(())
@@ -1038,8 +1040,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     }
                     let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
                     let start = Instant::now();
-                    let output =
-                        running.exec_in(&node, &cmd[0], &args, workdir.as_deref())?;
+                    let output = running.exec_in(&node, &cmd[0], &args, workdir.as_deref())?;
                     let duration_ms = start.elapsed().as_millis() as u64;
                     Ok(serde_json::json!({
                         "exit_code": output.exit_code,
@@ -1078,8 +1079,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
-            let code =
-                running.exec_attached_in(&node, &cmd[0], &args, workdir.as_deref())?;
+            let code = running.exec_attached_in(&node, &cmd[0], &args, workdir.as_deref())?;
             if code != 0 {
                 std::process::exit(code);
             }
@@ -1115,12 +1115,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
-            let pid = running.spawn_with_logs_in(
-                &node,
-                &args,
-                log_dir.as_deref(),
-                workdir.as_deref(),
-            )?;
+            let pid =
+                running.spawn_with_logs_in(&node, &args, log_dir.as_deref(), workdir.as_deref())?;
             running.save_state()?;
 
             if cli.json {
@@ -2756,10 +2752,7 @@ fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
 /// any claimed namespace is absent from `netns_present`. Labs with all
 /// namespaces present are omitted. Claimed namespaces are deduplicated and
 /// sorted in the output so results are stable for tests.
-fn classify_stale(
-    labs: &[(String, Vec<String>)],
-    netns_present: &[String],
-) -> Vec<StaleLab> {
+fn classify_stale(labs: &[(String, Vec<String>)], netns_present: &[String]) -> Vec<StaleLab> {
     let present: std::collections::HashSet<&str> =
         netns_present.iter().map(|s| s.as_str()).collect();
     let mut out = Vec::new();
@@ -2922,12 +2915,10 @@ fn tail_follow_to<W: std::io::Write>(
     should_continue: impl Fn() -> bool,
 ) -> nlink_lab::Result<()> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut file = std::fs::File::open(path).map_err(|e| {
-        nlink_lab::Error::deploy_failed(format!("failed to open log file: {e}"))
-    })?;
-    file.seek(SeekFrom::Start(start_offset)).map_err(|e| {
-        nlink_lab::Error::deploy_failed(format!("seek on log file: {e}"))
-    })?;
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("failed to open log file: {e}")))?;
+    file.seek(SeekFrom::Start(start_offset))
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("seek on log file: {e}")))?;
     let mut pos = start_offset;
     let mut buf = [0u8; 8192];
     while should_continue() {
@@ -2976,7 +2967,11 @@ fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<(
 /// and then look for a target it never got, failing with
 /// "neither filename nor target pid supplied for ns/net".
 fn nsenter_shell_args(ns: &str, shell: &str) -> Vec<String> {
-    vec![format!("--net=/var/run/netns/{ns}"), "--".into(), shell.into()]
+    vec![
+        format!("--net=/var/run/netns/{ns}"),
+        "--".into(),
+        shell.into(),
+    ]
 }
 
 #[cfg(test)]

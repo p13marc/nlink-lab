@@ -294,9 +294,7 @@ impl RunningLab {
                 .stderr(std::process::Stdio::inherit())
                 .status()
                 .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "attached exec in container '{node}' failed: {e}"
-                    ))
+                    Error::deploy_failed(format!("attached exec in container '{node}' failed: {e}"))
                 })?;
             Ok(status.code().unwrap_or(-1))
         } else {

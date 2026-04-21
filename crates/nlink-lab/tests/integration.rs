@@ -158,12 +158,7 @@ async fn exec_attached_forwards_exit_code(lab: RunningLab) {
 #[lab_test("examples/simple.nll")]
 async fn exec_in_respects_workdir(lab: RunningLab) {
     let output = lab
-        .exec_in(
-            "host",
-            "pwd",
-            &[],
-            Some(std::path::Path::new("/tmp")),
-        )
+        .exec_in("host", "pwd", &[], Some(std::path::Path::new("/tmp")))
         .unwrap();
     assert_eq!(output.exit_code, 0, "pwd failed: {}", output.stderr);
     assert_eq!(
@@ -202,9 +197,7 @@ fn builder_topology() -> nlink_lab::Topology {
 #[lab_test(topology = prefix_collision_topology)]
 async fn deploy_networks_with_shared_prefix(lab: RunningLab) {
     // Success = both networks came up.
-    let out_a = lab
-        .exec("host_a", "ip", &["addr", "show", "eth0"])
-        .unwrap();
+    let out_a = lab.exec("host_a", "ip", &["addr", "show", "eth0"]).unwrap();
     assert_eq!(out_a.exit_code, 0);
     assert!(
         out_a.stdout.contains("10.1.0.2/24"),
@@ -212,9 +205,7 @@ async fn deploy_networks_with_shared_prefix(lab: RunningLab) {
         out_a.stdout
     );
 
-    let out_b = lab
-        .exec("host_b", "ip", &["addr", "show", "eth0"])
-        .unwrap();
+    let out_b = lab.exec("host_b", "ip", &["addr", "show", "eth0"]).unwrap();
     assert_eq!(out_b.exit_code, 0);
     assert!(
         out_b.stdout.contains("10.2.0.2/24"),

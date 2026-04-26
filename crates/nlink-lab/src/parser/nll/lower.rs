@@ -1597,6 +1597,16 @@ fn interpolate_network(n: &ast::NetworkDef, vars: &HashMap<String, String>) -> a
         subnet: n.subnet.as_ref().map(|s| i(s, vars)),
         vlans: n.vlans.clone(),
         ports: n.ports.clone(),
+        impairments: n
+            .impairments
+            .iter()
+            .map(|imp| ast::NetworkImpairDef {
+                src: i(&imp.src, vars),
+                dst: i(&imp.dst, vars),
+                props: imp.props.clone(),
+                rate_cap: imp.rate_cap.as_ref().map(|s| i(s, vars)),
+            })
+            .collect(),
     }
 }
 
@@ -2394,6 +2404,15 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
         );
     }
 
+    for imp in &net.impairments {
+        network.impairments.push(types::NetworkImpairment {
+            src: imp.src.clone(),
+            dst: imp.dst.clone(),
+            impairment: lower_impair_props(&imp.props),
+            rate_cap: imp.rate_cap.clone(),
+        });
+    }
+
     // Subnet auto-assignment: assign sequential IPs to members without explicit addresses
     if let Some(subnet) = &net.subnet {
         network.subnet = Some(subnet.clone());
@@ -2969,6 +2988,35 @@ network lan {
         assert_eq!(net.ports["a:eth0"].addresses, vec!["10.0.1.1/24"]);
         assert_eq!(net.ports["b:eth0"].addresses, vec!["10.0.1.2/24"]);
         assert_eq!(net.ports["c:eth0"].addresses, vec!["10.0.1.3/24"]);
+    }
+
+    #[test]
+    fn test_lower_network_per_pair_impair() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node hq
+node alpha
+node bravo
+network radio {
+  members [hq:fo, alpha:fo, bravo:fo]
+  subnet 172.100.3.0/24
+  impair hq -- alpha { delay 15ms loss 1% }
+  impair hq -- bravo { delay 40ms rate-cap 100mbit }
+}"#,
+        );
+        let net = &topo.networks["radio"];
+        assert_eq!(net.impairments.len(), 2);
+
+        let r0 = &net.impairments[0];
+        assert_eq!(r0.src, "hq");
+        assert_eq!(r0.dst, "alpha");
+        assert_eq!(r0.impairment.delay.as_deref(), Some("15ms"));
+        assert_eq!(r0.impairment.loss.as_deref(), Some("1%"));
+        assert!(r0.rate_cap.is_none());
+
+        let r1 = &net.impairments[1];
+        assert_eq!(r1.dst, "bravo");
+        assert_eq!(r1.rate_cap.as_deref(), Some("100mbit"));
     }
 
     #[test]

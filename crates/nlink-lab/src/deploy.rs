@@ -1215,6 +1215,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         })?;
     }
 
+    // ── Step 14b: Apply per-pair network impairments ───────────────
+    apply_network_impairments(topology, &node_handles).await?;
+
     // ── Step 15: Apply rate limits ─────────────────────────────────
     for (endpoint_str, rate_limit) in &topology.rate_limits {
         // Skip if this endpoint also has an impairment (netem handles rate via .rate_bps)
@@ -1662,6 +1665,121 @@ async fn apply_firewall(
                 "failed to add nftables rule on '{node_name}': match='{match_expr}' action='{action}': {e}"
             ))
         })?;
+    }
+
+    Ok(())
+}
+
+/// Apply per-pair network impairments using `PerPeerImpairer`.
+///
+/// For each network with impairments, group rules by source node and
+/// install one HTB+netem+flower tree per source interface. We use
+/// `reconcile()` so re-deploying an unchanged topology makes zero
+/// kernel calls.
+async fn apply_network_impairments(
+    topology: &Topology,
+    node_handles: &HashMap<String, NodeHandle>,
+) -> Result<()> {
+    use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
+    use nlink::util::Rate;
+
+    let networks_with_impair: Vec<_> = topology
+        .networks
+        .iter()
+        .filter(|(_, n)| !n.impairments.is_empty())
+        .collect();
+
+    if networks_with_impair.is_empty() {
+        return Ok(());
+    }
+
+    tracing::info!(
+        "step 14b: applying per-pair network impairments ({} network(s))",
+        networks_with_impair.len()
+    );
+
+    for (net_name, network) in networks_with_impair {
+        // Map node name → its interface in this network (taken from
+        // the first member entry that names the node).
+        let mut node_ifaces: HashMap<String, String> = HashMap::new();
+        // Map node name → its IP on this network (first address from
+        // the auto-assigned subnet).
+        let mut node_ips: HashMap<String, IpAddr> = HashMap::new();
+
+        for member in &network.members {
+            let Some(ep) = EndpointRef::parse(member) else {
+                continue;
+            };
+            node_ifaces
+                .entry(ep.node.clone())
+                .or_insert_with(|| ep.iface.clone());
+
+            if let Some(port) = network.ports.get(member)
+                && let Some(addr_with_prefix) = port.addresses.first()
+                && let Some((addr_str, _)) = addr_with_prefix.split_once('/')
+                && let Ok(ip) = addr_str.parse::<IpAddr>()
+            {
+                node_ips.entry(ep.node.clone()).or_insert(ip);
+            }
+        }
+
+        // Group impairments by source node.
+        let mut by_source: HashMap<&str, Vec<&crate::types::NetworkImpairment>> = HashMap::new();
+        for imp in &network.impairments {
+            by_source.entry(&imp.src[..]).or_default().push(imp);
+        }
+
+        for (src_node, rules) in by_source {
+            let Some(src_iface) = node_ifaces.get(src_node) else {
+                return Err(Error::deploy_failed(format!(
+                    "network '{net_name}': src node '{src_node}' has no interface in this network"
+                )));
+            };
+            let Some(src_handle) = node_handles.get(src_node) else {
+                return Err(Error::deploy_failed(format!(
+                    "network '{net_name}': src node '{src_node}' has no namespace handle"
+                )));
+            };
+
+            let mut impairer = PerPeerImpairer::new(src_iface.as_str());
+
+            for rule in rules {
+                let Some(dst_ip) = node_ips.get(&rule.dst) else {
+                    return Err(Error::deploy_failed(format!(
+                        "network '{net_name}' impair {} -- {}: cannot resolve IP for dst node \
+                         '{}' (network needs a subnet, or the dst must have an explicit address)",
+                        rule.src, rule.dst, rule.dst
+                    )));
+                };
+
+                let netem = build_netem(&rule.impairment)?;
+                let mut peer = PeerImpairment::new(netem);
+                if let Some(rc) = &rule.rate_cap {
+                    let bits = parse_rate_bps(rc).map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "network '{net_name}' impair {} -- {}: bad rate-cap '{rc}': {e}",
+                            rule.src, rule.dst
+                        ))
+                    })?;
+                    peer = peer.rate_cap(Rate::bits_per_sec(bits));
+                }
+
+                impairer = impairer.impair_dst_ip(*dst_ip, peer);
+            }
+
+            let conn: Connection<Route> = src_handle.connection().map_err(|e| {
+                Error::deploy_failed(format!(
+                    "network '{net_name}': connection for '{src_node}': {e}"
+                ))
+            })?;
+
+            impairer.apply(&conn).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "network '{net_name}': failed to apply per-pair impairment on \
+                     '{src_node}:{src_iface}': {e}"
+                ))
+            })?;
+        }
     }
 
     Ok(())

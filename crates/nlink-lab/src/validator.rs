@@ -563,6 +563,69 @@ fn validate_impairment_refs(
         }
         // If node doesn't exist, dangling-node-ref will catch it
     }
+
+    // Network-level per-pair impairments.
+    for (net_name, network) in &topology.networks {
+        // Build a set of node names in this network's members for fast lookup.
+        let member_nodes: std::collections::HashSet<String> = network
+            .members
+            .iter()
+            .filter_map(|m| EndpointRef::parse(m).map(|e| e.node))
+            .collect();
+
+        let needs_subnet_for_dispatch = !network.impairments.is_empty();
+        if needs_subnet_for_dispatch && network.subnet.is_none() {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "network-impair-needs-subnet",
+                message: format!(
+                    "network '{net_name}' has per-pair impairments but no subnet — \
+                     a subnet is required so destination IPs can be resolved"
+                ),
+                location: Some(format!("networks.{net_name}.subnet")),
+            });
+        }
+
+        for (i, imp) in network.impairments.iter().enumerate() {
+            if imp.src == imp.dst {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "network-impair-self-pair",
+                    message: format!(
+                        "network '{net_name}' impair {} -- {}: src and dst must differ",
+                        imp.src, imp.dst
+                    ),
+                    location: Some(format!("networks.{net_name}.impairments[{i}]")),
+                });
+                continue;
+            }
+
+            for (which, who) in [("src", &imp.src), ("dst", &imp.dst)] {
+                if !topology.nodes.contains_key(who) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "dangling-node-ref",
+                        message: format!("node '{who}' does not exist"),
+                        location: Some(format!(
+                            "networks.{net_name}.impairments[{i}].{which}"
+                        )),
+                    });
+                } else if !member_nodes.contains(who) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "network-impair-member",
+                        message: format!(
+                            "node '{who}' is not a member of network '{net_name}' \
+                             (cannot impair traffic on a network the node is not on)"
+                        ),
+                        location: Some(format!(
+                            "networks.{net_name}.impairments[{i}].{which}"
+                        )),
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Rule 8: Rate limit keys must reference interfaces that exist on the node.
@@ -1173,6 +1236,95 @@ impair a:eth99 delay 10ms
         );
         assert!(result.has_errors());
         assert!(result.errors().any(|e| e.rule == "impairment-ref-valid"));
+    }
+
+    #[test]
+    fn test_network_impair_self_pair_rejected() {
+        let result = parse_and_validate(
+            r#"lab "self-pair"
+node a
+node b
+network lan {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- a { delay 10ms }
+}
+"#,
+        );
+        assert!(result.has_errors());
+        assert!(
+            result
+                .errors()
+                .any(|e| e.rule == "network-impair-self-pair")
+        );
+    }
+
+    #[test]
+    fn test_network_impair_non_member_rejected() {
+        let result = parse_and_validate(
+            r#"lab "nonmember"
+node a
+node b
+node c
+network lan {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- c { delay 10ms }
+}
+"#,
+        );
+        assert!(result.has_errors());
+        assert!(result.errors().any(|e| e.rule == "network-impair-member"));
+    }
+
+    #[test]
+    fn test_network_impair_needs_subnet() {
+        let result = parse_and_validate(
+            r#"lab "no-subnet"
+node a
+node b
+network lan {
+  members [a:eth0, b:eth0]
+  impair a -- b { delay 10ms }
+}
+"#,
+        );
+        assert!(result.has_errors());
+        assert!(
+            result
+                .errors()
+                .any(|e| e.rule == "network-impair-needs-subnet")
+        );
+    }
+
+    #[test]
+    fn test_network_impair_valid_passes() {
+        let result = parse_and_validate(
+            r#"lab "ok"
+node a
+node b
+node c
+network lan {
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b { delay 15ms loss 1% }
+  impair a -- c { delay 40ms rate-cap 100mbit }
+}
+"#,
+        );
+        // No errors related to network impair
+        let related: Vec<_> = result
+            .errors()
+            .filter(|e| {
+                matches!(
+                    e.rule,
+                    "network-impair-self-pair"
+                        | "network-impair-member"
+                        | "network-impair-needs-subnet"
+                )
+            })
+            .collect();
+        assert!(related.is_empty(), "unexpected errors: {related:?}");
     }
 
     #[test]

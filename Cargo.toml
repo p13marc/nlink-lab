@@ -51,7 +51,7 @@ zenoh = { version = "1.8", features = ["unstable"] }
 zenoh-ext = "1.8"
 
 # Networking
-nlink = { version = "0.13.0", features = ["full"] }
+nlink = { version = "0.15.1", features = ["full"] }
 netring = "0.2"
 
 # Workspace crates

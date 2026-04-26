@@ -579,6 +579,34 @@ pub struct Network {
     /// Port configurations.
     #[serde(default)]
     pub ports: HashMap<String, PortConfig>,
+
+    /// Per-pair impairment rules. Each rule installs a per-destination
+    /// netem leaf on the source node's bridge-side interface.
+    #[serde(default)]
+    pub impairments: Vec<NetworkImpairment>,
+}
+
+/// Per-pair impairment within a shared network.
+///
+/// `src` and `dst` are node names (not endpoints) — the bridge
+/// determines the interface. The configured `impairment` is applied
+/// to traffic leaving `src`'s network interface destined for `dst`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct NetworkImpairment {
+    /// Source node name.
+    pub src: String,
+
+    /// Destination node name.
+    pub dst: String,
+
+    /// netem configuration applied to this pair.
+    pub impairment: Impairment,
+
+    /// Optional per-pair rate cap (HTB ceil). Independent of
+    /// `impairment.rate` — `rate_cap` builds an HTB shaper on top of
+    /// netem, while `impairment.rate` uses netem's built-in
+    /// (token-bucket-like) rate limiting.
+    pub rate_cap: Option<String>,
 }
 
 /// VLAN definition within a network.

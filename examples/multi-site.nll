@@ -79,10 +79,27 @@ network sat {
   subnet 172.100.2.0/24
 }
 
-# Radio — full sites only
+# Radio — full sites only.
+# Per-pair impairments emulate distance-dependent radio links: closer
+# peers see lower delay/loss, farther peers see higher delay/loss.
+# Each rule installs a PerPeerImpairer (HTB + flower + per-peer netem)
+# on the source's egress, so the impairment applies to traffic leaving
+# that source toward the named destination.
 network radio {
   members [hq-fw:radio, *-black:radio]
   subnet 172.100.3.0/24
+
+  # hq <-> alpha: close (~5km hop)
+  impair hq-fw -- alpha-black { delay 15ms jitter 5ms loss 1% }
+  impair alpha-black -- hq-fw { delay 15ms jitter 5ms loss 1% }
+
+  # hq <-> bravo: far (~50km hop), capped at 10mbit
+  impair hq-fw -- bravo-black { delay 40ms jitter 20ms loss 5% rate-cap 10mbit }
+  impair bravo-black -- hq-fw { delay 40ms jitter 20ms loss 5% rate-cap 10mbit }
+
+  # alpha <-> bravo: farther (~60km hop direct)
+  impair alpha-black -- bravo-black { delay 60ms jitter 30ms loss 8% }
+  impair bravo-black -- alpha-black { delay 60ms jitter 30ms loss 8% }
 }
 
 # WiFi — simple sites only (glob: *-cc)

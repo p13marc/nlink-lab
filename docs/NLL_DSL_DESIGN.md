@@ -208,6 +208,46 @@ network fabric {
 }
 ```
 
+#### Per-Pair Impairment
+
+Inside a `network` block, you can declare per-source/destination
+impairments. Each rule applies on the source's egress side, filtering
+by the destination's IP, so the impairment only affects traffic from
+the source toward the named destination. Symmetric impairment (both
+directions) requires two rules.
+
+```nll
+network radio {
+  members [hq, alpha, bravo]
+  subnet 172.100.3.0/24
+
+  # Close peer: low delay, low loss
+  impair hq -- alpha     { delay 15ms jitter 5ms loss 1% }
+  impair alpha -- hq     { delay 15ms jitter 5ms loss 1% }
+
+  # Far peer with bandwidth cap
+  impair hq -- bravo     { delay 40ms jitter 20ms loss 5% rate-cap 10mbit }
+  impair bravo -- hq     { delay 40ms jitter 20ms loss 5% rate-cap 10mbit }
+
+  # Direct path between alpha and bravo
+  impair alpha -- bravo  { delay 60ms jitter 30ms loss 8% }
+  impair bravo -- alpha  { delay 60ms jitter 30ms loss 8% }
+}
+```
+
+Constraints:
+
+- The network must declare a `subnet` so each member has a resolvable
+  IP for the flower filter.
+- `src` and `dst` must both be members of the network.
+- `src == dst` is rejected.
+- `rate-cap` (HTB ceil, optional) is independent of `rate`
+  (netem's built-in token-bucket); the cap layers a shaper on top
+  of netem when both are present.
+- Implementation: nlink's `PerPeerImpairer` builds one HTB+netem+flower
+  tree per source interface, with one peer class per destination plus
+  a default catch-all.
+
 ### 6. Interfaces
 
 ```nll

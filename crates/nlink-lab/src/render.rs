@@ -404,6 +404,31 @@ fn render_networks(out: &mut String, topo: &Topology) {
         if !net.members.is_empty() {
             writeln!(out, "  members [{}]", net.members.join(", ")).unwrap();
         }
+        for imp in &net.impairments {
+            write!(out, "  impair {} -- {} {{", imp.src, imp.dst).unwrap();
+            if let Some(d) = &imp.impairment.delay {
+                write!(out, " delay {d}").unwrap();
+            }
+            if let Some(j) = &imp.impairment.jitter {
+                write!(out, " jitter {j}").unwrap();
+            }
+            if let Some(l) = &imp.impairment.loss {
+                write!(out, " loss {l}").unwrap();
+            }
+            if let Some(r) = &imp.impairment.rate {
+                write!(out, " rate {r}").unwrap();
+            }
+            if let Some(c) = &imp.impairment.corrupt {
+                write!(out, " corrupt {c}").unwrap();
+            }
+            if let Some(r) = &imp.impairment.reorder {
+                write!(out, " reorder {r}").unwrap();
+            }
+            if let Some(rc) = &imp.rate_cap {
+                write!(out, " rate-cap {rc}").unwrap();
+            }
+            out.push_str(" }\n");
+        }
         out.push_str("}\n");
     }
 }

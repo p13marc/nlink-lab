@@ -2042,6 +2042,7 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
         subnet: None,
         vlans: Vec::new(),
         ports: Vec::new(),
+        impairments: Vec::new(),
     };
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -2073,6 +2074,8 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
             let endpoint = parse_name(tokens, pos)?;
             let port_def = parse_port_block(tokens, pos, endpoint)?;
             net.ports.push(port_def);
+        } else if eat(tokens, pos, &Token::Impair) {
+            net.impairments.push(parse_network_impair(tokens, pos)?);
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -2094,6 +2097,81 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
     }
 
     Ok(net)
+}
+
+/// Parse `NODE -- NODE { delay … loss … [rate-cap …] }` inside a
+/// `network { }` block. The `impair` keyword is consumed by the
+/// caller.
+fn parse_network_impair(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkImpairDef> {
+    let src = parse_name(tokens, pos)?;
+    expect(tokens, pos, &Token::DashDash)?;
+    let dst = parse_name(tokens, pos)?;
+    expect(tokens, pos, &Token::LBrace)?;
+
+    let mut props = ast::ImpairProps::default();
+    let mut rate_cap: Option<String> = None;
+
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+
+        // Try the standard impair properties first.
+        let before = *pos;
+        let parsed = parse_impair_props(tokens, pos)?;
+        if *pos != before {
+            // parse_impair_props consumed at least one property; merge.
+            if parsed.delay.is_some() {
+                props.delay = parsed.delay;
+            }
+            if parsed.jitter.is_some() {
+                props.jitter = parsed.jitter;
+            }
+            if parsed.loss.is_some() {
+                props.loss = parsed.loss;
+            }
+            if parsed.rate.is_some() {
+                props.rate = parsed.rate;
+            }
+            if parsed.corrupt.is_some() {
+                props.corrupt = parsed.corrupt;
+            }
+            if parsed.reorder.is_some() {
+                props.reorder = parsed.reorder;
+            }
+            continue;
+        }
+
+        if eat_kw(tokens, pos, "rate-cap") {
+            rate_cap = Some(expect_rate_or_value(tokens, pos)?);
+            continue;
+        }
+
+        match at(tokens, *pos) {
+            Some(other) => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in network impair block"),
+                ));
+            }
+            None => {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    "unexpected end of input in network impair block".into(),
+                ));
+            }
+        }
+    }
+
+    Ok(ast::NetworkImpairDef {
+        src,
+        dst,
+        props,
+        rate_cap,
+    })
 }
 
 fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Result<ast::PortDef> {
@@ -3548,6 +3626,38 @@ network fabric {
                 assert_eq!(n.ports.len(), 1);
                 assert_eq!(n.ports[0].pvid, Some(100));
                 assert!(n.ports[0].untagged);
+            }
+            _ => panic!("expected Network"),
+        }
+    }
+
+    #[test]
+    fn test_parse_network_per_pair_impair() {
+        let ast = parse_nll(
+            r#"lab "t"
+network radio {
+  members [hq:fo, alpha:fo, bravo:fo]
+  subnet 172.100.3.0/24
+  impair hq -- alpha { delay 15ms jitter 5ms loss 1% }
+  impair hq -- bravo { delay 40ms loss 5% rate-cap 100mbit }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Network(n) => {
+                assert_eq!(n.impairments.len(), 2);
+                let r0 = &n.impairments[0];
+                assert_eq!(r0.src, "hq");
+                assert_eq!(r0.dst, "alpha");
+                assert_eq!(r0.props.delay.as_deref(), Some("15ms"));
+                assert_eq!(r0.props.jitter.as_deref(), Some("5ms"));
+                assert_eq!(r0.props.loss.as_deref(), Some("1%"));
+                assert!(r0.rate_cap.is_none());
+
+                let r1 = &n.impairments[1];
+                assert_eq!(r1.src, "hq");
+                assert_eq!(r1.dst, "bravo");
+                assert_eq!(r1.props.delay.as_deref(), Some("40ms"));
+                assert_eq!(r1.rate_cap.as_deref(), Some("100mbit"));
             }
             _ => panic!("expected Network"),
         }

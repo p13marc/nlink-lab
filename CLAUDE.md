@@ -135,8 +135,9 @@ examples/
 | `Profile` | Reusable node template (sysctls, firewall) |
 | `Node` | Network namespace or container definition |
 | `Link` | Point-to-point veth connection |
-| `Network` | Shared L2 bridge segment |
+| `Network` | Shared L2 bridge segment (with optional per-pair impairments) |
 | `Impairment` | Netem config (delay, jitter, loss, rate) |
+| `NetworkImpairment` | Per-pair impairment on a shared network (src/dst nodes + netem + optional rate-cap) |
 | `RateLimit` | Per-interface traffic shaping |
 | `FirewallConfig` | nftables rules (with src/dst matching) |
 | `NatConfig` | NAT rules (masquerade, snat, dnat, translate) |
@@ -203,7 +204,10 @@ conditional logic (`if` blocks with `==`/`!=`/`<`/`>`/`&&`/`||`),
 from topology graph), fleet `for_each` imports (instantiate templates
 N times), glob patterns in network members (`*-black:fo`),
 `param` declarations with CLI `--set` for parameterized topologies,
-and network (bridge) blocks.
+network (bridge) blocks, and per-pair impairment matrices inside
+`network` blocks (`impair NODE -- NODE { delay … loss … rate-cap … }`
+— one HTB+netem+flower tree per source interface, built via nlink's
+`PerPeerImpairer` helper).
 
 Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
@@ -249,6 +253,7 @@ The deployer executes these steps in order:
 12. Add routes per namespace
 13. Apply nftables rules per namespace
 14. Apply TC qdiscs/impairments per interface
+14b. Apply per-pair network impairments (`PerPeerImpairer` from nlink: HTB+netem+flower per source iface)
 15. Apply rate limits
 15b. Inject /etc/hosts entries (if `dns hosts`)
 16. Spawn background processes (topo-sorted by depends_on, with healthcheck polling, stdout/stderr captured to log files)

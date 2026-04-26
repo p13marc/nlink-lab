@@ -4,14 +4,11 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-| Plan | Description | Effort | Status |
-|------|-------------|--------|--------|
-| [128](128-network-impairment-matrix.md) | Per-pair impairment on shared networks | Medium-Large | Blocked (needs nlink TC filter API) |
-| [149](149-feedback-triage.md) | External feedback triage + nlink 0.13.0 upgrade | Medium | Implemented 2026-04-21 |
+_None._
 
 ## Completed
 
-Plans 050–148 have been implemented and their plan files removed:
+Plans 050–149 have been implemented and their plan files removed:
 
 - 050–104: Core features, parser, CLI, containers, polish
 - 105–119: DNS, macvlan/ipvlan, rich assertions, scenario DSL,
@@ -21,11 +18,17 @@ Plans 050–148 have been implemented and their plan files removed:
 - 120–127: IP computation functions, for-inside-blocks,
   site improvements, auto-addressing, conditional logic,
   auto-routing, fleet for_each imports, glob member patterns
-- 129–148: NAT translate, editor/IDE support, mgmt bridge,
+- 128: Per-pair impairment matrix on shared networks
+  (`impair A -- B { … }` inside `network { }`). Implementation lives
+  on top of `nlink::netlink::impair::PerPeerImpairer` (shipped in
+  nlink 0.15.1 in response to our spec); deploy step 14b builds one
+  HTB+netem+flower tree per source interface.
+- 129–149: NAT translate, editor/IDE support, mgmt bridge,
   spawn/wait-for/exec CLI, asymmetric impairments, healthcheck,
   partition/heal, IP discovery, CLI parameters, process capture,
   tcp-connect retry, network addresses, deploy suffix, validate
-  show-ips, documentation gaps
+  show-ips, documentation gaps, external feedback triage +
+  nlink 0.13.0 / 0.15.1 upgrades.
 
 ## Reference
 

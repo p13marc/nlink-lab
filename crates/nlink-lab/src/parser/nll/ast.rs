@@ -447,6 +447,18 @@ pub struct NetworkDef {
     pub subnet: Option<String>,
     pub vlans: Vec<VlanDef>,
     pub ports: Vec<PortDef>,
+    pub impairments: Vec<NetworkImpairDef>,
+}
+
+/// Per-pair impairment inside a network block.
+///
+/// Syntax: `impair NODE -- NODE { delay 10ms loss 1% [rate-cap 100mbit] }`
+#[derive(Debug, Clone)]
+pub struct NetworkImpairDef {
+    pub src: String,
+    pub dst: String,
+    pub props: ImpairProps,
+    pub rate_cap: Option<String>,
 }
 
 /// VLAN definition within a network.

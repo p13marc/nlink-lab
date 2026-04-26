@@ -1118,10 +1118,12 @@ fn find_operator(expr: &str, op: &str) -> Option<usize> {
         match bytes[i] {
             b'(' => depth += 1,
             b')' => depth -= 1,
-            _ if depth == 0 && i + op_bytes.len() <= bytes.len()
-                && &bytes[i..i + op_bytes.len()] == op_bytes => {
-                    return Some(i);
-                }
+            _ if depth == 0
+                && i + op_bytes.len() <= bytes.len()
+                && &bytes[i..i + op_bytes.len()] == op_bytes =>
+            {
+                return Some(i);
+            }
             _ => {}
         }
     }

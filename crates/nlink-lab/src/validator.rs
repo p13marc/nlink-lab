@@ -606,9 +606,7 @@ fn validate_impairment_refs(
                         severity: Severity::Error,
                         rule: "dangling-node-ref",
                         message: format!("node '{who}' does not exist"),
-                        location: Some(format!(
-                            "networks.{net_name}.impairments[{i}].{which}"
-                        )),
+                        location: Some(format!("networks.{net_name}.impairments[{i}].{which}")),
                     });
                 } else if !member_nodes.contains(who) {
                     issues.push(ValidationIssue {
@@ -618,9 +616,7 @@ fn validate_impairment_refs(
                             "node '{who}' is not a member of network '{net_name}' \
                              (cannot impair traffic on a network the node is not on)"
                         ),
-                        location: Some(format!(
-                            "networks.{net_name}.impairments[{i}].{which}"
-                        )),
+                        location: Some(format!("networks.{net_name}.impairments[{i}].{which}")),
                     });
                 }
             }

@@ -4,7 +4,22 @@ Implementation plans for nlink-lab.
 
 ## Active Plans
 
-_None._
+A coordinated arc — Plan 150 is the foundation; the others slot in
+once the docs scaffolding is in place. Each plan can ship as one
+or more independent PRs.
+
+| Plan | Title | Effort | Priority |
+|------|-------|--------|----------|
+| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | Large (5–7d, 4 phases) | P0 |
+| [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" (4 polished writeups) | Medium (3–4d) | P1 |
+| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | Medium-Large (4–6d) | P1 |
+| [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | Small (1.5–2d) | P2 |
+| [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | Small (1.5d) | P2 |
+
+**Recommended ship order:** 150 (Phase A: README) → 151 Example A
+(satellite mesh) → 150 Phases B–C → 152 Phase A → 154 → rest. This
+maximizes the compounding clarity: each piece makes the next one
+easier to motivate.
 
 ## Completed
 

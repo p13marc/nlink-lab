@@ -14,12 +14,19 @@ structurally impossible in container-based labs.
   loop with modulo arithmetic. Per-pair netem on a shared L2 — the
   thing Docker's network model can't express.
 
+## Networking primitives
+
+- [**VRF multi-tenant separation**](vrf-multitenant.md) — two
+  customers on one PE router, isolated at L3 via VRFs (red/blue
+  tables). Overlapping address space allowed.
+- [**WireGuard with auto-key generation**](wireguard-mesh.md) —
+  site-to-site VPN over a 50ms WAN underlay; keys generated at
+  deploy time, no manual key dance.
+
 ## Coming soon
 
 The following recipes ship over the next few releases:
 
-- VRF customer separation in a single namespace
-- WireGuard 3-node mesh with auto-key generation
 - macvlan attach to a host physical NIC
 - Stateful nftables firewall with conntrack zones
 - Bridge VLAN trunks (802.1Q access/trunk port mix)

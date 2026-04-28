@@ -528,7 +528,7 @@ pub struct InterfaceConfig {
 }
 
 /// Route configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RouteConfig {
     /// Next-hop gateway address.
     pub via: Option<String>,

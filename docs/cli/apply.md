@@ -19,10 +19,10 @@ unchanged paths.
 to `destroy` + `deploy`, which incurs full teardown and rebuild.
 
 The current implementation reconciles **nodes, links,
-per-endpoint impairments, and network-level per-pair impair**.
-Other resources (routes, sysctls, nftables, NAT) currently require
-redeploy until [Plan 152](../plans/152-apply-reconcile.md) Phase B
-ships.
+per-endpoint impairments, network-level per-pair impair, and
+per-node static routes**. Other resources (sysctls, nftables, NAT)
+currently require redeploy until [Plan 152](../plans/152-apply-reconcile.md)
+Phase B finishes.
 
 ## Arguments
 
@@ -93,7 +93,7 @@ done
 | Per-endpoint netem | ✅ change in place |
 | Network-level per-pair impair | ✅ via `PerPeerImpairer::reconcile()` — zero kernel calls when unchanged |
 | Rate limits | 🚧 Plan 152 Phase B |
-| Routes | 🚧 Plan 152 Phase B |
+| Routes | ✅ add / replace / remove via reconcile |
 | Sysctls | 🚧 Plan 152 Phase B |
 | nftables / NAT | 🚧 Plan 152 Phase B |
 | Spawned processes | ❌ — apply leaves them; redeploy or `kill` + `spawn` |

@@ -2743,6 +2743,12 @@ pub async fn apply_diff(
     // change_qdisc/replace_qdisc on the affected leaf.
     apply_network_impair_diff(running, desired, diff).await?;
 
+    // ── Phase 7c: Reconcile per-node static routes ─────────────────
+    // Add new routes, replace changed ones (del+add), remove gone
+    // ones. Only touches nodes that exist on both sides; routes for
+    // added/removed nodes are handled by the lifecycle phases above.
+    apply_routes_diff(running, diff).await?;
+
     // ── Phase 8: Update state file ─────────────────────────────────
     running.set_topology(desired.clone());
 
@@ -2766,6 +2772,78 @@ pub async fn apply_diff(
     state::save(&lab_state, desired)?;
 
     Ok(())
+}
+
+/// Reconcile per-node static routes (Plan 152 Phase B).
+///
+/// For each [`crate::diff::RouteChange`]:
+/// - `desired = Some(new)`, `was_present = false`  → add the route
+/// - `desired = Some(new)`, `was_present = true`   → del + add (replace)
+/// - `desired = None`                              → del the route
+///
+/// Failures on `del` are downgraded to a warning — a route the
+/// kernel claims doesn't exist isn't a deploy-blocker.
+async fn apply_routes_diff(
+    running: &mut RunningLab,
+    diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    if diff.routes_changed.is_empty() {
+        return Ok(());
+    }
+    for change in &diff.routes_changed {
+        let handle = node_handle_for(running, &change.node)?;
+        let conn: Connection<Route> = handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{}': {e}", change.node))
+        })?;
+
+        if change.was_present {
+            if let Err(e) = del_route_for_node(&conn, &change.node, &change.dest).await {
+                tracing::warn!(
+                    "del route '{}' on '{}' failed: {e} — continuing",
+                    change.dest,
+                    change.node,
+                );
+            }
+        }
+        if let Some(new) = &change.desired {
+            add_route(&conn, &change.node, &change.dest, new).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Delete a single static route from a node. Mirrors `add_route` but
+/// uses nlink's `del_route_v4` / `del_route_v6` based on the
+/// destination form.
+async fn del_route_for_node(
+    conn: &Connection<Route>,
+    node_name: &str,
+    dest: &str,
+) -> Result<()> {
+    let is_default = dest == "default";
+    let is_v6 = !is_default && dest.contains(':');
+
+    if is_default {
+        // Delete default route — try v4 first, then v6.
+        let _ = conn.del_route_v4("0.0.0.0", 0).await;
+        let _ = conn.del_route_v6("::", 0).await;
+        return Ok(());
+    }
+
+    let (addr, prefix) = parse_cidr(dest)?;
+    let result = if is_v6 {
+        conn.del_route_v6(&addr.to_string(), prefix).await
+    } else {
+        match addr {
+            IpAddr::V4(_) => conn.del_route_v4(&addr.to_string(), prefix).await,
+            IpAddr::V6(_) => conn.del_route_v6(&addr.to_string(), prefix).await,
+        }
+    };
+    result.map_err(|e| {
+        Error::deploy_failed(format!(
+            "del route '{dest}' on '{node_name}': {e}"
+        ))
+    })
 }
 
 /// Reconcile network-level per-pair impair via

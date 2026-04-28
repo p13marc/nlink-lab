@@ -3,7 +3,7 @@
 //! Compares two [`Topology`] structs and produces a structured change set.
 //! Used by the `nlink-lab diff` CLI and the future `apply` command.
 
-use crate::types::{Impairment, Link, NetworkImpairment, Topology};
+use crate::types::{Impairment, Link, NetworkImpairment, RouteConfig, Topology};
 
 /// A structured diff between two topologies.
 #[derive(Debug, Default)]
@@ -20,6 +20,21 @@ pub struct TopologyDiff {
     /// `(network_name, src_node)` because that's the unit
     /// `nlink::netlink::impair::PerPeerImpairer` reconciles.
     pub network_impairs_changed: Vec<NetworkImpairerChange>,
+
+    /// Per-node static-route changes. Plan 152 Phase B.
+    pub routes_changed: Vec<RouteChange>,
+}
+
+/// A change to a single static route on a single node.
+#[derive(Debug)]
+pub struct RouteChange {
+    pub node: String,
+    pub dest: String,
+    /// `None` → the route should be removed.
+    /// `Some` → add (when `was_present == false`) or replace
+    /// (when the old config differs).
+    pub desired: Option<RouteConfig>,
+    pub was_present: bool,
 }
 
 /// A change to an impairment on a specific endpoint.
@@ -53,6 +68,7 @@ impl TopologyDiff {
             && self.impairments_added.is_empty()
             && self.impairments_removed.is_empty()
             && self.network_impairs_changed.is_empty()
+            && self.routes_changed.is_empty()
     }
 
     /// Total number of changes.
@@ -65,6 +81,7 @@ impl TopologyDiff {
             + self.impairments_added.len()
             + self.impairments_removed.len()
             + self.network_impairs_changed.len()
+            + self.routes_changed.len()
     }
 }
 
@@ -120,6 +137,13 @@ impl std::fmt::Display for TopologyDiff {
                     "  - remove network impair: {} on {} (clear root qdisc)",
                     change.network, change.src_node,
                 )?,
+            }
+        }
+        for r in &self.routes_changed {
+            match (&r.desired, r.was_present) {
+                (Some(_), false) => writeln!(f, "  + add route: {} {}", r.node, r.dest)?,
+                (Some(_), true) => writeln!(f, "  ~ update route: {} {}", r.node, r.dest)?,
+                (None, _) => writeln!(f, "  - remove route: {} {}", r.node, r.dest)?,
             }
         }
         if self.is_empty() {
@@ -233,12 +257,51 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         }
     }
 
+    // ── Static routes (per-node) ──
+    // Routes live on Node.routes. We only compare for nodes that
+    // exist on both sides; nodes added/removed pull their routes
+    // along via the node lifecycle phases of apply_diff.
+    for (node_name, desired_node) in &desired.nodes {
+        let Some(current_node) = current.nodes.get(node_name) else {
+            continue;
+        };
+        for (dest, new_route) in &desired_node.routes {
+            match current_node.routes.get(dest) {
+                None => diff.routes_changed.push(RouteChange {
+                    node: node_name.clone(),
+                    dest: dest.clone(),
+                    desired: Some(new_route.clone()),
+                    was_present: false,
+                }),
+                Some(old) if old != new_route => diff.routes_changed.push(RouteChange {
+                    node: node_name.clone(),
+                    dest: dest.clone(),
+                    desired: Some(new_route.clone()),
+                    was_present: true,
+                }),
+                _ => {}
+            }
+        }
+        for dest in current_node.routes.keys() {
+            if !desired_node.routes.contains_key(dest) {
+                diff.routes_changed.push(RouteChange {
+                    node: node_name.clone(),
+                    dest: dest.clone(),
+                    desired: None,
+                    was_present: true,
+                });
+            }
+        }
+    }
+
     // Sort for deterministic output
     diff.nodes_added.sort();
     diff.nodes_removed.sort();
     diff.impairments_removed.sort();
     diff.network_impairs_changed
         .sort_by(|a, b| (&a.network, &a.src_node).cmp(&(&b.network, &b.src_node)));
+    diff.routes_changed
+        .sort_by(|a, b| (&a.node, &a.dest).cmp(&(&b.node, &b.dest)));
 
     diff
 }
@@ -438,6 +501,98 @@ network n {
             "identical topology should produce no network-impair changes, got {:?}",
             diff.network_impairs_changed
         );
+        assert!(diff.is_empty());
+    }
+
+    #[test]
+    fn test_route_added() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a { route 192.168.1.0/24 via 10.0.0.2 }
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.routes_changed.len(), 1);
+        let r = &diff.routes_changed[0];
+        assert_eq!(r.node, "a");
+        assert_eq!(r.dest, "192.168.1.0/24");
+        assert!(!r.was_present);
+        assert!(r.desired.is_some());
+    }
+
+    #[test]
+    fn test_route_removed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a { route 192.168.1.0/24 via 10.0.0.2 }
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.routes_changed.len(), 1);
+        let r = &diff.routes_changed[0];
+        assert!(r.was_present);
+        assert!(r.desired.is_none());
+    }
+
+    #[test]
+    fn test_route_changed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a { route 192.168.1.0/24 via 10.0.0.2 }
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a { route 192.168.1.0/24 via 10.0.0.2 metric 200 }
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.routes_changed.len(), 1);
+        let r = &diff.routes_changed[0];
+        assert!(r.was_present);
+        let new = r.desired.as_ref().unwrap();
+        assert_eq!(new.metric, Some(200));
+    }
+
+    #[test]
+    fn test_route_no_change() {
+        let nll = r#"lab "t"
+node a { route 192.168.1.0/24 via 10.0.0.2 }
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#;
+        let current = crate::parser::parse(nll).unwrap();
+        let desired = crate::parser::parse(nll).unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert!(diff.routes_changed.is_empty());
         assert!(diff.is_empty());
     }
 

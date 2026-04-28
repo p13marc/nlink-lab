@@ -1,0 +1,107 @@
+lab "multi-tenant-wan" {
+  description "Two customers, two sites, one shared WAN underlay — VRF+WG+nftables composition"
+  tags [cookbook, vrf, wireguard, nftables, multitenant]
+  dns hosts
+}
+
+profile router { forward ipv4 }
+
+# Site A — hub router that terminates two customer VRFs and one WG
+# tunnel toward site B. Customer hosts live in two separate L3
+# domains on the same physical box.
+node hub-a : router {
+  vrf red  table 10 {
+    interfaces [eth1, wg-red]
+    route 10.20.0.0/16 dev wg-red
+  }
+  vrf blue table 20 {
+    interfaces [eth2, wg-blue]
+    route 10.21.0.0/16 dev wg-blue
+  }
+
+  wireguard wg-red {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [hub-b]
+  }
+  wireguard wg-blue {
+    key auto
+    listen 51821
+    address 192.168.255.3/32
+    peers [hub-b]
+  }
+
+  # nftables policy: cross-VRF leak prevention (defense in depth on
+  # top of VRF L3 isolation) + drop unsolicited inbound to the WG
+  # underlay address.
+  firewall policy drop {
+    accept ct established,related
+    accept udp dport 51820
+    accept udp dport 51821
+    accept tcp dport 22 src 10.10.0.0/16   # mgmt ssh from customer red
+    accept tcp dport 22 src 10.20.0.0/16   # mgmt ssh from customer blue
+  }
+}
+
+# Site B — mirror of site A. The two hubs share a WAN underlay
+# (link below) carrying both WireGuard tunnels.
+node hub-b : router {
+  vrf red  table 10 {
+    interfaces [eth1, wg-red]
+    route 10.10.0.0/16 dev wg-red
+  }
+  vrf blue table 20 {
+    interfaces [eth2, wg-blue]
+    route 10.11.0.0/16 dev wg-blue
+  }
+
+  wireguard wg-red {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [hub-a]
+  }
+  wireguard wg-blue {
+    key auto
+    listen 51821
+    address 192.168.255.4/32
+    peers [hub-a]
+  }
+
+  firewall policy drop {
+    accept ct established,related
+    accept udp dport 51820
+    accept udp dport 51821
+    accept tcp dport 22 src 10.20.0.0/16
+    accept tcp dport 22 src 10.21.0.0/16
+  }
+}
+
+# Customer hosts — one per VRF per site.
+node red-a   { route default via 10.10.0.1 }
+node blue-a  { route default via 10.11.0.1 }
+node red-b   { route default via 10.20.0.1 }
+node blue-b  { route default via 10.21.0.1 }
+
+# Customer red attaches to hub:eth1.
+link hub-a:eth1 -- red-a:eth0  { 10.10.0.1/16 -- 10.10.0.10/16 }
+link hub-b:eth1 -- red-b:eth0  { 10.20.0.1/16 -- 10.20.0.10/16 }
+
+# Customer blue attaches to hub:eth2.
+link hub-a:eth2 -- blue-a:eth0 { 10.11.0.1/16 -- 10.11.0.10/16 }
+link hub-b:eth2 -- blue-b:eth0 { 10.21.0.1/16 -- 10.21.0.10/16 }
+
+# Shared WAN underlay between hubs. Both WG tunnels run over this
+# one link with realistic impairment.
+link hub-a:wan0 -- hub-b:wan0 { 10.0.0.1/30 -- 10.0.0.2/30 }
+impair hub-a:wan0 delay 30ms jitter 8ms loss 0.3%
+
+# Smoke tests: each customer host should reach its peer at the
+# other site, BUT not the other customer's host.
+validate {
+  reach red-a   red-b      # customer red end-to-end
+  reach blue-a  blue-b     # customer blue end-to-end
+  no-reach red-a blue-a    # cross-VRF same-site isolated
+  no-reach red-a blue-b    # cross-VRF cross-site isolated
+}

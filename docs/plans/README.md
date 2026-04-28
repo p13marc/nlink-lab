@@ -10,7 +10,7 @@ or more independent PRs.
 
 | Plan | Title | Status |
 |------|-------|--------|
-| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ Phases A+B+C+D shipped (doc-CI gate, 21 CLI stubs, TROUBLESHOOTING 193→416 LOC) — USER_GUIDE walkthrough restructure open |
+| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ All phases shipped: A (README) + B (8 hand-crafted CLI pages, 10 cookbook recipes) + C (COMPARISON, ARCHITECTURE) + D (doc-CI gate, 21 CLI stubs, TROUBLESHOOTING 193→416 LOC, USER_GUIDE 786→1160 LOC walkthrough). |
 | [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" | ✅ Examples A (satellite mesh) + B (multi-tenant VRF+WG+nftables WAN) + C (scenario partition) shipped — Example D (full Rust integration writeup) covered in `rust-integration-test.md` cookbook |
 | [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ All phases shipped: A + B/1 routes + B/2 sysctls + B/3 rate-limits + B/4 nftables/NAT + C (`--check` + `--json`). Only spawned-process reconcile is intentionally out of scope. |
 | [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | ✅ Module + CLI + cookbook + 3 CLI pages shipped |
@@ -44,14 +44,10 @@ or more independent PRs.
 
 **Still open:**
 
-- Plan 150 Phase D residual — USER_GUIDE walkthrough restructure
-  (the first 200 LOC currently read as reference; the plan calls for
-  it to be restructured as a 60-minute guided tour from zero).
-
-That's it for the active arc. Everything else is shipped or
-deliberately scoped out (vendor NOS support, multi-host, web UI —
-not the niche). Subsequent improvements will track as new plans
-filed against specific user-reported friction.
+_Nothing._ The five-plan arc shipped end-to-end. Subsequent
+improvements will track as new plans filed against specific
+user-reported friction; the deliberately-scoped-out items
+(vendor NOS support, multi-host clustering, web UI) remain so.
 
 ## Completed
 

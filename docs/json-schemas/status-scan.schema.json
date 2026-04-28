@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/status-scan.schema.json",
+  "title": "nlink-lab status --scan --json output",
+  "description": "Emitted by `nlink-lab status --scan --json`. Wraps the lab list with an `orphans` block reporting host resources without state files (bridges/veths/netns) and stale labs whose state file claims namespaces no longer present on the host.",
+  "type": "object",
+  "required": ["labs", "orphans"],
+  "additionalProperties": false,
+  "properties": {
+    "labs": {
+      "$ref": "status-list.schema.json"
+    },
+    "orphans": {
+      "type": "object",
+      "required": ["bridges", "veths", "netns"],
+      "additionalProperties": false,
+      "properties": {
+        "bridges": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Mgmt bridge interface name (`nl{hash8}`)."
+          }
+        },
+        "veths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Mgmt veth peer name (`nm{hash8}{idx}`)."
+          }
+        },
+        "netns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Named namespace whose prefix doesn't match any known lab."
+          }
+        },
+        "stale": {
+          "type": "array",
+          "description": "State files claiming namespaces that no longer exist on the host. Omitted from output when empty.",
+          "items": {
+            "type": "object",
+            "required": ["name", "missing_namespaces"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Lab name."
+              },
+              "missing_namespaces": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Namespaces listed in `state.json` but absent from `ip netns list`. Sorted."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

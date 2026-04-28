@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/deploy.schema.json",
+  "title": "nlink-lab deploy --json output",
+  "description": "Emitted on stdout (one object) by `nlink-lab deploy --json` after a successful deploy. With `--unique`, the `name` field is the chosen unique name (original + PID suffix).",
+  "type": "object",
+  "required": ["name", "nodes", "links", "deploy_time_ms"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Final lab name (post --unique/--suffix)."
+    },
+    "nodes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Node count from the lowered topology."
+    },
+    "links": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Point-to-point link count."
+    },
+    "deploy_time_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock duration of the deploy step, milliseconds."
+    }
+  }
+}

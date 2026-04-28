@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/spawn.schema.json",
+  "title": "nlink-lab spawn --json output",
+  "description": "Emitted on stdout (one object) by `nlink-lab spawn --json` after the child has been created. Per-process stdout/stderr live at `$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}` (default `~/.local/state`).",
+  "type": "object",
+  "required": ["command", "node", "pid"],
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "type": "string",
+      "description": "Space-joined argv as passed to spawn (post --env interpolation)."
+    },
+    "node": {
+      "type": "string",
+      "description": "Node the child runs in."
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Linux PID of the child."
+    }
+  }
+}

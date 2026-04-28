@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/status-list.schema.json",
+  "title": "nlink-lab status --json output",
+  "description": "Emitted by `nlink-lab status --json` with no lab argument. Array of summary records, one per state-backed lab. Sorted by name.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["name", "node_count", "created_at"],
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Lab name (matches the `state.json` directory name)."
+      },
+      "node_count": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of namespaces tracked in state."
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO-8601 timestamp written when the deploy succeeded."
+      }
+    }
+  }
+}

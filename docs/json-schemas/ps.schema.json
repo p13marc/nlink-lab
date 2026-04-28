@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/ps.schema.json",
+  "title": "nlink-lab ps --json output",
+  "description": "Emitted by `nlink-lab ps --json`. Array of tracked background processes, both alive and exited. Exited entries are kept (`alive: false`) until the lab is destroyed; consumers polling for liveness must check the `alive` field, not just the PID.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["node", "pid", "alive"],
+    "additionalProperties": false,
+    "properties": {
+      "node": {
+        "type": "string",
+        "description": "Node the process was spawned in."
+      },
+      "pid": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Linux PID of the spawned process."
+      },
+      "alive": {
+        "type": "boolean",
+        "description": "True if `kill(pid, 0)` returns 0. Stays false after the process exits — the entry is kept for post-mortem inspection."
+      },
+      "stdout_log": {
+        "type": "string",
+        "description": "Absolute path to the captured stdout log. Omitted when not captured."
+      },
+      "stderr_log": {
+        "type": "string",
+        "description": "Absolute path to the captured stderr log. Omitted when not captured."
+      }
+    }
+  }
+}

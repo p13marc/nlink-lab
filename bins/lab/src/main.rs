@@ -46,7 +46,11 @@ fn bold(s: &str) -> String {
 #[command(about = "Network lab engine — create isolated network topologies using Linux namespaces")]
 #[command(version)]
 struct Cli {
-    /// Output JSON instead of human-readable text (for status, diagnose, ps).
+    /// Output JSON instead of human-readable text (where supported).
+    ///
+    /// Supported by: `deploy`, `status`, `inspect`, `spawn`, `exec`, `ps`,
+    /// `diagnose`, `render`. JSON Schemas for the high-traffic shapes
+    /// (deploy/status/spawn/ps) live under `docs/json-schemas/`.
     #[arg(long, global = true)]
     json: bool,
 
@@ -54,7 +58,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
-    /// Quiet output (errors only).
+    /// Suppress informational output (errors still go to stderr).
+    ///
+    /// Recommended for scripted/automated use; the default human-readable
+    /// output is intended for interactive shells.
     #[arg(short, long, global = true)]
     quiet: bool,
 
@@ -65,6 +72,13 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Deploy a lab from a topology file (.nll).
+    ///
+    /// JSON OUTPUT (with `--json`):
+    ///   { "name": str, "nodes": int, "links": int, "deploy_time_ms": int }
+    ///
+    /// Combined with `--unique`, the `name` field is the chosen unique
+    /// lab name (original name + PID suffix). Useful for scripted
+    /// teardown.
     Deploy {
         /// Path to the topology file (.nll).
         topology: PathBuf,
@@ -139,12 +153,25 @@ enum Commands {
     },
 
     /// Show running labs or details of a specific lab.
+    ///
+    /// JSON OUTPUT (with `--json`, no lab name):
+    ///   [ { "name": str, "node_count": int, "created_at": str }, ... ]
+    ///
+    /// JSON OUTPUT (with `--json --scan`):
+    ///   { "labs": [ ... ],
+    ///     "orphans": { "bridges": [str], "veths": [str], "netns": [str],
+    ///                  "stale": [ { "name": str,
+    ///                               "missing_namespaces": [str] } ] } }
+    ///
+    /// JSON OUTPUT (with `--json <lab>`):
+    ///   topology object for the lab + an `addresses` field per node.
     Status {
         /// Lab name (omit to list all).
         name: Option<String>,
 
         /// Also scan the host for mgmt bridges / namespaces with no
-        /// matching state file, and report them as orphans.
+        /// matching state file (orphans), and labs whose state file
+        /// claims namespaces no longer present on the host (stale).
         #[arg(long)]
         scan: bool,
     },
@@ -173,6 +200,17 @@ enum Commands {
     },
 
     /// Spawn a background process in a lab node.
+    ///
+    /// Stdout/stderr are captured to per-process log files at:
+    ///
+    ///   $XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}
+    ///
+    /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
+    /// path is stable; consumers can read it directly, or use
+    /// `nlink-lab logs <lab> --pid <pid>`.
+    ///
+    /// JSON OUTPUT (with `--json`):
+    ///   { "command": str, "node": str, "pid": int }
     Spawn {
         /// Lab name.
         lab: String,
@@ -350,7 +388,17 @@ enum Commands {
         shell: String,
     },
 
-    /// List processes running in a lab.
+    /// List background processes (alive and exited) tracked by `spawn`.
+    ///
+    /// Exited processes remain in the listing with `alive: false` so
+    /// post-mortem inspection (which log files? when did they exit?) is
+    /// possible. They are pruned only when the lab is destroyed. Consumers
+    /// polling "is X still running?" must check the `alive` field, not
+    /// just look up the PID.
+    ///
+    /// JSON OUTPUT (with `--json`):
+    ///   [ { "node": str, "pid": int, "alive": bool,
+    ///       "stdout_log": str | null, "stderr_log": str | null }, ... ]
     Ps {
         /// Lab name.
         lab: String,
@@ -539,7 +587,16 @@ enum Commands {
         lab: String,
     },
 
-    /// Show container logs.
+    /// Show container logs or per-process logs from `nlink-lab spawn`.
+    ///
+    /// Without `--pid`: shows the container's stdout/stderr (node must be
+    /// a container).  With `--pid`: shows the per-process log file written
+    /// by `spawn`. Per-process log files live at:
+    ///
+    ///   $XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}
+    ///
+    /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
+    /// path is stable; consumers can read it directly.
     Logs {
         /// Lab name.
         lab: String,
@@ -551,7 +608,10 @@ enum Commands {
         /// Show stderr instead of stdout (with --pid).
         #[arg(long)]
         stderr: bool,
-        /// Stream logs (tail -f style, container only).
+        /// Stream logs in tail -F style. Works for container nodes (via
+        /// the runtime) and for tracked background processes (via
+        /// `--pid`). Re-opens the file on rotation/truncation. Stops on
+        /// Ctrl-C.
         #[arg(long)]
         follow: bool,
         /// Show last N lines.
@@ -3230,6 +3290,25 @@ fn nsenter_shell_args(ns: &str, shell: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use nlink_lab::state::LabInfo;
+
+    /// Each JSON Schema under `docs/json-schemas/` must be valid JSON.
+    /// Catches accidental hand-edit corruption (trailing comma, etc.) at
+    /// CI time — we don't validate the schema language itself, just
+    /// parseability. Keep the file list in sync when adding schemas.
+    #[test]
+    fn json_schemas_parse() {
+        let schemas = [
+            include_str!("../../../docs/json-schemas/deploy.schema.json"),
+            include_str!("../../../docs/json-schemas/status-list.schema.json"),
+            include_str!("../../../docs/json-schemas/status-scan.schema.json"),
+            include_str!("../../../docs/json-schemas/spawn.schema.json"),
+            include_str!("../../../docs/json-schemas/ps.schema.json"),
+        ];
+        for s in schemas {
+            let _: serde_json::Value = serde_json::from_str(s)
+                .expect("JSON Schema file failed to parse — see file list above");
+        }
+    }
 
     #[test]
     fn nsenter_shell_args_uses_equals_form() {

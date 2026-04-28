@@ -4,7 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `nlink-lab capture -w <pcap>` no longer produces a 0-byte pcap when
+  the capture process is terminated by SIGTERM (e.g., `timeout(1)`'s
+  default signal) or SIGKILL. The pcap writer now flushes after every
+  packet, matching `tcpdump -U`. The CLI also installs a SIGTERM
+  handler alongside the existing SIGINT handler so the loop exits
+  cleanly and prints the summary line. (Plan 155 PR A — round-3 §2.1)
+
 ### Added
+- JSON output schemas for the four high-traffic shapes under
+  `docs/json-schemas/`: `deploy`, `status` (list + scan variants),
+  `spawn`, `ps`. Hand-written draft-07 schemas; the source of truth
+  remains the code. Linked from `--json` `--help`. (Plan 155 PR D —
+  round-3 §5.1)
 - `nlink-lab exec --workdir <dir>` and `nlink-lab spawn --workdir <dir>`
   — set the working directory of the child. For namespace nodes this is
   `chdir()` on the host filesystem (namespace nodes share the host mount

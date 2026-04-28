@@ -48,13 +48,23 @@ pub struct ExecOutput {
 }
 
 /// Status of a tracked background process.
+///
+/// **Retention**: tracked processes are *not* removed from the lab's PID
+/// list when they exit. They remain with `alive == false` until the lab
+/// is destroyed (or the state file is cleaned manually). Consumers
+/// polling for "is X still running?" must check [`alive`](Self::alive),
+/// not just look up the PID.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProcessInfo {
     /// Node the process runs in.
     pub node: String,
     /// Process ID.
     pub pid: u32,
-    /// Whether the process is still alive.
+    /// Whether the process is still alive (`kill(pid, 0)` returns 0).
+    ///
+    /// Stays `false` after the process exits — the entry is kept for
+    /// post-mortem inspection (log paths, exit ordering). See the
+    /// type-level retention note above.
     pub alive: bool,
     /// Path to stdout log file (if captured).
     #[serde(skip_serializing_if = "Option::is_none")]

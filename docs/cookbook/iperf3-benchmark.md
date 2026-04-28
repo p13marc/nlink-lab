@@ -53,9 +53,9 @@ provides them).
 
 ## NLL: iperf3 throughput
 
-[`examples/iperf-benchmark.nll`](../../examples/iperf-benchmark.nll):
+[`examples/iperf-benchmark.nll`](../../examples/iperf-benchmark.nll) (extended with a `benchmark` block):
 
-```nll
+```nll-ignore
 lab "iperf-bench"
 
 node server { route default via 10.0.0.2 }

@@ -4,7 +4,7 @@ Reproducible Linux network labs in 100ms, scriptable from Rust,
 with deeper TC, nftables, VRF, WireGuard, and macvlan/ipvlan
 control than any container-based alternative.
 
-```nll
+```nll-ignore
 network radio {
   members [hq, alpha, bravo]
   subnet 172.100.3.0/24

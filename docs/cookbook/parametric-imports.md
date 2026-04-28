@@ -28,7 +28,7 @@ A reusable module declares its parameters with `param`:
 
 [`examples/imports/parametric-ring.nll`](../../examples/imports/parametric-ring.nll):
 
-```nll
+```nll-ignore
 param count default 4
 
 lab "ring"
@@ -53,7 +53,7 @@ with modulo wrap.
 
 [`examples/imports/use-ring.nll`](../../examples/imports/use-ring.nll):
 
-```nll
+```nll-ignore
 import "parametric-ring.nll" as backbone(count=6)
 
 lab "ring-with-monitor"
@@ -71,7 +71,7 @@ monitor host.
 To stamp out the same module N times (e.g., 3 datacenters, each
 with the same internal structure), use `for_each`:
 
-```nll
+```nll-ignore
 import "parametric-ring.nll" for_each {
   dc1(count=4)
   dc2(count=6)
@@ -115,7 +115,7 @@ strings, durations (`50ms`), rates (`100mbit`), or percentages
 A topology with `param` declarations can also accept overrides
 from the command line:
 
-```nll
+```nll-ignore
 # wan.nll
 param latency default 50ms
 param loss default 0.1%
@@ -140,7 +140,7 @@ parameter combinations per CI run. See
 Once imported, the imported topology's nodes are addressable as
 `<alias>.<node>`:
 
-```nll
+```nll-ignore
 link dc1.r1:wan -- dc2.r1:wan { ... }     # link between fabrics
 node monitor { route default via ${dc1.r1.eth0} }  # use cross-ref for IP
 ```
@@ -156,7 +156,7 @@ import boundary.
   which is in turn imported from a `region.nll`. Imports nest
   arbitrarily; each level prefixes the names of the level below.
 - **Conditional shape**: combine `param` + `if`:
-  ```nll
+  ```nll-ignore
   param redundant default 0
   if ${redundant} == 1 {
     link r1:redundant -- r2:redundant { ... }

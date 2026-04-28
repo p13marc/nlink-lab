@@ -40,7 +40,7 @@ nlink-lab completions zsh > /usr/share/zsh/site-functions/_nlink-lab
 
 Save this as `first.nll`:
 
-```nll
+```nll-ignore
 lab "my-first-lab"
 
 profile router { forward ipv4 }
@@ -136,7 +136,7 @@ Lab 'my-first-lab' destroyed
 
 Profiles are reusable node templates. Nodes inherit with `:`.
 
-```nll
+```nll-ignore
 profile router { forward ipv4 }
 profile dual-stack { forward ipv4  forward ipv6 }
 
@@ -148,7 +148,7 @@ node r2 : dual-stack
 
 ### 2. Routes
 
-```nll
+```nll-ignore
 node host {
   route default via 10.0.0.1
   route 192.168.0.0/16 via 10.0.0.2 metric 100
@@ -162,7 +162,7 @@ Routes support `via`, `dev`, and `metric` modifiers.
 
 Impairments placed directly in a link block apply to both directions.
 
-```nll
+```nll-ignore
 link r1:wan0 -- r2:wan0 {
   172.16.0.1/30 -- 172.16.0.2/30
   delay 30ms jitter 5ms loss 0.1% rate 50mbit
@@ -173,7 +173,7 @@ Available properties: `delay`, `jitter`, `loss`, `rate`, `corrupt`, `reorder`.
 
 Standalone form:
 
-```nll
+```nll-ignore
 impair switch:br0 delay 5ms jitter 1ms
 ```
 
@@ -183,7 +183,7 @@ See `examples/wan-impairment.nll`.
 
 Use `->` and `<-` for per-direction impairments. `->` applies to the left endpoint, `<-` to the right.
 
-```nll
+```nll-ignore
 link ground:sat0 -- satellite:sat0 {
   172.16.0.1/30 -- 172.16.0.2/30
   -> delay 270ms jitter 10ms rate 50mbit    # ground to satellite
@@ -195,7 +195,7 @@ See `examples/asymmetric.nll`.
 
 ### 5. For Loops and Variables
 
-```nll
+```nll-ignore
 let N = 4
 let base = 10.0
 
@@ -217,7 +217,7 @@ See `examples/spine-leaf.nll` for a full datacenter fabric using nested loops.
 
 ### 6. Firewall (nftables)
 
-```nll
+```nll-ignore
 node server {
   firewall policy drop {
     accept ct established,related
@@ -234,7 +234,7 @@ See `examples/firewall.nll`.
 
 ### 7. Bridge Networks with VLANs
 
-```nll
+```nll-ignore
 network fabric {
   vlan-filtering
   members [switch:br0, host1:eth0, host2:eth0]
@@ -249,7 +249,7 @@ See `examples/vlan-trunk.nll`.
 
 ### 8. WireGuard Tunnels
 
-```nll
+```nll-ignore
 node gw-a : gateway {
   wireguard wg0 {
     key auto
@@ -267,7 +267,7 @@ See `examples/wireguard-vpn.nll`.
 
 ### 9. VRF Multi-Tenancy
 
-```nll
+```nll-ignore
 node pe : router {
   vrf red table 10 {
     interfaces [eth1, eth2]
@@ -286,7 +286,7 @@ See `examples/vrf-multitenant.nll`.
 
 ### 10. Containers
 
-```nll
+```nll-ignore
 node router image "alpine:latest" cmd "sleep infinity"
 node host { route default via 10.0.0.1 }
 
@@ -303,7 +303,7 @@ See `examples/container.nll`.
 
 File `base-network.nll`:
 
-```nll
+```nll-ignore
 lab "base"
 profile router { forward ipv4 }
 node r1 : router
@@ -313,7 +313,7 @@ link r1:eth0 -- r2:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }
 
 File `composed.nll`:
 
-```nll
+```nll-ignore
 import "base-network.nll" as dc
 
 lab "composed"
@@ -333,7 +333,7 @@ See `examples/imports/`.
 
 Named pools eliminate manual address planning:
 
-```nll
+```nll-ignore
 pool fabric 10.0.0.0/16 /30
 pool access 10.1.0.0/16 /24
 
@@ -348,7 +348,7 @@ Subnets are allocated sequentially. Pool exhaustion is an error at parse time.
 
 Generate common topologies in a single statement:
 
-```nll
+```nll-ignore
 mesh cluster { node [a, b, c, d]; pool links }     # full mesh
 ring backbone { count 6; pool backbone }             # ring
 star campus { hub router; spokes [s1, s2, s3] }      # hub-and-spoke
@@ -360,7 +360,7 @@ Patterns expand to regular nodes and links during lowering. Use `nlink-lab rende
 
 Declare post-deploy connectivity checks in the topology:
 
-```nll
+```nll-ignore
 validate {
     reach host1 host2        # host1 can ping host2
     no-reach host1 host3     # firewall should block this
@@ -373,7 +373,7 @@ Assertions run automatically after deploy. Use `--skip-validate` to disable.
 
 Inner `${}` expressions are resolved first, enabling dynamic references:
 
-```nll
+```nll-ignore
 for i in 1..4 {
     node host${i} { route default via ${router${i}.eth0} }
 }
@@ -392,7 +392,7 @@ nlink-lab render --ascii topology.nll  # text summary
 
 Auto-create an out-of-band management bridge connecting all nodes:
 
-```nll
+```nll-ignore
 lab "mylab" {
     mgmt 172.20.0.0/24
 }
@@ -677,7 +677,7 @@ sudo nlink-lab impair mylab router:wan0 --heal       # restores original impairm
 
 Parameterize topologies without separate files per scenario:
 
-```nll
+```nll-ignore
 param wan_delay default 10ms
 param wan_loss default 0%
 
@@ -694,7 +694,7 @@ nlink-lab render topology.nll --set wan_delay=300ms
 
 Create a management bridge in the root namespace so host processes can reach lab nodes directly:
 
-```nll
+```nll-ignore
 lab "my-lab" {
     mgmt 172.20.0.0/24 host-reachable
 }

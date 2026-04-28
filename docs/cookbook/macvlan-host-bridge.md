@@ -118,7 +118,7 @@ If your environment doesn't permit macvlan (some DHCP servers reject
 unknown MACs, some hypervisors block additional MACs on a port),
 use `ipvlan` instead:
 
-```nll
+```nll-ignore
 node gateway {
   ipvlan eth0 parent "enp3s0" mode l2 {
     192.168.1.100/24

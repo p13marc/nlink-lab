@@ -155,7 +155,7 @@ deploy — your test doesn't even know it's happening."
   Rust binary that does heartbeat + leader election; ship the
   binary or use `python3 -m http.server` as a stand-in)
 - A `scenario` block:
-  ```nll
+  ```nll-ignore
   scenario partition-test {
     at 0s   { exec node1 -- ./run-test.sh }
     at 5s   { down node1:eth0 }

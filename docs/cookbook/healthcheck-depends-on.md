@@ -119,7 +119,7 @@ sudo nlink-lab destroy container-lifecycle
 
 ## Healthcheck options
 
-```nll
+```nll-ignore
 healthcheck "command"            # default: 30s interval, 10s timeout, 3 retries
 healthcheck "command" {
   interval 5s

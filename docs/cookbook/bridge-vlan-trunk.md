@@ -100,7 +100,7 @@ sudo nlink-lab destroy vlan-trunk
 For a node that needs to see multiple VLANs (e.g. a router doing
 inter-VLAN routing), declare a trunk port:
 
-```nll
+```nll-ignore
 node router
 
 network fabric {

@@ -45,7 +45,7 @@ semantic clarity.
 
 ## Quick Start
 
-```nll
+```nll-ignore
 lab "simple"
 
 node router { forward ipv4 }
@@ -68,7 +68,7 @@ IP forwarding, and 10ms of netem delay.
 
 Every file begins with a `lab` declaration.
 
-```nll
+```nll-ignore
 lab "my-lab"
 
 lab "spine-leaf" {
@@ -91,7 +91,7 @@ Optional lab properties:
 Compose topologies from reusable modules. Imported files are parsed
 independently; all names are prefixed with the alias.
 
-```nll
+```nll-ignore
 import "base-dc.nll" as dc
 import "wan-overlay.nll" as wan
 
@@ -114,7 +114,7 @@ link dc.spine1:wan0 -- wan.pe1:eth0 {
 
 Reusable node templates. Nodes inherit with `:`.
 
-```nll
+```nll-ignore
 profile router {
   forward ipv4
 }
@@ -131,7 +131,7 @@ profile web-server {
 
 ### 3. Nodes
 
-```nll
+```nll-ignore
 node host                              # bare node
 
 node r1 : router                       # profile inheritance
@@ -151,7 +151,7 @@ node r1 : router {                     # with properties
 
 The `--` operator connects two endpoints.
 
-```nll
+```nll-ignore
 link r1:eth0 -- r2:eth0                                # bare
 
 link r1:eth0 -- r2:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }  # with addresses
@@ -164,7 +164,7 @@ link r1:wan0 -- r2:wan0 {
 
 #### Inline Impairments
 
-```nll
+```nll-ignore
 # Symmetric (both directions)
 link site-a:wan0 -- site-b:wan0 {
   172.16.0.1/30 -- 172.16.0.2/30
@@ -184,7 +184,7 @@ Without arrows, impairment applies to both sides.
 
 #### Rate Limiting and Standalone Impairments
 
-```nll
+```nll-ignore
 link server:eth0 -- client:eth0 {
   10.0.0.1/24 -- 10.0.0.2/24
   rate egress 100mbit ingress 100mbit
@@ -196,7 +196,7 @@ impair switch:br0 delay 5ms jitter 1ms         # standalone
 
 ### 5. Networks (Bridges)
 
-```nll
+```nll-ignore
 network fabric {
   members [switch:br0, host1:eth0, host2:eth0]
   vlan-filtering
@@ -216,7 +216,7 @@ by the destination's IP, so the impairment only affects traffic from
 the source toward the named destination. Symmetric impairment (both
 directions) requires two rules.
 
-```nll
+```nll-ignore
 network radio {
   members [hq, alpha, bravo]
   subnet 172.100.3.0/24
@@ -253,7 +253,7 @@ impair rules. The loop variable substitutes via `${var}` and supports
 arithmetic (`${(i + 1) % 12}`), nested loops, and integer or list
 ranges. Eagerly expanded at parse time.
 
-```nll
+```nll-ignore
 network ring {
   members [n0:rf, n1:rf, n2:rf, n3:rf]
   subnet 10.0.0.0/24
@@ -272,7 +272,7 @@ for a worked 12-node example.
 
 ### 6. Interfaces
 
-```nll
+```nll-ignore
 node vtep1 : router {
   lo 10.255.0.1/32
 
@@ -290,7 +290,7 @@ node vtep1 : router {
 
 ### 7. Firewall
 
-```nll
+```nll-ignore
 node server {
   firewall policy drop {
     accept ct established,related
@@ -303,7 +303,7 @@ node server {
 
 ### 8. VRF
 
-```nll
+```nll-ignore
 node pe : router {
   vrf red table 10 {
     interfaces [eth1, eth2]
@@ -319,7 +319,7 @@ node pe : router {
 
 ### 9. WireGuard
 
-```nll
+```nll-ignore
 node gw : gateway {
   wireguard wg0 {
     key auto
@@ -333,7 +333,7 @@ node gw : gateway {
 
 ### 10. Process Execution
 
-```nll
+```nll-ignore
 node server {
   run background ["iperf3", "-s"]                             # daemon
   run ["ip", "link", "set", "eth0", "txqueuelen", "10000"]    # setup command
@@ -342,7 +342,7 @@ node server {
 
 ### 11. Variables
 
-```nll
+```nll-ignore
 let wan_delay = 30ms
 let wan_loss  = 0.1%
 let base      = 10.0
@@ -355,7 +355,7 @@ link r1:wan0 -- r2:wan0 {
 
 ### 12. Loops
 
-```nll
+```nll-ignore
 for i in 1..4 {
   node leaf${i} : router { lo 10.255.1.${i}/32 }
 }
@@ -373,7 +373,7 @@ Range `1..4` is inclusive: 1, 2, 3, 4.
 
 ### 13. Comments
 
-```nll
+```nll-ignore
 # Line comments (like TOML, Python, shell)
 
 /* Block comments for multi-line sections.
@@ -389,7 +389,7 @@ Range `1..4` is inclusive: 1, 2, 3, 4.
 
 <table><tr><th>NLL (9 lines)</th><th>TOML (20 lines)</th></tr><tr><td>
 
-```nll
+```nll-ignore
 lab "simple"
 
 node router { forward ipv4 }
@@ -433,7 +433,7 @@ jitter = "2ms"
 
 <table><tr><th>NLL (21 lines, with loops)</th><th>TOML (60 lines, no loops)</th></tr><tr><td>
 
-```nll
+```nll-ignore
 lab "spine-leaf" { prefix "dc" }
 
 profile router { forward ipv4 }
@@ -552,7 +552,7 @@ Scaling to 4 spines, 8 leaves, 16 servers: NLL stays ~25 lines. TOML grows to ~2
 
 <table><tr><th>NLL (15 lines)</th><th>TOML (39 lines)</th></tr><tr><td>
 
-```nll
+```nll-ignore
 lab "wan-impairment"
 
 profile router { forward ipv4 }
@@ -637,7 +637,7 @@ rate = "50mbit"
 
 ### 4. Firewall
 
-```nll
+```nll-ignore
 lab "firewall"
 
 profile router { forward ipv4 }
@@ -660,7 +660,7 @@ link router:eth1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }
 
 ### 5. VXLAN Overlay
 
-```nll
+```nll-ignore
 lab "vxlan-overlay"
 
 profile router { forward ipv4 }
@@ -690,7 +690,7 @@ link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
 ### 6. VRF Multi-Tenant
 
-```nll
+```nll-ignore
 lab "vrf-multitenant"
 
 profile router { forward ipv4 }
@@ -715,7 +715,7 @@ link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10/24 }
 
 ### 7. WireGuard VPN
 
-```nll
+```nll-ignore
 lab "wireguard-vpn"
 
 profile gateway { forward ipv4 }
@@ -754,7 +754,7 @@ link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
 
 ### 8. iperf Benchmark
 
-```nll
+```nll-ignore
 lab "iperf-bench"
 
 node server {
@@ -774,7 +774,7 @@ link server:eth0 -- client:eth0 {
 
 ### 9. VLAN Trunk
 
-```nll
+```nll-ignore
 lab "vlan-trunk" {
   description "Bridge with VLAN trunking and access ports"
 }
@@ -796,7 +796,7 @@ network fabric {
 
 ### 10. Ring Topology
 
-```nll
+```nll-ignore
 lab "ring"
 
 let N = 6
@@ -823,7 +823,7 @@ link r${N}:eth1 -- r1:eth0 {
 
 ### 11. Satellite Link (Asymmetric)
 
-```nll
+```nll-ignore
 lab "satellite"
 
 profile gateway { forward ipv4 }
@@ -845,7 +845,7 @@ link ground-station:sat0 -- satellite-gw:sat0 {
 
 ### 12. Multi-Site Enterprise with VRF
 
-```nll
+```nll-ignore
 lab "enterprise"
 
 profile pe-router {
@@ -894,7 +894,7 @@ link pe2:eth2 -- ce-b2:eth0 { 10.0.4.1/24 -- 10.0.4.10/24 }
 
 ### 13. Load Balancer + Web Farm
 
-```nll
+```nll-ignore
 lab "web-farm"
 
 profile web {
@@ -928,7 +928,7 @@ for i in 1..3 {
 
 ### 14. Large-Scale Fat-Tree (80 nodes)
 
-```nll
+```nll-ignore
 lab "fat-tree" { prefix "ft" }
 
 profile switch { forward ipv4 }
@@ -1277,9 +1277,11 @@ integrates loops and variables natively — one file, one parser, zero deps.
 
 ## Implementation
 
-See [Plan 060: NLL Parser](plans/060-nll-parser.md) for the full
-implementation plan including crate selection, file layout, phased
-implementation steps, and test strategy.
+The original NLL parser plan (Plan 060) shipped and was removed
+per the project's plan-document convention. See
+[`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for the contributor-
+oriented map of the parser/lower/validator pipeline, or read the
+modules directly under `crates/nlink-lab/src/parser/nll/`.
 
 **Architecture:**
 

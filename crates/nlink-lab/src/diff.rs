@@ -3,10 +3,12 @@
 //! Compares two [`Topology`] structs and produces a structured change set.
 //! Used by the `nlink-lab diff` CLI and the future `apply` command.
 
+use serde::Serialize;
+
 use crate::types::{Impairment, Link, NetworkImpairment, RouteConfig, Topology};
 
 /// A structured diff between two topologies.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct TopologyDiff {
     pub nodes_added: Vec<String>,
     pub nodes_removed: Vec<String>,
@@ -29,7 +31,7 @@ pub struct TopologyDiff {
 }
 
 /// A change to a single static route on a single node.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct RouteChange {
     pub node: String,
     pub dest: String,
@@ -47,7 +49,7 @@ pub struct RouteChange {
 /// leaving the previous value in place. Removed entries are
 /// reported so the operator can act on them, but no kernel call
 /// is made on the remove path.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SysctlChange {
     pub node: String,
     pub added: Vec<(String, String)>,
@@ -62,7 +64,7 @@ impl SysctlChange {
 }
 
 /// A change to an impairment on a specific endpoint.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct ImpairmentChange {
     pub endpoint: String,
     pub old: Impairment,
@@ -74,7 +76,7 @@ pub struct ImpairmentChange {
 /// `desired` carries the rules that should be live after reconcile;
 /// `None` means "remove the impairer entirely on this source's
 /// interface" (which translates to `PerPeerImpairer::clear`).
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct NetworkImpairerChange {
     pub network: String,
     pub src_node: String,

@@ -99,6 +99,11 @@ enum Commands {
     },
 
     /// Apply topology changes to a running lab.
+    ///
+    /// Reconciles the live lab state to match an updated NLL,
+    /// issuing only the deltas. Add `--check` to fail on any drift
+    /// (a CI gate). Add `--json --dry-run` for machine-parseable
+    /// diff output.
     Apply {
         /// Path to the updated topology file (.nll).
         topology: PathBuf,
@@ -106,6 +111,11 @@ enum Commands {
         /// Show what would change without applying.
         #[arg(long)]
         dry_run: bool,
+
+        /// Drift check — exit non-zero if the live lab differs from
+        /// the NLL. Useful as a CI gate. Implies --dry-run.
+        #[arg(long)]
+        check: bool,
     },
 
     /// Tear down a running lab.
@@ -820,7 +830,14 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Apply { topology, dry_run } => {
+        Commands::Apply {
+            topology,
+            dry_run,
+            check,
+        } => {
+            // --check implies --dry-run.
+            let dry_run = dry_run || check;
+
             let desired = nlink_lab::parser::parse_file(&topology)?;
             let result = desired.validate();
             for w in result.warnings() {
@@ -845,17 +862,61 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             let diff = nlink_lab::diff_topologies(current, &desired);
 
-            if diff.is_empty() {
-                println!("No changes to apply.");
+            // JSON dry-run output for CI consumption.
+            if json && dry_run {
+                #[derive(serde::Serialize)]
+                struct DryRunReport<'a> {
+                    lab: &'a str,
+                    no_op: bool,
+                    change_count: usize,
+                    diff: &'a nlink_lab::TopologyDiff,
+                }
+                let report = DryRunReport {
+                    lab: lab_name,
+                    no_op: diff.is_empty(),
+                    change_count: diff.change_count(),
+                    diff: &diff,
+                };
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                if check && !diff.is_empty() {
+                    return Err(nlink_lab::Error::Validation(format!(
+                        "drift detected: {} change(s) needed to converge",
+                        diff.change_count(),
+                    )));
+                }
                 return Ok(());
             }
 
-            println!("Changes for lab '{lab_name}':");
-            print!("{diff}");
-            println!("{} change(s)", diff.change_count());
+            if diff.is_empty() {
+                if !quiet {
+                    println!("No changes to apply.");
+                }
+                return Ok(());
+            }
+
+            // --check: exit non-zero if any drift.
+            if check {
+                if !quiet {
+                    println!("Drift detected for lab '{lab_name}':");
+                    print!("{diff}");
+                    println!("{} change(s) needed to converge", diff.change_count());
+                }
+                return Err(nlink_lab::Error::Validation(format!(
+                    "drift detected: {} change(s) needed to converge",
+                    diff.change_count(),
+                )));
+            }
+
+            if !quiet {
+                println!("Changes for lab '{lab_name}':");
+                print!("{diff}");
+                println!("{} change(s)", diff.change_count());
+            }
 
             if dry_run {
-                println!("\n(dry run — no changes applied)");
+                if !quiet {
+                    println!("\n(dry run — no changes applied)");
+                }
                 return Ok(());
             }
 
@@ -864,11 +925,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             nlink_lab::apply_diff(&mut running, &desired, &diff).await?;
             let elapsed = start.elapsed();
 
-            println!(
-                "\nApplied {} change(s) in {:.0?}",
-                diff.change_count(),
-                elapsed
-            );
+            if !quiet {
+                println!(
+                    "\nApplied {} change(s) in {:.0?}",
+                    diff.change_count(),
+                    elapsed
+                );
+            }
             Ok(())
         }
 

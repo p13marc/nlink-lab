@@ -35,7 +35,8 @@ NAT, rate-limits) currently require redeploy until
 | Flag | Description |
 |------|-------------|
 | `--dry-run` | Print the diff and what would change; don't make kernel calls. |
-| `--json` | Emit a structured diff: `{nodes_added, nodes_removed, links_added, links_removed, impairments_changed, ...}`. |
+| `--check` | Drift gate — exit non-zero if the live lab differs from the NLL. Implies `--dry-run`. |
+| `--json` | Emit a structured diff. With `--dry-run`/`--check`: a full report (`{lab, no_op, change_count, diff: {…}}`) suitable for CI. |
 | `-v`, `--verbose` | Print every reconcile step. |
 | `-q`, `--quiet` | Suppress non-error output. |
 
@@ -65,13 +66,40 @@ nlink-lab apply --dry-run examples/wan-impairment.nll
 
 ### CI gate — fail if the lab has drifted
 
-(After Plan 152 ships, `apply --check` will be the canonical drift
-gate. Today, `apply --dry-run --json` and `jq -e '.no_op == true'`
-is the equivalent.)
+```bash
+nlink-lab apply --check topo.nll
+# exit 0: no drift
+# exit non-zero: drift detected; the diff is printed to stderr
+```
+
+Or with structured output:
 
 ```bash
-nlink-lab apply --dry-run --json topo.nll | jq -e '.no_op == true' \
+nlink-lab apply --check --json topo.nll \
+  | jq -e '.no_op == true' \
   || { echo "drift detected"; exit 1; }
+```
+
+The `--json` flag with `--dry-run`/`--check` emits:
+
+```json
+{
+  "lab": "satellite-mesh",
+  "no_op": false,
+  "change_count": 2,
+  "diff": {
+    "nodes_added": [],
+    "nodes_removed": [],
+    "links_added": [],
+    "links_removed": [],
+    "impairments_changed": [],
+    "impairments_added": [],
+    "impairments_removed": [],
+    "network_impairs_changed": [{"network": "radio", "src_node": "hq", "desired": [...]}],
+    "routes_changed": [],
+    "sysctls_changed": []
+  }
+}
 ```
 
 ### Auto-apply in a config-watch loop

@@ -65,7 +65,8 @@ Things you'd reach for in a chaos test.
 |---------|------|
 | [`init`](init.md) | Generate a new NLL from a template |
 | [`test`](test.md) | Deploy → validate → destroy across one or more NLL files |
-| [`export`](export.md) | Export a lab as a portable archive _(planned in Plan 153)_ |
+| [`export`](export.md) | Export a lab as plain text or a portable `.nlz` archive |
+| [`import`](import.md) | Import a `.nlz` archive — verify, extract, deploy |
 | [`pull`](pull.md) | Pre-pull container images for a topology |
 | [`completions`](completions.md) | Generate shell completions |
 | [`daemon`](daemon.md) | Run as a long-lived daemon (used by integrations) |

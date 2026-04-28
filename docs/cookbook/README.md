@@ -37,6 +37,9 @@ structurally impossible in container-based labs.
   the `#[lab_test]` macro: deploy → run assertions → destroy
   inside an ordinary `cargo test` run. No Docker daemon, no
   fixture, no Pytest.
+- [**Sharing labs as `.nlz` archives**](lab-portability.md) — one
+  file containing NLL + params + rendered snapshot + checksums.
+  Solves the "send me your repro" problem cleanly.
 - [**iperf3 benchmark with hard assertions**](iperf3-benchmark.md) —
   pass/fail thresholds in the topology; deploy fails the build on
   SLA violation.

@@ -31,6 +31,14 @@ structurally impossible in container-based labs.
 - [**Bridge VLAN trunks**](bridge-vlan-trunk.md) — 802.1Q access
   and trunk ports on a vlan-aware bridge.
 
+## Fault injection
+
+- [**Mid-test partition with the scenario engine**](p2p-partition.md) —
+  declare a timeline of `down` / `up` / `clear` / `validate` /
+  `exec` actions. The engine fires each step within ±100ms;
+  `validate` failures abort the scenario. CI gets a deterministic
+  pass/fail.
+
 ## Application + CI patterns
 
 - [**Network integration tests in `cargo test`**](rust-integration-test.md) —

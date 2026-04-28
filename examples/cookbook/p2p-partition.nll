@@ -1,0 +1,84 @@
+lab "p2p-partition" {
+  description "Partition / heal a small P2P fabric mid-test via the scenario engine"
+  tags [cookbook, partition, faultinjection]
+  dns hosts
+}
+
+profile router { forward ipv4 }
+
+# A 3-node P2P fabric reachable through a hub router. The hub is
+# the partition point — bringing its interface down to a peer
+# isolates that peer from the others without any iptables magic.
+node hub : router
+
+node alice  { route default via ${hub.eth0} }
+node bob    { route default via ${hub.eth1} }
+node carol  { route default via ${hub.eth2} }
+
+link hub:eth0 -- alice:eth0  { subnet 10.0.1.0/24 }
+link hub:eth1 -- bob:eth0    { subnet 10.0.2.0/24 }
+link hub:eth2 -- carol:eth0  { subnet 10.0.3.0/24 }
+
+# WAN-style impairment on the alice-side path so the lab feels real.
+impair hub:eth0 delay 30ms jitter 5ms loss 0.5%
+
+# Smoke-test before the scenario runs.
+validate {
+  reach alice bob
+  reach alice carol
+  reach bob carol
+}
+
+# A 16-second scenario:
+# - 0s   establish baseline + capture ping samples
+# - 3s   partition alice (bring hub:eth0 down)
+# - 6s   alice unreachable; bob ↔ carol still fine
+# - 11s  heal the partition
+# - 14s  baseline again
+# - 16s  clear the WAN impair entirely
+scenario "partition-and-heal" {
+  at 0s {
+    log "baseline: full mesh reachable"
+    exec alice "ping" "-c" "3" "-W" "1" "bob"
+    exec alice "ping" "-c" "3" "-W" "1" "carol"
+    validate {
+      reach alice bob
+      reach alice carol
+      reach bob carol
+    }
+  }
+
+  at 3s {
+    log "partitioning alice from the rest of the fabric"
+    down hub:eth0
+  }
+
+  at 6s {
+    log "asserting alice is partitioned but bob ↔ carol still works"
+    validate {
+      no-reach bob alice
+      no-reach carol alice
+      reach bob carol
+    }
+  }
+
+  at 11s {
+    log "healing the partition"
+    up hub:eth0
+  }
+
+  at 14s {
+    log "asserting full mesh restored"
+    validate {
+      reach alice bob
+      reach alice carol
+      reach bob carol
+    }
+  }
+
+  at 16s {
+    log "clearing WAN impair on hub:eth0 — alice should now ping bob without delay"
+    clear hub:eth0
+    exec alice "ping" "-c" "3" "-W" "1" "bob"
+  }
+}

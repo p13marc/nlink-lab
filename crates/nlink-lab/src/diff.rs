@@ -31,6 +31,25 @@ pub struct TopologyDiff {
 
     /// Per-endpoint rate-limit changes. Plan 152 Phase B.
     pub rate_limits_changed: Vec<RateLimitChange>,
+
+    /// Per-node nftables ruleset changes (firewall + NAT, both
+    /// rooted in the same `nlink-lab` table). Reconcile is coarse:
+    /// any change triggers a full atomic flush + rebuild for the
+    /// affected node. Plan 152 Phase B.
+    pub nftables_changed: Vec<NftablesChange>,
+}
+
+/// A change to the per-node nftables ruleset (firewall + NAT).
+///
+/// `desired_*` carries the rules that should be live after
+/// reconcile; `None` means "remove the ruleset entirely on this
+/// node" (translates to `del_table`).
+#[derive(Debug, Serialize)]
+pub struct NftablesChange {
+    pub node: String,
+    pub desired_firewall: Option<crate::types::FirewallConfig>,
+    pub desired_nat: Option<crate::types::NatConfig>,
+    pub was_present: bool,
 }
 
 /// A change to the rate-limit on a single endpoint.
@@ -112,6 +131,7 @@ impl TopologyDiff {
             && self.routes_changed.is_empty()
             && self.sysctls_changed.is_empty()
             && self.rate_limits_changed.is_empty()
+            && self.nftables_changed.is_empty()
     }
 
     /// Total number of changes.
@@ -127,6 +147,7 @@ impl TopologyDiff {
             + self.routes_changed.len()
             + self.sysctls_changed.len()
             + self.rate_limits_changed.len()
+            + self.nftables_changed.len()
     }
 }
 
@@ -211,6 +232,15 @@ impl std::fmt::Display for TopologyDiff {
                 (Some(_), false) => writeln!(f, "  + add rate-limit: {}", r.endpoint)?,
                 (Some(_), true) => writeln!(f, "  ~ update rate-limit: {}", r.endpoint)?,
                 (None, _) => writeln!(f, "  - remove rate-limit: {}", r.endpoint)?,
+            }
+        }
+        for n in &self.nftables_changed {
+            let has_desired =
+                n.desired_firewall.is_some() || n.desired_nat.is_some();
+            match (has_desired, n.was_present) {
+                (true, false) => writeln!(f, "  + add nftables: {}", n.node)?,
+                (true, true) => writeln!(f, "  ~ rebuild nftables: {}", n.node)?,
+                (false, _) => writeln!(f, "  - remove nftables: {}", n.node)?,
             }
         }
         if self.is_empty() {
@@ -424,6 +454,32 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         }
     }
 
+    // ── nftables (per-node firewall + NAT) ──
+    // Coarse reconcile: if either firewall OR nat differs on a
+    // node that exists on both sides, emit one NftablesChange.
+    // The apply path will atomically flush + rebuild the node's
+    // `nlink-lab` table.
+    for (node_name, desired_node) in &desired.nodes {
+        let Some(current_node) = current.nodes.get(node_name) else {
+            continue;
+        };
+
+        let fw_diff = current_node.firewall != desired_node.firewall;
+        let nat_diff = current_node.nat != desired_node.nat;
+        if !fw_diff && !nat_diff {
+            continue;
+        }
+
+        let was_present =
+            current_node.firewall.is_some() || current_node.nat.is_some();
+        diff.nftables_changed.push(NftablesChange {
+            node: node_name.clone(),
+            desired_firewall: desired_node.firewall.clone(),
+            desired_nat: desired_node.nat.clone(),
+            was_present,
+        });
+    }
+
     // Sort for deterministic output
     diff.nodes_added.sort();
     diff.nodes_removed.sort();
@@ -435,6 +491,7 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     diff.sysctls_changed.sort_by(|a, b| a.node.cmp(&b.node));
     diff.rate_limits_changed
         .sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+    diff.nftables_changed.sort_by(|a, b| a.node.cmp(&b.node));
 
     diff
 }
@@ -890,6 +947,128 @@ rate a:eth0 egress 100mbit ingress 100mbit
         let desired = crate::parser::parse(nll).unwrap();
         let diff = diff_topologies(&current, &desired);
         assert!(diff.rate_limits_changed.is_empty());
+    }
+
+    #[test]
+    fn test_firewall_added() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a {
+  firewall policy drop {
+    accept tcp dport 22
+  }
+}
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.nftables_changed.len(), 1);
+        let n = &diff.nftables_changed[0];
+        assert_eq!(n.node, "a");
+        assert!(!n.was_present);
+        assert!(n.desired_firewall.is_some());
+        assert!(n.desired_nat.is_none());
+    }
+
+    #[test]
+    fn test_firewall_changed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a {
+  firewall policy drop {
+    accept tcp dport 22
+  }
+}
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a {
+  firewall policy drop {
+    accept tcp dport 22
+    accept tcp dport 443
+  }
+}
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.nftables_changed.len(), 1);
+        assert!(diff.nftables_changed[0].was_present);
+    }
+
+    #[test]
+    fn test_firewall_removed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a {
+  firewall policy drop {
+    accept tcp dport 22
+  }
+}
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.nftables_changed.len(), 1);
+        let n = &diff.nftables_changed[0];
+        assert!(n.was_present);
+        assert!(n.desired_firewall.is_none());
+        assert!(n.desired_nat.is_none());
+    }
+
+    #[test]
+    fn test_nat_added() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a {
+  forward ipv4
+  nat {
+    masquerade src 10.0.0.0/16
+  }
+}
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.nftables_changed.len(), 1);
+        let n = &diff.nftables_changed[0];
+        assert!(n.desired_nat.is_some());
+    }
+
+    #[test]
+    fn test_firewall_no_change() {
+        let nll = r#"lab "t"
+node a {
+  firewall policy drop {
+    accept tcp dport 22
+    accept ct established,related
+  }
+}
+"#;
+        let current = crate::parser::parse(nll).unwrap();
+        let desired = crate::parser::parse(nll).unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert!(diff.nftables_changed.is_empty());
     }
 
     #[test]

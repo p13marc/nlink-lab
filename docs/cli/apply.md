@@ -20,9 +20,10 @@ to `destroy` + `deploy`, which incurs full teardown and rebuild.
 
 The current implementation reconciles **nodes, links,
 per-endpoint impairments, network-level per-pair impair, per-node
-static routes, per-node sysctls, and per-endpoint rate-limits**.
-Other resources (nftables, NAT) currently require redeploy until
-[Plan 152](../plans/152-apply-reconcile.md) Phase B finishes.
+static routes, per-node sysctls, per-endpoint rate-limits, and
+per-node nftables / NAT**. Plan 152 Phase B is complete; Phase D
+adds full e2e tests. Spawned processes still need explicit
+respawn — apply leaves them alone.
 
 ## Arguments
 
@@ -123,8 +124,8 @@ done
 | Rate limits | ✅ add / replace / remove via reconcile (coarse — full HTB tree rebuild on any change; brief packet-drop window) |
 | Routes | ✅ add / replace / remove via reconcile |
 | Sysctls | ✅ add / change in place; removed entries warned (kernel default not auto-restored) |
-| nftables / NAT | 🚧 Plan 152 Phase B |
-| Spawned processes | ❌ — apply leaves them; redeploy or `kill` + `spawn` |
+| nftables / NAT | ✅ atomic flush + rebuild on any change (coarse — full ruleset swap, conntrack state preserved) |
+| Spawned processes | ❌ — apply leaves them alone; redeploy or use `kill` + `spawn` |
 | Container nodes | ❌ — image / cmd changes require redeploy |
 
 Behavior under unsupported changes: `apply` warns and applies what

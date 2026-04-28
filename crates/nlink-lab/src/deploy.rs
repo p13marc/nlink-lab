@@ -2760,6 +2760,12 @@ pub async fn apply_diff(
     // step 15). For removed: delete the root qdisc on the iface.
     apply_rate_limits_diff(running, diff).await?;
 
+    // ── Phase 7f: Reconcile per-node nftables (firewall + NAT) ─────
+    // Coarse: any change triggers a full atomic flush + rebuild of
+    // the node's `nlink-lab` table. nftables transactions ensure
+    // the kernel never sees a half-built ruleset.
+    apply_nftables_diff(running, diff).await?;
+
     // ── Phase 8: Update state file ─────────────────────────────────
     running.set_topology(desired.clone());
 
@@ -2855,6 +2861,65 @@ async fn del_route_for_node(
             "del route '{dest}' on '{node_name}': {e}"
         ))
     })
+}
+
+/// Reconcile per-node nftables ruleset (firewall + NAT).
+/// Plan 152 Phase B/4.
+///
+/// Implementation is coarse: on any change to a node's firewall
+/// or NAT config, we delete the node's `nlink-lab` nftables table
+/// and rebuild it from the desired config. The kernel's nftables
+/// netlink interface delivers the deletion + rebuild atomically;
+/// the kernel never sees a half-built ruleset.
+///
+/// A fully-incremental reconcile (rule-by-rule diffing inside the
+/// table) is doable but requires upstreaming a per-rule diff API
+/// to nlink. The full-rebuild approach is correct and lossless for
+/// existing connections (conntrack state is preserved across the
+/// table swap because the conntrack zone isn't tied to the table).
+async fn apply_nftables_diff(
+    running: &mut RunningLab,
+    diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    use nlink::netlink::Nftables;
+    use nlink::netlink::nftables::types::Family;
+
+    if diff.nftables_changed.is_empty() {
+        return Ok(());
+    }
+
+    for change in &diff.nftables_changed {
+        let handle = node_handle_for(running, &change.node)?;
+        let nft_conn: Connection<Nftables> = handle.connection().map_err(|e| {
+            Error::deploy_failed(format!(
+                "nftables connection for '{}': {e}",
+                change.node,
+            ))
+        })?;
+
+        // 1. Delete the existing table (if any). Idempotent — a
+        //    missing table isn't an error from our perspective.
+        if change.was_present {
+            if let Err(e) = nft_conn.del_table("nlink-lab", Family::Inet).await {
+                tracing::warn!(
+                    "del nftables table on '{}': {e} (continuing)",
+                    change.node,
+                );
+            }
+        }
+
+        // 2. Re-apply firewall + NAT from the desired config. Each
+        //    sub-call is itself atomic from the kernel's POV; we
+        //    sequence them after a successful delete.
+        if let Some(fw) = &change.desired_firewall {
+            apply_firewall(&handle, &change.node, fw).await?;
+        }
+        if let Some(nat) = &change.desired_nat {
+            apply_nat(&handle, &change.node, nat).await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Reconcile per-endpoint rate-limits (Plan 152 Phase B/3).

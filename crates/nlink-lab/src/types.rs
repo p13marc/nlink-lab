@@ -676,7 +676,7 @@ pub struct RateLimit {
 }
 
 /// Firewall configuration (nftables).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FirewallConfig {
     /// Default chain policy ("accept" or "drop").
     pub policy: Option<String>,
@@ -687,7 +687,7 @@ pub struct FirewallConfig {
 }
 
 /// A single firewall rule.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FirewallRule {
     /// Match expression (e.g., "tcp dport 80", "ct state established,related").
     #[serde(rename = "match")]
@@ -698,7 +698,7 @@ pub struct FirewallRule {
 }
 
 /// NAT configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NatConfig {
     /// NAT rules.
     #[serde(default)]
@@ -706,7 +706,7 @@ pub struct NatConfig {
 }
 
 /// A single NAT rule.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NatRule {
     /// NAT action.
     pub action: NatAction,

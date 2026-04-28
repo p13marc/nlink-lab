@@ -2749,6 +2749,12 @@ pub async fn apply_diff(
     // added/removed nodes are handled by the lifecycle phases above.
     apply_routes_diff(running, diff).await?;
 
+    // ── Phase 7d: Reconcile per-node sysctls ───────────────────────
+    // Apply added + changed entries via set_sysctls. Removed
+    // entries get a warning (the kernel default isn't recoverable;
+    // overshooting is worse than leaving the previous value).
+    apply_sysctls_diff(running, diff)?;
+
     // ── Phase 8: Update state file ─────────────────────────────────
     running.set_topology(desired.clone());
 
@@ -2844,6 +2850,52 @@ async fn del_route_for_node(
             "del route '{dest}' on '{node_name}': {e}"
         ))
     })
+}
+
+/// Reconcile per-node sysctls (Plan 152 Phase B).
+///
+/// Applies added + changed entries via `NodeHandle::set_sysctls`.
+/// Removed entries are reported via `tracing::warn!` only — the
+/// kernel default for an arbitrary sysctl isn't recoverable
+/// without snapshotting the original value before the original
+/// deploy, and overshooting would be worse than leaving the
+/// previous setting in place.
+fn apply_sysctls_diff(
+    running: &mut RunningLab,
+    diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    if diff.sysctls_changed.is_empty() {
+        return Ok(());
+    }
+    for change in &diff.sysctls_changed {
+        let handle = node_handle_for(running, &change.node)?;
+
+        // Build one set_sysctls call covering both adds and changes.
+        let mut entries: Vec<(&str, &str)> = Vec::new();
+        for (k, v) in &change.added {
+            entries.push((k.as_str(), v.as_str()));
+        }
+        for (k, _, new) in &change.changed {
+            entries.push((k.as_str(), new.as_str()));
+        }
+        if !entries.is_empty() {
+            handle.set_sysctls(&entries).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "set sysctls on '{}': {e}",
+                    change.node
+                ))
+            })?;
+        }
+
+        for k in &change.removed {
+            tracing::warn!(
+                "sysctl '{k}' on node '{}' is no longer in the desired topology — \
+                 kernel value left at its previous setting (set explicitly to override)",
+                change.node,
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Reconcile network-level per-pair impair via

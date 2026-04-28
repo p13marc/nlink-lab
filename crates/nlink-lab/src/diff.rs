@@ -23,6 +23,9 @@ pub struct TopologyDiff {
 
     /// Per-node static-route changes. Plan 152 Phase B.
     pub routes_changed: Vec<RouteChange>,
+
+    /// Per-node sysctl changes. Plan 152 Phase B.
+    pub sysctls_changed: Vec<SysctlChange>,
 }
 
 /// A change to a single static route on a single node.
@@ -35,6 +38,27 @@ pub struct RouteChange {
     /// (when the old config differs).
     pub desired: Option<RouteConfig>,
     pub was_present: bool,
+}
+
+/// Sysctl changes on a single node.
+///
+/// We don't try to *reset* removed sysctls — the kernel default
+/// isn't recoverable in general and overshooting is worse than
+/// leaving the previous value in place. Removed entries are
+/// reported so the operator can act on them, but no kernel call
+/// is made on the remove path.
+#[derive(Debug)]
+pub struct SysctlChange {
+    pub node: String,
+    pub added: Vec<(String, String)>,
+    pub changed: Vec<(String, String, String)>, // (key, old, new)
+    pub removed: Vec<String>,
+}
+
+impl SysctlChange {
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.changed.is_empty() && self.removed.is_empty()
+    }
 }
 
 /// A change to an impairment on a specific endpoint.
@@ -69,6 +93,7 @@ impl TopologyDiff {
             && self.impairments_removed.is_empty()
             && self.network_impairs_changed.is_empty()
             && self.routes_changed.is_empty()
+            && self.sysctls_changed.is_empty()
     }
 
     /// Total number of changes.
@@ -82,6 +107,7 @@ impl TopologyDiff {
             + self.impairments_removed.len()
             + self.network_impairs_changed.len()
             + self.routes_changed.len()
+            + self.sysctls_changed.len()
     }
 }
 
@@ -144,6 +170,21 @@ impl std::fmt::Display for TopologyDiff {
                 (Some(_), false) => writeln!(f, "  + add route: {} {}", r.node, r.dest)?,
                 (Some(_), true) => writeln!(f, "  ~ update route: {} {}", r.node, r.dest)?,
                 (None, _) => writeln!(f, "  - remove route: {} {}", r.node, r.dest)?,
+            }
+        }
+        for s in &self.sysctls_changed {
+            for (k, _) in &s.added {
+                writeln!(f, "  + add sysctl: {} {k}", s.node)?;
+            }
+            for (k, old, new) in &s.changed {
+                writeln!(f, "  ~ update sysctl: {} {k} ({old} → {new})", s.node)?;
+            }
+            for k in &s.removed {
+                writeln!(
+                    f,
+                    "  ! drop sysctl: {} {k} (kernel value left at last setting)",
+                    s.node
+                )?;
             }
         }
         if self.is_empty() {
@@ -294,6 +335,41 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         }
     }
 
+    // ── Sysctls (per-node) ──
+    // Compare the merged Node.sysctls map. Profiles fold into this
+    // at lower time, so we compare exactly what the kernel saw.
+    for (node_name, desired_node) in &desired.nodes {
+        let Some(current_node) = current.nodes.get(node_name) else {
+            continue;
+        };
+        let mut change = SysctlChange {
+            node: node_name.clone(),
+            added: Vec::new(),
+            changed: Vec::new(),
+            removed: Vec::new(),
+        };
+        for (key, new_val) in &desired_node.sysctls {
+            match current_node.sysctls.get(key) {
+                None => change.added.push((key.clone(), new_val.clone())),
+                Some(old_val) if old_val != new_val => {
+                    change.changed.push((key.clone(), old_val.clone(), new_val.clone()))
+                }
+                _ => {}
+            }
+        }
+        for key in current_node.sysctls.keys() {
+            if !desired_node.sysctls.contains_key(key) {
+                change.removed.push(key.clone());
+            }
+        }
+        if !change.is_empty() {
+            change.added.sort();
+            change.changed.sort();
+            change.removed.sort();
+            diff.sysctls_changed.push(change);
+        }
+    }
+
     // Sort for deterministic output
     diff.nodes_added.sort();
     diff.nodes_removed.sort();
@@ -302,6 +378,7 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         .sort_by(|a, b| (&a.network, &a.src_node).cmp(&(&b.network, &b.src_node)));
     diff.routes_changed
         .sort_by(|a, b| (&a.node, &a.dest).cmp(&(&b.node, &b.dest)));
+    diff.sysctls_changed.sort_by(|a, b| a.node.cmp(&b.node));
 
     diff
 }
@@ -580,6 +657,94 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         assert!(r.was_present);
         let new = r.desired.as_ref().unwrap();
         assert_eq!(new.metric, Some(200));
+    }
+
+    #[test]
+    fn test_sysctl_added() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a {
+  sysctl "net.ipv4.ip_forward" "1"
+}
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.sysctls_changed.len(), 1);
+        let s = &diff.sysctls_changed[0];
+        assert_eq!(s.node, "a");
+        assert_eq!(s.added.len(), 1);
+        assert!(s.changed.is_empty());
+        assert!(s.removed.is_empty());
+    }
+
+    #[test]
+    fn test_sysctl_changed_value() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a {
+  sysctl "net.core.rmem_max" "16777216"
+}
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a {
+  sysctl "net.core.rmem_max" "33554432"
+}
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.sysctls_changed.len(), 1);
+        let s = &diff.sysctls_changed[0];
+        assert_eq!(s.changed.len(), 1);
+        assert_eq!(s.changed[0].2, "33554432");
+    }
+
+    #[test]
+    fn test_sysctl_removed_does_not_block() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a {
+  sysctl "net.core.rmem_max" "16777216"
+}
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.sysctls_changed.len(), 1);
+        let s = &diff.sysctls_changed[0];
+        assert_eq!(s.removed.len(), 1);
+        assert!(s.added.is_empty());
+        assert!(s.changed.is_empty());
+    }
+
+    #[test]
+    fn test_sysctl_no_change_is_noop() {
+        let nll = r#"lab "t"
+node a {
+  sysctl "net.ipv4.ip_forward" "1"
+  sysctl "net.core.rmem_max" "16777216"
+}
+"#;
+        let current = crate::parser::parse(nll).unwrap();
+        let desired = crate::parser::parse(nll).unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert!(diff.sysctls_changed.is_empty());
     }
 
     #[test]

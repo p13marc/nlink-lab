@@ -110,6 +110,8 @@ side-by-side examples, and migration notes — lives at
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — permission errors, MTU mismatches, namespace cleanup.
 - [Examples](examples/) — 40 NLL files covering loops, imports, VRF, WireGuard, VXLAN, containers, scenarios, benchmarks, Wi-Fi.
 - [Architecture / design](docs/NLINK_LAB.md) — the why and how.
+- [Architecture for contributors](docs/ARCHITECTURE.md) — code map, the 18-step deploy sequence, how to add an NLL feature end-to-end.
+- [Comparison vs containerlab](docs/COMPARISON.md) — capability matrix + side-by-side examples.
 - [Active plans](docs/plans/) — what's coming next (docs overhaul, killer examples, full reconcile, lab archives).
 
 ## Status

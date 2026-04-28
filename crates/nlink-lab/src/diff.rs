@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::types::{Impairment, Link, NetworkImpairment, RouteConfig, Topology};
+use crate::types::{Impairment, Link, NetworkImpairment, RateLimit, RouteConfig, Topology};
 
 /// A structured diff between two topologies.
 #[derive(Debug, Default, Serialize)]
@@ -28,6 +28,21 @@ pub struct TopologyDiff {
 
     /// Per-node sysctl changes. Plan 152 Phase B.
     pub sysctls_changed: Vec<SysctlChange>,
+
+    /// Per-endpoint rate-limit changes. Plan 152 Phase B.
+    pub rate_limits_changed: Vec<RateLimitChange>,
+}
+
+/// A change to the rate-limit on a single endpoint.
+///
+/// `desired = None` means "remove the rate-limit entirely on this
+/// endpoint" — translates to deleting the root qdisc on the
+/// interface.
+#[derive(Debug, Serialize)]
+pub struct RateLimitChange {
+    pub endpoint: String,
+    pub desired: Option<RateLimit>,
+    pub was_present: bool,
 }
 
 /// A change to a single static route on a single node.
@@ -96,6 +111,7 @@ impl TopologyDiff {
             && self.network_impairs_changed.is_empty()
             && self.routes_changed.is_empty()
             && self.sysctls_changed.is_empty()
+            && self.rate_limits_changed.is_empty()
     }
 
     /// Total number of changes.
@@ -110,6 +126,7 @@ impl TopologyDiff {
             + self.network_impairs_changed.len()
             + self.routes_changed.len()
             + self.sysctls_changed.len()
+            + self.rate_limits_changed.len()
     }
 }
 
@@ -187,6 +204,13 @@ impl std::fmt::Display for TopologyDiff {
                     "  ! drop sysctl: {} {k} (kernel value left at last setting)",
                     s.node
                 )?;
+            }
+        }
+        for r in &self.rate_limits_changed {
+            match (&r.desired, r.was_present) {
+                (Some(_), false) => writeln!(f, "  + add rate-limit: {}", r.endpoint)?,
+                (Some(_), true) => writeln!(f, "  ~ update rate-limit: {}", r.endpoint)?,
+                (None, _) => writeln!(f, "  - remove rate-limit: {}", r.endpoint)?,
             }
         }
         if self.is_empty() {
@@ -372,6 +396,34 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         }
     }
 
+    // ── Rate limits (per-endpoint) ──
+    // topology.rate_limits is a HashMap<endpoint, RateLimit>.
+    // Add/change/remove the same way as per-endpoint impairments.
+    for (ep, new_rl) in &desired.rate_limits {
+        match current.rate_limits.get(ep) {
+            None => diff.rate_limits_changed.push(RateLimitChange {
+                endpoint: ep.clone(),
+                desired: Some(new_rl.clone()),
+                was_present: false,
+            }),
+            Some(old) if old != new_rl => diff.rate_limits_changed.push(RateLimitChange {
+                endpoint: ep.clone(),
+                desired: Some(new_rl.clone()),
+                was_present: true,
+            }),
+            _ => {}
+        }
+    }
+    for ep in current.rate_limits.keys() {
+        if !desired.rate_limits.contains_key(ep) {
+            diff.rate_limits_changed.push(RateLimitChange {
+                endpoint: ep.clone(),
+                desired: None,
+                was_present: true,
+            });
+        }
+    }
+
     // Sort for deterministic output
     diff.nodes_added.sort();
     diff.nodes_removed.sort();
@@ -381,6 +433,8 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     diff.routes_changed
         .sort_by(|a, b| (&a.node, &a.dest).cmp(&(&b.node, &b.dest)));
     diff.sysctls_changed.sort_by(|a, b| a.node.cmp(&b.node));
+    diff.rate_limits_changed
+        .sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
 
     diff
 }
@@ -747,6 +801,95 @@ node a {
         let desired = crate::parser::parse(nll).unwrap();
         let diff = diff_topologies(&current, &desired);
         assert!(diff.sysctls_changed.is_empty());
+    }
+
+    #[test]
+    fn test_rate_limit_added() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+rate a:eth0 egress 100mbit
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.rate_limits_changed.len(), 1);
+        assert!(!diff.rate_limits_changed[0].was_present);
+        assert!(diff.rate_limits_changed[0].desired.is_some());
+    }
+
+    #[test]
+    fn test_rate_limit_changed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+rate a:eth0 egress 100mbit
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+rate a:eth0 egress 1gbit
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.rate_limits_changed.len(), 1);
+        assert!(diff.rate_limits_changed[0].was_present);
+    }
+
+    #[test]
+    fn test_rate_limit_removed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+rate a:eth0 egress 100mbit
+"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.rate_limits_changed.len(), 1);
+        assert!(diff.rate_limits_changed[0].was_present);
+        assert!(diff.rate_limits_changed[0].desired.is_none());
+    }
+
+    #[test]
+    fn test_rate_limit_no_change() {
+        let nll = r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+rate a:eth0 egress 100mbit ingress 100mbit
+"#;
+        let current = crate::parser::parse(nll).unwrap();
+        let desired = crate::parser::parse(nll).unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert!(diff.rate_limits_changed.is_empty());
     }
 
     #[test]

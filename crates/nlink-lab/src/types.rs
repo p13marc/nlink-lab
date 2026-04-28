@@ -663,7 +663,7 @@ pub struct Impairment {
 }
 
 /// Per-interface rate limiting.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RateLimit {
     /// Egress rate (e.g., "1gbit").
     pub egress: Option<String>,

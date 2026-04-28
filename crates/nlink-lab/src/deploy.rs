@@ -2755,6 +2755,11 @@ pub async fn apply_diff(
     // overshooting is worse than leaving the previous value).
     apply_sysctls_diff(running, diff)?;
 
+    // ── Phase 7e: Reconcile per-endpoint rate-limits ───────────────
+    // For added/changed: apply via RateLimiter (same as deploy
+    // step 15). For removed: delete the root qdisc on the iface.
+    apply_rate_limits_diff(running, diff).await?;
+
     // ── Phase 8: Update state file ─────────────────────────────────
     running.set_topology(desired.clone());
 
@@ -2850,6 +2855,77 @@ async fn del_route_for_node(
             "del route '{dest}' on '{node_name}': {e}"
         ))
     })
+}
+
+/// Reconcile per-endpoint rate-limits (Plan 152 Phase B/3).
+///
+/// For added / changed entries we re-run `RateLimiter::apply`
+/// (which is itself destructive — it deletes the root qdisc and
+/// installs a fresh HTB tree, the same way deploy step 15 does).
+/// For removed entries we delete the root qdisc explicitly.
+///
+/// This is a coarse reconcile compared to the per-pair impair
+/// path: a single egress/ingress edit causes the whole HTB tree
+/// to be rebuilt, which can drop a few packets in flight. A
+/// fully-incremental rate-limit reconcile is doable but requires
+/// upstreaming a `PerHostLimiter::reconcile()` to nlink (mirror of
+/// `PerPeerImpairer::reconcile`) — out of scope for this PR.
+async fn apply_rate_limits_diff(
+    running: &mut RunningLab,
+    diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    if diff.rate_limits_changed.is_empty() {
+        return Ok(());
+    }
+    for change in &diff.rate_limits_changed {
+        let ep = EndpointRef::parse(&change.endpoint).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: change.endpoint.clone(),
+        })?;
+        let handle = node_handle_for(running, &ep.node)?;
+        let conn: Connection<Route> = handle.connection().map_err(|e| {
+            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
+        })?;
+
+        match &change.desired {
+            Some(rl) => {
+                let mut limiter = RateLimiter::new(&ep.iface);
+                if let Some(egress) = &rl.egress {
+                    let bits = parse_rate_bps(egress).map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "bad egress rate on '{}': {e}",
+                            change.endpoint,
+                        ))
+                    })?;
+                    limiter = limiter.egress(nlink::util::Rate::bits_per_sec(bits));
+                }
+                if let Some(ingress) = &rl.ingress {
+                    let bits = parse_rate_bps(ingress).map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "bad ingress rate on '{}': {e}",
+                            change.endpoint,
+                        ))
+                    })?;
+                    limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
+                }
+                limiter.apply(&conn).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to apply rate limit on '{}': {e}",
+                        change.endpoint,
+                    ))
+                })?;
+            }
+            None => {
+                use nlink::TcHandle;
+                if let Err(e) = conn.del_qdisc(ep.iface.as_str(), TcHandle::ROOT).await {
+                    tracing::warn!(
+                        "failed to clear rate-limit on '{}': {e} (already cleared?)",
+                        change.endpoint,
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Reconcile per-node sysctls (Plan 152 Phase B).

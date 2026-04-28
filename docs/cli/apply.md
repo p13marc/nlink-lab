@@ -20,8 +20,8 @@ to `destroy` + `deploy`, which incurs full teardown and rebuild.
 
 The current implementation reconciles **nodes, links,
 per-endpoint impairments, network-level per-pair impair, per-node
-static routes, and per-node sysctls**. Other resources (nftables,
-NAT, rate-limits) currently require redeploy until
+static routes, per-node sysctls, and per-endpoint rate-limits**.
+Other resources (nftables, NAT) currently require redeploy until
 [Plan 152](../plans/152-apply-reconcile.md) Phase B finishes.
 
 ## Arguments
@@ -120,7 +120,7 @@ done
 | Links removed | ✅ |
 | Per-endpoint netem | ✅ change in place |
 | Network-level per-pair impair | ✅ via `PerPeerImpairer::reconcile()` — zero kernel calls when unchanged |
-| Rate limits | 🚧 Plan 152 Phase B |
+| Rate limits | ✅ add / replace / remove via reconcile (coarse — full HTB tree rebuild on any change; brief packet-drop window) |
 | Routes | ✅ add / replace / remove via reconcile |
 | Sysctls | ✅ add / change in place; removed entries warned (kernel default not auto-restored) |
 | nftables / NAT | 🚧 Plan 152 Phase B |

@@ -81,7 +81,9 @@ pub use builder::Lab;
 pub use deploy::apply_diff;
 pub use diff::{TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
-pub use running::{ExecOpts, ExecOutput, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts};
+pub use running::{
+    ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
+};
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,

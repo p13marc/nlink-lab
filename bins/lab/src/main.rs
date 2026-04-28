@@ -41,6 +41,24 @@ fn bold(s: &str) -> String {
     }
 }
 
+/// Stream selector for `nlink-lab spawn --wait-log-stream`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum WaitLogStream {
+    Stdout,
+    Stderr,
+    Both,
+}
+
+impl From<WaitLogStream> for nlink_lab::LogStream {
+    fn from(s: WaitLogStream) -> Self {
+        match s {
+            WaitLogStream::Stdout => nlink_lab::LogStream::Stdout,
+            WaitLogStream::Stderr => nlink_lab::LogStream::Stderr,
+            WaitLogStream::Both => nlink_lab::LogStream::Both,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "nlink-lab")]
 #[command(about = "Network lab engine — create isolated network topologies using Linux namespaces")]
@@ -239,7 +257,21 @@ enum Commands {
         #[arg(long)]
         wait_tcp: Option<String>,
 
-        /// Timeout for --wait-tcp in seconds (default: 30).
+        /// Wait for a stdout/stderr line matching REGEX before returning.
+        ///
+        /// Useful for services that signal readiness via a log line
+        /// rather than a port (e.g., "[STARTED] tunnel established").
+        /// Combinable with --wait-tcp; both must succeed before spawn
+        /// returns. Fails the spawn on timeout.
+        #[arg(long, value_name = "REGEX")]
+        wait_log: Option<String>,
+
+        /// Which stream to monitor for --wait-log: stdout, stderr, or
+        /// both. Default: both.
+        #[arg(long, value_name = "STREAM", default_value = "both")]
+        wait_log_stream: WaitLogStream,
+
+        /// Timeout for --wait-tcp / --wait-log in seconds (default: 30).
         #[arg(long, default_value = "30")]
         wait_timeout: u64,
 
@@ -1272,6 +1304,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             env_vars,
             workdir,
             wait_tcp,
+            wait_log,
+            wait_log_stream,
             wait_timeout,
             cmd,
         } => {
@@ -1311,10 +1345,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 println!("PID: {pid}");
             }
 
-            // Wait for TCP port if requested
+            // Wait for readiness signal(s). --wait-tcp and --wait-log are
+            // independent and AND-composed: both must succeed before
+            // spawn returns. Either one can fail the spawn via timeout.
+            let timeout = std::time::Duration::from_secs(wait_timeout);
+            let interval = std::time::Duration::from_millis(500);
             if let Some(ref tcp_addr) = wait_tcp {
-                let timeout = std::time::Duration::from_secs(wait_timeout);
-                let interval = std::time::Duration::from_millis(500);
                 let (ip, port) = if let Some((ip, port_str)) = tcp_addr.rsplit_once(':') {
                     (
                         ip.to_string(),
@@ -1333,9 +1369,19 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 running
                     .wait_for_tcp(&node, &ip, port, timeout, interval)
                     .await?;
-                if !cli.quiet {
-                    eprintln!("ready");
-                }
+            }
+            if let Some(ref re_src) = wait_log {
+                let pattern = regex::Regex::new(re_src).map_err(|e| {
+                    nlink_lab::Error::invalid_topology(format!(
+                        "invalid --wait-log regex {re_src:?}: {e}"
+                    ))
+                })?;
+                running
+                    .wait_for_log_line(pid, &pattern, wait_log_stream.into(), timeout, interval)
+                    .await?;
+            }
+            if (wait_tcp.is_some() || wait_log.is_some()) && !cli.quiet {
+                eprintln!("ready");
             }
 
             Ok(())

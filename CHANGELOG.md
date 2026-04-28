@@ -19,6 +19,15 @@ All notable changes to this project will be documented in this file.
   cleanly and prints the summary line. (Plan 155 PR A — round-3 §2.1)
 
 ### Added
+- `nlink-lab spawn --wait-log <REGEX>` — block the spawn until a line
+  matching REGEX appears in the spawned process's captured
+  stdout/stderr, mirroring `--wait-tcp` for services that signal
+  readiness via a log line rather than a port. `--wait-log-stream`
+  selects which stream to watch (`stdout` / `stderr` / `both`,
+  default `both`). `--wait-log` and `--wait-tcp` AND-compose: both
+  must succeed before spawn returns. Library: new
+  `RunningLab::wait_for_log_line(pid, regex, LogStream, timeout,
+  interval)`. (Plan 155 PR E — round-3 §4.2)
 - `nlink-lab ps --alive-only` flag (and library helper
   `RunningLab::process_status_alive_only`) that filters out tracked
   processes whose PID has exited. Useful for "is X still running?"

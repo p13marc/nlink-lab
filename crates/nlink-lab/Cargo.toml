@@ -38,6 +38,9 @@ sha2 = "0.10"
 # `LabCapture` writes pcaps to a temp dir (Plan 154 capture-on-failure).
 tempfile = "3"
 
+# `wait_for_log_line` regex matching for `spawn --wait-log` (Plan 155 PR E).
+regex = "1"
+
 netring = { workspace = true }
 
 # Feature-gated dependencies

@@ -47,6 +47,19 @@ pub struct ExecOutput {
     pub exit_code: i32,
 }
 
+/// Which log stream(s) [`RunningLab::wait_for_log_line`] watches.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LogStream {
+    /// Match lines from the captured stdout file only.
+    Stdout,
+    /// Match lines from the captured stderr file only.
+    Stderr,
+    /// Match lines from either stream. Default — most services emit the
+    /// "ready" signal to whichever they default to.
+    #[default]
+    Both,
+}
+
 /// Optional knobs for [`RunningLab::exec_with_opts`] and
 /// [`RunningLab::exec_attached_with_opts`].
 ///
@@ -731,6 +744,51 @@ impl RunningLab {
             if std::time::Instant::now() >= deadline {
                 return Err(Error::deploy_failed(format!(
                     "timeout waiting for command to succeed on node '{node}': {cmd}"
+                )));
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
+
+    /// Wait until a tracked spawned process emits a log line matching
+    /// `pattern` on the chosen stream(s). Reads from offset 0 each poll
+    /// so a line emitted *before* the watcher started is matched too.
+    ///
+    /// Returns immediately on the first match. On timeout, returns an
+    /// error naming the regex source. The poll interval is the minimum
+    /// of `interval` and 250ms — enough granularity for spawn-readiness
+    /// latency budgets without hammering the filesystem.
+    pub async fn wait_for_log_line(
+        &self,
+        pid: u32,
+        pattern: &regex::Regex,
+        stream: LogStream,
+        timeout: std::time::Duration,
+        interval: std::time::Duration,
+    ) -> Result<()> {
+        let (stdout_path, stderr_path) = self.log_paths(pid).ok_or_else(|| {
+            Error::deploy_failed(format!("no log files tracked for PID {pid}"))
+        })?;
+        let paths: Vec<&str> = match stream {
+            LogStream::Stdout => vec![stdout_path],
+            LogStream::Stderr => vec![stderr_path],
+            LogStream::Both => vec![stdout_path, stderr_path],
+        };
+
+        let deadline = std::time::Instant::now() + timeout;
+        let interval = std::cmp::min(interval, std::time::Duration::from_millis(250));
+        loop {
+            for p in &paths {
+                if let Ok(contents) = std::fs::read_to_string(p)
+                    && contents.lines().any(|line| pattern.is_match(line))
+                {
+                    return Ok(());
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::deploy_failed(format!(
+                    "timeout waiting for log line matching '{}' on PID {pid}",
+                    pattern.as_str()
                 )));
             }
             tokio::time::sleep(interval).await;

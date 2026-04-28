@@ -30,3 +30,7 @@ tracing-subscriber = { workspace = true }
 zenoh = { workspace = true }
 nlink-lab-shared = { workspace = true }
 miette = { version = "7", features = ["fancy"] }
+
+# `spawn --wait-log REGEX` compiles the user's regex CLI-side and
+# passes it to `RunningLab::wait_for_log_line` (Plan 155 PR E).
+regex = "1"

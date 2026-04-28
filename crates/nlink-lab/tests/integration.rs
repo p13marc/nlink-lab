@@ -169,6 +169,56 @@ async fn exec_in_respects_workdir(lab: RunningLab) {
     );
 }
 
+// `wait_for_log_line` matches a stdout line emitted by a spawned
+// process. Uses `bash -c` to print a known marker, sleep briefly, then
+// exit. The watcher must return Ok within the timeout. Validates the
+// "service prints 'ready' before opening a port" use case.
+#[lab_test("examples/simple.nll")]
+async fn wait_for_log_line_matches_marker(mut lab: RunningLab) {
+    let pid = lab
+        .spawn_with_logs(
+            "host",
+            &["sh", "-c", "echo READYISH; sleep 5"],
+            None,
+        )
+        .unwrap();
+    let pat = regex::Regex::new(r"^READYISH$").unwrap();
+    lab.wait_for_log_line(
+        pid,
+        &pat,
+        nlink_lab::LogStream::Stdout,
+        std::time::Duration::from_secs(5),
+        std::time::Duration::from_millis(50),
+    )
+    .await
+    .unwrap();
+}
+
+// On timeout, `wait_for_log_line` must surface an error that includes
+// the regex source — debuggers chase typos in the regex itself.
+#[lab_test("examples/simple.nll")]
+async fn wait_for_log_line_times_out_with_regex_in_error(mut lab: RunningLab) {
+    let pid = lab
+        .spawn_with_logs("host", &["sleep", "5"], None)
+        .unwrap();
+    let pat = regex::Regex::new(r"^DEFINITELY_NOT_PRESENT$").unwrap();
+    let err = lab
+        .wait_for_log_line(
+            pid,
+            &pat,
+            nlink_lab::LogStream::Both,
+            std::time::Duration::from_millis(300),
+            std::time::Duration::from_millis(50),
+        )
+        .await
+        .unwrap_err();
+    let s = err.to_string();
+    assert!(
+        s.contains("DEFINITELY_NOT_PRESENT"),
+        "error should include regex source for debugging: {s}"
+    );
+}
+
 // `process_status_alive_only` must drop entries whose tracked PID has
 // exited. Spawn `true` (instant exit), wait briefly so the kernel has
 // reaped, then assert the listing is empty. The unfiltered

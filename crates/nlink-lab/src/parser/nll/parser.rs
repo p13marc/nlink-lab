@@ -2076,6 +2076,12 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
             net.ports.push(port_def);
         } else if eat(tokens, pos, &Token::Impair) {
             net.impairments.push(parse_network_impair(tokens, pos)?);
+        } else if matches!(at(tokens, *pos), Some(Token::For)) {
+            // for VAR in RANGE { impair … impair … } — eagerly expand
+            // each impair statement in the body for every value the
+            // range yields. Mirrors the pattern in parse_nat_def.
+            let expanded = parse_network_for(tokens, pos)?;
+            net.impairments.extend(expanded);
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -2172,6 +2178,99 @@ fn parse_network_impair(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Netw
         props,
         rate_cap,
     })
+}
+
+/// Parse a `for VAR in RANGE { impair … impair … [for …] }` block
+/// inside a `network { }`. Eagerly expands each impair statement
+/// for every value the range yields, substituting `${VAR}` in any
+/// string field. Nested `for` is allowed and expands as a Cartesian
+/// product. The `for` keyword has not yet been consumed by the
+/// caller.
+fn parse_network_for(
+    tokens: &[Spanned],
+    pos: &mut usize,
+) -> Result<Vec<ast::NetworkImpairDef>> {
+    expect(tokens, pos, &Token::For)?;
+    let var = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::In)?;
+    let range = parse_for_range(tokens, pos)?;
+    let values: Vec<String> = match &range {
+        ast::ForRange::IntRange { start, end } => {
+            (*start..=*end).map(|i| i.to_string()).collect()
+        }
+        ast::ForRange::List(items) => items.clone(),
+    };
+
+    expect(tokens, pos, &Token::LBrace)?;
+
+    // Parse the body into a flat list of impair templates. Nested
+    // `for` is parsed recursively and its expansion contributes its
+    // own values.
+    let mut body: Vec<ast::NetworkImpairDef> = Vec::new();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+
+        if eat(tokens, pos, &Token::Impair) {
+            body.push(parse_network_impair(tokens, pos)?);
+        } else if matches!(at(tokens, *pos), Some(Token::For)) {
+            let nested = parse_network_for(tokens, pos)?;
+            body.extend(nested);
+        } else {
+            match at(tokens, *pos) {
+                Some(other) => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("unexpected {other} in network for-loop body"),
+                    ));
+                }
+                None => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "unexpected end of input in network for-loop body".into(),
+                    ));
+                }
+            }
+        }
+    }
+
+    // Cartesian expansion: for each value of this loop variable,
+    // emit a copy of every body template with `${VAR}` substituted.
+    // Uses the same interpolation engine as `lower.rs` so arithmetic
+    // (e.g. `${(i + 1) % 12}`) and nested vars work as expected.
+    let mut out = Vec::with_capacity(body.len() * values.len());
+    let mut vars: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for val in &values {
+        vars.insert(var.clone(), val.clone());
+        for tmpl in &body {
+            let sub = |s: &str| -> String {
+                crate::parser::nll::lower::interpolate(s, &vars)
+            };
+            let sub_opt = |s: &Option<String>| -> Option<String> {
+                s.as_ref().map(|v| sub(v))
+            };
+            out.push(ast::NetworkImpairDef {
+                src: sub(&tmpl.src),
+                dst: sub(&tmpl.dst),
+                props: ast::ImpairProps {
+                    delay: sub_opt(&tmpl.props.delay),
+                    jitter: sub_opt(&tmpl.props.jitter),
+                    loss: sub_opt(&tmpl.props.loss),
+                    rate: sub_opt(&tmpl.props.rate),
+                    corrupt: sub_opt(&tmpl.props.corrupt),
+                    reorder: sub_opt(&tmpl.props.reorder),
+                },
+                rate_cap: sub_opt(&tmpl.rate_cap),
+            });
+        }
+    }
+
+    Ok(out)
 }
 
 fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Result<ast::PortDef> {
@@ -3658,6 +3757,74 @@ network radio {
                 assert_eq!(r1.dst, "bravo");
                 assert_eq!(r1.props.delay.as_deref(), Some("40ms"));
                 assert_eq!(r1.rate_cap.as_deref(), Some("100mbit"));
+            }
+            _ => panic!("expected Network"),
+        }
+    }
+
+    #[test]
+    fn test_parse_network_for_loop_expansion() {
+        // for-loop inside a network block expands eagerly at parse
+        // time, including modulo arithmetic in the loop variable.
+        let ast = parse_nll(
+            r#"lab "t"
+network ring {
+  members [n0:rf, n1:rf, n2:rf, n3:rf]
+  subnet 10.0.0.0/24
+  for i in 0..3 {
+    impair n${i} -- n${(i + 1) % 4} { delay 50ms }
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Network(n) => {
+                assert_eq!(n.impairments.len(), 4);
+                // Ring: n0->n1, n1->n2, n2->n3, n3->n0 (modulo wraps)
+                let pairs: Vec<(&str, &str)> = n
+                    .impairments
+                    .iter()
+                    .map(|imp| (imp.src.as_str(), imp.dst.as_str()))
+                    .collect();
+                assert_eq!(
+                    pairs,
+                    vec![("n0", "n1"), ("n1", "n2"), ("n2", "n3"), ("n3", "n0")],
+                    "ring closure via modulo failed",
+                );
+                assert!(n.impairments.iter().all(|i| i.props.delay.as_deref() == Some("50ms")));
+            }
+            _ => panic!("expected Network"),
+        }
+    }
+
+    #[test]
+    fn test_parse_network_nested_for_loops() {
+        // Nested `for` produces a Cartesian product. Outer for emits
+        // a copy per outer-value × inner-value combination.
+        let ast = parse_nll(
+            r#"lab "t"
+network mesh {
+  members [a:p, b:p, c:p, d:p]
+  subnet 10.0.0.0/24
+  for src in [a, b] {
+    for dst in [c, d] {
+      impair ${src} -- ${dst} { delay 20ms }
+    }
+  }
+}"#,
+        );
+        match &ast.statements[0] {
+            ast::Statement::Network(n) => {
+                let pairs: Vec<(&str, &str)> = n
+                    .impairments
+                    .iter()
+                    .map(|imp| (imp.src.as_str(), imp.dst.as_str()))
+                    .collect();
+                // Cartesian product: 2 × 2 = 4 entries. Inner loop
+                // varies fastest.
+                assert_eq!(
+                    pairs,
+                    vec![("a", "c"), ("a", "d"), ("b", "c"), ("b", "d")],
+                );
             }
             _ => panic!("expected Network"),
         }

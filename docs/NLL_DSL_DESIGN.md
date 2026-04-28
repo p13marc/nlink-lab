@@ -248,6 +248,28 @@ Constraints:
   tree per source interface, with one peer class per destination plus
   a default catch-all.
 
+`for` loops are supported inside `network` blocks for generating
+impair rules. The loop variable substitutes via `${var}` and supports
+arithmetic (`${(i + 1) % 12}`), nested loops, and integer or list
+ranges. Eagerly expanded at parse time.
+
+```nll
+network ring {
+  members [n0:rf, n1:rf, n2:rf, n3:rf]
+  subnet 10.0.0.0/24
+
+  # Ring topology: each node impairs its two neighbors via modulo wrap.
+  for i in 0..3 {
+    impair n${i} -- n${(i + 1) % 4} { delay 50ms loss 1% }
+    impair n${(i + 1) % 4} -- n${i} { delay 50ms loss 1% }
+  }
+}
+```
+
+Nested loops produce a Cartesian product; see
+[`docs/cookbook/satellite-mesh.md`](cookbook/satellite-mesh.md)
+for a worked 12-node example.
+
 ### 6. Interfaces
 
 ```nll

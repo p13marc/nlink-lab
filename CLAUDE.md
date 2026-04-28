@@ -199,7 +199,7 @@ Wi-Fi emulation (`wifi` block with `mode ap`/`station`/`mesh`,
 mac80211_hwsim), site grouping (`site name { ... }` auto-prefixes
 node names), IP computation functions (`subnet()`, `host()`),
 conditional logic (`if` blocks with `==`/`!=`/`<`/`>`/`&&`/`||`),
-`for` loops inside node/nat blocks, loopback pool allocation
+`for` loops inside node/nat/network blocks, loopback pool allocation
 (`lo pool name`), auto-routing (`routing auto` computes static routes
 from topology graph), fleet `for_each` imports (instantiate templates
 N times), glob patterns in network members (`*-black:fo`),

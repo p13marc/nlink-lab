@@ -854,7 +854,7 @@ impl LowerCtx {
 /// Supports arithmetic (`${i + 1}`, `${(i - 1) * 2}`, `${i % 3}`),
 /// ternary conditionals (`${env == "prod" ? "5ms" : "50ms"}`),
 /// and simple variable lookup (`${var}`).
-fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
+pub(crate) fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
     // Run interpolation repeatedly until stable (handles nested ${leaf${i}})
     let mut current = template.to_string();
     for _ in 0..10 {
@@ -3143,19 +3143,28 @@ node r1 : nonexistent"#,
     fn test_all_nll_examples_parse() {
         let dir = examples_dir();
         let mut count = 0;
-        for entry in std::fs::read_dir(&dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().and_then(|e| e.to_str()) == Some("nll") {
-                let topo = crate::parser::parse_file(&path)
-                    .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
-                let diags = topo.validate();
-                assert!(
-                    !diags.has_errors(),
-                    "{} has validation errors: {:?}",
-                    path.display(),
-                    diags
-                );
-                count += 1;
+        // Walk the top-level examples/ dir plus the cookbook/ subdir.
+        // (imports/ is skipped — those files are designed to be
+        // imported, not parsed standalone.)
+        let dirs = [dir.clone(), dir.join("cookbook")];
+        for d in &dirs {
+            if !d.exists() {
+                continue;
+            }
+            for entry in std::fs::read_dir(d).unwrap() {
+                let path = entry.unwrap().path();
+                if path.extension().and_then(|e| e.to_str()) == Some("nll") {
+                    let topo = crate::parser::parse_file(&path)
+                        .unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()));
+                    let diags = topo.validate();
+                    assert!(
+                        !diags.has_errors(),
+                        "{} has validation errors: {:?}",
+                        path.display(),
+                        diags
+                    );
+                    count += 1;
+                }
             }
         }
         assert!(

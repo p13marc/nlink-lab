@@ -1,0 +1,53 @@
+lab "satellite-mesh" {
+  description "12-node Iridium-style ring mesh with distance-dependent per-pair impairment"
+  tags [cookbook, mesh, satellite]
+}
+
+# 12 satellites in a ring. Each has one radio interface attached to
+# the shared `mesh` L2 segment.
+for i in 0..11 {
+  node sat${i}
+}
+
+# All 12 satellites share a single L2 segment. Per-pair impairment
+# below makes each link path independent — the kernel applies
+# per-destination netem on each node's egress via HTB+netem+flower.
+network mesh {
+  members [
+    sat0:rf,  sat1:rf,  sat2:rf,  sat3:rf,
+    sat4:rf,  sat5:rf,  sat6:rf,  sat7:rf,
+    sat8:rf,  sat9:rf,  sat10:rf, sat11:rf,
+  ]
+  subnet 172.100.0.0/24
+
+  # ── Inter-satellite links — ring topology ────────────────────
+  # Every node has two ring neighbors (i±1 mod 12). These links
+  # are short-haul: low delay, low loss, full bandwidth.
+  for i in 0..11 {
+    impair sat${i} -- sat${(i + 1) % 12} { delay 12ms jitter 2ms loss 0.1% }
+    impair sat${(i + 1) % 12} -- sat${i} { delay 12ms jitter 2ms loss 0.1% }
+  }
+
+  # ── Cross-ring links — long-haul ─────────────────────────────
+  # Three "polar" cross-links jump halfway across the ring (i↔i+6).
+  # These are realistic Iridium-style cross-plane links: higher
+  # delay, more loss, capped bandwidth.
+  for i in 0..2 {
+    impair sat${i} -- sat${i + 6} { delay 80ms jitter 15ms loss 2% rate-cap 50mbit }
+    impair sat${i + 6} -- sat${i} { delay 80ms jitter 15ms loss 2% rate-cap 50mbit }
+  }
+
+  # ── One degraded link ────────────────────────────────────────
+  # sat3 ↔ sat9 is operating on a degraded antenna: heavy loss,
+  # severe rate cap, asymmetric jitter.
+  impair sat3 -- sat9 { delay 95ms jitter 40ms loss 8% rate-cap 5mbit }
+  impair sat9 -- sat3 { delay 95ms jitter 40ms loss 8% rate-cap 5mbit }
+}
+
+# A fully-meshed L2 with 26 directional impair rules, one HTB+netem+
+# flower TC tree per source interface. Total deploy cost:
+#   - 12 namespaces
+#   - 1 bridge + 12 veth pairs
+#   - 12 per-source TC trees (one per node), each with up to 4
+#     per-destination netem leaves
+# This deploys in well under a second on a laptop.

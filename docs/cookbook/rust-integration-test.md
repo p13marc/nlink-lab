@@ -48,7 +48,7 @@ That's surprising; it's there because most CI runners aren't
 privileged by default. To ensure the test runs, use a privileged
 runner or `sudo cargo test`.
 
-## Two forms
+## Forms
 
 ```rust
 // Path to an NLL file
@@ -58,6 +58,18 @@ async fn t1(lab: RunningLab) { ... }
 // A function that builds the Topology programmatically
 #[lab_test(topology = my_topology)]
 async fn t2(lab: RunningLab) { ... }
+
+// With NLL `param` overrides (mirrors CLI `--set`)
+#[lab_test("wan.nll", set { delay = "20ms", loss = "0.5%" })]
+async fn t3(lab: RunningLab) { ... }
+
+// With a per-test timeout (test panics if it exceeds N seconds)
+#[lab_test("simple.nll", timeout = 30)]
+async fn t4(lab: RunningLab) { ... }
+
+// Combining
+#[lab_test("wan.nll", set { delay = "200ms" }, timeout = 60)]
+async fn t5(lab: RunningLab) { ... }
 
 fn my_topology() -> nlink_lab::Topology {
     nlink_lab::Lab::new("custom")
@@ -73,6 +85,16 @@ fn my_topology() -> nlink_lab::Topology {
 The `topology = ...` form is useful when the topology depends on
 test parameters — e.g. property-based tests where a `proptest`
 strategy generates the topology shape.
+
+The `set { … }` form maps to the same NLL `param` overrides the
+CLI `--set k=v` flag uses. Common use case: the same NLL file
+serves multiple tests with different parameter values, instead of
+maintaining one NLL per scenario.
+
+The `timeout = N` form wraps the test body in `tokio::time::timeout`
+and panics with a clear message after N seconds. Default: no
+timeout (the test runs as long as `cargo test`'s own timeout
+allows).
 
 ## What gets cleaned up
 

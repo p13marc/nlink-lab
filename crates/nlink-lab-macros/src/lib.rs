@@ -32,15 +32,32 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn, LitStr, parse_macro_input};
+use syn::{ItemFn, LitInt, LitStr, braced, parse_macro_input};
 
 /// Attribute that wraps an async test with lab deploy/destroy lifecycle.
 ///
 /// # Forms
 ///
-/// - `#[lab_test("path/to/topology.toml")]` — deploy from file
-/// - `#[lab_test("path/to/topology.nll")]` — deploy from NLL file
-/// - `#[lab_test(topology = my_fn)]` — deploy from a function returning `Topology`
+/// ```ignore
+/// // Path to an NLL file
+/// #[lab_test("examples/simple.nll")]
+/// async fn test_basic(lab: RunningLab) { ... }
+///
+/// // Builder-function form
+/// #[lab_test(topology = my_fn)]
+/// async fn test_custom(lab: RunningLab) { ... }
+///
+/// // With NLL `param` overrides (mirrors CLI `--set k=v`)
+/// #[lab_test("wan.nll", set { delay = "20ms", loss = "0.5%" })]
+/// async fn test_wan(lab: RunningLab) { ... }
+///
+/// // With a per-test timeout (test panics if it exceeds N seconds)
+/// #[lab_test("simple.nll", timeout = 30)]
+/// async fn test_must_finish_fast(lab: RunningLab) { ... }
+/// ```
+///
+/// `set { ... }` keys are NLL `param` names; values are string-typed
+/// (the param's declared type does the cast at lower time).
 #[proc_macro_attribute]
 pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
@@ -49,68 +66,111 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_attrs = &input_fn.attrs;
     let fn_vis = &input_fn.vis;
 
-    // Determine the topology source from the attribute
-    let deploy_expr = if attr.is_empty() {
-        // No attribute — error
+    if attr.is_empty() {
         return syn::Error::new_spanned(
             &input_fn.sig,
             "lab_test requires a topology file path or `topology = fn_name`",
         )
         .to_compile_error()
         .into();
-    } else {
-        // Try to parse as a string literal first (file path)
-        let attr2 = attr.clone();
-        if let Ok(path) = syn::parse::<LitStr>(attr) {
-            // Resolve relative paths against the workspace root at compile time
-            // so tests work regardless of the runtime working directory.
-            let workspace_root = std::env::var("CARGO_WORKSPACE_DIR").unwrap_or_else(|_| {
-                let manifest_dir =
-                    std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-                let mut dir = std::path::PathBuf::from(&manifest_dir);
-                // Walk up to find the workspace root (directory with [workspace] in Cargo.toml)
-                loop {
-                    let cargo_toml = dir.join("Cargo.toml");
-                    if cargo_toml.exists()
-                        && let Ok(contents) = std::fs::read_to_string(&cargo_toml)
-                        && contents.contains("[workspace]")
-                    {
-                        return dir.to_string_lossy().to_string();
-                    }
-                    if !dir.pop() {
-                        // Fallback to manifest dir if no workspace root found
-                        return manifest_dir;
-                    }
+    }
+
+    let args = parse_macro_input!(attr as LabTestArgs);
+
+    // Resolve relative paths against the workspace root at compile time
+    // so tests work regardless of the runtime working directory.
+    let workspace_root = || -> String {
+        std::env::var("CARGO_WORKSPACE_DIR").unwrap_or_else(|_| {
+            let manifest_dir =
+                std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+            let mut dir = std::path::PathBuf::from(&manifest_dir);
+            loop {
+                let cargo_toml = dir.join("Cargo.toml");
+                if cargo_toml.exists()
+                    && let Ok(contents) = std::fs::read_to_string(&cargo_toml)
+                    && contents.contains("[workspace]")
+                {
+                    return dir.to_string_lossy().to_string();
                 }
-            });
-            let abs_path = std::path::Path::new(&workspace_root)
+                if !dir.pop() {
+                    return manifest_dir;
+                }
+            }
+        })
+    };
+
+    let deploy_expr = match &args.source {
+        LabTestSource::Path(path) => {
+            let abs_path = std::path::Path::new(&workspace_root())
                 .join(path.value())
                 .to_string_lossy()
                 .to_string();
-            quote! {
-                let __topo = nlink_lab::parser::parse_file(#abs_path)
-                    .expect("failed to parse topology file");
+            if args.set.is_empty() {
+                quote! {
+                    let __topo = nlink_lab::parser::parse_file(#abs_path)
+                        .expect("failed to parse topology file");
+                }
+            } else {
+                let pairs = args.set.iter().map(|(k, v)| quote! { (#k.into(), #v.into()) });
+                quote! {
+                    let __params: Vec<(String, String)> = vec![ #(#pairs),* ];
+                    let __topo = nlink_lab::parser::parse_file_with_params(
+                        #abs_path,
+                        &__params,
+                    ).expect("failed to parse topology file with params");
+                }
             }
-        } else {
-            // Try to parse as `topology = ident`
-            let meta = parse_macro_input!(attr2 as LabTestArgs);
-            let fn_ident = meta.topology_fn;
+        }
+        LabTestSource::Function(fn_ident) => {
+            if !args.set.is_empty() {
+                return syn::Error::new_spanned(
+                    fn_ident,
+                    "`set { … }` overrides only apply to file-path topologies; \
+                     a `topology = fn` form should configure params inside the function",
+                )
+                .to_compile_error()
+                .into();
+            }
             quote! {
                 let __topo = #fn_ident();
             }
         }
     };
 
-    // Generate a unique lab name suffix from the test function name to avoid collisions
     let lab_name_suffix = fn_name.to_string();
+
+    // Optional timeout wrapping the test body.
+    let timeout_secs = args.timeout_secs;
+    let body_with_timeout = if let Some(secs) = timeout_secs {
+        quote! {
+            if let Err(_) = tokio::time::timeout(
+                std::time::Duration::from_secs(#secs),
+                async move { #fn_block }
+            ).await {
+                panic!(
+                    "lab_test '{}' exceeded {}s timeout",
+                    stringify!(#fn_name),
+                    #secs,
+                );
+            }
+        }
+    } else {
+        quote! { #fn_block }
+    };
 
     let expanded = quote! {
         #(#fn_attrs)*
         #[tokio::test]
         #fn_vis async fn #fn_name() {
-            // Skip if not root
+            // Skip if not root. The skip is loud so it doesn't look
+            // like a passing test in CI logs — non-root runs of
+            // privileged tests are a common foot-gun.
             if unsafe { libc::geteuid() } != 0 {
-                eprintln!("skipping {}: requires root or CAP_NET_ADMIN", stringify!(#fn_name));
+                eprintln!(
+                    "\n*** SKIPPING #[lab_test] '{}' — requires root or CAP_NET_ADMIN ***\n\
+                     ***   Run with `sudo cargo test` or grant CAP_NET_ADMIN to cargo. ***",
+                    stringify!(#fn_name),
+                );
                 return;
             }
 
@@ -159,10 +219,8 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let __guard = __LabGuard { name: lab.name().to_string() };
 
-            // Run the test body
-            {
-                #fn_block
-            }
+            // Run the test body (optionally wrapped in a timeout).
+            #body_with_timeout
 
             // Clean destroy (guard handles panics)
             std::mem::forget(__guard);
@@ -173,22 +231,84 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-/// Parse `topology = my_fn` from attribute args.
+/// Parsed attribute args for `#[lab_test(...)]`.
+///
+/// Grammar (informal):
+///
+/// ```text
+/// LabTestArgs := Source ( "," Modifier )*
+/// Source      := LitStr  |  "topology" "=" Ident
+/// Modifier    := "set" "{" KeyValue ( "," KeyValue )* "}"
+///              | "timeout" "=" LitInt          (seconds)
+/// KeyValue    := Ident "=" LitStr
+/// ```
 struct LabTestArgs {
-    topology_fn: syn::Ident,
+    source: LabTestSource,
+    set: Vec<(String, String)>,
+    timeout_secs: Option<u64>,
+}
+
+enum LabTestSource {
+    Path(LitStr),
+    Function(syn::Ident),
 }
 
 impl syn::parse::Parse for LabTestArgs {
     fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
-        let ident: syn::Ident = input.parse()?;
-        if ident != "topology" {
-            return Err(syn::Error::new_spanned(
-                ident,
-                "expected `topology = fn_name`",
-            ));
+        // Source first (positional).
+        let source = if input.peek(LitStr) {
+            LabTestSource::Path(input.parse()?)
+        } else {
+            let ident: syn::Ident = input.parse()?;
+            if ident != "topology" {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "expected a path literal or `topology = fn_name`",
+                ));
+            }
+            let _: syn::Token![=] = input.parse()?;
+            LabTestSource::Function(input.parse()?)
+        };
+
+        // Optional modifiers.
+        let mut set: Vec<(String, String)> = Vec::new();
+        let mut timeout_secs: Option<u64> = None;
+
+        while !input.is_empty() {
+            let _: syn::Token![,] = input.parse()?;
+            if input.is_empty() {
+                break; // trailing comma
+            }
+            let kw: syn::Ident = input.parse()?;
+            if kw == "set" {
+                let content;
+                braced!(content in input);
+                while !content.is_empty() {
+                    let key: syn::Ident = content.parse()?;
+                    let _: syn::Token![=] = content.parse()?;
+                    let val: LitStr = content.parse()?;
+                    set.push((key.to_string(), val.value()));
+                    if content.is_empty() {
+                        break;
+                    }
+                    let _: syn::Token![,] = content.parse()?;
+                }
+            } else if kw == "timeout" {
+                let _: syn::Token![=] = input.parse()?;
+                let lit: LitInt = input.parse()?;
+                timeout_secs = Some(lit.base10_parse()?);
+            } else {
+                return Err(syn::Error::new_spanned(
+                    kw,
+                    "unknown lab_test arg — expected `set { … }` or `timeout = SECS`",
+                ));
+            }
         }
-        let _: syn::Token![=] = input.parse()?;
-        let topology_fn: syn::Ident = input.parse()?;
-        Ok(Self { topology_fn })
+
+        Ok(Self {
+            source,
+            set,
+            timeout_secs,
+        })
     }
 }

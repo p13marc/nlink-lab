@@ -1,12 +1,25 @@
 # nlink-lab User Guide
 
-## Installation
+A 60-minute walkthrough from "I just installed this" to "I have a
+realistic site-to-site WAN with WireGuard, firewall, mid-test
+chaos injection, and a `cargo test` integration." Built around
+one topology that grows, not 18 disconnected snippets.
+
+If you want a feature reference instead of a tutorial, jump to
+[NLL by Example](#nll-by-example) below or read
+[`docs/NLL_DSL_DESIGN.md`](NLL_DSL_DESIGN.md).
+
+---
+
+## Install (5 minutes)
 
 Requirements:
 
-- Linux kernel 4.19 or later
-- Root, SUID, or capabilities (`CAP_NET_ADMIN` + `CAP_SYS_ADMIN`)
-- Rust 1.85+ toolchain
+- Linux kernel 4.19+ (5.x recommended).
+- One of: root, SUID install, or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`
+  capabilities. `CAP_DAC_OVERRIDE` for DNS injection,
+  `CAP_SYS_MODULE` for Wi-Fi (mac80211_hwsim auto-load).
+- Rust 1.85+ toolchain.
 
 Build and install:
 
@@ -20,113 +33,474 @@ just install
 # Option 2: Capabilities only (no SUID)
 just install-caps
 
-# Option 3: Manual install
+# Option 3: Manual
 cargo build --release -p nlink-lab-cli
-sudo install -o root -g root -m 4755 target/release/nlink-lab /usr/local/bin/
+sudo install -o root -g root -m 4755 \
+    target/release/nlink-lab /usr/local/bin/
 ```
 
-Generate shell completions:
+Shell completions:
 
 ```bash
 nlink-lab completions bash > /etc/bash_completion.d/nlink-lab
-nlink-lab completions zsh > /usr/share/zsh/site-functions/_nlink-lab
+nlink-lab completions zsh  > /usr/share/zsh/site-functions/_nlink-lab
+```
+
+Verify:
+
+```bash
+nlink-lab --help | head -5
 ```
 
 ---
 
-## Your First Lab
+## Step 1 — A 2-node lab to confirm everything works (5 minutes)
 
-### 1. Write the topology
-
-Save this as `first.nll`:
+Save this as `wan.nll`. We'll grow this same file across the next
+seven steps.
 
 ```nll-ignore
-lab "my-first-lab"
+lab "wan"
 
 profile router { forward ipv4 }
 
-node router : router
-node host { route default via 10.0.0.1 }
+node site-a-router : router
+node site-a-client { route default via 10.0.1.1 }
 
-link router:eth0 -- host:eth0 {
-  10.0.0.1/24 -- 10.0.0.2/24
+link site-a-router:lan -- site-a-client:eth0 {
+  10.0.1.1/24 -- 10.0.1.10/24
 }
 ```
 
-This creates two network namespaces connected by a veth pair. The router has IPv4 forwarding enabled, and the host has a default route pointing at the router.
+What this declares:
 
-### 2. Validate
+- **`profile router { forward ipv4 }`** — a reusable template.
+  `forward ipv4` is shorthand for `sysctl
+  "net.ipv4.ip_forward" "1"`. Profiles avoid repetition when many
+  nodes share traits.
+- **`node site-a-router : router`** — a network namespace. The
+  `: router` inherits the profile.
+- **`node site-a-client { route default via 10.0.1.1 }`** — a
+  client with a default gateway. nlink-lab adds the route in the
+  namespace's routing table at deploy.
+- **`link ... { 10.0.1.1/24 -- 10.0.1.10/24 }`** — a veth pair
+  connecting the two namespaces, with addresses on each end. The
+  syntax mirrors how you'd draw it: `A:iface -- B:iface`.
 
-```bash
-nlink-lab validate first.nll
-```
-
-Expected output:
-
-```
-Topology 'my-first-lab' is valid (2 nodes, 1 link)
-```
-
-### 3. Deploy
-
-```bash
-sudo nlink-lab deploy first.nll
-```
-
-Expected output:
-
-```
-Deploying lab 'my-first-lab'...
-  [1/18] Parsing topology
-  [2/18] Validating
-  ...
-  [18/18] Writing state
-Lab 'my-first-lab' deployed (2 nodes, 1 link) in 0.3s
-```
-
-### 4. Check status
+Now validate, deploy, smoke-test, and tear down:
 
 ```bash
-nlink-lab status
+nlink-lab validate wan.nll        # syntax + 20 validator rules
+sudo nlink-lab deploy wan.nll     # ~200ms; writes state to ~/.nlink-lab/wan/
+sudo nlink-lab exec wan site-a-client -- ping -c 3 10.0.1.1
+sudo nlink-lab destroy wan
 ```
 
-```
-LAB              NODES  LINKS  CREATED
-my-first-lab     2      1      2026-03-29T10:00:00Z
+The ping succeeds because step 9 of the deploy sequence assigned
+addresses, step 10 brought interfaces up, step 12 added routes.
+The 18-step sequence is documented in
+[ARCHITECTURE.md](ARCHITECTURE.md); the takeaway here is that
+deploy is **declarative** — you describe state, nlink-lab makes
+it real.
+
+---
+
+## Step 2 — Two sites with a WAN link (10 minutes)
+
+Now grow the file. Add a second site and a WAN link between the
+two routers:
+
+```nll-ignore
+lab "wan" { dns hosts }
+
+profile router { forward ipv4 }
+
+# Site A
+node site-a-router : router
+node site-a-client { route default via 10.0.1.1 }
+
+# Site B
+node site-b-router : router
+node site-b-server { route default via 10.0.2.1 }
+
+# LAN: each site
+link site-a-router:lan -- site-a-client:eth0 {
+  10.0.1.1/24 -- 10.0.1.10/24
+}
+link site-b-router:lan -- site-b-server:eth0 {
+  10.0.2.1/24 -- 10.0.2.10/24
+}
+
+# WAN: between the two routers
+link site-a-router:wan -- site-b-router:wan {
+  10.255.0.1/30 -- 10.255.0.2/30
+}
 ```
 
-### 5. Inspect
+Two new things:
+
+- **`dns hosts`** in the lab block — auto-generates `/etc/hosts`
+  entries in every namespace so you can `ping site-b-server` by
+  name instead of by IP. Convenience, not infrastructure.
+- **The WAN link** — a third veth between the two routers.
+
+But pinging across will still fail:
 
 ```bash
-sudo nlink-lab exec my-first-lab router -- ip addr show eth0
+sudo nlink-lab deploy wan.nll
+sudo nlink-lab exec wan site-a-client -- ping -c 2 10.0.2.10
+# 100% packet loss
 ```
 
-```
-2: eth0@if3: <BROADCAST,MULTICAST,UP> mtu 1500 ...
-    inet 10.0.0.1/24 scope global eth0
+The router doesn't know how to reach `10.0.2.0/24` yet. Add the
+return-path routes:
+
+```nll-ignore
+node site-a-router : router {
+  route 10.0.2.0/24 via 10.255.0.2
+}
+node site-b-router : router {
+  route 10.0.1.0/24 via 10.255.0.1
+}
 ```
 
-```bash
-sudo nlink-lab exec my-first-lab host -- ping -c 3 10.0.0.1
-```
-
-```
-PING 10.0.0.1 (10.0.0.1) 56(84) bytes of data.
-64 bytes from 10.0.0.1: icmp_seq=1 ttl=64 time=0.05 ms
-...
-3 packets transmitted, 3 received, 0% packet loss
-```
-
-### 6. Destroy
+Reconcile **without redeploying**:
 
 ```bash
-sudo nlink-lab destroy my-first-lab
+sudo nlink-lab apply wan.nll
 ```
 
+Now the path is end-to-end:
+
+```bash
+sudo nlink-lab exec wan site-a-client -- ping -c 3 site-b-server
+# 0% loss
 ```
-Destroying lab 'my-first-lab'...
-Lab 'my-first-lab' destroyed
+
+Why `apply` matters here: deploy is destructive (it rebuilds the
+whole lab), but `apply` is **reconcile** — it diffs the live
+state against the new NLL and only issues the deltas. Two
+new routes added; nothing else touched. CI loops use `apply` to
+keep the lab in sync with the NLL on every change.
+
+---
+
+## Step 3 — WAN impairment (5 minutes)
+
+A real internet path doesn't deliver line-rate packets at zero
+delay. Add realistic impairment to the WAN side:
+
+```nll-ignore
+link site-a-router:wan -- site-b-router:wan {
+  10.255.0.1/30 -- 10.255.0.2/30
+  delay 30ms jitter 5ms loss 0.5% rate 50mbit
+}
 ```
+
+`apply` again:
+
+```bash
+sudo nlink-lab apply wan.nll
+sudo nlink-lab exec wan site-a-client -- ping -c 5 site-b-server
+```
+
+The pings now show ~30ms RTT with occasional drops — netem in
+action. Properties available: `delay`, `jitter`, `loss`,
+`rate`, `corrupt`, `reorder`. Standalone form:
+
+```nll-ignore
+impair site-a-router:wan delay 30ms jitter 5ms
+```
+
+For asymmetric paths (satellite uplink: fast down, slow up), use
+directional arrows:
+
+```nll-ignore
+link ground:sat -- satellite:sat {
+  172.16.0.1/30 -- 172.16.0.2/30
+  -> rate 50mbit    # ground → satellite (uplink)
+  <- rate 150mbit   # satellite → ground (downlink)
+}
+```
+
+For per-pair impair on a shared L2 (3+ peers all sharing a
+bridge, each pair seeing different latency), see the
+[satellite-mesh cookbook recipe](cookbook/satellite-mesh.md).
+
+---
+
+## Step 4 — Encrypt the inter-site link with WireGuard (10 minutes)
+
+The WAN underlay carries traffic in cleartext today. Add a
+WireGuard tunnel terminating on each router:
+
+```nll-ignore
+node site-a-router : router {
+  route 10.0.2.0/24 via 10.255.0.2
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [site-b-router]
+  }
+}
+
+node site-b-router : router {
+  route 10.0.1.0/24 via 10.255.0.1
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [site-a-router]
+  }
+}
+```
+
+`key auto` generates an X25519 keypair at deploy time. The
+`peers [site-b-router]` declaration is **symmetric** — when
+nlink-lab lowers this, it pairs up the two `wireguard` blocks,
+fills in each peer's public key, and writes the configuration
+via the kernel WireGuard interface (genetlink) directly. No
+manual key copying, no `wg setconf`, no `exec:` hooks.
+
+Apply and verify:
+
+```bash
+sudo nlink-lab apply wan.nll
+sudo nlink-lab exec wan site-a-router -- wg show
+```
+
+You'll see `site-b-router`'s public key listed as a peer with a
+recent handshake.
+
+For the customer traffic to actually use the tunnel, point the
+inter-site routes at `wg0` instead of the underlay:
+
+```nll-ignore
+node site-a-router : router {
+  route 10.0.2.0/24 dev wg0
+  wireguard wg0 { ... }
+}
+node site-b-router : router {
+  route 10.0.1.0/24 dev wg0
+  wireguard wg0 { ... }
+}
+```
+
+Apply, ping, observe encrypted traffic between the two routers.
+
+---
+
+## Step 5 — Stateful firewall on the server (10 minutes)
+
+Site B's server should accept only HTTP and SSH from the trusted
+LAN. Add a stateful nftables policy:
+
+```nll-ignore
+node site-b-server {
+  route default via 10.0.2.1
+
+  firewall policy drop {
+    accept ct established,related      # return traffic
+    accept tcp dport 80                # HTTP open to anyone
+    accept tcp dport 22 src 10.0.1.0/24  # SSH from site-a LAN only
+  }
+}
+```
+
+`apply`. Verify:
+
+```bash
+# Spawn a tiny HTTP server inside the namespace
+sudo nlink-lab spawn wan site-b-server -- \
+    python3 -m http.server 80 --bind 0.0.0.0
+
+# A wait-for: block until the port accepts connections
+sudo nlink-lab wait-for wan site-b-server --tcp 0.0.0.0:80 --timeout 5
+
+# From site-a-client: HTTP works (port 80 accept)
+sudo nlink-lab exec wan site-a-client -- curl -fsS site-b-server/
+
+# From site-a-client: blocked port times out (default-drop, no RST)
+sudo nlink-lab exec wan site-a-client -- timeout 2 nc -v site-b-server 9999
+echo "exit code: $?"   # nonzero — firewall dropped (no RST, just timeout)
+```
+
+`apply` of a firewall edit triggers an atomic flush+rebuild of the
+node's nftables table. The kernel never sees a half-built ruleset;
+conntrack state is preserved across the swap.
+
+---
+
+## Step 6 — Mid-test chaos with the scenario engine (10 minutes)
+
+Now the question: how does this whole thing behave when the WAN
+link goes down?
+
+Add a `scenario` block. It declares a timeline of fault-injection
+actions, fired by the scenario engine within ±100ms of each
+declared offset:
+
+```nll-ignore
+scenario "wan-flap" {
+  at 0s {
+    log "baseline: WAN reachable"
+    validate { reach site-a-client site-b-server }
+  }
+
+  at 3s {
+    log "bringing the WAN underlay down on site-b"
+    down site-b-router:wan
+  }
+
+  at 5s {
+    validate { no-reach site-a-client site-b-server }
+  }
+
+  at 10s {
+    log "healing"
+    up site-b-router:wan
+  }
+
+  at 15s {
+    log "asserting recovery"
+    validate { reach site-a-client site-b-server }
+  }
+}
+```
+
+Run it:
+
+```bash
+sudo nlink-lab apply wan.nll
+sudo nlink-lab scenario run wan wan-flap
+```
+
+The scenario runner emits a timeline:
+
+```text
+[0.001s] log: baseline: WAN reachable
+[0.024s] validate: reach site-a-client site-b-server ✓
+[3.001s] log: bringing the WAN underlay down on site-b
+[3.005s] down site-b-router:wan
+[5.001s] validate: no-reach site-a-client site-b-server ✓
+[10.001s] log: healing
+[10.004s] up site-b-router:wan
+[15.001s] validate: reach site-a-client site-b-server ✓
+
+scenario "wan-flap" PASSED in 15.022s
+```
+
+If any `validate` fails, the scenario aborts and exits non-zero.
+This is the difference between a real test and a bash script
+that calls `iptables` and prays — declarative, validated,
+reproducible.
+
+For deeper exploration see the
+[partition cookbook recipe](cookbook/p2p-partition.md).
+
+---
+
+## Step 7 — Run as a CI gate (5 minutes)
+
+For CI, the all-in-one verb is `nlink-lab test`. It deploys,
+runs the validate block + scenarios, then destroys, in one
+shot:
+
+```bash
+sudo nlink-lab test wan.nll
+```
+
+```text
+PASS  wan.nll
+  topology: 4 nodes, 3 links, 1 scenario
+  deploy:   0.3s
+  validate: 4 assertions ✓
+  scenario "wan-flap": PASSED (15.0s)
+  destroy:  0.2s
+TOTAL: 1 passed, 0 failed
+```
+
+JUnit XML for CI dashboards:
+
+```bash
+sudo nlink-lab test --junit results.xml wan.nll
+```
+
+For library-first testing — the wedge nlink-lab has against
+containerlab — add a `#[lab_test]`-driven Rust test:
+
+```rust
+use nlink_lab::lab_test;
+use nlink_lab::RunningLab;
+
+#[lab_test("wan.nll", capture = true, timeout = 30)]
+async fn wan_recovers_from_partition(lab: RunningLab) {
+    let result = lab.run_scenario("wan-flap").await.unwrap();
+    assert!(result.passed());
+}
+```
+
+`capture = true` quietly captures pcaps on every interface for
+the test duration. On panic, the pcaps land at
+`target/lab_test_captures/<test>-<pid>/`; on success, they're
+discarded. CI flake → pcap auto-attached to the failure record.
+
+See the [Rust integration test cookbook](cookbook/rust-integration-test.md).
+
+---
+
+## Step 8 — Tear down or share (5 minutes)
+
+When you're done:
+
+```bash
+sudo nlink-lab destroy wan
+```
+
+To send the lab to a coworker (bug repro, "look at this"):
+
+```bash
+nlink-lab export --archive wan.nll -o wan-repro.nlz
+```
+
+The recipient runs:
+
+```bash
+nlink-lab inspect wan-repro.nlz       # summary, no extract
+sudo nlink-lab import wan-repro.nlz   # extract → validate → deploy
+```
+
+The `.nlz` archive is a gzipped tarball with the NLL, params,
+rendered Topology snapshot, and SHA-256 checksums. Format
+versioning lets older nlink-lab read newer archives; checksums
+catch bit rot and tampering. See
+[Cookbook: lab portability](cookbook/lab-portability.md).
+
+---
+
+## What's next
+
+You've now used roughly half the language and most of the
+tooling. From here:
+
+- **More cookbook recipes**: [VRF](cookbook/vrf-multitenant.md),
+  [macvlan](cookbook/macvlan-host-bridge.md),
+  [container nodes](cookbook/healthcheck-depends-on.md),
+  [satellite mesh](cookbook/satellite-mesh.md).
+- **Reference**: [NLL by Example](#nll-by-example) below covers
+  all 18 NLL features in compact form. The full grammar is in
+  [`docs/NLL_DSL_DESIGN.md`](NLL_DSL_DESIGN.md).
+- **CLI reference**: every command has a page in
+  [`docs/cli/`](cli/).
+- **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) is the
+  contributor on-ramp.
+- **vs containerlab**: [`COMPARISON.md`](COMPARISON.md) is the
+  honest comparison.
+
+If something didn't work, [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+covers the common failure modes and how to file a useful bug
+report.
 
 ---
 

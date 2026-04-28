@@ -65,6 +65,7 @@ pub mod error;
 pub mod helpers;
 pub mod ipfunc;
 pub mod parser;
+pub mod portability;
 pub mod render;
 pub mod running;
 pub mod scenario;

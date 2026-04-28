@@ -22,6 +22,13 @@ pub fn parse(input: &str) -> Result<Topology> {
     nll::parse(input)
 }
 
+/// Parse a topology from an NLL string with `param` overrides, no
+/// imports. Used by [`crate::portability::import_archive`] to
+/// re-parse an extracted topology with bundled `--set` values.
+pub fn parse_with_params(input: &str, params: &[(String, String)]) -> Result<Topology> {
+    nll::parse_with_params(input, params)
+}
+
 /// Parse a topology file with import resolution.
 ///
 /// Imports are resolved relative to the file's parent directory.

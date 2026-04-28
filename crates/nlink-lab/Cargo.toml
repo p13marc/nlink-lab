@@ -30,6 +30,11 @@ winnow = "0.7"
 miette = { version = "7", features = ["fancy"] }
 nlink-lab-macros = { workspace = true }
 
+# Lab archive (.nlz) — Plan 153 export / import.
+tar = "0.4"
+flate2 = "1"
+sha2 = "0.10"
+
 netring = { workspace = true }
 
 # Feature-gated dependencies

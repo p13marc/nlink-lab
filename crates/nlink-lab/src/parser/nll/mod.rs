@@ -21,6 +21,16 @@ pub fn parse(input: &str) -> Result<Topology> {
     lower::lower(&ast)
 }
 
+/// Parse an NLL string with `param` overrides, no imports.
+///
+/// Useful for re-parsing a self-contained NLL (e.g. extracted from
+/// a `.nlz` archive) with the same overrides used at export time.
+pub fn parse_with_params(input: &str, params: &[(String, String)]) -> Result<Topology> {
+    let tokens = lexer::lex(input)?;
+    let ast = parser::parse_tokens(&tokens, input)?;
+    lower::lower_with_params(&ast, None, params)
+}
+
 /// Parse an NLL string from a file path, with import resolution.
 ///
 /// Imports are resolved relative to the file's parent directory.

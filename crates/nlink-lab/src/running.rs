@@ -1046,6 +1046,14 @@ impl RunningLab {
             })
             .collect()
     }
+
+    /// Like [`process_status`](Self::process_status), but filters out any
+    /// entry whose tracked PID has exited. Useful for "is X still
+    /// running?" polling loops that would otherwise have to filter
+    /// `alive == false` themselves and risk forgetting to.
+    pub fn process_status_alive_only(&self) -> Vec<ProcessInfo> {
+        self.process_status().into_iter().filter(|p| p.alive).collect()
+    }
 }
 
 /// Best-effort kill of a process.

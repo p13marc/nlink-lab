@@ -251,7 +251,9 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 panic!("topology validation failed");
             }
 
-            let lab = __topo.deploy().await.expect("failed to deploy lab");
+            // `mut` so test bodies can call `&mut self` methods like
+            // `spawn_with_logs` without having to shadow the binding.
+            let mut lab = __topo.deploy().await.expect("failed to deploy lab");
 
             // Use a guard for panic-safe cleanup
             struct __LabGuard {

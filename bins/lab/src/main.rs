@@ -394,7 +394,8 @@ enum Commands {
     /// post-mortem inspection (which log files? when did they exit?) is
     /// possible. They are pruned only when the lab is destroyed. Consumers
     /// polling "is X still running?" must check the `alive` field, not
-    /// just look up the PID.
+    /// just look up the PID — or pass `--alive-only` to filter dead
+    /// entries out at the source.
     ///
     /// JSON OUTPUT (with `--json`):
     ///   [ { "node": str, "pid": int, "alive": bool,
@@ -402,6 +403,12 @@ enum Commands {
     Ps {
         /// Lab name.
         lab: String,
+
+        /// Hide processes whose tracked PID has exited (alive == false).
+        /// Useful for "is X still running?" polling loops where exited
+        /// post-mortem entries would otherwise be misread as alive.
+        #[arg(long)]
+        alive_only: bool,
     },
 
     /// Kill a tracked background process.
@@ -1657,9 +1664,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
         }
 
-        Commands::Ps { lab } => {
+        Commands::Ps { lab, alive_only } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
-            let procs = running.process_status();
+            let procs = if alive_only {
+                running.process_status_alive_only()
+            } else {
+                running.process_status()
+            };
             if json {
                 println!("{}", serde_json::to_string_pretty(&procs)?);
             } else if procs.is_empty() {

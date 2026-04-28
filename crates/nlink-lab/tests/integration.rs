@@ -169,6 +169,31 @@ async fn exec_in_respects_workdir(lab: RunningLab) {
     );
 }
 
+// `process_status_alive_only` must drop entries whose tracked PID has
+// exited. Spawn `true` (instant exit), wait briefly so the kernel has
+// reaped, then assert the listing is empty. The unfiltered
+// `process_status` still shows the entry with `alive: false` — that's
+// the retention guarantee.
+#[lab_test("examples/simple.nll")]
+async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
+    let pid = lab.spawn_with_logs("host", &["true"], None).unwrap();
+    // Give the child time to exit. /bin/true is essentially instant; 200ms
+    // is generous and avoids a race on slow CI runners.
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    let all = lab.process_status();
+    assert!(
+        all.iter().any(|p| p.pid == pid && !p.alive),
+        "expected dead entry retained in process_status: {all:?}"
+    );
+
+    let alive = lab.process_status_alive_only();
+    assert!(
+        !alive.iter().any(|p| p.pid == pid),
+        "alive_only must filter the dead entry: {alive:?}"
+    );
+}
+
 // `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
 // by wrapping in `/usr/bin/env`. Verifies both visibility of the new var
 // and additive semantics — inherited PATH must remain set.

@@ -19,6 +19,12 @@ All notable changes to this project will be documented in this file.
   cleanly and prints the summary line. (Plan 155 PR A — round-3 §2.1)
 
 ### Added
+- `nlink-lab ps --alive-only` flag (and library helper
+  `RunningLab::process_status_alive_only`) that filters out tracked
+  processes whose PID has exited. Useful for "is X still running?"
+  polling loops where the default retention behaviour (exited entries
+  remain in the listing with `alive: false`) is a footgun. The default
+  `ps` behaviour is unchanged. (Plan 155 PR C — round-3 §3.2)
 - `nlink_lab::ExecOpts` and `nlink_lab::SpawnOpts` — borrow-based
   option structs for `RunningLab::exec_with_opts`,
   `exec_attached_with_opts`, and `spawn_with_logs_with_opts`. Carry

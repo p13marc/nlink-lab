@@ -111,7 +111,10 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .expect("failed to parse topology file");
                 }
             } else {
-                let pairs = args.set.iter().map(|(k, v)| quote! { (#k.into(), #v.into()) });
+                let pairs = args
+                    .set
+                    .iter()
+                    .map(|(k, v)| quote! { (#k.into(), #v.into()) });
                 quote! {
                     let __params: Vec<(String, String)> = vec![ #(#pairs),* ];
                     let __topo = nlink_lab::parser::parse_file_with_params(

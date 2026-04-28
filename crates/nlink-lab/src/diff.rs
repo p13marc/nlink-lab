@@ -191,11 +191,8 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     // emit one NetworkImpairerChange.
     use std::collections::BTreeMap;
 
-    fn group_by_src(
-        topo: &Topology,
-    ) -> BTreeMap<(String, String), Vec<NetworkImpairment>> {
-        let mut out: BTreeMap<(String, String), Vec<NetworkImpairment>> =
-            BTreeMap::new();
+    fn group_by_src(topo: &Topology) -> BTreeMap<(String, String), Vec<NetworkImpairment>> {
+        let mut out: BTreeMap<(String, String), Vec<NetworkImpairment>> = BTreeMap::new();
         for (net_name, net) in &topo.networks {
             for imp in &net.impairments {
                 out.entry((net_name.clone(), imp.src.clone()))

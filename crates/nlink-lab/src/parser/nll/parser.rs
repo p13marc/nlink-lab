@@ -2186,18 +2186,13 @@ fn parse_network_impair(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Netw
 /// string field. Nested `for` is allowed and expands as a Cartesian
 /// product. The `for` keyword has not yet been consumed by the
 /// caller.
-fn parse_network_for(
-    tokens: &[Spanned],
-    pos: &mut usize,
-) -> Result<Vec<ast::NetworkImpairDef>> {
+fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::NetworkImpairDef>> {
     expect(tokens, pos, &Token::For)?;
     let var = expect_ident(tokens, pos)?;
     expect(tokens, pos, &Token::In)?;
     let range = parse_for_range(tokens, pos)?;
     let values: Vec<String> = match &range {
-        ast::ForRange::IntRange { start, end } => {
-            (*start..=*end).map(|i| i.to_string()).collect()
-        }
+        ast::ForRange::IntRange { start, end } => (*start..=*end).map(|i| i.to_string()).collect(),
         ast::ForRange::List(items) => items.clone(),
     };
 
@@ -2243,17 +2238,12 @@ fn parse_network_for(
     // Uses the same interpolation engine as `lower.rs` so arithmetic
     // (e.g. `${(i + 1) % 12}`) and nested vars work as expected.
     let mut out = Vec::with_capacity(body.len() * values.len());
-    let mut vars: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
+    let mut vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for val in &values {
         vars.insert(var.clone(), val.clone());
         for tmpl in &body {
-            let sub = |s: &str| -> String {
-                crate::parser::nll::lower::interpolate(s, &vars)
-            };
-            let sub_opt = |s: &Option<String>| -> Option<String> {
-                s.as_ref().map(|v| sub(v))
-            };
+            let sub = |s: &str| -> String { crate::parser::nll::lower::interpolate(s, &vars) };
+            let sub_opt = |s: &Option<String>| -> Option<String> { s.as_ref().map(|v| sub(v)) };
             out.push(ast::NetworkImpairDef {
                 src: sub(&tmpl.src),
                 dst: sub(&tmpl.dst),
@@ -3790,7 +3780,11 @@ network ring {
                     vec![("n0", "n1"), ("n1", "n2"), ("n2", "n3"), ("n3", "n0")],
                     "ring closure via modulo failed",
                 );
-                assert!(n.impairments.iter().all(|i| i.props.delay.as_deref() == Some("50ms")));
+                assert!(
+                    n.impairments
+                        .iter()
+                        .all(|i| i.props.delay.as_deref() == Some("50ms"))
+                );
             }
             _ => panic!("expected Network"),
         }
@@ -3821,10 +3815,7 @@ network mesh {
                     .collect();
                 // Cartesian product: 2 × 2 = 4 entries. Inner loop
                 // varies fastest.
-                assert_eq!(
-                    pairs,
-                    vec![("a", "c"), ("a", "d"), ("b", "c"), ("b", "d")],
-                );
+                assert_eq!(pairs, vec![("a", "c"), ("a", "d"), ("b", "c"), ("b", "d")],);
             }
             _ => panic!("expected Network"),
         }

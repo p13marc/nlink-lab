@@ -47,6 +47,35 @@ pub struct ExecOutput {
     pub exit_code: i32,
 }
 
+/// Optional knobs for [`RunningLab::exec_with_opts`] and
+/// [`RunningLab::exec_attached_with_opts`].
+///
+/// Construct with [`ExecOpts::default`] (or `..Default::default()`) and
+/// override fields as needed.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExecOpts<'a> {
+    /// Working directory for the child. Namespace nodes: `chdir()` on the
+    /// host filesystem. Container nodes: `-w <path>` to docker/podman.
+    pub workdir: Option<&'a std::path::Path>,
+    /// Additional environment variables, applied on top of the inherited
+    /// environment. Namespace nodes: set on the `Command` directly.
+    /// Container nodes: passed as repeated `-e KEY=VALUE` to the runtime.
+    pub env: &'a [(&'a str, &'a str)],
+}
+
+/// Optional knobs for [`RunningLab::spawn_with_logs_with_opts`]. Same env
+/// and workdir semantics as [`ExecOpts`], plus a custom log directory.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SpawnOpts<'a> {
+    /// Log directory override. `None` uses the lab's default state-dir
+    /// `logs/` subfolder.
+    pub log_dir: Option<&'a std::path::Path>,
+    /// Working directory for the child (chdir before exec).
+    pub workdir: Option<&'a std::path::Path>,
+    /// Additional environment variables (set via `Command::env`).
+    pub env: &'a [(&'a str, &'a str)],
+}
+
 /// Status of a tracked background process.
 ///
 /// **Retention**: tracked processes are *not* removed from the lab's PID
@@ -244,15 +273,11 @@ impl RunningLab {
 
     /// Execute a command in a lab node and collect output.
     pub fn exec(&self, node: &str, cmd: &str, args: &[&str]) -> Result<ExecOutput> {
-        self.exec_in(node, cmd, args, None)
+        self.exec_with_opts(node, cmd, args, ExecOpts::default())
     }
 
-    /// Execute a command in a lab node with an optional working directory.
-    ///
-    /// For namespace nodes, `workdir` is applied via `chdir()` on the host
-    /// filesystem (namespace nodes share the host mount namespace). For
-    /// container nodes it's passed as `-w <path>` to the runtime, resolved
-    /// inside the container's filesystem.
+    /// Execute with a working directory only. Thin wrapper over
+    /// [`exec_with_opts`](Self::exec_with_opts).
     pub fn exec_in(
         &self,
         node: &str,
@@ -260,17 +285,47 @@ impl RunningLab {
         args: &[&str],
         workdir: Option<&std::path::Path>,
     ) -> Result<ExecOutput> {
+        self.exec_with_opts(
+            node,
+            cmd,
+            args,
+            ExecOpts {
+                workdir,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Execute a command in a lab node with full control over workdir + env.
+    ///
+    /// See [`ExecOpts`] for semantics. For namespace nodes, env vars are
+    /// applied via `Command::env` (additive — inherited environment is
+    /// preserved). For container nodes, env vars are passed as repeated
+    /// `-e KEY=VALUE` to the runtime.
+    pub fn exec_with_opts(
+        &self,
+        node: &str,
+        cmd: &str,
+        args: &[&str],
+        opts: ExecOpts<'_>,
+    ) -> Result<ExecOutput> {
         if let Some(container) = self.containers.get(node) {
             // Use docker/podman exec for container nodes
             let rt_binary = self
                 .runtime_binary
                 .as_deref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
-            let wd_str = workdir.map(|p| p.to_string_lossy().into_owned());
+            let wd_str = opts.workdir.map(|p| p.to_string_lossy().into_owned());
+            let env_pairs: Vec<String> =
+                opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
             let mut all_args: Vec<&str> = vec!["exec"];
             if let Some(ref wd) = wd_str {
                 all_args.push("-w");
                 all_args.push(wd.as_str());
+            }
+            for pair in &env_pairs {
+                all_args.push("-e");
+                all_args.push(pair.as_str());
             }
             all_args.push(&container.id);
             all_args.push(cmd);
@@ -290,8 +345,11 @@ impl RunningLab {
             let ns_name = self.namespace_for(node)?;
             let mut command = std::process::Command::new(cmd);
             command.args(args);
-            if let Some(wd) = workdir {
+            if let Some(wd) = opts.workdir {
                 command.current_dir(wd);
+            }
+            for (k, v) in opts.env {
+                command.env(k, v);
             }
             let output = namespace::spawn_output_with_etc(ns_name, command)
                 .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
@@ -313,13 +371,11 @@ impl RunningLab {
     ///
     /// [`exec`]: Self::exec
     pub fn exec_attached(&self, node: &str, cmd: &str, args: &[&str]) -> Result<i32> {
-        self.exec_attached_in(node, cmd, args, None)
+        self.exec_attached_with_opts(node, cmd, args, ExecOpts::default())
     }
 
-    /// Streaming exec with an optional working directory. See [`exec_in`] for
-    /// workdir semantics (chdir for namespace nodes, `-w` for containers).
-    ///
-    /// [`exec_in`]: Self::exec_in
+    /// Streaming exec with a working directory only. Thin wrapper over
+    /// [`exec_attached_with_opts`](Self::exec_attached_with_opts).
     pub fn exec_attached_in(
         &self,
         node: &str,
@@ -327,16 +383,41 @@ impl RunningLab {
         args: &[&str],
         workdir: Option<&std::path::Path>,
     ) -> Result<i32> {
+        self.exec_attached_with_opts(
+            node,
+            cmd,
+            args,
+            ExecOpts {
+                workdir,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Streaming exec with full options (workdir + env). See [`ExecOpts`].
+    pub fn exec_attached_with_opts(
+        &self,
+        node: &str,
+        cmd: &str,
+        args: &[&str],
+        opts: ExecOpts<'_>,
+    ) -> Result<i32> {
         if let Some(container) = self.containers.get(node) {
             let rt_binary = self
                 .runtime_binary
                 .as_deref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
-            let wd_str = workdir.map(|p| p.to_string_lossy().into_owned());
+            let wd_str = opts.workdir.map(|p| p.to_string_lossy().into_owned());
+            let env_pairs: Vec<String> =
+                opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
             let mut all_args: Vec<&str> = vec!["exec", "-i"];
             if let Some(ref wd) = wd_str {
                 all_args.push("-w");
                 all_args.push(wd.as_str());
+            }
+            for pair in &env_pairs {
+                all_args.push("-e");
+                all_args.push(pair.as_str());
             }
             all_args.push(&container.id);
             all_args.push(cmd);
@@ -366,8 +447,11 @@ impl RunningLab {
                 .stdin(std::process::Stdio::inherit())
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit());
-            if let Some(wd) = workdir {
+            if let Some(wd) = opts.workdir {
                 command.current_dir(wd);
+            }
+            for (k, v) in opts.env {
+                command.env(k, v);
             }
             let status = command.status().map_err(|e| {
                 Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
@@ -409,13 +493,19 @@ impl RunningLab {
         cmd: &[&str],
         log_dir: Option<&std::path::Path>,
     ) -> Result<u32> {
-        self.spawn_with_logs_in(node, cmd, log_dir, None)
+        self.spawn_with_logs_with_opts(
+            node,
+            cmd,
+            SpawnOpts {
+                log_dir,
+                ..Default::default()
+            },
+        )
     }
 
-    /// Spawn a background process with logs and an optional working directory.
-    ///
-    /// Namespace nodes share the host mount namespace, so `workdir` is an
-    /// absolute path on the host's filesystem.
+    /// Spawn with a working directory in addition to the log directory.
+    /// Thin wrapper over
+    /// [`spawn_with_logs_with_opts`](Self::spawn_with_logs_with_opts).
     pub fn spawn_with_logs_in(
         &mut self,
         node: &str,
@@ -423,12 +513,34 @@ impl RunningLab {
         log_dir: Option<&std::path::Path>,
         workdir: Option<&std::path::Path>,
     ) -> Result<u32> {
+        self.spawn_with_logs_with_opts(
+            node,
+            cmd,
+            SpawnOpts {
+                log_dir,
+                workdir,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Spawn a background process with full control over log dir, working
+    /// directory, and environment. See [`SpawnOpts`]. The log file basename
+    /// is derived from `cmd[0]` after `Path::file_name()` — env vars are
+    /// applied via `Command::env` and do **not** affect the basename.
+    pub fn spawn_with_logs_with_opts(
+        &mut self,
+        node: &str,
+        cmd: &[&str],
+        opts: SpawnOpts<'_>,
+    ) -> Result<u32> {
         if cmd.is_empty() {
             return Err(Error::invalid_topology("empty command"));
         }
         let ns_name = self.namespace_for(node)?.to_string();
 
-        let log_dir = log_dir
+        let log_dir = opts
+            .log_dir
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| state::logs_dir(self.name()));
         std::fs::create_dir_all(&log_dir)?;
@@ -448,8 +560,11 @@ impl RunningLab {
         command.args(&cmd[1..]);
         command.stdout(stdout_file);
         command.stderr(stderr_file);
-        if let Some(wd) = workdir {
+        if let Some(wd) = opts.workdir {
             command.current_dir(wd);
+        }
+        for (k, v) in opts.env {
+            command.env(k, v);
         }
 
         let child = nlink::netlink::namespace::spawn_with_etc(&ns_name, command)

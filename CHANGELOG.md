@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- `nlink-lab spawn --env KEY=VALUE` no longer changes the per-process
+  log file basename to `env`. Previously the CLI implemented `--env` by
+  prepending `/usr/bin/env K=V` to the user's command; the log basename
+  is derived from `argv[0]`, so consumers that reconstructed log paths
+  from the binary name silently broke. Env vars are now applied via
+  `Command::env(k, v)` directly. (Plan 155 PR B — round-3 §3.1)
 - `nlink-lab capture -w <pcap>` no longer produces a 0-byte pcap when
   the capture process is terminated by SIGTERM (e.g., `timeout(1)`'s
   default signal) or SIGKILL. The pcap writer now flushes after every
@@ -13,6 +19,13 @@ All notable changes to this project will be documented in this file.
   cleanly and prints the summary line. (Plan 155 PR A — round-3 §2.1)
 
 ### Added
+- `nlink_lab::ExecOpts` and `nlink_lab::SpawnOpts` — borrow-based
+  option structs for `RunningLab::exec_with_opts`,
+  `exec_attached_with_opts`, and `spawn_with_logs_with_opts`. Carry
+  `workdir` and `env` (plus `log_dir` for spawn). Existing `exec`,
+  `exec_in`, `exec_attached`, `exec_attached_in`, `spawn_with_logs`,
+  `spawn_with_logs_in` methods are now thin wrappers over these — no
+  caller break. (Plan 155 PR B)
 - JSON output schemas for the four high-traffic shapes under
   `docs/json-schemas/`: `deploy`, `status` (list + scan variants),
   `spawn`, `ps`. Hand-written draft-07 schemas; the source of truth

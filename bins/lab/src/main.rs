@@ -1192,14 +1192,14 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             cmd,
         } => {
             check_root();
-            // Prepend env vars to command: env K=V K=V ... cmd args
-            let cmd = if env_vars.is_empty() {
-                cmd
-            } else {
-                let mut full = vec!["env".to_string()];
-                full.extend(env_vars);
-                full.extend(cmd);
-                full
+            let env_pairs = parse_env_pairs(&env_vars)?;
+            let env_refs: Vec<(&str, &str)> = env_pairs
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            let opts = nlink_lab::ExecOpts {
+                workdir: workdir.as_deref(),
+                env: &env_refs,
             };
 
             if cli.json {
@@ -1212,7 +1212,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     }
                     let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
                     let start = Instant::now();
-                    let output = running.exec_in(&node, &cmd[0], &args, workdir.as_deref())?;
+                    let output = running.exec_with_opts(&node, &cmd[0], &args, opts)?;
                     let duration_ms = start.elapsed().as_millis() as u64;
                     Ok(serde_json::json!({
                         "exit_code": output.exit_code,
@@ -1251,7 +1251,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
-            let code = running.exec_attached_in(&node, &cmd[0], &args, workdir.as_deref())?;
+            let code = running.exec_attached_with_opts(&node, &cmd[0], &args, opts)?;
             if code != 0 {
                 std::process::exit(code);
             }
@@ -1269,15 +1269,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             cmd,
         } => {
             check_root();
-            // Prepend env vars to command
-            let cmd = if env_vars.is_empty() {
-                cmd
-            } else {
-                let mut full = vec!["env".to_string()];
-                full.extend(env_vars);
-                full.extend(cmd);
-                full
-            };
+            let env_pairs = parse_env_pairs(&env_vars)?;
+            let env_refs: Vec<(&str, &str)> = env_pairs
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
             let mut running = nlink_lab::RunningLab::load(&lab)?;
             // Validate node exists
             let node_names: Vec<&str> = running.node_names().collect();
@@ -1287,8 +1283,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
-            let pid =
-                running.spawn_with_logs_in(&node, &args, log_dir.as_deref(), workdir.as_deref())?;
+            let opts = nlink_lab::SpawnOpts {
+                log_dir: log_dir.as_deref(),
+                workdir: workdir.as_deref(),
+                env: &env_refs,
+            };
+            let pid = running.spawn_with_logs_with_opts(&node, &args, opts)?;
             running.save_state()?;
 
             if cli.json {
@@ -3271,6 +3271,30 @@ fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<(
     tail_follow_to(path, start_offset, &mut stdout, || true)
 }
 
+/// Parse repeated `--env KEY=VALUE` strings into `(key, value)` pairs.
+///
+/// Returns an error on entries missing `=`. The parsed pairs are
+/// applied to the child process via `Command::env(k, v)` (additive on
+/// top of the inherited environment) — *not* by wrapping the command
+/// in `/usr/bin/env`. The wrapper approach was the previous behaviour
+/// and silently broke the per-process logfile naming convention,
+/// because `argv[0]` ended up being `env` rather than the user's
+/// binary. See round-3 feedback §3.1.
+fn parse_env_pairs(env_vars: &[String]) -> nlink_lab::Result<Vec<(String, String)>> {
+    env_vars
+        .iter()
+        .map(|s| {
+            s.split_once('=')
+                .ok_or_else(|| {
+                    nlink_lab::Error::invalid_topology(format!(
+                        "invalid --env {s:?} (expected KEY=VALUE)"
+                    ))
+                })
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+        })
+        .collect()
+}
+
 /// Build the argv to pass to `nsenter` for entering a lab node's network
 /// namespace and exec'ing a shell.
 ///
@@ -3290,6 +3314,30 @@ fn nsenter_shell_args(ns: &str, shell: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use nlink_lab::state::LabInfo;
+
+    #[test]
+    fn parse_env_pairs_accepts_valid() {
+        let inputs = vec!["FOO=bar".to_string(), "EMPTY=".to_string(), "X=y=z".to_string()];
+        let pairs = parse_env_pairs(&inputs).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("FOO".to_string(), "bar".to_string()),
+                ("EMPTY".to_string(), "".to_string()),
+                // `split_once` splits on the *first* `=`, so the value gets
+                // `y=z`. Keeps `--env DSN=postgres://u@h/db?x=y` working.
+                ("X".to_string(), "y=z".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_env_pairs_rejects_missing_equals() {
+        let inputs = vec!["NOEQ".to_string()];
+        let err = parse_env_pairs(&inputs).unwrap_err();
+        let s = err.to_string();
+        assert!(s.contains("NOEQ"), "error should name the bad entry: {s}");
+    }
 
     /// Each JSON Schema under `docs/json-schemas/` must be valid JSON.
     /// Catches accidental hand-edit corruption (trailing comma, etc.) at

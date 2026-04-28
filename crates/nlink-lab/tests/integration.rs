@@ -169,6 +169,31 @@ async fn exec_in_respects_workdir(lab: RunningLab) {
     );
 }
 
+// `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
+// by wrapping in `/usr/bin/env`. Verifies both visibility of the new var
+// and additive semantics — inherited PATH must remain set.
+#[lab_test("examples/simple.nll")]
+async fn exec_with_opts_propagates_env(lab: RunningLab) {
+    let env = &[("FEEDBACK_R3", "ok")];
+    let output = lab
+        .exec_with_opts(
+            "host",
+            "sh",
+            &["-c", "echo \"$FEEDBACK_R3\"; test -n \"$PATH\""],
+            nlink_lab::ExecOpts {
+                env,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        output.exit_code, 0,
+        "expected env var + inherited PATH; stderr={}",
+        output.stderr
+    );
+    assert_eq!(output.stdout.trim(), "ok");
+}
+
 // ─── Builder-based test ───────────────────────────────────
 
 #[lab_test(topology = builder_topology)]

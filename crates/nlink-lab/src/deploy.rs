@@ -2736,6 +2736,13 @@ pub async fn apply_diff(
             .await?;
     }
 
+    // ── Phase 7b: Reconcile network-level per-pair impair ──────────
+    // Each NetworkImpairerChange covers one (network, src_node) tree.
+    // We use PerPeerImpairer::reconcile() so an unchanged tree makes
+    // zero kernel calls; a single-rule edit becomes one
+    // change_qdisc/replace_qdisc on the affected leaf.
+    apply_network_impair_diff(running, desired, diff).await?;
+
     // ── Phase 8: Update state file ─────────────────────────────────
     running.set_topology(desired.clone());
 
@@ -2757,6 +2764,121 @@ pub async fn apply_diff(
         process_logs: HashMap::new(),
     };
     state::save(&lab_state, desired)?;
+
+    Ok(())
+}
+
+/// Reconcile network-level per-pair impair via
+/// `PerPeerImpairer::reconcile()`. Each `NetworkImpairerChange`
+/// covers one `(network, src_node)` tree; reconcile is
+/// non-destructive — unchanged sub-trees make zero kernel calls.
+async fn apply_network_impair_diff(
+    running: &mut RunningLab,
+    desired: &Topology,
+    diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
+    use nlink::util::Rate;
+
+    if diff.network_impairs_changed.is_empty() {
+        return Ok(());
+    }
+
+    for change in &diff.network_impairs_changed {
+        // Look up source-node interface and destination-node IPs from
+        // the desired topology's network definition. (For the `clear`
+        // path where `desired = None`, we still need the iface — read
+        // it from whichever topology has the network.)
+        let net_topo = desired
+            .networks
+            .get(&change.network)
+            .or_else(|| running.topology().networks.get(&change.network));
+
+        let Some(net) = net_topo else {
+            tracing::warn!(
+                "network '{}' not found in current or desired topology — skipping",
+                change.network,
+            );
+            continue;
+        };
+
+        // Map node name → its iface in this network, and IP if known.
+        let mut node_iface: Option<String> = None;
+        let mut node_ips: HashMap<String, IpAddr> = HashMap::new();
+        for member in &net.members {
+            let Some(ep) = EndpointRef::parse(member) else {
+                continue;
+            };
+            if ep.node == change.src_node && node_iface.is_none() {
+                node_iface = Some(ep.iface.clone());
+            }
+            if let Some(port) = net.ports.get(member)
+                && let Some(addr_with_prefix) = port.addresses.first()
+                && let Some((addr_str, _)) = addr_with_prefix.split_once('/')
+                && let Ok(ip) = addr_str.parse::<IpAddr>()
+            {
+                node_ips.entry(ep.node).or_insert(ip);
+            }
+        }
+
+        let Some(iface) = node_iface else {
+            tracing::warn!(
+                "network '{}': src node '{}' has no iface — skipping",
+                change.network,
+                change.src_node,
+            );
+            continue;
+        };
+
+        let handle = node_handle_for(running, &change.src_node)?;
+        let conn: Connection<Route> = handle.connection().map_err(|e| {
+            Error::deploy_failed(format!(
+                "network '{}': connection for '{}': {e}",
+                change.network, change.src_node,
+            ))
+        })?;
+
+        match &change.desired {
+            Some(rules) => {
+                let mut impairer = PerPeerImpairer::new(iface.as_str());
+                for rule in rules {
+                    let Some(dst_ip) = node_ips.get(&rule.dst) else {
+                        return Err(Error::deploy_failed(format!(
+                            "network '{}': cannot resolve IP for dst node '{}'",
+                            change.network, rule.dst,
+                        )));
+                    };
+                    let netem = build_netem(&rule.impairment)?;
+                    let mut peer = PeerImpairment::new(netem);
+                    if let Some(rc) = &rule.rate_cap {
+                        let bits = parse_rate_bps(rc).map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "network '{}': bad rate-cap '{rc}': {e}",
+                                change.network,
+                            ))
+                        })?;
+                        peer = peer.rate_cap(Rate::bits_per_sec(bits));
+                    }
+                    impairer = impairer.impair_dst_ip(*dst_ip, peer);
+                }
+                impairer.reconcile(&conn).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "network '{}': failed to reconcile impair on '{}:{}': {e}",
+                        change.network, change.src_node, iface,
+                    ))
+                })?;
+            }
+            None => {
+                let impairer = PerPeerImpairer::new(iface.as_str());
+                impairer.clear(&conn).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "network '{}': failed to clear impair on '{}:{}': {e}",
+                        change.network, change.src_node, iface,
+                    ))
+                })?;
+            }
+        }
+    }
 
     Ok(())
 }

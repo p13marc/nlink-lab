@@ -3,7 +3,7 @@
 //! Compares two [`Topology`] structs and produces a structured change set.
 //! Used by the `nlink-lab diff` CLI and the future `apply` command.
 
-use crate::types::{Impairment, Link, Topology};
+use crate::types::{Impairment, Link, NetworkImpairment, Topology};
 
 /// A structured diff between two topologies.
 #[derive(Debug, Default)]
@@ -15,6 +15,11 @@ pub struct TopologyDiff {
     pub impairments_changed: Vec<ImpairmentChange>,
     pub impairments_added: Vec<(String, Impairment)>,
     pub impairments_removed: Vec<String>,
+
+    /// Network-level per-pair impairment changes, grouped by
+    /// `(network_name, src_node)` because that's the unit
+    /// `nlink::netlink::impair::PerPeerImpairer` reconciles.
+    pub network_impairs_changed: Vec<NetworkImpairerChange>,
 }
 
 /// A change to an impairment on a specific endpoint.
@@ -23,6 +28,18 @@ pub struct ImpairmentChange {
     pub endpoint: String,
     pub old: Impairment,
     pub new: Impairment,
+}
+
+/// A change to the per-peer impairer on `(network, src_node)`.
+///
+/// `desired` carries the rules that should be live after reconcile;
+/// `None` means "remove the impairer entirely on this source's
+/// interface" (which translates to `PerPeerImpairer::clear`).
+#[derive(Debug)]
+pub struct NetworkImpairerChange {
+    pub network: String,
+    pub src_node: String,
+    pub desired: Option<Vec<NetworkImpairment>>,
 }
 
 impl TopologyDiff {
@@ -35,6 +52,7 @@ impl TopologyDiff {
             && self.impairments_changed.is_empty()
             && self.impairments_added.is_empty()
             && self.impairments_removed.is_empty()
+            && self.network_impairs_changed.is_empty()
     }
 
     /// Total number of changes.
@@ -46,6 +64,7 @@ impl TopologyDiff {
             + self.impairments_changed.len()
             + self.impairments_added.len()
             + self.impairments_removed.len()
+            + self.network_impairs_changed.len()
     }
 }
 
@@ -85,6 +104,23 @@ impl std::fmt::Display for TopologyDiff {
                 change.old.delay.as_deref().unwrap_or("-"),
                 change.new.delay.as_deref().unwrap_or("-"),
             )?;
+        }
+        for change in &self.network_impairs_changed {
+            match &change.desired {
+                Some(rules) => writeln!(
+                    f,
+                    "  ~ reconcile network impair: {} on {} ({} rule{})",
+                    change.network,
+                    change.src_node,
+                    rules.len(),
+                    if rules.len() == 1 { "" } else { "s" },
+                )?,
+                None => writeln!(
+                    f,
+                    "  - remove network impair: {} on {} (clear root qdisc)",
+                    change.network, change.src_node,
+                )?,
+            }
         }
         if self.is_empty() {
             writeln!(f, "  (no changes)")?;
@@ -148,10 +184,64 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         }
     }
 
+    // ── Network-level per-pair impairments ──
+    // Group both sides by `(network_name, src_node)`, the unit
+    // `PerPeerImpairer` reconciles. If the rule set for a key
+    // differs (or a key exists on one side and not the other),
+    // emit one NetworkImpairerChange.
+    use std::collections::BTreeMap;
+
+    fn group_by_src(
+        topo: &Topology,
+    ) -> BTreeMap<(String, String), Vec<NetworkImpairment>> {
+        let mut out: BTreeMap<(String, String), Vec<NetworkImpairment>> =
+            BTreeMap::new();
+        for (net_name, net) in &topo.networks {
+            for imp in &net.impairments {
+                out.entry((net_name.clone(), imp.src.clone()))
+                    .or_default()
+                    .push(imp.clone());
+            }
+        }
+        out
+    }
+
+    let cur = group_by_src(current);
+    let des = group_by_src(desired);
+
+    for (key, desired_rules) in &des {
+        match cur.get(key) {
+            None => diff.network_impairs_changed.push(NetworkImpairerChange {
+                network: key.0.clone(),
+                src_node: key.1.clone(),
+                desired: Some(desired_rules.clone()),
+            }),
+            Some(current_rules) if current_rules != desired_rules => {
+                diff.network_impairs_changed.push(NetworkImpairerChange {
+                    network: key.0.clone(),
+                    src_node: key.1.clone(),
+                    desired: Some(desired_rules.clone()),
+                });
+            }
+            _ => {} // unchanged
+        }
+    }
+    for key in cur.keys() {
+        if !des.contains_key(key) {
+            diff.network_impairs_changed.push(NetworkImpairerChange {
+                network: key.0.clone(),
+                src_node: key.1.clone(),
+                desired: None,
+            });
+        }
+    }
+
     // Sort for deterministic output
     diff.nodes_added.sort();
     diff.nodes_removed.sort();
     diff.impairments_removed.sort();
+    diff.network_impairs_changed
+        .sort_by(|a, b| (&a.network, &a.src_node).cmp(&(&b.network, &b.src_node)));
 
     diff
 }
@@ -239,6 +329,119 @@ mod tests {
         let diff = diff_topologies(&current, &desired);
         assert_eq!(diff.impairments_changed.len(), 1);
         assert_eq!(diff.impairments_changed[0].endpoint, "a:eth0");
+    }
+
+    #[test]
+    fn test_network_impair_added() {
+        // Build current and desired by parsing NLL — easier than the
+        // builder DSL for network-level features.
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+}"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b { delay 50ms }
+}"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.network_impairs_changed.len(), 1);
+        let change = &diff.network_impairs_changed[0];
+        assert_eq!(change.network, "n");
+        assert_eq!(change.src_node, "a");
+        let rules = change.desired.as_ref().expect("expected rules");
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].dst, "b");
+    }
+
+    #[test]
+    fn test_network_impair_modified() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b { delay 50ms }
+}"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b { delay 100ms }
+}"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.network_impairs_changed.len(), 1);
+    }
+
+    #[test]
+    fn test_network_impair_removed() {
+        let current = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b { delay 50ms }
+}"#,
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+}"#,
+        )
+        .unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert_eq!(diff.network_impairs_changed.len(), 1);
+        assert!(diff.network_impairs_changed[0].desired.is_none());
+    }
+
+    #[test]
+    fn test_network_impair_no_change_is_noop() {
+        let nll = r#"lab "t"
+node a
+node b
+network n {
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b { delay 50ms loss 1% }
+  impair b -- a { delay 50ms loss 1% }
+}"#;
+        let current = crate::parser::parse(nll).unwrap();
+        let desired = crate::parser::parse(nll).unwrap();
+        let diff = diff_topologies(&current, &desired);
+        assert!(
+            diff.network_impairs_changed.is_empty(),
+            "identical topology should produce no network-impair changes, got {:?}",
+            diff.network_impairs_changed
+        );
+        assert!(diff.is_empty());
     }
 
     #[test]

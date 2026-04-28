@@ -18,13 +18,11 @@ unchanged paths.
 `apply` is the canonical "edit and reconcile" verb — the alternative
 to `destroy` + `deploy`, which incurs full teardown and rebuild.
 
-The current implementation reconciles **nodes, links, and
-per-endpoint impairments**. Network-level per-pair impairments
-(Plan 128) are reconciled via nlink's `PerPeerImpairer::reconcile()`
-in
-[Plan 152](../plans/152-apply-reconcile.md). Other resources
-(routes, sysctls, nftables, NAT) currently require redeploy until
-that plan ships.
+The current implementation reconciles **nodes, links,
+per-endpoint impairments, and network-level per-pair impair**.
+Other resources (routes, sysctls, nftables, NAT) currently require
+redeploy until [Plan 152](../plans/152-apply-reconcile.md) Phase B
+ships.
 
 ## Arguments
 
@@ -93,11 +91,11 @@ done
 | Links added | ✅ |
 | Links removed | ✅ |
 | Per-endpoint netem | ✅ change in place |
-| Network-level per-pair impair | 🚧 Plan 152 |
-| Rate limits | 🚧 Plan 152 |
-| Routes | 🚧 Plan 152 |
-| Sysctls | 🚧 Plan 152 |
-| nftables / NAT | 🚧 Plan 152 |
+| Network-level per-pair impair | ✅ via `PerPeerImpairer::reconcile()` — zero kernel calls when unchanged |
+| Rate limits | 🚧 Plan 152 Phase B |
+| Routes | 🚧 Plan 152 Phase B |
+| Sysctls | 🚧 Plan 152 Phase B |
+| nftables / NAT | 🚧 Plan 152 Phase B |
 | Spawned processes | ❌ — apply leaves them; redeploy or `kill` + `spawn` |
 | Container nodes | ❌ — image / cmd changes require redeploy |
 

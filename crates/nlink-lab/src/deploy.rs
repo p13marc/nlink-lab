@@ -2813,14 +2813,14 @@ async fn apply_routes_diff(
             Error::deploy_failed(format!("connection for '{}': {e}", change.node))
         })?;
 
-        if change.was_present {
-            if let Err(e) = del_route_for_node(&conn, &change.node, &change.dest).await {
-                tracing::warn!(
-                    "del route '{}' on '{}' failed: {e} — continuing",
-                    change.dest,
-                    change.node,
-                );
-            }
+        if change.was_present
+            && let Err(e) = del_route_for_node(&conn, &change.node, &change.dest).await
+        {
+            tracing::warn!(
+                "del route '{}' on '{}' failed: {e} — continuing",
+                change.dest,
+                change.node,
+            );
         }
         if let Some(new) = &change.desired {
             add_route(&conn, &change.node, &change.dest, new).await?;
@@ -2899,13 +2899,13 @@ async fn apply_nftables_diff(
 
         // 1. Delete the existing table (if any). Idempotent — a
         //    missing table isn't an error from our perspective.
-        if change.was_present {
-            if let Err(e) = nft_conn.del_table("nlink-lab", Family::Inet).await {
-                tracing::warn!(
-                    "del nftables table on '{}': {e} (continuing)",
-                    change.node,
-                );
-            }
+        if change.was_present
+            && let Err(e) = nft_conn.del_table("nlink-lab", Family::Inet).await
+        {
+            tracing::warn!(
+                "del nftables table on '{}': {e} (continuing)",
+                change.node,
+            );
         }
 
         // 2. Re-apply firewall + NAT from the desired config. Each

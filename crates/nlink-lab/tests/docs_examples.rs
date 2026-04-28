@@ -100,8 +100,7 @@ fn extract_links(content: &str) -> Vec<(usize, String)> {
         if in_fence {
             continue;
         }
-        let mut chars = line.char_indices().peekable();
-        while let Some((i, c)) = chars.next() {
+        for (i, c) in line.char_indices() {
             if c == '[' {
                 // Find matching `]`, then `(`, then matching `)`.
                 let after_open = i + 1;

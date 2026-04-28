@@ -71,6 +71,16 @@ async fn t4(lab: RunningLab) { ... }
 #[lab_test("wan.nll", set { delay = "200ms" }, timeout = 60)]
 async fn t5(lab: RunningLab) { ... }
 
+// With capture-on-failure — every (node, iface) gets a live pcap
+// for the test duration. On panic, the pcaps are persisted to
+// `target/lab_test_captures/<test>-<pid>/`. On success, the pcaps
+// are wiped along with the temp dir.
+#[lab_test("multi-tenant-wan.nll", capture = true)]
+async fn t6(lab: RunningLab) {
+    let out = lab.exec("red-a", "ping", &["-c1", "10.20.0.10"]).unwrap();
+    assert_eq!(out.exit_code, 0); // panics → pcaps preserved automatically
+}
+
 fn my_topology() -> nlink_lab::Topology {
     nlink_lab::Lab::new("custom")
         .node("a", |n| n)
@@ -95,6 +105,29 @@ The `timeout = N` form wraps the test body in `tokio::time::timeout`
 and panics with a clear message after N seconds. Default: no
 timeout (the test runs as long as `cargo test`'s own timeout
 allows).
+
+The `capture = true` form is the killer feature for flake
+investigation. When the test panics — assert failure, deadline
+hit, or any other panic — the pcaps land in
+`target/lab_test_captures/<test-name>-<pid>/`, one per
+(namespace, iface). When the test passes, the pcaps are
+discarded along with the temp dir. CI runs that fail
+auto-attach the pcaps to the failure record:
+
+```yaml
+# .github/workflows/integration.yml
+- run: sudo cargo test --test integration -- --include-ignored
+- if: failure()
+  uses: actions/upload-artifact@v4
+  with:
+    name: lab-test-pcaps
+    path: target/lab_test_captures/
+```
+
+The pcaps cover **every** lab interface (each link's two ends, plus
+shared-network member interfaces). For a 12-node satellite mesh
+that's 12 pcaps. Test cycle cost: capture has a small per-packet
+overhead (~5%) for the test duration.
 
 ## What gets cleaned up
 

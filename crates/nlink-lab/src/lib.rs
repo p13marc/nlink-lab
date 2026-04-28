@@ -71,6 +71,7 @@ pub mod running;
 pub mod scenario;
 pub mod state;
 pub mod templates;
+pub mod test_helpers;
 pub mod test_runner;
 pub mod types;
 pub mod validator;

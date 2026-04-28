@@ -35,6 +35,9 @@ tar = "0.4"
 flate2 = "1"
 sha2 = "0.10"
 
+# `LabCapture` writes pcaps to a temp dir (Plan 154 capture-on-failure).
+tempfile = "3"
+
 netring = { workspace = true }
 
 # Feature-gated dependencies

@@ -148,6 +148,50 @@ impl RunningLab {
         &self.namespace_names
     }
 
+    /// All `(namespace_name, interface_name)` pairs suitable for
+    /// per-interface capture / diagnostics. Used by
+    /// [`crate::test_helpers::LabCapture`] to spin up parallel
+    /// pcaps. Skips container nodes — they need a different
+    /// capture path that handles the runtime's network model.
+    pub fn capture_targets(&self) -> Vec<(String, String)> {
+        use crate::types::EndpointRef;
+        let mut seen: std::collections::HashSet<(String, String)> =
+            std::collections::HashSet::new();
+        let mut out: Vec<(String, String)> = Vec::new();
+
+        // Walk every link's endpoints.
+        for link in &self.topology.links {
+            for ep_str in &link.endpoints {
+                let Some(ep) = EndpointRef::parse(ep_str) else {
+                    continue;
+                };
+                let Some(ns) = self.namespace_names.get(&ep.node) else {
+                    continue;
+                };
+                let key = (ns.clone(), ep.iface.clone());
+                if seen.insert(key.clone()) {
+                    out.push(key);
+                }
+            }
+        }
+        // Walk every shared-network member.
+        for network in self.topology.networks.values() {
+            for member in &network.members {
+                let Some(ep) = EndpointRef::parse(member) else {
+                    continue;
+                };
+                let Some(ns) = self.namespace_names.get(&ep.node) else {
+                    continue;
+                };
+                let key = (ns.clone(), ep.iface.clone());
+                if seen.insert(key.clone()) {
+                    out.push(key);
+                }
+            }
+        }
+        out
+    }
+
     /// Mutable access to namespace names map (crate-internal, used by apply_diff).
     pub(crate) fn namespace_names_mut(&mut self) -> &mut HashMap<String, String> {
         &mut self.namespace_names

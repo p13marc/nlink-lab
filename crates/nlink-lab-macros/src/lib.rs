@@ -54,6 +54,12 @@ use syn::{ItemFn, LitInt, LitStr, braced, parse_macro_input};
 /// // With a per-test timeout (test panics if it exceeds N seconds)
 /// #[lab_test("simple.nll", timeout = 30)]
 /// async fn test_must_finish_fast(lab: RunningLab) { ... }
+///
+/// // With capture-on-failure: every node:iface gets a live pcap
+/// // for the test duration. On panic, pcaps are persisted to
+/// // target/lab_test_captures/<test>-<pid>/. On success, discarded.
+/// #[lab_test("simple.nll", capture = true)]
+/// async fn test_with_pcaps(lab: RunningLab) { ... }
 /// ```
 ///
 /// `set { ... }` keys are NLL `param` names; values are string-typed
@@ -142,6 +148,59 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let lab_name_suffix = fn_name.to_string();
 
+    // Optional capture-on-failure wiring.
+    let capture_setup = if args.capture_on_failure {
+        quote! {
+            // Spin up parallel pcaps, one per (namespace, iface).
+            // The guard's Drop checks std::thread::panicking() —
+            // if true, pcaps are persisted to a discoverable
+            // path; otherwise they're wiped with the temp dir.
+            let __cap_targets = lab.capture_targets();
+            let __lab_capture = ::nlink_lab::test_helpers::LabCapture::start(&__cap_targets)
+                .map_err(|e| eprintln!("lab_capture: failed to start: {e}"))
+                .ok();
+
+            struct __CaptureGuard {
+                cap: Option<::nlink_lab::test_helpers::LabCapture>,
+                dest: ::std::path::PathBuf,
+            }
+            impl Drop for __CaptureGuard {
+                fn drop(&mut self) {
+                    if let Some(cap) = self.cap.take() {
+                        let failed = ::std::thread::panicking();
+                        match cap.persist_on_failure_in(failed, &self.dest) {
+                            Ok(Some(paths)) => {
+                                eprintln!(
+                                    "lab_capture: persisted {} pcap(s) to {}",
+                                    paths.len(),
+                                    self.dest.display(),
+                                );
+                                for p in paths {
+                                    eprintln!("  - {}", p.display());
+                                }
+                            }
+                            Ok(None) => {} // success path — discarded
+                            Err(e) => eprintln!("lab_capture: persist failed: {e}"),
+                        }
+                    }
+                }
+            }
+            // Persist directory under target/lab_test_captures/<test-name>-<pid>/
+            let __cap_dest = ::std::path::PathBuf::from(
+                ::std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()),
+            )
+            .join("lab_test_captures")
+            .join(format!("{}-{}", #lab_name_suffix, ::std::process::id()));
+
+            let __cap_guard = __CaptureGuard {
+                cap: __lab_capture,
+                dest: __cap_dest,
+            };
+        }
+    } else {
+        quote! {}
+    };
+
     // Optional timeout wrapping the test body.
     let timeout_secs = args.timeout_secs;
     let body_with_timeout = if let Some(secs) = timeout_secs {
@@ -222,6 +281,9 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let __guard = __LabGuard { name: lab.name().to_string() };
 
+            // Optional capture-on-failure setup (no-op when not enabled).
+            #capture_setup
+
             // Run the test body (optionally wrapped in a timeout).
             #body_with_timeout
 
@@ -249,6 +311,7 @@ struct LabTestArgs {
     source: LabTestSource,
     set: Vec<(String, String)>,
     timeout_secs: Option<u64>,
+    capture_on_failure: bool,
 }
 
 enum LabTestSource {
@@ -276,6 +339,7 @@ impl syn::parse::Parse for LabTestArgs {
         // Optional modifiers.
         let mut set: Vec<(String, String)> = Vec::new();
         let mut timeout_secs: Option<u64> = None;
+        let mut capture_on_failure = false;
 
         while !input.is_empty() {
             let _: syn::Token![,] = input.parse()?;
@@ -300,10 +364,15 @@ impl syn::parse::Parse for LabTestArgs {
                 let _: syn::Token![=] = input.parse()?;
                 let lit: LitInt = input.parse()?;
                 timeout_secs = Some(lit.base10_parse()?);
+            } else if kw == "capture" {
+                let _: syn::Token![=] = input.parse()?;
+                // Accept `capture = true` (the only form today).
+                let lit: syn::LitBool = input.parse()?;
+                capture_on_failure = lit.value;
             } else {
                 return Err(syn::Error::new_spanned(
                     kw,
-                    "unknown lab_test arg — expected `set { … }` or `timeout = SECS`",
+                    "unknown lab_test arg — expected `set { … }`, `timeout = SECS`, or `capture = true`",
                 ));
             }
         }
@@ -312,6 +381,7 @@ impl syn::parse::Parse for LabTestArgs {
             source,
             set,
             timeout_secs,
+            capture_on_failure,
         })
     }
 }

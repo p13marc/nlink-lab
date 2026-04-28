@@ -33,6 +33,10 @@ structurally impossible in container-based labs.
 
 ## Application + CI patterns
 
+- [**Network integration tests in `cargo test`**](rust-integration-test.md) —
+  the `#[lab_test]` macro: deploy → run assertions → destroy
+  inside an ordinary `cargo test` run. No Docker daemon, no
+  fixture, no Pytest.
 - [**iperf3 benchmark with hard assertions**](iperf3-benchmark.md) —
   pass/fail thresholds in the topology; deploy fails the build on
   SLA violation.

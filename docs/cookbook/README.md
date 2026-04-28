@@ -31,17 +31,30 @@ structurally impossible in container-based labs.
 - [**Bridge VLAN trunks**](bridge-vlan-trunk.md) — 802.1Q access
   and trunk ports on a vlan-aware bridge.
 
+## Application + CI patterns
+
+- [**iperf3 benchmark with hard assertions**](iperf3-benchmark.md) —
+  pass/fail thresholds in the topology; deploy fails the build on
+  SLA violation.
+- [**Healthcheck-gated container startup**](healthcheck-depends-on.md) —
+  multi-tier lab with `depends-on` ordering; deploy returns only
+  when every node is healthy.
+- [**Parametric `import for_each` for fabrics**](parametric-imports.md) —
+  define a fabric once, instantiate N times with different
+  parameters. Cross-references work across the import boundary.
+- [**CI matrix: parameter sweeps**](ci-matrix-sweep.md) — same
+  topology, multiple `--set` combinations in parallel. Pitfalls
+  (`IFNAMSIZ`, lock contention, cleanup on CTRL-C) covered.
+
 ## Coming soon
 
-The following recipes ship over the next few releases:
+The following recipes ship as part of [Plan 151](../plans/151-killer-examples.md)
+"killer examples":
 
-- iperf3 benchmark with hard assertions on p99 latency
-- Healthcheck-gated container startup with `depends_on`
-- CI matrix: `--set` parameter sweeps from a shell loop
-- Parametric `import for_each` for spine-leaf fabrics
-- Multi-tenant VRF + WireGuard + nftables WAN
+- Multi-tenant VRF + WireGuard + nftables WAN (composition showcase)
 - Mid-test partition via the scenario engine
 - Asymmetric WAN with a one-way loss spike
+- Library-first integration test using `#[lab_test]`
 
 In the meantime, every example under [`../../examples/`](../../examples/)
 is a runnable demonstration of one or more features.

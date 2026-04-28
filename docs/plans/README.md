@@ -8,18 +8,50 @@ A coordinated arc — Plan 150 is the foundation; the others slot in
 once the docs scaffolding is in place. Each plan can ship as one
 or more independent PRs.
 
-| Plan | Title | Effort | Priority |
-|------|-------|--------|----------|
-| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | Large (5–7d, 4 phases) | P0 |
-| [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" (4 polished writeups) | Medium (3–4d) | P1 |
-| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | Medium-Large (4–6d) | P1 |
-| [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | Small (1.5–2d) | P2 |
-| [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | Small (1.5d) | P2 |
+| Plan | Title | Status |
+|------|-------|--------|
+| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ Phases A+B+C shipped — Phase D (long-tail polish) open |
+| [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" (4 polished writeups) | ✅ Example A (satellite mesh) shipped — B/C/D pending |
+| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ Phase A (network impair reconcile) shipped — Phases B+C pending |
+| [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | 📋 Pending |
+| [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | ✅ `set { … }`, `timeout = N`, louder non-root skip + cookbook recipe shipped — `capture = true` pending |
 
-**Recommended ship order:** 150 (Phase A: README) → 151 Example A
-(satellite mesh) → 150 Phases B–C → 152 Phase A → 154 → rest. This
-maximizes the compounding clarity: each piece makes the next one
-easier to motivate.
+**Recently shipped (in ship order):**
+
+1. **Plan 150 Phase A** (`4439869`): README rewrite leading with the
+   wedge — 622 → 96 lines, hero example (3-line per-pair impair),
+   second hero (`#[lab_test]`), short comparison, doc-link audit.
+2. **Plan 151 Example A** (`d2682da`): 12-node Iridium-style
+   satellite mesh + parser extension to support `for` in network
+   blocks (with arithmetic and modulo).
+3. **Plan 150 Phase B** (`5e643bd`, `26d1f10`, `c7339a9`,
+   `99da188`, `218b0e9`, `fb0181e`): cookbook + CLI scaffolds,
+   8 hand-crafted CLI pages (deploy/destroy/validate/exec/spawn/
+   apply/capture/status), 9 cookbook recipes covering networking
+   primitives (VRF, WG, macvlan, nftables, VLAN trunk) and
+   application/CI patterns (iperf3, healthcheck, parametric
+   imports, CI sweep).
+4. **Plan 150 Phase C** (`842242b`, `9092cdb`): COMPARISON.md
+   (honest vs containerlab + capability matrix + side-by-side +
+   honest limitations) and ARCHITECTURE.md (contributor on-ramp
+   with worked end-to-end example).
+5. **Plan 152 Phase A** (`8b4afc5`): `PerPeerImpairer::reconcile()`
+   wired into `apply_diff`. Editing per-pair impair rules now
+   reconciles in-place with zero packet loss.
+6. **Plan 154** (`fe9d3d8`, `76ec514`): `#[lab_test]` cookbook
+   recipe + `set { … }` + `timeout = SECS` macro args + louder
+   skip-on-non-root.
+
+**Still open:**
+
+- Plan 150 Phase D — long-tail CLI pages (24 stubs), TROUBLESHOOTING
+  expansion, USER_GUIDE walkthrough restructure, doc-CI gates.
+- Plan 151 Examples B/C/D — VRF+WG+nftables WAN, scenario partition,
+  full Rust integration test writeup.
+- Plan 152 Phases B+C — reconcile for routes/sysctls/nftables/
+  rate-limits, `apply --check` drift gate.
+- Plan 153 — `.nlz` export/import.
+- Plan 154 capture-on-failure (`capture = true`).
 
 ## Completed
 

@@ -459,18 +459,67 @@ enum Commands {
     },
 
     /// Export a running lab's topology as serialized data.
+    ///
+    /// By default, dumps the rendered topology as TOML/JSON to stdout
+    /// or `--output FILE`. With `--archive`, produces a portable
+    /// `.nlz` lab archive (tar.gz with manifest + topology + params
+    /// + rendered + checksums) suitable for sharing repros.
     Export {
-        /// Lab name.
+        /// Lab name (or path to an .nll file with --archive).
         lab: String,
 
-        /// Output file (default: stdout).
+        /// Output file (default: stdout for plain export, ./<lab>.nlz with --archive).
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Produce a portable `.nlz` archive instead of plain TOML/JSON.
+        #[arg(long)]
+        archive: bool,
+
+        /// (with --archive) Include live state (PIDs, ns names) for inspection.
+        #[arg(long, requires = "archive")]
+        include_running_state: bool,
+
+        /// (with --archive) Skip the rendered.toml snapshot.
+        #[arg(long, requires = "archive")]
+        no_rendered: bool,
+
+        /// (with --archive) NLL `param` overrides recorded in the archive.
+        #[arg(long = "set", value_name = "KEY=VALUE", requires = "archive")]
+        set_params: Vec<String>,
     },
 
-    /// Show comprehensive lab details (status + links + impairments).
+    /// Import a `.nlz` lab archive.
+    ///
+    /// Verifies checksums, extracts to `./<lab-name>/` (or `-d DIR`),
+    /// and validates the topology. Pass `--no-deploy` to extract +
+    /// validate without deploying; `--no-reparse` to use the bundled
+    /// rendered.toml directly (useful when the archive was produced
+    /// by a newer nlink-lab whose NLL syntax we don't fully understand).
+    Import {
+        /// Path to a `.nlz` archive.
+        archive: PathBuf,
+
+        /// Extract to this directory. Default: ./<lab-name>/
+        #[arg(short = 'd', long)]
+        dir: Option<PathBuf>,
+
+        /// Extract + validate only; don't deploy.
+        #[arg(long)]
+        no_deploy: bool,
+
+        /// Use the archive's rendered.toml as-is, skip re-parsing the NLL.
+        #[arg(long)]
+        no_reparse: bool,
+    },
+
+    /// Show comprehensive lab details, OR summarize a `.nlz` archive.
+    ///
+    /// If LAB is a path ending in `.nlz`, summarizes the archive
+    /// (manifest + node/link/network counts) without extracting.
+    /// Otherwise, behaves as before — runs against a deployed lab.
     Inspect {
-        /// Lab name.
+        /// Lab name, or path to a `.nlz` archive.
         lab: String,
     },
 
@@ -1656,20 +1705,113 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Export { lab, output } => {
-            let running = nlink_lab::RunningLab::load(&lab)?;
-            let content = if json {
-                serde_json::to_string_pretty(running.topology())?
-            } else {
-                toml::to_string_pretty(running.topology())
-                    .map_err(|e| nlink_lab::Error::invalid_topology(format!("serialize: {e}")))?
-            };
-            match output {
-                Some(path) => {
-                    std::fs::write(&path, &content)?;
-                    eprintln!("Exported to {}", path.display());
+        Commands::Export {
+            lab,
+            output,
+            archive,
+            include_running_state,
+            no_rendered,
+            set_params,
+        } => {
+            if archive {
+                use nlink_lab::portability::{ArchiveSource, ExportOptions, export_archive};
+                let lab_path = std::path::Path::new(&lab);
+                let source = if lab_path.extension().and_then(|s| s.to_str()) == Some("nll")
+                    || lab_path.exists()
+                {
+                    ArchiveSource::Nll {
+                        path: lab_path.into(),
+                    }
+                } else {
+                    ArchiveSource::Lab { name: lab.clone() }
+                };
+
+                let params: Vec<(String, String)> = set_params
+                    .iter()
+                    .map(|p| {
+                        let (k, v) = p.split_once('=').ok_or_else(|| {
+                            nlink_lab::Error::invalid_topology(format!(
+                                "invalid --set format: '{p}' (expected KEY=VALUE)"
+                            ))
+                        })?;
+                        Ok((k.to_string(), v.to_string()))
+                    })
+                    .collect::<nlink_lab::Result<Vec<_>>>()?;
+
+                let out_path = output.unwrap_or_else(|| {
+                    let basename = match &source {
+                        ArchiveSource::Lab { name } => name.clone(),
+                        ArchiveSource::Nll { path } => path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("lab")
+                            .to_string(),
+                    };
+                    PathBuf::from(format!("{basename}.nlz"))
+                });
+
+                let opts = ExportOptions {
+                    include_running_state,
+                    no_rendered,
+                    params,
+                };
+                export_archive(source, &out_path, opts)?;
+                if !quiet {
+                    eprintln!("Archive written to {}", out_path.display());
                 }
-                None => print!("{content}"),
+            } else {
+                let running = nlink_lab::RunningLab::load(&lab)?;
+                let content = if json {
+                    serde_json::to_string_pretty(running.topology())?
+                } else {
+                    toml::to_string_pretty(running.topology()).map_err(|e| {
+                        nlink_lab::Error::invalid_topology(format!("serialize: {e}"))
+                    })?
+                };
+                match output {
+                    Some(path) => {
+                        std::fs::write(&path, &content)?;
+                        if !quiet {
+                            eprintln!("Exported to {}", path.display());
+                        }
+                    }
+                    None => print!("{content}"),
+                }
+            }
+            Ok(())
+        }
+
+        Commands::Import {
+            archive,
+            dir,
+            no_deploy,
+            no_reparse,
+        } => {
+            use nlink_lab::portability::import_archive;
+            let report = import_archive(&archive, dir.as_deref(), no_reparse)?;
+            if !quiet {
+                eprintln!(
+                    "Extracted lab '{}' to {} (format v{}, exported by {})",
+                    report.manifest.lab_name,
+                    report.extracted_to.display(),
+                    report.manifest.format_version,
+                    report.manifest.exported_by,
+                );
+            }
+            if no_deploy {
+                if !quiet {
+                    eprintln!("(--no-deploy: skipping deploy)");
+                }
+                return Ok(());
+            }
+            // Deploy the imported topology. We re-read the extracted
+            // topology.nll so the import path matches what `deploy`
+            // would do for a regular file.
+            let topology_path = report.extracted_to.join("topology.nll");
+            let topo = nlink_lab::parser::parse_file(&topology_path)?;
+            let lab = topo.deploy().await?;
+            if !quiet {
+                eprintln!("Deployed lab '{}'", lab.name());
             }
             Ok(())
         }
@@ -1955,6 +2097,49 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         }
 
         Commands::Inspect { lab } => {
+            // If the argument looks like a `.nlz` archive path, do
+            // archive inspection instead of lab inspection.
+            let lab_path = std::path::Path::new(&lab);
+            if lab.ends_with(".nlz") || (lab_path.exists() && !nlink_lab::state::exists(&lab)) {
+                use nlink_lab::portability::inspect_archive;
+                let summary = inspect_archive(lab_path)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&summary)?);
+                } else {
+                    let m = &summary.manifest;
+                    println!("Archive:       {}", lab_path.display());
+                    println!("Lab:           {}", m.lab_name);
+                    println!("Format:        v{}", m.format_version);
+                    println!("Exported by:   {} on {}", m.exported_by, m.exported_at);
+                    println!(
+                        "Platform:      {} {} / {}",
+                        m.platform.os, m.platform.kernel, m.platform.arch,
+                    );
+                    println!("State:         {:?}", m.deploy_state);
+                    if let Some(n) = summary.node_count {
+                        println!("Nodes:         {n}");
+                    }
+                    if let Some(n) = summary.link_count {
+                        println!("Links:         {n}");
+                    }
+                    if let Some(n) = summary.network_count {
+                        println!("Networks:      {n}");
+                    }
+                    println!("Files:");
+                    println!("  topology:    {}", m.files.topology);
+                    if let Some(f) = &m.files.params {
+                        println!("  params:      {f}");
+                    }
+                    if let Some(f) = &m.files.rendered {
+                        println!("  rendered:    {f}");
+                    }
+                    if let Some(f) = &m.files.state {
+                        println!("  state:       {f}");
+                    }
+                }
+                return Ok(());
+            }
+
             let running = nlink_lab::RunningLab::load(&lab)?;
             let topo = running.topology();
 

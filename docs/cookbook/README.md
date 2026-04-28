@@ -22,14 +22,19 @@ structurally impossible in container-based labs.
 - [**WireGuard with auto-key generation**](wireguard-mesh.md) —
   site-to-site VPN over a 50ms WAN underlay; keys generated at
   deploy time, no manual key dance.
+- [**macvlan attach to a host NIC**](macvlan-host-bridge.md) —
+  give a lab node a real address on the host's physical LAN, with
+  its own MAC, addressable from any external machine.
+- [**Stateful nftables firewall**](nftables-firewall.md) —
+  default-drop with conntrack-aware accept rules. The kernel's
+  nftables, declared inline.
+- [**Bridge VLAN trunks**](bridge-vlan-trunk.md) — 802.1Q access
+  and trunk ports on a vlan-aware bridge.
 
 ## Coming soon
 
 The following recipes ship over the next few releases:
 
-- macvlan attach to a host physical NIC
-- Stateful nftables firewall with conntrack zones
-- Bridge VLAN trunks (802.1Q access/trunk port mix)
 - iperf3 benchmark with hard assertions on p99 latency
 - Healthcheck-gated container startup with `depends_on`
 - CI matrix: `--set` parameter sweeps from a shell loop

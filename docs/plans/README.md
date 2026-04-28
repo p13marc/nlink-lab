@@ -12,8 +12,8 @@ or more independent PRs.
 |------|-------|--------|
 | [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ Phases A+B+C shipped — Phase D (long-tail polish) open |
 | [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" (4 polished writeups) | ✅ Example A (satellite mesh) shipped — B/C/D pending |
-| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ Phase A (network impair reconcile) shipped — Phases B+C pending |
-| [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | 📋 Pending |
+| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ Phases A + B/1 (routes) + B/2 (sysctls) + C (`--check` + `--json`) shipped — nftables / NAT / rate-limits remain |
+| [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | ✅ Module + CLI + cookbook + 3 CLI pages shipped |
 | [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | ✅ `set { … }`, `timeout = N`, louder non-root skip + cookbook recipe shipped — `capture = true` pending |
 
 **Recently shipped (in ship order):**
@@ -44,13 +44,11 @@ or more independent PRs.
 
 **Still open:**
 
-- Plan 150 Phase D — long-tail CLI pages (24 stubs), TROUBLESHOOTING
+- Plan 150 Phase D — long-tail CLI pages (~22 stubs), TROUBLESHOOTING
   expansion, USER_GUIDE walkthrough restructure, doc-CI gates.
-- Plan 151 Examples B/C/D — VRF+WG+nftables WAN, scenario partition,
-  full Rust integration test writeup.
-- Plan 152 Phases B+C — reconcile for routes/sysctls/nftables/
-  rate-limits, `apply --check` drift gate.
-- Plan 153 — `.nlz` export/import.
+- Plan 151 Examples B/C/D — VRF+WG+nftables WAN, scenario partition
+  showcase, full Rust integration test writeup.
+- Plan 152 nftables / NAT / rate-limits reconcile (Phase B residual).
 - Plan 154 capture-on-failure (`capture = true`).
 
 ## Completed

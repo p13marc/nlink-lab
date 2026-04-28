@@ -98,7 +98,9 @@ a CI environment without a Docker daemon.
 | Library API | Go (undocumented) | Rust (first-class) |
 | DSL: loops / imports / arithmetic | ❌ static YAML | ✅ |
 
-A full feature-by-feature comparison page is on the roadmap.
+A full feature-by-feature comparison — including capability matrix,
+side-by-side examples, and migration notes — lives at
+[docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## Documentation
 

@@ -10,9 +10,9 @@ or more independent PRs.
 
 | Plan | Title | Status |
 |------|-------|--------|
-| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ Phases A+B+C shipped — Phase D (long-tail polish) open |
-| [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" (4 polished writeups) | ✅ Example A (satellite mesh) shipped — B/C/D pending |
-| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ Phases A + B/1 (routes) + B/2 (sysctls) + C (`--check` + `--json`) shipped — nftables / NAT / rate-limits remain |
+| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ Phases A+B+C shipped, Phase D doc-CI gate + 21 CLI stubs shipped — TROUBLESHOOTING expansion + USER_GUIDE walkthrough open |
+| [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" | ✅ Examples A (satellite mesh) + B (multi-tenant VRF+WG+nftables WAN) + C (scenario partition) shipped — Example D (Rust integration writeup) deferred until Plan 154 capture lands |
+| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ Phases A + B/1 (routes) + B/2 (sysctls) + B/3 (rate-limits) + C (`--check` + `--json`) shipped — nftables / NAT remain |
 | [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | ✅ Module + CLI + cookbook + 3 CLI pages shipped |
 | [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | ✅ `set { … }`, `timeout = N`, louder non-root skip + cookbook recipe shipped — `capture = true` pending |
 
@@ -44,11 +44,13 @@ or more independent PRs.
 
 **Still open:**
 
-- Plan 150 Phase D — long-tail CLI pages (~22 stubs), TROUBLESHOOTING
-  expansion, USER_GUIDE walkthrough restructure, doc-CI gates.
-- Plan 151 Examples B/C/D — VRF+WG+nftables WAN, scenario partition
-  showcase, full Rust integration test writeup.
-- Plan 152 nftables / NAT / rate-limits reconcile (Phase B residual).
+- Plan 150 Phase D residual — TROUBLESHOOTING expansion, USER_GUIDE
+  walkthrough restructure (CLI long-tail stubs and doc-CI gate
+  shipped).
+- Plan 151 Example D — full Rust integration test writeup (deferred
+  until Plan 154 capture-on-failure lands).
+- Plan 152 nftables / NAT reconcile (Phase B residual; rate-limits
+  shipped).
 - Plan 154 capture-on-failure (`capture = true`).
 
 ## Completed

@@ -3,7 +3,7 @@
 //! Enters a lab node's network namespace, creates an AF_PACKET capture via
 //! netring, and either writes packets as pcap or prints one-line summaries.
 
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -22,30 +22,33 @@ const PCAP_VERSION_MINOR: u16 = 4;
 const LINKTYPE_ETHERNET: u32 = 1;
 
 /// Minimal pcap file writer (nanosecond timestamp variant).
+///
+/// Writes are unbuffered — every `write_packet` flushes the bytes to the
+/// underlying `W` directly, so a SIGKILL or abrupt termination still leaves
+/// a complete pcap up to the last fully-written packet. Matches `tcpdump
+/// -U`. Capture in this tool runs at debugging packet rates, not line-rate,
+/// so the syscall cost is irrelevant.
 struct PcapWriter<W: Write> {
-    writer: BufWriter<W>,
+    writer: W,
     snap_len: u32,
 }
 
 impl<W: Write> PcapWriter<W> {
     /// Create a new pcap writer, immediately writing the 24-byte global header.
-    fn new(writer: W, snap_len: u32) -> io::Result<Self> {
-        let mut w = BufWriter::new(writer);
+    fn new(mut writer: W, snap_len: u32) -> io::Result<Self> {
         // Global header: magic, version, thiszone, sigfigs, snaplen, network
-        w.write_all(&PCAP_MAGIC_NS.to_le_bytes())?;
-        w.write_all(&PCAP_VERSION_MAJOR.to_le_bytes())?;
-        w.write_all(&PCAP_VERSION_MINOR.to_le_bytes())?;
-        w.write_all(&0i32.to_le_bytes())?; // thiszone
-        w.write_all(&0u32.to_le_bytes())?; // sigfigs
-        w.write_all(&snap_len.to_le_bytes())?;
-        w.write_all(&LINKTYPE_ETHERNET.to_le_bytes())?;
-        Ok(Self {
-            writer: w,
-            snap_len,
-        })
+        writer.write_all(&PCAP_MAGIC_NS.to_le_bytes())?;
+        writer.write_all(&PCAP_VERSION_MAJOR.to_le_bytes())?;
+        writer.write_all(&PCAP_VERSION_MINOR.to_le_bytes())?;
+        writer.write_all(&0i32.to_le_bytes())?; // thiszone
+        writer.write_all(&0u32.to_le_bytes())?; // sigfigs
+        writer.write_all(&snap_len.to_le_bytes())?;
+        writer.write_all(&LINKTYPE_ETHERNET.to_le_bytes())?;
+        writer.flush()?;
+        Ok(Self { writer, snap_len })
     }
 
-    /// Write a single packet record (16-byte header + data).
+    /// Write a single packet record (16-byte header + data) and flush.
     fn write_packet(
         &mut self,
         ts: netring::Timestamp,
@@ -58,10 +61,6 @@ impl<W: Write> PcapWriter<W> {
         self.writer.write_all(&incl_len.to_le_bytes())?;
         self.writer.write_all(&orig_len.to_le_bytes())?;
         self.writer.write_all(&data[..incl_len as usize])?;
-        Ok(())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
         self.writer.flush()
     }
 }
@@ -227,9 +226,10 @@ pub fn run_capture<W: Write + Send + 'static>(
         }
     }
 
-    if let Some(ref mut w) = pcap {
-        w.flush()?;
-    }
+    // No trailing flush needed — `PcapWriter::write_packet` already flushes
+    // per-packet, so a SIGKILL between the loop body and this point still
+    // leaves a complete pcap.
+    drop(pcap);
 
     let stats = capture.stats().unwrap_or_default();
 
@@ -237,4 +237,56 @@ pub fn run_capture<W: Write + Send + 'static>(
         packets_captured: count,
         stats,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    /// `Write` impl that pushes into a shared `Vec<u8>` so the test can
+    /// observe what's been written *while* the writer is still alive (i.e.
+    /// without relying on an explicit flush or drop).
+    struct SharedSink(Rc<RefCell<Vec<u8>>>);
+    impl Write for SharedSink {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// `PcapWriter::write_packet` must flush per-packet. Guards against
+    /// accidental reintroduction of `BufWriter`, which caused 0-byte pcaps
+    /// when the capture process was killed by SIGTERM/SIGKILL.
+    #[test]
+    fn pcap_writer_flushes_each_packet() {
+        let buf: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = SharedSink(Rc::clone(&buf));
+        let mut w = PcapWriter::new(sink, 256).unwrap();
+
+        // Constructor wrote the 24-byte global header.
+        assert_eq!(buf.borrow().len(), 24, "global header should be present");
+
+        let ts = netring::Timestamp {
+            sec: 7,
+            nsec: 1_000,
+        };
+        let payload = [0xab, 0xcd, 0xef];
+        w.write_packet(ts, &payload, payload.len() as u32).unwrap();
+
+        // Without dropping or flushing `w`, the packet bytes must already be
+        // visible. 24 (header) + 16 (record header) + 3 (payload).
+        assert_eq!(buf.borrow().len(), 24 + 16 + 3);
+
+        let captured = buf.borrow();
+        let magic = u32::from_le_bytes(captured[..4].try_into().unwrap());
+        assert_eq!(magic, PCAP_MAGIC_NS);
+        // Packet's `incl_len` at offset 24 + 8 = 32.
+        let incl_len = u32::from_le_bytes(captured[32..36].try_into().unwrap());
+        assert_eq!(incl_len, 3);
+    }
 }

@@ -1709,13 +1709,17 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             static CAPTURE_SHUTDOWN: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
             CAPTURE_SHUTDOWN.store(false, std::sync::atomic::Ordering::Relaxed);
+            // Handle both SIGINT (Ctrl-C) and SIGTERM (`kill`, `timeout(1)`)
+            // so the capture loop can exit cleanly and print the summary
+            // line. SIGKILL is uncatchable; per-packet pcap flushes
+            // (capture.rs) protect data integrity in that case.
             unsafe {
-                libc::signal(libc::SIGINT, {
-                    extern "C" fn handler(_: libc::c_int) {
-                        CAPTURE_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    handler as *const () as libc::sighandler_t
-                });
+                extern "C" fn handler(_: libc::c_int) {
+                    CAPTURE_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                let h = handler as *const () as libc::sighandler_t;
+                libc::signal(libc::SIGINT, h);
+                libc::signal(libc::SIGTERM, h);
             }
 
             let result = if let Some(path) = write {

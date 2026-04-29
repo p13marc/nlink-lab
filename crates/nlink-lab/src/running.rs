@@ -1086,11 +1086,20 @@ impl RunningLab {
     }
 
     /// Check status of tracked background processes.
+    ///
+    /// `alive` is `true` only if the PID still exists **and** is not a
+    /// zombie. This matters because `spawn_with_logs` returns a
+    /// `std::process::Child` that the caller drops without
+    /// `wait()`-ing, so an exited child becomes a zombie that
+    /// `kill(pid, 0)` will continue to report as deliverable
+    /// (returning 0). Without the zombie check, "is this process
+    /// still running?" polling would never see a quick-exiting child
+    /// transition to dead.
     pub fn process_status(&self) -> Vec<ProcessInfo> {
         self.pids
             .iter()
             .map(|(node, pid)| {
-                let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
+                let alive = pid_is_alive(*pid);
                 let logs = self.process_logs.get(pid);
                 ProcessInfo {
                     node: node.clone(),
@@ -1125,5 +1134,134 @@ fn kill_process(pid: u32) {
     std::thread::sleep(std::time::Duration::from_millis(100));
     unsafe {
         libc::kill(pid as i32, libc::SIGKILL);
+    }
+}
+
+/// Check whether a process is alive **and not a zombie**.
+///
+/// `kill(pid, 0)` alone is insufficient: a zombie (a process that has
+/// exited but hasn't been waited-on by its parent) still has an entry
+/// in the kernel process table and `kill(pid, 0)` returns 0. Since
+/// [`spawn_with_logs`](RunningLab::spawn_with_logs) drops its
+/// `std::process::Child` without `wait()`-ing, every quick-exiting
+/// child stays a zombie indefinitely from this process's POV.
+///
+/// To match the user-facing meaning of "alive" (the process is
+/// actually running), we also read `/proc/<pid>/stat` and treat the
+/// `Z` (zombie) state as not alive. The `stat` format is:
+///
+/// ```text
+/// PID (comm) STATE PPID …
+/// ```
+///
+/// where `comm` may contain spaces and parentheses, so we parse from
+/// the last `)` rightward.
+pub(crate) fn pid_is_alive(pid: u32) -> bool {
+    if unsafe { libc::kill(pid as i32, 0) } != 0 {
+        return false; // ESRCH: PID is gone entirely.
+    }
+    // PID exists. Check if it's a zombie.
+    let stat_path = format!("/proc/{pid}/stat");
+    if let Ok(content) = std::fs::read_to_string(&stat_path) {
+        if let Some(after_comm) = content.rsplit_once(')') {
+            let mut fields = after_comm.1.trim().split_whitespace();
+            if let Some(state) = fields.next() {
+                return state != "Z";
+            }
+        }
+    }
+    // /proc unreadable or unparseable — fall back to "alive" since
+    // kill(pid, 0) said the PID is at least present.
+    true
+}
+
+#[cfg(test)]
+mod pid_alive_tests {
+    use super::*;
+
+    /// A live, busy process is reported alive.
+    #[test]
+    fn alive_for_running_process() {
+        // sleep(60) gives us 60 seconds to check. Spawn it, take the
+        // PID, kill at the end of the test.
+        let mut child = std::process::Command::new("sleep")
+            .arg("60")
+            .spawn()
+            .expect("spawn sleep");
+        let pid = child.id();
+        assert!(
+            pid_is_alive(pid),
+            "expected sleep(60) to be alive immediately after spawn"
+        );
+        // Cleanup: kill + reap to avoid leaving a zombie behind.
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// A zombie process (exited, not yet reaped) must read as **dead**.
+    /// This is the regression test for the integration-suite failure:
+    /// before the /proc/<pid>/stat check was added, kill(pid, 0)
+    /// returned 0 for zombies and pid_is_alive() falsely returned true.
+    #[test]
+    fn dead_for_zombie() {
+        // Spawn `true`, capture its pid, drop the Child without
+        // wait()-ing. The process exits ~immediately; std::process::
+        // Child's Drop does NOT reap, so it sticks as a zombie.
+        let child = std::process::Command::new("true")
+            .spawn()
+            .expect("spawn true");
+        let pid = child.id();
+        std::mem::drop(child); // intentionally don't wait()
+        // Give the kernel a moment to actually run + exit `true`.
+        // 50ms is generous on any modern host.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Confirm it's actually a zombie by reading /proc directly.
+        // If for some reason it isn't (e.g. running on a system with
+        // SIGCHLD-IGN'd by some test framework), skip the assertion
+        // rather than fail spuriously.
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .unwrap_or_default();
+        let is_zombie = stat
+            .rsplit_once(')')
+            .and_then(|(_, after)| after.trim().split_whitespace().next())
+            .is_some_and(|state| state == "Z");
+
+        if is_zombie {
+            assert!(
+                !pid_is_alive(pid),
+                "zombie pid {pid} must read as dead; /proc says state=Z"
+            );
+        } else {
+            // Process was already reaped (e.g. test runner has a
+            // SIGCHLD handler) — there's no zombie to test against.
+            // The completely-gone case is covered separately below.
+            eprintln!(
+                "skipping zombie assertion: pid {pid} not in zombie state \
+                 (test runner may have reaped it)"
+            );
+        }
+
+        // Reap it so the test process leaves no zombie behind.
+        unsafe {
+            let mut status = 0;
+            libc::waitpid(pid as i32, &mut status, libc::WNOHANG);
+        }
+    }
+
+    /// A reaped (gone) PID must read as dead.
+    #[test]
+    fn dead_for_reaped_pid() {
+        let mut child = std::process::Command::new("true").spawn().expect("spawn true");
+        let pid = child.id();
+        // Reap it ourselves.
+        let _ = child.wait();
+        // Give the scheduler a moment to actually free the slot.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(
+            !pid_is_alive(pid),
+            "reaped pid {pid} must read as dead"
+        );
     }
 }

@@ -364,13 +364,13 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
 
         for (net_name, network) in &topology.networks {
-            let bridge_name = format!("{}-{}", topology.lab.prefix(), net_name);
-            // Truncate to 15 chars (Linux interface name limit)
-            let bridge_name = if bridge_name.len() > 15 {
-                bridge_name[..15].to_string()
-            } else {
-                bridge_name
-            };
+            // Hash-based bridge name: `nb{hash8}` (10 chars). Always
+            // fits the 15-char Linux IFNAMSIZ budget, never collides
+            // for distinct net_names (DJB2 hash collisions are
+            // statistically negligible at the few-networks-per-lab
+            // scale we care about). See network_bridge_name_for() for
+            // the full rationale and the regression-test reference.
+            let bridge_name = crate::types::network_bridge_name_for(net_name);
 
             let mut bridge = nlink::netlink::link::BridgeLink::new(&bridge_name);
             if let Some(true) = network.vlan_filtering {

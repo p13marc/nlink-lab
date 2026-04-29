@@ -326,6 +326,22 @@ pub fn network_peer_name_for(net_name: &str, idx: usize) -> String {
     format!("np{}{}", name_hash_str(net_name), idx)
 }
 
+/// Compute the bridge name for a shared L2 network.
+///
+/// Format: `nb{hash8}` (10 chars, always within the 15-char Linux ifname
+/// budget). The hash is over `net_name` only — bridges live in the lab's
+/// mgmt namespace, so cross-lab collisions aren't a concern.
+///
+/// Replaces an earlier scheme (`{prefix}-{net_name}` truncated to 15 chars)
+/// that silently collided whenever the lab prefix grew long enough that
+/// the truncation chopped off the distinguishing part of `net_name`. That
+/// failure mode was not theoretical — `#[lab_test]` rewrites lab names to
+/// `{base}-test-{fn_name}-{pid}`, easily 30+ chars, which guaranteed a
+/// collision between any two networks in the same lab.
+pub fn network_bridge_name_for(net_name: &str) -> String {
+    format!("nb{}", name_hash_str(net_name))
+}
+
 /// Reusable node template.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Profile {
@@ -1000,5 +1016,47 @@ mod name_hash_tests {
     fn network_peer_name_uses_np_prefix() {
         let n = network_peer_name_for("mynet", 0);
         assert!(n.starts_with("np"), "expected np prefix, got {n}");
+    }
+
+    #[test]
+    fn network_bridge_name_fits_ifname_budget() {
+        // `nb{hash8}` = 10 chars, always within the 15-char budget.
+        for net_name in ["a", "lan", "very-long-network-name-that-would-overflow"] {
+            let n = network_bridge_name_for(net_name);
+            assert!(
+                n.len() <= 15,
+                "bridge name {n:?} ({} chars) exceeds 15-char ifname budget",
+                n.len(),
+            );
+        }
+    }
+
+    #[test]
+    fn network_bridge_name_disambiguates_shared_prefixes() {
+        // Regression test for the bridge-naming bug: when the lab
+        // prefix grew long (as #[lab_test] forces), the old
+        // `{prefix}-{net_name}[..15]` truncation collapsed
+        // `lan_a`/`lan_b` to the same name. Hash-based names must
+        // differ.
+        let a = network_bridge_name_for("lan_a");
+        let b = network_bridge_name_for("lan_b");
+        let c = network_bridge_name_for("lan_c");
+        assert_ne!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(b, c);
+    }
+
+    #[test]
+    fn network_bridge_name_is_deterministic() {
+        assert_eq!(
+            network_bridge_name_for("radio"),
+            network_bridge_name_for("radio"),
+        );
+    }
+
+    #[test]
+    fn network_bridge_name_uses_nb_prefix() {
+        let n = network_bridge_name_for("mynet");
+        assert!(n.starts_with("nb"), "expected nb prefix, got {n}");
     }
 }

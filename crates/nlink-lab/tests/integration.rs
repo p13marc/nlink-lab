@@ -214,23 +214,46 @@ async fn wait_for_log_line_times_out_with_regex_in_error(mut lab: RunningLab) {
 }
 
 // `process_status_alive_only` must drop entries whose tracked PID has
-// exited. Spawn `true` (instant exit), wait briefly so the kernel has
-// reaped, then assert the listing is empty. The unfiltered
-// `process_status` still shows the entry with `alive: false` — that's
-// the retention guarantee.
+// exited. Spawn `true` (instant exit), wait until either the child is
+// gone or it shows up as a zombie, then assert the listing is empty.
+//
+// `spawn_with_logs` drops the `std::process::Child` without `wait()`-
+// ing, so an exited child becomes a zombie. `process_status` reads
+// `/proc/<pid>/stat` and treats state Z as dead — see
+// `running::pid_is_alive` for the rationale and unit tests.
+//
+// We poll for the dead state instead of sleeping a fixed interval,
+// which makes the test deterministic on slow CI runners.
 #[lab_test("examples/simple.nll")]
 async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
     let pid = lab.spawn_with_logs("host", &["true"], None).unwrap();
-    // Give the child time to exit. /bin/true is essentially instant; 200ms
-    // is generous and avoids a race on slow CI runners.
-    std::thread::sleep(std::time::Duration::from_millis(200));
 
+    // Poll for up to 5s for the child to transition to !alive.
+    // /bin/true is ~instant; this loop almost always exits in the
+    // first iteration. The deadline is purely a CI safety net.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let all = lab.process_status();
+        if all.iter().any(|p| p.pid == pid && !p.alive) {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!(
+                "child pid {pid} never transitioned to !alive within 5s: {:?}",
+                all,
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    // The unfiltered process_status retains the dead entry.
     let all = lab.process_status();
     assert!(
         all.iter().any(|p| p.pid == pid && !p.alive),
         "expected dead entry retained in process_status: {all:?}"
     );
 
+    // alive_only filters it out.
     let alive = lab.process_status_alive_only();
     assert!(
         !alive.iter().any(|p| p.pid == pid),
@@ -309,9 +332,12 @@ async fn deploy_networks_with_shared_prefix(lab: RunningLab) {
 }
 
 fn prefix_collision_topology() -> nlink_lab::Topology {
-    // Lab name must be short enough that `{prefix}-{net_name}` stays under
-    // 15 chars (Linux IFNAMSIZ) for both networks, otherwise the bridge
-    // names collide — unrelated to the peer-name bug under test.
+    // Both bridge names AND peer names use hash-based naming
+    // (`nb{hash8}` and `np{hash8}{idx}`), so this test is a
+    // regression check for both: that two networks sharing a long
+    // common prefix get distinct bridge names AND distinct mgmt-side
+    // peer interfaces. Lab name length is irrelevant — the
+    // `#[lab_test]` macro can rewrite the name to anything.
     nlink_lab::Lab::new("pcol")
         .node("host_a", |n| n)
         .node("host_b", |n| n)

@@ -1162,12 +1162,12 @@ pub(crate) fn pid_is_alive(pid: u32) -> bool {
     }
     // PID exists. Check if it's a zombie.
     let stat_path = format!("/proc/{pid}/stat");
-    if let Ok(content) = std::fs::read_to_string(&stat_path) {
-        if let Some(after_comm) = content.rsplit_once(')') {
-            let mut fields = after_comm.1.trim().split_whitespace();
-            if let Some(state) = fields.next() {
-                return state != "Z";
-            }
+    if let Ok(content) = std::fs::read_to_string(&stat_path)
+        && let Some(after_comm) = content.rsplit_once(')')
+    {
+        let mut fields = after_comm.1.split_whitespace();
+        if let Some(state) = fields.next() {
+            return state != "Z";
         }
     }
     // /proc unreadable or unparseable — fall back to "alive" since
@@ -1253,15 +1253,14 @@ mod pid_alive_tests {
     /// A reaped (gone) PID must read as dead.
     #[test]
     fn dead_for_reaped_pid() {
-        let mut child = std::process::Command::new("true").spawn().expect("spawn true");
+        let mut child = std::process::Command::new("true")
+            .spawn()
+            .expect("spawn true");
         let pid = child.id();
         // Reap it ourselves.
         let _ = child.wait();
         // Give the scheduler a moment to actually free the slot.
         std::thread::sleep(std::time::Duration::from_millis(20));
-        assert!(
-            !pid_is_alive(pid),
-            "reaped pid {pid} must read as dead"
-        );
+        assert!(!pid_is_alive(pid), "reaped pid {pid} must read as dead");
     }
 }

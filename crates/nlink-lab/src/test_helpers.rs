@@ -10,13 +10,13 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use crate::capture::{run_capture, CaptureConfig};
-use netring::RingProfile;
+use crate::capture::{CaptureConfig, run_capture};
 use crate::error::{Error, Result};
+use netring::RingProfile;
 
 /// A live packet-capture session covering one or more lab interfaces.
 ///
@@ -48,9 +48,8 @@ impl LabCapture {
     /// Each capture writes to `<temp>/<node>.pcap`. Captures run
     /// until [`stop`] is called or the helper is dropped.
     pub fn start(targets: &[(String, String)]) -> Result<Self> {
-        let temp = tempfile::tempdir().map_err(|e| {
-            Error::invalid_topology(format!("create temp dir for captures: {e}"))
-        })?;
+        let temp = tempfile::tempdir()
+            .map_err(|e| Error::invalid_topology(format!("create temp dir for captures: {e}")))?;
         let shutdown = Arc::new(AtomicBool::new(false));
         let mut pcaps: HashMap<String, PathBuf> = HashMap::new();
         let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
@@ -79,15 +78,8 @@ impl LabCapture {
                         return;
                     }
                 };
-                if let Err(e) = run_capture(
-                    &ns_name_thread,
-                    &cfg,
-                    Some(f),
-                    &shutdown_thread,
-                ) {
-                    tracing::warn!(
-                        "lab_capture: '{ns_name_thread}' aborted: {e}"
-                    );
+                if let Err(e) = run_capture(&ns_name_thread, &cfg, Some(f), &shutdown_thread) {
+                    tracing::warn!("lab_capture: '{ns_name_thread}' aborted: {e}");
                 }
             });
             handles.push(handle);
@@ -122,10 +114,7 @@ impl LabCapture {
     pub fn persist_to(mut self, dest_dir: &Path) -> Result<Vec<PathBuf>> {
         self.stop();
         std::fs::create_dir_all(dest_dir).map_err(|e| {
-            Error::invalid_topology(format!(
-                "create capture dir {}: {e}",
-                dest_dir.display(),
-            ))
+            Error::invalid_topology(format!("create capture dir {}: {e}", dest_dir.display(),))
         })?;
         let mut out = Vec::with_capacity(self.pcaps.len());
         for (ns, src) in &self.pcaps {

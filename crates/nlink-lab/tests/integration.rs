@@ -176,11 +176,7 @@ async fn exec_in_respects_workdir(lab: RunningLab) {
 #[lab_test("examples/simple.nll")]
 async fn wait_for_log_line_matches_marker(mut lab: RunningLab) {
     let pid = lab
-        .spawn_with_logs(
-            "host",
-            &["sh", "-c", "echo READYISH; sleep 5"],
-            None,
-        )
+        .spawn_with_logs("host", &["sh", "-c", "echo READYISH; sleep 5"], None)
         .unwrap();
     let pat = regex::Regex::new(r"^READYISH$").unwrap();
     lab.wait_for_log_line(
@@ -198,9 +194,7 @@ async fn wait_for_log_line_matches_marker(mut lab: RunningLab) {
 // the regex source — debuggers chase typos in the regex itself.
 #[lab_test("examples/simple.nll")]
 async fn wait_for_log_line_times_out_with_regex_in_error(mut lab: RunningLab) {
-    let pid = lab
-        .spawn_with_logs("host", &["sleep", "5"], None)
-        .unwrap();
+    let pid = lab.spawn_with_logs("host", &["sleep", "5"], None).unwrap();
     let pat = regex::Regex::new(r"^DEFINITELY_NOT_PRESENT$").unwrap();
     let err = lab
         .wait_for_log_line(

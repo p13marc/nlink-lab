@@ -145,11 +145,7 @@ pub struct ImportReport {
 // ────────────────────────────────────────────────────────────────────
 
 /// Build a `.nlz` archive from a deployed lab or an NLL file.
-pub fn export_archive(
-    source: ArchiveSource,
-    out_path: &Path,
-    opts: ExportOptions,
-) -> Result<()> {
+pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOptions) -> Result<()> {
     // Resolve the entry-point NLL and load the rendered Topology.
     let (nll_source, lab_name, deploy_state, state_json) = match &source {
         ArchiveSource::Lab { name } => {
@@ -171,9 +167,8 @@ pub fn export_archive(
             )
         }
         ArchiveSource::Nll { path } => {
-            let nll = fs::read_to_string(path).map_err(|e| {
-                Error::invalid_topology(format!("read {}: {e}", path.display()))
-            })?;
+            let nll = fs::read_to_string(path)
+                .map_err(|e| Error::invalid_topology(format!("read {}: {e}", path.display())))?;
             let topo = if opts.params.is_empty() {
                 crate::parser::parse_file(path)?
             } else {
@@ -196,9 +191,10 @@ pub fn export_archive(
     let rendered_toml = if opts.no_rendered {
         None
     } else {
-        Some(toml::to_string_pretty(&topology).map_err(|e| {
-            Error::invalid_topology(format!("serialize topology: {e}"))
-        })?)
+        Some(
+            toml::to_string_pretty(&topology)
+                .map_err(|e| Error::invalid_topology(format!("serialize topology: {e}")))?,
+        )
     };
 
     let params_json = if opts.params.is_empty() {
@@ -243,9 +239,8 @@ pub fn export_archive(
 
     // Write the tarball.
     let manifest_json = serde_json::to_string_pretty(&manifest)?;
-    let out_file = File::create(out_path).map_err(|e| {
-        Error::invalid_topology(format!("create {}: {e}", out_path.display()))
-    })?;
+    let out_file = File::create(out_path)
+        .map_err(|e| Error::invalid_topology(format!("create {}: {e}", out_path.display())))?;
     let gz = GzEncoder::new(out_file, Compression::default());
     let mut tarball = tar::Builder::new(gz);
 
@@ -291,9 +286,11 @@ pub fn import_archive(
 
     // Verify checksums for every listed file.
     for (name, expected) in &manifest.checksums {
-        let bytes = entries
-            .get(name)
-            .ok_or_else(|| Error::invalid_topology(format!("manifest lists {name} but it's missing from archive")))?;
+        let bytes = entries.get(name).ok_or_else(|| {
+            Error::invalid_topology(format!(
+                "manifest lists {name} but it's missing from archive"
+            ))
+        })?;
         let actual = sha256_hex(bytes);
         if actual != *expected {
             return Err(Error::invalid_topology(format!(
@@ -314,17 +311,15 @@ pub fn import_archive(
         Some(p) => p.to_path_buf(),
         None => PathBuf::from(&manifest.lab_name),
     };
-    fs::create_dir_all(&dir).map_err(|e| {
-        Error::invalid_topology(format!("create {}: {e}", dir.display()))
-    })?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| Error::invalid_topology(format!("create {}: {e}", dir.display())))?;
     for (name, bytes) in &entries {
         let path = dir.join(name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).ok();
         }
-        fs::write(&path, bytes).map_err(|e| {
-            Error::invalid_topology(format!("write {}: {e}", path.display()))
-        })?;
+        fs::write(&path, bytes)
+            .map_err(|e| Error::invalid_topology(format!("write {}: {e}", path.display())))?;
     }
 
     // Validate by either re-parsing the NLL or loading rendered.toml.
@@ -332,9 +327,10 @@ pub fn import_archive(
         if let Some(bytes) = entries.get("rendered.toml") {
             let s = std::str::from_utf8(bytes)
                 .map_err(|e| Error::invalid_topology(format!("rendered.toml not utf-8: {e}")))?;
-            Some(toml::from_str::<Topology>(s).map_err(|e| {
-                Error::invalid_topology(format!("rendered.toml: {e}"))
-            })?)
+            Some(
+                toml::from_str::<Topology>(s)
+                    .map_err(|e| Error::invalid_topology(format!("rendered.toml: {e}")))?,
+            )
         } else {
             return Err(Error::invalid_topology(
                 "--no-reparse requested but archive has no rendered.toml",
@@ -347,10 +343,8 @@ pub fn import_archive(
         let nll = std::str::from_utf8(nll_bytes)
             .map_err(|e| Error::invalid_topology(format!("topology.nll not utf-8: {e}")))?;
         let topo = if let Some(params_bytes) = entries.get("params.json") {
-            let map: HashMap<String, String> =
-                serde_json::from_slice(params_bytes).map_err(|e| {
-                    Error::invalid_topology(format!("params.json: {e}"))
-                })?;
+            let map: HashMap<String, String> = serde_json::from_slice(params_bytes)
+                .map_err(|e| Error::invalid_topology(format!("params.json: {e}")))?;
             let pairs: Vec<(String, String)> = map.into_iter().collect();
             crate::parser::parse_with_params(nll, &pairs)?
         } else {
@@ -407,11 +401,7 @@ pub fn inspect_archive(archive: &Path) -> Result<ArchiveSummary> {
 // Helpers
 // ────────────────────────────────────────────────────────────────────
 
-fn write_tar_entry<W: Write>(
-    tarball: &mut tar::Builder<W>,
-    name: &str,
-    data: &[u8],
-) -> Result<()> {
+fn write_tar_entry<W: Write>(tarball: &mut tar::Builder<W>, name: &str, data: &[u8]) -> Result<()> {
     // append_data sets path + recomputes cksum, so we don't pre-set
     // cksum here (it would be overwritten anyway, and setting the
     // wrong cksum first can trip header validation paths).
@@ -426,9 +416,8 @@ fn write_tar_entry<W: Write>(
 }
 
 fn read_archive_entries(archive: &Path) -> Result<HashMap<String, Vec<u8>>> {
-    let f = File::open(archive).map_err(|e| {
-        Error::invalid_topology(format!("open {}: {e}", archive.display()))
-    })?;
+    let f = File::open(archive)
+        .map_err(|e| Error::invalid_topology(format!("open {}: {e}", archive.display())))?;
     let gz = GzDecoder::new(f);
     let mut tarball = tar::Archive::new(gz);
     let mut entries: HashMap<String, Vec<u8>> = HashMap::new();
@@ -468,9 +457,11 @@ fn sha256_hex(data: &[u8]) -> String {
 }
 
 fn now_iso8601() -> String {
-    use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
-    OffsetDateTime::now_utc().format(&Rfc3339).unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+    use time::format_description::well_known::Rfc3339;
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
 }
 
 fn detect_platform() -> Platform {
@@ -518,8 +509,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         .unwrap();
 
         let extract_dir = tempfile::tempdir().unwrap();
-        let report =
-            import_archive(archive.path(), Some(extract_dir.path()), false).unwrap();
+        let report = import_archive(archive.path(), Some(extract_dir.path()), false).unwrap();
         assert_eq!(report.manifest.lab_name, "roundtrip");
         assert_eq!(report.manifest.deploy_state, DeployState::Definition);
         assert_eq!(report.manifest.format_version, ARCHIVE_FORMAT_VERSION);
@@ -577,10 +567,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
         let extract_dir = tempfile::tempdir().unwrap();
         let result = import_archive(archive.path(), Some(extract_dir.path()), false);
-        assert!(
-            result.is_err(),
-            "expected checksum mismatch to be rejected"
-        );
+        assert!(result.is_err(), "expected checksum mismatch to be rejected");
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("checksum mismatch"),

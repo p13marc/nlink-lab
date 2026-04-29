@@ -235,8 +235,7 @@ impl std::fmt::Display for TopologyDiff {
             }
         }
         for n in &self.nftables_changed {
-            let has_desired =
-                n.desired_firewall.is_some() || n.desired_nat.is_some();
+            let has_desired = n.desired_firewall.is_some() || n.desired_nat.is_some();
             match (has_desired, n.was_present) {
                 (true, false) => writeln!(f, "  + add nftables: {}", n.node)?,
                 (true, true) => writeln!(f, "  ~ rebuild nftables: {}", n.node)?,
@@ -408,7 +407,9 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
             match current_node.sysctls.get(key) {
                 None => change.added.push((key.clone(), new_val.clone())),
                 Some(old_val) if old_val != new_val => {
-                    change.changed.push((key.clone(), old_val.clone(), new_val.clone()))
+                    change
+                        .changed
+                        .push((key.clone(), old_val.clone(), new_val.clone()))
                 }
                 _ => {}
             }
@@ -470,8 +471,7 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
             continue;
         }
 
-        let was_present =
-            current_node.firewall.is_some() || current_node.nat.is_some();
+        let was_present = current_node.firewall.is_some() || current_node.nat.is_some();
         diff.nftables_changed.push(NftablesChange {
             node: node_name.clone(),
             desired_firewall: desired_node.firewall.clone(),

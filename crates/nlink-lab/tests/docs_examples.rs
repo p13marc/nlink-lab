@@ -142,7 +142,9 @@ fn extract_links(content: &str) -> Vec<(usize, String)> {
                     }
                     k += 1;
                 }
-                let Some(target_end) = target_end else { continue };
+                let Some(target_end) = target_end else {
+                    continue;
+                };
                 let target = &line[target_start..target_end];
                 links.push((lineno + 1, target.to_string()));
             }
@@ -269,10 +271,7 @@ fn internal_doc_links_resolve() {
             let parent = md.parent().unwrap_or(&docs_dir);
             let resolved = parent.join(path_part);
             // Try as-is, plus a few common forms.
-            let candidates = [
-                resolved.clone(),
-                resolved.with_extension("md"),
-            ];
+            let candidates = [resolved.clone(), resolved.with_extension("md")];
             let exists = candidates.iter().any(|p| p.exists());
             if !exists {
                 errors.push(format!(
@@ -289,7 +288,10 @@ fn internal_doc_links_resolve() {
         }
     }
 
-    println!("Checked {checked} internal links across {} files", md_files.len());
+    println!(
+        "Checked {checked} internal links across {} files",
+        md_files.len()
+    );
 
     if !errors.is_empty() {
         for e in &errors {

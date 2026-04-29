@@ -329,8 +329,7 @@ impl RunningLab {
                 .as_deref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
             let wd_str = opts.workdir.map(|p| p.to_string_lossy().into_owned());
-            let env_pairs: Vec<String> =
-                opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            let env_pairs: Vec<String> = opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
             let mut all_args: Vec<&str> = vec!["exec"];
             if let Some(ref wd) = wd_str {
                 all_args.push("-w");
@@ -421,8 +420,7 @@ impl RunningLab {
                 .as_deref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
             let wd_str = opts.workdir.map(|p| p.to_string_lossy().into_owned());
-            let env_pairs: Vec<String> =
-                opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            let env_pairs: Vec<String> = opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
             let mut all_args: Vec<&str> = vec!["exec", "-i"];
             if let Some(ref wd) = wd_str {
                 all_args.push("-w");
@@ -766,9 +764,9 @@ impl RunningLab {
         timeout: std::time::Duration,
         interval: std::time::Duration,
     ) -> Result<()> {
-        let (stdout_path, stderr_path) = self.log_paths(pid).ok_or_else(|| {
-            Error::deploy_failed(format!("no log files tracked for PID {pid}"))
-        })?;
+        let (stdout_path, stderr_path) = self
+            .log_paths(pid)
+            .ok_or_else(|| Error::deploy_failed(format!("no log files tracked for PID {pid}")))?;
         let paths: Vec<&str> = match stream {
             LogStream::Stdout => vec![stdout_path],
             LogStream::Stderr => vec![stderr_path],
@@ -1110,7 +1108,10 @@ impl RunningLab {
     /// running?" polling loops that would otherwise have to filter
     /// `alive == false` themselves and risk forgetting to.
     pub fn process_status_alive_only(&self) -> Vec<ProcessInfo> {
-        self.process_status().into_iter().filter(|p| p.alive).collect()
+        self.process_status()
+            .into_iter()
+            .filter(|p| p.alive)
+            .collect()
     }
 }
 

@@ -3374,7 +3374,11 @@ mod tests {
 
     #[test]
     fn parse_env_pairs_accepts_valid() {
-        let inputs = vec!["FOO=bar".to_string(), "EMPTY=".to_string(), "X=y=z".to_string()];
+        let inputs = vec![
+            "FOO=bar".to_string(),
+            "EMPTY=".to_string(),
+            "X=y=z".to_string(),
+        ];
         let pairs = parse_env_pairs(&inputs).unwrap();
         assert_eq!(
             pairs,

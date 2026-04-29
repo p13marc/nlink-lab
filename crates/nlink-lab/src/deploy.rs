@@ -2809,9 +2809,9 @@ async fn apply_routes_diff(
     }
     for change in &diff.routes_changed {
         let handle = node_handle_for(running, &change.node)?;
-        let conn: Connection<Route> = handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{}': {e}", change.node))
-        })?;
+        let conn: Connection<Route> = handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", change.node)))?;
 
         if change.was_present
             && let Err(e) = del_route_for_node(&conn, &change.node, &change.dest).await
@@ -2832,11 +2832,7 @@ async fn apply_routes_diff(
 /// Delete a single static route from a node. Mirrors `add_route` but
 /// uses nlink's `del_route_v4` / `del_route_v6` based on the
 /// destination form.
-async fn del_route_for_node(
-    conn: &Connection<Route>,
-    node_name: &str,
-    dest: &str,
-) -> Result<()> {
+async fn del_route_for_node(conn: &Connection<Route>, node_name: &str, dest: &str) -> Result<()> {
     let is_default = dest == "default";
     let is_v6 = !is_default && dest.contains(':');
 
@@ -2856,11 +2852,7 @@ async fn del_route_for_node(
             IpAddr::V6(_) => conn.del_route_v6(&addr.to_string(), prefix).await,
         }
     };
-    result.map_err(|e| {
-        Error::deploy_failed(format!(
-            "del route '{dest}' on '{node_name}': {e}"
-        ))
-    })
+    result.map_err(|e| Error::deploy_failed(format!("del route '{dest}' on '{node_name}': {e}")))
 }
 
 /// Reconcile per-node nftables ruleset (firewall + NAT).
@@ -2891,10 +2883,7 @@ async fn apply_nftables_diff(
     for change in &diff.nftables_changed {
         let handle = node_handle_for(running, &change.node)?;
         let nft_conn: Connection<Nftables> = handle.connection().map_err(|e| {
-            Error::deploy_failed(format!(
-                "nftables connection for '{}': {e}",
-                change.node,
-            ))
+            Error::deploy_failed(format!("nftables connection for '{}': {e}", change.node,))
         })?;
 
         // 1. Delete the existing table (if any). Idempotent — a
@@ -2902,10 +2891,7 @@ async fn apply_nftables_diff(
         if change.was_present
             && let Err(e) = nft_conn.del_table("nlink-lab", Family::Inet).await
         {
-            tracing::warn!(
-                "del nftables table on '{}': {e} (continuing)",
-                change.node,
-            );
+            tracing::warn!("del nftables table on '{}': {e} (continuing)", change.node,);
         }
 
         // 2. Re-apply firewall + NAT from the desired config. Each
@@ -2947,9 +2933,9 @@ async fn apply_rate_limits_diff(
             endpoint: change.endpoint.clone(),
         })?;
         let handle = node_handle_for(running, &ep.node)?;
-        let conn: Connection<Route> = handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-        })?;
+        let conn: Connection<Route> = handle
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
 
         match &change.desired {
             Some(rl) => {
@@ -3001,10 +2987,7 @@ async fn apply_rate_limits_diff(
 /// without snapshotting the original value before the original
 /// deploy, and overshooting would be worse than leaving the
 /// previous setting in place.
-fn apply_sysctls_diff(
-    running: &mut RunningLab,
-    diff: &crate::diff::TopologyDiff,
-) -> Result<()> {
+fn apply_sysctls_diff(running: &mut RunningLab, diff: &crate::diff::TopologyDiff) -> Result<()> {
     if diff.sysctls_changed.is_empty() {
         return Ok(());
     }
@@ -3021,10 +3004,7 @@ fn apply_sysctls_diff(
         }
         if !entries.is_empty() {
             handle.set_sysctls(&entries).map_err(|e| {
-                Error::deploy_failed(format!(
-                    "set sysctls on '{}': {e}",
-                    change.node
-                ))
+                Error::deploy_failed(format!("set sysctls on '{}': {e}", change.node))
             })?;
         }
 

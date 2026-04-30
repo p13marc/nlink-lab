@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+(empty — entries land here as the next release accumulates)
+
+## [0.2.0] - 2026-04-30
+
+The "documentation + reconcile" release. Two big arcs landed since
+0.1.0:
+
+1. **Documentation overhaul (Plans 150–154).** README rewritten
+   to lead with the wedge, 11 cookbook recipes paired with runnable
+   `examples/cookbook/*.nll`, full CLI reference, `COMPARISON.md`
+   (vs containerlab), `ARCHITECTURE.md` (contributor on-ramp),
+   60-minute USER_GUIDE walkthrough, TROUBLESHOOTING expanded
+   193→416 LOC, doc-CI gate.
+2. **`apply` reconcile completeness.** Editing any non-process
+   topology field (per-endpoint impair, network-level per-pair
+   impair, routes, sysctls, rate-limits, nftables, NAT) now
+   converges in place via `nlink-lab apply` — no destroy + redeploy
+   for non-structural edits. Backed by nlink 0.15.1's
+   `PerPeerImpairer::reconcile()`. New `--check` drift gate exits
+   non-zero if live state differs from NLL; new `--json` structured
+   diff for CI consumption.
+
+Plus: lab portability (`.nlz` archives, Plan 153), library-first
+testing polish (`#[lab_test]` `set` / `timeout` / `capture = true`,
+Plan 154), per-pair network impair (`impair A -- B { … }` inside
+`network`, Plan 128), `for` loops inside network blocks, plus the
+round-3 polish from Plan 155 (workdir, status --scan stale
+detection, destroy --orphans, spawn --wait-log, ps --alive-only,
+ExecOpts/SpawnOpts, JSON schemas).
+
+### Notable bug fixes (this release)
+
+- **Bridge naming collision** (hash-based `nb{hash8}` replaces
+  `{prefix}-{net_name}[..15]`). The old truncation silently
+  collided whenever the lab prefix grew long enough — surfaced
+  by the `#[lab_test]` macro's name-rewriting.
+- **Zombie processes treated as alive**: `process_status` now
+  reads `/proc/<pid>/stat` and treats state `Z` as not-alive.
+  `kill(pid, 0)` returns 0 for zombies; before this fix,
+  quick-exiting children stayed "alive" forever from the lab's
+  POV.
+- **Builder `.port(node, |p| p.interface("eth0"))`** now
+  auto-adds `node:eth0` to `network.members` (idempotent).
+  Without this, builder-DSL labs silently produced empty
+  `members` and a missing veth at deploy time.
+
 ### Fixed
 - `nlink-lab spawn --env KEY=VALUE` no longer changes the per-process
   log file basename to `env`. Previously the CLI implemented `--env` by
@@ -19,6 +65,67 @@ All notable changes to this project will be documented in this file.
   cleanly and prints the summary line. (Plan 155 PR A — round-3 §2.1)
 
 ### Added
+
+#### From Plans 150–154 (this session)
+
+- **Per-pair network impairment**: `impair A -- B { delay … loss …
+  rate-cap … }` inside `network { }` blocks, modeling
+  distance-dependent radio/satellite/multipoint paths on a shared
+  L2. Built on nlink 0.15.1's `PerPeerImpairer`. Deploy step 14b
+  builds one HTB+netem+flower TC tree per source interface.
+  (Plan 128)
+- **`for` loops inside `network { }`** with full arithmetic
+  (`${(i+1) % 12}`), modulo, and nested loops (Cartesian product
+  expansion). The 12-node satellite-mesh cookbook example uses
+  this to generate 32 directional impair rules from ~25 lines of
+  NLL.
+- **`apply` reconcile completeness** (Plan 152): network-level
+  per-pair impair (Phase A), per-node static routes (B/1),
+  per-node sysctls (B/2), per-endpoint rate-limits (B/3), per-node
+  nftables firewall + NAT (B/4 — atomic flush + rebuild). Phase C
+  added `apply --check` (drift gate) and `apply --json --dry-run`
+  (structured diff for CI).
+- **`.nlz` lab archive** for repros and sharing (Plan 153):
+  - `nlink-lab export --archive <lab|.nll> [-o file.nlz]` with
+    `--include-running-state`, `--no-rendered`, `--set`.
+  - `nlink-lab import file.nlz` — verifies SHA-256 checksums,
+    extracts, validates, deploys.
+  - `nlink-lab inspect FILE.nlz` — manifest + node/link/network
+    counts without extracting.
+  - Format: gzipped tarball with `manifest.json` + `topology.nll`
+    + optional `params.json` / `rendered.toml` / `state.json`.
+    `format_version = 1`.
+- **`#[lab_test]` macro polish** (Plan 154):
+  - `set { key = "value" }` — apply NLL `param` overrides.
+  - `timeout = N` — wrap test body in `tokio::time::timeout`.
+  - `capture = true` — start parallel pcaps on every (namespace,
+    iface). On panic, persist to
+    `target/lab_test_captures/<test>-<pid>/`. On success, discard.
+  - `nlink_lab::test_helpers::LabCapture` helper drives the
+    implementation.
+- **Documentation overhaul** (Plan 150):
+  - README rewritten leading with the wedge.
+  - `docs/COMPARISON.md` (honest vs containerlab) and
+    `docs/ARCHITECTURE.md` (contributor on-ramp).
+  - `docs/cookbook/` with 11 recipes: satellite-mesh,
+    multi-tenant-wan, vrf-multitenant, wireguard-mesh,
+    macvlan-host-bridge, nftables-firewall, bridge-vlan-trunk,
+    p2p-partition, iperf3-benchmark, healthcheck-depends-on,
+    parametric-imports, ci-matrix-sweep, lab-portability,
+    rust-integration-test.
+  - `docs/cli/` with 29 reference pages (8 hand-crafted +
+    21 auto-stubs).
+  - `docs/USER_GUIDE.md` 60-minute guided walkthrough that builds
+    one realistic site-to-site WAN progressively (786→1160 LOC).
+  - `docs/TROUBLESHOOTING.md` expanded 193→416 LOC with apply,
+    archive, scenario, library-test, and common-misconfig
+    sections.
+  - Doc-CI gate: `every_nll_snippet_in_docs_parses` and
+    `internal_doc_links_resolve` lib tests catch drift on every
+    PR.
+
+#### From Plan 155 (round-3 polish)
+
 - `nlink-lab spawn --wait-log <REGEX>` — block the spawn until a line
   matching REGEX appears in the spawned process's captured
   stdout/stderr, mirroring `--wait-tcp` for services that signal
@@ -84,6 +191,41 @@ All notable changes to this project will be documented in this file.
 - Atomic state file writes (temp + rename)
 
 ### Changed
+
+#### From Plans 150–154 (this session)
+
+- **Upgraded `nlink` 0.13.0 → 0.15.1.** Mostly additive; the typed
+  `*Config::parse_params` rollout, new
+  `nlink::netlink::impair::PerPeerImpairer` helper (which Plan 128
+  consumes), legacy `nlink::tc::builders::*` deletion (we never
+  used it). MSRV bumped to 1.85 (already required by edition 2024).
+- **Bridge naming**: shared L2 bridges now use
+  `network_bridge_name_for(net_name) → "nb{hash8}"` (10 chars,
+  always within IFNAMSIZ). Replaces the previous
+  `{prefix}-{net_name}[..15]` truncation that silently collided
+  whenever the lab prefix grew long enough. Mirrors the existing
+  Plan-149 fix for veth peer names. Internal — no caller-visible
+  change.
+- **Process liveness check** now treats zombie state (`Z` in
+  `/proc/<pid>/stat`) as not-alive. Previously `kill(pid, 0) == 0`
+  reported zombies as alive forever, since `spawn_with_logs`
+  drops its `Child` without `wait()`-ing. Affects
+  `RunningLab::process_status` and `process_status_alive_only`.
+- **Builder DSL**: `.port(node, |p| p.interface("eth0").address(...))`
+  now auto-adds `node:eth0` to `network.members` (idempotent).
+  Without this, callers had to write both `.member(...)` and
+  `.port(...)` separately — and forgetting `.member` produced
+  empty members and a missing veth at deploy time. The deploy
+  step's address-application pass also handles bare-`node` port
+  keys now (using `port.interface` for the iface name) so both
+  builder and NLL keying styles work.
+- **`for` loops inside `network` blocks** use the same
+  `interpolate()` engine as the lower stage (now `pub(crate)`),
+  so arithmetic and nested vars work consistently across loop
+  forms.
+
+#### From Plan 155 + earlier (existing Unreleased)
+
 - Upgraded `nlink` dependency from 0.12.2 to 0.13.0. Internal only —
   no behavioural change. `NetemConfig::rate_bps(u64)` was removed in
   favour of `rate(Rate)`; `NetemConfig::{loss,corrupt,reorder}` and

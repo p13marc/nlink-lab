@@ -791,28 +791,51 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
-    // From network (bridge) port configs
+    // From network (bridge) port configs.
+    //
+    // The map key may be either:
+    //  - "node:iface" (NLL's `port host:eth0 { ... }` syntax + the
+    //    auto-subnet-assignment path) — `EndpointRef::parse` works
+    //    directly.
+    //  - bare "node" (the builder DSL's `.port("host", |p|
+    //    p.interface("eth0"))` form, kept for backward-compat with
+    //    pre-builder-fix tests that look up `ports["host"]`).
+    //
+    // For the bare-node form, fall back to `port.interface` for the
+    // iface name. Without this, addresses on bare-node ports were
+    // silently dropped, leaving the interface up but with no IP —
+    // surfaced by the `deploy_networks_with_shared_prefix`
+    // integration test.
     for network in topology.networks.values() {
-        for (endpoint_str, port) in &network.ports {
+        for (key, port) in &network.ports {
             if port.addresses.is_empty() {
                 continue;
             }
-            if let Some(ep) = EndpointRef::parse(endpoint_str) {
-                let ep_handle = &node_handles[&ep.node];
-                let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
-                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-                })?;
-                for addr_str in &port.addresses {
-                    let (ip, prefix) = parse_cidr(addr_str)?;
-                    conn.add_address_by_name(&ep.iface, ip, prefix)
-                        .await
-                        .map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
-                                ep.iface, ep.node
-                            ))
-                        })?;
-                }
+            let (node, iface) = match EndpointRef::parse(key) {
+                Some(ep) => (ep.node, ep.iface),
+                None => match port.interface.as_deref() {
+                    Some(iface) => (key.clone(), iface.to_string()),
+                    None => {
+                        tracing::warn!(
+                            "network port '{key}' has addresses but no resolvable iface; skipping"
+                        );
+                        continue;
+                    }
+                },
+            };
+            let ep_handle = &node_handles[&node];
+            let conn: Connection<Route> = ep_handle
+                .connection()
+                .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))?;
+            for addr_str in &port.addresses {
+                let (ip, prefix) = parse_cidr(addr_str)?;
+                conn.add_address_by_name(&iface, ip, prefix)
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to add address '{ip}'/{prefix} to '{iface}' on '{node}': {e}"
+                        ))
+                    })?;
             }
         }
     }

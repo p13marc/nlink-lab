@@ -517,9 +517,30 @@ impl NetworkBuilder {
     }
 
     /// Add a port configuration.
+    ///
+    /// If the port specifies an `interface(...)`, the endpoint
+    /// (`node:iface`) is auto-added to `members` (idempotent).
+    /// Without this, callers had to write both
+    /// `.member("host_a:eth0")` and `.port("host_a", |p|
+    /// p.interface("eth0"))` — and forgetting the member silently
+    /// produced an empty `members` list, which the deploy step
+    /// iterates to create veth pairs. Empty members → no veth in
+    /// the node namespace → `ip addr show eth0` fails at exec time.
+    ///
+    /// The port itself is keyed by `node` (legacy behavior, kept so
+    /// existing builder tests using `network.ports["switch"]` keep
+    /// working). The deploy step recognizes both bare-node keys
+    /// (when `port.interface` is set) and `node:iface` keys (from
+    /// NLL's auto-assignment).
     pub fn port(mut self, node: &str, f: impl FnOnce(PortBuilder) -> PortBuilder) -> Self {
-        let builder = f(PortBuilder::new());
-        self.network.ports.insert(node.to_string(), builder.build());
+        let port = f(PortBuilder::new()).build();
+        if let Some(iface) = port.interface.as_deref() {
+            let endpoint = format!("{node}:{iface}");
+            if !self.network.members.iter().any(|m| m == &endpoint) {
+                self.network.members.push(endpoint);
+            }
+        }
+        self.network.ports.insert(node.to_string(), port);
         self
     }
 
@@ -919,6 +940,77 @@ mod tests {
         assert_eq!(net.ports["switch"].vlans, vec![10, 20]);
         assert_eq!(net.ports["switch"].tagged, Some(true));
         assert_eq!(net.ports["pc1"].pvid, Some(10));
+    }
+
+    #[test]
+    fn test_port_auto_adds_to_members() {
+        // Regression test: `.port(node, |p| p.interface("eth0"))` must
+        // auto-populate `members` so the deploy step actually creates
+        // the veth in the node's namespace. Before this fix, callers
+        // had to specify both `.member("host_a:eth0")` and
+        // `.port("host_a", |p| p.interface("eth0"))` separately, and
+        // forgetting `.member` silently produced an empty members list
+        // — surfaced by `deploy_networks_with_shared_prefix` failing
+        // with `ip addr show eth0` returning exit 1.
+        let topo = Lab::new("auto-members")
+            .node("host_a", |n| n)
+            .node("host_b", |n| n)
+            .network("lan_a", |net| {
+                net.subnet("10.1.0.0/24")
+                    .port("host_a", |p| p.interface("eth0").address("10.1.0.2/24"))
+            })
+            .network("lan_b", |net| {
+                net.subnet("10.2.0.0/24")
+                    .port("host_b", |p| p.interface("eth0").address("10.2.0.2/24"))
+            })
+            .build();
+
+        assert_eq!(
+            topo.networks["lan_a"].members,
+            vec!["host_a:eth0".to_string()]
+        );
+        assert_eq!(
+            topo.networks["lan_b"].members,
+            vec!["host_b:eth0".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_port_auto_add_is_idempotent_with_explicit_member() {
+        // If the user calls both `.member("host:eth0")` and
+        // `.port("host", |p| p.interface("eth0"))`, the endpoint
+        // should appear exactly once in members.
+        let topo = Lab::new("idempotent")
+            .node("host", |n| n)
+            .network("lan", |net| {
+                net.member("host:eth0")
+                    .port("host", |p| p.interface("eth0").address("10.0.0.2/24"))
+            })
+            .build();
+
+        assert_eq!(
+            topo.networks["lan"].members,
+            vec!["host:eth0".to_string()],
+            "expected single member entry, not duplicated"
+        );
+    }
+
+    #[test]
+    fn test_port_without_interface_does_not_add_to_members() {
+        // VLAN-only port configs (no .interface(...)) shouldn't pollute
+        // members — the user hasn't said which iface attaches.
+        let topo = Lab::new("vlan-only")
+            .node("sw", |n| n)
+            .network("fab", |net| {
+                net.member("sw:eth0").port("sw", |p| p.pvid(10))
+            })
+            .build();
+
+        assert_eq!(
+            topo.networks["fab"].members,
+            vec!["sw:eth0".to_string()],
+            "port without interface() must not add to members"
+        );
     }
 
     #[test]

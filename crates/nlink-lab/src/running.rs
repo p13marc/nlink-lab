@@ -1225,7 +1225,7 @@ mod pid_alive_tests {
             .unwrap_or_default();
         let is_zombie = stat
             .rsplit_once(')')
-            .and_then(|(_, after)| after.trim().split_whitespace().next())
+            .and_then(|(_, after)| after.split_whitespace().next())
             .is_some_and(|state| state == "Z");
 
         if is_zombie {

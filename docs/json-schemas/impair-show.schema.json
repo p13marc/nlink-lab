@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/impair-show.schema.json",
+  "title": "nlink-lab impair --show --json output",
+  "description": "Emitted by `nlink-lab impair --show --json`. One row per endpoint declared in the topology. Endpoints with no qdisc installed (kernel default `noqueue`) appear as `null`. Numeric fields (delay_ms, jitter_ms, loss_pct, rate_bps) are present only when the corresponding netem parameter was set; absent fields mean 'no value', not 'zero'. The `partition` flag is true iff the endpoint is in partition/heal state — distinct from a user having installed `--loss 100%` directly.",
+  "type": "object",
+  "required": ["lab", "endpoints"],
+  "additionalProperties": false,
+  "properties": {
+    "lab": {
+      "type": "string",
+      "description": "Lab name."
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "Map of `node:iface` endpoint string to its impairment row, or null if no qdisc is installed.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "null" },
+          {
+            "type": "object",
+            "required": ["qdisc", "partition"],
+            "additionalProperties": false,
+            "properties": {
+              "qdisc": {
+                "type": "string",
+                "description": "Qdisc kind reported by `tc` (`netem`, `htb`, `tbf`, ...)."
+              },
+              "delay_ms": {
+                "type": "number",
+                "description": "Mean delay in milliseconds. Omitted if not set."
+              },
+              "jitter_ms": {
+                "type": "number",
+                "description": "Jitter in milliseconds (the second value after `delay`). Omitted if not set."
+              },
+              "loss_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Loss percentage in 0–100. Omitted if not set."
+              },
+              "rate_bps": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Rate in bits per second. Omitted if not set."
+              },
+              "partition": {
+                "type": "boolean",
+                "description": "True iff the endpoint is in partition state (its pre-partition impairment is saved off and a 100% loss qdisc is installed via `partition`/`heal`). False for direct `--loss 100%` installs."
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -12,6 +12,7 @@ is stale** — please file a fix.
 | `nlink-lab status --scan --json` | `status-scan.schema.json` | running labs + orphans + stale |
 | `nlink-lab spawn --json` | `spawn.schema.json` | one object per spawn |
 | `nlink-lab ps --json` | `ps.schema.json` | array of tracked processes |
+| `nlink-lab impair --show --json` | `impair-show.schema.json` | per-endpoint qdisc state |
 
 The `inspect`, `exec`, `diagnose`, `render`, `diff` and `apply` JSON
 shapes are documented inline in each subcommand's `--help`. Open a PR

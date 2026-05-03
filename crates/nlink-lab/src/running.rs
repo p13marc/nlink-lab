@@ -863,6 +863,15 @@ impl RunningLab {
         }
     }
 
+    /// Whether the given endpoint is currently in
+    /// [`partition`](Self::partition)ed state — i.e. its pre-partition
+    /// impairment is saved off and a 100% loss qdisc is installed.
+    /// Used by `nlink-lab impair --show --json` to surface the
+    /// partition flag distinct from "user installed `--loss 100%`".
+    pub fn is_partitioned(&self, endpoint: &str) -> bool {
+        self.saved_impairments.contains_key(endpoint)
+    }
+
     /// Remove all impairments from an interface.
     ///
     /// Idempotent: a `QdiscNotFound` from the kernel is treated as

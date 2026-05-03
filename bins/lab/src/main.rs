@@ -1570,11 +1570,22 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let mut running = nlink_lab::RunningLab::load(&lab)?;
 
             if show {
-                for node_name in running.node_names() {
-                    let output = running.exec(node_name, "tc", &["qdisc", "show"])?;
-                    if !output.stdout.trim().is_empty() {
-                        println!("--- {node_name} ---");
-                        println!("{}", output.stdout.trim());
+                if cli.json {
+                    let endpoints = collect_impair_show(&running)?;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "lab": running.name(),
+                            "endpoints": endpoints,
+                        }))?
+                    );
+                } else {
+                    for node_name in running.node_names() {
+                        let output = running.exec(node_name, "tc", &["qdisc", "show"])?;
+                        if !output.stdout.trim().is_empty() {
+                            println!("--- {node_name} ---");
+                            println!("{}", output.stdout.trim());
+                        }
                     }
                 }
                 return Ok(());
@@ -3352,6 +3363,54 @@ fn parse_env_pairs(env_vars: &[String]) -> nlink_lab::Result<Vec<(String, String
         .collect()
 }
 
+/// One row of `nlink-lab impair --show --json` output. `ImpairShow`'s
+/// fields (qdisc, delay_ms, jitter_ms, loss_pct, rate_bps) flatten in
+/// next to a `partition` flag pulled from `RunningLab::is_partitioned`.
+#[derive(serde::Serialize)]
+struct ImpairShowEntry {
+    #[serde(flatten)]
+    fields: nlink_lab::impair_parse::ImpairShow,
+    /// `true` iff the endpoint is in `partition` state (i.e. its
+    /// pre-partition impairment is in `saved_impairments`). A user who
+    /// installed `--loss 100%` directly is *not* partitioned by this
+    /// definition — the flag tracks the partition/heal lifecycle.
+    partition: bool,
+}
+
+/// Walk every endpoint in the topology, exec `tc qdisc show dev <iface>`
+/// inside the right namespace, and parse the result. Endpoints with no
+/// impairment installed serialize as `null`. Used by `--show --json`.
+fn collect_impair_show(
+    running: &nlink_lab::RunningLab,
+) -> nlink_lab::Result<std::collections::BTreeMap<String, Option<ImpairShowEntry>>> {
+    use nlink_lab::EndpointRef;
+    let mut out = std::collections::BTreeMap::new();
+    for link in &running.topology().links {
+        for ep_str in &link.endpoints {
+            // `out.contains_key` would be cheaper than recomputing
+            // EndpointRef::parse, but endpoints don't normalise (e.g.
+            // case), so the literal endpoint string is the contract
+            // for both keys and the `is_partitioned` lookup.
+            if out.contains_key(ep_str) {
+                continue;
+            }
+            let ep = EndpointRef::parse(ep_str).ok_or_else(|| {
+                nlink_lab::Error::invalid_topology(format!(
+                    "malformed endpoint {ep_str:?} in link"
+                ))
+            })?;
+            let tc = running.exec(&ep.node, "tc", &["qdisc", "show", "dev", &ep.iface])?;
+            let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&tc.stdout);
+            let entry = parsed.map(|fields| ImpairShowEntry {
+                fields,
+                partition: running.is_partitioned(ep_str),
+            });
+            out.insert(ep_str.clone(), entry);
+        }
+    }
+    Ok(out)
+}
+
 /// Build the argv to pass to `nsenter` for entering a lab node's network
 /// namespace and exec'ing a shell.
 ///
@@ -3412,6 +3471,7 @@ mod tests {
             include_str!("../../../docs/json-schemas/status-scan.schema.json"),
             include_str!("../../../docs/json-schemas/spawn.schema.json"),
             include_str!("../../../docs/json-schemas/ps.schema.json"),
+            include_str!("../../../docs/json-schemas/impair-show.schema.json"),
         ];
         for s in schemas {
             let _: serde_json::Value = serde_json::from_str(s)

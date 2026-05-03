@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `nlink-lab impair --show --json` — structured per-endpoint view of
+  installed netem state, replacing grep-against-`tc`-text for harness
+  consumers. One row per endpoint declared in the topology;
+  endpoints with no qdisc serialize as `null`. Each row carries
+  `qdisc`, `delay_ms`, `jitter_ms`, `loss_pct`, `rate_bps` (omitted
+  when not set), plus a `partition` flag tracking the partition/heal
+  lifecycle (distinct from a user installing `--loss 100%`
+  directly). New library helper
+  `RunningLab::is_partitioned(endpoint)` and pure parser
+  `nlink_lab::impair_parse::parse_tc_qdisc_show`. Schema:
+  `docs/json-schemas/impair-show.schema.json`.
+  (Plan 156 PR C — round-4 §3)
+
 ### Fixed
 - `nlink-lab impair --partition` is no longer a silent no-op on the
   second invocation after `--clear`. `clear_impairment` now prunes

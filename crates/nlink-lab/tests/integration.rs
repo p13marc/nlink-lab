@@ -1121,3 +1121,25 @@ async fn clear_impairment_idempotent_on_fresh_deploy(mut lab: RunningLab) {
     // Second call must also succeed.
     lab.clear_impairment("host:eth0").await.unwrap();
 }
+
+// ─── Plan 156 PR C — impair --show JSON view ────────────
+
+// `is_partitioned` should reflect partition/heal lifecycle, not raw
+// `--loss 100%` installs. Before partition: false. After partition:
+// true. After clear_impairment (which prunes saved_impairments): false
+// again. This is the contract `impair --show --json` exposes via the
+// `partition` field per-endpoint.
+#[lab_test("examples/simple.nll")]
+async fn is_partitioned_tracks_partition_clear_lifecycle(mut lab: RunningLab) {
+    let endpoint = "host:eth0";
+    assert!(!lab.is_partitioned(endpoint), "fresh: not partitioned");
+
+    lab.partition(endpoint).await.unwrap();
+    assert!(lab.is_partitioned(endpoint), "after partition: partitioned");
+
+    lab.clear_impairment(endpoint).await.unwrap();
+    assert!(
+        !lab.is_partitioned(endpoint),
+        "after clear: flag must be reset (this is the round-4 §1 fix)"
+    );
+}

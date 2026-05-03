@@ -1077,3 +1077,47 @@ async fn dns_example_deploys(lab: RunningLab) {
     assert_eq!(lab.topology().lab.dns, nlink_lab::DnsMode::Hosts);
     assert_eq!(lab.topology().nodes.len(), 3);
 }
+
+// ─── Plan 156 PR A — partition cycles fix ───────────────
+
+// Round-4 §1: `partition` was a silent no-op on the second call after
+// `clear`, because the stale `saved_impairments` entry survived
+// `clear_impairment`. This test cycles partition+clear five times
+// and asserts each `--partition` actually installs a netem qdisc.
+// Before the fix this fails on cycle 2 with "no netem on interface".
+#[lab_test("examples/simple.nll")]
+async fn partition_clear_cycles_are_idempotent(mut lab: RunningLab) {
+    let endpoint = "host:eth0";
+    for cycle in 1..=5 {
+        lab.partition(endpoint).await.unwrap_or_else(|e| {
+            panic!("cycle {cycle}: partition failed: {e}");
+        });
+
+        // The partition must actually be live — assert via `tc`.
+        let qd = lab
+            .exec("host", "tc", &["qdisc", "show", "dev", "eth0"])
+            .unwrap();
+        assert!(
+            qd.stdout.contains("loss 100%"),
+            "cycle {cycle}: expected loss 100% qdisc after partition; got: {}",
+            qd.stdout
+        );
+
+        lab.clear_impairment(endpoint).await.unwrap_or_else(|e| {
+            panic!("cycle {cycle}: clear_impairment failed: {e}");
+        });
+    }
+}
+
+// `clear_impairment` is now idempotent: calling it on an interface
+// with no qdisc must succeed (kernel returns ENOENT, we treat it as
+// "already cleared"). Before the fix this failed with "qdisc not
+// found: root on ifindex 3".
+#[lab_test("examples/simple.nll")]
+async fn clear_impairment_idempotent_on_fresh_deploy(mut lab: RunningLab) {
+    // Topology has no impairments declared. The very first clear must
+    // succeed — there's nothing to clear.
+    lab.clear_impairment("host:eth0").await.unwrap();
+    // Second call must also succeed.
+    lab.clear_impairment("host:eth0").await.unwrap();
+}

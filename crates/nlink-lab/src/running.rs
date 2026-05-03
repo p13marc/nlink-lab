@@ -864,7 +864,14 @@ impl RunningLab {
     }
 
     /// Remove all impairments from an interface.
-    pub async fn clear_impairment(&self, endpoint: &str) -> Result<()> {
+    ///
+    /// Idempotent: a `QdiscNotFound` from the kernel is treated as
+    /// success — we're converging on the same end state. Other errors
+    /// propagate. Also prunes any `saved_impairments` bookkeeping for
+    /// this endpoint so a subsequent [`partition`](Self::partition) on
+    /// the same endpoint goes through the real install path instead of
+    /// short-circuiting on a stale "is partitioned" flag.
+    pub async fn clear_impairment(&mut self, endpoint: &str) -> Result<()> {
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
@@ -872,10 +879,25 @@ impl RunningLab {
         let conn: Connection<Route> = namespace::connection_for(ns_name)
             .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
 
-        // Delete the root qdisc (removes all netem config)
-        conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT)
-            .await
-            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
+        // Delete the root qdisc (removes all netem config). Idempotent:
+        // a missing qdisc is the same as "already cleared".
+        match conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT).await {
+            Ok(()) => {}
+            Err(nlink::Error::QdiscNotFound { .. }) => {}
+            Err(e) => {
+                return Err(Error::deploy_failed(format!(
+                    "clear impairment on '{endpoint}': {e}"
+                )));
+            }
+        }
+
+        // Drop any "is partitioned" bookkeeping for this endpoint and
+        // persist. Without this, a follow-up `partition()` would see
+        // the stale entry and return early without installing the
+        // qdisc — the silent no-op reported as round-4 §1.
+        if self.saved_impairments.remove(endpoint).is_some() {
+            self.save_state()?;
+        }
         Ok(())
     }
 

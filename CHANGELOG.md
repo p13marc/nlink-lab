@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-(empty — entries land here as the next release accumulates)
+### Fixed
+- `nlink-lab impair --partition` is no longer a silent no-op on the
+  second invocation after `--clear`. `clear_impairment` now prunes
+  the endpoint's entry from `saved_impairments` (so the next
+  `partition` doesn't short-circuit on the stale "is partitioned"
+  flag) and persists state. It is also now idempotent on
+  `QdiscNotFound` from the kernel — a missing qdisc is treated as
+  "already cleared" instead of erroring. Together this makes
+  partition→clear→partition→clear cycles work reliably; previously
+  cycle 2's `partition` printed success but installed nothing, and
+  cycle 2's `clear` crashed. (Plan 156 PR A — round-4 §1)
+  Library API change: `RunningLab::clear_impairment` is now
+  `&mut self` (was `&self`).
 
 ## [0.2.0] - 2026-04-30
 

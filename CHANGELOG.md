@@ -4,15 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+(empty — entries land here as the next release accumulates)
+
+## [0.3.1] - 2026-05-03
+
+Patch release for one bug in 0.3.0. No API changes.
+
 ### Fixed
 - `nlink-lab impair --show --json` returned `endpoints: {}` for any
   topology built around bridge networks. The first cut only walked
   `topology.links`, so `network { members [...] }`-style endpoints
   were invisible. `collect_impair_show` now collects from
   `links` + `networks.members` + declared `impairments` keys via a
-  new pure helper `topology_endpoints`. Two new unit tests cover
-  the multi-source collection and a network-only topology
-  (regression guard for the harness team's 3-machine config).
+  new pure helper `nlink_lab::impair_parse::topology_endpoints`.
+  Two unit tests cover the multi-source collection and a
+  network-only topology; a root-gated integration test
+  (`impair_show_includes_network_members`) deploys
+  `examples/vlan-trunk.nll` and verifies end-to-end that a
+  partitioned bridge member's qdisc is visible. Regression guard
+  for the harness team's 3-machine config.
   (round-4 §3 follow-up)
 
 ## [0.3.0] - 2026-05-03

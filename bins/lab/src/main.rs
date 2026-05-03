@@ -212,6 +212,13 @@ enum Commands {
         #[arg(long, value_name = "DIR")]
         workdir: Option<PathBuf>,
 
+        /// Maximum wall-clock time the command may run, in seconds. On
+        /// expiry the child is sent SIGTERM, then SIGKILL after a 1s
+        /// grace period. Exit code 124 on timeout (matches
+        /// `coreutils timeout(1)`). Default: no timeout.
+        #[arg(long, value_name = "SECS")]
+        timeout: Option<u64>,
+
         /// Command and arguments.
         #[arg(trailing_var_arg = true, required = true)]
         cmd: Vec<String>,
@@ -1228,6 +1235,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             node,
             env_vars,
             workdir,
+            timeout,
             cmd,
         } => {
             check_root();
@@ -1239,6 +1247,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let opts = nlink_lab::ExecOpts {
                 workdir: workdir.as_deref(),
                 env: &env_refs,
+                timeout: timeout.map(std::time::Duration::from_secs),
             };
 
             if cli.json {
@@ -1262,6 +1271,22 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 })();
                 match result {
                     Ok(json) => println!("{json}"),
+                    Err(nlink_lab::Error::Timeout(d)) => {
+                        // Timeout in --json: emit a structured error and
+                        // exit 124 so scripts can distinguish "child
+                        // exited 124" from "we timed out".
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "error": format!("timed out after {d:?}"),
+                                "exit_code": 124,
+                                "stdout": "",
+                                "stderr": "",
+                                "duration_ms": d.as_millis() as u64,
+                            })
+                        );
+                        std::process::exit(124);
+                    }
                     Err(e) => {
                         println!(
                             "{}",
@@ -1290,11 +1315,19 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 std::process::exit(1);
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
-            let code = running.exec_attached_with_opts(&node, &cmd[0], &args, opts)?;
-            if code != 0 {
-                std::process::exit(code);
+            match running.exec_attached_with_opts(&node, &cmd[0], &args, opts) {
+                Ok(code) => {
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                    Ok(())
+                }
+                Err(nlink_lab::Error::Timeout(d)) => {
+                    eprintln!("nlink-lab exec: command timed out after {d:?}");
+                    std::process::exit(124);
+                }
+                Err(e) => Err(e),
             }
-            Ok(())
         }
 
         Commands::Spawn {
@@ -3395,9 +3428,7 @@ fn collect_impair_show(
                 continue;
             }
             let ep = EndpointRef::parse(ep_str).ok_or_else(|| {
-                nlink_lab::Error::invalid_topology(format!(
-                    "malformed endpoint {ep_str:?} in link"
-                ))
+                nlink_lab::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in link"))
             })?;
             let tc = running.exec(&ep.node, "tc", &["qdisc", "show", "dev", &ep.iface])?;
             let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&tc.stdout);

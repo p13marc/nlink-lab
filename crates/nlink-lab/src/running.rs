@@ -74,6 +74,13 @@ pub struct ExecOpts<'a> {
     /// environment. Namespace nodes: set on the `Command` directly.
     /// Container nodes: passed as repeated `-e KEY=VALUE` to the runtime.
     pub env: &'a [(&'a str, &'a str)],
+    /// Maximum wall-clock time the child is allowed to run. On expiry
+    /// the child is sent SIGTERM, then SIGKILL after a 1-second grace
+    /// period. Returns [`Error::Timeout`] when triggered. `None` =
+    /// no timeout (matches the historical behaviour). Mirrors
+    /// `coreutils timeout(1)`; the CLI translates `Error::Timeout`
+    /// into exit code 124.
+    pub timeout: Option<std::time::Duration>,
 }
 
 /// Optional knobs for [`RunningLab::spawn_with_logs_with_opts`]. Same env
@@ -342,17 +349,33 @@ impl RunningLab {
             all_args.push(&container.id);
             all_args.push(cmd);
             all_args.extend(args);
-            let output = std::process::Command::new(rt_binary)
-                .args(&all_args)
-                .output()
-                .map_err(|e| {
+            let mut command = std::process::Command::new(rt_binary);
+            command.args(&all_args);
+            if let Some(timeout) = opts.timeout {
+                let mut child = command
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| {
+                        Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
+                    })?;
+                wait_with_timeout(&mut child, timeout)?;
+                let output = child.wait_with_output().map_err(Error::Io)?;
+                Ok(ExecOutput {
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                    exit_code: output.status.code().unwrap_or(-1),
+                })
+            } else {
+                let output = command.output().map_err(|e| {
                     Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
                 })?;
-            Ok(ExecOutput {
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                exit_code: output.status.code().unwrap_or(-1),
-            })
+                Ok(ExecOutput {
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                    exit_code: output.status.code().unwrap_or(-1),
+                })
+            }
         } else {
             let ns_name = self.namespace_for(node)?;
             let mut command = std::process::Command::new(cmd);
@@ -363,13 +386,27 @@ impl RunningLab {
             for (k, v) in opts.env {
                 command.env(k, v);
             }
-            let output = namespace::spawn_output_with_etc(ns_name, command)
-                .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
-            Ok(ExecOutput {
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                exit_code: output.status.code().unwrap_or(-1),
-            })
+            if let Some(timeout) = opts.timeout {
+                command.stdout(std::process::Stdio::piped());
+                command.stderr(std::process::Stdio::piped());
+                let mut child = namespace::spawn_with_etc(ns_name, command)
+                    .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
+                wait_with_timeout(&mut child, timeout)?;
+                let output = child.wait_with_output().map_err(Error::Io)?;
+                Ok(ExecOutput {
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                    exit_code: output.status.code().unwrap_or(-1),
+                })
+            } else {
+                let output = namespace::spawn_output_with_etc(ns_name, command)
+                    .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
+                Ok(ExecOutput {
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                    exit_code: output.status.code().unwrap_or(-1),
+                })
+            }
         }
     }
 
@@ -433,16 +470,18 @@ impl RunningLab {
             all_args.push(&container.id);
             all_args.push(cmd);
             all_args.extend(args);
-            let status = std::process::Command::new(rt_binary)
+            let mut command = std::process::Command::new(rt_binary);
+            command
                 .args(&all_args)
                 .stdin(std::process::Stdio::inherit())
                 .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .status()
-                .map_err(|e| {
-                    Error::deploy_failed(format!("attached exec in container '{node}' failed: {e}"))
-                })?;
-            Ok(status.code().unwrap_or(-1))
+                .stderr(std::process::Stdio::inherit());
+            run_with_optional_timeout(&mut command, opts.timeout).map_err(|e| match e {
+                Error::Timeout(_) => e,
+                other => Error::deploy_failed(format!(
+                    "attached exec in container '{node}' failed: {other}"
+                )),
+            })
         } else {
             let ns_name = self.namespace_for(node)?;
             // Enter the namespace via nsenter so stdio inherits naturally.
@@ -464,10 +503,10 @@ impl RunningLab {
             for (k, v) in opts.env {
                 command.env(k, v);
             }
-            let status = command.status().map_err(|e| {
-                Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
-            })?;
-            Ok(status.code().unwrap_or(-1))
+            run_with_optional_timeout(&mut command, opts.timeout).map_err(|e| match e {
+                Error::Timeout(_) => e,
+                other => Error::deploy_failed(format!("attached exec in '{node}' failed: {other}")),
+            })
         }
     }
 
@@ -1152,6 +1191,66 @@ impl RunningLab {
             .into_iter()
             .filter(|p| p.alive)
             .collect()
+    }
+}
+
+/// Wait for a child to exit, escalating SIGTERM → SIGKILL on deadline.
+///
+/// On timeout: sends SIGTERM, gives the child up to 1 second to exit
+/// cleanly, then `child.kill()` (SIGKILL). Either way the child has
+/// been reaped on return so `wait_with_output()` (or further `try_wait`)
+/// won't block. Returns [`Error::Timeout`] when the deadline fires;
+/// `Ok(())` if the child exits in time. Used by `exec_with_opts` and
+/// `exec_attached_with_opts` when [`ExecOpts::timeout`] is set.
+fn wait_with_timeout(child: &mut std::process::Child, timeout: std::time::Duration) -> Result<()> {
+    let deadline = std::time::Instant::now() + timeout;
+    let poll = std::time::Duration::from_millis(50);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return Ok(()),
+            Ok(None) => {}
+            Err(e) => return Err(Error::Io(e)),
+        }
+        if std::time::Instant::now() >= deadline {
+            // SIGTERM, 1s grace, then SIGKILL — matches `coreutils
+            // timeout(1)`'s default escalation.
+            unsafe {
+                libc::kill(child.id() as i32, libc::SIGTERM);
+            }
+            let grace_deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+            loop {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    break;
+                }
+                if std::time::Instant::now() >= grace_deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break;
+                }
+                std::thread::sleep(poll);
+            }
+            return Err(Error::Timeout(timeout));
+        }
+        std::thread::sleep(poll);
+    }
+}
+
+/// Run a `Command` to completion with an optional deadline. Returns the
+/// child's exit code on normal exit, [`Error::Timeout`] when the deadline
+/// fires. Used by the *attached* exec path where stdio is inherited and
+/// no output capture is needed.
+fn run_with_optional_timeout(
+    command: &mut std::process::Command,
+    timeout: Option<std::time::Duration>,
+) -> Result<i32> {
+    if let Some(t) = timeout {
+        let mut child = command.spawn().map_err(Error::Io)?;
+        wait_with_timeout(&mut child, t)?;
+        let status = child.wait().map_err(Error::Io)?;
+        Ok(status.code().unwrap_or(-1))
+    } else {
+        let status = command.status().map_err(Error::Io)?;
+        Ok(status.code().unwrap_or(-1))
     }
 }
 

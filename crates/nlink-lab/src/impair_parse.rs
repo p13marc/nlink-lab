@@ -154,10 +154,9 @@ mod tests {
 
     #[test]
     fn parses_loss_only() {
-        let out = parse_tc_qdisc_show(
-            "qdisc netem 801c: dev eth0 root refcnt 2 limit 1000 loss 100%",
-        )
-        .unwrap();
+        let out =
+            parse_tc_qdisc_show("qdisc netem 801c: dev eth0 root refcnt 2 limit 1000 loss 100%")
+                .unwrap();
         assert_eq!(out.qdisc, "netem");
         assert_eq!(out.loss_pct, Some(100.0));
         assert_eq!(out.delay_ms, None);
@@ -220,9 +219,7 @@ qdisc netem 10: dev eth0 parent 1:1 limit 1000 loss 100%";
             ("rate 42bit", 42),
         ];
         for (snippet, expected) in cases {
-            let line = format!(
-                "qdisc netem 1: dev eth0 root refcnt 2 limit 1000 {snippet}"
-            );
+            let line = format!("qdisc netem 1: dev eth0 root refcnt 2 limit 1000 {snippet}");
             let out = parse_tc_qdisc_show(&line).unwrap();
             assert_eq!(out.rate_bps, Some(expected), "for {snippet:?}");
         }
@@ -247,19 +244,17 @@ qdisc netem 10: dev eth0 parent 1:1 limit 1000 loss 100%";
     fn unknown_fields_are_ignored() {
         // tc may print fields we don't model (limit, refcnt, etc.) —
         // they should not break parsing of fields we do model.
-        let out = parse_tc_qdisc_show(
-            "qdisc netem 1: dev eth0 root refcnt 2 limit 1000 ecn delay 5ms",
-        )
-        .unwrap();
+        let out =
+            parse_tc_qdisc_show("qdisc netem 1: dev eth0 root refcnt 2 limit 1000 ecn delay 5ms")
+                .unwrap();
         assert_eq!(out.delay_ms, Some(5.0));
     }
 
     #[test]
     fn malformed_loss_skipped_not_panicked() {
         // `loss xyz` shouldn't blow up — the value just doesn't get set.
-        let out =
-            parse_tc_qdisc_show("qdisc netem 1: dev eth0 root refcnt 2 limit 1000 loss XYZ")
-                .unwrap();
+        let out = parse_tc_qdisc_show("qdisc netem 1: dev eth0 root refcnt 2 limit 1000 loss XYZ")
+            .unwrap();
         assert_eq!(out.loss_pct, None);
         assert_eq!(out.qdisc, "netem");
     }

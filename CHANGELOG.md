@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab exec --timeout SECS` — bound the wall-clock time a command
+  may run. On expiry the child is sent SIGTERM, then SIGKILL after a
+  1-second grace period. Exit code 124 on timeout (matches
+  `coreutils timeout(1)`). The CLI prints
+  `nlink-lab exec: command timed out after Ns` to stderr. New
+  `ExecOpts::timeout: Option<Duration>` field plumbs the value
+  through `exec_with_opts` and `exec_attached_with_opts`. New
+  `Error::Timeout(Duration)` variant for library consumers.
+  (Plan 156 PR B — round-4 §2)
 - `nlink-lab impair --show --json` — structured per-endpoint view of
   installed netem state, replacing grep-against-`tc`-text for harness
   consumers. One row per endpoint declared in the topology;

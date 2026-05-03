@@ -101,6 +101,14 @@ pub enum Error {
     #[error("deploy failed: {0}")]
     DeployFailed(String),
 
+    /// Command exceeded its `--timeout`. The CLI maps this to exit
+    /// code 124, matching `coreutils timeout(1)`. Surfaced from
+    /// `RunningLab::exec_with_opts` and `exec_attached_with_opts`
+    /// when `ExecOpts::timeout` is set and elapses before the child
+    /// exits.
+    #[error("command timed out after {0:?}")]
+    Timeout(std::time::Duration),
+
     /// State file error.
     #[error("{op} state: {detail} (path: {path})")]
     State {

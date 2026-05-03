@@ -1143,3 +1143,46 @@ async fn is_partitioned_tracks_partition_clear_lifecycle(mut lab: RunningLab) {
         "after clear: flag must be reset (this is the round-4 §1 fix)"
     );
 }
+
+// ─── Plan 156 PR B — exec --timeout ─────────────────────
+
+// `ExecOpts::timeout` set to a value shorter than the child's run time
+// must surface `Error::Timeout` and reap the child within the
+// SIGTERM+1s grace+SIGKILL escalation window. Test wraps `sleep 30` in
+// a 500ms timeout; total should complete in ~1.5s (kill grace).
+#[lab_test("examples/simple.nll")]
+async fn exec_with_timeout_kills_long_running(lab: RunningLab) {
+    let opts = nlink_lab::ExecOpts {
+        timeout: Some(std::time::Duration::from_millis(500)),
+        ..Default::default()
+    };
+    let start = std::time::Instant::now();
+    let err = lab
+        .exec_with_opts("host", "sleep", &["30"], opts)
+        .unwrap_err();
+    let elapsed = start.elapsed();
+    assert!(
+        matches!(err, nlink_lab::Error::Timeout(_)),
+        "expected Error::Timeout, got: {err:?}"
+    );
+    // Should be ~500ms timeout + ~1s grace = ~1.5s. Allow generous
+    // upper bound (5s) for slow CI; the point is it didn't hang the
+    // full 30s.
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "took too long: {elapsed:?}"
+    );
+}
+
+// A short-lived command under a generous timeout must complete normally
+// — timeout is opt-in cap, not a hard wait.
+#[lab_test("examples/simple.nll")]
+async fn exec_under_timeout_returns_normally(lab: RunningLab) {
+    let opts = nlink_lab::ExecOpts {
+        timeout: Some(std::time::Duration::from_secs(5)),
+        ..Default::default()
+    };
+    let out = lab.exec_with_opts("host", "echo", &["hi"], opts).unwrap();
+    assert_eq!(out.exit_code, 0);
+    assert_eq!(out.stdout.trim(), "hi");
+}

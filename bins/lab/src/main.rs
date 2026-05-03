@@ -3413,31 +3413,54 @@ struct ImpairShowEntry {
 /// Walk every endpoint in the topology, exec `tc qdisc show dev <iface>`
 /// inside the right namespace, and parse the result. Endpoints with no
 /// impairment installed serialize as `null`. Used by `--show --json`.
+/// Collect every endpoint reference declared anywhere in the topology
+/// — `links`, `networks.members`, `impairments` keys. Returns a sorted
+/// dedup'd list. Pure function, unit-testable.
+///
+/// History: the first cut of `--show --json` only walked `links`, so
+/// any topology built around bridge networks (`network lan_a { members
+/// router:eth0, ... }`) emitted `endpoints: {}`. Round-4 follow-up
+/// fix.
+fn topology_endpoints(topology: &nlink_lab::Topology) -> Vec<String> {
+    let mut endpoint_strs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for link in &topology.links {
+        for ep in &link.endpoints {
+            endpoint_strs.insert(ep.clone());
+        }
+    }
+    for network in topology.networks.values() {
+        for member in &network.members {
+            endpoint_strs.insert(member.clone());
+        }
+    }
+    for ep in topology.impairments.keys() {
+        endpoint_strs.insert(ep.clone());
+    }
+    endpoint_strs.into_iter().collect()
+}
+
 fn collect_impair_show(
     running: &nlink_lab::RunningLab,
 ) -> nlink_lab::Result<std::collections::BTreeMap<String, Option<ImpairShowEntry>>> {
     use nlink_lab::EndpointRef;
     let mut out = std::collections::BTreeMap::new();
-    for link in &running.topology().links {
-        for ep_str in &link.endpoints {
-            // `out.contains_key` would be cheaper than recomputing
-            // EndpointRef::parse, but endpoints don't normalise (e.g.
-            // case), so the literal endpoint string is the contract
-            // for both keys and the `is_partitioned` lookup.
-            if out.contains_key(ep_str) {
-                continue;
-            }
-            let ep = EndpointRef::parse(ep_str).ok_or_else(|| {
-                nlink_lab::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in link"))
-            })?;
-            let tc = running.exec(&ep.node, "tc", &["qdisc", "show", "dev", &ep.iface])?;
-            let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&tc.stdout);
-            let entry = parsed.map(|fields| ImpairShowEntry {
-                fields,
-                partition: running.is_partitioned(ep_str),
-            });
-            out.insert(ep_str.clone(), entry);
+    for ep_str in topology_endpoints(running.topology()) {
+        let ep = EndpointRef::parse(&ep_str).ok_or_else(|| {
+            nlink_lab::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in topology"))
+        })?;
+        // Skip endpoints whose node isn't a known namespace (e.g.
+        // container-only nodes — `tc qdisc show` via `running.exec`
+        // would route through docker/podman and is meaningless).
+        if running.namespace_for(&ep.node).is_err() {
+            continue;
         }
+        let tc = running.exec(&ep.node, "tc", &["qdisc", "show", "dev", &ep.iface])?;
+        let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&tc.stdout);
+        let entry = parsed.map(|fields| ImpairShowEntry {
+            fields,
+            partition: running.is_partitioned(&ep_str),
+        });
+        out.insert(ep_str, entry);
     }
     Ok(out)
 }
@@ -3508,6 +3531,88 @@ mod tests {
             let _: serde_json::Value = serde_json::from_str(s)
                 .expect("JSON Schema file failed to parse — see file list above");
         }
+    }
+
+    /// `topology_endpoints` must collect from every place a topology
+    /// can declare an endpoint — `links`, `networks.members`, and
+    /// declared impairments. Round-4 follow-up: the first `--show
+    /// --json` impl only walked `links` and emitted `endpoints: {}`
+    /// for any topology built around bridge networks.
+    #[test]
+    fn topology_endpoints_collects_links_networks_and_impairments() {
+        let nll = r#"
+lab "tep"
+
+node a
+node b
+node c
+
+# point-to-point link → endpoints visible in `links`
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+# bridge network → endpoints visible in `networks.members`
+network lan {
+  members [b:eth1, c:eth0]
+  subnet 10.1.0.0/24
+}
+
+# top-level impair → endpoint visible in `impairments`
+impair c:lo delay 5ms
+"#;
+        let topo = nlink_lab::parser::parse(nll).unwrap();
+        let endpoints = topology_endpoints(&topo);
+
+        // BTreeSet ordering is alphabetical.
+        assert_eq!(
+            endpoints,
+            vec![
+                "a:eth0".to_string(),
+                "b:eth0".to_string(),
+                "b:eth1".to_string(),
+                "c:eth0".to_string(),
+                "c:lo".to_string(),
+            ],
+            "must collect link endpoints + network members + impairment keys"
+        );
+    }
+
+    /// Network-only topology must produce a non-empty endpoint list.
+    /// Specifically guards against the round-4 follow-up regression
+    /// where `--show --json` returned `endpoints: {}` for the harness
+    /// team's 3-machine topology (built around networks, no `link`
+    /// declarations).
+    #[test]
+    fn topology_endpoints_handles_network_only_topology() {
+        let nll = r#"
+lab "net-only"
+
+node router
+node site_a
+node site_b
+
+network lan_a {
+  members [router:eth0, site_a:eth0]
+  subnet 10.0.0.0/24
+}
+network lan_b {
+  members [router:eth1, site_b:eth0]
+  subnet 10.1.0.0/24
+}
+"#;
+        let topo = nlink_lab::parser::parse(nll).unwrap();
+        let endpoints = topology_endpoints(&topo);
+        assert!(
+            endpoints.contains(&"router:eth0".to_string()),
+            "missing router:eth0: {endpoints:?}"
+        );
+        assert!(
+            endpoints.contains(&"site_a:eth0".to_string()),
+            "missing site_a:eth0: {endpoints:?}"
+        );
+        assert!(
+            endpoints.contains(&"site_b:eth0".to_string()),
+            "missing site_b:eth0 (was the regression trigger): {endpoints:?}"
+        );
     }
 
     #[test]

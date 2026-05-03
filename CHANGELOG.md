@@ -4,7 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-(empty — entries land here as the next release accumulates)
+### Fixed
+- `nlink-lab impair --show --json` returned `endpoints: {}` for any
+  topology built around bridge networks. The first cut only walked
+  `topology.links`, so `network { members [...] }`-style endpoints
+  were invisible. `collect_impair_show` now collects from
+  `links` + `networks.members` + declared `impairments` keys via a
+  new pure helper `topology_endpoints`. Two new unit tests cover
+  the multi-source collection and a network-only topology
+  (regression guard for the harness team's 3-machine config).
+  (round-4 §3 follow-up)
 
 ## [0.3.0] - 2026-05-03
 

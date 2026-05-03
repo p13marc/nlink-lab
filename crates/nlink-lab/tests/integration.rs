@@ -1124,6 +1124,40 @@ async fn clear_impairment_idempotent_on_fresh_deploy(mut lab: RunningLab) {
 
 // ─── Plan 156 PR C — impair --show JSON view ────────────
 
+// Round-4 follow-up: `--show --json` returned `endpoints: {}` for any
+// topology built around bridge networks. The fix walks
+// `networks.members` in addition to `links`. This deploys a real
+// network-only topology, partitions a member endpoint, and asserts:
+//   1. `topology_endpoints` includes the bridge member.
+//   2. `is_partitioned(member)` is true after partition.
+//   3. The kernel actually has the netem qdisc on the member's iface.
+// Together these prove the `--show --json` flow can see endpoints
+// declared via networks, end-to-end.
+#[lab_test("examples/vlan-trunk.nll")]
+async fn impair_show_includes_network_members(mut lab: RunningLab) {
+    let endpoints = nlink_lab::impair_parse::topology_endpoints(lab.topology());
+    assert!(
+        endpoints.contains(&"host1:eth0".to_string()),
+        "vlan-trunk topology has no `link` declarations — host1:eth0 \
+         lives only in `network fabric.members`. The endpoint must \
+         still appear in topology_endpoints. Got: {endpoints:?}"
+    );
+
+    lab.partition("host1:eth0").await.unwrap();
+    assert!(lab.is_partitioned("host1:eth0"));
+
+    let qd = lab
+        .exec("host1", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(
+        qd.stdout.contains("loss 100%"),
+        "expected a loss 100% qdisc on host1:eth0 after partition; tc said: {}",
+        qd.stdout
+    );
+    let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout).unwrap();
+    assert_eq!(parsed.loss_pct, Some(100.0));
+}
+
 // `is_partitioned` should reflect partition/heal lifecycle, not raw
 // `--loss 100%` installs. Before partition: false. After partition:
 // true. After clear_impairment (which prunes saved_impairments): false

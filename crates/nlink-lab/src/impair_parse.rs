@@ -33,6 +33,34 @@ pub struct ImpairShow {
     pub rate_bps: Option<u64>,
 }
 
+/// Collect every endpoint reference declared anywhere in a topology —
+/// `links`, `networks.members`, and `impairments` keys — sorted and
+/// deduplicated. Pure function, used by `nlink-lab impair --show
+/// --json` to enumerate which interfaces to probe with `tc qdisc show`.
+///
+/// History: an earlier cut walked only `topology.links`, so any
+/// topology built around bridge networks (`network lan { members
+/// [router:eth0, ...] }`) emitted `endpoints: {}` from `--show
+/// --json`. Reported as a round-4 follow-up; this helper is the
+/// regression guard.
+pub fn topology_endpoints(topology: &crate::types::Topology) -> Vec<String> {
+    let mut out: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for link in &topology.links {
+        for ep in &link.endpoints {
+            out.insert(ep.clone());
+        }
+    }
+    for network in topology.networks.values() {
+        for member in &network.members {
+            out.insert(member.clone());
+        }
+    }
+    for ep in topology.impairments.keys() {
+        out.insert(ep.clone());
+    }
+    out.into_iter().collect()
+}
+
 /// Parse one or more lines of `tc qdisc show dev <iface>` output, returning
 /// the *root* qdisc's parsed state, or `None` if the only qdisc is the
 /// kernel default `noqueue`.

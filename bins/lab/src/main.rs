@@ -3413,38 +3413,12 @@ struct ImpairShowEntry {
 /// Walk every endpoint in the topology, exec `tc qdisc show dev <iface>`
 /// inside the right namespace, and parse the result. Endpoints with no
 /// impairment installed serialize as `null`. Used by `--show --json`.
-/// Collect every endpoint reference declared anywhere in the topology
-/// — `links`, `networks.members`, `impairments` keys. Returns a sorted
-/// dedup'd list. Pure function, unit-testable.
-///
-/// History: the first cut of `--show --json` only walked `links`, so
-/// any topology built around bridge networks (`network lan_a { members
-/// router:eth0, ... }`) emitted `endpoints: {}`. Round-4 follow-up
-/// fix.
-fn topology_endpoints(topology: &nlink_lab::Topology) -> Vec<String> {
-    let mut endpoint_strs: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for link in &topology.links {
-        for ep in &link.endpoints {
-            endpoint_strs.insert(ep.clone());
-        }
-    }
-    for network in topology.networks.values() {
-        for member in &network.members {
-            endpoint_strs.insert(member.clone());
-        }
-    }
-    for ep in topology.impairments.keys() {
-        endpoint_strs.insert(ep.clone());
-    }
-    endpoint_strs.into_iter().collect()
-}
-
 fn collect_impair_show(
     running: &nlink_lab::RunningLab,
 ) -> nlink_lab::Result<std::collections::BTreeMap<String, Option<ImpairShowEntry>>> {
     use nlink_lab::EndpointRef;
     let mut out = std::collections::BTreeMap::new();
-    for ep_str in topology_endpoints(running.topology()) {
+    for ep_str in nlink_lab::impair_parse::topology_endpoints(running.topology()) {
         let ep = EndpointRef::parse(&ep_str).ok_or_else(|| {
             nlink_lab::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in topology"))
         })?;
@@ -3560,7 +3534,7 @@ network lan {
 impair c:lo delay 5ms
 "#;
         let topo = nlink_lab::parser::parse(nll).unwrap();
-        let endpoints = topology_endpoints(&topo);
+        let endpoints = nlink_lab::impair_parse::topology_endpoints(&topo);
 
         // BTreeSet ordering is alphabetical.
         assert_eq!(
@@ -3600,7 +3574,7 @@ network lan_b {
 }
 "#;
         let topo = nlink_lab::parser::parse(nll).unwrap();
-        let endpoints = topology_endpoints(&topo);
+        let endpoints = nlink_lab::impair_parse::topology_endpoints(&topo);
         assert!(
             endpoints.contains(&"router:eth0".to_string()),
             "missing router:eth0: {endpoints:?}"

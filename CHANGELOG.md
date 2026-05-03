@@ -45,6 +45,11 @@ their host-side `Command + child.kill()` deadline plumbing.
   `nlink_lab::impair_parse::parse_tc_qdisc_show`. Schema:
   `docs/json-schemas/impair-show.schema.json`.
   (Plan 156 PR C — round-4 §3)
+  > **Known bug in 0.3.0**: `endpoints` always returned `{}` for
+  > topologies built around bridge networks (the harness team's
+  > 3-machine config). The collector only walked `topology.links`
+  > and missed `network { members [...] }`-style endpoints
+  > entirely. Use 0.3.1 or later for this feature.
 
 ### Fixed
 - `nlink-lab impair --partition` is no longer a silent no-op on the

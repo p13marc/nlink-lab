@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+(empty — entries land here as the next release accumulates)
+
+## [0.3.0] - 2026-05-03
+
+The "round-4 harness feedback" release — three small PRs from Plan
+156 fixing the partition-cycle silent no-op, adding `exec --timeout`,
+and adding `impair --show --json`. Together they let the
+`des-test-harness` team revert their `--loss 100%` workaround and
+their host-side `Command + child.kill()` deadline plumbing.
+
 ### Added
 - `nlink-lab exec --timeout SECS` — bound the wall-clock time a command
   may run. On expiry the child is sent SIGTERM, then SIGKILL after a
@@ -38,8 +48,12 @@ All notable changes to this project will be documented in this file.
   partition→clear→partition→clear cycles work reliably; previously
   cycle 2's `partition` printed success but installed nothing, and
   cycle 2's `clear` crashed. (Plan 156 PR A — round-4 §1)
-  Library API change: `RunningLab::clear_impairment` is now
-  `&mut self` (was `&self`).
+
+### Changed
+- **Library API**: `RunningLab::clear_impairment` is now `&mut self`
+  (was `&self`) — necessary for the partition-cycle fix above. All
+  in-tree callers were already passing `mut RunningLab`; external
+  callers (none we know of) need to pass `mut`.
 
 ## [0.2.0] - 2026-04-30
 

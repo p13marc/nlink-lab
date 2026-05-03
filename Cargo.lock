@@ -3014,7 +3014,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "flate2",
@@ -3042,7 +3042,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-backend"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3061,7 +3061,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "atty",
  "clap",
@@ -3083,7 +3083,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3092,7 +3092,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-shared"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3100,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-topoviewer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "iced",

@@ -4,7 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-(empty — entries land here as the next release accumulates)
+### Added
+- `docs/ARCHITECTURE.md` — new "Process & namespace model" section
+  documenting which `CLONE_NEW*` flags are active (only
+  `CLONE_NEWNET` always; `CLONE_NEWNS` when `dns hosts` is set; no
+  `CLONE_NEWPID`), the UID model, `/proc` permission rules, and the
+  globally-shared state surfaces parallel deploys can race on
+  (`/etc/hosts`, mac80211_hwsim). Source-of-truth answer to "what's
+  the relationship between host PID and ns PID" — they're equal.
+  (Plan 157 PR A — round-5 §1.1)
+- README links `CHANGELOG.md` from the Documentation section.
+  (Plan 157 PR A — round-5 §3.3)
+
+### Changed
+- Each `--json`-emitting subcommand's `--help` now points at its
+  schema file under `docs/json-schemas/` (deploy, status, spawn,
+  ps, impair --show). Saves consumers the discovery cost.
+  (Plan 157 PR A — round-5 §3.2)
 
 ## [0.3.1] - 2026-05-03
 

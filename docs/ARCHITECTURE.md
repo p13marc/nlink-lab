@@ -139,6 +139,107 @@ down. (`destroy --orphans` reaps it without a state file.)
 `destroy`, and `apply`. Different labs have different lock files
 and run in parallel without contention.
 
+**Global state caveat**: a few subsystems mutate host-global state
+without per-lab locks — `dns::inject_hosts` rewrites `/etc/hosts`,
+the mac80211_hwsim module load is process-global, etc. Two
+parallel deploys that both touch one of these surfaces can race.
+The "Process & namespace model" section below has the full
+inventory.
+
+## Process & namespace model
+
+Quick reference for harness writers and anyone reasoning about
+spawned-process visibility. Targets bare namespace nodes —
+container nodes follow docker/podman's conventions instead.
+
+### Namespaces
+
+A process spawned by `nlink-lab spawn` (or `nlink-lab exec`) into a
+bare namespace node enters exactly **one** Linux namespace via
+`setns(2)`:
+
+| Flag             | Active? | Notes |
+|------------------|---------|-------|
+| `CLONE_NEWNET`   | always  | Network ns — the reason nlink-lab exists. Source: `crates/nlink/src/netlink/namespace.rs:405`. |
+| `CLONE_NEWNS`    | sometimes | Only when `dns hosts` (or any `/etc/netns/<ns>/` overlay) is configured. The mount ns is private to the spawned process; needed for the `/etc/hosts` bind-mount to be visible to the child without polluting the host. Source: `namespace.rs:1016`. |
+| `CLONE_NEWPID`   | **no**  | PIDs are shared with the host. **`host_pid == ns_pid` for every spawned process.** |
+| `CLONE_NEWUTS`   | no      | Hostname/domainname inherited from host. |
+| `CLONE_NEWIPC`   | no      | SysV IPC, POSIX message queues shared with host. |
+| `CLONE_NEWUSER`  | no      | No UID mapping. Root in the namespace is root on the host. |
+
+### UID
+
+`nlink-lab` enforces root via `check_root` before any deploy / exec
+/ spawn that touches netlink. Spawned processes inherit the
+caller's UID — which is always root in practice. Without
+`CLONE_NEWUSER`, this is *real* root: no UID mapping, full
+capabilities.
+
+### `/proc` visibility from the host
+
+Without `CLONE_NEWPID`, the host's `/proc` shows every spawned
+process. Permissions follow the standard kernel rules — they don't
+change inside the namespace:
+
+| Path                      | Readable from host non-root? | Why |
+|---------------------------|------------------------------|-----|
+| `/proc/<pid>/stat`        | yes (mode 0444)              | always world-readable. |
+| `/proc/<pid>/status`      | yes (mode 0444)              | always world-readable. |
+| `/proc/<pid>/cmdline`     | yes (mode 0444)              | always world-readable. |
+| `/proc/<pid>/comm`        | yes (mode 0444)              | always world-readable. |
+| `/proc/<pid>/fd/`         | **no** (mode 0700, root)     | listing requires UID match — the spawned process is root, you are not. |
+| `/proc/<pid>/net/tcp`     | yes (mode 0444)              | reads the *netns*'s socket table, not the host's, when the reading process is in the same netns. From the host, this is the host's table. |
+
+If you need to read `fd/` or other UID-restricted paths from a
+non-root host shell, route the read through `nlink-lab` itself:
+
+```bash
+sudo nlink-lab proc-stat <lab> <node> <pid> --json
+sudo nlink-lab exec <lab> <node> -- ls /proc/<pid>/fd
+```
+
+`proc-stat` (Plan 157 PR C) exists specifically to abstract over
+the permission gymnastics; prefer it over hand-rolled `/proc`
+parsing.
+
+### Host PID vs namespace PID
+
+Equal. **Always.** No exceptions today.
+
+`nlink-lab spawn --json` returns `{ "pid": N, "host_pid": N, ... }`
+where `pid` and `host_pid` are aliases for the same value. The
+`host_pid` field exists for forward compatibility — if a future
+version of nlink-lab adds `CLONE_NEWPID`, an `ns_pid` field will
+appear alongside it. Until then, code that reads either is
+correct.
+
+### Globally-shared state (the parallel-deploy caveats)
+
+Despite per-lab `flock` (see "Concurrency" above), some subsystems
+touch host-global state without coordinating across labs. Two
+parallel deploys that both exercise one of these can race:
+
+- **`/etc/hosts`** — `crates/nlink-lab/src/dns.rs` rewrites the
+  managed section non-atomically across labs. Only matters when
+  `dns hosts` is set in the topology.
+- **`mac80211_hwsim`** — kernel module load is process-global.
+  Multiple Wi-Fi labs share the same hwsim radio pool.
+- **Default network namespace** — `mgmt host-reachable` adds a
+  bridge to the *host* network namespace; the bridge name is
+  hash-derived per lab, so no name collision, but allocation of
+  bridge IPs from a shared subnet is not coordinated.
+- **The `nlink-lab` process pool** — `nlink-lab status --scan`
+  walks `/run/netns` and `ip link show` from the host's POV; it
+  doesn't take a global lock, so two `--scan` invocations can
+  observe inconsistent intermediate states. Reads only — no
+  mutation race.
+
+Per-lab interface name allocation (`nl{hash8}` mgmt bridge,
+`nm{hash8}<idx>` mgmt veth peers, `np{hash8}<idx>` per-network
+veth peers, `nb{hash8}` bridges) is **not** a parallel-deploy
+hazard: the hashes are djb2 over names which `--unique` makes
+distinct. Collision probability over 100 parallel labs is ~5e-7.
+
 ## Adding a new NLL feature end-to-end
 
 This is the contributor on-ramp. Worked example: **per-pair

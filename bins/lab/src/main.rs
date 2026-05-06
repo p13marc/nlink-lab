@@ -93,6 +93,7 @@ enum Commands {
     ///
     /// JSON OUTPUT (with `--json`):
     ///   { "name": str, "nodes": int, "links": int, "deploy_time_ms": int }
+    /// Schema: docs/json-schemas/deploy.schema.json
     ///
     /// Combined with `--unique`, the `name` field is the chosen unique
     /// lab name (original name + PID suffix). Useful for scripted
@@ -174,12 +175,14 @@ enum Commands {
     ///
     /// JSON OUTPUT (with `--json`, no lab name):
     ///   [ { "name": str, "node_count": int, "created_at": str }, ... ]
+    /// Schema: docs/json-schemas/status-list.schema.json
     ///
     /// JSON OUTPUT (with `--json --scan`):
     ///   { "labs": [ ... ],
     ///     "orphans": { "bridges": [str], "veths": [str], "netns": [str],
     ///                  "stale": [ { "name": str,
     ///                               "missing_namespaces": [str] } ] } }
+    /// Schema: docs/json-schemas/status-scan.schema.json
     ///
     /// JSON OUTPUT (with `--json <lab>`):
     ///   topology object for the lab + an `addresses` field per node.
@@ -235,7 +238,12 @@ enum Commands {
     /// `nlink-lab logs <lab> --pid <pid>`.
     ///
     /// JSON OUTPUT (with `--json`):
-    ///   { "command": str, "node": str, "pid": int }
+    ///   { "command": str, "node": str, "pid": int, "host_pid": int }
+    /// Schema: docs/json-schemas/spawn.schema.json
+    ///
+    /// `pid` and `host_pid` are aliases — equal values today because
+    /// nlink-lab does not use `CLONE_NEWPID`. See ARCHITECTURE.md
+    /// "Process & namespace model" for why.
     Spawn {
         /// Lab name.
         lab: String,
@@ -320,6 +328,13 @@ enum Commands {
     },
 
     /// Modify link impairment at runtime.
+    ///
+    /// JSON OUTPUT (with `--show --json`):
+    ///   { "lab": str, "endpoints": { "<node>:<iface>": { ... } | null } }
+    /// Schema: docs/json-schemas/impair-show.schema.json
+    ///
+    /// Without `--show`, applies impairment changes; output is plain
+    /// confirmation text.
     Impair {
         /// Lab name.
         lab: String,
@@ -437,8 +452,9 @@ enum Commands {
     /// entries out at the source.
     ///
     /// JSON OUTPUT (with `--json`):
-    ///   [ { "node": str, "pid": int, "alive": bool,
+    ///   [ { "node": str, "pid": int, "host_pid": int, "alive": bool,
     ///       "stdout_log": str | null, "stderr_log": str | null }, ... ]
+    /// Schema: docs/json-schemas/ps.schema.json
     Ps {
         /// Lab name.
         lab: String,

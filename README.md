@@ -113,6 +113,7 @@ side-by-side examples, and migration notes — lives at
 - [Architecture for contributors](docs/ARCHITECTURE.md) — code map, the 18-step deploy sequence, how to add an NLL feature end-to-end.
 - [Comparison vs containerlab](docs/COMPARISON.md) — capability matrix + side-by-side examples.
 - [Active plans](docs/plans/) — what's coming next (docs overhaul, killer examples, full reconcile, lab archives).
+- [Changelog](CHANGELOG.md) — per-release notes (Keep-a-Changelog format). The README's `## Status` section pins the current minor.
 
 ## Status
 

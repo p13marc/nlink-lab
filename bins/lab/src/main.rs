@@ -475,6 +475,41 @@ enum Commands {
         pid: u32,
     },
 
+    /// Sample resource usage of a process inside a lab node.
+    ///
+    /// Reads `/proc/<pid>/{stat,status}` and counts entries in
+    /// `/proc/<pid>/fd/` from inside the target namespace. Routes the
+    /// reads through `nlink-lab exec` so `/proc/<pid>/fd/`
+    /// (mode 0700, owned by root) is readable even from a non-root
+    /// caller.
+    ///
+    /// JSON OUTPUT (with `--json`):
+    ///   { "host_pid": int, "command": str, "uid": int,
+    ///     "rss_kb": int | null, "vsz_kb": int | null,
+    ///     "fd_count": int,
+    ///     "cpu_user_ticks": int, "cpu_kernel_ticks": int,
+    ///     "started_at_unix_micros": int, "state": str }
+    /// Schema: docs/json-schemas/proc-stat.schema.json
+    ///
+    /// CPU ticks are in `sysconf(_SC_CLK_TCK)` units (typically 100
+    /// per second); convert by dividing.
+    ProcStat {
+        /// Lab name.
+        lab: String,
+
+        /// Node name.
+        node: String,
+
+        /// Process ID (host PID — same as ns PID; see ARCHITECTURE.md).
+        pid: u32,
+
+        /// Sample every SECS seconds, emitting one record per
+        /// sample. NDJSON (one JSON object per line) when combined
+        /// with `--json`. Stops on Ctrl-C.
+        #[arg(long, value_name = "SECS")]
+        watch: Option<f64>,
+    },
+
     /// Run diagnostics on a lab.
     Diagnose {
         /// Lab name.
@@ -1814,6 +1849,43 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let running = nlink_lab::RunningLab::load(&lab)?;
             running.kill_process(pid)?;
             println!("Killed process {pid}");
+            Ok(())
+        }
+
+        Commands::ProcStat {
+            lab,
+            node,
+            pid,
+            watch,
+        } => {
+            check_root();
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            // Single sample = one shot then exit. --watch = NDJSON
+            // (or text) stream until Ctrl-C.
+            let interval = watch.map(std::time::Duration::from_secs_f64);
+            loop {
+                let stat = running.proc_stat(&node, pid)?;
+                if cli.json {
+                    println!("{}", serde_json::to_string(&stat)?);
+                } else {
+                    println!(
+                        "pid={} cmd={} state={} rss={}kB vsz={}kB fds={} \
+                         user_ticks={} kernel_ticks={}",
+                        stat.host_pid,
+                        stat.command,
+                        stat.state,
+                        stat.rss_kb.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
+                        stat.vsz_kb.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
+                        stat.fd_count,
+                        stat.cpu_user_ticks,
+                        stat.cpu_kernel_ticks,
+                    );
+                }
+                match interval {
+                    Some(d) => tokio::time::sleep(d).await,
+                    None => break,
+                }
+            }
             Ok(())
         }
 
@@ -3594,6 +3666,7 @@ mod tests {
             include_str!("../../../docs/json-schemas/spawn.schema.json"),
             include_str!("../../../docs/json-schemas/ps.schema.json"),
             include_str!("../../../docs/json-schemas/impair-show.schema.json"),
+            include_str!("../../../docs/json-schemas/proc-stat.schema.json"),
         ];
         for s in schemas {
             let _: serde_json::Value = serde_json::from_str(s)

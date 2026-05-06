@@ -67,6 +67,7 @@ pub mod impair_parse;
 pub mod ipfunc;
 pub mod parser;
 pub mod portability;
+pub mod proc_stat;
 pub mod render;
 pub mod running;
 pub mod scenario;
@@ -82,6 +83,7 @@ pub use builder::Lab;
 pub use deploy::apply_diff;
 pub use diff::{TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
+pub use proc_stat::ProcStat;
 pub use running::{
     ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
 };

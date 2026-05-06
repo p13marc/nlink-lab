@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `nlink-lab proc-stat <LAB> <NODE> <PID> [--json] [--watch SECS]` —
+  single primitive for sampling a spawned process's resource usage.
+  Reads `/proc/<pid>/{stat,status}` and `/proc/<pid>/fd/` from inside
+  the target namespace via `nlink-lab exec`, so the
+  `/proc/<pid>/fd/` permission gymnastics (mode 0700, root-owned)
+  go away. `--watch` emits NDJSON at the given interval until
+  Ctrl-C. New library API `RunningLab::proc_stat(node, pid)` and
+  pure parser `nlink_lab::proc_stat::{parse_stat, parse_status,
+  parse_btime, assemble}`. Schema:
+  `docs/json-schemas/proc-stat.schema.json`. (Plan 157 PR C —
+  round-5 §2.2)
+
 ### Fixed
 - Parallel `nlink-lab deploy` invocations on labs that use `dns hosts`
   could lose each other's managed `/etc/hosts` sections. The

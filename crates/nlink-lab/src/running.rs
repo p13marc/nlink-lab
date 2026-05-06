@@ -1201,6 +1201,84 @@ impl RunningLab {
             .filter(|p| p.alive)
             .collect()
     }
+
+    /// Sample resource usage for a single process inside a node's
+    /// namespace. Reads `/proc/<pid>/{stat,status}` plus the entry
+    /// count of `/proc/<pid>/fd/`, then assembles into a structured
+    /// [`ProcStat`].
+    ///
+    /// The reads happen via [`exec`](Self::exec) inside the target
+    /// namespace, so:
+    ///
+    /// - The mount-namespaced `/proc` view (when `dns hosts` etc. has
+    ///   set up `/etc/netns/`) is what the parser sees.
+    /// - The exec runs as the same UID as `nlink-lab` itself —
+    ///   typically root via `check_root` — so `/proc/<pid>/fd/` is
+    ///   readable even though it's mode 0700 owned by the spawned
+    ///   process's UID.
+    ///
+    /// `pid` is the host PID (same as ns PID — `CLONE_NEWPID` isn't
+    /// used). See `docs/ARCHITECTURE.md` "Process & namespace model".
+    /// (Round-5 §2.2.)
+    pub fn proc_stat(&self, node: &str, pid: u32) -> Result<crate::proc_stat::ProcStat> {
+        let stat_path = format!("/proc/{pid}/stat");
+        let status_path = format!("/proc/{pid}/status");
+        let fd_path = format!("/proc/{pid}/fd");
+
+        let stat_out = self.exec(node, "cat", &[&stat_path])?;
+        if stat_out.exit_code != 0 {
+            return Err(Error::deploy_failed(format!(
+                "read {stat_path}: exit {} stderr={}",
+                stat_out.exit_code,
+                stat_out.stderr.trim()
+            )));
+        }
+        let stat_fields = crate::proc_stat::parse_stat(&stat_out.stdout).ok_or_else(|| {
+            Error::deploy_failed(format!("parse /proc/{pid}/stat (unexpected format)"))
+        })?;
+
+        let status_out = self.exec(node, "cat", &[&status_path])?;
+        if status_out.exit_code != 0 {
+            return Err(Error::deploy_failed(format!(
+                "read {status_path}: exit {} stderr={}",
+                status_out.exit_code,
+                status_out.stderr.trim()
+            )));
+        }
+        let status_fields = crate::proc_stat::parse_status(&status_out.stdout);
+
+        // Count entries in /proc/<pid>/fd. `ls -1 | wc -l` is robust
+        // across coreutils versions; the trim+parse handles trailing
+        // whitespace from the various locales.
+        let fd_out = self.exec(
+            node,
+            "sh",
+            &["-c", &format!("ls {fd_path} 2>/dev/null | wc -l")],
+        )?;
+        let fd_count: u32 = fd_out
+            .stdout
+            .trim()
+            .parse()
+            .map_err(|e| Error::deploy_failed(format!("parse fd count {fd_path:?}: {e}")))?;
+
+        // /proc/stat for btime — needed to convert starttime_ticks
+        // (jiffies since boot) into a Unix timestamp.
+        let proc_stat_out = self.exec(node, "cat", &["/proc/stat"])?;
+        let btime = crate::proc_stat::parse_btime(&proc_stat_out.stdout).unwrap_or(0);
+
+        // Tick rate. `getconf CLK_TCK` is portable across ns + host.
+        let tck_out = self.exec(node, "getconf", &["CLK_TCK"])?;
+        let tick_hz: u64 = tck_out.stdout.trim().parse().unwrap_or(100);
+
+        Ok(crate::proc_stat::assemble(
+            pid,
+            &stat_fields,
+            &status_fields,
+            fd_count,
+            btime,
+            tick_hz,
+        ))
+    }
 }
 
 /// Wait for a child to exit, escalating SIGTERM → SIGKILL on deadline.

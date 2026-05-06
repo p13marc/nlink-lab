@@ -1078,6 +1078,55 @@ async fn dns_example_deploys(lab: RunningLab) {
     assert_eq!(lab.topology().nodes.len(), 3);
 }
 
+// ─── Plan 157 PR C — proc-stat primitive ─────────────────
+
+// `RunningLab::proc_stat` against a known live process. Spawn `sleep
+// 30`, sample, assert command/state/uid look right and CPU/memory
+// fields are populated. Round-5 §2.2.
+#[lab_test("examples/simple.nll")]
+async fn proc_stat_returns_live_data(mut lab: RunningLab) {
+    let pid = lab
+        .spawn_with_logs("host", &["sleep", "30"], None)
+        .unwrap();
+    // Give /proc/<pid>/stat a moment to settle (rare on fast hosts
+    // for the comm to not yet be set, but the deterministic write
+    // happens at exec(2) time so it should be there by the time
+    // spawn_with_logs returns).
+    let stat = lab.proc_stat("host", pid).unwrap();
+    assert_eq!(stat.host_pid, pid);
+    assert_eq!(
+        stat.command, "sleep",
+        "expected comm=sleep, got {stat:?}"
+    );
+    // Spawned by check_root context — uid 0.
+    assert_eq!(stat.uid, 0);
+    // sleep should be in S (sleeping) state — not D, not R, not Z.
+    assert!(
+        stat.state == "S" || stat.state == "I",
+        "unexpected state: {}",
+        stat.state
+    );
+    // VmSize/VmRSS should both be present for a userland process.
+    assert!(stat.rss_kb.is_some());
+    assert!(stat.vsz_kb.is_some());
+    // started_at_unix_micros should be roughly "now" (within last
+    // 60s). A loose check; just guarding the arithmetic.
+    let now_micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as u64;
+    assert!(
+        stat.started_at_unix_micros > now_micros - 60_000_000
+            && stat.started_at_unix_micros <= now_micros + 1_000_000,
+        "started_at outside expected window: {} vs now {}",
+        stat.started_at_unix_micros,
+        now_micros
+    );
+
+    // Cleanup — kill so the lab teardown is clean.
+    let _ = lab.exec("host", "kill", &[&pid.to_string()]);
+}
+
 // ─── Plan 156 PR A — partition cycles fix ───────────────
 
 // Round-4 §1: `partition` was a silent no-op on the second call after

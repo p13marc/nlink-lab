@@ -4,7 +4,7 @@
   "title": "nlink-lab spawn --json output",
   "description": "Emitted on stdout (one object) by `nlink-lab spawn --json` after the child has been created. Per-process stdout/stderr live at `$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}` (default `~/.local/state`).",
   "type": "object",
-  "required": ["command", "node", "pid"],
+  "required": ["command", "node", "pid", "host_pid"],
   "additionalProperties": false,
   "properties": {
     "command": {
@@ -18,7 +18,12 @@
     "pid": {
       "type": "integer",
       "minimum": 1,
-      "description": "Linux PID of the child."
+      "description": "Linux PID of the child. Equal to host_pid today."
+    },
+    "host_pid": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Explicit alias for pid: host-side PID. Equal to pid today because nlink-lab does not use CLONE_NEWPID (host_pid == ns_pid). See ARCHITECTURE.md 'Process & namespace model'. The field exists so consumers that explicitly want 'the host PID' can name it; if a future nlink-lab adds CLONE_NEWPID, an ns_pid field will join host_pid."
     }
   }
 }

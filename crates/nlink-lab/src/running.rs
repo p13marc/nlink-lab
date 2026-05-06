@@ -109,6 +109,14 @@ pub struct ProcessInfo {
     pub node: String,
     /// Process ID.
     pub pid: u32,
+    /// Explicit alias for `pid`. Equal today because nlink-lab does not
+    /// use `CLONE_NEWPID` (host_pid == ns_pid for every spawned
+    /// process). The field exists so consumers that explicitly want
+    /// "the host PID" can name it; if a future nlink-lab adds
+    /// `CLONE_NEWPID`, an `ns_pid` field will join `host_pid` and
+    /// `pid` will follow `host_pid`. See `docs/ARCHITECTURE.md`
+    /// "Process & namespace model".
+    pub host_pid: u32,
     /// Whether the process is still alive (`kill(pid, 0)` returns 0).
     ///
     /// Stays `false` after the process exits — the entry is kept for
@@ -1174,6 +1182,7 @@ impl RunningLab {
                 ProcessInfo {
                     node: node.clone(),
                     pid: *pid,
+                    host_pid: *pid,
                     alive,
                     stdout_log: logs.map(|(s, _)| s.clone()),
                     stderr_log: logs.map(|(_, s)| s.clone()),

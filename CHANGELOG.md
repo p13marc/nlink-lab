@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab spawn --json` and `nlink-lab ps --json` now also emit
+  `host_pid` alongside `pid` — explicit alias documenting that the
+  PID is host-side. Required field in both schemas. Equal to `pid`
+  today (nlink-lab doesn't use `CLONE_NEWPID`); separate naming
+  future-proofs the contract for when/if a NEWPID-based variant
+  ships. Library: new `ProcessInfo::host_pid: u32` field.
+  (Plan 157 PR B — round-5 §2.1)
 - `docs/ARCHITECTURE.md` — new "Process & namespace model" section
   documenting which `CLONE_NEW*` flags are active (only
   `CLONE_NEWNET` always; `CLONE_NEWNS` when `dns hosts` is set; no

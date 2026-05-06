@@ -1386,6 +1386,10 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     "{}",
                     serde_json::json!({
                         "pid": pid,
+                        // Explicit alias for `pid`: equal today because nlink-lab
+                        // doesn't use CLONE_NEWPID (host_pid == ns_pid). See
+                        // ARCHITECTURE.md "Process & namespace model". Round-5 §2.1.
+                        "host_pid": pid,
                         "node": node,
                         "command": cmd.join(" "),
                     })

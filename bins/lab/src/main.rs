@@ -573,6 +573,26 @@ enum Commands {
         /// non-loopback interfaces. (Requires kernel >= 4.20.)
         #[arg(long)]
         dedupe_loopback: bool,
+
+        /// Rotate the pcap file when the active segment exceeds this
+        /// size (suffixes K/M/G accepted; e.g. `100M`). On rotation
+        /// the active `<base>.pcap` becomes `<base>.pcap.1`, the
+        /// previous `.1` becomes `.2`, etc. Requires `--write`.
+        /// Round-5 §2.3.
+        #[arg(long, value_name = "SIZE", value_parser = parse_byte_size)]
+        max_size: Option<u64>,
+
+        /// Rotate the pcap file every SECS seconds since the last
+        /// rotation. Composes with `--max-size` (whichever threshold
+        /// fires first triggers the rotation). Requires `--write`.
+        #[arg(long, value_name = "SECS")]
+        rotate: Option<f64>,
+
+        /// Number of *rotated* segments to keep (`<base>.pcap.1`
+        /// through `<base>.pcap.<keep>`). The active `<base>.pcap`
+        /// is always retained and doesn't count. Default: 5.
+        #[arg(long, default_value = "5", value_name = "N")]
+        keep: usize,
     },
 
     /// Wait for a lab to be ready.
@@ -1986,6 +2006,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             duration,
             snap_len,
             dedupe_loopback,
+            max_size,
+            rotate,
+            keep,
         } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
@@ -2028,17 +2051,27 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 libc::signal(libc::SIGTERM, h);
             }
 
-            let result = if let Some(path) = write {
-                let file = std::fs::File::create(&path)?;
-                nlink_lab::capture::run_capture(&ns_name, &config, Some(file), &CAPTURE_SHUTDOWN)?
-            } else {
-                nlink_lab::capture::run_capture::<std::fs::File>(
-                    &ns_name,
-                    &config,
-                    None,
-                    &CAPTURE_SHUTDOWN,
-                )?
+            // Build the output sink. --max-size or --rotate need
+            // --write (rotation only makes sense for file output).
+            if (max_size.is_some() || rotate.is_some()) && write.is_none() {
+                return Err(nlink_lab::Error::invalid_topology(
+                    "--max-size and --rotate require --write",
+                ));
+            }
+            let output = match write {
+                Some(path) if max_size.is_some() || rotate.is_some() => {
+                    nlink_lab::capture::CaptureOutput::RotatingPcap {
+                        base: path,
+                        max_size,
+                        rotate_after: rotate.map(std::time::Duration::from_secs_f64),
+                        keep,
+                    }
+                }
+                Some(path) => nlink_lab::capture::CaptureOutput::pcap(&path)?,
+                None => nlink_lab::capture::CaptureOutput::Summaries,
             };
+            let result =
+                nlink_lab::capture::run_capture(&ns_name, &config, output, &CAPTURE_SHUTDOWN)?;
 
             if !cli.quiet {
                 eprintln!(
@@ -3515,6 +3548,26 @@ fn tail_follow_to<W: std::io::Write>(
 fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<()> {
     let mut stdout = std::io::stdout();
     tail_follow_to(path, start_offset, &mut stdout, || true)
+}
+
+/// Parse a byte-size CLI argument with optional K/M/G suffix.
+/// Decimal-SI units (1K = 1000, 1M = 1_000_000) — same convention as
+/// `tcpdump -C`. Round-5 §2.3.
+fn parse_byte_size(s: &str) -> std::result::Result<u64, String> {
+    let s = s.trim();
+    let (num_str, mul) = if let Some(rest) = s.strip_suffix(['G', 'g']) {
+        (rest, 1_000_000_000u64)
+    } else if let Some(rest) = s.strip_suffix(['M', 'm']) {
+        (rest, 1_000_000u64)
+    } else if let Some(rest) = s.strip_suffix(['K', 'k']) {
+        (rest, 1_000u64)
+    } else {
+        (s, 1u64)
+    };
+    let n: u64 = num_str
+        .parse()
+        .map_err(|e| format!("invalid byte size {s:?}: {e}"))?;
+    Ok(n * mul)
 }
 
 /// Parse repeated `--env KEY=VALUE` strings into `(key, value)` pairs.

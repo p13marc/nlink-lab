@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab capture --max-size <N>` and `--rotate <SECS>` flags —
+  rotating pcap segments for long-soak captures. `--keep <N>` (default
+  5) caps how many rotated segments are retained; older ones are
+  pruned at rotation. Each rotated segment is a complete pcap with
+  its own global header. Decimal-SI suffixes accepted on `--max-size`
+  (e.g. `100M`, `2G`). Library: new
+  `nlink_lab::capture::CaptureOutput` enum (Summaries / Pcap /
+  RotatingPcap), `RotatingPcapWriter`. **Library API change**:
+  `run_capture` now takes `CaptureOutput` instead of `Option<W>`.
+  (Plan 157 PR F — round-5 §2.3)
 - `nlink-lab spawn --wait-port <PORT>` and `--wait-fd-stable <SECS>` —
   two new readiness probes joining `--wait-tcp` and `--wait-log`.
   All four AND-compose. `--wait-port` reads `/proc/<pid>/net/tcp{,6}`

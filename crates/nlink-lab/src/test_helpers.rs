@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use crate::capture::{CaptureConfig, run_capture};
+use crate::capture::{CaptureConfig, CaptureOutput, run_capture};
 use crate::error::{Error, Result};
 use netring::RingProfile;
 
@@ -70,8 +70,8 @@ impl LabCapture {
             let shutdown_thread = Arc::clone(&shutdown);
             let ns_name_thread = ns_name.clone();
             let handle = thread::spawn(move || {
-                let f = match std::fs::File::create(&pcap_path) {
-                    Ok(f) => f,
+                let output = match CaptureOutput::pcap(&pcap_path) {
+                    Ok(o) => o,
                     Err(e) => {
                         tracing::warn!(
                             "lab_capture: failed to open pcap for '{ns_name_thread}': {e}"
@@ -79,7 +79,7 @@ impl LabCapture {
                         return;
                     }
                 };
-                if let Err(e) = run_capture(&ns_name_thread, &cfg, Some(f), &shutdown_thread) {
+                if let Err(e) = run_capture(&ns_name_thread, &cfg, output, &shutdown_thread) {
                     tracing::warn!("lab_capture: '{ns_name_thread}' aborted: {e}");
                 }
             });

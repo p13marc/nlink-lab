@@ -3,7 +3,9 @@
 //! Enters a lab node's network namespace, creates an AF_PACKET capture via
 //! netring, and either writes packets as pcap or prints one-line summaries.
 
+use std::fs::File;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -64,6 +66,148 @@ impl<W: Write> PcapWriter<W> {
         self.writer.flush()
     }
 }
+
+// ── Rotating pcap writer ──────────────────────────────────────────────────
+
+/// Rotating pcap file sink. Wraps a `PcapWriter<File>` and an
+/// optional rotation policy (size and/or time-based). When the
+/// active segment crosses the threshold, the file is closed,
+/// existing segments are renamed to make room (`base.pcap` →
+/// `base.pcap.1`, `.1` → `.2`, etc., dropping anything past `keep`),
+/// and a new segment is started with a fresh pcap global header.
+///
+/// Per-packet writes are unbuffered (inherited from `PcapWriter`),
+/// so a SIGKILL between rotations still leaves all completed
+/// segments intact and the active segment complete up to the last
+/// fully-written packet. Round-5 §2.3.
+pub struct RotatingPcapWriter {
+    base: PathBuf,
+    max_size: Option<u64>,
+    rotate_after: Option<Duration>,
+    /// Maximum number of *rotated* segments to keep (i.e. `.pcap.1`
+    /// through `.pcap.keep`). The active `.pcap` doesn't count
+    /// against this. `usize::MAX` means unlimited.
+    keep: usize,
+    snap_len: u32,
+    writer: Option<PcapWriter<File>>,
+    bytes_written: u64,
+    rotated_at: Instant,
+}
+
+impl RotatingPcapWriter {
+    /// Create a new rotating sink writing to `base`. The active
+    /// segment is created immediately with a pcap global header.
+    pub fn new(
+        base: PathBuf,
+        max_size: Option<u64>,
+        rotate_after: Option<Duration>,
+        keep: usize,
+        snap_len: u32,
+    ) -> io::Result<Self> {
+        let file = File::create(&base)?;
+        let writer = PcapWriter::new(file, snap_len)?;
+        Ok(Self {
+            base,
+            max_size,
+            rotate_after,
+            keep,
+            snap_len,
+            writer: Some(writer),
+            bytes_written: PCAP_GLOBAL_HEADER_BYTES,
+            rotated_at: Instant::now(),
+        })
+    }
+
+    /// Write a packet, rotating first if the active segment has
+    /// crossed the configured threshold.
+    pub fn write_packet(
+        &mut self,
+        ts: netring::Timestamp,
+        data: &[u8],
+        orig_len: u32,
+    ) -> io::Result<()> {
+        let pkt_size = PCAP_RECORD_HEADER_BYTES
+            + (data.len() as u64).min(self.snap_len as u64);
+        if self.should_rotate(pkt_size) {
+            self.rotate()?;
+        }
+        if let Some(ref mut w) = self.writer {
+            w.write_packet(ts, data, orig_len)?;
+        }
+        self.bytes_written += pkt_size;
+        Ok(())
+    }
+
+    fn should_rotate(&self, next_pkt_size: u64) -> bool {
+        if let Some(max) = self.max_size
+            && self.bytes_written + next_pkt_size > max
+        {
+            return true;
+        }
+        if let Some(after) = self.rotate_after
+            && self.rotated_at.elapsed() >= after
+        {
+            return true;
+        }
+        false
+    }
+
+    /// Close the active segment, shift older segments by one index,
+    /// drop anything past `keep`, and start a fresh segment.
+    fn rotate(&mut self) -> io::Result<()> {
+        // Drop the writer first so its File is closed before we
+        // rename it.
+        self.writer = None;
+
+        // Drop the oldest segment if we're at the keep limit. `keep`
+        // is the *max* number of rotated segments; if user passed
+        // keep=3, files are .pcap.1, .pcap.2, .pcap.3, and we drop
+        // .pcap.4 before shifting everything up.
+        if self.keep != usize::MAX {
+            let oldest = self.segment_path(self.keep + 1);
+            let _ = std::fs::remove_file(&oldest);
+        }
+
+        // Shift `.pcap.<keep>` → `.pcap.<keep+1>` if no keep limit;
+        // otherwise shift `.pcap.<keep-1>` → `.pcap.<keep>`. Walk
+        // from oldest existing index down to 1.
+        let max_idx = self.keep.min(usize::MAX - 1);
+        for i in (1..=max_idx).rev() {
+            let from = self.segment_path(i);
+            let to = self.segment_path(i + 1);
+            if from.exists() && i < self.keep {
+                let _ = std::fs::rename(&from, &to);
+            } else if from.exists() {
+                let _ = std::fs::remove_file(&from);
+            }
+        }
+
+        // Move the active segment to .pcap.1.
+        if self.base.exists() && self.keep >= 1 {
+            let _ = std::fs::rename(&self.base, self.segment_path(1));
+        } else if self.keep == 0 {
+            // keep=0 means "never retain rotated segments". Just
+            // drop the active segment when rotating.
+            let _ = std::fs::remove_file(&self.base);
+        }
+
+        // Open new active segment with a fresh global header.
+        let file = File::create(&self.base)?;
+        self.writer = Some(PcapWriter::new(file, self.snap_len)?);
+        self.bytes_written = PCAP_GLOBAL_HEADER_BYTES;
+        self.rotated_at = Instant::now();
+        Ok(())
+    }
+
+    fn segment_path(&self, idx: usize) -> PathBuf {
+        let mut s = self.base.as_os_str().to_os_string();
+        s.push(format!(".{idx}"));
+        PathBuf::from(s)
+    }
+}
+
+const PCAP_GLOBAL_HEADER_BYTES: u64 = 24;
+const PCAP_RECORD_HEADER_BYTES: u64 = 16;
 
 // ── BPF filter compilation ────────────────────────────────────────────────
 
@@ -160,17 +304,64 @@ pub struct CaptureResult {
     pub stats: CaptureStats,
 }
 
+/// Where captured packets go. Selects between summary printing,
+/// single-file pcap output, and rotating-pcap output. Constructed
+/// by the CLI based on `--write` / `--max-size` / `--rotate` flags.
+pub enum CaptureOutput {
+    /// Print a one-line summary per packet to stdout.
+    Summaries,
+    /// Write all packets to a single pcap. Closed when the loop exits.
+    Pcap(File),
+    /// Write rotating pcap segments. See [`RotatingPcapWriter`].
+    RotatingPcap {
+        base: PathBuf,
+        max_size: Option<u64>,
+        rotate_after: Option<Duration>,
+        keep: usize,
+    },
+}
+
+impl CaptureOutput {
+    /// Convenience constructor: `--write <path>` with no rotation.
+    pub fn pcap(path: impl AsRef<Path>) -> io::Result<Self> {
+        Ok(CaptureOutput::Pcap(File::create(path.as_ref())?))
+    }
+}
+
+/// Internal packet sink used by [`run_capture`]. Erased over the
+/// public `CaptureOutput` enum so the inner loop is monomorphic.
+enum PcapSink {
+    None,
+    Single(PcapWriter<File>),
+    Rotating(RotatingPcapWriter),
+}
+
+impl PcapSink {
+    fn write_packet(
+        &mut self,
+        ts: netring::Timestamp,
+        data: &[u8],
+        orig_len: u32,
+    ) -> io::Result<()> {
+        match self {
+            PcapSink::None => Ok(()),
+            PcapSink::Single(w) => w.write_packet(ts, data, orig_len),
+            PcapSink::Rotating(w) => w.write_packet(ts, data, orig_len),
+        }
+    }
+}
+
 // ── Main capture loop ─────────────────────────────────────────────────────
 
 /// Run a packet capture in the given namespace.
 ///
 /// Enters the namespace on a dedicated thread (to avoid affecting the tokio
 /// runtime), creates the AF_PACKET socket there, then runs the capture loop.
-/// If `pcap_output` is `Some`, writes pcap format; otherwise prints summaries.
-pub fn run_capture<W: Write + Send + 'static>(
+/// `output` selects pcap-vs-summary and single-vs-rotating.
+pub fn run_capture(
     ns_name: &str,
     config: &CaptureConfig,
-    pcap_output: Option<W>,
+    output: CaptureOutput,
     shutdown: &AtomicBool,
 ) -> Result<CaptureResult> {
     // Enter namespace and create capture socket.
@@ -196,9 +387,21 @@ pub fn run_capture<W: Write + Send + 'static>(
     drop(guard);
 
     // Set up output
-    let mut pcap = match pcap_output {
-        Some(w) => Some(PcapWriter::new(w, config.snap_len)?),
-        None => None,
+    let mut pcap = match output {
+        CaptureOutput::Summaries => PcapSink::None,
+        CaptureOutput::Pcap(file) => PcapSink::Single(PcapWriter::new(file, config.snap_len)?),
+        CaptureOutput::RotatingPcap {
+            base,
+            max_size,
+            rotate_after,
+            keep,
+        } => PcapSink::Rotating(RotatingPcapWriter::new(
+            base,
+            max_size,
+            rotate_after,
+            keep,
+            config.snap_len,
+        )?),
     };
 
     let start = Instant::now();
@@ -219,10 +422,13 @@ pub fn run_capture<W: Write + Send + 'static>(
         let data = pkt.data();
         let orig_len = pkt.original_len() as u32;
 
-        if let Some(ref mut w) = pcap {
-            w.write_packet(ts, data, orig_len)?;
-        } else {
-            println!("{}.{:09}  {} bytes", ts.sec, ts.nsec, data.len(),);
+        match &mut pcap {
+            PcapSink::None => {
+                println!("{}.{:09}  {} bytes", ts.sec, ts.nsec, data.len(),);
+            }
+            _ => {
+                pcap.write_packet(ts, data, orig_len)?;
+            }
         }
 
         count += 1;
@@ -296,5 +502,101 @@ mod tests {
         // Packet's `incl_len` at offset 24 + 8 = 32.
         let incl_len = u32::from_le_bytes(captured[32..36].try_into().unwrap());
         assert_eq!(incl_len, 3);
+    }
+
+    /// Drive `RotatingPcapWriter` through enough bytes to trigger
+    /// rotation and verify (a) the active segment + N rotated
+    /// segments exist, (b) no segments past `keep` are kept, and
+    /// (c) each rotated segment opens with the pcap global header.
+    #[test]
+    fn rotating_writer_rotates_at_size_and_keeps_n() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("cap.pcap");
+
+        // Each packet writes 16 (record header) + 100 (payload, capped
+        // by snap_len=128) = 116 bytes. With max_size=400 and a 24-
+        // byte global header, the first 3 packets fit (24 + 3*116 =
+        // 372), the 4th forces rotation.
+        let snap_len = 128;
+        let mut w =
+            RotatingPcapWriter::new(base.clone(), Some(400), None, /*keep=*/ 2, snap_len)
+                .unwrap();
+
+        let ts = netring::Timestamp { sec: 0, nsec: 0 };
+        let payload = vec![0xAB; 100];
+        // Write 8 packets — should produce active + .1 + .2 (with .3
+        // dropped due to keep=2).
+        for _ in 0..8 {
+            w.write_packet(ts, &payload, payload.len() as u32).unwrap();
+        }
+        drop(w);
+
+        assert!(base.exists(), "active segment must remain");
+        assert!(
+            dir.path().join("cap.pcap.1").exists(),
+            ".pcap.1 must exist (rotated once)"
+        );
+        assert!(
+            dir.path().join("cap.pcap.2").exists(),
+            ".pcap.2 must exist (rotated twice)"
+        );
+        assert!(
+            !dir.path().join("cap.pcap.3").exists(),
+            ".pcap.3 must NOT exist with keep=2"
+        );
+
+        // Each segment must start with the pcap global header magic —
+        // proves rotation re-emits the header rather than letting the
+        // new file start mid-packet.
+        for name in ["cap.pcap", "cap.pcap.1", "cap.pcap.2"] {
+            let bytes = std::fs::read(dir.path().join(name)).unwrap();
+            assert!(bytes.len() >= 24, "{name}: pcap header missing");
+            let magic = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+            assert_eq!(magic, PCAP_MAGIC_NS, "{name}: bad pcap magic");
+        }
+    }
+
+    /// `keep = 0` means "no rotated segments retained" — when the
+    /// active segment is rotated out it just gets deleted.
+    #[test]
+    fn rotating_writer_keep_zero_drops_old_segments() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("cap.pcap");
+        let snap_len = 128;
+        let mut w =
+            RotatingPcapWriter::new(base.clone(), Some(200), None, /*keep=*/ 0, snap_len)
+                .unwrap();
+
+        let ts = netring::Timestamp { sec: 0, nsec: 0 };
+        let payload = vec![0xAB; 100];
+        for _ in 0..5 {
+            w.write_packet(ts, &payload, payload.len() as u32).unwrap();
+        }
+        drop(w);
+
+        assert!(base.exists(), "active segment must remain");
+        assert!(!dir.path().join("cap.pcap.1").exists());
+        assert!(!dir.path().join("cap.pcap.2").exists());
+    }
+
+    /// No `--max-size` and no `--rotate` → no rotation ever, even on
+    /// arbitrary write volume. Sanity check that the rotation logic
+    /// is opt-in.
+    #[test]
+    fn rotating_writer_no_policy_never_rotates() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("cap.pcap");
+        let mut w =
+            RotatingPcapWriter::new(base.clone(), None, None, 5, 128).unwrap();
+
+        let ts = netring::Timestamp { sec: 0, nsec: 0 };
+        let payload = vec![0xAB; 100];
+        for _ in 0..50 {
+            w.write_packet(ts, &payload, payload.len() as u32).unwrap();
+        }
+        drop(w);
+
+        assert!(base.exists());
+        assert!(!dir.path().join("cap.pcap.1").exists());
     }
 }

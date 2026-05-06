@@ -126,8 +126,7 @@ impl RotatingPcapWriter {
         data: &[u8],
         orig_len: u32,
     ) -> io::Result<()> {
-        let pkt_size = PCAP_RECORD_HEADER_BYTES
-            + (data.len() as u64).min(self.snap_len as u64);
+        let pkt_size = PCAP_RECORD_HEADER_BYTES + (data.len() as u64).min(self.snap_len as u64);
         if self.should_rotate(pkt_size) {
             self.rotate()?;
         }
@@ -519,8 +518,7 @@ mod tests {
         // 372), the 4th forces rotation.
         let snap_len = 128;
         let mut w =
-            RotatingPcapWriter::new(base.clone(), Some(400), None, /*keep=*/ 2, snap_len)
-                .unwrap();
+            RotatingPcapWriter::new(base.clone(), Some(400), None, /*keep=*/ 2, snap_len).unwrap();
 
         let ts = netring::Timestamp { sec: 0, nsec: 0 };
         let payload = vec![0xAB; 100];
@@ -564,8 +562,7 @@ mod tests {
         let base = dir.path().join("cap.pcap");
         let snap_len = 128;
         let mut w =
-            RotatingPcapWriter::new(base.clone(), Some(200), None, /*keep=*/ 0, snap_len)
-                .unwrap();
+            RotatingPcapWriter::new(base.clone(), Some(200), None, /*keep=*/ 0, snap_len).unwrap();
 
         let ts = netring::Timestamp { sec: 0, nsec: 0 };
         let payload = vec![0xAB; 100];
@@ -586,8 +583,7 @@ mod tests {
     fn rotating_writer_no_policy_never_rotates() {
         let dir = tempfile::tempdir().unwrap();
         let base = dir.path().join("cap.pcap");
-        let mut w =
-            RotatingPcapWriter::new(base.clone(), None, None, 5, 128).unwrap();
+        let mut w = RotatingPcapWriter::new(base.clone(), None, None, 5, 128).unwrap();
 
         let ts = netring::Timestamp { sec: 0, nsec: 0 };
         let payload = vec![0xAB; 100];

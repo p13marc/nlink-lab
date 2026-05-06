@@ -253,8 +253,7 @@ mod tests {
 
     #[test]
     fn parse_btime_extracts_seconds() {
-        let text =
-            "cpu 1 2 3 4 5 6 7 8 9 10\ncpu0 1 2 3 4\nbtime 1714900000\nintr 12345\n";
+        let text = "cpu 1 2 3 4 5 6 7 8 9 10\ncpu0 1 2 3 4\nbtime 1714900000\nintr 12345\n";
         assert_eq!(parse_btime(text), Some(1714900000));
     }
 

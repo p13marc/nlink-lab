@@ -35,7 +35,10 @@ fn pool_path() -> PathBuf {
     let base = if let Ok(state_home) = std::env::var("XDG_STATE_HOME") {
         PathBuf::from(state_home).join("nlink-lab")
     } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".local").join("state").join("nlink-lab")
+        PathBuf::from(home)
+            .join(".local")
+            .join("state")
+            .join("nlink-lab")
     } else {
         PathBuf::from("/tmp/nlink-lab")
     };

@@ -120,10 +120,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // `&Topology` we received is borrowed; substitution mutates.
     let mut owned_topology = topology.clone();
     let lab_name = owned_topology.lab.name.clone();
-    let allocated_subnets = crate::subnet_pool::substitute_auto_subnets(
-        &mut owned_topology,
-        |prefix| crate::subnet_pool::allocate(&lab_name, prefix),
-    )?;
+    let allocated_subnets =
+        crate::subnet_pool::substitute_auto_subnets(&mut owned_topology, |prefix| {
+            crate::subnet_pool::allocate(&lab_name, prefix)
+        })?;
     let topology = &owned_topology;
     let mut cleanup = Cleanup::new();
     if !allocated_subnets.is_empty() {

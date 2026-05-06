@@ -1934,8 +1934,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                         stat.host_pid,
                         stat.command,
                         stat.state,
-                        stat.rss_kb.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
-                        stat.vsz_kb.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
+                        stat.rss_kb
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "?".into()),
+                        stat.vsz_kb
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "?".into()),
                         stat.fd_count,
                         stat.cpu_user_ticks,
                         stat.cpu_kernel_ticks,

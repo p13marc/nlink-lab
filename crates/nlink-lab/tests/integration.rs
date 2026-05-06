@@ -1085,19 +1085,14 @@ async fn dns_example_deploys(lab: RunningLab) {
 // fields are populated. Round-5 §2.2.
 #[lab_test("examples/simple.nll")]
 async fn proc_stat_returns_live_data(mut lab: RunningLab) {
-    let pid = lab
-        .spawn_with_logs("host", &["sleep", "30"], None)
-        .unwrap();
+    let pid = lab.spawn_with_logs("host", &["sleep", "30"], None).unwrap();
     // Give /proc/<pid>/stat a moment to settle (rare on fast hosts
     // for the comm to not yet be set, but the deterministic write
     // happens at exec(2) time so it should be there by the time
     // spawn_with_logs returns).
     let stat = lab.proc_stat("host", pid).unwrap();
     assert_eq!(stat.host_pid, pid);
-    assert_eq!(
-        stat.command, "sleep",
-        "expected comm=sleep, got {stat:?}"
-    );
+    assert_eq!(stat.command, "sleep", "expected comm=sleep, got {stat:?}");
     // Spawned by check_root context — uid 0.
     assert_eq!(stat.uid, 0);
     // sleep should be in S (sleeping) state — not D, not R, not Z.

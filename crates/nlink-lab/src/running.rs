@@ -904,8 +904,11 @@ impl RunningLab {
         let mut last_count: Option<u32> = None;
         let mut last_change = std::time::Instant::now();
         loop {
-            let probe = self
-                .exec(node, "sh", &["-c", &format!("ls {path} 2>/dev/null | wc -l")])?;
+            let probe = self.exec(
+                node,
+                "sh",
+                &["-c", &format!("ls {path} 2>/dev/null | wc -l")],
+            )?;
             let count: u32 = probe.stdout.trim().parse().unwrap_or(0);
             match last_count {
                 Some(prev) if prev == count => {
@@ -1648,6 +1651,9 @@ mod proc_net_tcp_tests {
     fn empty_input_returns_false() {
         assert!(!proc_net_tcp_has_listener("", "1F90"));
         // Header-only also returns false.
-        assert!(!proc_net_tcp_has_listener("  sl  local_address ...\n", "1F90"));
+        assert!(!proc_net_tcp_has_listener(
+            "  sl  local_address ...\n",
+            "1F90"
+        ));
     }
 }

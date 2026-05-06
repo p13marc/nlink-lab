@@ -129,6 +129,34 @@ pub struct LabLock {
 
 use std::os::unix::io::AsRawFd;
 
+/// Acquire a *blocking* exclusive lock on a global sentinel that
+/// serialises any operation touching globally-shared host state —
+/// today, just `/etc/hosts` mutations from `dns::inject_hosts` and
+/// friends. Unlike [`lock`] (per-lab, non-blocking, fails fast), this
+/// blocks until the lock is available, since concurrent deploys
+/// merely need to take turns rather than fail.
+///
+/// Held across the full read-modify-write of `/etc/hosts` so two
+/// parallel deploys can't lose each other's managed sections.
+/// Released when the returned guard is dropped. (Plan 157 PR D —
+/// round-5 §1.2 prime suspect.)
+pub fn hosts_lock() -> Result<LabLock> {
+    let lock_path = base_dir().join(".hosts.lock");
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let file = std::fs::File::create(&lock_path)?;
+    // Blocking lock — concurrent deploys serialise here.
+    let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+    if ret != 0 {
+        return Err(Error::deploy_failed(format!(
+            "failed to acquire /etc/hosts lock: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(LabLock { _file: file })
+}
+
 /// Save lab state and topology.
 pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
     let dir = state_dir(&state.name);

@@ -88,7 +88,13 @@ pub fn generate_hosts_entries(topology: &Topology) -> Vec<HostsEntry> {
 ///
 /// Appends a managed section delimited by marker lines. If a section for this
 /// lab already exists, it is replaced. Uses atomic write to prevent corruption.
+///
+/// Holds a global blocking flock for the duration of the read-modify-write,
+/// so two parallel deploys serialise instead of racing. Without the lock,
+/// the loser's atomic-rename overwrites the winner's section. See
+/// [`crate::state::hosts_lock`] and round-5 feedback §1.2.
 pub fn inject_hosts(lab_name: &str, entries: &[HostsEntry]) -> Result<()> {
+    let _lock = crate::state::hosts_lock()?;
     inject_hosts_to(HOSTS_PATH, lab_name, entries)
 }
 
@@ -135,7 +141,10 @@ pub(crate) fn inject_hosts_to(path: &str, lab_name: &str, entries: &[HostsEntry]
 }
 
 /// Remove lab host entries from /etc/hosts.
+///
+/// Same global lock as [`inject_hosts`].
 pub fn remove_hosts(lab_name: &str) -> Result<()> {
+    let _lock = crate::state::hosts_lock()?;
     remove_hosts_from(HOSTS_PATH, lab_name)
 }
 
@@ -162,7 +171,10 @@ pub(crate) fn remove_hosts_from(path: &str, lab_name: &str) -> Result<()> {
 }
 
 /// Remove all NLINK-LAB sections from /etc/hosts (for `destroy --all`).
+///
+/// Same global lock as [`inject_hosts`].
 pub fn remove_all_hosts() -> Result<()> {
+    let _lock = crate::state::hosts_lock()?;
     remove_all_hosts_from(HOSTS_PATH)
 }
 

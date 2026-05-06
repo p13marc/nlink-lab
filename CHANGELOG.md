@@ -4,7 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Parallel `nlink-lab deploy` invocations on labs that use `dns hosts`
+  could lose each other's managed `/etc/hosts` sections. The
+  read-modify-write of `/etc/hosts` in `dns::inject_hosts`,
+  `remove_hosts`, and `remove_all_hosts` was not synchronised across
+  labs. Now serialised by a global blocking flock at
+  `$XDG_STATE_HOME/nlink-lab/labs/.hosts.lock` (new
+  `state::hosts_lock()`). Concurrent deploys take turns instead of
+  racing. (Plan 157 PR D — round-5 §1.2 prime suspect)
+
 ### Added
+- `nlink-lab status --json <lab>` now includes a `host_resources`
+  block with the lab's mgmt bridge name and declared subnets. Lets
+  consumers detect cross-lab collisions client-side without
+  netlink. (Plan 157 PR D — round-5 §1.2 bonus)
 - `nlink-lab capture --dedupe-loopback` flag — sets the kernel's
   `PACKET_IGNORE_OUTGOING` socket option on the AF_PACKET ring, so
   loopback (`lo`) capture no longer reports each packet twice

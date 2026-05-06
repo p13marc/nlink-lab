@@ -1225,6 +1225,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                             }
                         }
                     }
+                    // Add host_resources — round-5 §1.2 bonus. Lets
+                    // consumers detect parallel-lab collisions
+                    // client-side (mgmt bridge name, declared subnets).
+                    if let Some(o) = output.as_object_mut() {
+                        o.insert("host_resources".to_string(), host_resources_json(&lab));
+                    }
                     println!("{}", serde_json::to_string_pretty(&output)?);
                 } else {
                     let topo = lab.topology();
@@ -3424,6 +3430,64 @@ fn parse_env_pairs(env_vars: &[String]) -> nlink_lab::Result<Vec<(String, String
                 .map(|(k, v)| (k.to_string(), v.to_string()))
         })
         .collect()
+}
+
+/// Build the `host_resources` block for `status --json <lab>`.
+///
+/// Reports the host-side artefacts a lab installs, so consumers can
+/// detect cross-lab collisions client-side without netlink:
+///
+/// - `mgmt_bridge`: the `nl{hash8}` bridge in the host network ns
+///   (always present for namespace-only labs).
+/// - `subnets`: every declared subnet in the topology (links +
+///   networks). Useful to verify two labs don't claim the same
+///   private range.
+///
+/// Round-5 §1.2 bonus.
+fn host_resources_json(lab: &nlink_lab::RunningLab) -> serde_json::Value {
+    let topo = lab.topology();
+    let mgmt_bridge = nlink_lab::mgmt_bridge_name_for(lab.name());
+
+    let mut subnets: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for link in &topo.links {
+        if let Some(addrs) = &link.addresses {
+            for a in addrs {
+                if let Some((_, prefix)) = a.split_once('/')
+                    && let Some(network) = subnet_of(a)
+                {
+                    subnets.insert(format!("{network}/{prefix}"));
+                }
+            }
+        }
+    }
+    for network in topo.networks.values() {
+        if let Some(s) = &network.subnet {
+            subnets.insert(s.clone());
+        }
+    }
+
+    serde_json::json!({
+        "mgmt_bridge": mgmt_bridge,
+        "subnets": subnets.into_iter().collect::<Vec<_>>(),
+    })
+}
+
+/// Compute the network-address portion of a CIDR (e.g.
+/// `"10.0.0.5/24"` → `"10.0.0.0"`). Returns None on malformed input.
+fn subnet_of(cidr: &str) -> Option<String> {
+    let (ip_str, prefix_str) = cidr.split_once('/')?;
+    let ip: std::net::Ipv4Addr = ip_str.parse().ok()?;
+    let prefix: u32 = prefix_str.parse().ok()?;
+    if prefix > 32 {
+        return None;
+    }
+    let mask = if prefix == 0 {
+        0u32
+    } else {
+        u32::MAX << (32 - prefix)
+    };
+    let network = u32::from(ip) & mask;
+    Some(std::net::Ipv4Addr::from(network).to_string())
 }
 
 /// One row of `nlink-lab impair --show --json` output. `ImpairShow`'s

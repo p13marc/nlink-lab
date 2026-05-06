@@ -190,6 +190,78 @@ async fn deploy_50_node_ring() {
     lab.destroy().await.expect("destroy failed");
 }
 
+/// Parallel deploys must all succeed when each lab uses non-colliding
+/// names (via `--unique`-style PID suffix). Round-5 §1.2: the harness
+/// team observed 1–2 of 4 parallel `nextest` deploys failing
+/// non-deterministically. The prime suspect was the unsynchronised
+/// `/etc/hosts` read-modify-write in `dns::inject_hosts`. PR D adds a
+/// global blocking flock around hosts mutations; this test exercises
+/// that path with `dns hosts` mode enabled.
+#[tokio::test]
+#[ignore]
+async fn parallel_dns_hosts_deploys_all_succeed() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: requires root");
+        return;
+    }
+    const N: usize = 6;
+    let pid = std::process::id();
+
+    let mut handles = Vec::new();
+    for i in 0..N {
+        let lab_name = format!("stress-par-{pid}-{i}");
+        // Use disjoint /24 subnets per lab so addresses don't conflict
+        // at the kernel level. The race we're testing is in /etc/hosts,
+        // not in netlink.
+        let nll = format!(
+            r#"lab "{lab_name}" {{
+  description "parallel-deploy stress"
+  dns hosts
+}}
+
+profile router {{ forward ipv4 }}
+
+node router : router
+node host
+
+link router:eth0 -- host:eth0 {{
+  10.{i}.0.1/24 -- 10.{i}.0.2/24
+}}
+"#
+        );
+        handles.push(tokio::spawn(async move {
+            let topo = nlink_lab::parser::parse(&nll)?;
+            let lab = topo.deploy().await?;
+            // Hold the lab briefly so deploys overlap; concurrent
+            // hosts mutations are the failure mode we're guarding.
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            lab.destroy().await
+        }));
+    }
+
+    let mut errs: Vec<String> = Vec::new();
+    for h in handles {
+        if let Err(e) = h.await.unwrap() {
+            errs.push(e.to_string());
+        }
+    }
+    assert!(
+        errs.is_empty(),
+        "{}/{} parallel deploys failed: {errs:?}",
+        errs.len(),
+        N,
+    );
+
+    // After all destroys: /etc/hosts must have no NLINK-LAB sections
+    // for our test prefix. (Sanity check that the lock didn't leave
+    // sections behind.)
+    let hosts = std::fs::read_to_string("/etc/hosts").unwrap_or_default();
+    assert!(
+        !hosts.contains(&format!("NLINK-LAB-stress-par-{pid}-")),
+        "stale managed sections remain in /etc/hosts after destroy"
+    );
+}
+
 // ─── Full-feature topology test ──────────────────────────
 
 /// Parse and validate a topology that exercises every major NLL feature simultaneously.

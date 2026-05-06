@@ -143,6 +143,13 @@ pub struct CaptureConfig {
     pub bpf_filter: Option<Vec<BpfInsn>>,
     /// Ring buffer profile.
     pub profile: RingProfile,
+    /// When true, set `PACKET_IGNORE_OUTGOING` on the AF_PACKET socket
+    /// so the kernel skips outgoing packets. The intended use case is
+    /// loopback (`lo`) capture, where every packet otherwise appears
+    /// twice — once with `PACKET_OUTGOING` (send-side BPF tap) and
+    /// once with `PACKET_HOST` (receive-side). Default: false.
+    /// (Round-5 §2.6.)
+    pub ignore_outgoing: bool,
 }
 
 /// Result of a completed capture session.
@@ -174,7 +181,8 @@ pub fn run_capture<W: Write + Send + 'static>(
     let mut builder = Capture::builder()
         .interface(&config.interface)
         .profile(config.profile)
-        .snap_len(config.snap_len);
+        .snap_len(config.snap_len)
+        .ignore_outgoing(config.ignore_outgoing);
 
     if let Some(ref insns) = config.bpf_filter {
         builder = builder.bpf_filter(insns.clone());

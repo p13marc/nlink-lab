@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab capture --dedupe-loopback` flag — sets the kernel's
+  `PACKET_IGNORE_OUTGOING` socket option on the AF_PACKET ring, so
+  loopback (`lo`) capture no longer reports each packet twice
+  (once outgoing, once incoming). Off by default; the historical
+  both-directions behavior is preserved when the flag is omitted.
+  Requires kernel ≥ 4.20. Library:
+  `nlink_lab::capture::CaptureConfig::ignore_outgoing: bool`.
+  (Plan 157 PR H — round-5 §2.6)
 - `nlink-lab spawn --json` and `nlink-lab ps --json` now also emit
   `host_pid` alongside `pid` — explicit alias documenting that the
   PID is host-side. Required field in both schemas. Equal to `pid`

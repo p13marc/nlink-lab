@@ -511,6 +511,14 @@ enum Commands {
         /// Snap length -- truncate packets to N bytes.
         #[arg(long, default_value = "262144")]
         snap_len: u32,
+
+        /// Drop outgoing packets at the kernel via
+        /// `PACKET_IGNORE_OUTGOING`. Use this when capturing on `lo`
+        /// to halve the packet count: loopback otherwise reports each
+        /// packet twice (once outgoing, once incoming). No effect on
+        /// non-loopback interfaces. (Requires kernel >= 4.20.)
+        #[arg(long)]
+        dedupe_loopback: bool,
     },
 
     /// Wait for a lab to be ready.
@@ -1862,6 +1870,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             filter,
             duration,
             snap_len,
+            dedupe_loopback,
         } => {
             check_root();
             let running = nlink_lab::RunningLab::load(&lab)?;
@@ -1885,6 +1894,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 duration: duration.map(std::time::Duration::from_secs_f64),
                 bpf_filter: bpf,
                 profile: netring::RingProfile::LowMemory,
+                ignore_outgoing: dedupe_loopback,
             };
 
             static CAPTURE_SHUTDOWN: std::sync::atomic::AtomicBool =

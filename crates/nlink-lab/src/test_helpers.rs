@@ -65,6 +65,7 @@ impl LabCapture {
                 profile: RingProfile::Default,
                 count: None,
                 duration: None,
+                ignore_outgoing: false,
             };
             let shutdown_thread = Arc::clone(&shutdown);
             let ns_name_thread = ns_name.clone();

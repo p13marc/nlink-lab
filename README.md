@@ -105,6 +105,7 @@ side-by-side examples, and migration notes — lives at
 ## Documentation
 
 - [User guide](docs/USER_GUIDE.md) — install, first lab, CLI tour, container management, CI/CD, packet capture.
+- [Harness guide](docs/HARNESS_GUIDE.md) — patterns for building Rust test harnesses on top of nlink-lab (spawn ordering, capture endpoint selection, failure-mode debugging, parallel-lab concurrency).
 - [NLL language spec](docs/NLL_DSL_DESIGN.md) — every keyword, with examples.
 - [Testing guide](docs/TESTING_GUIDE.md) — `#[lab_test]` macro and integration test patterns.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — permission errors, MTU mismatches, namespace cleanup.

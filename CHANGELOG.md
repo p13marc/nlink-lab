@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `docs/HARNESS_GUIDE.md` — guide for harness writers building on
+  top of nlink-lab (spawn ordering with `--wait-log`/`--wait-port`,
+  capture endpoint selection, failure-mode debugging, cleanup
+  discipline, parallel-lab concurrency). Linked from README.
+  (Plan 157 PR I — round-5 §3.1)
 - NLL `subnet auto/<prefix>` (or just `auto`) placeholder for
   network blocks. Resolved at deploy time against a host-wide
   flock-protected pool (`$XDG_STATE_HOME/nlink-lab/subnet-pool.json`,

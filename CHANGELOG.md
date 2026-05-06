@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `nlink-lab spawn --wait-port <PORT>` and `--wait-fd-stable <SECS>` —
+  two new readiness probes joining `--wait-tcp` and `--wait-log`.
+  All four AND-compose. `--wait-port` reads `/proc/<pid>/net/tcp{,6}`
+  for a `LISTEN` row matching the port (no `connect(2)` attempt;
+  works for non-routable binds and avoids logged
+  connection-refused noise). `--wait-fd-stable` is a heuristic:
+  returns when the spawned process's `/proc/<pid>/fd/` count hasn't
+  changed for SECS seconds. Library:
+  `RunningLab::wait_for_port(node, pid, port, timeout, interval)`
+  and `wait_for_fd_stable(node, pid, stable_for, timeout, interval)`.
+  (Plan 157 PR G — round-5 §2.4)
 - `nlink-lab proc-stat <LAB> <NODE> <PID> [--json] [--watch SECS]` —
   single primitive for sampling a spawned process's resource usage.
   Reads `/proc/<pid>/{stat,status}` and `/proc/<pid>/fd/` from inside

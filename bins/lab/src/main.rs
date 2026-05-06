@@ -286,7 +286,26 @@ enum Commands {
         #[arg(long, value_name = "STREAM", default_value = "both")]
         wait_log_stream: WaitLogStream,
 
-        /// Timeout for --wait-tcp / --wait-log in seconds (default: 30).
+        /// Wait until the spawned process has a TCP listener on PORT
+        /// inside its namespace. Reads `/proc/<pid>/net/tcp{,6}` —
+        /// no actual `connect(2)` is attempted, so this works for
+        /// services that bind to non-routable addresses or that
+        /// would log connection-refused on probe attempts. Combinable
+        /// with --wait-tcp / --wait-log (all AND-compose). Round-5
+        /// §2.4.
+        #[arg(long, value_name = "PORT")]
+        wait_port: Option<u16>,
+
+        /// Wait until the spawned process's open-fd count has been
+        /// stable for SECS seconds. Heuristic — prefer --wait-log or
+        /// --wait-port when a deterministic signal is available. A
+        /// process can open more files later in its lifecycle.
+        /// Round-5 §2.4.
+        #[arg(long, value_name = "SECS")]
+        wait_fd_stable: Option<f64>,
+
+        /// Timeout for --wait-tcp / --wait-log / --wait-port /
+        /// --wait-fd-stable in seconds (default: 30).
         #[arg(long, default_value = "30")]
         wait_timeout: u64,
 
@@ -1404,6 +1423,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             wait_tcp,
             wait_log,
             wait_log_stream,
+            wait_port,
+            wait_fd_stable,
             wait_timeout,
             cmd,
         } => {
@@ -1482,7 +1503,23 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     .wait_for_log_line(pid, &pattern, wait_log_stream.into(), timeout, interval)
                     .await?;
             }
-            if (wait_tcp.is_some() || wait_log.is_some()) && !cli.quiet {
+            if let Some(port) = wait_port {
+                running
+                    .wait_for_port(&node, pid, port, timeout, interval)
+                    .await?;
+            }
+            if let Some(secs) = wait_fd_stable {
+                let stable_for = std::time::Duration::from_secs_f64(secs);
+                running
+                    .wait_for_fd_stable(&node, pid, stable_for, timeout, interval)
+                    .await?;
+            }
+            if (wait_tcp.is_some()
+                || wait_log.is_some()
+                || wait_port.is_some()
+                || wait_fd_stable.is_some())
+                && !cli.quiet
+            {
                 eprintln!("ready");
             }
 

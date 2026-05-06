@@ -840,6 +840,93 @@ impl RunningLab {
         }
     }
 
+    /// Wait until process `pid` has a TCP listener bound to `port`
+    /// inside its namespace. Reads `/proc/<pid>/net/tcp` and
+    /// `/proc/<pid>/net/tcp6` (which reflect the namespace's socket
+    /// table when the reading process is in the same netns) and looks
+    /// for a row with `st = 0A` (TCP_LISTEN) and the matching local
+    /// port.
+    ///
+    /// Cheaper than [`wait_for_tcp`](Self::wait_for_tcp) — no actual
+    /// `connect(2)` is attempted, so there's no logged
+    /// connection-refused noise on the target side, and binds to
+    /// non-routable addresses are observable too. Useful when the
+    /// service is up and listening but isn't ready to accept the
+    /// test's specific connection yet (e.g. cold-start TLS handshake).
+    /// Round-5 §2.4.
+    pub async fn wait_for_port(
+        &self,
+        node: &str,
+        pid: u32,
+        port: u16,
+        timeout: std::time::Duration,
+        interval: std::time::Duration,
+    ) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        let interval = std::cmp::min(interval, std::time::Duration::from_millis(250));
+        let port_hex = format!("{port:04X}");
+        loop {
+            for proto in &["tcp", "tcp6"] {
+                let path = format!("/proc/{pid}/net/{proto}");
+                if let Ok(out) = self.exec(node, "cat", &[&path])
+                    && out.exit_code == 0
+                    && proc_net_tcp_has_listener(&out.stdout, &port_hex)
+                {
+                    return Ok(());
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::deploy_failed(format!(
+                    "timeout waiting for TCP listener on port {port} for PID {pid}"
+                )));
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
+
+    /// Wait until process `pid`'s open-fd count has been stable for
+    /// `stable_for`. Heuristic — a process *can* open more files
+    /// later, so this isn't a guarantee of readiness. Prefer
+    /// [`wait_for_log_line`](Self::wait_for_log_line) or
+    /// [`wait_for_port`](Self::wait_for_port) when a deterministic
+    /// signal is available. (Round-5 §2.4.)
+    pub async fn wait_for_fd_stable(
+        &self,
+        node: &str,
+        pid: u32,
+        stable_for: std::time::Duration,
+        timeout: std::time::Duration,
+        interval: std::time::Duration,
+    ) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        let interval = std::cmp::min(interval, std::time::Duration::from_millis(250));
+        let path = format!("/proc/{pid}/fd");
+        let mut last_count: Option<u32> = None;
+        let mut last_change = std::time::Instant::now();
+        loop {
+            let probe = self
+                .exec(node, "sh", &["-c", &format!("ls {path} 2>/dev/null | wc -l")])?;
+            let count: u32 = probe.stdout.trim().parse().unwrap_or(0);
+            match last_count {
+                Some(prev) if prev == count => {
+                    if last_change.elapsed() >= stable_for {
+                        return Ok(());
+                    }
+                }
+                _ => {
+                    last_count = Some(count);
+                    last_change = std::time::Instant::now();
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::deploy_failed(format!(
+                    "timeout waiting for fd-count to stabilise on PID {pid}"
+                )));
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
+
     /// Wait for a file to exist inside a node's namespace.
     pub async fn wait_for_file(
         &self,
@@ -1281,6 +1368,47 @@ impl RunningLab {
     }
 }
 
+/// True iff `text` (the body of `/proc/<pid>/net/tcp` or `tcp6`)
+/// contains a row with state `0A` (TCP_LISTEN) and a local port
+/// matching `port_hex` (uppercase 4-hex-digit form). Pure function,
+/// unit-testable.
+///
+/// Format reminder (one row per socket):
+///
+/// ```text
+///   sl  local_address      rem_address      st ...
+///   0:  0100007F:1F90      00000000:0000    0A ...
+/// ```
+///
+/// `local_address` is `IP:PORT` in hex; we split on `:` and match the
+/// port half (case-sensitive uppercase, which is what the kernel emits).
+pub(crate) fn proc_net_tcp_has_listener(text: &str, port_hex: &str) -> bool {
+    for line in text.lines().skip(1) {
+        // Skip header line.
+        let mut cols = line.split_whitespace();
+        // sl, local, rem, st
+        let _sl = cols.next();
+        let local = match cols.next() {
+            Some(s) => s,
+            None => continue,
+        };
+        let _rem = cols.next();
+        let st = match cols.next() {
+            Some(s) => s,
+            None => continue,
+        };
+        if st != "0A" {
+            continue;
+        }
+        if let Some((_, p)) = local.rsplit_once(':')
+            && p == port_hex
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Wait for a child to exit, escalating SIGTERM → SIGKILL on deadline.
 ///
 /// On timeout: sends SIGTERM, gives the child up to 1 second to exit
@@ -1479,5 +1607,41 @@ mod pid_alive_tests {
         // Give the scheduler a moment to actually free the slot.
         std::thread::sleep(std::time::Duration::from_millis(20));
         assert!(!pid_is_alive(pid), "reaped pid {pid} must read as dead");
+    }
+}
+
+#[cfg(test)]
+mod proc_net_tcp_tests {
+    use super::*;
+
+    /// A real-world `/proc/<pid>/net/tcp` snippet: one listener on
+    /// 0.0.0.0:8080 (port 0x1F90) plus one ESTABLISHED conn that
+    /// must NOT be matched as a listener.
+    const SAMPLE: &str = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0\n   1: 0100007F:0050 0100007F:E1F0 01 00000000:00000000 00:00000000 00000000     0        0 67890 1 0000000000000000 0 0 0 10 0\n";
+
+    #[test]
+    fn finds_listener_on_matching_port() {
+        assert!(proc_net_tcp_has_listener(SAMPLE, "1F90"));
+    }
+
+    #[test]
+    fn rejects_non_matching_port() {
+        assert!(!proc_net_tcp_has_listener(SAMPLE, "0050"));
+    }
+
+    /// State 01 = TCP_ESTABLISHED. Even if the port matches, an
+    /// established connection is not a listener.
+    #[test]
+    fn rejects_established_state() {
+        // Port 0x0050 (80) appears with state 01 in SAMPLE — matches
+        // port-wise but not state-wise.
+        assert!(!proc_net_tcp_has_listener(SAMPLE, "0050"));
+    }
+
+    #[test]
+    fn empty_input_returns_false() {
+        assert!(!proc_net_tcp_has_listener("", "1F90"));
+        // Header-only also returns false.
+        assert!(!proc_net_tcp_has_listener("  sl  local_address ...\n", "1F90"));
     }
 }

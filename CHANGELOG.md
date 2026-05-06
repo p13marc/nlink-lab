@@ -6,7 +6,26 @@ All notable changes to this project will be documented in this file.
 
 (empty — entries land here as the next release accumulates)
 
-## [0.4.0] - 2026-05-06
+## [0.4.1] - 2026-05-06
+
+Patch release. One bug fix.
+
+### Fixed
+- `nlink-lab proc-stat`'s `fd_count` always reported `0` regardless
+  of the number of file descriptors actually open. The internal
+  implementation exec'd `sh -c "ls /proc/<pid>/fd 2>/dev/null | wc
+  -l"` — when `ls` failed (any cause, including the SUID-install
+  euid-demotion path that `bash`/`dash` apply when ruid != euid),
+  the `2>/dev/null` swallowed the error, `wc -l` read empty stdin
+  and emitted `0`, and the trim+parse cleanly returned 0 instead
+  of erroring. Direct `ls` exec now (no shell wrapper); errors
+  propagate. New `running::count_fd_dir` shared helper. Same bug
+  was present in `wait_for_fd_stable` (PR G's heuristic probe);
+  fixed alongside. The existing `proc_stat_returns_live_data`
+  integration test now asserts `fd_count >= 3` (every spawned
+  process inherits stdin/stdout/stderr from `spawn_with_logs`),
+  catching the regression. (Round-5 follow-up — same-day report
+  on 0.4.0)
 
 The "round-5 wishlist" release — nine PRs from Plan 157 addressing
 every item in the harness team's wishlist. New `proc-stat` primitive,

@@ -1104,6 +1104,19 @@ async fn proc_stat_returns_live_data(mut lab: RunningLab) {
     // VmSize/VmRSS should both be present for a userland process.
     assert!(stat.rss_kb.is_some());
     assert!(stat.vsz_kb.is_some());
+    // fd_count must be at least 3 — every spawned process inherits
+    // stdin/stdout/stderr from `spawn_with_logs`. 0.4.0 had a bug
+    // where this always reported 0 because the internal
+    // `sh -c "ls /proc/<pid>/fd 2>/dev/null | wc -l"` swallowed
+    // the `ls` error and `wc -l` of empty input emitted 0. The
+    // round-5 follow-up fix exec's `ls` directly. Floor of 3 also
+    // catches the regression of returning 0 unconditionally.
+    assert!(
+        stat.fd_count >= 3,
+        "fd_count {} too low; sleep should have at least stdin/stdout/stderr — \
+         see round-5 follow-up bug",
+        stat.fd_count
+    );
     // started_at_unix_micros should be roughly "now" (within last
     // 60s). A loose check; just guarding the arithmetic.
     let now_micros = std::time::SystemTime::now()

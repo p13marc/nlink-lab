@@ -900,16 +900,10 @@ impl RunningLab {
     ) -> Result<()> {
         let deadline = std::time::Instant::now() + timeout;
         let interval = std::cmp::min(interval, std::time::Duration::from_millis(250));
-        let path = format!("/proc/{pid}/fd");
         let mut last_count: Option<u32> = None;
         let mut last_change = std::time::Instant::now();
         loop {
-            let probe = self.exec(
-                node,
-                "sh",
-                &["-c", &format!("ls {path} 2>/dev/null | wc -l")],
-            )?;
-            let count: u32 = probe.stdout.trim().parse().unwrap_or(0);
+            let count = count_fd_dir(self, node, pid)?;
             match last_count {
                 Some(prev) if prev == count => {
                     if last_change.elapsed() >= stable_for {
@@ -1319,7 +1313,6 @@ impl RunningLab {
     pub fn proc_stat(&self, node: &str, pid: u32) -> Result<crate::proc_stat::ProcStat> {
         let stat_path = format!("/proc/{pid}/stat");
         let status_path = format!("/proc/{pid}/status");
-        let fd_path = format!("/proc/{pid}/fd");
 
         let stat_out = self.exec(node, "cat", &[&stat_path])?;
         if stat_out.exit_code != 0 {
@@ -1343,19 +1336,9 @@ impl RunningLab {
         }
         let status_fields = crate::proc_stat::parse_status(&status_out.stdout);
 
-        // Count entries in /proc/<pid>/fd. `ls -1 | wc -l` is robust
-        // across coreutils versions; the trim+parse handles trailing
-        // whitespace from the various locales.
-        let fd_out = self.exec(
-            node,
-            "sh",
-            &["-c", &format!("ls {fd_path} 2>/dev/null | wc -l")],
-        )?;
-        let fd_count: u32 = fd_out
-            .stdout
-            .trim()
-            .parse()
-            .map_err(|e| Error::deploy_failed(format!("parse fd count {fd_path:?}: {e}")))?;
+        // Count entries in /proc/<pid>/fd. Direct `ls` exec — see
+        // `count_fd_dir` for why we don't go through `sh -c`.
+        let fd_count = count_fd_dir(self, node, pid)?;
 
         // /proc/stat for btime — needed to convert starttime_ticks
         // (jiffies since boot) into a Unix timestamp.
@@ -1375,6 +1358,39 @@ impl RunningLab {
             tick_hz,
         ))
     }
+}
+
+/// Count entries in `/proc/<pid>/fd` inside a target node's
+/// namespace. Exec's `ls` directly — *not* via `sh -c "... | wc -l"`,
+/// because:
+///
+/// 1. `2>/dev/null` in the shell version swallowed any error, so a
+///    failed `ls` (any cause) produced an empty stdin to `wc -l`,
+///    which silently emitted `0`. Round-5 follow-up bug:
+///    `proc-stat`'s `fd_count` always reported 0.
+/// 2. SUID-installed `nlink-lab` invocations have ruid != euid;
+///    `bash`/`dash` demote euid to ruid when invoked that way (per
+///    `man bash`'s "If the shell is started with the effective user
+///    id not equal to the real user id, [...] the effective user id
+///    is set to the real user id"). The shell-wrapped `ls
+///    /proc/<pid>/fd` (mode 0700, root-owned) then hits EACCES, but
+///    `2>/dev/null` hides it. Direct `ls` exec doesn't go through a
+///    shell so the demotion doesn't apply.
+///
+/// Returns the count as `u32`. Errors propagate (non-zero exit,
+/// stderr is included in the message). `None`-out shouldn't happen
+/// in practice.
+pub(crate) fn count_fd_dir(lab: &RunningLab, node: &str, pid: u32) -> Result<u32> {
+    let path = format!("/proc/{pid}/fd");
+    let out = lab.exec(node, "ls", &[&path])?;
+    if out.exit_code != 0 {
+        return Err(Error::deploy_failed(format!(
+            "list {path}: exit {} stderr={}",
+            out.exit_code,
+            out.stderr.trim()
+        )));
+    }
+    Ok(out.stdout.lines().count() as u32)
 }
 
 /// True iff `text` (the body of `/proc/<pid>/net/tcp` or `tcp6`)

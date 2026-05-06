@@ -508,7 +508,7 @@ sudo cargo test -p nlink-lab --test stress -- N_labs_in_parallel_all_succeed
 
 ### NLL syntax
 
-```nll
+```nll-ignore
 node site_a {
     subnet auto/24
 }
@@ -520,7 +520,7 @@ network lan {
 
 Or a compact pool form:
 
-```nll
+```nll-ignore
 pool labs 10.0.0.0/8 /24
 network lan {
     subnet from labs

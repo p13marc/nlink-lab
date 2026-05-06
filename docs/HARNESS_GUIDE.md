@@ -274,7 +274,7 @@ Use `subnet auto/24` (Plan 157 PR E) in network blocks instead of
 hard-coding. The pool guarantees parallel labs get non-colliding
 subnets.
 
-```nll
+```nll-ignore
 network lan_a {
   members [router:eth0, site_a:eth0]
   subnet auto/24    # resolved at deploy time

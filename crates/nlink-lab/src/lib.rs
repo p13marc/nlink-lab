@@ -72,6 +72,7 @@ pub mod render;
 pub mod running;
 pub mod scenario;
 pub mod state;
+pub mod subnet_pool;
 pub mod templates;
 pub mod test_helpers;
 pub mod test_runner;

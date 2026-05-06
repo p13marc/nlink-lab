@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- NLL `subnet auto/<prefix>` (or just `auto`) placeholder for
+  network blocks. Resolved at deploy time against a host-wide
+  flock-protected pool (`$XDG_STATE_HOME/nlink-lab/subnet-pool.json`,
+  `10.0.0.0/8`-derived). Lets parallel labs share a host without
+  hard-coding non-colliding subnets in each topology. Allocations
+  recorded against the lab name and freed on destroy. New module
+  `nlink_lab::subnet_pool` with public `allocate`, `free_for_lab`,
+  and `substitute_auto_subnets`. Currently `/24` only; other
+  prefixes error clearly. (Plan 157 PR E — round-5 §2.5)
 - `nlink-lab capture --max-size <N>` and `--rotate <SECS>` flags —
   rotating pcap segments for long-soak captures. `--keep <N>` (default
   5) caps how many rotated segments are retained; older ones are

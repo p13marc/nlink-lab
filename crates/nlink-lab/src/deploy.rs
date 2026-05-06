@@ -113,7 +113,22 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         });
     }
 
+    // Resolve `auto/N` subnet placeholders against the host-wide pool
+    // before any kernel state is created. The pool acquires its own
+    // flock; allocations are recorded against the lab name so destroy
+    // can free them. (Round-5 §2.5.) Clone the topology since the
+    // `&Topology` we received is borrowed; substitution mutates.
+    let mut owned_topology = topology.clone();
+    let lab_name = owned_topology.lab.name.clone();
+    let allocated_subnets = crate::subnet_pool::substitute_auto_subnets(
+        &mut owned_topology,
+        |prefix| crate::subnet_pool::allocate(&lab_name, prefix),
+    )?;
+    let topology = &owned_topology;
     let mut cleanup = Cleanup::new();
+    if !allocated_subnets.is_empty() {
+        cleanup.set_subnet_pool_lab(lab_name.clone());
+    }
     let mut node_handles: HashMap<String, NodeHandle> = HashMap::new();
     let mut namespace_names: HashMap<String, String> = HashMap::new();
     let mut container_states: HashMap<String, ContainerState> = HashMap::new();
@@ -3469,6 +3484,10 @@ struct Cleanup {
     runtime_binary: Option<String>,
     dns_lab: Option<String>,
     wifi_loaded: bool,
+    /// Lab name whose subnet-pool entries should be released on
+    /// rollback. Set when `auto/N` placeholders were resolved at the
+    /// top of `deploy()`.
+    subnet_pool_lab: Option<String>,
     armed: bool,
 }
 
@@ -3480,6 +3499,7 @@ impl Cleanup {
             runtime_binary: None,
             dns_lab: None,
             wifi_loaded: false,
+            subnet_pool_lab: None,
             armed: true,
         }
     }
@@ -3500,6 +3520,10 @@ impl Cleanup {
         self.dns_lab = Some(name);
     }
 
+    fn set_subnet_pool_lab(&mut self, name: String) {
+        self.subnet_pool_lab = Some(name);
+    }
+
     fn disarm(&mut self) {
         self.armed = false;
     }
@@ -3509,6 +3533,9 @@ impl Drop for Cleanup {
     fn drop(&mut self) {
         if !self.armed {
             return;
+        }
+        if let Some(lab_name) = &self.subnet_pool_lab {
+            let _ = crate::subnet_pool::free_for_lab(lab_name);
         }
         if let Some(lab_name) = &self.dns_lab {
             let _ = crate::dns::remove_hosts(lab_name);

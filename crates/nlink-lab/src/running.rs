@@ -1151,6 +1151,12 @@ impl RunningLab {
         // Acquire exclusive lock
         let _lock = crate::state::lock(&self.topology.lab.name)?;
 
+        // Release any subnet-pool entries this lab claimed at deploy
+        // time (round-5 §2.5). Best-effort — pool errors are not
+        // fatal for destroy. The pool flock keeps this safe against
+        // concurrent free_for_lab calls.
+        let _ = crate::subnet_pool::free_for_lab(&self.topology.lab.name);
+
         // 1. Kill background processes
         for (_node, pid) in &self.pids {
             kill_process(*pid);

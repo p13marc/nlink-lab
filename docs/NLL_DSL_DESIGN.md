@@ -266,6 +266,25 @@ network ring {
 }
 ```
 
+#### Auto-allocated subnets
+
+When parallel labs share a host, hard-coded subnets risk collision.
+Use `auto/<prefix>` (or just `auto`, which defaults to `/24`)
+anywhere a CIDR is accepted in a `network` block. At deploy time,
+nlink-lab draws a free subnet from a host-wide pool
+(`$XDG_STATE_HOME/nlink-lab/subnet-pool.json`, flock-protected) and
+substitutes it. Subnets are released when the lab is destroyed.
+
+```nll-ignore
+network lan {
+  members [router:eth0, host:eth0]
+  subnet auto/24    # resolved to e.g. 10.7.3.0/24 at deploy time
+}
+```
+
+The pool is `10.0.0.0/8` and supports `/24` today; other prefixes
+return a clear error. (Round-5 §2.5.)
+
 Nested loops produce a Cartesian product; see
 [`docs/cookbook/satellite-mesh.md`](cookbook/satellite-mesh.md)
 for a worked 12-node example.

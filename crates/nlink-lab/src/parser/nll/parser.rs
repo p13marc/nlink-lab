@@ -1002,6 +1002,30 @@ fn parse_cidr_or_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     {
         return parse_function_call(tokens, pos);
     }
+    // `auto` / `auto/N` placeholder — round-5 §2.5. Resolved at
+    // deploy time by `subnet_pool::substitute_auto_subnets` to a
+    // concrete /N drawn from the host-wide pool.
+    if let Some(Token::Ident(s)) = at(tokens, *pos)
+        && s == "auto"
+    {
+        let mut val = String::from("auto");
+        *pos += 1;
+        if matches!(at(tokens, *pos), Some(Token::Slash)) {
+            val.push('/');
+            *pos += 1;
+            if let Some(Token::Int(n)) = at(tokens, *pos) {
+                val.push_str(n);
+                *pos += 1;
+            } else {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    "expected prefix length after `auto/` (e.g. `auto/24`)".into(),
+                ));
+            }
+        }
+        return Ok(val);
+    }
     // May be CIDR, IP, or compound address with interpolation (e.g. 10.255.0.${i}/32)
     let mut val = String::new();
     loop {

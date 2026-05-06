@@ -185,7 +185,10 @@ enum Commands {
     /// Schema: docs/json-schemas/status-scan.schema.json
     ///
     /// JSON OUTPUT (with `--json <lab>`):
-    ///   topology object for the lab + an `addresses` field per node.
+    ///   topology object for the lab + an `addresses` field per node
+    ///   + a `host_resources` block (mgmt bridge, declared subnets).
+    ///
+    /// Schema: docs/json-schemas/status-lab.schema.json
     Status {
         /// Lab name (omit to list all).
         name: Option<String>,
@@ -3757,6 +3760,7 @@ mod tests {
             include_str!("../../../docs/json-schemas/ps.schema.json"),
             include_str!("../../../docs/json-schemas/impair-show.schema.json"),
             include_str!("../../../docs/json-schemas/proc-stat.schema.json"),
+            include_str!("../../../docs/json-schemas/status-lab.schema.json"),
         ];
         for s in schemas {
             let _: serde_json::Value = serde_json::from_str(s)

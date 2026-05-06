@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/status-lab.schema.json",
+  "title": "nlink-lab status --json <LAB> output",
+  "description": "Emitted by `nlink-lab status --json <LAB>` (the per-lab variant — different from the no-arg list and the --scan summary). Wraps the lab's serialised topology with two augmentations: per-node `addresses` map (resolved IPs incl. mgmt0) and a `host_resources` block describing the host-side artefacts the lab installed. The topology fields themselves are not schematised here — refer to the lib's Topology type. Round-5 §1.2.",
+  "type": "object",
+  "required": ["lab", "host_resources"],
+  "properties": {
+    "lab": {
+      "description": "Lab metadata (name, description, tags, etc.). Shape mirrors `LabConfig` in the library."
+    },
+    "nodes": {
+      "type": "object",
+      "description": "Per-node details. Each node value carries the topology Node fields plus an `addresses` map (interface name → list of CIDR strings) when at least one address resolved. Schema is open-ended; consumers that need stability for specific fields should pin to the library type.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": "object",
+            "description": "Resolved IPs per interface. Includes `mgmt0` for host-reachable mgmt setups.",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "description": "Topology links — see the library's Link type for fields."
+    },
+    "networks": {
+      "type": "object",
+      "description": "Bridge networks — see the library's Network type for fields."
+    },
+    "host_resources": {
+      "type": "object",
+      "description": "Host-side artefacts the lab installed. Lets consumers detect cross-lab collisions client-side without netlink.",
+      "required": ["mgmt_bridge", "subnets"],
+      "additionalProperties": false,
+      "properties": {
+        "mgmt_bridge": {
+          "type": "string",
+          "description": "Mgmt bridge interface name in the host network namespace (`nl{hash8}`). Always present for namespace-only labs."
+        },
+        "subnets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Every declared subnet in the topology (links + networks), normalised to network-address/prefix form. Useful to verify two parallel labs don't claim the same private range."
+        }
+      }
+    }
+  }
+}

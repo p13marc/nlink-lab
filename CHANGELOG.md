@@ -4,42 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+(empty — entries land here as the next release accumulates)
+
+## [0.4.0] - 2026-05-06
+
+The "round-5 wishlist" release — nine PRs from Plan 157 addressing
+every item in the harness team's wishlist. New `proc-stat` primitive,
+capture rotation, `--wait-port`/`--wait-fd-stable`, `subnet auto/N`
+allocator, loopback dedup, `host_pid` alias, fixed parallel-deploy
+`/etc/hosts` race, namespace-model docs, harness writer guide.
+
+**Library API breaks** (relevant for direct library consumers):
+- `nlink_lab::capture::run_capture` now takes a `CaptureOutput`
+  enum instead of `Option<W>`. Construct via
+  `CaptureOutput::pcap(path)?` for the simple case.
+- `nlink_lab::ProcessInfo` gains a public `host_pid: u32` field.
+  Code that constructs `ProcessInfo` directly needs to populate it.
+
 ### Added
-- `docs/HARNESS_GUIDE.md` — guide for harness writers building on
-  top of nlink-lab (spawn ordering with `--wait-log`/`--wait-port`,
-  capture endpoint selection, failure-mode debugging, cleanup
-  discipline, parallel-lab concurrency). Linked from README.
-  (Plan 157 PR I — round-5 §3.1)
-- NLL `subnet auto/<prefix>` (or just `auto`) placeholder for
-  network blocks. Resolved at deploy time against a host-wide
-  flock-protected pool (`$XDG_STATE_HOME/nlink-lab/subnet-pool.json`,
-  `10.0.0.0/8`-derived). Lets parallel labs share a host without
-  hard-coding non-colliding subnets in each topology. Allocations
-  recorded against the lab name and freed on destroy. New module
-  `nlink_lab::subnet_pool` with public `allocate`, `free_for_lab`,
-  and `substitute_auto_subnets`. Currently `/24` only; other
-  prefixes error clearly. (Plan 157 PR E — round-5 §2.5)
-- `nlink-lab capture --max-size <N>` and `--rotate <SECS>` flags —
-  rotating pcap segments for long-soak captures. `--keep <N>` (default
-  5) caps how many rotated segments are retained; older ones are
-  pruned at rotation. Each rotated segment is a complete pcap with
-  its own global header. Decimal-SI suffixes accepted on `--max-size`
-  (e.g. `100M`, `2G`). Library: new
-  `nlink_lab::capture::CaptureOutput` enum (Summaries / Pcap /
-  RotatingPcap), `RotatingPcapWriter`. **Library API change**:
-  `run_capture` now takes `CaptureOutput` instead of `Option<W>`.
-  (Plan 157 PR F — round-5 §2.3)
-- `nlink-lab spawn --wait-port <PORT>` and `--wait-fd-stable <SECS>` —
-  two new readiness probes joining `--wait-tcp` and `--wait-log`.
-  All four AND-compose. `--wait-port` reads `/proc/<pid>/net/tcp{,6}`
-  for a `LISTEN` row matching the port (no `connect(2)` attempt;
-  works for non-routable binds and avoids logged
-  connection-refused noise). `--wait-fd-stable` is a heuristic:
-  returns when the spawned process's `/proc/<pid>/fd/` count hasn't
-  changed for SECS seconds. Library:
-  `RunningLab::wait_for_port(node, pid, port, timeout, interval)`
-  and `wait_for_fd_stable(node, pid, stable_for, timeout, interval)`.
-  (Plan 157 PR G — round-5 §2.4)
 - `nlink-lab proc-stat <LAB> <NODE> <PID> [--json] [--watch SECS]` —
   single primitive for sampling a spawned process's resource usage.
   Reads `/proc/<pid>/{stat,status}` and `/proc/<pid>/fd/` from inside
@@ -51,22 +33,14 @@ All notable changes to this project will be documented in this file.
   parse_btime, assemble}`. Schema:
   `docs/json-schemas/proc-stat.schema.json`. (Plan 157 PR C —
   round-5 §2.2)
-
-### Fixed
-- Parallel `nlink-lab deploy` invocations on labs that use `dns hosts`
-  could lose each other's managed `/etc/hosts` sections. The
-  read-modify-write of `/etc/hosts` in `dns::inject_hosts`,
-  `remove_hosts`, and `remove_all_hosts` was not synchronised across
-  labs. Now serialised by a global blocking flock at
-  `$XDG_STATE_HOME/nlink-lab/labs/.hosts.lock` (new
-  `state::hosts_lock()`). Concurrent deploys take turns instead of
-  racing. (Plan 157 PR D — round-5 §1.2 prime suspect)
-
-### Added
-- `nlink-lab status --json <lab>` now includes a `host_resources`
-  block with the lab's mgmt bridge name and declared subnets. Lets
-  consumers detect cross-lab collisions client-side without
-  netlink. (Plan 157 PR D — round-5 §1.2 bonus)
+- `nlink-lab capture --max-size <N>` and `--rotate <SECS>` flags —
+  rotating pcap segments for long-soak captures. `--keep <N>` (default
+  5) caps how many rotated segments are retained; older ones are
+  pruned at rotation. Each rotated segment is a complete pcap with
+  its own global header. Decimal-SI suffixes accepted on `--max-size`
+  (e.g. `100M`, `2G`). Library: new
+  `nlink_lab::capture::CaptureOutput` enum (Summaries / Pcap /
+  RotatingPcap), `RotatingPcapWriter`. (Plan 157 PR F — round-5 §2.3)
 - `nlink-lab capture --dedupe-loopback` flag — sets the kernel's
   `PACKET_IGNORE_OUTGOING` socket option on the AF_PACKET ring, so
   loopback (`lo`) capture no longer reports each packet twice
@@ -75,6 +49,31 @@ All notable changes to this project will be documented in this file.
   Requires kernel ≥ 4.20. Library:
   `nlink_lab::capture::CaptureConfig::ignore_outgoing: bool`.
   (Plan 157 PR H — round-5 §2.6)
+- `nlink-lab spawn --wait-port <PORT>` and `--wait-fd-stable <SECS>` —
+  two new readiness probes joining `--wait-tcp` and `--wait-log`.
+  All four AND-compose. `--wait-port` reads `/proc/<pid>/net/tcp{,6}`
+  for a `LISTEN` row matching the port (no `connect(2)` attempt;
+  works for non-routable binds and avoids logged
+  connection-refused noise). `--wait-fd-stable` is a heuristic:
+  returns when the spawned process's `/proc/<pid>/fd/` count hasn't
+  changed for SECS seconds. Library:
+  `RunningLab::wait_for_port(node, pid, port, timeout, interval)`
+  and `wait_for_fd_stable(node, pid, stable_for, timeout, interval)`.
+  (Plan 157 PR G — round-5 §2.4)
+- NLL `subnet auto/<prefix>` (or just `auto`) placeholder for
+  network blocks. Resolved at deploy time against a host-wide
+  flock-protected pool (`$XDG_STATE_HOME/nlink-lab/subnet-pool.json`,
+  `10.0.0.0/8`-derived). Lets parallel labs share a host without
+  hard-coding non-colliding subnets in each topology. Allocations
+  recorded against the lab name and freed on destroy. New module
+  `nlink_lab::subnet_pool` with public `allocate`, `free_for_lab`,
+  and `substitute_auto_subnets`. Currently `/24` only; other
+  prefixes error clearly. (Plan 157 PR E — round-5 §2.5)
+- `nlink-lab status --json <LAB>` now includes a `host_resources`
+  block with the lab's mgmt bridge name and declared subnets. Lets
+  consumers detect cross-lab collisions client-side without
+  netlink. Schema: `docs/json-schemas/status-lab.schema.json`.
+  (Plan 157 PR D — round-5 §1.2 bonus)
 - `nlink-lab spawn --json` and `nlink-lab ps --json` now also emit
   `host_pid` alongside `pid` — explicit alias documenting that the
   PID is host-side. Required field in both schemas. Equal to `pid`
@@ -82,6 +81,11 @@ All notable changes to this project will be documented in this file.
   future-proofs the contract for when/if a NEWPID-based variant
   ships. Library: new `ProcessInfo::host_pid: u32` field.
   (Plan 157 PR B — round-5 §2.1)
+- `docs/HARNESS_GUIDE.md` — guide for harness writers building on
+  top of nlink-lab (spawn ordering with `--wait-log`/`--wait-port`,
+  capture endpoint selection, failure-mode debugging, cleanup
+  discipline, parallel-lab concurrency). Linked from README.
+  (Plan 157 PR I — round-5 §3.1)
 - `docs/ARCHITECTURE.md` — new "Process & namespace model" section
   documenting which `CLONE_NEW*` flags are active (only
   `CLONE_NEWNET` always; `CLONE_NEWNS` when `dns hosts` is set; no
@@ -93,11 +97,29 @@ All notable changes to this project will be documented in this file.
 - README links `CHANGELOG.md` from the Documentation section.
   (Plan 157 PR A — round-5 §3.3)
 
+### Fixed
+- Parallel `nlink-lab deploy` invocations on labs that use `dns hosts`
+  could lose each other's managed `/etc/hosts` sections. The
+  read-modify-write of `/etc/hosts` in `dns::inject_hosts`,
+  `remove_hosts`, and `remove_all_hosts` was not synchronised across
+  labs. Now serialised by a global blocking flock at
+  `$XDG_STATE_HOME/nlink-lab/labs/.hosts.lock` (new
+  `state::hosts_lock()`). Concurrent deploys take turns instead of
+  racing. (Plan 157 PR D — round-5 §1.2 prime suspect)
+
 ### Changed
+- **Library API**: `nlink_lab::capture::run_capture` now takes a
+  `CaptureOutput` enum instead of `Option<W>`. Use
+  `CaptureOutput::pcap(path)?` for the simple case;
+  `CaptureOutput::RotatingPcap { ... }` enables `--max-size` /
+  `--rotate` rotation. (Plan 157 PR F)
+- **Library API**: `nlink_lab::ProcessInfo` gains a public
+  `host_pid: u32` field. Direct constructors need to populate it
+  (set to `pid`). (Plan 157 PR B)
 - Each `--json`-emitting subcommand's `--help` now points at its
   schema file under `docs/json-schemas/` (deploy, status, spawn,
-  ps, impair --show). Saves consumers the discovery cost.
-  (Plan 157 PR A — round-5 §3.2)
+  ps, impair --show, proc-stat). Saves consumers the discovery
+  cost. (Plan 157 PR A — round-5 §3.2)
 
 ## [0.3.1] - 2026-05-03
 

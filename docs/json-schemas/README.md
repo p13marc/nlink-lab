@@ -10,6 +10,7 @@ is stale** — please file a fix.
 | `nlink-lab deploy --json` | `deploy.schema.json` | one object per deploy |
 | `nlink-lab status --json` (no lab) | `status-list.schema.json` | array of running labs |
 | `nlink-lab status --scan --json` | `status-scan.schema.json` | running labs + orphans + stale |
+| `nlink-lab status --json <LAB>` | `status-lab.schema.json` | per-lab topology + addresses + host_resources |
 | `nlink-lab spawn --json` | `spawn.schema.json` | one object per spawn |
 | `nlink-lab ps --json` | `ps.schema.json` | array of tracked processes |
 | `nlink-lab impair --show --json` | `impair-show.schema.json` | per-endpoint qdisc state |

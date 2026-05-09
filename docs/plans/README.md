@@ -46,7 +46,8 @@ or more independent PRs.
 
 | Plan | Title | Effort | Priority |
 |------|-------|--------|----------|
-| [156](156-eliminate-tcpdump-runtime-dep.md) | Eliminate the `tcpdump` runtime dep — typed BPF builder DSL replacing the `--filter` shell-out | Small (~1d) | P2 |
+| [156](156-eliminate-tcpdump-runtime-dep.md) | Eliminate the `tcpdump` runtime dep — typed BPF builder DSL | Small (~1d after upstream lands) | P2 |
+| [156a](156a-netring-bpf-builder-proposal.md) | Upstream proposal to netring team for the `BpfFilter::builder()` primitive (Plan 156's prerequisite) | — (proposal) | P2 |
 
 The five-plan arc (150–154) shipped end-to-end. Plan 156 is a
 small follow-up triggered by the C-dep audit: nlink-lab has zero

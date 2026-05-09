@@ -44,10 +44,18 @@ or more independent PRs.
 
 **Still open:**
 
-_Nothing._ The five-plan arc shipped end-to-end. Subsequent
-improvements will track as new plans filed against specific
-user-reported friction; the deliberately-scoped-out items
-(vendor NOS support, multi-host clustering, web UI) remain so.
+| Plan | Title | Effort | Priority |
+|------|-------|--------|----------|
+| [156](156-eliminate-tcpdump-runtime-dep.md) | Eliminate the `tcpdump` runtime dep — typed BPF builder DSL replacing the `--filter` shell-out | Small (~1d) | P2 |
+
+The five-plan arc (150–154) shipped end-to-end. Plan 156 is a
+small follow-up triggered by the C-dep audit: nlink-lab has zero
+compile-time C library deps, but `capture --filter "<expr>"`
+shells out to `tcpdump -dd` at runtime. Plan 156 replaces this
+with a typed builder.
+
+The deliberately-scoped-out items (vendor NOS support, multi-host
+clustering, web UI) remain so.
 
 ## Completed
 

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+(empty — entries land here as the next release accumulates)
+
+## [0.5.0] - 2026-05-10
+
+Plan 156 release — `nlink-lab capture` no longer needs `tcpdump`
+or `libpcap` at runtime. netring 0.11.0 ships the typed
+`BpfFilter::builder()` primitive (proposed in Plan 156a, adopted
+upstream); nlink-lab now uses it directly and exposes typed
+`--filter-*` CLI flags.
+
 **Library API breaks** (relevant for direct library consumers):
 - `nlink_lab::capture::CaptureConfig::bpf_filter` is now
   `Option<netring::BpfFilter>` (was `Option<Vec<netring::BpfInsn>>`).

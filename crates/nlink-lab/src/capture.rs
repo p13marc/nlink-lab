@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use netring::{BpfInsn, Capture, CaptureStats, RingProfile};
+use netring::{BpfFilter, Capture, CaptureStats, RingProfile};
+#[cfg(feature = "legacy-tcpdump-filter")]
+use netring::BpfInsn;
 use nlink::netlink::namespace;
 
 use crate::error::{Error, Result};
@@ -210,11 +212,17 @@ const PCAP_RECORD_HEADER_BYTES: u64 = 16;
 
 // ── BPF filter compilation ────────────────────────────────────────────────
 
-/// Compile a tcpdump filter expression into BPF instructions.
+/// Compile a tcpdump filter expression into a [`BpfFilter`].
 ///
 /// Shells out to `tcpdump -dd` which outputs C-style BPF bytecode.
-/// Requires tcpdump to be installed on the system.
-pub fn compile_bpf_filter(expression: &str) -> Result<Vec<BpfInsn>> {
+/// Requires `tcpdump` (and `libpcap`) installed on the system.
+///
+/// **This is the legacy path.** Prefer [`netring::BpfFilter::builder`]
+/// (re-exported as `netring::BpfFilter`) for typed, dependency-free
+/// filter construction. Available only when nlink-lab is built with
+/// the `legacy-tcpdump-filter` feature.
+#[cfg(feature = "legacy-tcpdump-filter")]
+pub fn compile_bpf_filter(expression: &str) -> Result<BpfFilter> {
     let output = std::process::Command::new("tcpdump")
         .args(["-dd", expression])
         .output()
@@ -256,9 +264,10 @@ pub fn compile_bpf_filter(expression: &str) -> Result<Vec<BpfInsn>> {
         ));
     }
 
-    Ok(insns)
+    BpfFilter::new(insns).map_err(|e| Error::Capture(format!("invalid BPF filter: {e}")))
 }
 
+#[cfg(feature = "legacy-tcpdump-filter")]
 fn parse_hex_or_dec(s: &str) -> Result<u64> {
     let s = s.trim();
     if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
@@ -282,8 +291,10 @@ pub struct CaptureConfig {
     pub count: Option<u64>,
     /// Stop after this duration.
     pub duration: Option<Duration>,
-    /// Compiled BPF filter instructions.
-    pub bpf_filter: Option<Vec<BpfInsn>>,
+    /// Compiled BPF filter. Build via [`netring::BpfFilter::builder`]
+    /// for typed, dependency-free construction. Set to `None` to
+    /// capture every packet on the interface.
+    pub bpf_filter: Option<BpfFilter>,
     /// Ring buffer profile.
     pub profile: RingProfile,
     /// When true, set `PACKET_IGNORE_OUTGOING` on the AF_PACKET socket
@@ -374,8 +385,8 @@ pub fn run_capture(
         .snap_len(config.snap_len)
         .ignore_outgoing(config.ignore_outgoing);
 
-    if let Some(ref insns) = config.bpf_filter {
-        builder = builder.bpf_filter(insns.clone());
+    if let Some(ref filter) = config.bpf_filter {
+        builder = builder.bpf_filter(filter.clone());
     }
 
     let mut capture = builder
@@ -594,5 +605,33 @@ mod tests {
 
         assert!(base.exists());
         assert!(!dir.path().join("cap.pcap.1").exists());
+    }
+
+    /// Smoke-test that `CaptureConfig.bpf_filter` accepts a typed
+    /// `netring::BpfFilter` built via the chain DSL — i.e. the
+    /// `Plan 156` migration off the `tcpdump -dd` shell-out is
+    /// wired up end-to-end on the type level. The bytecode itself
+    /// is exhaustively covered by netring's own tests; we just
+    /// guard the integration boundary.
+    #[test]
+    fn capture_config_accepts_typed_bpf_filter() {
+        let filter = netring::BpfFilter::builder()
+            .ipv4()
+            .tcp()
+            .dst_port(80)
+            .build()
+            .expect("builder produces a valid filter for tcp dst port 80");
+        assert!(!filter.is_empty(), "compiled filter must be non-empty");
+
+        let cfg = CaptureConfig {
+            interface: "eth0".into(),
+            snap_len: 65536,
+            count: None,
+            duration: None,
+            bpf_filter: Some(filter),
+            profile: RingProfile::Default,
+            ignore_outgoing: false,
+        };
+        assert!(cfg.bpf_filter.is_some());
     }
 }

@@ -52,7 +52,7 @@ zenoh-ext = "1.8"
 
 # Networking
 nlink = { version = "0.15.1", features = ["full"] }
-netring = "0.2"
+netring = "0.11"
 
 # Workspace crates
 nlink-lab = { path = "crates/nlink-lab" }

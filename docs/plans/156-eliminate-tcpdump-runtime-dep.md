@@ -1,7 +1,13 @@
 # Plan 156: Eliminate the `tcpdump` runtime dependency
 
 **Date:** 2026-04-30
-**Status:** Proposed
+**Status:** ✅ Shipped 2026-05-10 — netring 0.11.0 ships the
+`BpfFilter::builder()` primitive proposed in Plan 156a; nlink-lab
+adopts it directly. New `--filter-tcp` / `--filter-dst-port` /
+`--filter-src-net` / etc. CLI flags. Legacy `--filter "<tcpdump
+expr>"` gated behind a `legacy-tcpdump-filter` Cargo feature
+(off by default). Default builds run `capture` with zero runtime
+shell-out to `tcpdump`.
 **Effort:** Small (1 day for the recommended option)
 **Priority:** P2 — only matters when users pass `capture --filter`;
 default path already C-dep-free.

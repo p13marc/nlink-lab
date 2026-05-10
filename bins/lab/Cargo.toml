@@ -14,6 +14,13 @@ readme = "../../README.md"
 name = "nlink-lab"
 path = "src/main.rs"
 
+[features]
+default = []
+# Forwards to `nlink-lab/legacy-tcpdump-filter`. With this feature
+# off (default), passing `--filter "<tcpdump expr>"` errors with a
+# migration message pointing at the typed `--filter-*` flags.
+legacy-tcpdump-filter = ["nlink-lab/legacy-tcpdump-filter"]
+
 [dependencies]
 nlink-lab = { workspace = true }
 netring = { workspace = true }

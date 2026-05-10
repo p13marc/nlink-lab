@@ -1408,6 +1408,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bf7cc16383c4b8d58b9905a8509f02926ce3058053c056376248d958c9df1e8"
 
 [[package]]
+name = "flowscope"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba8b9d0c3af24b2387a676093c9dd28a1f6eb6e118a48c43ee190de9f879cc67"
+dependencies = [
+ "bitflags 2.11.1",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "flume"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2956,15 +2966,17 @@ dependencies = [
 
 [[package]]
 name = "netring"
-version = "0.2.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40976857613feff0c1aff488c1e76ee6445a597b83df1feb089fa90fc88825e9"
+checksum = "bd609e1d7702a927aad1292e4161c533981af76dccd5ebe9f97ee70290ee883f"
 dependencies = [
  "bitflags 2.11.1",
+ "flowscope",
  "libc",
  "nix 0.31.2",
  "thiserror 2.0.18",
  "tracing",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -7132,6 +7144,12 @@ name = "xml-rs"
 version = "0.8.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yasna"

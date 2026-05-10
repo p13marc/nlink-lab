@@ -557,9 +557,90 @@ enum Commands {
         #[arg(short, long)]
         count: Option<u64>,
 
-        /// BPF filter expression (e.g., "tcp port 80").
+        /// Legacy: full tcpdump filter expression (e.g., "tcp port
+        /// 80"). Requires nlink-lab built with the
+        /// `legacy-tcpdump-filter` feature *and* `tcpdump` on PATH.
+        /// Default builds prefer the typed `--filter-*` flags below.
         #[arg(short, long)]
         filter: Option<String>,
+
+        /// Match only TCP (sets ip_proto=6).
+        #[arg(long = "filter-tcp")]
+        filter_tcp: bool,
+
+        /// Match only UDP (sets ip_proto=17).
+        #[arg(long = "filter-udp")]
+        filter_udp: bool,
+
+        /// Match only ICMP (sets ip_proto=1).
+        #[arg(long = "filter-icmp")]
+        filter_icmp: bool,
+
+        /// Match a specific IP protocol number (e.g. 47 for GRE).
+        #[arg(long = "filter-ip-proto", value_name = "PROTO")]
+        filter_ip_proto: Option<u8>,
+
+        /// Restrict to IPv4 traffic.
+        #[arg(long = "filter-ipv4")]
+        filter_ipv4: bool,
+
+        /// Restrict to IPv6 traffic.
+        #[arg(long = "filter-ipv6")]
+        filter_ipv6: bool,
+
+        /// Match ARP frames (ethertype 0x0806).
+        #[arg(long = "filter-arp")]
+        filter_arp: bool,
+
+        /// Match 802.1Q VLAN-tagged frames.
+        #[arg(long = "filter-vlan")]
+        filter_vlan: bool,
+
+        /// Match a specific VLAN ID. Implies `--filter-vlan`.
+        #[arg(long = "filter-vlan-id", value_name = "VID")]
+        filter_vlan_id: Option<u16>,
+
+        /// Match either source or destination IP address.
+        #[arg(long = "filter-host", value_name = "ADDR")]
+        filter_host: Option<std::net::IpAddr>,
+
+        /// Match a specific source IP address.
+        #[arg(long = "filter-src-host", value_name = "ADDR")]
+        filter_src_host: Option<std::net::IpAddr>,
+
+        /// Match a specific destination IP address.
+        #[arg(long = "filter-dst-host", value_name = "ADDR")]
+        filter_dst_host: Option<std::net::IpAddr>,
+
+        /// Match either source or destination network (CIDR).
+        #[arg(long = "filter-net", value_name = "CIDR")]
+        filter_net: Option<String>,
+
+        /// Match a source network (CIDR).
+        #[arg(long = "filter-src-net", value_name = "CIDR")]
+        filter_src_net: Option<String>,
+
+        /// Match a destination network (CIDR).
+        #[arg(long = "filter-dst-net", value_name = "CIDR")]
+        filter_dst_net: Option<String>,
+
+        /// Match either source or destination L4 port. Requires
+        /// `--filter-tcp` or `--filter-udp`.
+        #[arg(long = "filter-port", value_name = "PORT")]
+        filter_port: Option<u16>,
+
+        /// Match L4 source port.
+        #[arg(long = "filter-src-port", value_name = "PORT")]
+        filter_src_port: Option<u16>,
+
+        /// Match L4 destination port.
+        #[arg(long = "filter-dst-port", value_name = "PORT")]
+        filter_dst_port: Option<u16>,
+
+        /// Negate the entire filter (capture everything that does
+        /// NOT match the other `--filter-*` flags).
+        #[arg(long = "filter-not")]
+        filter_not: bool,
 
         /// Stop after N seconds.
         #[arg(long)]
@@ -2010,6 +2091,25 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             write,
             count,
             filter,
+            filter_tcp,
+            filter_udp,
+            filter_icmp,
+            filter_ip_proto,
+            filter_ipv4,
+            filter_ipv6,
+            filter_arp,
+            filter_vlan,
+            filter_vlan_id,
+            filter_host,
+            filter_src_host,
+            filter_dst_host,
+            filter_net,
+            filter_src_net,
+            filter_dst_net,
+            filter_port,
+            filter_src_port,
+            filter_dst_port,
+            filter_not,
             duration,
             snap_len,
             dedupe_loopback,
@@ -2027,9 +2127,106 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             let ns_name = running.namespace_for(&ep.node)?.to_string();
 
-            let bpf = match &filter {
-                Some(expr) => Some(nlink_lab::capture::compile_bpf_filter(expr)?),
-                None => None,
+            // Reject combining the legacy `--filter` expression with
+            // any typed `--filter-*` flag — the two paths describe
+            // the same logical thing and mixing them produces
+            // surprising AND-of-AND semantics.
+            let any_typed_filter = filter_tcp
+                || filter_udp
+                || filter_icmp
+                || filter_ip_proto.is_some()
+                || filter_ipv4
+                || filter_ipv6
+                || filter_arp
+                || filter_vlan
+                || filter_vlan_id.is_some()
+                || filter_host.is_some()
+                || filter_src_host.is_some()
+                || filter_dst_host.is_some()
+                || filter_net.is_some()
+                || filter_src_net.is_some()
+                || filter_dst_net.is_some()
+                || filter_port.is_some()
+                || filter_src_port.is_some()
+                || filter_dst_port.is_some()
+                || filter_not;
+            if filter.is_some() && any_typed_filter {
+                return Err(nlink_lab::Error::invalid_topology(
+                    "cannot combine --filter \"<expr>\" with typed --filter-* flags",
+                ));
+            }
+
+            let bpf = if let Some(expr) = &filter {
+                Some(compile_legacy_bpf_filter(expr)?)
+            } else if any_typed_filter {
+                let mut b = netring::BpfFilter::builder();
+                if filter_ipv4 {
+                    b = b.ipv4();
+                }
+                if filter_ipv6 {
+                    b = b.ipv6();
+                }
+                if filter_arp {
+                    b = b.arp();
+                }
+                // `--filter-vlan-id` implies `--filter-vlan` so the
+                // ethertype check + offset shift get emitted before
+                // the ID match.
+                if filter_vlan || filter_vlan_id.is_some() {
+                    b = b.vlan();
+                }
+                if let Some(vid) = filter_vlan_id {
+                    b = b.vlan_id(vid);
+                }
+                if filter_tcp {
+                    b = b.tcp();
+                }
+                if filter_udp {
+                    b = b.udp();
+                }
+                if filter_icmp {
+                    b = b.icmp();
+                }
+                if let Some(proto) = filter_ip_proto {
+                    b = b.ip_proto(proto);
+                }
+                if let Some(addr) = filter_host {
+                    b = b.host(addr);
+                }
+                if let Some(addr) = filter_src_host {
+                    b = b.src_host(addr);
+                }
+                if let Some(addr) = filter_dst_host {
+                    b = b.dst_host(addr);
+                }
+                if let Some(s) = &filter_net {
+                    b = b.net(parse_filter_cidr("--filter-net", s)?);
+                }
+                if let Some(s) = &filter_src_net {
+                    b = b.src_net(parse_filter_cidr("--filter-src-net", s)?);
+                }
+                if let Some(s) = &filter_dst_net {
+                    b = b.dst_net(parse_filter_cidr("--filter-dst-net", s)?);
+                }
+                if let Some(p) = filter_port {
+                    b = b.port(p);
+                }
+                if let Some(p) = filter_src_port {
+                    b = b.src_port(p);
+                }
+                if let Some(p) = filter_dst_port {
+                    b = b.dst_port(p);
+                }
+                if filter_not {
+                    b = b.negate();
+                }
+                Some(b.build().map_err(|e| {
+                    nlink_lab::Error::invalid_topology(format!(
+                        "BPF filter build failed: {e}"
+                    ))
+                })?)
+            } else {
+                None
             };
 
             let config = nlink_lab::capture::CaptureConfig {
@@ -3560,6 +3757,35 @@ fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<(
 /// Parse a byte-size CLI argument with optional K/M/G suffix.
 /// Decimal-SI units (1K = 1000, 1M = 1_000_000) — same convention as
 /// `tcpdump -C`. Round-5 §2.3.
+/// Parse a CIDR string (`10.0.0.0/24`, `2001:db8::/32`) into the
+/// netring `IpNet` type used by the typed BPF filter builder.
+/// Surfaces the originating flag name in the error so the user can
+/// tell which `--filter-*-net` was malformed.
+fn parse_filter_cidr(flag: &str, s: &str) -> nlink_lab::Result<netring::IpNet> {
+    s.parse::<netring::IpNet>().map_err(|e| {
+        nlink_lab::Error::invalid_topology(format!("invalid {flag} value {s:?}: {e}"))
+    })
+}
+
+/// Legacy `--filter "<tcpdump expr>"` path. Default builds reject
+/// at parse time with a migration suggestion; opting into the
+/// `legacy-tcpdump-filter` feature reinstates the `tcpdump -dd`
+/// shell-out.
+#[cfg(feature = "legacy-tcpdump-filter")]
+fn compile_legacy_bpf_filter(expr: &str) -> nlink_lab::Result<netring::BpfFilter> {
+    nlink_lab::capture::compile_bpf_filter(expr)
+}
+
+#[cfg(not(feature = "legacy-tcpdump-filter"))]
+fn compile_legacy_bpf_filter(_expr: &str) -> nlink_lab::Result<netring::BpfFilter> {
+    Err(nlink_lab::Error::invalid_topology(
+        "--filter \"<tcpdump expr>\" requires nlink-lab built with the \
+         `legacy-tcpdump-filter` feature (which shells out to `tcpdump -dd`). \
+         Default builds use the typed --filter-tcp / --filter-dst-port / \
+         --filter-host / --filter-src-net flags instead.",
+    ))
+}
+
 fn parse_byte_size(s: &str) -> std::result::Result<u64, String> {
     let s = s.trim();
     let (num_str, mul) = if let Some(rest) = s.strip_suffix(['G', 'g']) {

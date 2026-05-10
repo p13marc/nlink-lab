@@ -34,22 +34,59 @@ readable by tcpdump, Wireshark, scapy, and tshark.
 | `-w`, `--write FILE` | Write to pcap. Without this, summaries go to stdout. |
 | `-c`, `--count N` | Stop after N packets. |
 | `--duration SECS` | Stop after N seconds. |
-| `-f`, `--filter EXPR` | BPF filter, e.g. `"tcp port 80"`. Applied in the kernel via `setsockopt`. |
 | `--snap-len BYTES` | Truncate each packet to N bytes. Default 262144 (full packet). |
 | `--json` | Emit each summary as a JSON line (without `-w`). |
+
+### Typed BPF filter flags
+
+The kernel-side filter is constructed via netring's typed
+`BpfFilter::builder()` — pure Rust, no `tcpdump`/`libpcap`
+dependency at runtime. Repeat flags compose with implicit AND.
+For OR or hand-rolled bytecode, use the library API directly.
+
+| Flag | Description |
+|------|-------------|
+| `--filter-tcp` | TCP only (ip_proto=6). |
+| `--filter-udp` | UDP only (ip_proto=17). |
+| `--filter-icmp` | ICMP only (ip_proto=1). |
+| `--filter-ip-proto N` | Specific IP protocol number (e.g. `47` for GRE). |
+| `--filter-ipv4` | Restrict to IPv4. |
+| `--filter-ipv6` | Restrict to IPv6. |
+| `--filter-arp` | ARP frames (ethertype 0x0806). |
+| `--filter-vlan` | 802.1Q VLAN-tagged frames. |
+| `--filter-vlan-id VID` | Specific VLAN ID. Implies `--filter-vlan`. |
+| `--filter-host ADDR` | Source OR destination IP. |
+| `--filter-src-host ADDR` | Source IP. |
+| `--filter-dst-host ADDR` | Destination IP. |
+| `--filter-net CIDR` | Source OR destination network. |
+| `--filter-src-net CIDR` | Source network. |
+| `--filter-dst-net CIDR` | Destination network. |
+| `--filter-port PORT` | Source OR destination L4 port. |
+| `--filter-src-port PORT` | L4 source port. |
+| `--filter-dst-port PORT` | L4 destination port. |
+| `--filter-not` | Negate the entire filter. |
+
+### Legacy tcpdump-expression flag
+
+| Flag | Description |
+|------|-------------|
+| `-f`, `--filter EXPR` | tcpdump-style filter, e.g. `"tcp port 80"`. **Default builds reject this** with a migration suggestion — it shells out to `tcpdump -dd` and re-introduces a runtime tooling dependency. Build with `--features legacy-tcpdump-filter` to opt back in. Cannot be combined with any `--filter-*` flag. |
 
 ## Examples
 
 ### Capture 100 TCP packets on port 80
 
 ```bash
-sudo nlink-lab capture lab client:eth0 -c 100 -f "tcp port 80" -w http.pcap
+sudo nlink-lab capture lab client:eth0 \
+  -c 100 \
+  --filter-tcp --filter-dst-port 80 \
+  -w http.pcap
 ```
 
 ### Watch traffic live with summaries
 
 ```bash
-sudo nlink-lab capture lab router:wan -f "icmp"
+sudo nlink-lab capture lab router:wan --filter-icmp
 ```
 
 ```text

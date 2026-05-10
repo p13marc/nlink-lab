@@ -15,6 +15,8 @@ or more independent PRs.
 | [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ All phases shipped: A + B/1 routes + B/2 sysctls + B/3 rate-limits + B/4 nftables/NAT + C (`--check` + `--json`). Only spawned-process reconcile is intentionally out of scope. |
 | [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | ✅ Module + CLI + cookbook + 3 CLI pages shipped |
 | [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | ✅ All shipped: `set { … }`, `timeout = N`, louder non-root skip, `capture = true` (pcaps preserved on failure), cookbook recipe |
+| [156](156-eliminate-tcpdump-runtime-dep.md) | Eliminate the `tcpdump` runtime dep — typed BPF builder DSL | ✅ Shipped via netring 0.11's `BpfFilter::builder()` (proposed in 156a, landed upstream). New `--filter-tcp/--filter-dst-port/--filter-src-net/...` flags; legacy `--filter "<expr>"` gated behind `legacy-tcpdump-filter` feature. |
+| [156a](156a-netring-bpf-builder-proposal.md) | Upstream proposal to netring team for the `BpfFilter::builder()` primitive | ✅ Adopted upstream — netring 0.11.0 ships the proposed API |
 
 **Recently shipped (in ship order):**
 
@@ -44,16 +46,13 @@ or more independent PRs.
 
 **Still open:**
 
-| Plan | Title | Effort | Priority |
-|------|-------|--------|----------|
-| [156](156-eliminate-tcpdump-runtime-dep.md) | Eliminate the `tcpdump` runtime dep — typed BPF builder DSL | Small (~1d after upstream lands) | P2 |
-| [156a](156a-netring-bpf-builder-proposal.md) | Upstream proposal to netring team for the `BpfFilter::builder()` primitive (Plan 156's prerequisite) | — (proposal) | P2 |
+(none)
 
-The five-plan arc (150–154) shipped end-to-end. Plan 156 is a
-small follow-up triggered by the C-dep audit: nlink-lab has zero
-compile-time C library deps, but `capture --filter "<expr>"`
-shells out to `tcpdump -dd` at runtime. Plan 156 replaces this
-with a typed builder.
+The five-plan arc (150–154) shipped end-to-end. Plan 156 (typed
+BPF filter via netring 0.11's `BpfFilter::builder()`) and its
+upstream proposal Plan 156a both shipped — `nlink-lab capture`
+no longer runs `tcpdump -dd` at runtime on the default build
+path.
 
 The deliberately-scoped-out items (vendor NOS support, multi-host
 clustering, web UI) remain so.

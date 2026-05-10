@@ -4,7 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-(empty — entries land here as the next release accumulates)
+**Library API breaks** (relevant for direct library consumers):
+- `nlink_lab::capture::CaptureConfig::bpf_filter` is now
+  `Option<netring::BpfFilter>` (was `Option<Vec<netring::BpfInsn>>`).
+  Build via `netring::BpfFilter::builder().tcp().dst_port(80).build()?`.
+- `nlink_lab::capture::compile_bpf_filter` now returns
+  `Result<netring::BpfFilter>` and is gated behind the new
+  `legacy-tcpdump-filter` Cargo feature (off by default).
+
+### Added
+- `nlink-lab capture --filter-tcp / --filter-udp / --filter-icmp /
+  --filter-ip-proto / --filter-ipv4 / --filter-ipv6 / --filter-arp /
+  --filter-vlan / --filter-vlan-id / --filter-host / --filter-src-host /
+  --filter-dst-host / --filter-net / --filter-src-net /
+  --filter-dst-net / --filter-port / --filter-src-port /
+  --filter-dst-port / --filter-not` — typed BPF filter flags backed
+  by `netring::BpfFilter::builder()`. Compose with implicit AND.
+  Pure-Rust compilation; no `tcpdump`/`libpcap` runtime dependency.
+  (Plan 156 — round-2 of the C-dependency audit)
+
+### Changed
+- nlink-lab no longer shells out to `tcpdump -dd` on the default
+  capture path. The legacy `--filter "<tcpdump expr>"` flag still
+  exists for parsing-compat, but default builds reject it at parse
+  time with a migration suggestion pointing at the new typed
+  `--filter-*` flags. Build the CLI with `--features
+  legacy-tcpdump-filter` to opt back in to the shell-out behaviour
+  (requires `tcpdump` on PATH at runtime). New
+  `nlink-lab/legacy-tcpdump-filter` and
+  `nlink-lab-cli/legacy-tcpdump-filter` Cargo features (both off
+  by default).
+- Bumped `netring` workspace dependency to `0.11` for the typed
+  `BpfFilter::builder()` API. (Same surface that nlink-lab proposed
+  to the netring team in Plan 156a; that proposal landed in
+  netring 0.11.0.)
 
 ## [0.4.1] - 2026-05-06
 

@@ -14,6 +14,12 @@ readme = "../../README.md"
 default = ["wireguard", "containers"]
 wireguard = ["dep:x25519-dalek", "dep:base64", "dep:getrandom"]
 containers = []
+# Opt-in: keep `nlink_lab::capture::compile_bpf_filter` (and the
+# CLI's `--filter "<tcpdump expr>"` flag) wired to a `tcpdump -dd`
+# shell-out. Requires `tcpdump` + `libpcap` on PATH at runtime.
+# Default builds use the typed `netring::BpfFilter::builder()` API
+# instead — pure Rust, no external tooling.
+legacy-tcpdump-filter = []
 
 [dependencies]
 nlink = { workspace = true }

@@ -826,16 +826,49 @@ fn multi_hop_topology() -> nlink_lab::Topology {
 
 #[lab_test(topology = ipv6_topology)]
 async fn ipv6_ping(lab: RunningLab) {
-    // IPv6 DAD (Duplicate Address Detection) keeps addresses in "tentative"
-    // state for ~1s after assignment. Wait for DAD to complete before pinging.
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    // IPv6 DAD keeps addresses in `tentative` for ~1s after assignment;
+    // a slow CI runner can stretch this past any fixed sleep we pick.
+    // Poll `ip -6 addr` on both nodes until neither side reports
+    // `tentative` (with a hard 10s ceiling), then ping with retries to
+    // tolerate the very first NDP solicit being dropped.
+    for node in ["a", "b"] {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let out = lab
+                .exec(node, "ip", &["-6", "-o", "addr", "show", "eth0"])
+                .unwrap();
+            if out.exit_code == 0 && !out.stdout.contains("tentative") {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!(
+                    "DAD did not complete on {node}:eth0 within 10s; last `ip -6 addr` = {}",
+                    out.stdout
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
 
-    let output = lab
-        .exec("a", "ping", &["-6", "-c1", "-W3", "fd00::2"])
-        .unwrap();
+    // Even after DAD, the very first ICMPv6 echo can race the NDP
+    // solicit/advert handshake on slow runners. Retry up to 3 times
+    // with `-c1 -W3` before declaring failure.
+    let mut output = None;
+    for _ in 0..3 {
+        let attempt = lab
+            .exec("a", "ping", &["-6", "-c1", "-W3", "fd00::2"])
+            .unwrap();
+        let done = attempt.exit_code == 0;
+        output = Some(attempt);
+        if done {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    let output = output.unwrap();
     assert_eq!(
         output.exit_code, 0,
-        "IPv6 ping failed: stdout={} stderr={}",
+        "IPv6 ping failed after 3 retries: stdout={} stderr={}",
         output.stdout, output.stderr
     );
 }

@@ -2221,9 +2221,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     b = b.negate();
                 }
                 Some(b.build().map_err(|e| {
-                    nlink_lab::Error::invalid_topology(format!(
-                        "BPF filter build failed: {e}"
-                    ))
+                    nlink_lab::Error::invalid_topology(format!("BPF filter build failed: {e}"))
                 })?)
             } else {
                 None
@@ -3762,9 +3760,8 @@ fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<(
 /// Surfaces the originating flag name in the error so the user can
 /// tell which `--filter-*-net` was malformed.
 fn parse_filter_cidr(flag: &str, s: &str) -> nlink_lab::Result<netring::IpNet> {
-    s.parse::<netring::IpNet>().map_err(|e| {
-        nlink_lab::Error::invalid_topology(format!("invalid {flag} value {s:?}: {e}"))
-    })
+    s.parse::<netring::IpNet>()
+        .map_err(|e| nlink_lab::Error::invalid_topology(format!("invalid {flag} value {s:?}: {e}")))
 }
 
 /// Legacy `--filter "<tcpdump expr>"` path. Default builds reject

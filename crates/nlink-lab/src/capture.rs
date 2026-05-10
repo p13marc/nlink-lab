@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use netring::{BpfFilter, Capture, CaptureStats, RingProfile};
 #[cfg(feature = "legacy-tcpdump-filter")]
 use netring::BpfInsn;
+use netring::{BpfFilter, Capture, CaptureStats, RingProfile};
 use nlink::netlink::namespace;
 
 use crate::error::{Error, Result};

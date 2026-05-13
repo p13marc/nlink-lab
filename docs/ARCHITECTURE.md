@@ -486,7 +486,7 @@ Today: GitHub Actions (`.github/workflows/`). Gates:
 - `cargo clippy --workspace --all-features -- --deny warnings`
 - `cargo fmt --check`
 
-Not yet wired (see [Plan 150 Phase D](plans/150-documentation-overhaul.md)):
+Not yet wired (see **Plan 150 Phase D**):
 
 - A doc-snippet parse test (every \`\`\`nll block in `docs/`
   parses).

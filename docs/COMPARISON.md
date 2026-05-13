@@ -64,8 +64,8 @@ because the comparison is honest about both wins and losses.
 | Bridge VLAN filtering (802.1Q) | ⚠️ kind-specific | ✅ first-class |
 | Multi-host clustering | ✅ via `clab tools cert` + inventory | ❌ single-host |
 | Web UI / topology graph | ✅ `clab graph` web view | ⚠️ Dot/ASCII output only |
-| Save / restore live state | ✅ `clab save` | ⚠️ via NLL re-deploy; lab archive in [Plan 153](plans/153-export-import.md) |
-| Reconcile (apply config diff) | ⚠️ partial | ✅ `apply` (full coverage in [Plan 152](plans/152-apply-reconcile.md)) |
+| Save / restore live state | ✅ `clab save` | ⚠️ via NLL re-deploy; lab archive in **Plan 153** |
+| Reconcile (apply config diff) | ⚠️ partial | ✅ `apply` (full coverage in **Plan 152**) |
 | Library API | Go (undocumented) | Rust (first-class, `#[lab_test]`) |
 | DSL features | static YAML + Go templates | NLL: loops, imports, parametric, glob, arithmetic |
 | Deploy speed | seconds (Docker pull + boot) | sub-second |
@@ -230,7 +230,7 @@ Where nlink-lab is **worse** than containerlab today:
    [cookbook](cookbook/) — comprehensive but newer.
 5. **Save/restore is incomplete.** `nlink-lab apply` reconciles
    topology changes, but there's no `clab save` equivalent yet —
-   see [Plan 153](plans/153-export-import.md).
+   see **Plan 153**.
 6. **No vendor NOS support, ever.** This is a design decision, not
    a bug — the project doesn't compete in that space.
 

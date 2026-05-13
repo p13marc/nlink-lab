@@ -2,89 +2,64 @@
 
 Implementation plans for nlink-lab.
 
-## Active Plans
+## Active plans
 
-A coordinated arc — Plan 150 is the foundation; the others slot in
-once the docs scaffolding is in place. Each plan can ship as one
-or more independent PRs.
-
-| Plan | Title | Status |
-|------|-------|--------|
-| [150](150-documentation-overhaul.md) | Documentation overhaul (README rewrite, CLI reference, cookbook, comparison, architecture) | ✅ All phases shipped: A (README) + B (8 hand-crafted CLI pages, 10 cookbook recipes) + C (COMPARISON, ARCHITECTURE) + D (doc-CI gate, 21 CLI stubs, TROUBLESHOOTING 193→416 LOC, USER_GUIDE 786→1160 LOC walkthrough). |
-| [151](151-killer-examples.md) | Killer examples — "what containerlab can't do, in 30 seconds" | ✅ Examples A (satellite mesh) + B (multi-tenant VRF+WG+nftables WAN) + C (scenario partition) shipped — Example D (full Rust integration writeup) covered in `rust-integration-test.md` cookbook |
-| [152](152-apply-reconcile.md) | Complete `apply` reconcile path leveraging nlink 0.15.1 `PerPeerImpairer::reconcile()` | ✅ All phases shipped: A + B/1 routes + B/2 sysctls + B/3 rate-limits + B/4 nftables/NAT + C (`--check` + `--json`). Only spawned-process reconcile is intentionally out of scope. |
-| [153](153-export-import.md) | `export` / `import` — `.nlz` lab archive for repros and sharing | ✅ Module + CLI + cookbook + 3 CLI pages shipped |
-| [154](154-lab-test-macro-polish.md) | Polish + promote `#[lab_test]` proc macro for library-first testing | ✅ All shipped: `set { … }`, `timeout = N`, louder non-root skip, `capture = true` (pcaps preserved on failure), cookbook recipe |
-| [156](156-eliminate-tcpdump-runtime-dep.md) | Eliminate the `tcpdump` runtime dep — typed BPF builder DSL | ✅ Shipped via netring 0.11's `BpfFilter::builder()` (proposed in 156a, landed upstream). New `--filter-tcp/--filter-dst-port/--filter-src-net/...` flags; legacy `--filter "<expr>"` gated behind `legacy-tcpdump-filter` feature. |
-| [156a](156a-netring-bpf-builder-proposal.md) | Upstream proposal to netring team for the `BpfFilter::builder()` primitive | ✅ Adopted upstream — netring 0.11.0 ships the proposed API |
-
-**Recently shipped (in ship order):**
-
-1. **Plan 150 Phase A** (`4439869`): README rewrite leading with the
-   wedge — 622 → 96 lines, hero example (3-line per-pair impair),
-   second hero (`#[lab_test]`), short comparison, doc-link audit.
-2. **Plan 151 Example A** (`d2682da`): 12-node Iridium-style
-   satellite mesh + parser extension to support `for` in network
-   blocks (with arithmetic and modulo).
-3. **Plan 150 Phase B** (`5e643bd`, `26d1f10`, `c7339a9`,
-   `99da188`, `218b0e9`, `fb0181e`): cookbook + CLI scaffolds,
-   8 hand-crafted CLI pages (deploy/destroy/validate/exec/spawn/
-   apply/capture/status), 9 cookbook recipes covering networking
-   primitives (VRF, WG, macvlan, nftables, VLAN trunk) and
-   application/CI patterns (iperf3, healthcheck, parametric
-   imports, CI sweep).
-4. **Plan 150 Phase C** (`842242b`, `9092cdb`): COMPARISON.md
-   (honest vs containerlab + capability matrix + side-by-side +
-   honest limitations) and ARCHITECTURE.md (contributor on-ramp
-   with worked end-to-end example).
-5. **Plan 152 Phase A** (`8b4afc5`): `PerPeerImpairer::reconcile()`
-   wired into `apply_diff`. Editing per-pair impair rules now
-   reconciles in-place with zero packet loss.
-6. **Plan 154** (`fe9d3d8`, `76ec514`): `#[lab_test]` cookbook
-   recipe + `set { … }` + `timeout = SECS` macro args + louder
-   skip-on-non-root.
-
-**Still open:**
-
-(none)
-
-The five-plan arc (150–154) shipped end-to-end. Plan 156 (typed
-BPF filter via netring 0.11's `BpfFilter::builder()`) and its
-upstream proposal Plan 156a both shipped — `nlink-lab capture`
-no longer runs `tcpdump -dd` at runtime on the default build
-path.
-
-The deliberately-scoped-out items (vendor NOS support, multi-host
-clustering, web UI) remain so.
+(none — current state is `0.5.0`; see CHANGELOG)
 
 ## Completed
 
-Plans 050–149 have been implemented and their plan files removed:
+Plans 050–157 have been implemented and their plan files removed.
+Authoritative ship-record is `CHANGELOG.md` at the repo root.
 
-- 050–104: Core features, parser, CLI, containers, polish
-- 105–119: DNS, macvlan/ipvlan, rich assertions, scenario DSL,
+Highlights, in rough chronological order:
+
+- **050–104** — Core features, parser, CLI, containers, polish.
+- **105–119** — DNS, macvlan/ipvlan, rich assertions, scenario DSL,
   CI integration, integration tests, benchmarks, Wi-Fi emulation,
-  context-sensitive keywords, NAT, network subnet, shell-style run,
-  route groups, link profiles, site grouping
-- 120–127: IP computation functions, for-inside-blocks,
+  context-sensitive keywords, NAT, network subnet, shell-style
+  run, route groups, link profiles, site grouping.
+- **120–127** — IP computation functions, for-inside-blocks,
   site improvements, auto-addressing, conditional logic,
-  auto-routing, fleet for_each imports, glob member patterns
-- 128: Per-pair impairment matrix on shared networks
-  (`impair A -- B { … }` inside `network { }`). Implementation lives
-  on top of `nlink::netlink::impair::PerPeerImpairer` (shipped in
-  nlink 0.15.1 in response to our spec); deploy step 14b builds one
+  auto-routing, fleet for_each imports, glob member patterns.
+- **128** — Per-pair impairment matrix on shared networks
+  (`impair A -- B { … }` inside `network { }`). Implementation
+  lives on top of `nlink::netlink::impair::PerPeerImpairer`
+  (shipped in nlink 0.15.1); deploy step 14b builds one
   HTB+netem+flower tree per source interface.
-- 129–149: NAT translate, editor/IDE support, mgmt bridge,
+- **129–148** — NAT translate, editor/IDE support, mgmt bridge,
   spawn/wait-for/exec CLI, asymmetric impairments, healthcheck,
   partition/heal, IP discovery, CLI parameters, process capture,
   tcp-connect retry, network addresses, deploy suffix, validate
-  show-ips, documentation gaps, external feedback triage +
-  nlink 0.13.0 / 0.15.1 upgrades.
+  show-ips, documentation gaps.
+- **149** — External feedback triage round 1 + nlink 0.13.0
+  upgrade (`shell` nsenter, `np{hash8}` peer naming, `destroy
+  --orphans`, `status --scan`, streaming exec, `logs --pid
+  --follow`).
+- **150–154** — Documentation overhaul, killer examples,
+  `apply` reconcile, `.nlz` lab archive, `#[lab_test]` macro
+  polish (shipped in `0.2.0`).
+- **155** — Round-3 harness feedback (capture flush, `--env`,
+  `--alive-only`, doc sweep, `--wait-log`) — `0.2.0`.
+- **156 (round-4)** — Partition cycles, `exec --timeout`,
+  `impair --show --json` — `0.3.0` / `0.3.1`.
+- **156 (eliminate tcpdump runtime dep)** + **156a (netring
+  upstream proposal)** — Typed BPF filter builder; default
+  capture path no longer shells out to `tcpdump`. netring 0.11.0
+  ships `BpfFilter::builder()` upstream. `0.5.0`.
+- **157** — Round-5 wishlist: `proc-stat`, capture rotation,
+  `--wait-port`, `--wait-fd-stable`, `subnet auto/N`,
+  `--dedupe-loopback`, `host_pid`, parallel-deploy `/etc/hosts`
+  flock, ARCHITECTURE namespace section, `HARNESS_GUIDE.md`.
+  `0.4.0` / `0.4.1`.
+
+Deliberately scoped out (and remaining so): vendor NOS support,
+multi-host clustering, web UI.
 
 ## Reference
 
 | File | Description |
 |------|-------------|
-| [GUIDELINES.md](GUIDELINES.md) | Implementation guidelines |
+| [GUIDELINES.md](GUIDELINES.md) | Implementation guidelines for new plans |
 | [../NLINK_LAB.md](../NLINK_LAB.md) | Full design document |
 | [../NLL_DSL_DESIGN.md](../NLL_DSL_DESIGN.md) | NLL language specification |
+| `../../CHANGELOG.md` | Authoritative ship record |

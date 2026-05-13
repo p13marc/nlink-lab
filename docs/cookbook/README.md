@@ -67,7 +67,7 @@ structurally impossible in container-based labs.
 
 ## Coming soon
 
-The following recipes ship as part of [Plan 151](../plans/151-killer-examples.md)
+The following recipes ship as part of **Plan 151**
 "killer examples":
 
 - Multi-tenant VRF + WireGuard + nftables WAN (composition showcase)

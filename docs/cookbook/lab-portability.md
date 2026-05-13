@@ -235,4 +235,4 @@ get a one-click reproducer.
 - [`export` CLI page](../cli/export.md)
 - [`import` CLI page](../cli/import.md)
 - [`inspect` CLI page](../cli/inspect.md)
-- [Plan 153](../plans/153-export-import.md) — design + roadmap
+- **Plan 153** — design + roadmap

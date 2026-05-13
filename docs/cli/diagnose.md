@@ -1,7 +1,7 @@
 # `nlink-lab diagnose`
 
 > **Stub page** — auto-generated from `--help`. Will get a full
-> reference (examples, exit codes, see-also) in [Plan 150 Phase D](../plans/150-documentation-overhaul.md).
+> reference (examples, exit codes, see-also) in **Plan 150 Phase D**.
 
 ```text
 Run diagnostics on a lab

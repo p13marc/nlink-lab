@@ -146,4 +146,4 @@ it can. Use `--json` to see the unhandled diff items.
 - [`deploy`](deploy.md) — start fresh
 - [`destroy`](destroy.md) — tear down
 - [`diff`](diff.md) — diff two NLL files (no kernel involvement)
-- [Plan 152](../plans/152-apply-reconcile.md) — the full reconcile rollout
+- **Plan 152** — the full reconcile rollout

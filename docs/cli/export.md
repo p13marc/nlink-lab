@@ -110,7 +110,7 @@ nlink-lab inspect mybug.nlz
   human-readable JSON file at the root.
 - **`--set` values are stored verbatim**. If they contain
   secrets (WG keys, passwords), treat the archive as a secret.
-- **Archive format is versioned**. See [Plan 153](../plans/153-export-import.md).
+- **Archive format is versioned**. See **Plan 153**.
 
 ## See also
 

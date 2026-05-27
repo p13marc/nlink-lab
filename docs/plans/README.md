@@ -4,7 +4,20 @@ Implementation plans for nlink-lab.
 
 ## Active plans
 
-(none — current state is `0.5.0`; see CHANGELOG)
+The Plan 158 arc — adopt nlink 0.16/0.17. Each sub-plan ships
+as its own PR; all share the workspace `nlink = "0.17"` bump.
+
+| Plan | Title | Effort | Priority |
+|------|-------|--------|----------|
+| [158](158-nlink-0.16-0.17-adoption.md) | Umbrella report: what nlink 0.16/0.17 give us | — | — |
+| [158a](158a-nftables-reconcile.md) | Per-rule nftables reconcile via `NftablesConfig` + atomic `apply()` | M (3–4d) | P1 |
+| [158b](158b-error-ext-ack.md) | Surface kernel `ext_ack` (NLMSGERR_ATTR_MSG) in error messages | S (0.5d) | P2 |
+| [158c](158c-from-parse-error.md) | `From<AddrParseError>` / `From<ParseIntError>` ergonomics sweep | XS (1–2h) | P3 |
+| [158d](158d-watch-nft-events.md) | `nlink-lab watch <lab>` — push-driven nftables event tail | L (4–5d) | P3 |
+
+Recommended ship order: A → B → C in a single nlink-bump
+commit; D only if a user asks. See the umbrella plan for
+the rationale.
 
 ## Completed
 

@@ -126,12 +126,21 @@ documented compromise; the comment at
   `config/apply.rs:51` (returns the change count, atomic).
 - `NftablesDiff::apply_reconcile(&conn, ReconcileOptions) ->
   Result<ReconcileReport>` → `config/apply.rs:190`.
-- USERDATA storage: keys live in `Rule.comment` (string),
-  shown by `nft list ruleset` as
-  `comment "<key>"`. **No automatic prefix is added** —
-  whatever string we pass is the literal comment. We use
-  `"nlink-lab:fw:…"` and `"nlink-lab:nat:…"` to namespace
-  ourselves and make accidental collisions visible.
+- USERDATA storage: keys live in `Rule.comment` (string).
+  **The library auto-wraps user-supplied keys with the
+  literal prefix `"nlink:"`** before writing
+  `NFTA_RULE_USERDATA`
+  (`crates/nlink/src/netlink/nftables/userdata.rs:47-58`),
+  and strips it on parse
+  (`userdata.rs:75-95`). User-side keys do *not* include
+  `nlink:`. We pass keys like
+  `"nlink-lab/fw/input/0"`; the kernel-side comment
+  becomes `comment "nlink:nlink-lab/fw/input/0"` and
+  the diff round-trips back to `"nlink-lab/fw/input/0"`.
+  `NFTNL_UDATA_COMMENT_MAXLEN = 128` bounds the total
+  encoded comment (including `"nlink:"` prefix + trailing
+  NUL); our keys must stay ≤ 121 bytes — comfortable
+  headroom for the `<kind>/<chain>/<index>` shape.
 
 ### Caveat — `ChainType::Nat` is not exposed on `DeclaredChainBuilder` in 0.17
 
@@ -216,10 +225,10 @@ Where:
 Examples:
 
 ```
-nlink-lab:fw:input:0
-nlink-lab:fw:forward:3
-nlink-lab:nat:postrouting:0
-nlink-lab:nat:prerouting:1
+nlink-lab/fw/input/0
+nlink-lab/fw/forward/3
+nlink-lab/nat/postrouting/0
+nlink-lab/nat/prerouting/1
 ```
 
 Why ordinal-based rather than content-hash:
@@ -296,7 +305,7 @@ fn firewall_config_for_node(
         for (idx, rule) in fw.rules.iter().enumerate() {
             let action = rule.action.as_deref().unwrap_or("accept");
             let match_expr = rule.match_expr.as_deref().unwrap_or("");
-            let key = format!("nlink-lab:fw:input:{idx}");
+            let key = format!("nlink-lab/fw/input/{idx}");
             t = t.rule_keyed("input", &key, |r| {
                 let r = if !match_expr.is_empty() {
                     apply_match_expr(r, match_expr)
@@ -397,7 +406,7 @@ async fn apply_nftables_diff(
 ### Phase 2 — NAT reconcile (1 day, P1) — depends on Phase 0
 
 Same pattern as 1.1/1.2 but for `apply_nat`. The keying
-scheme is `nlink-lab:nat:<chain>:<idx>:<kind>` to absorb the
+scheme is `nlink-lab/nat/<chain>/<idx>/<kind>` to absorb the
 multi-variant NAT rule (`Masquerade` / `Snat` / `Dnat`)
 inside a single index slot if needed.
 
@@ -431,7 +440,7 @@ mod tests`:
 
 | Test | Description |
 |------|-------------|
-| `firewall_config_key_schema` | Build a `FirewallConfig` with 3 rules; call `firewall_config_for_node`; walk the resulting `NftablesConfig` and assert each rule's key matches `nlink-lab:fw:input:{0,1,2}`. |
+| `firewall_config_key_schema` | Build a `FirewallConfig` with 3 rules; call `firewall_config_for_node`; walk the resulting `NftablesConfig` and assert each rule's key matches `nlink-lab/fw/input/{0,1,2}`. |
 | `firewall_config_drop_policy_propagates` | Policy "drop" → both `input` and `forward` chains get `Policy::Drop`. |
 | `firewall_config_empty_rule_list_emits_chains_only` | Empty `rules` vec still produces 2 chains with the right policy + zero rules. |
 | `nat_config_key_schema` | Same shape for the NAT helper, assert keys for masquerade / snat / dnat all distinct and discoverable. |

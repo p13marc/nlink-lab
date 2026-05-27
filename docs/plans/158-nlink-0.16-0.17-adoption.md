@@ -315,3 +315,75 @@ churn at runtime, so the priority is low.
 - nlink-lab call site to retire:
   `crates/nlink-lab/src/deploy.rs:2900-2947`
   (`apply_nftables_diff` full-table-rebuild).
+
+## Upstream prerequisites (asks for the nlink author)
+
+Audit of nlink 0.17 surfaced one **real blocker** and two
+**nice-to-haves** for the 158 arc:
+
+### Required for Plan 158a Phase 2 (NAT reconcile)
+
+- **`DeclaredChainBuilder::chain_type(ChainType)`** —
+  `DeclaredChain` (`crates/nlink/src/netlink/nftables/config/
+  types.rs:216-221`) carries `name`, `hook`, `priority`,
+  `policy` but **not** `chain_type`. The apply path
+  (`config/apply.rs:100-112`) reconstructs a runtime
+  `Chain` from the declared form without threading
+  `chain_type` either. Result: declared NAT chains default
+  to `ChainType::Filter`, which is wrong for
+  `prerouting`/`postrouting`. Fix:
+  1. Add `pub(crate) chain_type: Option<ChainType>` field
+     to `DeclaredChain`.
+  2. Add `.chain_type(ChainType)` method on
+     `DeclaredChainBuilder`.
+  3. Wire it into the runtime `Chain` reconstruction in
+     `config/apply.rs:100-112` (~5 LOC).
+  Total: ~25–40 LOC + one round-trip unit test
+  (declare a NAT chain, assert the emitted
+  `NFTA_CHAIN_TYPE` attribute).
+
+  Without this, nlink-lab Phase 1 (firewall reconcile)
+  ships standalone and Phase 2 (NAT reconcile) is
+  deferred. Phase 1 is the majority of the win — NAT
+  chains can stay imperative for one more cycle.
+
+### Nice-to-have for Plan 158d resync efficiency
+
+- **`Connection::<Nftables>::list_flowtables(table, family)`
+  overload** — `list_flowtables()`
+  (`connection.rs:187-220`) dumps every flowtable across
+  every table+family. For the per-table resync snapshot
+  in Plan 158d, we'd dump all flowtables and filter
+  client-side. Tiny inefficiency, not a blocker.
+
+### Nice-to-have for nlink-lab rate-limit reconcile (Plan 159 candidate)
+
+- **`PerHostLimiter::reconcile`** mirroring
+  `PerPeerImpairer::reconcile` would close the last
+  remaining "delete-then-rebuild" reconcile path in
+  nlink-lab (`deploy.rs:2962` `apply_rate_limits_diff`).
+  Out of scope for the 158 arc but specifically
+  flagged in `deploy.rs:2956-2961`:
+  > A fully-incremental rate-limit reconcile is doable
+  > but requires upstreaming a `PerHostLimiter::reconcile()`
+  > to nlink.
+
+### False alarms (no upstream work needed)
+
+- The `"nlink:"` USERDATA prefix is **not** a namespace
+  collision risk for nlink-lab. The library auto-wraps
+  user-supplied keys
+  (`crates/nlink/src/netlink/nftables/userdata.rs:47-58`)
+  and strips on parse — user-side keys can contain any
+  bytes that fit the 121-byte budget after the `"nlink:"`
+  prefix and trailing NUL.
+- All listing methods needed for the 158d resync snapshot
+  exist (`list_tables`, `list_chains`,
+  `stream_rules`, `list_flowtables`).
+- `Connection::<Nftables>::subscribe` is callable from a
+  current-thread runtime — no `tokio::spawn` or blocking
+  primitives in the path
+  (`connection.rs:757-762`).
+- `Error::Kernel { ext_ack }` already lands in 0.16 with
+  `Display` rendering; nlink-lab inherits it for free
+  after the dep bump.

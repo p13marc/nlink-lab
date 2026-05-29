@@ -23,6 +23,16 @@ All notable changes to this project will be documented in this file.
   `Error::DeployFailed`.
 
 ### Added
+- **`LayeredDiff` struct + `Display` impl** (`nlink_lab::diff::LayeredDiff`).
+  Bundles the three layers an `apply` call commits against: the
+  lab-graph topology, per-namespace RTNETLINK state (links + addresses
+  + routes + qdiscs), and per-namespace nftables state. The `Display`
+  impl delegates to `TopologyDiff::Display` for the lab-graph diff and
+  to `nlink::ConfigDiff`'s / `NftablesDiff`'s upstream `Display` impls
+  (Plan 183 in nlink 0.18) for the kernel-resource diffs. Renders each
+  non-empty subdiff under its own section header; falls back to "no
+  changes" when everything is empty. `is_empty()` and `change_count()`
+  aggregate across all three layers. Plan 158f.
 - **`Error::ext_ack() -> Option<&str>`,
   `Error::ext_ack_offset() -> Option<u32>`,
   `Error::errno() -> Option<i32>`** inherent accessors on

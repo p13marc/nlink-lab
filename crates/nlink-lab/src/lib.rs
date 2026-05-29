@@ -88,7 +88,7 @@ pub mod wifi;
 
 pub use builder::Lab;
 pub use deploy::apply_diff;
-pub use diff::{TopologyDiff, diff_topologies};
+pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
 pub use proc_stat::ProcStat;
 pub use running::{

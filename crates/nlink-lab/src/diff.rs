@@ -249,6 +249,117 @@ impl std::fmt::Display for TopologyDiff {
     }
 }
 
+/// Bundled diff covering the three layers an `apply` call commits
+/// against: the lab-graph topology, per-namespace RTNETLINK state
+/// (links + addresses + routes + qdiscs), and per-namespace
+/// nftables state. Plan 158f.
+///
+/// Each layer's `Display` impl is delegated to:
+/// - [`TopologyDiff::fmt`] for the lab-graph diff
+/// - [`nlink::netlink::config::ConfigDiff`]'s `Display` (Plan 183
+///   in nlink 0.18) for RTNETLINK
+/// - [`nlink::netlink::nftables::config::NftablesDiff`]'s `Display`
+///   (same plan) for nftables
+///
+/// The wrapper renders each non-empty layer in turn with a one-
+/// line section header, and falls back to "no changes" when the
+/// whole bundle is empty. The `apply --check` / `apply --dry-run`
+/// commands print `LayeredDiff` directly; the JSON form serializes
+/// each subdiff under its own top-level key.
+#[derive(Debug, Default)]
+pub struct LayeredDiff {
+    pub topology: TopologyDiff,
+    pub network: std::collections::HashMap<String, nlink::netlink::config::ConfigDiff>,
+    pub nftables: std::collections::HashMap<String, nlink::netlink::nftables::config::NftablesDiff>,
+}
+
+impl LayeredDiff {
+    /// True when every subdiff is empty — i.e. re-applying the
+    /// declared state would produce zero kernel mutations across
+    /// every layer of every node.
+    pub fn is_empty(&self) -> bool {
+        self.topology.is_empty()
+            && self.network.values().all(|d| d.is_empty())
+            && self.nftables.values().all(|d| d.is_empty())
+    }
+
+    /// Total change count, summed across every subdiff.
+    pub fn change_count(&self) -> usize {
+        self.topology.change_count()
+            + self
+                .network
+                .values()
+                .map(|d| d.change_count())
+                .sum::<usize>()
+            + self
+                .nftables
+                .values()
+                .map(|d| d.change_count())
+                .sum::<usize>()
+    }
+}
+
+impl std::fmt::Display for LayeredDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut emitted = false;
+
+        if !self.topology.is_empty() {
+            writeln!(
+                f,
+                "TopologyDiff ({} change{}):",
+                self.topology.change_count(),
+                if self.topology.change_count() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
+            )?;
+            write!(f, "{}", self.topology)?;
+            emitted = true;
+        }
+
+        // Sort keys so output is stable across runs.
+        let mut network_nodes: Vec<&String> = self.network.keys().collect();
+        network_nodes.sort();
+        for node in network_nodes {
+            let diff = &self.network[node];
+            if diff.is_empty() {
+                continue;
+            }
+            writeln!(
+                f,
+                "NetworkConfig diff ({node}, {} change{}):",
+                diff.change_count(),
+                if diff.change_count() == 1 { "" } else { "s" }
+            )?;
+            write!(f, "{diff}")?;
+            emitted = true;
+        }
+
+        let mut nftables_nodes: Vec<&String> = self.nftables.keys().collect();
+        nftables_nodes.sort();
+        for node in nftables_nodes {
+            let diff = &self.nftables[node];
+            if diff.is_empty() {
+                continue;
+            }
+            writeln!(
+                f,
+                "NftablesDiff ({node}, {} change{}):",
+                diff.change_count(),
+                if diff.change_count() == 1 { "" } else { "s" }
+            )?;
+            write!(f, "{diff}")?;
+            emitted = true;
+        }
+
+        if !emitted {
+            writeln!(f, "no changes")?;
+        }
+        Ok(())
+    }
+}
+
 /// Compare two topologies and produce a diff.
 pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     let mut diff = TopologyDiff::default();
@@ -1101,5 +1212,63 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         let diff = diff_topologies(&current, &desired);
         let output = diff.to_string();
         assert!(output.contains("+ add node: c"));
+    }
+
+    // ── Plan 158f: LayeredDiff tests ──
+
+    #[test]
+    fn layered_diff_default_is_empty_and_says_no_changes() {
+        let layered = LayeredDiff::default();
+        assert!(layered.is_empty());
+        assert_eq!(layered.change_count(), 0);
+        let s = layered.to_string();
+        assert!(
+            s.contains("no changes"),
+            "Display of empty LayeredDiff should say 'no changes', got: {s}"
+        );
+    }
+
+    #[test]
+    fn layered_diff_renders_topology_section_when_present() {
+        let mut layered = LayeredDiff::default();
+        layered.topology.nodes_added.push("alice".into());
+        assert!(!layered.is_empty());
+        assert_eq!(layered.change_count(), 1);
+        let s = layered.to_string();
+        assert!(
+            s.contains("TopologyDiff"),
+            "expected TopologyDiff section header in: {s}"
+        );
+        assert!(
+            s.contains("+ add node: alice"),
+            "expected lab-graph line in: {s}"
+        );
+        // The two upstream sections shouldn't appear if their
+        // maps are empty.
+        assert!(
+            !s.contains("NetworkConfig diff"),
+            "no NetworkConfig section expected: {s}"
+        );
+        assert!(
+            !s.contains("NftablesDiff"),
+            "no NftablesDiff section expected: {s}"
+        );
+    }
+
+    #[test]
+    fn layered_diff_change_count_singular_plural() {
+        let mut layered = LayeredDiff::default();
+        layered.topology.nodes_added.push("a".into());
+        let s = layered.to_string();
+        assert!(
+            s.contains("(1 change)"),
+            "expected singular 'change' for count=1, got: {s}"
+        );
+        layered.topology.nodes_added.push("b".into());
+        let s = layered.to_string();
+        assert!(
+            s.contains("(2 changes)"),
+            "expected plural 'changes' for count=2, got: {s}"
+        );
     }
 }

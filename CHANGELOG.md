@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Plan 158e Slice 1 — interface addresses and routes now apply
+  declaratively via `nlink::NetworkConfig::apply()`** instead of the
+  previous per-source imperative loops. The new step 11c
+  (`apply_network_config_for_node`) consumes per-link, per-
+  node, network-port, WireGuard, macvlan/ipvlan, and WiFi
+  address sources plus manual + auto-generated routes into one
+  per-namespace `NetworkConfig`, then calls
+  `cfg.apply(&conn)` which computes a `ConfigDiff` and applies
+  only the deltas. Idempotent re-deploys make zero kernel
+  mutations for the address + route layer. Imperative steps 9
+  (addresses) and 12 (routes) are now no-op markers.
+  VRF routes (step 12b) remain imperative — `RouteBuilder` does
+  not yet expose every VRF table knob.
 - **Plan 158a — nftables firewall + NAT now reconcile per-rule
   via `nlink::NftablesConfig::diff().apply_reconcile()`** instead
   of the previous "delete the whole table, rebuild from scratch"

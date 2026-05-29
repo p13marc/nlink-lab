@@ -763,187 +763,13 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 9: Set interface addresses ────────────────────────────
-    tracing::info!("step 9/18: setting interface addresses");
-    // From links
-    for link in &topology.links {
-        if let Some(addresses) = &link.addresses {
-            for (j, ep_str) in link.endpoints.iter().enumerate() {
-                let ep = EndpointRef::parse(ep_str).ok_or_else(|| Error::InvalidEndpoint {
-                    endpoint: ep_str.clone(),
-                })?;
-                let ep_handle = &node_handles[&ep.node];
-                let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
-                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-                })?;
-                let (ip, prefix) = parse_cidr(&addresses[j])?;
-                conn.add_address_by_name(&ep.iface, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{}'/{prefix} to '{}' on '{}': {e}",
-                            ip, ep.iface, ep.node
-                        ))
-                    })?;
-            }
-        }
-    }
-
-    // From explicit interfaces
-    for (node_name, node) in &topology.nodes {
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (iface_name, iface_config) in &node.interfaces {
-            for addr_str in &iface_config.addresses {
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(iface_name, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to '{iface_name}' on '{node_name}': {e}"
-                        ))
-                    })?;
-            }
-        }
-    }
-
-    // From network (bridge) port configs.
     //
-    // The map key may be either:
-    //  - "node:iface" (NLL's `port host:eth0 { ... }` syntax + the
-    //    auto-subnet-assignment path) — `EndpointRef::parse` works
-    //    directly.
-    //  - bare "node" (the builder DSL's `.port("host", |p|
-    //    p.interface("eth0"))` form, kept for backward-compat with
-    //    pre-builder-fix tests that look up `ports["host"]`).
-    //
-    // For the bare-node form, fall back to `port.interface` for the
-    // iface name. Without this, addresses on bare-node ports were
-    // silently dropped, leaving the interface up but with no IP —
-    // surfaced by the `deploy_networks_with_shared_prefix`
-    // integration test.
-    for network in topology.networks.values() {
-        for (key, port) in &network.ports {
-            if port.addresses.is_empty() {
-                continue;
-            }
-            let (node, iface) = match EndpointRef::parse(key) {
-                Some(ep) => (ep.node, ep.iface),
-                None => match port.interface.as_deref() {
-                    Some(iface) => (key.clone(), iface.to_string()),
-                    None => {
-                        tracing::warn!(
-                            "network port '{key}' has addresses but no resolvable iface; skipping"
-                        );
-                        continue;
-                    }
-                },
-            };
-            let ep_handle = &node_handles[&node];
-            let conn: Connection<Route> = ep_handle
-                .connection()
-                .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))?;
-            for addr_str in &port.addresses {
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(&iface, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to '{iface}' on '{node}': {e}"
-                        ))
-                    })?;
-            }
-        }
-    }
-
-    // From WireGuard interfaces
-    for (node_name, node) in &topology.nodes {
-        if node.wireguard.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (wg_name, wg_config) in &node.wireguard {
-            for addr_str in &wg_config.addresses {
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(wg_name, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to WireGuard '{wg_name}' on '{node_name}': {e}"
-                        ))
-                    })?;
-            }
-        }
-    }
-
-    // From macvlan/ipvlan interfaces
-    for (node_name, node) in &topology.nodes {
-        if node.macvlans.is_empty() && node.ipvlans.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for mv in &node.macvlans {
-            for addr_str in &mv.addresses {
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(&mv.name, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to macvlan '{}' on '{node_name}': {e}",
-                            mv.name
-                        ))
-                    })?;
-            }
-        }
-        for iv in &node.ipvlans {
-            for addr_str in &iv.addresses {
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(&iv.name, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to ipvlan '{}' on '{node_name}': {e}",
-                            iv.name
-                        ))
-                    })?;
-            }
-        }
-    }
-
-    // From WiFi interfaces (addresses assigned after PHY move)
-    for (node_name, node) in &topology.nodes {
-        if node.wifi.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for w in &node.wifi {
-            for addr_str in &w.addresses {
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(&w.name, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to wifi '{}' on '{node_name}': {e}",
-                            w.name
-                        ))
-                    })?;
-            }
-        }
-    }
+    // Plan 158e Slice 1 moves the per-link / per-interface / network
+    // port / WireGuard / macvlan / ipvlan / WiFi address application
+    // into a single per-namespace `NetworkConfig::diff().apply()`
+    // call (step 11c below). This step is now a no-op marker kept
+    // for the step-numbering audit trail.
+    tracing::info!("step 9/18: (addresses now applied declaratively in step 11c)");
 
     // ── Step 10: Bring interfaces up ───────────────────────────────
     tracing::info!("step 10/18: bringing interfaces up");
@@ -1173,28 +999,20 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         HashMap::new()
     };
 
-    // ── Step 12: Add routes ────────────────────────────────────────
-    tracing::info!("step 12/18: adding routes");
+    // ── Step 11c: Apply NetworkConfig per namespace ────────────────
+    //
+    // Plan 158e Slice 1 — single per-namespace
+    // `NetworkConfig::diff().apply()` covering all addresses
+    // (steps 9.1-9.5) and routes (step 12 main + 11b auto). VRF
+    // routes (12b) remain imperative because `RouteBuilder` doesn't
+    // expose every VRF table knob the older code path used. Re-
+    // deploys on unchanged topologies make zero kernel calls.
+    tracing::info!("step 11c: applying NetworkConfig per namespace (addresses + routes)");
     for (node_name, node) in &topology.nodes {
-        if node.routes.is_empty() {
-            continue;
-        }
         let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (dest, route_config) in &node.routes {
-            add_route(&conn, node_name, dest, route_config).await?;
-        }
-        // Apply auto-generated routes (don't duplicate manual ones)
-        if let Some(node_auto_routes) = auto_routes.get(node_name) {
-            for (dest, route_config) in node_auto_routes {
-                if !node.routes.contains_key(dest) {
-                    add_route(&conn, node_name, dest, route_config).await?;
-                }
-            }
-        }
+        let cfg =
+            topology_to_network_config(node_name, node, topology, auto_routes.get(node_name))?;
+        apply_network_config_for_node(node_handle, node_name, cfg).await?;
     }
 
     // ── Step 12b: Add VRF routes ───────────────────────────────────
@@ -2006,6 +1824,274 @@ async fn apply_network_impairments(
 // through `apply_nftables_for_node` which builds a single
 // `NftablesConfig` covering firewall + NAT and commits it
 // via `NftablesDiff::apply_reconcile`.
+
+/// Build a per-namespace [`NetworkConfig`] covering every IP
+/// address and route nlink-lab wants on `node`. Plan 158e
+/// Slice 1.
+///
+/// Each declared address/route carries enough identity for
+/// `NetworkConfig::diff` to detect "modify" vs "add" — no
+/// USERDATA-style keying like nftables has (RTNETLINK
+/// resources are already keyed by their own attributes:
+/// `(dev, address, prefix_len)` for addresses,
+/// `(destination, prefix_len, table)` for routes).
+///
+/// **Scope** (Slice 1 — addresses + routes only): collects
+/// every address attached to the node from the five existing
+/// nlink-lab sources (per-link endpoints, per-node
+/// `interfaces[...]`, network port configs, WireGuard
+/// addresses, macvlan/ipvlan addresses) plus every route from
+/// `node.routes` + auto-generated routes. **Veth creation,
+/// interface ifup, bond/VRF/WG enslave, and exotic link kinds
+/// stay imperative** (their bodies still live in the deploy
+/// steps preceding this one).
+fn topology_to_network_config(
+    node_name: &str,
+    node: &crate::types::Node,
+    topology: &Topology,
+    auto_routes: Option<&HashMap<String, crate::types::RouteConfig>>,
+) -> Result<nlink::netlink::config::NetworkConfig> {
+    use nlink::netlink::config::NetworkConfig;
+
+    let mut cfg = NetworkConfig::new();
+
+    // ── Addresses, in the same order step 9 used to apply them ──
+    // 1. From per-link endpoint addresses.
+    for link in &topology.links {
+        let Some(addresses) = &link.addresses else {
+            continue;
+        };
+        for (j, ep_str) in link.endpoints.iter().enumerate() {
+            let Some(ep) = EndpointRef::parse(ep_str) else {
+                continue;
+            };
+            if ep.node != node_name {
+                continue;
+            }
+            if j >= addresses.len() {
+                continue;
+            }
+            cfg = cfg.address(&ep.iface, &addresses[j]).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "invalid address '{}' on '{}:{}': {e}",
+                    addresses[j], ep.node, ep.iface
+                ))
+            })?;
+        }
+    }
+
+    // 2. From explicit per-node interfaces.
+    for (iface_name, iface_config) in &node.interfaces {
+        for addr_str in &iface_config.addresses {
+            cfg = cfg.address(iface_name, addr_str).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "invalid address '{addr_str}' on '{node_name}:{iface_name}': {e}"
+                ))
+            })?;
+        }
+    }
+
+    // 3. From network (bridge) port configs.
+    for network in topology.networks.values() {
+        for (key, port) in &network.ports {
+            if port.addresses.is_empty() {
+                continue;
+            }
+            let (port_node, port_iface) = match EndpointRef::parse(key) {
+                Some(ep) => (ep.node, ep.iface),
+                None => match port.interface.as_deref() {
+                    Some(iface) => (key.clone(), iface.to_string()),
+                    None => {
+                        tracing::warn!(
+                            "network port '{key}' has addresses but no resolvable iface; skipping"
+                        );
+                        continue;
+                    }
+                },
+            };
+            if port_node != node_name {
+                continue;
+            }
+            for addr_str in &port.addresses {
+                cfg = cfg.address(&port_iface, addr_str).map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "invalid address '{addr_str}' on '{port_node}:{port_iface}': {e}"
+                    ))
+                })?;
+            }
+        }
+    }
+
+    // 4. WireGuard interface addresses.
+    for (wg_name, wg_config) in &node.wireguard {
+        for addr_str in &wg_config.addresses {
+            cfg = cfg.address(wg_name, addr_str).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "invalid address '{addr_str}' on WireGuard '{node_name}:{wg_name}': {e}"
+                ))
+            })?;
+        }
+    }
+
+    // 5. WiFi addresses.
+    for w in &node.wifi {
+        for addr_str in &w.addresses {
+            cfg = cfg.address(&w.name, addr_str).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "invalid address '{addr_str}' on WiFi '{node_name}:{}': {e}",
+                    w.name
+                ))
+            })?;
+        }
+    }
+
+    // 6. macvlan + ipvlan addresses.
+    for mv in &node.macvlans {
+        for addr_str in &mv.addresses {
+            cfg = cfg.address(&mv.name, addr_str).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "invalid address '{addr_str}' on macvlan '{node_name}:{}': {e}",
+                    mv.name
+                ))
+            })?;
+        }
+    }
+    for iv in &node.ipvlans {
+        for addr_str in &iv.addresses {
+            cfg = cfg.address(&iv.name, addr_str).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "invalid address '{addr_str}' on ipvlan '{node_name}:{}': {e}",
+                    iv.name
+                ))
+            })?;
+        }
+    }
+
+    // ── Routes (main + auto-generated) ──
+    // Manual routes win on conflict; auto-routes only fill gaps.
+    let mut route_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (dest, route_config) in &node.routes {
+        cfg = push_route(cfg, node_name, dest, route_config)?;
+        route_keys.insert(dest.clone());
+    }
+    if let Some(autos) = auto_routes {
+        for (dest, route_config) in autos {
+            if route_keys.contains(dest) {
+                continue;
+            }
+            cfg = push_route(cfg, node_name, dest, route_config)?;
+        }
+    }
+
+    Ok(cfg)
+}
+
+/// Add a single route to the in-progress `NetworkConfig`.
+/// Handles the "default" → "0.0.0.0/0" / "::/0" translation
+/// (nlink's `RouteBuilder` only accepts proper CIDR
+/// destinations).
+fn push_route(
+    cfg: nlink::netlink::config::NetworkConfig,
+    node_name: &str,
+    dest: &str,
+    route_config: &crate::types::RouteConfig,
+) -> Result<nlink::netlink::config::NetworkConfig> {
+    let is_v6 = route_config
+        .via
+        .as_deref()
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+        .map(|ip| ip.is_ipv6())
+        .unwrap_or(false)
+        || (dest != "default" && dest.contains(':'));
+
+    let dst_cidr = if dest == "default" {
+        if is_v6 { "::/0" } else { "0.0.0.0/0" }.to_string()
+    } else if !dest.contains('/') {
+        // Bare IP without prefix — assume host route.
+        if is_v6 {
+            format!("{dest}/128")
+        } else {
+            format!("{dest}/32")
+        }
+    } else {
+        dest.to_string()
+    };
+
+    let via = route_config.via.clone();
+    let dev = route_config.dev.clone();
+    let metric = route_config.metric;
+
+    let cfg = cfg
+        .route(&dst_cidr, move |mut r| {
+            if let Some(gw) = &via {
+                r = r.via(gw);
+            }
+            if let Some(d) = &dev {
+                r = r.dev(d);
+            }
+            if let Some(m) = metric {
+                r = r.metric(m);
+            }
+            r
+        })
+        .map_err(|e| {
+            Error::deploy_failed(format!("invalid route '{dest}' on node '{node_name}': {e}"))
+        })?;
+    Ok(cfg)
+}
+
+/// Apply the declarative [`NetworkConfig`] for one node.
+/// Plan 158e Slice 1.
+///
+/// Wraps `cfg.diff(&conn).await?.apply(&conn, …).await?`.
+/// Idempotent re-apply makes zero kernel calls for the
+/// address + route layer.
+async fn apply_network_config_for_node(
+    node_handle: &NodeHandle,
+    node_name: &str,
+    cfg: nlink::netlink::config::NetworkConfig,
+) -> Result<()> {
+    // Skip the round-trip when the declared config is empty (no
+    // addresses, no routes, no links, no qdiscs).
+    if cfg.links().is_empty()
+        && cfg.addresses().is_empty()
+        && cfg.routes().is_empty()
+        && cfg.qdiscs().is_empty()
+    {
+        return Ok(());
+    }
+
+    let conn: Connection<Route> = node_handle.connection().map_err(|e| {
+        Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
+    })?;
+
+    // `NetworkConfig::apply` computes the diff and applies it.
+    // Idempotent — re-apply on an unchanged topology completes
+    // with `changes_made == 0`.
+    let result = cfg
+        .apply(&conn)
+        .await
+        .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
+
+    tracing::info!(
+        node = %node_name,
+        changes = result.changes_made,
+        errors = result.errors.len(),
+        "NetworkConfig reconcile (addresses + routes)"
+    );
+
+    if !result.errors.is_empty() {
+        let first = &result.errors[0];
+        return Err(Error::deploy_failed(format!(
+            "NetworkConfig::apply on '{node_name}' completed with {} error(s); \
+             first: {}: {}",
+            result.errors.len(),
+            first.operation,
+            first.error
+        )));
+    }
+    Ok(())
+}
 
 /// Parse a (possibly compound) match expression and apply it to an nftables rule.
 ///
@@ -4042,6 +4128,125 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         assert!(
             err.to_string().contains("invalid NAT target"),
             "want target error from validate, got: {err}"
+        );
+    }
+
+    // ── Plan 158e Slice 1: topology_to_network_config tests ─────────
+
+    #[test]
+    fn network_config_empty_node_produces_empty_config() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node alone
+"#,
+        )
+        .unwrap();
+        let cfg = topology_to_network_config("alone", &topo.nodes["alone"], &topo, None).unwrap();
+        assert!(cfg.addresses().is_empty(), "no addresses expected");
+        assert!(cfg.routes().is_empty(), "no routes expected");
+    }
+
+    #[test]
+    fn network_config_link_addresses_appear_per_node() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let cfg_a = topology_to_network_config("a", &topo.nodes["a"], &topo, None).unwrap();
+        let cfg_b = topology_to_network_config("b", &topo.nodes["b"], &topo, None).unwrap();
+        assert_eq!(cfg_a.addresses().len(), 1, "a gets one address");
+        assert_eq!(cfg_b.addresses().len(), 1, "b gets one address");
+    }
+
+    #[test]
+    fn network_config_default_route_translates_to_zero_cidr() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host { route default via 10.0.0.1 }
+node router
+link router:eth0 -- host:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let cfg = topology_to_network_config("host", &topo.nodes["host"], &topo, None).unwrap();
+        let routes = cfg.routes();
+        assert_eq!(routes.len(), 1, "exactly one route");
+        let dst = routes[0].destination();
+        let prefix = routes[0].prefix_len();
+        assert_eq!(prefix, 0, "default route has /0 prefix");
+        assert!(dst.is_ipv4(), "v4 default via v4 gateway");
+    }
+
+    #[test]
+    fn network_config_auto_route_merges_with_manual() {
+        // Manual route should win on conflict; auto-routes fill gaps.
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["a"].clone();
+        node.routes.insert(
+            "default".to_string(),
+            crate::types::RouteConfig {
+                via: Some("10.0.0.1".to_string()),
+                dev: None,
+                metric: None,
+            },
+        );
+        let mut autos = HashMap::new();
+        autos.insert(
+            "default".to_string(),
+            crate::types::RouteConfig {
+                via: Some("10.0.0.99".to_string()),
+                dev: None,
+                metric: None,
+            },
+        );
+        autos.insert(
+            "10.99.0.0/16".to_string(),
+            crate::types::RouteConfig {
+                via: Some("10.0.0.50".to_string()),
+                dev: None,
+                metric: None,
+            },
+        );
+        let cfg = topology_to_network_config("a", &node, &topo, Some(&autos)).unwrap();
+        assert_eq!(
+            cfg.routes().len(),
+            2,
+            "manual default + auto 10.99.0.0/16 (auto default suppressed)"
+        );
+    }
+
+    #[test]
+    fn network_config_invalid_address_surfaces() {
+        let mut topo = crate::parser::parse(
+            r#"lab "t"
+node a
+"#,
+        )
+        .unwrap();
+        // Inject an invalid address bypassing the parser, mimicking
+        // what would happen if a future feature flowed bad data.
+        let mut node = topo.nodes["a"].clone();
+        node.interfaces.insert(
+            "eth0".to_string(),
+            crate::types::InterfaceConfig {
+                addresses: vec!["not-a-cidr".to_string()],
+                ..Default::default()
+            },
+        );
+        topo.nodes.insert("a".to_string(), node);
+        let err = topology_to_network_config("a", &topo.nodes["a"], &topo, None).unwrap_err();
+        assert!(
+            err.to_string().contains("invalid address"),
+            "want address validation error, got: {err}"
         );
     }
 }

@@ -465,6 +465,79 @@ fn collect_rule_handles(nft_output: &str) -> Vec<u32> {
     handles
 }
 
+// Plan 158e Slice 1 — re-applying an unchanged topology must
+// not perturb live addresses or routes. The new declarative
+// path runs `NetworkConfig::apply` which is idempotent;
+// `result.changes_made` must be 0 on the second apply. We
+// observe this end-to-end by checking that the snapshot of
+// `ip -j addr show` and `ip -j route show` is byte-equal
+// before/after the second apply.
+#[tokio::test]
+async fn network_config_reapply_is_zero_ops() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping network_config_reapply_is_zero_ops: requires root");
+        return;
+    }
+
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/simple.nll"
+    ))
+    .expect("failed to parse topology file");
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Snapshot the kernel-side state on every node before the
+    // no-op apply. Use the JSON form so the comparison is
+    // whitespace-insensitive and ignores kernel-side cache
+    // ordering quirks.
+    let nodes: Vec<String> = lab.topology().nodes.keys().cloned().collect();
+    let mut before: Vec<(String, String, String)> = Vec::new();
+    for node in &nodes {
+        let addrs = lab
+            .exec(node, "ip", &["-j", "addr", "show"])
+            .unwrap()
+            .stdout;
+        let routes = lab
+            .exec(node, "ip", &["-j", "route", "show"])
+            .unwrap()
+            .stdout;
+        before.push((node.clone(), addrs, routes));
+    }
+
+    // Re-apply the same topology — must be a no-op for the
+    // NetworkConfig layer.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("failed to re-apply unchanged topology");
+
+    for (node, before_addrs, before_routes) in &before {
+        let after_addrs = lab
+            .exec(node, "ip", &["-j", "addr", "show"])
+            .unwrap()
+            .stdout;
+        let after_routes = lab
+            .exec(node, "ip", &["-j", "route", "show"])
+            .unwrap()
+            .stdout;
+        assert_eq!(
+            before_addrs, &after_addrs,
+            "addresses changed on '{node}' across a no-op apply"
+        );
+        assert_eq!(
+            before_routes, &after_routes,
+            "routes changed on '{node}' across a no-op apply"
+        );
+    }
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("failed to destroy lab");
+}
+
 // ─── Spine-leaf test ──────────────────────────────────────
 
 #[lab_test("examples/spine-leaf.nll")]

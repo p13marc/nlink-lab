@@ -1150,55 +1150,102 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             let diff = nlink_lab::diff_topologies(current, &desired);
 
+            // Plan 158f Phase 2 — when --check or --dry-run is set,
+            // compute the layered diff (topology + per-namespace
+            // NetworkConfig + NftablesConfig) so the user sees the
+            // full set of kernel changes apply would commit, not
+            // just the lab-graph subset.
+            //
+            // `compute_layered_diff` walks every node and runs a
+            // dump round-trip per (node, protocol family). For a
+            // 50-node lab that's ~100 dumps; in practice ms-scale
+            // on a quiet host. The cost only applies on
+            // --check/--dry-run paths; normal apply doesn't pay it.
+            let layered_view = if check || dry_run {
+                Some(nlink_lab::compute_layered_diff(&running, &desired).await?)
+            } else {
+                None
+            };
+
             // JSON dry-run output for CI consumption.
             if json && dry_run {
+                let layered = layered_view
+                    .as_ref()
+                    .expect("layered_view is Some when dry_run");
                 #[derive(serde::Serialize)]
                 struct DryRunReport<'a> {
                     lab: &'a str,
                     no_op: bool,
                     change_count: usize,
                     diff: &'a nlink_lab::TopologyDiff,
+                    /// Plan 158f Phase 2 — human-readable view of
+                    /// the full layered diff (topology + per-
+                    /// namespace upstream subdiffs). Useful as a
+                    /// preview alongside the structured `diff`
+                    /// field above.
+                    layered_summary: String,
                 }
                 let report = DryRunReport {
                     lab: lab_name,
-                    no_op: diff.is_empty(),
-                    change_count: diff.change_count(),
+                    no_op: layered.is_empty(),
+                    change_count: layered.change_count(),
                     diff: &diff,
+                    layered_summary: layered.to_string(),
                 };
                 println!("{}", serde_json::to_string_pretty(&report)?);
-                if check && !diff.is_empty() {
+                if check && !layered.is_empty() {
                     return Err(nlink_lab::Error::Validation(format!(
                         "drift detected: {} change(s) needed to converge",
-                        diff.change_count(),
+                        layered.change_count(),
                     )));
                 }
                 return Ok(());
             }
 
-            if diff.is_empty() {
+            // Non-JSON path. For --check / --dry-run, render the
+            // layered diff (richer than the lab-graph-only
+            // TopologyDiff). For ordinary apply, the existing
+            // TopologyDiff render is what gets printed.
+            let layered_is_empty = layered_view.as_ref().map(|l| l.is_empty()).unwrap_or(true);
+
+            if (check || dry_run) && layered_is_empty {
+                if !quiet {
+                    println!("No changes to apply.");
+                }
+                return Ok(());
+            }
+            if !(check || dry_run) && diff.is_empty() {
                 if !quiet {
                     println!("No changes to apply.");
                 }
                 return Ok(());
             }
 
-            // --check: exit non-zero if any drift.
+            // --check: exit non-zero if any layered drift.
             if check {
+                let layered = layered_view
+                    .as_ref()
+                    .expect("layered_view is Some when check");
                 if !quiet {
                     println!("Drift detected for lab '{lab_name}':");
-                    print!("{diff}");
-                    println!("{} change(s) needed to converge", diff.change_count());
+                    print!("{layered}");
+                    println!("{} change(s) needed to converge", layered.change_count());
                 }
                 return Err(nlink_lab::Error::Validation(format!(
                     "drift detected: {} change(s) needed to converge",
-                    diff.change_count(),
+                    layered.change_count(),
                 )));
             }
 
             if !quiet {
                 println!("Changes for lab '{lab_name}':");
-                print!("{diff}");
-                println!("{} change(s)", diff.change_count());
+                if let Some(layered) = &layered_view {
+                    print!("{layered}");
+                    println!("{} change(s)", layered.change_count());
+                } else {
+                    print!("{diff}");
+                    println!("{} change(s)", diff.change_count());
+                }
             }
 
             if dry_run {

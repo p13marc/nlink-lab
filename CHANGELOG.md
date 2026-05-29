@@ -30,6 +30,25 @@ All notable changes to this project will be documented in this file.
   `Result<_, nlink_lab::Error>`, removing
   `.map_err(|e| Error::invalid_topology(format!(...)))` ceremony
   at identity wrap sites. Plan 158c.
+- **`compute_layered_diff(running, desired) -> Result<LayeredDiff>`**
+  public async helper (`nlink_lab::compute_layered_diff`). Walks
+  every node in the desired topology, opens per-node `Connection<Route>`
+  and `Connection<Nftables>` connections, builds the same
+  `NetworkConfig` / `NftablesConfig` the deploy uses, and calls
+  upstream `diff()` against the live state. Returns the bundled
+  `LayeredDiff` covering all three layers. Cost is one dump
+  round-trip per (node, protocol family); only used on
+  `apply --check` / `apply --dry-run` paths so normal apply stays
+  cheap. Plan 158f Phase 2.
+- **`nlink-lab apply --check` and `apply --dry-run` now render
+  the layered diff** (lab graph + per-namespace RTNETLINK + per-
+  namespace nftables) instead of the TopologyDiff-only view.
+  `--check` exits non-zero on layered-level drift, so drift in
+  the nftables or RTNETLINK layers that previously slipped past
+  `apply --check` (because `TopologyDiff` doesn't model rule-level
+  changes) is now caught. The `--json --dry-run` envelope grows
+  a `layered_summary` string field carrying the rendered diff. Plan
+  158f Phase 2.
 - **`LayeredDiff` struct + `Display` impl** (`nlink_lab::diff::LayeredDiff`).
   Bundles the three layers an `apply` call commits against: the
   lab-graph topology, per-namespace RTNETLINK state (links + addresses

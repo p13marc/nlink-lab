@@ -2722,6 +2722,94 @@ fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Opt
     None
 }
 
+/// Compute the full layered diff between a running lab's live
+/// state and a desired topology. Plan 158f Phase 2.
+///
+/// Aggregates three views:
+/// - Lab-graph differences (nodes/links/impair/sysctls/etc.) via
+///   [`crate::diff::diff_topologies`].
+/// - Per-namespace RTNETLINK diff (links/addresses/routes/qdiscs)
+///   by building the same [`NetworkConfig`] step 11c of the
+///   deploy uses and calling its `diff()` against a per-node
+///   `Connection<Route>`.
+/// - Per-namespace nftables diff by building the same
+///   [`NftablesConfig`] step 13 uses and calling its `diff()`
+///   against a per-node `Connection<Nftables>`.
+///
+/// Used by `nlink-lab apply --check` and `apply --dry-run` so
+/// CI and operators see the full set of kernel changes that
+/// `apply` would commit — not just the lab-graph subset that
+/// `TopologyDiff` covers.
+///
+/// Re-computing the upstream subdiffs on every call costs one
+/// dump round-trip per node per protocol family. For a 50-node
+/// lab that's 100 dumps; in practice ms-scale on a quiet host.
+pub async fn compute_layered_diff(
+    running: &RunningLab,
+    desired: &Topology,
+) -> Result<crate::diff::LayeredDiff> {
+    use nlink::netlink::Nftables;
+
+    let topology = crate::diff::diff_topologies(running.topology(), desired);
+
+    let auto_routes = if desired.lab.routing == crate::types::RoutingMode::Auto {
+        auto_generate_routes(desired)
+    } else {
+        HashMap::new()
+    };
+
+    let mut network = HashMap::new();
+    let mut nftables = HashMap::new();
+
+    for (node_name, node) in &desired.nodes {
+        // The handle lookup uses the running-lab state. A node
+        // listed in `desired` but not in `running` (i.e. a
+        // newly-added node) is captured by the lab-graph diff
+        // (`topology.nodes_added`) and gets full creation work
+        // during apply. We skip it here to avoid a spurious error.
+        let handle = match node_handle_for(running, node_name) {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+
+        // RTNETLINK side.
+        let cfg = topology_to_network_config(node_name, node, desired, auto_routes.get(node_name))?;
+        let cfg_is_empty = cfg.links().is_empty()
+            && cfg.addresses().is_empty()
+            && cfg.routes().is_empty()
+            && cfg.qdiscs().is_empty();
+        if !cfg_is_empty {
+            let conn: Connection<Route> = handle.connection().map_err(|e| {
+                Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
+            })?;
+            let diff = cfg.diff(&conn).await.map_err(|e| {
+                Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
+            })?;
+            network.insert(node_name.clone(), diff);
+        }
+
+        // nftables side.
+        let fw = desired.effective_firewall(node);
+        let nat = node.nat.as_ref();
+        if fw.is_some() || nat.is_some() {
+            let cfg = topology_to_nftables_config(fw, nat)?;
+            let nft_conn: Connection<Nftables> = handle.connection().map_err(|e| {
+                Error::deploy_failed(format!("Nftables connection on '{node_name}': {e}"))
+            })?;
+            let diff = cfg.diff(&nft_conn).await.map_err(|e| {
+                Error::deploy_failed(format!("NftablesConfig::diff on '{node_name}': {e}"))
+            })?;
+            nftables.insert(node_name.clone(), diff);
+        }
+    }
+
+    Ok(crate::diff::LayeredDiff {
+        topology,
+        network,
+        nftables,
+    })
+}
+
 /// Apply a topology diff to a running lab, performing incremental updates.
 ///
 /// Executes changes in dependency order:

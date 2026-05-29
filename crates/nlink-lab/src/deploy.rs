@@ -555,13 +555,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         for (iface_name, iface_config) in &node.interfaces {
             match &iface_config.kind {
                 Some(InterfaceKind::Dummy) => {
-                    conn.add_link(nlink::netlink::link::DummyLink::new(iface_name))
-                        .await
-                        .map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to create dummy interface '{iface_name}' on node '{node_name}': {e}"
-                            ))
-                        })?;
+                    // Plan 158e Slice 2 — dummy creation absorbed
+                    // into the declarative NetworkConfig path
+                    // (step 11c).
                 }
                 Some(InterfaceKind::Vxlan) => {
                     let vni = iface_config.vni.ok_or_else(|| {
@@ -596,13 +592,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     })?;
                 }
                 Some(InterfaceKind::Bond) => {
-                    conn.add_link(nlink::netlink::link::BondLink::new(iface_name))
-                        .await
-                        .map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to create bond interface '{iface_name}' on node '{node_name}': {e}"
-                            ))
-                        })?;
+                    // Plan 158e Slice 2 — bond creation +
+                    // member enslave absorbed into the declarative
+                    // NetworkConfig path (step 11c, replaces step
+                    // 10b).
                 }
                 Some(InterfaceKind::Vlan) => {
                     let parent = iface_config.parent.as_deref().ok_or_else(|| {
@@ -794,25 +787,11 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 10b: Enslave bond members ─────────────────────────────
-    for (node_name, node) in &topology.nodes {
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (iface_name, iface_config) in &node.interfaces {
-            if iface_config.kind != Some(InterfaceKind::Bond) || iface_config.members.is_empty() {
-                continue;
-            }
-            for member in &iface_config.members {
-                conn.enslave(member, iface_name).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to enslave '{member}' to bond '{iface_name}' on '{node_name}': {e}"
-                    ))
-                })?;
-            }
-        }
-    }
+    //
+    // Plan 158e Slice 2 — absorbed into the declarative
+    // NetworkConfig path in step 11c (`.link(member, |b|
+    // b.master(bond))`). Empty marker kept for the step-numbering
+    // audit trail; the imperative body is gone.
 
     // ── Step 10c: Enslave interfaces to VRFs ─────────────────────
     for (node_name, node) in &topology.nodes {
@@ -1854,6 +1833,52 @@ fn topology_to_network_config(
     use nlink::netlink::config::NetworkConfig;
 
     let mut cfg = NetworkConfig::new();
+
+    // ── Links — single-namespace kinds only (Plan 158e Slice 2) ──
+    //
+    // Veth pairs stay imperative (peer_netns_fd is cross-namespace);
+    // macvlan/ipvlan/VRF/WG/Wi-Fi stay imperative (upstream
+    // LinkBuilder doesn't cover them or has thin coverage). Dummies
+    // and bonds are clean single-namespace resources — fold them
+    // into the declarative path with `.up()` so re-deploys are
+    // idempotent here too.
+    use crate::types::InterfaceKind;
+    for (iface_name, iface_config) in &node.interfaces {
+        match iface_config.kind {
+            Some(InterfaceKind::Dummy) => {
+                let mtu = iface_config.mtu;
+                cfg = cfg.link(iface_name, move |mut b| {
+                    b = b.dummy().up();
+                    if let Some(m) = mtu {
+                        b = b.mtu(m);
+                    }
+                    b
+                });
+            }
+            Some(InterfaceKind::Bond) => {
+                let mtu = iface_config.mtu;
+                cfg = cfg.link(iface_name, move |mut b| {
+                    b = b.bond().up();
+                    if let Some(m) = mtu {
+                        b = b.mtu(m);
+                    }
+                    b
+                });
+                // Enslave each member (Plan 158e Slice 2 folds in
+                // what was step 10b). The member link itself must
+                // exist already (veth — created in step 5).
+                for member in &iface_config.members {
+                    let bond_name = iface_name.clone();
+                    cfg = cfg.link(member, move |b| b.master(&bond_name));
+                }
+            }
+            // Vlan, Vxlan, Loopback, None stay imperative for now —
+            // they each need topology shapes (parent iface, VNI) or
+            // existing-link semantics that the declarative slice
+            // would have to re-engineer. Slice 3 candidates.
+            _ => {}
+        }
+    }
 
     // ── Addresses, in the same order step 9 used to apply them ──
     // 1. From per-link endpoint addresses.
@@ -4228,6 +4253,61 @@ node a
             cfg.routes().len(),
             2,
             "manual default + auto 10.99.0.0/16 (auto default suppressed)"
+        );
+    }
+
+    #[test]
+    fn network_config_dummy_iface_appears_as_link() {
+        // Build the topology programmatically — NLL surfaces `dummy
+        // NAME { ... }` as a top-level node property, not the
+        // generic `interface { kind dummy }` shape.
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "lo0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Dummy),
+                ..Default::default()
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        assert!(
+            names.contains(&"lo0"),
+            "expected 'lo0' in declared links, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn network_config_bond_with_members_emits_master_links() {
+        // The bond iface declares one link; each member declares
+        // another link with `.master(bond_name)` set.
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "bond0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Bond),
+                members: vec!["eth0".into(), "eth1".into()],
+                ..Default::default()
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        assert!(names.contains(&"bond0"), "expected 'bond0', got {names:?}");
+        assert!(
+            names.contains(&"eth0") && names.contains(&"eth1"),
+            "expected bond members 'eth0' + 'eth1' declared for master assignment, got {names:?}"
         );
     }
 

@@ -52,6 +52,15 @@ All notable changes to this project will be documented in this file.
   wrapper enum.
 
 ### Changed
+- **Plan 158e Slice 2 — dummy + bond interface creation (and
+  bond member enslave) now go through the declarative
+  `NetworkConfig`** built by `topology_to_network_config`. Step
+  6's dummy + bond branches and step 10b (bond enslave) are now
+  no-op markers; the actual link declarations live in the
+  per-namespace apply at step 11c. Re-deploys are idempotent for
+  these kinds too (NetworkConfig diff sees the live link and
+  emits nothing). Vlan/Vxlan/macvlan/ipvlan/VRF/WG stay
+  imperative — Slice 3+ candidates.
 - **Plan 158c — default routes now use
   `nlink::Ipv4Route::default_route()` / `Ipv6Route::default_route()`**
   (Plan 184 in nlink 0.18) at the four call sites in `deploy.rs`

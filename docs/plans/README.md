@@ -9,16 +9,16 @@ ships as its own PR; the workspace `nlink = "0.18"` bump is
 already in. With breaking-compat freedom granted, the arc
 expanded from 4 PRs to 7.
 
-| Plan | Title | Effort | Priority |
-|------|-------|--------|----------|
-| [158](158-nlink-0.16-0.17-adoption.md) | Umbrella — what 0.16/0.17/0.18 give us; ship order | — | — |
-| [158a](158a-nftables-reconcile.md) | Per-rule nftables reconcile via `NftablesConfig` + atomic `apply()` | M (2-3d) | P1 |
-| [158e](158e-network-config-adoption.md) | **NEW** — declarative RTNETLINK deploy via `NetworkConfig`; collapses 8 of 18 deploy steps | L (5-7d) | P1 |
-| [158b](158b-error-ext-ack.md) | Typed `Error::source` chain + `ext_ack()` accessor (BC-break) | M (1-1.5d) | P2 |
-| [158f](158f-display-driven-diff.md) | **NEW** — `LayeredDiff` using upstream `Display for *Diff` | S (0.5d) | P2 |
-| [158g](158g-rate-limit-reconcile.md) | **NEW** — adopt `RateLimiter::reconcile` (small upstream + swap) | S (1d) | P2 |
-| [158c](158c-from-parse-error.md) | Parse-error ergonomics + `default_route()` adoption | S (3-4h) | P3 |
-| [158d](158d-watch-nft-events.md) | `nlink-lab watch <lab>` — push-driven nftables event tail (RTNETLINK side not feasible upstream) | M (2-3d) | P3 |
+| Plan | Title | Effort | Priority | Status |
+|------|-------|--------|----------|--------|
+| [158](158-nlink-0.16-0.17-adoption.md) | Umbrella — what 0.16/0.17/0.18 give us; ship order | — | — | ongoing |
+| [158a](158a-nftables-reconcile.md) | Per-rule nftables reconcile via `NftablesConfig` + atomic `apply()` | M | P1 | ✅ shipped (`792a588`) |
+| [158e](158e-network-config-adoption.md) | Declarative RTNETLINK deploy via `NetworkConfig`; collapses many deploy steps | L | P1 | ✅ Slices 1+2+3 shipped (`4098328` `5ae58a8` `ffb0e5b`); Vxlan still imperative (upstream gap) |
+| [158b](158b-error-ext-ack.md) | Typed `Error::source` chain + `ext_ack()` accessor (BC-break) | M | P2 | ✅ shipped (`22887bd`) |
+| [158f](158f-display-driven-diff.md) | `LayeredDiff` using upstream `Display for *Diff` | S | P2 | ✅ Phase 1 + Phase 2 shipped (`4115099` + `4581be3`) |
+| [158g](158g-rate-limit-reconcile.md) | Adopt `RateLimiter::reconcile` (small upstream + swap) | S | P2 | ⏳ blocked on upstream `RateLimiter::reconcile` PR |
+| [158c](158c-from-parse-error.md) | Parse-error ergonomics + `default_route()` adoption | S | P3 | ✅ shipped (`3af7e7b`) |
+| [158d](158d-watch-nft-events.md) | `nlink-lab watch <lab>` — push-driven nftables event tail | M | P3 | ⏳ unimplemented — power-user feature, "ship if asked" per umbrella plan |
 
 Recommended ship order: **A + E in one bundle** (declarative
 deploy shape) → **B** (typed Error chain) → **F** (Display

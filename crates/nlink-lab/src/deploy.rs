@@ -609,12 +609,17 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 }
             }
 
-            // Set MTU if specified
+            // Set MTU if specified.
+            //
+            // Plan 158e Slices 2 + 3 moved Dummy / Bond / Vlan
+            // creation to step 11c's declarative NetworkConfig path,
+            // which sets MTU via `LinkBuilder::mtu` inline. Those
+            // kinds no longer exist when this step runs, so calling
+            // `set_link_mtu` on them would fail with ENODEV. Restrict
+            // the imperative MTU set to Vxlan (still created here).
             if let Some(mtu) = iface_config.mtu
-                && iface_config.kind.is_some()
-                && iface_config.kind != Some(InterfaceKind::Loopback)
+                && iface_config.kind == Some(InterfaceKind::Vxlan)
             {
-                // Only set MTU on interfaces we created (not lo)
                 conn.set_link_mtu(iface_name, mtu).await.map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to set MTU on '{node_name}'.{iface_name}: {e}"

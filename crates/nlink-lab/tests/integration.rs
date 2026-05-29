@@ -465,6 +465,162 @@ fn collect_rule_handles(nft_output: &str) -> Vec<u32> {
     handles
 }
 
+// Plan 158e Slice 2 — declaratively-created dummy interfaces
+// survive an idempotent re-apply. Boots a topology with a
+// dummy + address on it, then re-applies and confirms the
+// dummy is still present with the same address.
+#[tokio::test]
+async fn slice2_dummy_iface_reapply_is_zero_ops() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping slice2_dummy_iface_reapply_is_zero_ops: requires root");
+        return;
+    }
+    let topo = nlink_lab::Lab::new("slice2-dummy")
+        .node("host", |n| {
+            n.interface("lo0", |i| {
+                i.kind(nlink_lab::types::InterfaceKind::Dummy)
+                    .address("10.255.0.1/32")
+            })
+        })
+        .build();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Dummy + address must be live after initial deploy.
+    let out = lab.exec("host", "ip", &["addr", "show", "lo0"]).unwrap();
+    assert_eq!(out.exit_code, 0, "lo0 must exist after deploy");
+    assert!(
+        out.stdout.contains("10.255.0.1/32"),
+        "lo0 must carry declared address; got {}",
+        out.stdout
+    );
+
+    // Re-apply must be a no-op.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("reapply failed");
+
+    let out2 = lab.exec("host", "ip", &["addr", "show", "lo0"]).unwrap();
+    assert_eq!(
+        out.stdout, out2.stdout,
+        "lo0 state changed across no-op reapply"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Plan 158e Slice 3 — declaratively-created VLAN sub-interface
+// survives an idempotent re-apply with the right parent + VID.
+#[tokio::test]
+async fn slice3_vlan_iface_reapply_is_zero_ops() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping slice3_vlan_iface_reapply_is_zero_ops: requires root");
+        return;
+    }
+    // Need a parent iface that exists in the namespace. Use a
+    // dummy on the same node as the VLAN's parent so the test
+    // is self-contained.
+    let topo = nlink_lab::Lab::new("slice3-vlan")
+        .node("host", |n| {
+            n.interface("eth0", |i| i.kind(nlink_lab::types::InterfaceKind::Dummy))
+                .interface("eth0.42", |i| {
+                    let i = i
+                        .kind(nlink_lab::types::InterfaceKind::Vlan)
+                        .address("10.42.0.1/24");
+                    // The builder doesn't currently expose
+                    // `parent`/`vni` setters cleanly for vlan via
+                    // `.interface`, so set them through the
+                    // underlying config. Done programmatically
+                    // below via a topology touch-up.
+                    i
+                })
+        })
+        .build();
+
+    // Programmatically attach parent + vid because the builder
+    // DSL for `.interface` doesn't expose them cleanly today.
+    let mut topo_mut = topo;
+    if let Some(node) = topo_mut.nodes.get_mut("host")
+        && let Some(iface) = node.interfaces.get_mut("eth0.42")
+    {
+        iface.parent = Some("eth0".to_string());
+        iface.vni = Some(42);
+    }
+    let topo = topo_mut;
+
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    let out = lab
+        .exec("host", "ip", &["-d", "link", "show", "eth0.42"])
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "eth0.42 must exist after deploy");
+    assert!(
+        out.stdout.contains("vlan id 42") || out.stdout.contains("id 42"),
+        "eth0.42 must report VID 42; got {}",
+        out.stdout
+    );
+
+    // Re-apply must be a no-op.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("reapply failed");
+
+    let out2 = lab
+        .exec("host", "ip", &["-d", "link", "show", "eth0.42"])
+        .unwrap();
+    assert_eq!(
+        out.stdout, out2.stdout,
+        "eth0.42 link details changed across no-op reapply"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Plan 158f Phase 2 — `compute_layered_diff` on an unchanged
+// deployed lab returns an empty bundle (every subdiff
+// reports zero changes). Verified end-to-end against a real
+// namespace.
+#[tokio::test]
+async fn compute_layered_diff_on_unchanged_topology_is_empty() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping compute_layered_diff_on_unchanged_topology_is_empty: requires root");
+        return;
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/simple.nll"
+    ))
+    .expect("failed to parse topology file");
+    let lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(
+        layered.is_empty(),
+        "expected empty layered diff against own-state apply; \
+         got {} change(s):\n{layered}",
+        layered.change_count()
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Plan 158e Slice 1 — re-applying an unchanged topology must
 // not perturb live addresses or routes. The new declarative
 // path runs `NetworkConfig::apply` which is idempotent;

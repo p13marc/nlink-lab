@@ -235,31 +235,64 @@ See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 
 ## Deployment Sequence
 
-The deployer executes these steps in order:
+The deployer executes these steps in order. After the Plan 158
+arc (Plans 158a / 158e Slices 1+2+3 / 158f), the address /
+route / firewall / NAT / dummy / bond / VLAN layers commit
+through `nlink::NetworkConfig` and `nlink::NftablesConfig`
+declarative reconcile — idempotent re-deploys make zero kernel
+calls for those layers.
 
 ```
- 1. Parse topology file → Topology
- 2. Validate (bail on errors)
- 3. Create namespaces
+ 1.  Parse topology file → Topology
+ 2.  Validate (bail on errors)
+ 3.  Create namespaces
  3d. Create host-reachable mgmt bridge (if `mgmt ... host-reachable`)
- 4. Create bridge networks (if any)
- 5. Create veth pairs spanning namespaces
- 6. Create additional interfaces (vxlan, bond, vlan, wireguard)
- 7. Assign interfaces to bridges/bonds
- 8. Configure VLANs on bridge ports
- 9. Set interface addresses
-10. Bring interfaces up
-11. Apply sysctls per namespace
-12. Add routes per namespace
-13. Apply nftables rules per namespace
-14. Apply TC qdiscs/impairments per interface
-14b. Apply per-pair network impairments (`PerPeerImpairer` from nlink: HTB+netem+flower per source iface)
-15. Apply rate limits
-15b. Inject /etc/hosts entries (if `dns hosts`)
-16. Spawn background processes (topo-sorted by depends_on, with healthcheck polling, stdout/stderr captured to log files)
-17. Run validation (connectivity checks, tcp-connect with retries)
-18. Write state file
+ 4.  Create bridge networks (if any)
+ 5.  Create veth pairs spanning namespaces
+ 6.  Create additional interfaces — *VXLAN + WiFi remain
+     imperative; Dummy / Bond / VLAN now declare in step 11c
+     (Plan 158e Slices 2+3)*
+ 6a. Create macvlan/ipvlan interfaces (host-side, moved to ns)
+ 6b. Create VRF interfaces
+ 6c. Create WireGuard interfaces
+ 7.  Assign interfaces to bridges (legacy — bond enslave moved
+     to step 11c via `LinkBuilder::master`)
+ 8.  Configure VLANs on bridge ports
+ 9.  Set interface addresses — *no-op marker after Plan 158e Slice 1;
+     addresses now declared in step 11c*
+ 10. Bring interfaces up
+ 10b. Enslave bond members — *no-op marker after Plan 158e Slice 2;
+      bond `.master()` now declared in step 11c*
+ 10c. Enslave to VRFs
+ 10d. Configure WireGuard devices
+ 11. Apply sysctls per namespace
+ 11b. Auto-generate routes from topology graph (if `routing auto`)
+ 11c. Apply `NetworkConfig::diff().apply()` per namespace
+      (Plan 158e: links — dummies + bonds + VLANs, addresses
+      from every source, routes manual + auto, qdiscs)
+ 12. Add routes — *no-op marker after Plan 158e Slice 1; routes
+     now in step 11c*
+ 12b. Add VRF routes (still imperative — table knobs not on
+      `RouteBuilder`)
+ 13. Apply `NftablesConfig::diff().apply_reconcile()` per
+     namespace (Plan 158a: firewall + NAT, one atomic batch)
+ 14. Apply TC qdiscs/impairments per interface (`PerPeerImpairer`)
+ 14b. Apply per-pair network impairments
+ 15. Apply rate limits (`RateLimiter::apply` — still rebuilds;
+     `RateLimiter::reconcile` upstream pending, Plan 158g)
+ 15b. Inject /etc/hosts entries (if `dns hosts`)
+ 16. Spawn background processes (topo-sorted by depends_on,
+     with healthcheck polling, stdout/stderr captured to logs)
+ 17. Run validation (connectivity checks, tcp-connect with retries)
+ 18. Write state file
 ```
+
+`apply_diff` (live reconcile) shares the declarative builders
+with the initial-deploy path. `compute_layered_diff(running,
+desired)` (Plan 158f Phase 2) is the dry-run preview that walks
+every node, builds the same per-namespace `NetworkConfig` /
+`NftablesConfig`, and emits a single `LayeredDiff` bundle for
+`apply --check` / `apply --dry-run`.
 
 ## Dependencies
 

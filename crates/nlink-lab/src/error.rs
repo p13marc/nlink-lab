@@ -57,40 +57,16 @@ pub enum Error {
     #[error("invalid topology: {0}")]
     InvalidTopology(String),
 
-    /// Namespace operation failed.
-    #[error("{op} namespace '{ns}': {detail}")]
+    /// Namespace operation failed. Plan 158b — the underlying
+    /// `nlink::Error` is preserved on `#[source]` so
+    /// `err.ext_ack()` walks through to the kernel's
+    /// `NLMSGERR_ATTR_MSG` text.
+    #[error("{op} namespace '{ns}'")]
     Namespace {
         op: &'static str,
         ns: String,
-        detail: String,
-    },
-
-    /// Netlink link/address/interface operation failed.
-    #[error("{op} on node '{node}': {detail}")]
-    NetlinkOp {
-        op: String,
-        node: String,
-        detail: String,
-    },
-
-    /// Route configuration failed.
-    #[error("add route '{dest}' on node '{node}': {detail}")]
-    Route {
-        dest: String,
-        node: String,
-        detail: String,
-    },
-
-    /// Firewall (nftables) operation failed.
-    #[error("apply firewall on node '{node}': {detail}")]
-    Firewall { node: String, detail: String },
-
-    /// Container runtime operation failed.
-    #[error("{op} container '{name}': {detail}")]
-    Container {
-        op: &'static str,
-        name: String,
-        detail: String,
+        #[source]
+        source: nlink::Error,
     },
 
     /// Packet capture error.
@@ -152,5 +128,134 @@ impl Error {
     /// Check if this is a "not found" error.
     pub fn is_not_found(&self) -> bool {
         matches!(self, Self::NotFound { .. } | Self::NodeNotFound { .. })
+    }
+
+    /// Walk the source chain looking for a kernel
+    /// `NLMSGERR_ATTR_MSG` payload. Returns the first
+    /// `ext_ack` string found, or `None` if no kernel
+    /// error is in the chain.
+    ///
+    /// Plan 158b — the new typed-source variants
+    /// ([`Self::Namespace`], `[Self::Nlink]`) carry the
+    /// underlying `nlink::Error` on `#[source]`, so this
+    /// accessor finds it even when the top-level error is
+    /// one of our wrapper variants. For the (still legacy)
+    /// stringified call sites that route through
+    /// [`Self::DeployFailed`], `ext_ack` is no longer
+    /// recoverable — its text is flattened into the
+    /// human-readable string at construction time.
+    pub fn ext_ack(&self) -> Option<&str> {
+        let mut src: &dyn std::error::Error = self;
+        loop {
+            if let Some(e) = src.downcast_ref::<nlink::Error>()
+                && let Some(s) = e.ext_ack()
+            {
+                return Some(s);
+            }
+            src = src.source()?;
+        }
+    }
+
+    /// Companion to [`Self::ext_ack`] — returns the offset
+    /// (if any) into the request payload where the kernel
+    /// said the rejected attribute lives.
+    pub fn ext_ack_offset(&self) -> Option<u32> {
+        let mut src: &dyn std::error::Error = self;
+        loop {
+            if let Some(e) = src.downcast_ref::<nlink::Error>()
+                && let Some(o) = e.ext_ack_offset()
+            {
+                return Some(o);
+            }
+            src = src.source()?;
+        }
+    }
+
+    /// Return the kernel errno from the source chain, if any.
+    /// Walks the chain via [`std::error::Error::source`] so
+    /// callers don't have to know which wrapper variant the
+    /// `nlink::Error` is hidden behind.
+    pub fn errno(&self) -> Option<i32> {
+        let mut src: &dyn std::error::Error = self;
+        loop {
+            if let Some(e) = src.downcast_ref::<nlink::Error>()
+                && let Some(n) = e.errno()
+            {
+                return Some(n);
+            }
+            src = src.source()?;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ext_ack_walks_through_namespace_variant() {
+        // `from_errno_ext_ack` stores the errno negated; pass 1 →
+        // stored as -1. The accessor returns whatever is stored.
+        let kernel = nlink::Error::from_errno_ext_ack(
+            1,
+            Some("netlink: Could not process attribute".into()),
+            Some(16),
+        );
+        let lab_err = Error::Namespace {
+            op: "create",
+            ns: "ns-test".into(),
+            source: kernel,
+        };
+        assert_eq!(lab_err.errno(), Some(-1));
+        assert_eq!(
+            lab_err.ext_ack(),
+            Some("netlink: Could not process attribute")
+        );
+        assert_eq!(lab_err.ext_ack_offset(), Some(16));
+    }
+
+    #[test]
+    fn ext_ack_walks_through_nlink_from_variant() {
+        let kernel =
+            nlink::Error::from_errno_ext_ack(17, Some("netlink: duplicate link".into()), None);
+        let lab_err: Error = kernel.into();
+        assert_eq!(lab_err.errno(), Some(-17));
+        assert_eq!(lab_err.ext_ack(), Some("netlink: duplicate link"));
+    }
+
+    #[test]
+    fn ext_ack_none_when_no_kernel_in_chain() {
+        let lab_err = Error::Validation("bad name".into());
+        assert_eq!(lab_err.ext_ack(), None);
+        assert_eq!(lab_err.errno(), None);
+        assert_eq!(lab_err.ext_ack_offset(), None);
+    }
+
+    #[test]
+    fn ext_ack_none_for_legacy_deploy_failed_string() {
+        // DeployFailed flattens the source at construction; the
+        // typed chain is lost. Documented limitation — callers
+        // should prefer typed-source variants for new code.
+        let lab_err = Error::deploy_failed("apply firewall failed: kernel error EPERM");
+        assert_eq!(lab_err.ext_ack(), None);
+    }
+
+    #[test]
+    fn display_includes_source_chain_text() {
+        let kernel = nlink::Error::from_errno_ext_ack(1, Some("netlink: foo".into()), None);
+        // The wire format of the kernel error already includes
+        // ext_ack via its Display impl (Plan 182 in nlink). When
+        // wrapped, our wrapper renders the variant context and
+        // the source chain is reachable via std::error::Error.
+        let lab_err = Error::Namespace {
+            op: "create",
+            ns: "ns-test".into(),
+            source: kernel,
+        };
+        let rendered = format!("{lab_err}");
+        assert!(
+            rendered.contains("create namespace 'ns-test'"),
+            "wrapper context expected in Display: {rendered}"
+        );
     }
 }

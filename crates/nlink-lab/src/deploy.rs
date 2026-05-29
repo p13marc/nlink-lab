@@ -212,7 +212,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             namespace::create(&ns_name).map_err(|e| Error::Namespace {
                 op: "create",
                 ns: ns_name.clone(),
-                detail: e.to_string(),
+                source: e,
             })?;
             cleanup.add_namespace(ns_name.clone());
             namespace_names.insert(node_name.clone(), ns_name.clone());
@@ -374,7 +374,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         namespace::create(&mgmt_ns).map_err(|e| Error::Namespace {
             op: "create",
             ns: mgmt_ns.clone(),
-            detail: e.to_string(),
+            source: e,
         })?;
         cleanup.add_namespace(mgmt_ns.clone());
 
@@ -2813,7 +2813,7 @@ pub async fn apply_diff(
             namespace::create(&ns_name).map_err(|e| Error::Namespace {
                 op: "create",
                 ns: ns_name.clone(),
-                detail: e.to_string(),
+                source: e,
             })?;
             running
                 .namespace_names_mut()

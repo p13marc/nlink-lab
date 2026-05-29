@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Library API breaks
+- **Plan 158b — `Error::Namespace` now carries
+  `#[source] source: nlink::Error`** instead of
+  `detail: String`. Match arms that destructured the old
+  `{ op, ns, detail }` shape need to switch to
+  `{ op, ns, source, .. }`. The old detail string is recoverable
+  via `source.to_string()`, but the typed shape lets new accessors
+  walk the source chain to surface kernel
+  `NLMSGERR_ATTR_MSG` text.
+- **Removed four dead error variants** that were declared in
+  `nlink_lab::Error` but never constructed anywhere in nlink-lab
+  or downstream code: `Firewall`, `Route`, `NetlinkOp`,
+  `Container`. They were leftover from an earlier
+  per-resource error taxonomy; the actual wrapping pattern uses
+  `Error::deploy_failed(format!(...))` instead. If you matched
+  on them in downstream code, replace with a wildcard or
+  `Error::DeployFailed`.
+
+### Added
+- **`Error::ext_ack() -> Option<&str>`,
+  `Error::ext_ack_offset() -> Option<u32>`,
+  `Error::errno() -> Option<i32>`** inherent accessors on
+  `nlink_lab::Error`. They walk the source chain via
+  [`std::error::Error::source`], so the kernel's
+  `NLMSGERR_ATTR_MSG` payload is reachable from any wrapper
+  variant whose `#[source]` ultimately points at an
+  `nlink::Error::Kernel` / `KernelWithContext`. Mirrors nlink
+  0.18's shape (Plan 182) but routes through nlink-lab's
+  wrapper enum.
+
 ### Changed
 - **Plan 158e Slice 1 — interface addresses and routes now apply
   declaratively via `nlink::NetworkConfig::apply()`** instead of the

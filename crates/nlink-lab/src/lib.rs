@@ -1,4 +1,10 @@
 #![allow(clippy::field_reassign_with_default)]
+// Plan 158b — Error::Namespace and Nlink variants carry an inline
+// `nlink::Error` so that `Error::ext_ack()` can walk the typed
+// source chain. Boxing the source breaks thiserror's #[source]
+// downcast walk; an ergonomic clippy lint about the resulting
+// enum size is the lesser cost.
+#![allow(clippy::result_large_err)]
 //! nlink-lab: Network lab engine for Linux.
 //!
 //! Create isolated, reproducible network topologies using Linux network namespaces.

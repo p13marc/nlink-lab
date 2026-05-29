@@ -2234,14 +2234,21 @@ fn apply_match_expr(
 }
 
 /// Parse an IPv4 CIDR like `10.0.1.0/24` into address and prefix length.
-fn parse_v4_cidr(s: &str) -> std::result::Result<(std::net::Ipv4Addr, u8), String> {
+///
+/// Plan 158c — uses bare `?` on the inner parses via the new
+/// `From<AddrParseError>` / `From<ParseIntError>` impls on
+/// `Error`. Returns `Result<_, Error>` so callers can propagate
+/// directly without a `.map_err` ceremony.
+fn parse_v4_cidr(s: &str) -> Result<(std::net::Ipv4Addr, u8)> {
     let (addr_str, prefix_str) = s
         .split_once('/')
-        .ok_or_else(|| format!("missing '/' in CIDR notation: {s}"))?;
-    let addr: std::net::Ipv4Addr = addr_str.parse().map_err(|e| format!("{e}"))?;
-    let prefix: u8 = prefix_str.parse().map_err(|e| format!("{e}"))?;
+        .ok_or_else(|| Error::invalid_topology(format!("missing '/' in CIDR notation: {s}")))?;
+    let addr: std::net::Ipv4Addr = addr_str.parse()?;
+    let prefix: u8 = prefix_str.parse()?;
     if prefix > 32 {
-        return Err(format!("prefix length {prefix} exceeds 32"));
+        return Err(Error::invalid_topology(format!(
+            "prefix length {prefix} exceeds 32"
+        )));
     }
     Ok((addr, prefix))
 }
@@ -2463,7 +2470,7 @@ async fn add_route(
 
     if is_v6 {
         let mut route = if is_default {
-            nlink::netlink::route::Ipv6Route::new("::", 0)
+            nlink::netlink::route::Ipv6Route::default_route()
         } else {
             let (addr, prefix) = parse_cidr(dest)?;
             match addr {
@@ -2491,7 +2498,7 @@ async fn add_route(
         })?;
     } else {
         let mut route = if is_default {
-            nlink::netlink::route::Ipv4Route::new("0.0.0.0", 0)
+            nlink::netlink::route::Ipv4Route::default_route()
         } else {
             let (addr, prefix) = parse_cidr(dest)?;
             match addr {
@@ -2547,7 +2554,7 @@ async fn add_route_with_table(
 
     if is_v6 {
         let mut route = if is_default {
-            nlink::netlink::route::Ipv6Route::new("::", 0)
+            nlink::netlink::route::Ipv6Route::default_route()
         } else {
             let (addr, prefix) = parse_cidr(dest)?;
             match addr {
@@ -2576,7 +2583,7 @@ async fn add_route_with_table(
         })?;
     } else {
         let mut route = if is_default {
-            nlink::netlink::route::Ipv4Route::new("0.0.0.0", 0)
+            nlink::netlink::route::Ipv4Route::default_route()
         } else {
             let (addr, prefix) = parse_cidr(dest)?;
             match addr {

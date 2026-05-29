@@ -114,6 +114,27 @@ impl From<NllDiagnostic> for Error {
     }
 }
 
+/// Plan 158c — route bare `IpAddr` parse failures from the `?`
+/// operator into [`Error::InvalidTopology`]. The previous
+/// `.map_err(|e| Error::invalid_topology(format!("…: {e}")))`
+/// ceremony at every parse site collapses to a bare `?` when
+/// the surrounding `Result<_, Error>` context is descriptive
+/// enough (e.g. inside a function whose name is itself the
+/// context).
+impl From<std::net::AddrParseError> for Error {
+    fn from(e: std::net::AddrParseError) -> Self {
+        Self::InvalidTopology(format!("invalid IP address: {e}"))
+    }
+}
+
+/// Same shape for integer parses (port numbers, prefix
+/// lengths, mark values, etc.).
+impl From<std::num::ParseIntError> for Error {
+    fn from(e: std::num::ParseIntError) -> Self {
+        Self::InvalidTopology(format!("invalid integer: {e}"))
+    }
+}
+
 impl Error {
     /// Create an invalid topology error.
     pub fn invalid_topology(message: impl Into<String>) -> Self {
@@ -238,6 +259,41 @@ mod tests {
         // should prefer typed-source variants for new code.
         let lab_err = Error::deploy_failed("apply firewall failed: kernel error EPERM");
         assert_eq!(lab_err.ext_ack(), None);
+    }
+
+    #[test]
+    fn from_addr_parse_error_routes_to_invalid_topology() {
+        let parse_err = "not-an-ip".parse::<std::net::IpAddr>().unwrap_err();
+        let lab_err: Error = parse_err.into();
+        assert!(matches!(lab_err, Error::InvalidTopology(_)));
+        let rendered = lab_err.to_string();
+        assert!(
+            rendered.contains("invalid IP address"),
+            "expected 'invalid IP address' prefix, got: {rendered}"
+        );
+    }
+
+    #[test]
+    fn from_parse_int_error_routes_to_invalid_topology() {
+        let parse_err = "abc".parse::<u32>().unwrap_err();
+        let lab_err: Error = parse_err.into();
+        assert!(matches!(lab_err, Error::InvalidTopology(_)));
+        let rendered = lab_err.to_string();
+        assert!(
+            rendered.contains("invalid integer"),
+            "expected 'invalid integer' prefix, got: {rendered}"
+        );
+    }
+
+    #[test]
+    fn question_mark_propagates_addr_parse_error() {
+        // Verify the `?` operator works in a fn returning
+        // Result<_, Error> — the documented use case.
+        fn parse_one(s: &str) -> Result<std::net::IpAddr> {
+            Ok(s.parse()?)
+        }
+        let err = parse_one("not-an-ip").unwrap_err();
+        assert!(matches!(err, Error::InvalidTopology(_)));
     }
 
     #[test]

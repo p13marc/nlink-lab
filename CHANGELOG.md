@@ -23,6 +23,13 @@ All notable changes to this project will be documented in this file.
   `Error::DeployFailed`.
 
 ### Added
+- **`impl From<std::net::AddrParseError> for Error`** and
+  **`impl From<std::num::ParseIntError> for Error`** route into
+  `Error::InvalidTopology`. The bare `?` operator works on
+  `IpAddr::parse()` / `u32::parse()` etc. in any fn returning
+  `Result<_, nlink_lab::Error>`, removing
+  `.map_err(|e| Error::invalid_topology(format!(...)))` ceremony
+  at identity wrap sites. Plan 158c.
 - **`LayeredDiff` struct + `Display` impl** (`nlink_lab::diff::LayeredDiff`).
   Bundles the three layers an `apply` call commits against: the
   lab-graph topology, per-namespace RTNETLINK state (links + addresses
@@ -45,6 +52,19 @@ All notable changes to this project will be documented in this file.
   wrapper enum.
 
 ### Changed
+- **Plan 158c — default routes now use
+  `nlink::Ipv4Route::default_route()` / `Ipv6Route::default_route()`**
+  (Plan 184 in nlink 0.18) at the four call sites in `deploy.rs`
+  that previously wrote `Ipv4Route::new("0.0.0.0", 0)` /
+  `Ipv6Route::new("::", 0)`. Purely cosmetic — the on-wire shape
+  is identical — but self-documenting.
+- **Plan 158c — `parse_v4_cidr` now returns
+  `Result<(Ipv4Addr, u8), Error>`** instead of
+  `Result<…, String>`. Internal helper; affected call sites
+  preserve their existing context wrappers (`Error::deploy_failed`
+  / `Error::invalid_topology`) without change beyond the `e`
+  binding becoming `Error` instead of `String` (`Display`
+  output is identical).
 - **Plan 158e Slice 1 — interface addresses and routes now apply
   declaratively via `nlink::NetworkConfig::apply()`** instead of the
   previous per-source imperative loops. The new step 11c

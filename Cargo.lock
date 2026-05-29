@@ -3006,20 +3006,23 @@ dependencies = [
 
 [[package]]
 name = "nlink"
-version = "0.15.1"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28d82f9dc7d2add47f0b5a7d3f17d02623f79fae90db0edd09afc53a68fce2bb"
+checksum = "92797d349d80354c4168c8b6db6b18250d213b5a350b0b3c90ce70f5af5364b0"
 dependencies = [
+ "bitflags 2.11.1",
  "bytes",
  "inotify",
  "libc",
  "netlink-sys",
+ "nlink-macros",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tracing",
+ "tracing-subscriber",
  "winnow 1.0.2",
  "zerocopy",
 ]
@@ -3123,6 +3126,17 @@ dependencies = [
  "serde_json",
  "tokio",
  "zenoh",
+]
+
+[[package]]
+name = "nlink-macros"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ca8297cf3d8f788fd91f1dd29200c09b55ebb60e4881d48bd9ca745303e86d5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

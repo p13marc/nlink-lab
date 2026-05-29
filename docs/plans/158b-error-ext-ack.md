@@ -1,8 +1,9 @@
 # Plan 158b — Surface kernel `ext_ack` in nlink-lab errors
 
-**Date:** 2026-05-27
-**Status:** Proposed (PR B of the Plan 158 arc)
-**Effort:** Small (0.5 day)
+**Date:** 2026-05-27 (revised 2026-05-29 — nlink 0.18 lands
+`Error::ext_ack()` accessor, simplifying Phase 3)
+**Status:** Proposed (PR B of the Plan 158 arc) — fully unblocked
+**Effort:** Small (0.5 day; Phase 3 is now trivial)
 **Priority:** P2 — quality-of-life win that turns a class of
 mystery `EPERM` / `EINVAL` failures into actionable one-liners.
 
@@ -69,8 +70,9 @@ The work in this PR is:
   - `.errno() -> Option<i32>` — `error.rs:484`
   - `.is_busy() -> bool` — `error.rs:474`
   - `.is_try_again() -> bool` — `error.rs:576`
-  - **No** built-in `.ext_ack() -> Option<&str>` — consumers
-    pattern-match the variants.
+  - **`.ext_ack() -> Option<&str>`** — landed in nlink 0.18
+    as Plan 182 (was wishlist W3 in our upstream-asks report).
+  - **`.ext_ack_offset() -> Option<u32>`** — same.
 - Source parser: `crates/nlink/src/netlink/message.rs:329`
   (`NlMsgError::parsed_ext_ack`) reads
   `NLMSGERR_ATTR_MSG` (TLV type 1) and
@@ -206,7 +208,7 @@ and emit (where applicable) a structured shape:
 }
 ```
 
-The helper:
+With the new nlink 0.18 accessors, the helper collapses to:
 
 ```rust
 // crates/nlink-lab/src/error.rs (additions)
@@ -218,16 +220,12 @@ impl Error {
         let mut src: &dyn std::error::Error = self;
         loop {
             if let Some(e) = src.downcast_ref::<nlink::Error>() {
-                match e {
-                    nlink::Error::Kernel { errno, ext_ack, ext_ack_offset, .. }
-                    | nlink::Error::KernelWithContext { errno, ext_ack, ext_ack_offset, .. } => {
-                        return Some(KernelDetail {
-                            errno: *errno,
-                            ext_ack: ext_ack.as_deref(),
-                            ext_ack_offset: *ext_ack_offset,
-                        });
-                    }
-                    _ => {}
+                if let Some(errno) = e.errno() {
+                    return Some(KernelDetail {
+                        errno,
+                        ext_ack: e.ext_ack(),
+                        ext_ack_offset: e.ext_ack_offset(),
+                    });
                 }
             }
             match src.source() {
@@ -246,6 +244,16 @@ pub struct KernelDetail<'a> {
 }
 ```
 
+Three benefits over the pattern-match form the original
+plan called for:
+
+1. No `_ =>` wildcard ceremony (the `#[non_exhaustive]`
+   attribute on the variants is invisible to us).
+2. Future-proof — any new kernel-error variant added to nlink
+   that wires `errno()` automatically routes through.
+3. Half the LOC; the typed `KernelDetail` shape is preserved
+   for serde-friendly JSON emission.
+
 Caveat: nlink-lab's `Error::Firewall { detail: String }` and
 similar variants stringify the inner error early — by the
 time we have an `Error::Firewall`, the `nlink::Error` is
@@ -258,7 +266,9 @@ For now: only the top-level `Nlink(#[from] nlink::Error)`
 variant carries the typed chain. JSON envelopes can route
 through `kernel_detail()` and it'll succeed for that one
 variant — better than nothing, and the firewall/route paths
-get the ext_ack via the flattened `Display` string anyway.
+get the ext_ack via the flattened `Display` string anyway
+(which now includes `ext_ack` text via 0.16's `Display`
+impl).
 
 ### Phase 4 — Library-internal integration test (0.1 day)
 

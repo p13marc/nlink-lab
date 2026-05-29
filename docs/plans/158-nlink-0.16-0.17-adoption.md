@@ -1,7 +1,7 @@
-# Plan 158 — Taking advantage of nlink 0.16 + 0.17
+# Plan 158 — Taking advantage of nlink 0.16 + 0.17 + 0.18
 
-**Date:** 2026-05-27
-**Status:** Proposal
+**Date:** 2026-05-27 (rewritten 2026-05-29 after nlink 0.18.0)
+**Status:** Proposal — all upstream prerequisites have landed
 **Effort:** S to M depending on scope
 **Priority:** P1 for the nftables-reconcile arc (PR A); P2 for the rest
 
@@ -9,7 +9,7 @@
 
 ## TL;DR
 
-nlink shipped two back-to-back releases since nlink-lab last
+nlink shipped three back-to-back releases since nlink-lab last
 upgraded (`0.15.1`):
 
 - **`0.16.0` (2026-05-25)** — substantial-but-additive. New
@@ -22,6 +22,20 @@ upgraded (`0.15.1`):
   30-second operation timeout on every `Connection<P>` call,
   nine recv-loops audited to the canonical seq-filter +
   timeout shape, `NftablesConfig::diff` idempotence fix.
+- **`0.18.0` (2026-05-29)** — purely additive release driven
+  entirely by `nlink-upstream-asks.md` (this report). Shipped
+  both 158 asks (`DeclaredChainBuilder::chain_type`,
+  `list_*_in`) **and the full six-item wishlist**
+  (`Error::ext_ack()`,
+  `impl Display for NftablesDiff / ConfigDiff`,
+  `Ipv4Route::default_route()`,
+  `subscribe_all_with_resync(factory)` /
+  `into_events_with_resync(factory)`, plus
+  `NftablesEvent::NewSet`/`DelSet` for resync completeness).
+  Bonus: `Chain::device(name)` for netdev base chains —
+  shipped alongside `chain_type` since they share the
+  `NFTA_CHAIN_HOOK` nest. **All 158 sub-plans are now
+  unblocked across the board.**
 
 **The single highest-impact item for nlink-lab is** Plan 157 in
 nlink (`NftablesConfig` with `rule_keyed`). It directly closes
@@ -316,12 +330,17 @@ churn at runtime, so the priority is low.
   `crates/nlink-lab/src/deploy.rs:2900-2947`
   (`apply_nftables_diff` full-table-rebuild).
 
-## Upstream prerequisites (asks for the nlink author)
+## Upstream prerequisites (asks for the nlink author) — ALL SHIPPED IN 0.18.0
 
-Audit of nlink 0.17 surfaced one **real blocker** and two
-**nice-to-haves** for the 158 arc:
+Originally this section listed one real blocker and two
+nice-to-haves. nlink 0.18.0 (2026-05-29) shipped every item
+plus the six wishlist entries. The block-level summary below
+is preserved as historical record. **Action: bump
+`nlink = "0.18"` workspace dep and remove Phase 0
+coordination from 158a; everything else just inherits the
+new ergonomics automatically.**
 
-### Required for Plan 158a Phase 2 (NAT reconcile)
+### ✅ Required for Plan 158a Phase 2 (NAT reconcile) — landed as Plan 180 in nlink
 
 - **`DeclaredChainBuilder::chain_type(ChainType)`** —
   `DeclaredChain` (`crates/nlink/src/netlink/nftables/config/
@@ -347,26 +366,44 @@ Audit of nlink 0.17 surfaced one **real blocker** and two
   deferred. Phase 1 is the majority of the win — NAT
   chains can stay imperative for one more cycle.
 
-### Nice-to-have for Plan 158d resync efficiency
+### ✅ Nice-to-have for Plan 158d resync efficiency — landed as Plan 181 in nlink
 
-- **`Connection::<Nftables>::list_flowtables(table, family)`
-  overload** — `list_flowtables()`
-  (`connection.rs:187-220`) dumps every flowtable across
-  every table+family. For the per-table resync snapshot
-  in Plan 158d, we'd dump all flowtables and filter
-  client-side. Tiny inefficiency, not a blocker.
+- **`list_tables_in(family)` / `list_chains_in(table, family)`
+  / `list_flowtables_in(table, family)` /
+  `list_sets_in(table, family)`** — server-side filtered
+  dump methods on `Connection<Nftables>`. Tiny efficiency
+  win, now available, with the bonus `list_sets_in` for the
+  resync snapshot.
 
-### Nice-to-have for nlink-lab rate-limit reconcile (Plan 159 candidate)
+### ✅ Wishlist — all six items landed in 0.18.0
 
-- **`PerHostLimiter::reconcile`** mirroring
-  `PerPeerImpairer::reconcile` would close the last
-  remaining "delete-then-rebuild" reconcile path in
-  nlink-lab (`deploy.rs:2962` `apply_rate_limits_diff`).
-  Out of scope for the 158 arc but specifically
-  flagged in `deploy.rs:2956-2961`:
-  > A fully-incremental rate-limit reconcile is doable
-  > but requires upstreaming a `PerHostLimiter::reconcile()`
-  > to nlink.
+| Wishlist | nlink plan | Status |
+|----------|-----------|--------|
+| W1: `impl Display for NftablesDiff` + `ConfigDiff` | Plan 183 | ✅ Shipped |
+| W2: `subscribe_all_with_resync(factory)` + `into_events_with_resync(factory)` | Plan 185 | ✅ Shipped |
+| W3: `Error::ext_ack()` + `ext_ack_offset()` accessors | Plan 182 | ✅ Shipped |
+| W4: `for_each_namespace_async` | — | Not done (lab-flavored helper — punted) |
+| W5: `Ipv4Route::default_route()` / `Ipv6Route::default_route()` | Plan 184 | ✅ Shipped |
+| W6: `NetworkConfig` per-object reconcile parity | — | Direction noted; multi-cycle work, not in 0.18 |
+
+Plus a bonus pair landed alongside Plan 180:
+- `Chain::device(name)` (imperative + declarative) for
+  netdev base chains hooked at `ingress`/`egress` with
+  `NFTA_HOOK_DEV`. Useful for future nlink-lab work on
+  ingress-side filtering inside namespaces.
+- `NftablesEvent::NewSet(SetInfo)` + `DelSet(SetInfo)` —
+  Plan 185 bundled them since `events_with_resync` enumerates
+  sets during the snapshot replay; consumers benefit
+  immediately even without using the resync wrapper.
+
+### Nice-to-have for nlink-lab rate-limit reconcile (already done, was false alarm)
+
+- ~~**`PerHostLimiter::reconcile`** mirroring
+  `PerPeerImpairer::reconcile`~~ — **already exists** in nlink
+  at `crates/nlink/src/netlink/ratelimit.rs:749`. The
+  stale comment in nlink-lab's `deploy.rs:2956-2961`
+  claiming this was missing should be removed in PR A's
+  cleanup pass.
 
 ### False alarms (no upstream work needed)
 

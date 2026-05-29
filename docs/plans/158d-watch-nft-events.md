@@ -1,8 +1,11 @@
 # Plan 158d — `nlink-lab watch` via nftables multicast
 
-**Date:** 2026-05-27
+**Date:** 2026-05-27 (rewritten 2026-05-29 — nlink 0.18 lands
+`subscribe_all_with_resync` + `NewSet/DelSet` variants,
+collapsing the per-thread snapshot scaffolding)
 **Status:** Proposed (PR D of the Plan 158 arc — optional)
-**Effort:** Large (4–5 days)
+**Effort:** Medium (2–3 days now that the resync helper exists
+upstream)
 **Priority:** P3 — power-user feature; no concrete user
 request yet, but the underlying nlink primitives just
 landed and the data flow is clean.
@@ -42,38 +45,39 @@ first and gate D on whether anyone asks for it.
 
 ---
 
-## Audit — nlink 0.17 primitives (citations to `/home/mpardo/git/rip/`)
+## Audit — nlink 0.18 primitives (citations to `/home/mpardo/git/rip/`)
 
-- `NftablesEvent` enum — 8 typed variants
-  (`New/DelTable`, `New/DelChain`, `New/DelRule`,
-  `New/DelFlowtable`) at
-  `crates/nlink/src/netlink/nftables/events.rs:71`.
-  All are `#[non_exhaustive]`.
+- `NftablesEvent` enum — **10 typed variants** now (the
+  original 8 + `NewSet(SetInfo)`/`DelSet(SetInfo)` shipped
+  in 0.18 Plan 185 for resync completeness) at
+  `crates/nlink/src/netlink/nftables/events.rs:71`. All are
+  `#[non_exhaustive]`.
 - `NftablesGroup::All` resolves to kernel multicast group
-  `NFNLGRP_NFTABLES (= 7)` —
-  `crates/nlink/src/netlink/nftables/events.rs:48`.
-- `Connection::<Nftables>::subscribe(&mut self, &[NftablesGroup])`
-  + `subscribe_all(&mut self)` —
-  `crates/nlink/src/netlink/nftables/connection.rs:757`.
-  Note **`&mut self`** — sync call.
-- `Connection::<Nftables>::events(&self) -> EventSubscription<'_, Nftables>`
-  — `crates/nlink/src/netlink/stream.rs:300`. Borrows
-  `&self`. Returns a `Stream<Item = Result<NftablesEvent>>`.
-- `events_with_resync<S, T, F>(stream, snapshot_fn) ->
-  ResyncStream<S, T, F>` —
-  `crates/nlink/src/netlink/resync.rs:332`.
-  - `S: Stream<Item = Result<T>> + Unpin`
-  - `F: FnMut() -> Pin<Box<dyn Future<Output = Result<Vec<T>>> + Send>> + Unpin`
-  - Output items are `ResyncedEvent<T>`:
-    `Event(T)`, `Resynced(T)`, `Marker(ResyncMarker::Start
-    | ResyncMarker::End)`.
-- One `Connection<Nftables>` = one namespace. For
-  multi-namespace, open one per namespace via
-  `Connection::<Nftables>::new_in_namespace(fd)` or
-  `nlink::netlink::namespace::connection_for(name)` —
-  `crates/nlink/src/netlink/nftables/connection.rs:135`.
+  `NFNLGRP_NFTABLES (= 7)`.
+- **The big simplification** — nlink 0.18 ships two new
+  helpers on `Connection<Nftables>`:
+  - `Connection<Nftables>::subscribe_all_with_resync(factory)`
+    — borrowed form, holds `&mut self`.
+  - `Connection<Nftables>::into_events_with_resync(factory)`
+    — **owned form**, returns `'static + Send` —
+    `tokio::spawn`-friendly. **This is what we want.**
+  - Both return
+    `Stream<Item = Result<ResyncedEvent<NftablesEvent>>>`.
+  - The `factory` parameter is a `ConnectionFactory<Nftables>`
+    (generic alias at the crate root —
+    `nlink::ConnectionFactory<P>`) that opens a fresh
+    `Connection<Nftables>` on demand for the snapshot
+    re-dump after ENOBUFS. nlink handles the snapshot enumeration
+    (tables / chains / rules / flowtables / sets) and the
+    `Resynced(...)` replay internally.
+- Recipe: `/home/mpardo/git/rip/docs/recipes/nftables-watch-with-resync.md`.
+- Per-namespace multi-subscribe pattern: one
+  `Connection<Nftables>` per namespace, opened via
+  `nlink::netlink::namespace::connection_for(name)`.
+  `subscribe_all` takes `&mut self` and is sync; the
+  resync helpers consume the connection.
 - **No built-in table-name filter** on the event stream.
-  Filtering is consumer-side.
+  Filtering is still consumer-side.
 
 ---
 
@@ -108,26 +112,33 @@ first and gate D on whether anyone asks for it.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│  RunningLab                                  │
-│  ┌─────────────────────────────────────────┐ │
-│  │  spawn per-node tokio task              │ │
-│  │  ┌───────────────────────────────────┐  │ │
-│  │  │ enter ns_for(node)                │  │ │
-│  │  │ Connection::<Nftables>::new()     │  │ │
-│  │  │ .subscribe(NftablesGroup::All)    │  │ │
-│  │  │ events_with_resync(.events(),     │  │ │
-│  │  │   || fresh_dump_for_resync())     │  │ │
-│  │  │   .map(|ev| (node.clone(), ev))   │  │ │
-│  │  │   .forward(tx)                    │  │ │
-│  │  └───────────────────────────────────┘  │ │
-│  └────────────────────────┬────────────────┘ │
-│                           │ mpsc::Receiver   │
-│                           ▼                  │
-│  ┌─────────────────────────────────────────┐ │
-│  │  ReceiverStream → Stream<NodeNftEvent> │ │
-│  └─────────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  RunningLab                                      │
+│  ┌─────────────────────────────────────────────┐ │
+│  │  spawn per-node thread (setns + LocalSet)   │ │
+│  │  ┌───────────────────────────────────────┐  │ │
+│  │  │ enter ns_for(node)                    │  │ │
+│  │  │ let mut conn =                        │  │ │
+│  │  │   namespace::connection_for(ns)?;     │  │ │
+│  │  │ conn.subscribe_all()?;                │  │ │
+│  │  │ let ns = ns_name.clone();             │  │ │
+│  │  │ let stream = conn                     │  │ │
+│  │  │   .into_events_with_resync(           │  │ │
+│  │  │     move || { let ns = ns.clone();    │  │ │
+│  │  │       Box::pin(async move {           │  │ │
+│  │  │         namespace::connection_for(&ns)│  │ │
+│  │  │       })                              │  │ │
+│  │  │     })?;                              │  │ │
+│  │  │ stream.map(|ev| (node, ev))           │  │ │
+│  │  │       .forward(tx)                    │  │ │
+│  │  └───────────────────────────────────────┘  │ │
+│  └────────────────────────┬────────────────────┘ │
+│                           │ mpsc::Receiver       │
+│                           ▼                      │
+│  ┌─────────────────────────────────────────────┐ │
+│  │  ReceiverStream → Stream<NodeNftEvent>      │ │
+│  └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
         │                       │
         ▼                       ▼
   CLI render loop          Backend Zenoh publisher
@@ -140,11 +151,12 @@ Key constraints:
   is thread-local). Per-thread task pool sized to
   `min(node_count, num_cpus)` so a 100-node lab doesn't
   spawn 100 threads.
-- **Snapshot for resync** uses a *separate*
-  `Connection<Nftables>` (the events conn is mid-stream
-  and can't dump). The snapshot conn is opened lazily on
-  the first ENOBUFS, lives for the duration of the
-  resync, and is dropped.
+- **Snapshot for resync is now nlink's job.** The
+  `into_events_with_resync(factory)` helper handles the
+  fresh-connection-on-ENOBUFS dance internally — we hand
+  it a closure that re-opens a `Connection<Nftables>` in
+  the right namespace, and it does the rest. **~150 LOC
+  of plumbing the original plan called for is gone.**
 - **Backpressure.** mpsc channel capacity = 1024 events.
   If consumers fall behind, sender drops and emits a
   `OverflowWarn(dropped: u64)` event the consumer can
@@ -231,6 +243,8 @@ pub enum NftablesEventKind {
                     handle: u64, comment: Option<String> },
     NewFlowtable  { family: Family, table: String, name: String },
     DelFlowtable  { family: Family, table: String, name: String },
+    NewSet        { family: Family, table: String, name: String },
+    DelSet        { family: Family, table: String, name: String },
     /// Emitted before a resync replay following ENOBUFS.
     ResyncStart   { reason: String },
     /// One item per snapshot frame during a resync.
@@ -274,11 +288,11 @@ channel; the returned `ReceiverStream` doesn't borrow from
 In `crates/nlink-lab/src/running.rs`:
 
 ```rust
-async fn spawn_node_watcher(
+fn spawn_node_watcher(
     node: String,
     ns_name: String,
     tx: mpsc::Sender<Result<NodeNftablesEvent>>,
-) -> Result<()> {
+) -> Result<std::thread::JoinHandle<()>> {
     // Spawn a *thread* (not a task) for the namespace pin.
     // setns is thread-local; the subsequent Connection must
     // live on that thread.
@@ -288,26 +302,42 @@ async fn spawn_node_watcher(
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all().build().unwrap();
             runtime.block_on(async move {
-                let mut conn = match nlink::netlink::namespace::connection_for_async(&ns_name) {
+                let mut conn = match nlink::netlink::namespace::connection_for(&ns_name) {
                     Ok(c) => c,
                     Err(e) => { let _ = tx.send(Err(e.into())).await; return; }
                 };
-                conn.subscribe_all().expect("subscribe");
+                if let Err(e) = conn.subscribe_all() {
+                    let _ = tx.send(Err(e.into())).await;
+                    return;
+                }
 
-                let snapshot_node = node.clone();
-                let snapshot_ns = ns_name.clone();
-                let stream = events_with_resync(
-                    conn.events().map(Ok).boxed(),
-                    move || Box::pin(snapshot_dump(snapshot_node.clone(), snapshot_ns.clone())),
-                );
+                // nlink 0.18: into_events_with_resync handles the
+                // ENOBUFS-recovery dance entirely. We just hand it a
+                // closure that opens a fresh Connection<Nftables> in
+                // the right namespace; nlink dumps + emits Resynced
+                // items + restarts live forwarding internally.
+                let ns_for_factory = ns_name.clone();
+                let stream = match conn.into_events_with_resync(
+                    move || {
+                        let ns = ns_for_factory.clone();
+                        Box::pin(async move {
+                            nlink::netlink::namespace::connection_for::<nlink::Nftables>(&ns)
+                        })
+                    },
+                ) {
+                    Ok(s) => s,
+                    Err(e) => { let _ = tx.send(Err(e.into())).await; return; }
+                };
 
                 let mut stream = stream;
                 while let Some(item) = stream.next().await {
                     let event = match item {
                         Ok(ResyncedEvent::Event(e))    => NftablesEventKind::from_nlink(e),
                         Ok(ResyncedEvent::Resynced(e)) => NftablesEventKind::resynced_from(e),
-                        Ok(ResyncedEvent::Marker(ResyncMarker::Start)) => NftablesEventKind::ResyncStart { reason: "ENOBUFS".into() },
-                        Ok(ResyncedEvent::Marker(ResyncMarker::End))   => NftablesEventKind::ResyncEnd,
+                        Ok(ResyncedEvent::Marker(ResyncMarker::ResyncStart)) =>
+                            NftablesEventKind::ResyncStart { reason: "ENOBUFS".into() },
+                        Ok(ResyncedEvent::Marker(ResyncMarker::ResyncEnd))   =>
+                            NftablesEventKind::ResyncEnd,
                         Err(e) => { let _ = tx.send(Err(e.into())).await; continue; }
                     };
                     let wrapped = NodeNftablesEvent {
@@ -322,10 +352,7 @@ async fn spawn_node_watcher(
                 }
             });
         }).map_err(|e| Error::deploy_failed(format!("spawn watch thread: {e}")))?;
-
-    // Register the join handle so destroy can stop the thread.
-    // (See "Lifecycle" below.)
-    Ok(())
+    Ok(handle)
 }
 ```
 
@@ -341,6 +368,22 @@ Lifecycle concerns:
   drained on destroy. JoinHandles use a `Drop` impl that
   signals a per-thread `AtomicBool` shutdown flag the
   watcher loop checks each iteration.
+
+**Key simplification vs. the original plan.** The owned
+`into_events_with_resync(factory)` helper:
+
+- Internally opens a fresh `Connection<Nftables>` on
+  ENOBUFS and runs the snapshot.
+- Knows how to enumerate tables / chains / rules /
+  flowtables / sets (since 0.18, `NftablesEvent::NewSet`
+  is in the resync replay too).
+- Returns a `'static + Send` stream that's safe to forward
+  across thread boundaries.
+
+We don't need the ~80 LOC of `snapshot_dump(...)` helper
+the original plan called for, nor the per-namespace
+`Connection<Nftables>` factory boilerplate — both are
+upstream concerns now.
 
 #### 1.2 Tests
 

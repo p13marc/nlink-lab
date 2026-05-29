@@ -1,8 +1,10 @@
 # Plan 158a — nftables reconcile via `NftablesConfig`
 
-**Date:** 2026-05-27
-**Status:** Proposed (PR A of the Plan 158 arc)
-**Effort:** Medium (3–4 days, splittable into two phases)
+**Date:** 2026-05-27 (rewritten 2026-05-29 — nlink 0.18 lands)
+**Status:** Proposed (PR A of the Plan 158 arc) — **all
+upstream prerequisites now shipped in nlink 0.18.0**; Phase 0
+deleted; Phases 1 + 2 ship together.
+**Effort:** Medium (2–3 days now that Phase 0 is gone)
 **Priority:** P1 — closes the TODO that has lived in
 `deploy.rs:2906` since Plan 152 (April 2026), and gives
 nlink-lab a reconcile story comparable to the per-pair impair
@@ -142,33 +144,27 @@ documented compromise; the comment at
   NUL); our keys must stay ≤ 121 bytes — comfortable
   headroom for the `<kind>/<chain>/<index>` shape.
 
-### Caveat — `ChainType::Nat` is not exposed on `DeclaredChainBuilder` in 0.17
+### ✅ NAT-chain support resolved by nlink 0.18.0
 
-`DeclaredChainBuilder` (`config/types.rs:200-300`) exposes
-`.hook()`, `.priority()`, `.policy()` but NOT
-`.chain_type(ChainType::Nat)`. Today the apply path
-reconstructs a runtime `Chain` from the declared form at
-`config/apply.rs:100-112` and **does not** wire
-`chain_type`. The result is that NAT chains declared via
-`NftablesConfig` would default to `ChainType::Filter` —
-wrong for `prerouting`/`postrouting`.
+The Phase 0 upstream coordination called for in the original
+plan landed as **Plan 180 in nlink 0.18.0**:
+- `DeclaredChainBuilder::chain_type(ChainType)` —
+  `crates/nlink/src/netlink/nftables/config/types.rs` (the
+  new setter on `DeclaredChainBuilder`).
+- `DeclaredChain.chain_type: Option<ChainType>` field + getter.
+- `config/apply.rs` chain reconstruction threads
+  `chain_type` into the runtime `Chain` build.
 
-**Two options:**
+Plus a bonus `Chain::device(name)` /
+`DeclaredChainBuilder::device(name)` for `Family::Netdev`
+base chains hooked at `ingress`/`egress`. nlink-lab doesn't
+use netdev hooks yet but they're worth knowing about for
+future ingress filtering work.
 
-1. **Upstream a small patch to nlink** adding
-   `DeclaredChainBuilder::chain_type(ChainType)` +
-   threading it through `apply.rs` chain creation. Tiny
-   change (~20 LOC); fits the same Plan 158 cycle. This is
-   the right long-term answer.
-2. **Carry NAT chains imperatively** for the first cut —
-   wrap a `NftablesConfig` for firewall + leave NAT
-   chains on the existing `apply_nat` path. Less elegant
-   but ships before the upstream PR lands.
-
-Recommended order: open the upstream PR **first** (Plan
-158a Phase 0 — see below); land Phase 1 (firewall) +
-Phase 2 (NAT) against an `nlink = "0.18"` or `nlink = "0.17.x"`
-with that change.
+Net result: **Phase 1 (firewall reconcile) and Phase 2 (NAT
+reconcile) ship in the same cycle**, both via
+`NftablesConfig::diff().apply()`. No more split between
+declarative firewall + imperative NAT.
 
 ---
 
@@ -247,23 +243,10 @@ The discriminator slot exists to absorb future expansions
 
 ## Phases
 
-### Phase 0 — Upstream `DeclaredChainBuilder::chain_type` to nlink (0.5 day, P0)
+### ~~Phase 0 — Upstream `DeclaredChainBuilder::chain_type` to nlink~~ ✅ Shipped in nlink 0.18.0
 
-Open a small PR on nlink:
-
-- Add `chain_type: Option<ChainType>` to `DeclaredChain`
-  struct.
-- Add `.chain_type(ChainType)` builder method to
-  `DeclaredChainBuilder`.
-- Thread it through `config/apply.rs` where the imperative
-  `Chain` is reconstructed (~5 LOC).
-- Add a unit test: declare a NAT chain, assert the apply
-  path emits the correct `NFTA_CHAIN_TYPE` attribute.
-
-Block Plan 158a Phase 2 on this landing in an `nlink` patch
-release (0.17.1 or 0.18.0). If upstream wants to bundle with
-unrelated work, fall back to the "imperative NAT" path in
-Phase 2 with a TODO.
+Plan 180 in the nlink repo. Delete this phase from the
+plan — `chain_type` is available; Phase 2 is unblocked.
 
 ### Phase 1 — Firewall reconcile (1 day, P1)
 
@@ -403,17 +386,33 @@ async fn apply_nftables_diff(
 }
 ```
 
-### Phase 2 — NAT reconcile (1 day, P1) — depends on Phase 0
+### Phase 2 — NAT reconcile (1 day, P1) — unblocked by nlink 0.18
 
 Same pattern as 1.1/1.2 but for `apply_nat`. The keying
 scheme is `nlink-lab/nat/<chain>/<idx>/<kind>` to absorb the
 multi-variant NAT rule (`Masquerade` / `Snat` / `Dnat`)
 inside a single index slot if needed.
 
-Phase 2 depends on `DeclaredChainBuilder::chain_type(...)`
-being available in the nlink we depend on. If Phase 0 didn't
-land in time, ship Phase 1 alone and keep `apply_nat`
-imperative until 0.18.
+`nat_config_for_node` declares the chains via:
+
+```rust
+.chain("prerouting",  |c| {
+    c.hook(Hook::Prerouting)
+        .priority(Priority::DstNat)
+        .chain_type(ChainType::Nat)    // landed in nlink 0.18 (Plan 180)
+})
+.chain("postrouting", |c| {
+    c.hook(Hook::Postrouting)
+        .priority(Priority::SrcNat)
+        .chain_type(ChainType::Nat)
+})
+```
+
+Without `chain_type(ChainType::Nat)` the kernel would default
+the chains to `ChainType::Filter` and reject any
+`masquerade`/`snat`/`dnat` verdict with `EOPNOTSUPP` (the
+entire batch then rolls back). This is exactly the bug that
+motivated nlink Plan 180.
 
 ### Phase 3 — Initial-deploy unification (0.5 day, P2)
 
@@ -506,9 +505,13 @@ opens).
   independent of this.
 - **`PerHostLimiter::reconcile`.** The
   `apply_rate_limits_diff` path at `deploy.rs:2962` still
-  uses the coarse full-HTB-rebuild approach. Upstreaming a
-  mirror of `PerPeerImpairer::reconcile` for per-host
-  rate-limits is a separate plan (158-followup or 159).
+  uses the coarse full-HTB-rebuild approach. The reconcile
+  primitive **already exists upstream** at
+  `crates/nlink/src/netlink/ratelimit.rs:749` (mirror of
+  `PerPeerImpairer::reconcile`). Switching nlink-lab over
+  is a separate plan (159 candidate). The PR A cleanup
+  pass should at minimum delete the stale `deploy.rs:2956-
+  2961` comment that claimed this was missing.
 - **Multi-table support.** nlink-lab always writes to a
   single table `nlink-lab` per namespace. Supporting
   user-controlled multi-table configs is out of scope.
@@ -521,7 +524,7 @@ opens).
 
 | File | Change |
 |------|--------|
-| `Cargo.toml` (workspace) | `nlink = "0.17"` bump (paired with 158b/c/d into one commit). |
+| `Cargo.toml` (workspace) | `nlink = "0.18"` bump (paired with 158b/c/d into one commit). Already landed in `b60b5855..96a7f51c` chain — see the realignment commit. |
 | `crates/nlink-lab/src/deploy.rs` | New `firewall_config_for_node` + `nat_config_for_node` builders. Rewrite of `apply_firewall` (~1625-1709), `apply_nat` (~1827-1922), and `apply_nftables_diff` (~2900-2947) bodies. Delete the "full-rebuild" docstring. ~+250 / −100 LOC. |
 | `crates/nlink-lab/src/error.rs` | No change (existing `Error::Firewall` variant already fits). |
 | `crates/nlink-lab/src/validator.rs` | Add early validation of `match_expr` strings so deploy-time lowering can `.expect()` safely. |
@@ -530,10 +533,7 @@ opens).
 | `CHANGELOG.md` | New entry under `[Unreleased] → Changed` (see Acceptance). |
 | `docs/plans/README.md` | Mark Plan 158a status after ship. |
 
-### Upstream coordination (Phase 0, separate repo)
+### ~~Upstream coordination (Phase 0, separate repo)~~
 
-| File | Change |
-|------|--------|
-| `nlink crates/nlink/src/netlink/nftables/config/types.rs` | Add `chain_type: Option<ChainType>` field + `DeclaredChainBuilder::chain_type(ChainType)` method. |
-| `nlink crates/nlink/src/netlink/nftables/config/apply.rs` | Thread `chain_type` into the runtime `Chain` reconstruction (~5 LOC). |
-| `nlink CHANGELOG.md` | New entry under `[Unreleased] → Added`. |
+Shipped in nlink 0.18.0 — Plan 180. No separate-repo work
+required.

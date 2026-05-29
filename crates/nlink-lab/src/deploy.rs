@@ -33,7 +33,9 @@ enum NodeHandle {
 }
 
 impl NodeHandle {
-    fn connection<P: nlink::netlink::ProtocolState + Default>(
+    fn connection<
+        P: nlink::netlink::ProtocolState + Default + nlink::netlink::construction::SyncConstructible,
+    >(
         &self,
     ) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
         match self {
@@ -229,7 +231,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
         // Use nlink's nl80211 to enumerate PHYs and move them to namespaces
         use nlink::netlink::Nl80211;
-        let nl_conn = nlink::Connection::<Nl80211>::new()
+        let nl_conn = nlink::Connection::<Nl80211>::new_async()
+            .await
             .map_err(|e| Error::deploy_failed(format!("nl80211 connection: {e}")))?;
 
         let phys = nl_conn

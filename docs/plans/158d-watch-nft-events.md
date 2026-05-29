@@ -45,6 +45,36 @@ first and gate D on whether anyone asks for it.
 
 ---
 
+## Why nftables-only (RTNETLINK events not feasible in 0.18)
+
+A natural extension of "drift detection" would cover RTNETLINK
+events too — `Connection<Route>::subscribe` for link, address,
+route, neighbor multicast groups. nlink 0.18 ships
+event-subscription **only for nftables**. The audit confirmed:
+
+- No `Connection<Route>::subscribe(...)` or
+  `subscribe_all_with_resync(...)` method.
+- No `RouteEvent` typed enum analogous to `NftablesEvent`.
+- `into_events_with_resync(factory)` is gated to
+  `Connection<Nftables>` at
+  `crates/nlink/src/netlink/nftables/resync.rs:136-143`
+  — not generic over `P`.
+
+Two consequences for Plan 158d:
+
+1. **The watch command covers nftables drift only.** Useful
+   for the "did someone hand-edit the firewall?" case but not
+   the "did someone add a route or change an address?" case.
+2. **A future ask to upstream** could add
+   `Connection<Route>::subscribe(RouteGroup::All)` + a typed
+   `RouteEvent` enum, mirroring the nftables shape. Worth
+   raising in a follow-up upstream-asks round if 158d ships
+   and users want broader drift coverage.
+
+Until then, RTNETLINK drift detection means **polling** via
+`NetworkConfig::diff(&conn)` on an interval — much cheaper
+than a full deploy and idempotent, but not push-driven.
+
 ## Audit — nlink 0.18 primitives (citations to `/home/mpardo/git/rip/`)
 
 - `NftablesEvent` enum — **10 typed variants** now (the
@@ -555,9 +585,16 @@ for `wait_for_log_line_times_out_*`).
   events come at line rate; nlink-lab's debug use case is
   more "what's the firewall doing" than "what's flowing
   through" — the latter is what `capture` is for.
-- **Route / link multicast events.** Same shape applies —
-  add later if a user asks. RTNETLINK multicast is one
-  more `Connection<Route>` subscribe call.
+- **Route / link multicast events.** Not feasible in
+  nlink 0.18 — `Connection<Route>` lacks
+  `subscribe`/`into_events_with_resync`. Would need a
+  new upstream ask before 158d could absorb the RTNETLINK
+  side. If we want RTNETLINK drift detection without
+  upstream work, the path is **periodic polling**: spawn a
+  task per namespace that runs `NetworkConfig::diff(&conn)`
+  on an interval and emits synthesized events for the
+  delta. Acceptable for the "did someone edit a route by
+  hand?" case but not packet-rate suitable. Defer.
 - **Filtering at the kernel side.** The kernel doesn't
   filter nft multicast by table — all consumers receive
   all groups they subscribe to. Client-side filtering is

@@ -3,7 +3,9 @@
 **Date:** 2026-05-27 (rewritten 2026-05-29 — nlink 0.18 lands)
 **Status:** Proposed (PR A of the Plan 158 arc) — **all
 upstream prerequisites now shipped in nlink 0.18.0**; Phase 0
-deleted; Phases 1 + 2 ship together.
+deleted; Phases 1 + 2 ship together. Pairs with **158e**
+(NetworkConfig adoption, P1) and **158f** (Display-driven
+diff, P2) — see the umbrella plan for ship order.
 **Effort:** Medium (2–3 days now that Phase 0 is gone)
 **Priority:** P1 — closes the TODO that has lived in
 `deploy.rs:2906` since Plan 152 (April 2026), and gives

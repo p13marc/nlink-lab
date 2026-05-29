@@ -219,6 +219,37 @@ internal-quality release.
 
 ## Proposed PR breakdown
 
+The original plan called for four PRs (A–D). After the
+nlink 0.18 expansion plus breaking-compat freedom, three
+additional sub-plans landed: **158e** (`NetworkConfig`
+adoption), **158f** (Display-driven diff), and **158g**
+(`RateLimiter::reconcile` adoption — needs a tiny upstream
+PR like 158a Phase 0 did). The full arc is now seven PRs:
+
+| PR | Plan | Effort | Priority | Notes |
+|----|------|--------|----------|-------|
+| A | [158a](158a-nftables-reconcile.md) | M (2-3d) | P1 | Phase 0 deleted; NAT unblocked by 0.18. |
+| **E** | **[158e](158e-network-config-adoption.md)** | **L (5-7d)** | **P1** | **NEW.** RTNETLINK declarative deploy. Largest LOC drop. |
+| B | [158b](158b-error-ext-ack.md) | M (1-1.5d) | P2 | Rewritten with BC-break freedom. Full typed-source chain. |
+| **F** | **[158f](158f-display-driven-diff.md)** | **S (0.5d)** | **P2** | **NEW.** `LayeredDiff` + JSON envelope. |
+| **G** | **[158g](158g-rate-limit-reconcile.md)** | **S (1d)** | **P2** | **NEW.** Small upstream + adoption; closes last rebuild path. |
+| C | [158c](158c-from-parse-error.md) | XS (1-2h) | P3 | Janitorial sweep. |
+| D | [158d](158d-watch-nft-events.md) | M (2-3d) | P3 | nftables-only — RTNETLINK events not in upstream. |
+
+### Recommended ship order
+
+1. **158a + 158e in one bundle** — both depend on the
+   already-landed 0.18 features and 158b's typed-source
+   Error variants. They define the shape of the new
+   declarative deploy. Ship together so the deploy code
+   reaches the post-arc shape in one logical commit.
+2. **158b before 158f** — 158f's JSON envelope uses
+   158b's `ext_ack()` accessors for kernel-error layering.
+3. **158g** — independent; ships whenever the upstream
+   `RateLimiter::reconcile` PR lands.
+4. **158c** — independent janitorial.
+5. **158d** — independent power-user feature, last.
+
 ### PR A — nftables reconcile via `NftablesConfig` (P1, M effort)
 
 The big payoff. Concretely:

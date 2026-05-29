@@ -1,10 +1,10 @@
-# Plan 158c — Adopt `From<AddressParseError>` / `From<RouteParseError>`
+# Plan 158c — Parse-error ergonomics + `default_route()` + 0.18 cleanup sweep
 
-**Date:** 2026-05-27
+**Date:** 2026-05-27 (expanded 2026-05-29 — 0.18 default_route
+helpers + larger sweep enabled by BC-break freedom)
 **Status:** Proposed (PR C of the Plan 158 arc)
-**Effort:** XS (1–2 hours)
-**Priority:** P3 — cosmetic but cheap and ships in the same
-nlink-bump commit.
+**Effort:** S (3–4 hours)
+**Priority:** P3 — janitorial; ships alongside the nlink bump.
 
 ---
 
@@ -171,6 +171,28 @@ let prefix: u8 = prefix_str.parse()?;
 
 (when `parse_v4_cidr` is changed to return `Result<_,
 Error>` instead of `Result<_, String>` — see Phase 3).
+
+### Phase 2b — Adopt `Ipv4Route::default_route()` / `Ipv6Route::default_route()` (5 min)
+
+nlink 0.18 (Plan 184) ships:
+
+```rust
+nlink::netlink::route::Ipv4Route::default_route()  // 0.0.0.0/0
+nlink::netlink::route::Ipv6Route::default_route()  // ::/0
+```
+
+nlink-lab today uses the literal-string idiom at
+`deploy.rs:2294` and `deploy.rs:2322` (and two more in the
+diff/route code):
+
+```rust
+nlink::netlink::route::Ipv4Route::new("0.0.0.0", 0)
+nlink::netlink::route::Ipv6Route::new("::", 0)
+```
+
+Replace the four sites with `::default_route()`. The
+`Ipv4Route::new("0.0.0.0", 0)` form still works — this is
+purely a readability win.
 
 ### Phase 3 — Normalize `Result<_, String>` private helpers to `Result<_, Error>` (15 min)
 

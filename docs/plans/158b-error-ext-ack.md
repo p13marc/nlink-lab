@@ -1,369 +1,460 @@
-# Plan 158b — Surface kernel `ext_ack` in nlink-lab errors
+# Plan 158b — Typed `Error::source` chain + `ext_ack` surfacing
 
-**Date:** 2026-05-27 (revised 2026-05-29 — nlink 0.18 lands
-`Error::ext_ack()` accessor, simplifying Phase 3)
-**Status:** Proposed (PR B of the Plan 158 arc) — fully unblocked
-**Effort:** Small (0.5 day; Phase 3 is now trivial)
-**Priority:** P2 — quality-of-life win that turns a class of
-mystery `EPERM` / `EINVAL` failures into actionable one-liners.
+**Date:** 2026-05-29 (rewritten, BC-break freedom granted)
+**Status:** Proposed (PR B of the Plan 158 arc)
+**Effort:** Medium (1–1.5 days, breaking-change refactor)
+**Priority:** P2 — quality-of-life; turns mystery `EPERM` /
+`EINVAL` failures into actionable one-liners with full
+typed-chain fidelity (was P3 before BC-break freedom).
 
 ---
 
 ## TL;DR
 
-nlink 0.16 added `ext_ack: Option<String>` and
-`ext_ack_offset: Option<u32>` to both `Error::Kernel` and
-`Error::KernelWithContext`. The kernel populates these from
-`NETLINK_EXT_ACK` TLVs (`NLMSGERR_ATTR_MSG`,
-`NLMSGERR_ATTR_OFFS`) and they are *dramatically* more
-actionable than the bare errno. nlink's `Display` already
-renders them in the format:
+The original (pre-BC-freedom) version of 158b only added a
+`kernel_detail()` helper that walked
+`Error::Nlink(#[from] nlink::Error)` — the only variant
+that still carried a typed `nlink::Error`. Every other
+variant
+(`Error::Firewall { detail: String }`, `Error::Route {
+detail: String }`, `Error::NetlinkOp { detail: String }`,
+`Error::Namespace { detail: String }`,
+`Error::Container { detail: String }`) stringified the
+inner error at construction — so by the time we had an
+`Error::Firewall`, the kernel's `ext_ack` was already
+flattened into the human-readable string and the structured
+attribute was lost.
 
-```text
-kernel error: <strerror>(errno <N>): <ext_ack> (at request offset <K>)
+With BC-break freedom we can do the right thing:
+
+```rust
+// Before
+pub enum Error {
+    Firewall { node: String, detail: String },
+    Route    { dest: String, node: String, detail: String },
+    NetlinkOp { op: String, node: String, detail: String },
+    Namespace { op: &'static str, ns: String, detail: String },
+    Container { op: &'static str, name: String, detail: String },
+    // ...
+}
+
+// After
+pub enum Error {
+    Firewall { node: String, #[source] source: nlink::Error },
+    Route    { dest: String, node: String, #[source] source: nlink::Error },
+    NetlinkOp { op: String, node: String, #[source] source: nlink::Error },
+    Namespace { op: &'static str, ns: String, #[source] source: nlink::Error },
+    Container { op: &'static str, name: String, #[source] source: Box<dyn std::error::Error + Send + Sync> },
+    // ...
+}
 ```
 
-In nlink-lab today every kernel error is wrapped in one of
-our higher-level variants (`Error::Firewall`, `Error::Route`,
-`Error::NetlinkOp`, etc.) by formatting the inner error with
-`{e}` — which routes through nlink's `Display` impl and
-**already includes the ext_ack text** in the rendered
-string. So step one is just: bump nlink to 0.17 and
-verify the new content appears in our existing error
-messages.
+This gives us:
 
-The work in this PR is:
+1. **Full source-chain fidelity** — `err.source()`
+   recursively yields the underlying `nlink::Error` from
+   any nlink-lab variant, so `err.kernel_detail()` works
+   from the top-level error regardless of which wrapper
+   variant fired.
+2. **`Error::ext_ack()` callable on `nlink_lab::Error`
+   directly** — a 3-line forwarder that walks `source()`
+   until it finds an `nlink::Error` and returns
+   `e.ext_ack()` (the accessor that nlink 0.18 ships).
+3. **Cleaner `.map_err` sites** — `format!("…: {e}")` no
+   longer needed because `thiserror` renders the chain
+   automatically via `#[error("…")]`. About 50 `.map_err`
+   ceremonies in `deploy.rs` simplify.
+4. **No string-clobbering of typed data** — `errno`,
+   `ext_ack`, and offset are preserved through every
+   error wrapper for the JSON paths in `bins/lab` to
+   surface structurally.
 
-1. **Add the `_ =>` wildcard arms** that 0.16's
-   `#[non_exhaustive]` markers on `Error::Kernel` and
-   `Error::KernelWithContext` require. Without these the
-   code stops compiling.
-2. **Audit our few `match` sites** that inspect kernel
-   errors (e.g. `running.rs:1026`
-   `Err(nlink::Error::QdiscNotFound { .. }) => {}`) and add
-   the same wildcards if any of them destructure the
-   affected variants.
-3. **Optional:** add a top-level `Error::display_chain()`
-   helper that walks the source chain and surfaces
-   `ext_ack` even when the error was wrapped through more
-   than one layer of `Error::Firewall { detail }` strings —
-   this is useful for the `--json` error paths where we
-   want the structured `ext_ack` separately from the
-   already-flattened display string.
+Container errors don't always wrap an nlink::Error (could
+be `std::io::Error` from `docker exec`), so they get
+`Box<dyn Error + Send + Sync>` as a generalized source.
 
 ---
 
 ## Audit
 
-### nlink 0.17 surface (citations to `/home/mpardo/git/rip/`)
+### nlink 0.18 ext_ack accessors (citations to `/home/mpardo/git/rip/`)
 
-- `Error::Kernel` — `crates/nlink/src/netlink/error.rs:31`
-  (`#[non_exhaustive]`).
-- `Error::KernelWithContext` —
-  `crates/nlink/src/netlink/error.rs:49`
-  (`#[non_exhaustive]`).
-- Both variants carry `ext_ack: Option<String>` and
-  `ext_ack_offset: Option<u32>`.
-- Display rendering: `error.rs:268-302`
-  (`format_kernel` / `format_kernel_ctx`).
-- Helper getters on `nlink::Error`:
-  - `.errno() -> Option<i32>` — `error.rs:484`
-  - `.is_busy() -> bool` — `error.rs:474`
-  - `.is_try_again() -> bool` — `error.rs:576`
-  - **`.ext_ack() -> Option<&str>`** — landed in nlink 0.18
-    as Plan 182 (was wishlist W3 in our upstream-asks report).
-  - **`.ext_ack_offset() -> Option<u32>`** — same.
-- Source parser: `crates/nlink/src/netlink/message.rs:329`
-  (`NlMsgError::parsed_ext_ack`) reads
-  `NLMSGERR_ATTR_MSG` (TLV type 1) and
-  `NLMSGERR_ATTR_OFFS` (TLV type 2).
+- `Error::Kernel { errno, message, ext_ack, ext_ack_offset }`
+  — `crates/nlink/src/netlink/error.rs:31` (`#[non_exhaustive]`).
+- `Error::KernelWithContext { operation, errno, message,
+  ext_ack, ext_ack_offset }` — `error.rs:49`.
+- `Error::ext_ack(&self) -> Option<&str>` — landed in
+  nlink 0.18 (Plan 182). Walks `Kernel` and
+  `KernelWithContext` variants.
+- `Error::ext_ack_offset(&self) -> Option<u32>` — same.
+- `Error::errno(&self) -> Option<i32>` — `error.rs:484`.
+- `Display` impl renders `ext_ack` inline already
+  (`error.rs:268-302`).
 
-### nlink-lab sites that touch `nlink::Error` directly
+### nlink-lab error variants that wrap kernel errors today
 
-```
-crates/nlink-lab/src/error.rs:22
-    Nlink(#[from] nlink::Error)
+`crates/nlink-lab/src/error.rs` defines 17 variants. The
+ones currently using a `detail: String` shape that should
+flip to typed sources:
 
-crates/nlink-lab/src/running.rs:1026
-    Err(nlink::Error::QdiscNotFound { .. }) => {}
-```
+| Variant | Today | After |
+|---------|-------|-------|
+| `Nlink(#[from] nlink::Error)` | typed | unchanged |
+| `Namespace { op, ns, detail }` | string | `{ op, ns, source: nlink::Error }` |
+| `NetlinkOp { op, node, detail }` | string | `{ op, node, source: nlink::Error }` |
+| `Route { dest, node, detail }` | string | `{ dest, node, source: nlink::Error }` |
+| `Firewall { node, detail }` | string | `{ node, source: nlink::Error }` |
+| `Container { op, name, detail }` | string | `{ op, name, source: Box<dyn Error + Send + Sync> }` (heterogeneous) |
+| `State { op, detail, path }` | string | leave — wraps mostly `io::Error` (already typed in chain) |
+| `Capture(String)` | string | leave — netring errors, not nlink |
+| `DeployFailed(String)` | string | leave — generic catch-all |
+| `Validation(String)` | string | leave — domain error, no source |
+| `InvalidTopology(String)` | string | leave — domain error |
+| `Timeout(Duration)` | typed | unchanged |
+| `Io(#[from] io::Error)` | typed | unchanged |
+| `Json(#[from] serde_json::Error)` | typed | unchanged |
+| `AlreadyExists` / `NotFound` / `NodeNotFound` / `InvalidEndpoint` | typed | unchanged |
+| `NllParse(String)` / `NllDiagnostic(Box<…>)` | typed | unchanged |
 
-The `QdiscNotFound` match arm at `running.rs:1026` is on a
-variant that is **not** `#[non_exhaustive]` in 0.17, so it
-keeps compiling. There are no other direct destructuring
-matches on `nlink::Error::Kernel{…}` or
-`Error::KernelWithContext{…}` in nlink-lab — the
-`Nlink(#[from] nlink::Error)` `#[from]` derive on
-`nlink_lab::Error` propagates the whole variant
-opaquely. Stays compatible without change.
+**Five variants flip**: `Namespace`, `NetlinkOp`, `Route`,
+`Firewall`, `Container`. Each currently has ~5-15
+`.map_err(|e| Error::* { …, detail: format!("…: {e}") })`
+call sites in `deploy.rs` / `running.rs`. Total ~50 call
+sites to simplify.
 
-### Where ext_ack already shows up "for free" after the bump
+### Call-site shape today
 
-Every `.map_err(|e| Error::Firewall { detail: format!("…: {e}"), … })`
-pattern in `deploy.rs` walks through `nlink::Error`'s
-`Display` impl on its way to our `detail` string. That impl
-already includes `ext_ack` if present — so an existing
-firewall failure log like:
-
-```text
-apply firewall on node 'router': diff: kernel error: operation not permitted (errno 1)
-```
-
-becomes (after the bump, no nlink-lab code change):
-
-```text
-apply firewall on node 'router': diff: kernel error: operation not permitted (errno 1): netlink: Could not process rule: Operation not permitted (at request offset 16)
+```rust
+nft_conn.add_table(...).await.map_err(|e| {
+    Error::Firewall {
+        node: node_name.into(),
+        detail: format!("failed to create nftables table: {e}"),
+    }
+})?;
 ```
 
-That's the main win. PR B is mostly verifying it lands
-without regressions + the small audit below.
+### Call-site shape after
 
-### `--json` error paths
+```rust
+nft_conn.add_table(...).await.map_err(|e| Error::Firewall {
+    node: node_name.into(),
+    source: e,
+})?;
+```
 
-In a few places nlink-lab emits JSON-shaped error envelopes
-(`bins/lab/src/main.rs` — `deploy --json`, `inspect --json`,
-`render --json`, `diagnose --json`). Today these flatten the
-error to a single `error_message` string. After the bump,
-the string is richer, but the structured `ext_ack` is still
-buried inside it.
+The `failed to create nftables table` context moves into
+the variant's `#[error]` template:
 
-**Optional improvement:** add an
-`ext_ack: Option<String>` field to the JSON error envelope
-when the underlying error is a `nlink::Error::Kernel{…}` or
-`KernelWithContext{…}`. This is a downstream consumer
-ergonomic — tools like `jq` can then surface
-`.error.ext_ack` directly.
+```rust
+#[error("apply firewall on node '{node}'")]
+Firewall { node: String, #[source] source: nlink::Error },
+```
+
+`Display` renders as `apply firewall on node 'router'`
+plus the source chain (`thiserror` walks `source()`
+automatically with `{:#}` / `Report` shaping).
 
 ---
 
 ## Goals
 
-1. **Compile against nlink 0.17** with no new `match`-arm
-   ceremony beyond what's strictly required.
-2. **Verify ext_ack flows through** existing error messages
-   by running an integration test that triggers a kernel
-   `EINVAL` deliberately (e.g. attempt to add a route to a
-   non-existent interface) and asserts the human-readable
-   error string contains the kernel's `NLMSGERR_ATTR_MSG`
-   text.
-3. **Decide on the structured-ext_ack JSON surface.** Either
-   add it (small) or document why we punt.
+1. **Five variants flip** to typed-source shape.
+2. **`Error::ext_ack(&self) -> Option<&str>`** + **
+   `Error::ext_ack_offset(&self) -> Option<u32>`** + **
+   `Error::errno(&self) -> Option<i32>`** inherent methods
+   walk the source chain.
+3. **JSON envelope** in `bins/lab` emits structured
+   `errno` / `ext_ack` / `ext_ack_offset` / `error_chain`
+   fields for all 4 commands using `--json` error
+   reporting (deploy, status, render, diagnose).
+4. **All ~50 affected `.map_err` sites** simplified to
+   match the new variant shapes.
+5. **Public API change** documented as a breaking change
+   in CHANGELOG `[Unreleased]` under "Library API breaks."
 
 ---
 
 ## Phases
 
-### Phase 1 — nlink bump + compile sanity (0.1 day)
+### Phase 1 — Variant refactor + inherent accessors (0.5 day)
 
-Already done as part of the umbrella Plan 158 dep bump.
-This phase is just: build, run existing tests, confirm
-nothing breaks. No code change.
-
-### Phase 2 — Integration smoke test (0.2 day)
-
-Add a single root-gated integration test that proves
-`ext_ack` is being surfaced end-to-end.
+#### 1.1 `crates/nlink-lab/src/error.rs`
 
 ```rust
-// crates/nlink-lab/tests/integration.rs
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // ... unchanged variants ...
 
-#[lab_test(topology = ext_ack_smoke_topology)]
-async fn kernel_ext_ack_surfaces_in_error(lab: RunningLab) {
-    // Deliberately add a route via a non-existent interface.
-    // The kernel rejects with EINVAL + a human-readable
-    // NLMSGERR_ATTR_MSG explaining which attribute failed.
-    let result = lab
-        .exec("a", "ip", &["route", "add", "10.99.0.0/24", "dev", "nope0"])
-        .unwrap();
-    assert_ne!(result.exit_code, 0);
-    // The `ip` command renders kernel errors itself; this
-    // path verifies our infrastructure isn't filtering them.
-    assert!(
-        result.stderr.contains("Cannot find device") || result.stderr.contains("No such device"),
-        "expected kernel detail in stderr, got: {}",
-        result.stderr
-    );
+    #[error("{op} namespace '{ns}'")]
+    Namespace {
+        op: &'static str,
+        ns: String,
+        #[source]
+        source: nlink::Error,
+    },
+
+    #[error("{op} on node '{node}'")]
+    NetlinkOp {
+        op: String,
+        node: String,
+        #[source]
+        source: nlink::Error,
+    },
+
+    #[error("add route '{dest}' on node '{node}'")]
+    Route {
+        dest: String,
+        node: String,
+        #[source]
+        source: nlink::Error,
+    },
+
+    #[error("apply firewall on node '{node}'")]
+    Firewall {
+        node: String,
+        #[source]
+        source: nlink::Error,
+    },
+
+    #[error("{op} container '{name}'")]
+    Container {
+        op: &'static str,
+        name: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
+
+    // ... unchanged ...
 }
 
-fn ext_ack_smoke_topology() -> nlink_lab::Topology {
-    Lab::new("ext-ack-smoke").node("a", |n| n).build()
-}
-```
-
-This test doesn't actually exercise nlink-lab's *own* error
-path — it exercises `iproute2` inside the namespace. For a
-library-internal test, see Phase 4.
-
-### Phase 3 — Optional `--json` ext_ack surface (0.1 day)
-
-Walk every `--json` error path in `bins/lab/src/main.rs`
-and emit (where applicable) a structured shape:
-
-```json
-{
-  "error": "apply firewall on node 'router': …",
-  "ext_ack": "netlink: Could not process rule: Operation not permitted",
-  "ext_ack_offset": 16,
-  "errno": 1
-}
-```
-
-With the new nlink 0.18 accessors, the helper collapses to:
-
-```rust
-// crates/nlink-lab/src/error.rs (additions)
 impl Error {
-    /// Extract `(errno, ext_ack, ext_ack_offset)` if this error
-    /// (or any error in its source chain) is a kernel error
-    /// carrying NLMSGERR_ATTR_MSG / NLMSGERR_ATTR_OFFS.
-    pub fn kernel_detail(&self) -> Option<KernelDetail<'_>> {
+    /// Walk the source chain looking for a kernel
+    /// `NLMSGERR_ATTR_MSG` payload. Returns the first
+    /// `ext_ack` string found, or `None` if no kernel
+    /// error is in the chain.
+    pub fn ext_ack(&self) -> Option<&str> {
         let mut src: &dyn std::error::Error = self;
         loop {
             if let Some(e) = src.downcast_ref::<nlink::Error>() {
-                if let Some(errno) = e.errno() {
-                    return Some(KernelDetail {
-                        errno,
-                        ext_ack: e.ext_ack(),
-                        ext_ack_offset: e.ext_ack_offset(),
-                    });
+                if let Some(s) = e.ext_ack() {
+                    return Some(s);
                 }
             }
-            match src.source() {
-                Some(next) => src = next,
-                None => return None,
+            src = src.source()?;
+        }
+    }
+
+    /// Companion to `ext_ack()` — returns the offset (if
+    /// any) into the request payload where the kernel said
+    /// the rejected attribute lives.
+    pub fn ext_ack_offset(&self) -> Option<u32> {
+        let mut src: &dyn std::error::Error = self;
+        loop {
+            if let Some(e) = src.downcast_ref::<nlink::Error>() {
+                if let Some(o) = e.ext_ack_offset() {
+                    return Some(o);
+                }
             }
+            src = src.source()?;
+        }
+    }
+
+    /// Returns the kernel errno from the source chain, if
+    /// any.
+    pub fn errno(&self) -> Option<i32> {
+        let mut src: &dyn std::error::Error = self;
+        loop {
+            if let Some(e) = src.downcast_ref::<nlink::Error>() {
+                if let Some(n) = e.errno() {
+                    return Some(n);
+                }
+            }
+            src = src.source()?;
         }
     }
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct KernelDetail<'a> {
-    pub errno: i32,
-    pub ext_ack: Option<&'a str>,
-    pub ext_ack_offset: Option<u32>,
-}
 ```
 
-Three benefits over the pattern-match form the original
-plan called for:
+The three accessors deliberately mirror nlink 0.18's
+inherent shape, so consumers calling `err.ext_ack()` get
+the same semantic on either type.
 
-1. No `_ =>` wildcard ceremony (the `#[non_exhaustive]`
-   attribute on the variants is invisible to us).
-2. Future-proof — any new kernel-error variant added to nlink
-   that wires `errno()` automatically routes through.
-3. Half the LOC; the typed `KernelDetail` shape is preserved
-   for serde-friendly JSON emission.
-
-Caveat: nlink-lab's `Error::Firewall { detail: String }` and
-similar variants stringify the inner error early — by the
-time we have an `Error::Firewall`, the `nlink::Error` is
-*gone*. To preserve the typed chain we'd need to switch
-the variant to carry `source: Box<dyn Error>`. Out of
-scope for PR B (too invasive); document as Plan 158b
-follow-up.
-
-For now: only the top-level `Nlink(#[from] nlink::Error)`
-variant carries the typed chain. JSON envelopes can route
-through `kernel_detail()` and it'll succeed for that one
-variant — better than nothing, and the firewall/route paths
-get the ext_ack via the flattened `Display` string anyway
-(which now includes `ext_ack` text via 0.16's `Display`
-impl).
-
-### Phase 4 — Library-internal integration test (0.1 day)
-
-Verify `kernel_detail()` works on a real failure that
-flows through `nlink_lab::Error::Nlink(…)`.
+#### 1.2 Update tests
 
 ```rust
-// crates/nlink-lab/tests/integration.rs
-
-#[lab_test(topology = lib_ext_ack_topology)]
-async fn library_kernel_error_carries_ext_ack(lab: RunningLab) {
-    use nlink::netlink::link::DummyLink;
-
-    // Open a connection inside the lab's namespace.
-    let handle = lab.namespace_handle_for("a").unwrap();
-    let conn: nlink::Connection<nlink::Route> = handle.connection().unwrap();
-
-    // Add a dummy link, then try to add it again — the second
-    // call yields EEXIST + a kernel ext_ack message.
-    let link = DummyLink::new("dup-iface");
-    conn.add_link(link).await.unwrap();
-    let link2 = DummyLink::new("dup-iface");
-    let err = conn.add_link(link2).await.unwrap_err();
-
-    // Wrap into our error type, then extract.
-    let lab_err: nlink_lab::Error = err.into();
-    let detail = lab_err.kernel_detail()
-        .expect("kernel error must surface detail");
-    assert_eq!(detail.errno, 17, "EEXIST");
-    assert!(
-        detail.ext_ack.is_some(),
-        "ext_ack should be populated by NLMSGERR_ATTR_MSG"
-    );
-    // The display string should also contain the ext_ack text
-    // (passthrough through nlink::Error's Display impl).
-    let rendered = format!("{lab_err}");
-    let ack = detail.ext_ack.unwrap();
-    assert!(
-        rendered.contains(ack),
-        "Display should include ext_ack: {rendered}"
-    );
+#[test]
+fn ext_ack_walks_through_firewall_variant() {
+    let kernel = nlink::Error::Kernel {
+        errno: 1,
+        message: "operation not permitted".into(),
+        ext_ack: Some("netlink: Could not process rule".into()),
+        ext_ack_offset: Some(16),
+    };
+    let lab_err = Error::Firewall {
+        node: "router".into(),
+        source: kernel,
+    };
+    assert_eq!(lab_err.ext_ack(), Some("netlink: Could not process rule"));
+    assert_eq!(lab_err.ext_ack_offset(), Some(16));
+    assert_eq!(lab_err.errno(), Some(1));
 }
 
-fn lib_ext_ack_topology() -> nlink_lab::Topology {
-    Lab::new("lib-ext-ack").node("a", |n| n).build()
+#[test]
+fn ext_ack_walks_through_container_variant_with_io_source() {
+    let io = std::io::Error::new(std::io::ErrorKind::Other, "docker exec failed");
+    let lab_err = Error::Container {
+        op: "exec",
+        name: "router".into(),
+        source: Box::new(io),
+    };
+    assert_eq!(lab_err.ext_ack(), None);  // no nlink::Error in chain
+    assert_eq!(lab_err.errno(), None);
+}
+
+#[test]
+fn ext_ack_none_when_no_kernel_in_chain() {
+    let lab_err = Error::Validation("bad name".into());
+    assert_eq!(lab_err.ext_ack(), None);
 }
 ```
 
-Skip this if Phase 3's `kernel_detail()` helper is descoped.
+### Phase 2 — Migrate all ~50 `.map_err` call sites (0.5 day)
+
+Mechanical sweep. Grep for each of the 5 affected
+variants:
+
+```bash
+rg 'Error::Firewall \{' crates/nlink-lab/src bins/lab/src
+rg 'Error::Route \{'    crates/nlink-lab/src bins/lab/src
+rg 'Error::NetlinkOp \{' crates/nlink-lab/src bins/lab/src
+rg 'Error::Namespace \{' crates/nlink-lab/src bins/lab/src
+rg 'Error::Container \{' crates/nlink-lab/src bins/lab/src
+```
+
+For each:
+
+- Replace `detail: format!("…: {e}")` with `source: e`
+  (drop the format-string context since the variant's
+  `#[error]` template already carries node/op/dest).
+- If the context was load-bearing (rare — e.g. the format
+  string distinguishes between two `add_link` failures
+  in the same function), introduce a more specific
+  variant. Audit: there are probably ≤5 such call sites.
+- `Container { detail }` sites either route through
+  `nlink::Error` (use the typed source directly) or
+  through `std::io::Error` (`Box::new(e)`); pick per
+  site.
+
+Expected cleanup: ~50 `format!("…: {e}")` ceremonies
+removed; ~150 lines net.
+
+### Phase 3 — JSON envelope wiring in `bins/lab` (0.25 day)
+
+In each `--json` error path
+(`deploy --json`, `status --json`, `render --json`,
+`diagnose --json`), serialize a structured error:
+
+```rust
+fn render_error_json(err: &nlink_lab::Error) -> serde_json::Value {
+    let mut chain = Vec::new();
+    let mut src: &dyn std::error::Error = err;
+    loop {
+        chain.push(src.to_string());
+        match src.source() {
+            Some(next) => src = next,
+            None => break,
+        }
+    }
+    serde_json::json!({
+        "error": err.to_string(),
+        "error_chain": chain,
+        "errno": err.errno(),
+        "ext_ack": err.ext_ack(),
+        "ext_ack_offset": err.ext_ack_offset(),
+    })
+}
+```
+
+Document this shape under `docs/json-schemas/error.schema.json`.
+
+### Phase 4 — Documentation (0.25 day)
+
+- `docs/TROUBLESHOOTING.md` — new section "Reading nlink-lab
+  error output" with examples of human-readable + JSON
+  shapes.
+- `CHANGELOG.md` `[Unreleased]` entry under "Library API
+  breaks":
+  > `Error::{Namespace, NetlinkOp, Route, Firewall,
+  > Container}` now carry `#[source] source: nlink::Error`
+  > (or `Box<dyn Error>` for `Container`) instead of
+  > `detail: String`. Match arms that destructure these
+  > variants need updating. New inherent methods
+  > `Error::ext_ack()` / `ext_ack_offset()` / `errno()`
+  > walk the source chain.
+- `CHANGELOG.md` under "Added":
+  > `Error::ext_ack()`, `Error::ext_ack_offset()`,
+  > `Error::errno()` inherent accessors mirror the
+  > nlink 0.18 shape but walk through nlink-lab's
+  > wrapper variants.
 
 ---
 
 ## Tests
 
-| Test | Phase | Description | Gated |
-|------|-------|-------------|-------|
-| Existing tests (regression) | 1 | All 393 lib tests + ~43 integration tests pass against nlink 0.17. | (uses CI's existing matrix) |
-| `kernel_ext_ack_surfaces_in_error` | 2 | Run `iproute2` inside lab, assert ENOENT for "Cannot find device" surfaces. | root |
-| `library_kernel_error_carries_ext_ack` | 4 (opt.) | Trigger EEXIST via library API, assert `kernel_detail().ext_ack` populated. | root |
-| `kernel_detail_walks_source_chain` | 3 (opt.) | Unit test on the helper using a hand-rolled `nlink::Error::Kernel { ext_ack: Some(…), … }`. | none |
+### Unit
+
+5 new tests in `crates/nlink-lab/src/error.rs`:
+
+| Test | Description |
+|------|-------------|
+| `ext_ack_walks_through_firewall_variant` | Top-level `Error::Firewall { source }` returns the kernel's `ext_ack` string. |
+| `ext_ack_walks_through_route_variant` | Same for `Error::Route`. |
+| `ext_ack_walks_through_netlinkop_variant` | Same for `Error::NetlinkOp`. |
+| `ext_ack_walks_through_container_variant_with_io_source` | `Box<dyn Error>` chain that doesn't contain `nlink::Error` returns `None`. |
+| `ext_ack_none_when_no_kernel_in_chain` | `Error::Validation("...")` returns `None`. |
+
+### Integration (root-gated)
+
+| Test | Description |
+|------|-------------|
+| `ext_ack_surfaces_from_real_kernel_error` | Trigger a real kernel `EEXIST` (add a duplicate dummy link). Assert the resulting `nlink_lab::Error::NetlinkOp.ext_ack()` is `Some(_)` and contains kernel text. |
+| `ext_ack_json_envelope_shape` | Run `nlink-lab deploy --json` on a topology that fails with a kernel error. Assert stdout JSON has `errno`, `ext_ack`, `ext_ack_offset` fields. |
 
 ---
 
 ## Acceptance
 
-- nlink-lab compiles against `nlink = "0.17"`.
-- An apparent existing firewall error message now includes
-  the kernel's `ext_ack` text — verified by intentionally
-  breaking a deploy (e.g. inject a rule the kernel will
-  reject) and reading the error.
-- If Phase 3 lands: `kernel_detail()` helper documented in
-  `Error`'s rustdoc + JSON error envelopes in `bins/lab`
-  carry `errno` / `ext_ack` / `ext_ack_offset` fields when
-  the underlying error is a `nlink::Error::Kernel*` variant.
-- CHANGELOG entry under **Changed** (umbrella with 158a):
-  > Kernel error messages now include `NETLINK_EXT_ACK`
-  > detail strings inline. Failed `apply` and `deploy`
-  > operations surface the kernel's actionable text
-  > (e.g. "netlink: Could not process rule: Operation not
-  > permitted") instead of the bare errno.
+- All `.map_err(|e| Error::* { ..., detail: format!("...: {e}") })`
+  patterns in `crates/nlink-lab/src` and `bins/lab/src` for
+  the 5 affected variants are gone.
+- `Error::ext_ack()` / `ext_ack_offset()` / `errno()`
+  walk the source chain.
+- `nlink-lab deploy --json` on a deliberately-failing
+  topology surfaces structured `errno` / `ext_ack`.
+- 7 new tests pass (5 unit + 2 integration).
+- CHANGELOG entries under both "Library API breaks" and
+  "Added".
 
 ---
 
 ## Out of scope
 
-- **Typed-chain `nlink_lab::Error` rework.** Switching
-  `Error::Firewall { detail: String }` to
-  `Error::Firewall { source: Box<dyn Error + Send + Sync> }`
-  is the right answer for full ext_ack fidelity but breaks
-  every caller. Defer to Plan 159+ if there's demand.
-- **Localizing ext_ack.** Kernel emits English strings;
-  nlink-lab is also English. No translation surface.
-- **Stripping ext_ack from `--quiet` mode.** Current
-  `--quiet` only suppresses informational output; errors
-  still go to stderr. No change.
+- **Variant unification.** The 5 variants stay distinct
+  (`Firewall`, `Route`, `NetlinkOp`, `Namespace`,
+  `Container`) — they carry different context fields and
+  serve different rendering needs. A `Source` variant
+  that collapses them was considered; rejected because
+  losing the per-variant context (`node`, `dest`, `op`)
+  is a downgrade.
+- **Migrating `DeployFailed(String)` / `Capture(String)` /
+  `Validation(String)` to typed sources.** These are
+  catch-all / domain variants without a natural source.
+  Stay as-is.
+- **`#[non_exhaustive]` on `nlink_lab::Error`.** We
+  already break BC here — adding `#[non_exhaustive]`
+  defensively for future-proofing is a separate
+  judgment call (and yes, we should — but it's a one-
+  line addition that can land alongside or after).
 
 ---
 
@@ -371,8 +462,12 @@ Skip this if Phase 3's `kernel_detail()` helper is descoped.
 
 | File | Change |
 |------|--------|
-| `Cargo.toml` (workspace) | `nlink = "0.17"` bump (shared with 158a). |
-| `crates/nlink-lab/src/error.rs` | (Optional Phase 3) Add `kernel_detail()` + `KernelDetail` struct. ~+40 LOC. |
-| `bins/lab/src/main.rs` | (Optional Phase 3) Thread `kernel_detail()` into the 4 `--json` error envelopes. ~+20 LOC. |
-| `crates/nlink-lab/tests/integration.rs` | 1–2 new `#[lab_test]` integration tests (Phase 2 + Phase 4). |
-| `CHANGELOG.md` | Shared umbrella entry with 158a (see Acceptance). |
+| `crates/nlink-lab/src/error.rs` | Refactor 5 variants; add 3 inherent accessors; 5 new unit tests. ~+80 / −20 LOC. |
+| `crates/nlink-lab/src/deploy.rs` | Migrate ~30 call sites. ~−100 LOC (format-string cleanup). |
+| `crates/nlink-lab/src/running.rs` | Migrate ~10 call sites. |
+| `crates/nlink-lab/src/state.rs` | Migrate ~5 call sites. |
+| `bins/lab/src/main.rs` | JSON envelope helper + 4 dispatch path updates. ~+30 / −10 LOC. |
+| `crates/nlink-lab/tests/integration.rs` | 2 new root-gated tests. |
+| `docs/json-schemas/error.schema.json` | NEW — JSON Schema for the structured error envelope. |
+| `docs/TROUBLESHOOTING.md` | New section. |
+| `CHANGELOG.md` | New entries (Library API breaks + Added). |

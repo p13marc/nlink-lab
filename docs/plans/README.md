@@ -4,20 +4,32 @@ Implementation plans for nlink-lab.
 
 ## Active plans
 
-The Plan 158 arc — adopt nlink 0.16/0.17. Each sub-plan ships
-as its own PR; all share the workspace `nlink = "0.17"` bump.
+The Plan 158 arc — adopt nlink 0.16/0.17/0.18. Each sub-plan
+ships as its own PR; the workspace `nlink = "0.18"` bump is
+already in. With breaking-compat freedom granted, the arc
+expanded from 4 PRs to 7.
 
 | Plan | Title | Effort | Priority |
 |------|-------|--------|----------|
-| [158](158-nlink-0.16-0.17-adoption.md) | Umbrella report: what nlink 0.16/0.17 give us | — | — |
-| [158a](158a-nftables-reconcile.md) | Per-rule nftables reconcile via `NftablesConfig` + atomic `apply()` | M (3–4d) | P1 |
-| [158b](158b-error-ext-ack.md) | Surface kernel `ext_ack` (NLMSGERR_ATTR_MSG) in error messages | S (0.5d) | P2 |
-| [158c](158c-from-parse-error.md) | `From<AddrParseError>` / `From<ParseIntError>` ergonomics sweep | XS (1–2h) | P3 |
-| [158d](158d-watch-nft-events.md) | `nlink-lab watch <lab>` — push-driven nftables event tail | L (4–5d) | P3 |
+| [158](158-nlink-0.16-0.17-adoption.md) | Umbrella — what 0.16/0.17/0.18 give us; ship order | — | — |
+| [158a](158a-nftables-reconcile.md) | Per-rule nftables reconcile via `NftablesConfig` + atomic `apply()` | M (2-3d) | P1 |
+| [158e](158e-network-config-adoption.md) | **NEW** — declarative RTNETLINK deploy via `NetworkConfig`; collapses 8 of 18 deploy steps | L (5-7d) | P1 |
+| [158b](158b-error-ext-ack.md) | Typed `Error::source` chain + `ext_ack()` accessor (BC-break) | M (1-1.5d) | P2 |
+| [158f](158f-display-driven-diff.md) | **NEW** — `LayeredDiff` using upstream `Display for *Diff` | S (0.5d) | P2 |
+| [158g](158g-rate-limit-reconcile.md) | **NEW** — adopt `RateLimiter::reconcile` (small upstream + swap) | S (1d) | P2 |
+| [158c](158c-from-parse-error.md) | Parse-error ergonomics + `default_route()` adoption | S (3-4h) | P3 |
+| [158d](158d-watch-nft-events.md) | `nlink-lab watch <lab>` — push-driven nftables event tail (RTNETLINK side not feasible upstream) | M (2-3d) | P3 |
 
-Recommended ship order: A → B → C in a single nlink-bump
-commit; D only if a user asks. See the umbrella plan for
-the rationale.
+Recommended ship order: **A + E in one bundle** (declarative
+deploy shape) → **B** (typed Error chain) → **F** (Display
+shape uses B's `ext_ack` accessor) → **G** (independent, ships
+when upstream `RateLimiter::reconcile` lands) → **C** (janitor)
+→ **D** (power-user, last). See the umbrella plan for the
+rationale.
+
+After the arc lands, nlink-lab's deploy has zero "delete-
+then-rebuild" reconcile paths — every resource layer is
+incremental.
 
 ## Completed
 

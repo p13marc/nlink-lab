@@ -598,23 +598,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     // 10b).
                 }
                 Some(InterfaceKind::Vlan) => {
-                    let parent = iface_config.parent.as_deref().ok_or_else(|| {
-                        Error::invalid_topology(format!(
-                            "vlan interface '{iface_name}' on node '{node_name}' missing parent"
-                        ))
-                    })?;
-                    let vid = iface_config.vni.ok_or_else(|| {
-                        Error::invalid_topology(format!(
-                            "vlan interface '{iface_name}' on node '{node_name}' missing vni (VLAN ID)"
-                        ))
-                    })? as u16;
-                    conn.add_link(nlink::netlink::link::VlanLink::new(iface_name, parent, vid))
-                        .await
-                        .map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to create vlan '{iface_name}' on node '{node_name}': {e}"
-                            ))
-                        })?;
+                    // Plan 158e Slice 3 — VLAN creation absorbed
+                    // into the declarative NetworkConfig path
+                    // (step 11c).
                 }
                 // loopback or no kind — skip creation (lo exists already, addresses set in step 9)
                 None => {}
@@ -1872,10 +1858,42 @@ fn topology_to_network_config(
                     cfg = cfg.link(member, move |b| b.master(&bond_name));
                 }
             }
-            // Vlan, Vxlan, Loopback, None stay imperative for now —
-            // they each need topology shapes (parent iface, VNI) or
-            // existing-link semantics that the declarative slice
-            // would have to re-engineer. Slice 3 candidates.
+            Some(InterfaceKind::Vlan) => {
+                // Plan 158e Slice 3 — VLAN sub-interfaces are a
+                // clean single-namespace LinkBuilder fit. Parent
+                // iface (which must already exist) + VID is exactly
+                // what `LinkBuilder::vlan` consumes.
+                let parent = match iface_config.parent.as_deref() {
+                    Some(p) => p.to_string(),
+                    None => {
+                        return Err(Error::invalid_topology(format!(
+                            "vlan interface '{iface_name}' on node \
+                             '{node_name}' missing parent"
+                        )));
+                    }
+                };
+                let vid = match iface_config.vni {
+                    Some(v) => v as u16,
+                    None => {
+                        return Err(Error::invalid_topology(format!(
+                            "vlan interface '{iface_name}' on node \
+                             '{node_name}' missing vni (VLAN ID)"
+                        )));
+                    }
+                };
+                let mtu = iface_config.mtu;
+                cfg = cfg.link(iface_name, move |mut b| {
+                    b = b.vlan(&parent, vid).up();
+                    if let Some(m) = mtu {
+                        b = b.mtu(m);
+                    }
+                    b
+                });
+            }
+            // Vxlan, Loopback, None stay imperative for now. Vxlan
+            // needs `local` + `port` knobs that upstream
+            // `LinkBuilder::vxlan` doesn't yet expose. Slice 4+
+            // pending upstream extension.
             _ => {}
         }
     }
@@ -4308,6 +4326,82 @@ node host
         assert!(
             names.contains(&"eth0") && names.contains(&"eth1"),
             "expected bond members 'eth0' + 'eth1' declared for master assignment, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn network_config_vlan_iface_declares_parent_and_vid() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "eth0.42".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vlan),
+                parent: Some("eth0".into()),
+                vni: Some(42),
+                ..Default::default()
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        assert!(
+            names.contains(&"eth0.42"),
+            "expected 'eth0.42' vlan link, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn network_config_vlan_missing_parent_errors() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "v0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vlan),
+                parent: None,
+                vni: Some(10),
+                ..Default::default()
+            },
+        );
+        let err = topology_to_network_config("host", &node, &topo, None).unwrap_err();
+        assert!(
+            err.to_string().contains("missing parent"),
+            "want 'missing parent' error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn network_config_vlan_missing_vid_errors() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "v0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vlan),
+                parent: Some("eth0".into()),
+                vni: None,
+                ..Default::default()
+            },
+        );
+        let err = topology_to_network_config("host", &node, &topo, None).unwrap_err();
+        assert!(
+            err.to_string().contains("missing vni"),
+            "want 'missing vni' error, got: {err}"
         );
     }
 

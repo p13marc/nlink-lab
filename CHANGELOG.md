@@ -52,6 +52,12 @@ All notable changes to this project will be documented in this file.
   wrapper enum.
 
 ### Changed
+- **Plan 158e Slice 3 — VLAN sub-interfaces now declare via
+  `LinkBuilder::vlan(parent, vid)`** in the per-namespace
+  NetworkConfig. The imperative branch in step 6 is a no-op
+  marker. Vxlan stays imperative — upstream `LinkBuilder` lacks
+  the `local` / `port` setters our existing topology shape
+  supports.
 - **Plan 158e Slice 2 — dummy + bond interface creation (and
   bond member enslave) now go through the declarative
   `NetworkConfig`** built by `topology_to_network_config`. Step

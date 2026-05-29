@@ -1222,21 +1222,24 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
-    // ── Step 13: Apply nftables firewall rules ──────────────────────
-    tracing::info!("step 13/18: applying firewall rules");
+    // ── Step 13: Apply nftables firewall + NAT (declarative reconcile) ──
+    //
+    // Plan 158a — `NftablesConfig::diff().apply_reconcile()` commits
+    // every chain/rule/table mutation in one kernel batch per node.
+    // Idempotent re-deploy makes zero kernel calls. Both firewall
+    // and NAT live in the same `nlink-lab` table, so we apply the
+    // unified config in a single call rather than two atomic
+    // batches (each of which would see the other's chains as
+    // foreign).
+    tracing::info!("step 13/18: applying firewall + NAT (declarative reconcile)");
     for (node_name, node) in &topology.nodes {
-        if let Some(fw) = topology.effective_firewall(node) {
-            let node_handle = &node_handles[node_name];
-            apply_firewall(node_handle, node_name, fw).await?;
+        let fw = topology.effective_firewall(node);
+        let nat = node.nat.as_ref();
+        if fw.is_none() && nat.is_none() {
+            continue;
         }
-    }
-
-    // ── Step 13b: Apply NAT rules ────────────────────────────────────
-    for (node_name, node) in &topology.nodes {
-        if let Some(nat) = &node.nat {
-            let node_handle = &node_handles[node_name];
-            apply_nat(node_handle, node_name, nat).await?;
-        }
+        let node_handle = &node_handles[node_name];
+        apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
     }
 
     // ── Step 14: Apply netem impairments ───────────────────────────
@@ -1624,90 +1627,262 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     Ok(running)
 }
 
-/// Apply nftables firewall rules for a node.
-async fn apply_firewall(
+/// Name of the nftables table that nlink-lab owns on every
+/// node carrying firewall / NAT rules. Rules outside this
+/// table (or rules in this table without an `nlink-lab/`
+/// USERDATA-keyed comment) are treated as foreign and left
+/// alone by the reconcile path.
+const NLINK_LAB_TABLE: &str = "nlink-lab";
+
+/// Build the declarative [`NftablesConfig`] for a node's
+/// firewall + NAT rules. Plan 158a.
+///
+/// The single resulting config covers both firewall (input +
+/// forward chains, filter type) and NAT (prerouting +
+/// postrouting chains, nat type) under the shared
+/// `nlink-lab` table. `NftablesDiff::apply` then commits
+/// every chain/rule/table mutation in one atomic kernel
+/// batch.
+///
+/// Each rule carries a stable
+/// `nlink-lab/{fw,nat}/<chain>/<idx>` USERDATA key (the
+/// `"nlink:"` prefix is auto-prepended by the library). Stable
+/// keys make idempotent re-apply produce zero kernel ops and
+/// in-place edits (e.g. `dport 80` → `dport 8080`) replace the
+/// rule body without losing its position.
+///
+/// `match_expr` strings are validated up-front so the
+/// builder closures can safely `.expect()` on lowering; an
+/// invalid expression here surfaces as `Err` before any
+/// kernel I/O.
+fn topology_to_nftables_config(
+    fw: Option<&crate::types::FirewallConfig>,
+    nat: Option<&crate::types::NatConfig>,
+) -> Result<nlink::netlink::nftables::config::NftablesConfig> {
+    use crate::types::NatAction;
+    use nlink::netlink::nftables::config::NftablesConfig;
+    use nlink::netlink::nftables::types::{ChainType, Family, Hook, Policy, Priority, Rule};
+
+    // Pre-validate every firewall rule's match_expr so the
+    // closure shape inside .rule_keyed(...) can call
+    // apply_match_expr without an error escape hatch.
+    if let Some(fw) = fw {
+        for fw_rule in &fw.rules {
+            let expr = fw_rule.match_expr.as_deref().unwrap_or("");
+            if !expr.is_empty() {
+                let probe = Rule::new(NLINK_LAB_TABLE, "input").family(Family::Inet);
+                let _ = apply_match_expr(probe, expr)?;
+            }
+        }
+    }
+
+    let mut cfg = NftablesConfig::new();
+
+    // Decide which chains we actually need to declare. NAT
+    // chains are only present when at least one NAT rule
+    // demands them; firewall chains follow the same rule for
+    // consistency.
+    let want_fw = fw.is_some();
+    let want_nat = nat.is_some_and(|n| !n.rules.is_empty());
+    if !want_fw && !want_nat {
+        // Caller-side guard normally prevents this, but
+        // keeping the cfg empty here means apply has nothing
+        // to do — diff returns the empty set and apply is a
+        // no-op.
+        return Ok(cfg);
+    }
+
+    let policy = match fw.and_then(|f| f.policy.as_deref()) {
+        Some("drop") => Policy::Drop,
+        _ => Policy::Accept,
+    };
+
+    let fw_rules = fw.map(|f| f.rules.as_slice()).unwrap_or(&[]);
+    let nat_rules = nat.map(|n| n.rules.as_slice()).unwrap_or(&[]);
+
+    cfg = cfg.table(NLINK_LAB_TABLE, Family::Inet, |mut t| {
+        if want_fw {
+            t = t
+                .chain("input", |c| {
+                    c.hook(Hook::Input)
+                        .priority(Priority::Filter)
+                        .chain_type(ChainType::Filter)
+                        .policy(policy)
+                })
+                .chain("forward", |c| {
+                    c.hook(Hook::Forward)
+                        .priority(Priority::Filter)
+                        .chain_type(ChainType::Filter)
+                        .policy(policy)
+                });
+
+            for (idx, fw_rule) in fw_rules.iter().enumerate() {
+                let action = fw_rule.action.as_deref().unwrap_or("accept").to_string();
+                let match_expr = fw_rule.match_expr.clone().unwrap_or_default();
+                let key = format!("nlink-lab/fw/input/{idx}");
+                t = t.rule_keyed("input", &key, move |mut r| {
+                    if !match_expr.is_empty() {
+                        // Pre-validation above guarantees this
+                        // can't fail.
+                        r = apply_match_expr(r, &match_expr)
+                            .expect("validated match_expr must lower");
+                    }
+                    match action.as_str() {
+                        "drop" => r.drop(),
+                        _ => r.accept(),
+                    }
+                });
+            }
+        }
+
+        if want_nat {
+            t = t
+                .chain("prerouting", |c| {
+                    c.hook(Hook::Prerouting)
+                        .priority(Priority::DstNat)
+                        .chain_type(ChainType::Nat)
+                })
+                .chain("postrouting", |c| {
+                    c.hook(Hook::Postrouting)
+                        .priority(Priority::SrcNat)
+                        .chain_type(ChainType::Nat)
+                });
+
+            for (idx, nat_rule) in nat_rules.iter().enumerate() {
+                let rule_clone = nat_rule.clone();
+                match nat_rule.action {
+                    NatAction::Masquerade => {
+                        let key = format!("nlink-lab/nat/postrouting/{idx}/masq");
+                        t = t.rule_keyed("postrouting", &key, move |mut r| {
+                            if let Some(src) = &rule_clone.src {
+                                let (addr, prefix) =
+                                    parse_v4_cidr(src).expect("validated NAT CIDR must parse");
+                                r = r.match_saddr_v4(addr, prefix);
+                            }
+                            r.masquerade()
+                        });
+                    }
+                    NatAction::Snat => {
+                        let key = format!("nlink-lab/nat/postrouting/{idx}/snat");
+                        t = t.rule_keyed("postrouting", &key, move |mut r| {
+                            if let Some(src) = &rule_clone.src {
+                                let (addr, prefix) =
+                                    parse_v4_cidr(src).expect("validated NAT CIDR must parse");
+                                r = r.match_saddr_v4(addr, prefix);
+                            }
+                            if let Some(target) = &rule_clone.target {
+                                let addr: std::net::Ipv4Addr =
+                                    target.parse().expect("validated NAT target must parse");
+                                r = r.snat(addr, None);
+                            }
+                            r
+                        });
+                    }
+                    NatAction::Dnat => {
+                        let key = format!("nlink-lab/nat/prerouting/{idx}/dnat");
+                        t = t.rule_keyed("prerouting", &key, move |mut r| {
+                            if let Some(dst) = &rule_clone.dst {
+                                let (addr, prefix) =
+                                    parse_v4_cidr(dst).expect("validated NAT CIDR must parse");
+                                r = r.match_daddr_v4(addr, prefix);
+                            }
+                            if let Some(target) = &rule_clone.target {
+                                let addr: std::net::Ipv4Addr =
+                                    target.parse().expect("validated NAT target must parse");
+                                r = r.dnat(addr, rule_clone.target_port);
+                            }
+                            r
+                        });
+                    }
+                    NatAction::Translate => {
+                        unreachable!("translate rules should be expanded during lowering");
+                    }
+                }
+            }
+        }
+
+        t
+    });
+
+    Ok(cfg)
+}
+
+/// Pre-validate every NAT rule's CIDR / target literals so
+/// the [`topology_to_nftables_config`] closures can rely on
+/// `.expect()`. Surfaces the offending value in the error.
+fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Result<()> {
+    for nat_rule in &nat.rules {
+        if let Some(src) = &nat_rule.src {
+            parse_v4_cidr(src).map_err(|e| {
+                Error::deploy_failed(format!("invalid src CIDR '{src}' in NAT rule: {e}"))
+            })?;
+        }
+        if let Some(dst) = &nat_rule.dst {
+            parse_v4_cidr(dst).map_err(|e| {
+                Error::deploy_failed(format!("invalid dst CIDR '{dst}' in NAT rule: {e}"))
+            })?;
+        }
+        if let Some(target) = &nat_rule.target {
+            target
+                .parse::<std::net::Ipv4Addr>()
+                .map_err(|e| Error::deploy_failed(format!("invalid NAT target '{target}': {e}")))?;
+        }
+    }
+    Ok(())
+}
+
+/// Apply the unified `nlink-lab` nftables table for a node.
+/// Plan 158a.
+///
+/// Builds an [`NftablesConfig`] covering firewall + NAT
+/// chains and rules from the desired state and commits it via
+/// `NftablesDiff::apply_reconcile`. Idempotent re-apply makes
+/// zero kernel calls; in-place edits replace rule bodies
+/// atomically without rebuilding the chain.
+async fn apply_nftables_for_node(
     node_handle: &NodeHandle,
     node_name: &str,
-    fw: &crate::types::FirewallConfig,
+    fw: Option<&crate::types::FirewallConfig>,
+    nat: Option<&crate::types::NatConfig>,
 ) -> Result<()> {
     use nlink::netlink::Nftables;
-    use nlink::netlink::nftables::types::{Chain, ChainType, Family, Hook, Policy, Priority, Rule};
+    use nlink::netlink::nftables::config::ReconcileOptions;
 
-    // nftables needs Connection<Nftables> (NETLINK_NETFILTER socket)
+    // Phase 0: validate user-supplied literals so the
+    // declarative closures can `.expect()` cleanly.
+    if let Some(nat) = nat {
+        validate_nat_rule_literals(nat)?;
+    }
+
+    let cfg = topology_to_nftables_config(fw, nat)?;
+
     let nft_conn: Connection<Nftables> = node_handle.connection().map_err(|e| {
         Error::deploy_failed(format!(
             "failed to create nftables connection for '{node_name}': {e}"
         ))
     })?;
 
-    let table_name = "nlink-lab";
+    let diff = cfg.diff(&nft_conn).await.map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to diff nftables config on '{node_name}': {e}"
+        ))
+    })?;
 
-    // Create table
-    nft_conn
-        .add_table(table_name, Family::Inet)
+    let report = diff
+        .apply_reconcile(&nft_conn, ReconcileOptions::default())
         .await
         .map_err(|e| {
             Error::deploy_failed(format!(
-                "failed to create nftables table on '{node_name}': {e}"
+                "failed to apply nftables config on '{node_name}': {e}"
             ))
         })?;
 
-    // Create input chain with policy
-    let policy = match fw.policy.as_deref() {
-        Some("drop") => Policy::Drop,
-        _ => Policy::Accept,
-    };
-    let chain = Chain::new(table_name, "input")
-        .family(Family::Inet)
-        .hook(Hook::Input)
-        .priority(Priority::Filter)
-        .chain_type(ChainType::Filter)
-        .policy(policy);
-    nft_conn.add_chain(chain).await.map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to create nftables input chain on '{node_name}': {e}"
-        ))
-    })?;
-
-    // Create forward chain with same policy
-    let fwd_chain = Chain::new(table_name, "forward")
-        .family(Family::Inet)
-        .hook(Hook::Forward)
-        .priority(Priority::Filter)
-        .chain_type(ChainType::Filter)
-        .policy(policy);
-    nft_conn.add_chain(fwd_chain).await.map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to create nftables forward chain on '{node_name}': {e}"
-        ))
-    })?;
-
-    // Add rules to input chain
-    for fw_rule in &fw.rules {
-        let action = fw_rule.action.as_deref().unwrap_or("accept");
-        let match_expr = fw_rule.match_expr.as_deref().unwrap_or("");
-
-        let mut rule = Rule::new(table_name, "input").family(Family::Inet);
-
-        // Parse common match expressions
-        if !match_expr.is_empty() {
-            rule = apply_match_expr(rule, match_expr)?;
-        }
-
-        // Apply action
-        rule = match action {
-            "accept" => rule.accept(),
-            "drop" => rule.drop(),
-            _ => rule.accept(),
-        };
-
-        nft_conn.add_rule(rule).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to add nftables rule on '{node_name}': match='{match_expr}' action='{action}': {e}"
-            ))
-        })?;
-    }
-
+    tracing::info!(
+        node = %node_name,
+        attempts = report.attempts,
+        changes = report.change_count,
+        "nftables reconcile"
+    );
     Ok(())
 }
 
@@ -1826,103 +2001,11 @@ async fn apply_network_impairments(
     Ok(())
 }
 
-/// Apply NAT rules to a node.
-async fn apply_nat(
-    node_handle: &NodeHandle,
-    node_name: &str,
-    nat: &crate::types::NatConfig,
-) -> Result<()> {
-    use nlink::netlink::Nftables;
-    use nlink::netlink::nftables::types::{Chain, ChainType, Family, Hook, Priority, Rule};
-
-    let nft_conn: Connection<Nftables> = node_handle.connection().map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to create nftables connection for '{node_name}': {e}"
-        ))
-    })?;
-
-    let table_name = "nlink-lab";
-
-    // Ensure table exists (may already be created by apply_firewall)
-    let _ = nft_conn.add_table(table_name, Family::Inet).await;
-
-    // Create prerouting chain for DNAT
-    let pre_chain = Chain::new(table_name, "prerouting")
-        .family(Family::Inet)
-        .hook(Hook::Prerouting)
-        .priority(Priority::DstNat)
-        .chain_type(ChainType::Nat);
-    let _ = nft_conn.add_chain(pre_chain).await;
-
-    // Create postrouting chain for SNAT/masquerade
-    let post_chain = Chain::new(table_name, "postrouting")
-        .family(Family::Inet)
-        .hook(Hook::Postrouting)
-        .priority(Priority::SrcNat)
-        .chain_type(ChainType::Nat);
-    let _ = nft_conn.add_chain(post_chain).await;
-
-    for nat_rule in &nat.rules {
-        match nat_rule.action {
-            crate::types::NatAction::Masquerade => {
-                let mut rule = Rule::new(table_name, "postrouting").family(Family::Inet);
-                if let Some(src) = &nat_rule.src {
-                    let (addr, prefix) = parse_v4_cidr(src).map_err(|e| {
-                        Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
-                    })?;
-                    rule = rule.match_saddr_v4(addr, prefix);
-                }
-                rule = rule.masquerade();
-                nft_conn.add_rule(rule).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to add masquerade rule on '{node_name}': {e}"
-                    ))
-                })?;
-            }
-            crate::types::NatAction::Dnat => {
-                let mut rule = Rule::new(table_name, "prerouting").family(Family::Inet);
-                if let Some(dst) = &nat_rule.dst {
-                    let (addr, prefix) = parse_v4_cidr(dst).map_err(|e| {
-                        Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
-                    })?;
-                    rule = rule.match_daddr_v4(addr, prefix);
-                }
-                if let Some(target) = &nat_rule.target {
-                    let addr: std::net::Ipv4Addr = target.parse().map_err(|e| {
-                        Error::deploy_failed(format!("invalid DNAT target '{target}': {e}"))
-                    })?;
-                    rule = rule.dnat(addr, nat_rule.target_port);
-                }
-                nft_conn.add_rule(rule).await.map_err(|e| {
-                    Error::deploy_failed(format!("failed to add DNAT rule on '{node_name}': {e}"))
-                })?;
-            }
-            crate::types::NatAction::Snat => {
-                let mut rule = Rule::new(table_name, "postrouting").family(Family::Inet);
-                if let Some(src) = &nat_rule.src {
-                    let (addr, prefix) = parse_v4_cidr(src).map_err(|e| {
-                        Error::deploy_failed(format!("invalid CIDR in NAT rule: {e}"))
-                    })?;
-                    rule = rule.match_saddr_v4(addr, prefix);
-                }
-                if let Some(target) = &nat_rule.target {
-                    let addr: std::net::Ipv4Addr = target.parse().map_err(|e| {
-                        Error::deploy_failed(format!("invalid SNAT target '{target}': {e}"))
-                    })?;
-                    rule = rule.snat(addr, None);
-                }
-                nft_conn.add_rule(rule).await.map_err(|e| {
-                    Error::deploy_failed(format!("failed to add SNAT rule on '{node_name}': {e}"))
-                })?;
-            }
-            crate::types::NatAction::Translate => {
-                unreachable!("translate rules should be expanded during lowering");
-            }
-        }
-    }
-
-    Ok(())
-}
+// NOTE: the imperative `apply_nat(...)` body (Plan 152 era)
+// is deleted by Plan 158a. All NAT rule application now goes
+// through `apply_nftables_for_node` which builds a single
+// `NftablesConfig` covering firewall + NAT and commits it
+// via `NftablesDiff::apply_reconcile`.
 
 /// Parse a (possibly compound) match expression and apply it to an nftables rule.
 ///
@@ -2743,7 +2826,7 @@ pub async fn apply_diff(
         }
     }
 
-    // ── Phase 6: Configure new nodes (routes, firewall) ────────────
+    // ── Phase 6: Configure new nodes (routes, firewall + NAT) ──────
     for node_name in &diff.nodes_added {
         let node = &desired.nodes[node_name];
         let handle = node_handle_for(running, node_name)?;
@@ -2758,9 +2841,12 @@ pub async fn apply_diff(
             }
         }
 
-        // Firewall
-        if let Some(fw) = desired.effective_firewall(node) {
-            apply_firewall(&handle, node_name, fw).await?;
+        // Firewall + NAT (Plan 158a — declarative reconcile in one
+        // atomic batch per node).
+        let fw = desired.effective_firewall(node);
+        let nat = node.nat.as_ref();
+        if fw.is_some() || nat.is_some() {
+            apply_nftables_for_node(&handle, node_name, fw, nat).await?;
         }
     }
 
@@ -2897,53 +2983,36 @@ async fn del_route_for_node(conn: &Connection<Route>, node_name: &str, dest: &st
 }
 
 /// Reconcile per-node nftables ruleset (firewall + NAT).
-/// Plan 152 Phase B/4.
+/// Plan 152 Phase B/4 + Plan 158a.
 ///
-/// Implementation is coarse: on any change to a node's firewall
-/// or NAT config, we delete the node's `nlink-lab` nftables table
-/// and rebuild it from the desired config. The kernel's nftables
-/// netlink interface delivers the deletion + rebuild atomically;
-/// the kernel never sees a half-built ruleset.
+/// Per-rule reconcile via `NftablesConfig::apply_reconcile`:
+/// each per-rule USERDATA-keyed (`nlink-lab/fw/...` /
+/// `nlink-lab/nat/...`) so the diff identifies "our" rules by
+/// key. Foreign rules (no `nlink-lab/` USERDATA key) are left
+/// untouched, supporting hand-edits via
+/// `nlink-lab exec node -- nft -f ...` that survive an apply.
 ///
-/// A fully-incremental reconcile (rule-by-rule diffing inside the
-/// table) is doable but requires upstreaming a per-rule diff API
-/// to nlink. The full-rebuild approach is correct and lossless for
-/// existing connections (conntrack state is preserved across the
-/// table swap because the conntrack zone isn't tied to the table).
+/// Editing a single rule in-place no longer rebuilds the
+/// table: the diff emits `rules_to_replace` for the changed
+/// rule, and `apply` commits the swap atomically in the
+/// kernel's nftables batch.
 async fn apply_nftables_diff(
     running: &mut RunningLab,
     diff: &crate::diff::TopologyDiff,
 ) -> Result<()> {
-    use nlink::netlink::Nftables;
-    use nlink::netlink::nftables::types::Family;
-
     if diff.nftables_changed.is_empty() {
         return Ok(());
     }
 
     for change in &diff.nftables_changed {
         let handle = node_handle_for(running, &change.node)?;
-        let nft_conn: Connection<Nftables> = handle.connection().map_err(|e| {
-            Error::deploy_failed(format!("nftables connection for '{}': {e}", change.node,))
-        })?;
-
-        // 1. Delete the existing table (if any). Idempotent — a
-        //    missing table isn't an error from our perspective.
-        if change.was_present
-            && let Err(e) = nft_conn.del_table("nlink-lab", Family::Inet).await
-        {
-            tracing::warn!("del nftables table on '{}': {e} (continuing)", change.node,);
-        }
-
-        // 2. Re-apply firewall + NAT from the desired config. Each
-        //    sub-call is itself atomic from the kernel's POV; we
-        //    sequence them after a successful delete.
-        if let Some(fw) = &change.desired_firewall {
-            apply_firewall(&handle, &change.node, fw).await?;
-        }
-        if let Some(nat) = &change.desired_nat {
-            apply_nat(&handle, &change.node, nat).await?;
-        }
+        apply_nftables_for_node(
+            &handle,
+            &change.node,
+            change.desired_firewall.as_ref(),
+            change.desired_nat.as_ref(),
+        )
+        .await?;
     }
 
     Ok(())
@@ -3817,5 +3886,162 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         let result = apply_match_expr(rule, "unknown expression");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("unsupported"));
+    }
+
+    // ── Plan 158a: topology_to_nftables_config tests ────────────────
+
+    #[test]
+    fn nftables_config_empty_inputs_produce_empty_config() {
+        let cfg = topology_to_nftables_config(None, None).unwrap();
+        assert!(
+            cfg.tables().is_empty(),
+            "no fw + no nat must produce zero tables"
+        );
+    }
+
+    #[test]
+    fn nftables_config_firewall_only_has_filter_chains() {
+        let fw = crate::types::FirewallConfig {
+            policy: Some("drop".into()),
+            rules: vec![
+                crate::types::FirewallRule {
+                    match_expr: Some("tcp dport 80".into()),
+                    action: Some("accept".into()),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("tcp dport 22".into()),
+                    action: Some("accept".into()),
+                },
+            ],
+        };
+        let cfg = topology_to_nftables_config(Some(&fw), None).unwrap();
+        assert_eq!(cfg.tables().len(), 1, "exactly one table");
+        let table = cfg.tables().first().unwrap();
+        let chain_names: Vec<&str> = table.chains().iter().map(|c| c.name()).collect();
+        assert!(
+            chain_names.contains(&"input") && chain_names.contains(&"forward"),
+            "expected input + forward chains, got {chain_names:?}"
+        );
+        assert!(
+            !chain_names.contains(&"prerouting"),
+            "NAT chains must not be present without NAT config"
+        );
+    }
+
+    #[test]
+    fn nftables_config_nat_only_has_nat_chains() {
+        let nat = crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Masquerade,
+                src: Some("10.0.0.0/24".into()),
+                dst: None,
+                target: None,
+                target_port: None,
+            }],
+        };
+        let cfg = topology_to_nftables_config(None, Some(&nat)).unwrap();
+        assert_eq!(cfg.tables().len(), 1);
+        let chain_names: Vec<&str> = cfg
+            .tables()
+            .first()
+            .unwrap()
+            .chains()
+            .iter()
+            .map(|c| c.name())
+            .collect();
+        assert!(
+            chain_names.contains(&"prerouting") && chain_names.contains(&"postrouting"),
+            "expected prerouting + postrouting, got {chain_names:?}"
+        );
+        assert!(
+            !chain_names.contains(&"input"),
+            "filter chains must not be present without firewall config"
+        );
+    }
+
+    #[test]
+    fn nftables_config_fw_and_nat_share_one_table() {
+        let fw = crate::types::FirewallConfig {
+            policy: Some("accept".into()),
+            rules: vec![crate::types::FirewallRule {
+                match_expr: Some("tcp dport 22".into()),
+                action: Some("accept".into()),
+            }],
+        };
+        let nat = crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Dnat,
+                src: None,
+                dst: Some("203.0.113.1/32".into()),
+                target: Some("10.0.0.10".into()),
+                target_port: Some(8080),
+            }],
+        };
+        let cfg = topology_to_nftables_config(Some(&fw), Some(&nat)).unwrap();
+        assert_eq!(
+            cfg.tables().len(),
+            1,
+            "both fw and nat must collapse into one nlink-lab table"
+        );
+        let table = cfg.tables().first().unwrap();
+        let chain_names: Vec<&str> = table.chains().iter().map(|c| c.name()).collect();
+        for expected in ["input", "forward", "prerouting", "postrouting"] {
+            assert!(
+                chain_names.contains(&expected),
+                "expected chain '{expected}' in unified config, got {chain_names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn nftables_config_invalid_match_expr_surfaces_early() {
+        let fw = crate::types::FirewallConfig {
+            policy: None,
+            rules: vec![crate::types::FirewallRule {
+                match_expr: Some("ip saddr 999.999.999.999/24".into()),
+                action: Some("accept".into()),
+            }],
+        };
+        let err = topology_to_nftables_config(Some(&fw), None).unwrap_err();
+        assert!(
+            err.to_string().contains("invalid IPv4 CIDR"),
+            "want validation error from up-front match_expr check, got: {err}"
+        );
+    }
+
+    #[test]
+    fn nftables_config_invalid_nat_cidr_surfaces_via_validate() {
+        let nat = crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Masquerade,
+                src: Some("not-a-cidr".into()),
+                dst: None,
+                target: None,
+                target_port: None,
+            }],
+        };
+        let err = validate_nat_rule_literals(&nat).unwrap_err();
+        assert!(
+            err.to_string().contains("invalid src CIDR"),
+            "want CIDR error from validate, got: {err}"
+        );
+    }
+
+    #[test]
+    fn nftables_config_invalid_nat_target_surfaces_via_validate() {
+        let nat = crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Snat,
+                src: Some("10.0.0.0/24".into()),
+                dst: None,
+                target: Some("not-an-ip".into()),
+                target_port: None,
+            }],
+        };
+        let err = validate_nat_rule_literals(&nat).unwrap_err();
+        assert!(
+            err.to_string().contains("invalid NAT target"),
+            "want target error from validate, got: {err}"
+        );
     }
 }

@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-(empty — entries land here as the next release accumulates)
+### Changed
+- **Plan 158a — nftables firewall + NAT now reconcile per-rule
+  via `nlink::NftablesConfig::diff().apply_reconcile()`** instead
+  of the previous "delete the whole table, rebuild from scratch"
+  approach. Both firewall and NAT live in the unified `nlink-lab`
+  table and apply as one atomic kernel batch per node. Editing a
+  single rule no longer rebuilds the chain; idempotent re-apply
+  on an unchanged topology makes zero kernel mutations.
+  Per-rule USERDATA keys (`nlink-lab/{fw,nat}/<chain>/<idx>...`,
+  auto-prefixed with `nlink:` by the library) drive the diff so
+  foreign rules added via `nlink-lab exec NODE -- nft -f ...`
+  survive subsequent applies. Closes the TODO that has lived at
+  `crates/nlink-lab/src/deploy.rs:2906` since Plan 152.
 
 ## [0.5.0] - 2026-05-10
 

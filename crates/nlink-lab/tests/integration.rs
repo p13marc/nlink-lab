@@ -387,6 +387,84 @@ async fn deploy_firewall() {
     lab.destroy().await.expect("failed to destroy lab");
 }
 
+// Plan 158a — applying the same firewall config a second time
+// must not perturb live rules. Verified by reading the
+// nftables generation counter from `nft list ruleset` before
+// and after the second apply: equal counter ⇒ kernel made no
+// mutations (the `apply_reconcile` diff was empty).
+#[tokio::test]
+async fn nftables_reapply_is_zero_ops() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping nftables_reapply_is_zero_ops: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping nftables_reapply_is_zero_ops: nftables not functional");
+        return;
+    }
+
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall.nll"
+    ))
+    .expect("failed to parse topology file");
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Snapshot the kernel's per-table generation counter (the
+    // "handle" each rule carries monotonically increases with
+    // any kernel-side mutation in the namespace).
+    let baseline = lab
+        .exec("server", "nft", &["-a", "list", "ruleset"])
+        .unwrap();
+    assert_eq!(baseline.exit_code, 0);
+    let baseline_handles = collect_rule_handles(&baseline.stdout);
+    assert!(
+        !baseline_handles.is_empty(),
+        "expected at least one rule with a handle after initial deploy"
+    );
+
+    // Re-apply the same topology — diff should be empty and
+    // apply_diff should be a no-op for the nftables layer.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("failed to re-apply unchanged topology");
+
+    let after = lab
+        .exec("server", "nft", &["-a", "list", "ruleset"])
+        .unwrap();
+    assert_eq!(after.exit_code, 0);
+    let after_handles = collect_rule_handles(&after.stdout);
+    assert_eq!(
+        baseline_handles, after_handles,
+        "reapply on unchanged topology should preserve rule handles \
+         (kernel mutations would re-issue handles); baseline={baseline_handles:?} after={after_handles:?}"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("failed to destroy lab");
+}
+
+/// Extract `# handle N` markers from `nft -a list ruleset`
+/// output. Rule handles are stable across no-op reapplies and
+/// monotonically increase when the kernel re-creates a rule,
+/// so comparing the set lets a test detect "did anything
+/// change?" without parsing the full ruleset.
+fn collect_rule_handles(nft_output: &str) -> Vec<u32> {
+    let mut handles: Vec<u32> = nft_output
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("# handle "))
+        .filter_map(|s| s.split_whitespace().next())
+        .filter_map(|s| s.parse::<u32>().ok())
+        .collect();
+    handles.sort_unstable();
+    handles
+}
+
 // ─── Spine-leaf test ──────────────────────────────────────
 
 #[lab_test("examples/spine-leaf.nll")]

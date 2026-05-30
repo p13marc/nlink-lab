@@ -918,7 +918,7 @@ async fn nat_masquerade_reapply_is_zero_ops() {
     };
 
     let baseline = lab
-        .exec("router", "nft", &["-a", "list", "ruleset"])
+        .exec("firewall", "nft", &["-a", "list", "ruleset"])
         .unwrap();
     assert_eq!(baseline.exit_code, 0);
     let baseline_handles = collect_rule_handles(&baseline.stdout);
@@ -935,7 +935,7 @@ async fn nat_masquerade_reapply_is_zero_ops() {
         .expect("failed to re-apply unchanged topology");
 
     let after = lab
-        .exec("router", "nft", &["-a", "list", "ruleset"])
+        .exec("firewall", "nft", &["-a", "list", "ruleset"])
         .unwrap();
     let after_handles = collect_rule_handles(&after.stdout);
     assert_eq!(

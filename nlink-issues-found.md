@@ -119,6 +119,68 @@ which is phase 2 of apply, after the bond creation in phase 1.
 So bond ordering happens to be correct by coincidence. VLAN is
 the cleanly-broken case.
 
+### 2a. (Related, more serious) `add_link(VlanLink::new(...))` name→ifindex resolution races with prior `add_link`
+
+**Discovered:** During CI run for the slice3 integration test.
+
+Even with correct declaration order, `add_link(VlanLink::new(name,
+parent_name, vid))` for a VLAN whose parent was just created via a
+prior `add_link(DummyLink::new(parent_name))` in the SAME async
+sequence (`for link in &diff.links_to_add { create_link(...).await }`)
+fails with `Error::InterfaceNotFound { name: "<parent>" }`.
+
+Concrete failure: in our slice3 test, NetworkConfig declared
+`[Dummy "eth0", Vlan "eth0.42" parent="eth0"]`. apply_diff did:
+
+```rust
+conn.add_link(DummyLink::new("eth0")).await?;        // OK, dummy
+                                                       // exists in
+                                                       // kernel after
+                                                       // ACK
+conn.add_link(VlanLink::new("eth0.42", "eth0", 42)).await?;
+//          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// Inside: resolve_interface(InterfaceRef::Name("eth0"))
+//   → get_link_by_name("eth0")
+//   → returns None
+//   → Err(InterfaceNotFound { name: "eth0" })
+```
+
+The kernel ACKed the dummy create. The subsequent VLAN create's
+internal `get_link_by_name("eth0")` dump returned no match.
+
+Hypothesis: nlink's `Connection<Route>` may be caching link
+dumps, or the resolve goes through a different socket / fd than
+the create. Either way, ACK-after-add doesn't guarantee that a
+following `get_link_by_name` on the same connection sees the
+new link.
+
+**Downstream impact:** we cannot reliably express "create parent
++ child in one NetworkConfig" via the public API. Our slice3
+integration test had to use a pre-existing veth as the VLAN
+parent instead.
+
+**Suggested fixes:**
+
+a. Inside `add_link(VlanLink)` (and other parent-name-bearing
+   shapes), after the create succeeds, retry the parent
+   resolution with a brief backoff before giving up. ~10 LOC at
+   the resolve site.
+
+b. Or: expose a `LinkBuilder::vlan_with_parent_index(idx, vid)`
+   declarative method paralleling the imperative
+   `VlanLink::with_parent_index`. Downstream code could pre-resolve
+   the parent's ifindex (impossible if the parent is itself
+   declarative + new, but works for the common "VLAN on existing
+   iface" case).
+
+c. Or: make `compute_diff` detect VLAN parent-in-config and emit a
+   `links_to_modify` op that retro-fits the parent ifindex into
+   the VLAN spec, ordered after the parent create.
+
+The bug is more impactful than 2.0 above — it makes the
+parent-and-child-in-same-config case unusable, not just
+sensitive to declaration order.
+
 ---
 
 ## 3. (Ergonomic gap) `nlink::netlink::config::apply::apply_diff` not re-exported

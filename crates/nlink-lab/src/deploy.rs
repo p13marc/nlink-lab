@@ -1825,14 +1825,28 @@ fn topology_to_network_config(
 
     let mut cfg = NetworkConfig::new();
 
-    // ── Links — single-namespace kinds only (Plan 158e Slice 2) ──
+    // ── Links — single-namespace kinds only (Plan 158e Slice 2+3) ──
     //
     // Veth pairs stay imperative (peer_netns_fd is cross-namespace);
     // macvlan/ipvlan/VRF/WG/Wi-Fi stay imperative (upstream
-    // LinkBuilder doesn't cover them or has thin coverage). Dummies
-    // and bonds are clean single-namespace resources — fold them
-    // into the declarative path with `.up()` so re-deploys are
+    // LinkBuilder doesn't cover them or has thin coverage). Dummies,
+    // bonds, and VLANs are clean single-namespace resources — fold
+    // them into the declarative path with `.up()` so re-deploys are
     // idempotent here too.
+    //
+    // **Order matters for VLAN parents.** `node.interfaces` is a
+    // `HashMap`, so iteration order is non-deterministic. nlink's
+    // `NetworkConfig::apply` iterates `links_to_add` in declaration
+    // order; a VLAN whose parent is also a declarative link (e.g. a
+    // Dummy declared on the same node) must be declared *after* its
+    // parent or the kernel returns `ENODEV` for the VLAN create
+    // (Plan 158e polish — bug caught during the polish audit).
+    //
+    // Two-pass: declare Dummy + Bond + bond-member-master ops in
+    // pass 1, declare VLANs in pass 2. VLANs whose parents are
+    // imperative links (veths created in step 5, macvlans created
+    // in step 6a, etc.) work either way; the two-pass shape only
+    // matters when the parent is also declarative.
     use crate::types::InterfaceKind;
     for (iface_name, iface_config) in &node.interfaces {
         match iface_config.kind {
@@ -1863,44 +1877,46 @@ fn topology_to_network_config(
                     cfg = cfg.link(member, move |b| b.master(&bond_name));
                 }
             }
-            Some(InterfaceKind::Vlan) => {
-                // Plan 158e Slice 3 — VLAN sub-interfaces are a
-                // clean single-namespace LinkBuilder fit. Parent
-                // iface (which must already exist) + VID is exactly
-                // what `LinkBuilder::vlan` consumes.
-                let parent = match iface_config.parent.as_deref() {
-                    Some(p) => p.to_string(),
-                    None => {
-                        return Err(Error::invalid_topology(format!(
-                            "vlan interface '{iface_name}' on node \
-                             '{node_name}' missing parent"
-                        )));
-                    }
-                };
-                let vid = match iface_config.vni {
-                    Some(v) => v as u16,
-                    None => {
-                        return Err(Error::invalid_topology(format!(
-                            "vlan interface '{iface_name}' on node \
-                             '{node_name}' missing vni (VLAN ID)"
-                        )));
-                    }
-                };
-                let mtu = iface_config.mtu;
-                cfg = cfg.link(iface_name, move |mut b| {
-                    b = b.vlan(&parent, vid).up();
-                    if let Some(m) = mtu {
-                        b = b.mtu(m);
-                    }
-                    b
-                });
-            }
-            // Vxlan, Loopback, None stay imperative for now. Vxlan
-            // needs `local` + `port` knobs that upstream
-            // `LinkBuilder::vxlan` doesn't yet expose. Slice 4+
-            // pending upstream extension.
+            // Pass 2 below handles Vlan. Vxlan, Loopback, None stay
+            // imperative for now. Vxlan needs `local` + `port` knobs
+            // that upstream `LinkBuilder::vxlan` doesn't yet expose.
             _ => {}
         }
+    }
+
+    // Pass 2 — VLAN sub-interfaces. Declared AFTER their potential
+    // parent siblings so `NetworkConfig::apply` creates the parent
+    // first within its links_to_add iteration.
+    for (iface_name, iface_config) in &node.interfaces {
+        let Some(InterfaceKind::Vlan) = iface_config.kind else {
+            continue;
+        };
+        let parent = match iface_config.parent.as_deref() {
+            Some(p) => p.to_string(),
+            None => {
+                return Err(Error::invalid_topology(format!(
+                    "vlan interface '{iface_name}' on node \
+                     '{node_name}' missing parent"
+                )));
+            }
+        };
+        let vid = match iface_config.vni {
+            Some(v) => v as u16,
+            None => {
+                return Err(Error::invalid_topology(format!(
+                    "vlan interface '{iface_name}' on node \
+                     '{node_name}' missing vni (VLAN ID)"
+                )));
+            }
+        };
+        let mtu = iface_config.mtu;
+        cfg = cfg.link(iface_name, move |mut b| {
+            b = b.vlan(&parent, vid).up();
+            if let Some(m) = mtu {
+                b = b.mtu(m);
+            }
+            b
+        });
     }
 
     // ── Addresses, in the same order step 9 used to apply them ──
@@ -3055,20 +3071,35 @@ pub async fn apply_diff(
         }
     }
 
-    // ── Phase 6: Configure new nodes (routes, firewall + NAT) ──────
+    // ── Phase 6: Configure new nodes (NetworkConfig + nftables) ────
+    //
+    // Plan 158e Slice 1+2+3 + polish — apply the per-namespace
+    // declarative `NetworkConfig` so newly-added nodes get every
+    // address source (interfaces, network ports, WG, macvlan/ipvlan,
+    // WiFi), every route (manual + auto), and every declarative link
+    // kind (dummies, bonds + bond-member master, VLANs) handled in
+    // one atomic-ish per-namespace apply. Without this, dummy and
+    // VLAN interfaces with addresses declared on them would silently
+    // miss those addresses on apply (a pre-existing gap before
+    // Slice 1 — link-pair addresses were set imperatively in Phase 5,
+    // but non-link sources were not handled here).
+    let auto_routes_for_apply = if desired.lab.routing == crate::types::RoutingMode::Auto {
+        auto_generate_routes(desired)
+    } else {
+        HashMap::new()
+    };
+
     for node_name in &diff.nodes_added {
         let node = &desired.nodes[node_name];
         let handle = node_handle_for(running, node_name)?;
 
-        // Routes
-        if !node.routes.is_empty() {
-            let conn: Connection<Route> = handle
-                .connection()
-                .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-            for (dest, route_config) in &node.routes {
-                add_route(&conn, node_name, dest, route_config).await?;
-            }
-        }
+        let cfg = topology_to_network_config(
+            node_name,
+            node,
+            desired,
+            auto_routes_for_apply.get(node_name),
+        )?;
+        apply_network_config_for_node(&handle, node_name, cfg).await?;
 
         // Firewall + NAT (Plan 158a — declarative reconcile in one
         // atomic batch per node).
@@ -4446,6 +4477,80 @@ node host
             names.contains(&"eth0.42"),
             "expected 'eth0.42' vlan link, got {names:?}"
         );
+    }
+
+    #[test]
+    fn network_config_vlan_parent_dummy_declared_first_regardless_of_hashmap_order() {
+        // Plan 158e polish — `node.interfaces` is a HashMap, so the
+        // raw iteration order can put the VLAN child before the
+        // parent Dummy. nlink's apply iterates links_to_add in
+        // declaration order, so a VLAN declared before its parent
+        // would fail with ENODEV at the kernel.
+        //
+        // The two-pass shape inside `topology_to_network_config`
+        // guarantees the Dummy is declared in pass 1 and the VLAN in
+        // pass 2. Verify that order shows up in
+        // `cfg.links().iter()` for the worst-case hashing — try
+        // multiple parent/vlan name pairs to defeat any single
+        // hash-seed alignment.
+        for (parent_name, vlan_name) in &[
+            ("eth0", "eth0.42"),
+            ("aaa", "zzz.7"),
+            ("zzz", "aaa.99"),
+            ("p", "v"),
+        ] {
+            let topo = crate::parser::parse(
+                r#"lab "t"
+node host
+"#,
+            )
+            .unwrap();
+            let mut node = topo.nodes["host"].clone();
+            node.interfaces.insert(
+                (*parent_name).into(),
+                crate::types::InterfaceConfig {
+                    kind: Some(crate::types::InterfaceKind::Dummy),
+                    ..Default::default()
+                },
+            );
+            node.interfaces.insert(
+                (*vlan_name).into(),
+                crate::types::InterfaceConfig {
+                    kind: Some(crate::types::InterfaceKind::Vlan),
+                    parent: Some((*parent_name).into()),
+                    vni: Some(42),
+                    ..Default::default()
+                },
+            );
+            let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+            let positions: Vec<usize> = cfg
+                .links()
+                .iter()
+                .enumerate()
+                .filter_map(|(i, l)| {
+                    if l.name() == *parent_name || l.name() == *vlan_name {
+                        Some((i, l.name()))
+                    } else {
+                        None
+                    }
+                })
+                .map(|(i, _)| i)
+                .collect();
+            assert_eq!(
+                positions.len(),
+                2,
+                "expected both '{parent_name}' and '{vlan_name}' in cfg.links() for case ({parent_name}, {vlan_name}), got {} link(s)",
+                positions.len()
+            );
+            let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+            let parent_idx = names.iter().position(|n| *n == *parent_name).unwrap();
+            let vlan_idx = names.iter().position(|n| *n == *vlan_name).unwrap();
+            assert!(
+                parent_idx < vlan_idx,
+                "VLAN '{vlan_name}' must come after parent '{parent_name}' in links order, \
+                 got parent@{parent_idx} vlan@{vlan_idx}: {names:?}"
+            );
+        }
     }
 
     #[test]

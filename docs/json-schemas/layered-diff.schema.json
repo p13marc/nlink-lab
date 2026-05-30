@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/layered-diff.schema.json",
+  "title": "nlink-lab apply --check / --dry-run --json output",
+  "description": "Emitted on stdout (one object) by `nlink-lab apply --check --json` or `apply --dry-run --json`. Bundles the three diff layers an apply commits against: lab graph (TopologyDiff), per-namespace RTNETLINK state (NetworkConfig diff), per-namespace nftables state (NftablesDiff). Plan 158f Phase 2.",
+  "type": "object",
+  "required": ["lab", "no_op", "change_count", "diff", "layered_summary"],
+  "additionalProperties": false,
+  "properties": {
+    "lab": {
+      "type": "string",
+      "description": "Lab name (matches `desired.lab.name` in the parsed topology)."
+    },
+    "no_op": {
+      "type": "boolean",
+      "description": "True when `LayeredDiff::is_empty()` is true — every subdiff reports zero changes across topology, RTNETLINK, and nftables layers. `apply --check` exits 0 iff `no_op == true`."
+    },
+    "change_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Aggregate `LayeredDiff::change_count()` across all three layers."
+    },
+    "diff": {
+      "type": "object",
+      "description": "TopologyDiff (lab-graph layer) — kept as a typed shape for back-compat with consumers from the pre-LayeredDiff era. Sub-fields cover node/link adds and removes, sysctls, route changes, network impairments, rate limits, and nftables_changed (a coarse 'something in nftables changed' marker; the actual layered nftables view lives in `layered_summary`).",
+      "additionalProperties": true,
+      "properties": {
+        "nodes_added": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node names declared in `desired` but missing from the running lab."
+        },
+        "nodes_removed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node names in the running lab but absent from `desired`."
+        },
+        "links_added": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Lab-graph link entries to be added. Each carries `endpoints` (two `node:iface` strings) and optionally `addresses` + `mtu`."
+        },
+        "links_removed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Lab-graph link entries to be removed."
+        },
+        "sysctls_changed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Per-node sysctl deltas (added / changed / removed) — Plan 152 Phase B."
+        },
+        "routes_changed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Per-node route deltas — Plan 152 Phase B."
+        },
+        "rate_limits_changed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Per-endpoint rate-limit deltas — Plan 152 Phase B."
+        },
+        "network_impairs_changed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Per-(network, src_node) impair tree deltas — Plan 152 Phase A."
+        },
+        "nftables_changed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Per-node nftables change markers (firewall + NAT, both rooted in the same `nlink-lab` table). The layered view in `layered_summary` carries the per-rule detail."
+        }
+      }
+    },
+    "layered_summary": {
+      "type": "string",
+      "description": "Human-readable rendering of the full `LayeredDiff` — TopologyDiff section then per-node NetworkConfig diffs then per-node NftablesDiff sections. Empty bundle renders 'no changes'. Format intentionally line-oriented for ergonomic `apply --dry-run --json | jq -r .layered_summary` consumption.",
+      "examples": [
+        "no changes\n",
+        "TopologyDiff (2 changes):\n  + add node: server-2\n  + add link: router:eth2 -- server-2:eth0\nNetworkConfig diff (server-2, 3 changes):\n  + link  veth eth0\n  + addr  10.0.2.2/24 on eth0\n  + route default via 10.0.2.1\nNftablesDiff (server-2, 0 changes):\n"
+      ]
+    }
+  }
+}

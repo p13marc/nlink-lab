@@ -199,6 +199,7 @@ impl Topology {
         validate_unreferenced_nodes(self, &interfaces, &mut issues);
         validate_exec_cmds(self, &mut issues);
         validate_container_fields(self, &mut issues);
+        validate_imperative_resource_use(self, &mut issues);
 
         ValidationResult { issues }
     }
@@ -922,6 +923,70 @@ fn validate_exec_cmds(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                     rule: "empty-exec-cmd",
                     message: format!("exec[{i}] has empty cmd"),
                     location: Some(format!("nodes.{node_name}.exec[{i}]")),
+                });
+            }
+        }
+    }
+}
+
+/// Rule (Plan 158e Phase 1): topology features that map to gaps
+/// in upstream `nlink::LinkBuilder` keep going through nlink-lab's
+/// imperative deploy steps instead of the declarative
+/// `NetworkConfig` path (step 11c). That's not a deploy failure —
+/// the imperative paths still work — but re-applies on those
+/// resources are NOT idempotent the way the declarative ones are
+/// (every apply re-runs the imperative creation). Surface this as
+/// a documented warning so users understand the reapply trade-off.
+fn validate_imperative_resource_use(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in &topology.nodes {
+        if !node.vrfs.is_empty() {
+            issues.push(ValidationIssue {
+                severity: Severity::Warning,
+                rule: "imperative-resource",
+                message: format!(
+                    "VRF on '{node_name}' stays on the imperative deploy path \
+                     — upstream `LinkBuilder` lacks `.vrf()`. Re-applies for \
+                     this resource are not declarative-idempotent."
+                ),
+                location: Some(format!("nodes.{node_name}.vrfs")),
+            });
+        }
+        if !node.wireguard.is_empty() {
+            issues.push(ValidationIssue {
+                severity: Severity::Warning,
+                rule: "imperative-resource",
+                message: format!(
+                    "WireGuard on '{node_name}' stays on the imperative deploy \
+                     path — WireGuard is a GENL family (not RTNETLINK) and \
+                     upstream `LinkBuilder` doesn't model it. Addresses on the \
+                     WG iface do go through the declarative NetworkConfig \
+                     path (step 11c); peer + key configuration stays \
+                     imperative (step 10d)."
+                ),
+                location: Some(format!("nodes.{node_name}.wireguard")),
+            });
+        }
+        // Vxlan with `local` or `port` set — upstream LinkBuilder
+        // doesn't expose those knobs, so Slice 3 left Vxlan on the
+        // imperative path. Without `local`/`port`, the bare VNI +
+        // remote shape COULD fit `LinkBuilder::vxlan` in a future
+        // slice; flag the explicit-knob case here so users know
+        // why this resource isn't reconciled.
+        for (iface_name, iface_config) in &node.interfaces {
+            if iface_config.kind == Some(crate::types::InterfaceKind::Vxlan)
+                && (iface_config.local.is_some() || iface_config.port.is_some())
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Warning,
+                    rule: "imperative-resource",
+                    message: format!(
+                        "VXLAN '{iface_name}' on '{node_name}' uses `local` \
+                         or `port` — upstream `LinkBuilder::vxlan` doesn't \
+                         expose those knobs, so this stays on the imperative \
+                         path. Re-applies for this resource are not \
+                         declarative-idempotent."
+                    ),
+                    location: Some(format!("nodes.{node_name}.interfaces.{iface_name}")),
                 });
             }
         }

@@ -465,6 +465,196 @@ fn collect_rule_handles(nft_output: &str) -> Vec<u32> {
     handles
 }
 
+// Plan 158a — foreign nftables rules (no `nlink-lab/` USERDATA
+// comment) must survive a reconcile reapply. Documented
+// guarantee that lets users hand-edit via
+// `nlink-lab exec NODE -- nft -f extra.nft` without their
+// additions being clobbered.
+#[tokio::test]
+async fn nftables_foreign_rule_survives_apply() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping nftables_foreign_rule_survives_apply: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping nftables_foreign_rule_survives_apply: nftables not functional");
+        return;
+    }
+
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall.nll"
+    ))
+    .expect("failed to parse topology file");
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Inject a foreign rule with a distinctive comment that the
+    // diff path must leave alone (no `nlink-lab/` prefix, no
+    // `nlink:` USERDATA key — pure foreign).
+    let inject = lab
+        .exec(
+            "server",
+            "nft",
+            &[
+                "add",
+                "rule",
+                "inet",
+                "nlink-lab",
+                "input",
+                "tcp",
+                "dport",
+                "9999",
+                "accept",
+                "comment",
+                "cilium-style-foreign",
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        inject.exit_code, 0,
+        "failed to inject foreign rule: {}",
+        inject.stderr
+    );
+
+    // Confirm the foreign rule is live before reapply.
+    let before = lab.exec("server", "nft", &["list", "ruleset"]).unwrap();
+    assert!(
+        before.stdout.contains("9999"),
+        "foreign rule must be live before reapply; ruleset: {}",
+        before.stdout
+    );
+
+    // Re-apply the same topology. The diff path must not touch
+    // the foreign rule.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("failed to re-apply unchanged topology");
+
+    let after = lab.exec("server", "nft", &["list", "ruleset"]).unwrap();
+    assert!(
+        after.stdout.contains("9999"),
+        "foreign rule was deleted by reapply; surviving ruleset: {}",
+        after.stdout
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Plan 158e Slice 1 — WireGuard topologies still work after
+// addresses + routes moved to the declarative NetworkConfig
+// path. Regression check that WG interfaces (which stay
+// imperative — Slice 1 skipped them) coexist cleanly with the
+// NetworkConfig step 11c apply.
+#[tokio::test]
+async fn network_config_coexists_with_wireguard() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping network_config_coexists_with_wireguard: requires root");
+        return;
+    }
+    if !has_wireguard() {
+        eprintln!("skipping network_config_coexists_with_wireguard: wireguard not functional");
+        return;
+    }
+
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/wireguard.nll"
+    ))
+    .expect("failed to parse topology file");
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // WG interfaces should be live + carry the declared
+    // addresses on their tunnel iface (set via NetworkConfig in
+    // step 11c).
+    for node in lab.topology().nodes.keys() {
+        let out = lab.exec(node, "ip", &["addr", "show"]).unwrap();
+        assert_eq!(
+            out.exit_code, 0,
+            "ip addr show on '{node}' failed: {}",
+            out.stderr
+        );
+    }
+
+    // Reapply must succeed (catches the case where Slice 1's
+    // address handling clashes with the imperative WG
+    // configuration in step 10d).
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("reapply of WG topology failed");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Plan 158a — NAT masquerade rules reapply idempotently. The
+// declarative `NftablesConfig` path keyed on
+// `nlink-lab/nat/postrouting/<idx>/masq` must produce
+// zero kernel ops on a no-change apply.
+#[tokio::test]
+async fn nat_masquerade_reapply_is_zero_ops() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping nat_masquerade_reapply_is_zero_ops: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping nat_masquerade_reapply_is_zero_ops: nftables not functional");
+        return;
+    }
+
+    // Use the existing NAT example NLL rather than reinventing
+    // a builder DSL the codebase doesn't yet expose.
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/nat.nll"
+    ))
+    .expect("failed to parse NAT example");
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    let baseline = lab
+        .exec("router", "nft", &["-a", "list", "ruleset"])
+        .unwrap();
+    assert_eq!(baseline.exit_code, 0);
+    let baseline_handles = collect_rule_handles(&baseline.stdout);
+    assert!(
+        !baseline_handles.is_empty(),
+        "expected at least one rule (masquerade) with a handle after initial deploy"
+    );
+
+    // Re-apply.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
+    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+        .await
+        .expect("failed to re-apply unchanged topology");
+
+    let after = lab
+        .exec("router", "nft", &["-a", "list", "ruleset"])
+        .unwrap();
+    let after_handles = collect_rule_handles(&after.stdout);
+    assert_eq!(
+        baseline_handles, after_handles,
+        "NAT reapply must preserve rule handles (kernel mutations re-issue them); \
+         baseline={baseline_handles:?} after={after_handles:?}"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Plan 158e Slice 2 — declaratively-created dummy interfaces
 // survive an idempotent re-apply. Boots a topology with a
 // dummy + address on it, then re-applies and confirms the

@@ -967,12 +967,31 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // Plan 158b Phase 3 — when `--json` is on, surface terminal
+    // errors as a structured envelope on stderr (still going to
+    // stderr to keep stdout clean for tools piping JSON output).
+    let want_json_errors = cli.json;
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     match rt.block_on(run(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(nlink_lab::Error::NllDiagnostic(diag)) => {
+            // NLL diagnostics get their own rich miette renderer
+            // even under --json; the structured envelope below is
+            // for kernel/runtime errors.
             let report = miette::Report::new(*diag);
             eprintln!("{report:?}");
+            ExitCode::FAILURE
+        }
+        Err(e) if want_json_errors => {
+            let envelope = render_error_json(&e);
+            // Pretty-printing keeps the schema obvious in
+            // interactive use; tools that want compact output can
+            // re-serialize with serde_json::to_string.
+            eprintln!(
+                "{}",
+                serde_json::to_string_pretty(&envelope).unwrap_or_else(|_| format!("error: {e}"))
+            );
             ExitCode::FAILURE
         }
         Err(e) => {
@@ -980,6 +999,31 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Plan 158b Phase 3 — render an `nlink_lab::Error` as a
+/// structured JSON envelope for the `--json` paths. Walks the
+/// `std::error::Error::source` chain to build `error_chain`,
+/// and surfaces `errno` / `ext_ack` / `ext_ack_offset` from any
+/// `nlink::Error::Kernel` / `KernelWithContext` found in the
+/// chain (via the inherent accessors added in Plan 158b Phase 1).
+fn render_error_json(err: &nlink_lab::Error) -> serde_json::Value {
+    let mut chain: Vec<String> = Vec::new();
+    let mut src: &dyn std::error::Error = err;
+    loop {
+        chain.push(src.to_string());
+        match src.source() {
+            Some(next) => src = next,
+            None => break,
+        }
+    }
+    serde_json::json!({
+        "error": err.to_string(),
+        "error_chain": chain,
+        "errno": err.errno(),
+        "ext_ack": err.ext_ack(),
+        "ext_ack_offset": err.ext_ack_offset(),
+    })
 }
 
 /// Parse a topology file, optionally with CLI `--set` parameters.

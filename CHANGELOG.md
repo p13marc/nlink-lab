@@ -30,6 +30,15 @@ All notable changes to this project will be documented in this file.
   `Result<_, nlink_lab::Error>`, removing
   `.map_err(|e| Error::invalid_topology(format!(...)))` ceremony
   at identity wrap sites. Plan 158c.
+- **JSON error envelope on `--json` paths** (Plan 158b Phase 3 —
+  `bins/lab/src/main.rs`). When `--json` is in effect, terminal
+  errors render to stderr as a structured envelope: `{ error,
+  error_chain, errno, ext_ack, ext_ack_offset }`. `error_chain`
+  walks `std::error::Error::source` from the top-level error
+  down. `errno` / `ext_ack` / `ext_ack_offset` surface kernel
+  detail when an `nlink::Error::Kernel` / `KernelWithContext` is
+  anywhere in the chain. NLL parse-diagnostic errors keep their
+  miette renderer regardless of `--json`.
 - **`compute_layered_diff(running, desired) -> Result<LayeredDiff>`**
   public async helper (`nlink_lab::compute_layered_diff`). Walks
   every node in the desired topology, opens per-node `Connection<Route>`

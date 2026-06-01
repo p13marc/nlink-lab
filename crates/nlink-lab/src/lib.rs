@@ -95,7 +95,6 @@ pub use proc_stat::ProcStat;
 pub use running::{
     ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
 };
-pub use watch::{WatchEvent, WatchEventKind, WatchFamily, WatchOpts, watch_loop};
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,
@@ -103,6 +102,7 @@ pub use types::{
     network_peer_name_for,
 };
 pub use validator::{Severity, ValidationIssue, ValidationResult};
+pub use watch::{WatchEvent, WatchEventKind, WatchFamily, WatchOpts, watch_loop};
 
 /// Proc macro for integration testing. See [`lab_test`] for details.
 pub use nlink_lab_macros::lab_test;

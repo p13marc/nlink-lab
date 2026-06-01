@@ -1263,17 +1263,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     /// `NetworkConfig` diff under
                     /// `nlink/serde`. Empty map elided.
                     #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
-                    network: &'a std::collections::HashMap<
-                        String,
-                        nlink_lab::diff::ConfigDiff,
-                    >,
+                    network: &'a std::collections::HashMap<String, nlink_lab::diff::ConfigDiff>,
                     /// Plan 159d — typed per-namespace
                     /// `NftablesDiff`. Empty map elided.
                     #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
-                    nftables: &'a std::collections::HashMap<
-                        String,
-                        nlink_lab::diff::NftablesDiff,
-                    >,
+                    nftables: &'a std::collections::HashMap<String, nlink_lab::diff::NftablesDiff>,
                     /// v1 alias of `topology` — kept for one
                     /// release for backwards compat. Removed in
                     /// schema v3.

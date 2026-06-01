@@ -2659,18 +2659,13 @@ fn topology_to_wireguard_config(
 
     for (wg_name, wg_config) in &node.wireguard {
         let (private_key, _own_pub) = own_keys.get(wg_name).ok_or_else(|| {
-            Error::deploy_failed(format!(
-                "internal: no key for '{node_name}'.{wg_name}"
-            ))
+            Error::deploy_failed(format!("internal: no key for '{node_name}'.{wg_name}"))
         })?;
 
         // Snapshot the per-peer data before moving into the
         // builder closure (the closure takes `self` by value).
-        let mut peer_specs: Vec<(
-            [u8; 32],
-            Option<std::net::SocketAddr>,
-            Vec<AllowedIp>,
-        )> = Vec::new();
+        let mut peer_specs: Vec<([u8; 32], Option<std::net::SocketAddr>, Vec<AllowedIp>)> =
+            Vec::new();
 
         for peer_node_name in &wg_config.peers {
             let peer_keys = public_keys.get(peer_node_name).ok_or_else(|| {
@@ -2691,20 +2686,16 @@ fn topology_to_wireguard_config(
                 if !peer_wg_config.peers.iter().any(|p| p == node_name) {
                     continue;
                 }
-                let (_peer_priv, peer_pub) =
-                    peer_keys.get(peer_wg_name).ok_or_else(|| {
-                        Error::deploy_failed(format!(
-                            "missing public key for '{peer_node_name}'.{peer_wg_name}"
-                        ))
-                    })?;
+                let (_peer_priv, peer_pub) = peer_keys.get(peer_wg_name).ok_or_else(|| {
+                    Error::deploy_failed(format!(
+                        "missing public key for '{peer_node_name}'.{peer_wg_name}"
+                    ))
+                })?;
 
-                let endpoint = peer_wg_config
-                    .listen_port
-                    .and_then(|port| {
-                        find_peer_endpoint(topology, peer_node_name).map(|addr| {
-                            std::net::SocketAddr::new(addr, port)
-                        })
-                    });
+                let endpoint = peer_wg_config.listen_port.and_then(|port| {
+                    find_peer_endpoint(topology, peer_node_name)
+                        .map(|addr| std::net::SocketAddr::new(addr, port))
+                });
 
                 let mut allowed_ips = Vec::new();
                 for addr_str in &peer_wg_config.addresses {

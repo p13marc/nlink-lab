@@ -1129,7 +1129,9 @@ async fn slice4_vrf_reapply_is_zero_ops() {
     );
 
     // Enslave must have landed — eth1 master should be the VRF.
-    let out = lab.exec("pe", "ip", &["-d", "link", "show", "eth1"]).unwrap();
+    let out = lab
+        .exec("pe", "ip", &["-d", "link", "show", "eth1"])
+        .unwrap();
     assert!(
         out.stdout.contains("master red"),
         "'eth1' must be enslaved to VRF 'red'; got {}",
@@ -1236,7 +1238,11 @@ async fn wireguard_config_reapply_is_zero_ops() {
 
     // WG interface must exist after deploy.
     let out = lab.exec("gw-a", "wg", &["show", "wg0"]).unwrap();
-    assert_eq!(out.exit_code, 0, "wg0 must exist after deploy; stderr={}", out.stderr);
+    assert_eq!(
+        out.exit_code, 0,
+        "wg0 must exist after deploy; stderr={}",
+        out.stderr
+    );
     assert!(
         out.stdout.contains("listening port: 51820"),
         "wg0 must listen on port 51820; got {}",

@@ -13,8 +13,8 @@
 use std::sync::Arc;
 
 use nlink::netlink::events::NetworkEvent;
-use nlink::netlink::nftables::events::NftablesEvent;
 use nlink::netlink::namespace;
+use nlink::netlink::nftables::events::NftablesEvent;
 use nlink::netlink::resync::ResyncedEvent;
 use nlink::{Connection, Nftables, Route};
 use serde::Serialize;
@@ -248,7 +248,11 @@ impl WatchEventKind {
 impl WatchEvent {
     /// Render a one-line human-readable form.
     pub fn render_line(&self) -> String {
-        let snap = if self.from_snapshot { " [snapshot]" } else { "" };
+        let snap = if self.from_snapshot {
+            " [snapshot]"
+        } else {
+            ""
+        };
         format!(
             "[{}/{:?}]{snap} {}",
             self.node,
@@ -273,16 +277,34 @@ fn short_kind(k: &WatchEventKind) -> String {
         WatchEventKind::DelAddress { ifindex } => format!("DelAddress idx={ifindex}"),
         WatchEventKind::NewTable { table, family } => format!("NewTable {family}/{table}"),
         WatchEventKind::DelTable { table, family } => format!("DelTable {family}/{table}"),
-        WatchEventKind::NewChain { table, chain, family } => {
+        WatchEventKind::NewChain {
+            table,
+            chain,
+            family,
+        } => {
             format!("NewChain {family}/{table}/{chain}")
         }
-        WatchEventKind::DelChain { table, chain, family } => {
+        WatchEventKind::DelChain {
+            table,
+            chain,
+            family,
+        } => {
             format!("DelChain {family}/{table}/{chain}")
         }
-        WatchEventKind::NewRule { table, chain, family, handle } => {
+        WatchEventKind::NewRule {
+            table,
+            chain,
+            family,
+            handle,
+        } => {
             format!("NewRule {family}/{table}/{chain} handle={handle}")
         }
-        WatchEventKind::DelRule { table, chain, family, handle } => {
+        WatchEventKind::DelRule {
+            table,
+            chain,
+            family,
+            handle,
+        } => {
             format!("DelRule {family}/{table}/{chain} handle={handle}")
         }
         WatchEventKind::Other { raw } => format!("Other {raw}"),
@@ -407,16 +429,13 @@ async fn run_route_subscription(
     ns: &str,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
 ) -> Result<()> {
-    let conn: Connection<Route> = namespace::connection_for(ns).map_err(|e| {
-        Error::deploy_failed(format!("watch: route connection for '{node}': {e}"))
-    })?;
+    let conn: Connection<Route> = namespace::connection_for(ns)
+        .map_err(|e| Error::deploy_failed(format!("watch: route connection for '{node}': {e}")))?;
 
     let ns_for_factory = ns.to_owned();
     let factory: nlink::ConnectionFactory<Route> = Arc::new(move || {
         let ns = ns_for_factory.clone();
-        Box::pin(async move {
-            namespace::connection_for::<Route>(&ns)
-        })
+        Box::pin(async move { namespace::connection_for::<Route>(&ns) })
     });
 
     let mut stream = conn
@@ -463,15 +482,12 @@ async fn run_nftables_subscription(
     let ns_for_factory = ns.to_owned();
     let factory: nlink::ConnectionFactory<Nftables> = Arc::new(move || {
         let ns = ns_for_factory.clone();
-        Box::pin(async move {
-            namespace::connection_for::<Nftables>(&ns)
-        })
+        Box::pin(async move { namespace::connection_for::<Nftables>(&ns) })
     });
 
-    let mut stream = conn
-        .into_events_with_resync(factory)
-        .await
-        .map_err(|e| Error::deploy_failed(format!("watch: nftables subscribe for '{node}': {e}")))?;
+    let mut stream = conn.into_events_with_resync(factory).await.map_err(|e| {
+        Error::deploy_failed(format!("watch: nftables subscribe for '{node}': {e}"))
+    })?;
 
     while let Some(item) = stream.next().await {
         let item = match item {
@@ -545,7 +561,10 @@ mod tests {
             from_snapshot: true,
         };
         let line = ev.render_line();
-        assert!(line.contains("[snapshot]"), "snapshot marker missing: {line}");
+        assert!(
+            line.contains("[snapshot]"),
+            "snapshot marker missing: {line}"
+        );
     }
 
     #[test]
@@ -557,7 +576,10 @@ mod tests {
             from_snapshot: false,
         };
         let json = serde_json::to_string(&ev).unwrap();
-        assert!(json.contains("\"kind\":\"new_route\""), "tagged kind missing: {json}");
+        assert!(
+            json.contains("\"kind\":\"new_route\""),
+            "tagged kind missing: {json}"
+        );
         assert!(
             !json.contains("from_snapshot"),
             "from_snapshot should be elided when false: {json}"

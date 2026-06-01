@@ -326,11 +326,8 @@ mod tests {
     /// chain that `first_nlink_error` walks in one step.
     #[test]
     fn root_cause_drills_through_nlink_chain_to_kernel_layer() {
-        let kernel = nlink::Error::from_errno_ext_ack(
-            42,
-            Some("netlink: deep ext_ack".into()),
-            Some(8),
-        );
+        let kernel =
+            nlink::Error::from_errno_ext_ack(42, Some("netlink: deep ext_ack".into()), Some(8));
         let lab_err: Error = kernel.into();
         // first_nlink_error walks to the nlink::Error layer;
         // root_cause then drills (transparently unboxing) to
@@ -346,11 +343,8 @@ mod tests {
     /// `root_cause`.
     #[test]
     fn root_cause_drills_through_namespace_variant() {
-        let kernel = nlink::Error::from_errno_ext_ack(
-            13,
-            Some("netlink: namespace wrap".into()),
-            None,
-        );
+        let kernel =
+            nlink::Error::from_errno_ext_ack(13, Some("netlink: namespace wrap".into()), None);
         let lab_err = Error::Namespace {
             op: "create",
             ns: "rc-test".into(),

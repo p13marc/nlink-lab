@@ -4,6 +4,108 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`nlink-lab watch <lab>` — kernel-event tail (Plan 159b).**
+  Subscribes to nftables + RTNETLINK multicast on every node in
+  the running lab and emits one line per kernel mutation. Powered
+  by 0.19's `Connection<Route>::subscribe_all_with_resync` +
+  `Connection<Nftables>::subscribe_all_with_resync`. Supports
+  `--family route|nftables|both` (default `both`) and `--json`
+  for NDJSON output. Container nodes are skipped in this phase
+  (bare-namespace nodes only); follow-up to extend to
+  `/proc/<pid>/ns/net` resolution. Public API:
+  `nlink_lab::WatchEvent`, `WatchEventKind`, `WatchFamily`,
+  `WatchOpts`, `watch_loop`.
+- **Declarative VRF + VXLAN in deploy step 11c (Plan 159a
+  Slice 4).** `topology_to_network_config` now emits VRF links
+  via `LinkBuilder::vrf(table)` and VXLAN links via
+  `LinkBuilder::vxlan + vxlan_local + vxlan_remote + vxlan_port`
+  (0.19 upstream Plan 190 §2.1/§2.3). Step 6's VXLAN branch +
+  step 6b VRF block + step 10c VRF enslave block become no-op
+  markers; re-applies on unchanged topologies make zero kernel
+  calls on these layers. Five new unit tests:
+  `network_config_vrf_declares_link_with_table`,
+  `network_config_vrf_master_enslave_after_vrf_link`,
+  `network_config_vxlan_declares_with_local_remote_port`,
+  `network_config_vxlan_missing_vni_errors`,
+  `network_config_vxlan_bad_local_addr_errors`.
+- **Declarative WireGuard in step 10d (Plan 159a Phase 2).**
+  Three new helpers replace the two-pass imperative
+  `wg_conn.set_device(...)` loops: `build_wg_public_key_map`
+  (sync key resolution, returns `(private, public)` per WG
+  iface), `topology_to_wireguard_config` (builds a
+  `WireguardConfig` from NLL), and `apply_wireguard_for_node`
+  (calls `apply_reconcile` per node). Step 10d's body is now
+  one declarative apply per node with peer cross-references
+  resolved up-front. Four new unit tests:
+  `build_wg_public_key_map_decodes_explicit_key`,
+  `build_wg_public_key_map_bad_key_errors`,
+  `topology_to_wireguard_config_declares_devices_and_peers`,
+  `topology_to_wireguard_config_unknown_peer_node_errors`.
+- **`apply_stack_for_node` per-node orchestrator (Plan 159c).**
+  Bundles `apply_network_config_for_node`,
+  `apply_nftables_for_node`, and `apply_wireguard_for_node`
+  into a single per-node call site with one unified
+  `tracing::info!`. Mirrors upstream `facade::Stack::apply`
+  shape but routes through `NodeHandle::connection<P>()` so the
+  container case (`connection_for_pid`) keeps working alongside
+  bare namespaces — upstream's `Stack::apply_in_namespace(&str)`
+  is name-based only. Collapsed three separate per-node loops
+  in `deploy()` into one.
+
+### Changed
+- **`apply --check --json` / `apply --dry-run --json` ships
+  schema v2 (Plan 159d).** The envelope now emits typed
+  per-namespace `network` (upstream `ConfigDiff` under
+  `nlink/serde`) and `nftables` (upstream `NftablesDiff`)
+  fields. `schema_version: 2` is an explicit envelope field;
+  downstream `jq` consumers should branch on it. The v1 fields
+  `.diff` (alias of topology) and `.layered_summary` (Display
+  output) are retained for one release as a deprecation period,
+  marked by `"layered_summary_deprecated": true`. Both will be
+  removed in schema v3. See
+  `docs/json-schemas/layered-diff.v2.schema.json` for the new
+  shape and `docs/json-schemas/layered-diff.schema.json` for
+  the v1 reference still kept alongside.
+- **`Error::ext_ack` / `errno` / `ext_ack_offset` refactored
+  onto `nlink::Error::root_cause` (Plan 159f).** Three
+  hand-rolled `downcast_ref` loops collapsed to one private
+  `first_nlink_error` helper + three one-liners. Behavior
+  unchanged for current variants; defeats the
+  `Box<nlink::Error>` source-downcast trap described in
+  `nlink-feedback.md` item #4 if we ever box a wrapper source
+  in the future. Two new tests:
+  `root_cause_drills_through_nlink_chain_to_kernel_layer`,
+  `root_cause_drills_through_namespace_variant`.
+- **Bumped workspace `nlink` dep `0.18` → `0.19`.** The 0.19
+  release closes 14 of the 16 numbered items, 4 of the 9
+  wishlist items, and all 6 documentation suggestions from
+  `nlink-feedback.md` (2026-05-30). The bump itself required
+  only two test-assertion flips in
+  `crates/nlink-lab/src/error.rs` (`Error::from_errno*` now
+  normalizes errno via `.abs()` per upstream Plan 187 §2.1, so
+  `errno()` returns the positive errno regardless of input
+  sign) and silencing a new `#[must_use]` warning on
+  `PerPeerImpairer::reconcile`'s `ReconcileReport` return.
+  No other call site changed. The breaking changes in 0.19
+  (`ApplyOptions::with_purge` removed, `Hook::Ingress` split,
+  `NatExpr.addr` enum, `Connection<P>::events()` async,
+  `subscribe` family `&mut self` → `&self`) all targeted call
+  sites nlink-lab does not use. Silent-corruption fixes that
+  nlink-lab transitively benefits from include the TC filter
+  `tcm_info` packing fix (flower filter protocol field was
+  silently wrong), `Verdict::Jump`/`Goto` constants (pre-0.19
+  emitted `NFT_BREAK = -2` instead of `NFT_JUMP = -3` /
+  `NFT_GOTO = -4`, silently terminating instead of jumping),
+  IPv6 NAT register drop (PR #6), F1 `Connection<P>` request
+  lock (concurrent dumps on shared `Arc<Connection>`), and N1
+  `namespace::create` thread-bleed. See
+  `nlink-0.19-realignment.md` for the full closeout +
+  follow-up work list (Plan 158d RTNETLINK side, Plan 158e
+  Slice 4 declarative VRF/WG/Vxlan, `facade::Stack` adoption,
+  `serde` derive on `LayeredDiff`, `chain_walk`-based source
+  walk).
+
 ### Library API breaks
 - **Plan 158b — `Error::Namespace` now carries
   `#[source] source: nlink::Error`** instead of

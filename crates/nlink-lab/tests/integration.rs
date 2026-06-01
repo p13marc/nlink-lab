@@ -1350,6 +1350,171 @@ async fn compute_layered_diff_on_unchanged_topology_is_empty() {
     lab.destroy().await.expect("destroy failed");
 }
 
+// Plan 158f Phase 2 follow-up — `compute_layered_diff` against
+// a topology that DIFFERS from the running state must report a
+// non-empty diff. Specifically: deploy simple.nll, mutate the
+// in-memory `desired` topology to add a new address, recompute
+// the layered diff, assert at least one change shows up in the
+// network layer for the affected node.
+//
+// Catches the regression where compute_layered_diff returns
+// empty for *all* topologies (e.g. silently swallowed
+// per-node connection errors). The "empty case" test above
+// can't catch this because both 0-changes-OK and broken-loop
+// produce the same empty result.
+#[tokio::test]
+async fn compute_layered_diff_reports_non_empty_when_address_changes() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping compute_layered_diff_reports_non_empty_when_address_changes: \
+             requires root"
+        );
+        return;
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/simple.nll"
+    ))
+    .expect("failed to parse topology file");
+    let lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Mutate the desired topology — inject an extra address on
+    // 'router' under an explicit interface entry. The running
+    // lab doesn't have this address, so compute_layered_diff
+    // must surface it.
+    let mut desired = topo.clone();
+    let router = desired
+        .nodes
+        .get_mut("router")
+        .expect("simple.nll has 'router'");
+    router.interfaces.insert(
+        "lo".to_string(),
+        nlink_lab::types::InterfaceConfig {
+            kind: Some(nlink_lab::types::InterfaceKind::Loopback),
+            addresses: vec!["10.99.99.99/32".to_string()],
+            ..Default::default()
+        },
+    );
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(
+        !layered.is_empty(),
+        "expected non-empty layered diff after injecting an extra \
+         address on 'router'; got {} changes",
+        layered.change_count()
+    );
+
+    // The change must be on the network layer for 'router'.
+    let router_diff = layered
+        .network
+        .get("router")
+        .expect("network layer must surface a diff for 'router'");
+    assert!(
+        !router_diff.is_empty(),
+        "network layer diff for 'router' must be non-empty after \
+         injecting an extra address"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Plan 159d — `apply --check --json` emits a v2 envelope with
+// schema_version, network, nftables, diff, layered_summary, and
+// layered_summary_deprecated fields. Exercises the end-to-end
+// CLI shape against a real deployed lab.
+//
+// Spawns the CLI rather than calling library code directly so
+// regressions in `bins/lab/src/main.rs` can't slip past.
+#[tokio::test]
+async fn apply_check_json_emits_schema_v2_envelope() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_check_json_emits_schema_v2_envelope: requires root");
+        return;
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/simple.nll"
+    ))
+    .expect("failed to parse topology file");
+    let lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Locate the test-built `nlink-lab` binary. cargo populates
+    // CARGO_BIN_EXE_<binary> for `bin` targets, but the binary
+    // lives in the workspace `bins/lab` crate, not this one;
+    // we have to walk the parent target/ dir instead.
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let target_dir = manifest
+        .ancestors()
+        .find_map(|p| {
+            let candidate = p.join("target").join("debug").join("nlink-lab");
+            if candidate.exists() {
+                Some(candidate)
+            } else {
+                None
+            }
+        })
+        .expect(
+            "expected debug nlink-lab binary in target/debug; \
+             run `cargo build --bin nlink-lab` first",
+        );
+
+    let output = std::process::Command::new(&target_dir)
+        .args([
+            "--json",
+            "apply",
+            "--check",
+            "--dry-run",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/simple.nll"),
+        ])
+        .output()
+        .expect("failed to run nlink-lab apply --check --json");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let envelope: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("envelope not valid JSON: {e}; stdout:\n{stdout}"));
+
+    assert_eq!(
+        envelope["schema_version"], 2,
+        "schema_version must be 2; got {envelope}"
+    );
+    assert!(
+        envelope["lab"].is_string(),
+        "lab field must be a string; got {envelope}"
+    );
+    assert!(
+        envelope["no_op"].is_boolean(),
+        "no_op field must be a boolean; got {envelope}"
+    );
+    assert!(
+        envelope["change_count"].is_number(),
+        "change_count must be a number; got {envelope}"
+    );
+    assert!(
+        envelope["diff"].is_object(),
+        "diff (v1 alias) must be an object; got {envelope}"
+    );
+    assert!(
+        envelope["layered_summary"].is_string(),
+        "layered_summary must be a string during the deprecation window"
+    );
+    assert_eq!(
+        envelope["layered_summary_deprecated"], true,
+        "deprecation marker must be true; got {envelope}"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Plan 158e Slice 1 — re-applying an unchanged topology must
 // not perturb live addresses or routes. The new declarative
 // path runs `NetworkConfig::apply` which is idempotent;
@@ -1751,6 +1916,128 @@ async fn apply_add_node_and_link() {
     );
 
     // Clean up
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Plan 159a Phase 2 follow-up (commit bfe8744) — `apply_diff`
+// Phase 6 must now configure WireGuard for newly-added nodes via
+// the Stack pattern. Pre-fix, adding a node with WG via apply
+// left the WG layer unconfigured. This test:
+//
+//   1. Deploy a small 2-node topology with no WG.
+//   2. Build a desired topology that adds a third node with WG.
+//   3. `apply_diff` and confirm `wg show wg0` works on the new
+//      node — proves Phase 6 ran the WG config.
+//
+// Skips when the kernel WG module or the `wg` userspace binary
+// aren't available (CI runner inconsistency).
+#[cfg(feature = "wireguard")]
+#[tokio::test]
+async fn apply_diff_phase6_configures_wireguard_for_added_node() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping apply_diff_phase6_configures_wireguard_for_added_node: \
+             requires root"
+        );
+        return;
+    }
+    let _ = std::process::Command::new("modprobe")
+        .arg("wireguard")
+        .status();
+    if !std::path::Path::new("/sys/module/wireguard").exists() {
+        eprintln!(
+            "skipping apply_diff_phase6_configures_wireguard_for_added_node: \
+             wireguard kernel module unavailable"
+        );
+        return;
+    }
+    let wg_on_path = std::process::Command::new("which")
+        .arg("wg")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !wg_on_path {
+        eprintln!(
+            "skipping apply_diff_phase6_configures_wireguard_for_added_node: \
+             `wg` binary not on PATH"
+        );
+        return;
+    }
+
+    // Step 1 — deploy a starting topology with two plain nodes.
+    let topo = nlink_lab::Lab::new("apply-wg-phase6")
+        .node("a", |n| n)
+        .node("b", |n| n)
+        .link("a:eth0", "b:eth0", |l| {
+            l.addresses("10.99.0.1/24", "10.99.0.2/24")
+        })
+        .build();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // Step 2 — build a desired topology that adds a 'c' node
+    // hosting a WireGuard interface peered with 'a'. We have to
+    // add a matching WG block on 'a' too (peers cross-reference
+    // each other in the public-key map).
+    let mut desired = topo.clone();
+    desired.nodes.insert(
+        "c".to_string(),
+        nlink_lab::types::Node {
+            wireguard: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(
+                    "wg0".to_string(),
+                    nlink_lab::types::WireguardConfig {
+                        private_key: None,
+                        listen_port: Some(51822),
+                        fwmark: None,
+                        addresses: vec!["10.255.0.3/32".to_string()],
+                        peers: vec!["a".to_string()],
+                    },
+                );
+                m
+            },
+            ..Default::default()
+        },
+    );
+    if let Some(a) = desired.nodes.get_mut("a") {
+        a.wireguard.insert(
+            "wg0".to_string(),
+            nlink_lab::types::WireguardConfig {
+                private_key: None,
+                listen_port: Some(51820),
+                fwmark: None,
+                addresses: vec!["10.255.0.1/32".to_string()],
+                peers: vec!["c".to_string()],
+            },
+        );
+    }
+
+    // Step 3 — apply the diff and check the WG layer is live on
+    // the newly-added node.
+    let current = lab.topology().clone();
+    let diff = nlink_lab::diff::diff_topologies(&current, &desired);
+    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+        .await
+        .expect("apply_diff failed");
+
+    let out = lab
+        .exec("c", "wg", &["show", "wg0"])
+        .expect("exec wg show on new node 'c'");
+    assert_eq!(
+        out.exit_code, 0,
+        "wg show wg0 on newly-added node must succeed; stderr={}",
+        out.stderr
+    );
+    assert!(
+        out.stdout.contains("listening port: 51822"),
+        "wg0 on 'c' must report the declared listen port; got {}",
+        out.stdout
+    );
+
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }

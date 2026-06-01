@@ -3,13 +3,13 @@
 //! Takes a validated [`Topology`] and creates the actual network lab using
 //! nlink APIs. Follows the deployment sequence from the design document.
 
+#[cfg(feature = "wireguard")]
+use nlink::Wireguard;
 use nlink::netlink::bridge_vlan::BridgeVlanBuilder;
 use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::netlink::tc::NetemConfig;
 use nlink::{Connection, Route};
-#[cfg(feature = "wireguard")]
-use nlink::Wireguard;
 use std::collections::HashMap;
 use std::net::IpAddr;
 

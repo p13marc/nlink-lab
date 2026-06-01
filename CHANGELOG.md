@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **WireGuard `fwmark` keyword in NLL.** Surfaces nlink 0.19's
+  `DeclaredWgDeviceBuilder::fwmark` so policy-routing setups can
+  match WG-encapsulated outbound traffic by routing mark. Syntax:
+  `wireguard wg0 { ... fwmark 100 ... }`. Per-peer `preshared_key`
+  remains deferred — needs a broader parser refactor since the
+  existing `peers [a, b]` shape is a flat `Vec<String>`.
+- **Watch CLI now covers container nodes (Plan 159b Phase 4).** New
+  `NsResolver` enum (re-exported as `nlink_lab::NsResolver`) bundles
+  both name-based (bare namespace) and pid-based (container)
+  namespace resolution. The watch loop and ENOBUFS resync factory
+  closures both branch through `NsResolver::open_route` /
+  `open_nftables`, so `nlink-lab watch <lab>` now tails events from
+  every node in the lab regardless of whether the node is a bare
+  namespace or a container. The previous "skipping watch for
+  container node" warning is gone.
 - **VXLAN `underlay` keyword in NLL.** Pins the VXLAN tunnel to a
   specific underlay device via nlink 0.19's
   `LinkBuilder::vxlan_underlay_dev` (upstream Plan 190 §2.1). NLL

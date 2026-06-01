@@ -253,7 +253,7 @@ enum Commands {
     ///
     /// Stdout/stderr are captured to per-process log files at:
     ///
-    ///   $XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}
+    ///   `$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
     ///
     /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
     /// path is stable; consumers can read it directly, or use
@@ -297,7 +297,7 @@ enum Commands {
         /// Wait for a stdout/stderr line matching REGEX before returning.
         ///
         /// Useful for services that signal readiness via a log line
-        /// rather than a port (e.g., "[STARTED] tunnel established").
+        /// rather than a port (e.g., `[STARTED] tunnel established`).
         /// Combinable with --wait-tcp; both must succeed before spawn
         /// returns. Fails the spawn on timeout.
         #[arg(long, value_name = "REGEX")]
@@ -371,7 +371,7 @@ enum Commands {
     /// Modify link impairment at runtime.
     ///
     /// JSON OUTPUT (with `--show --json`):
-    ///   { "lab": str, "endpoints": { "<node>:<iface>": { ... } | null } }
+    ///   `{ "lab": str, "endpoints": { "<node>:<iface>": { ... } | null } }`
     /// Schema: docs/json-schemas/impair-show.schema.json
     ///
     /// Without `--show`, applies impairment changes; output is plain
@@ -802,7 +802,7 @@ enum Commands {
         /// Lab name (or path to an .nll file with --archive).
         lab: String,
 
-        /// Output file (default: stdout for plain export, ./<lab>.nlz with --archive).
+        /// Output file (default: stdout for plain export, `./<lab>.nlz` with `--archive`).
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -834,7 +834,7 @@ enum Commands {
         /// Path to a `.nlz` archive.
         archive: PathBuf,
 
-        /// Extract to this directory. Default: ./<lab-name>/
+        /// Extract to this directory. Default: `./<lab-name>/`
         #[arg(short = 'd', long)]
         dir: Option<PathBuf>,
 
@@ -869,7 +869,7 @@ enum Commands {
     /// a container).  With `--pid`: shows the per-process log file written
     /// by `spawn`. Per-process log files live at:
     ///
-    ///   $XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}
+    ///   `$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
     ///
     /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
     /// path is stable; consumers can read it directly.

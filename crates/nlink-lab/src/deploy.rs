@@ -7,7 +7,9 @@ use nlink::netlink::bridge_vlan::BridgeVlanBuilder;
 use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::netlink::tc::NetemConfig;
-use nlink::{Connection, Route, Wireguard};
+use nlink::{Connection, Route};
+#[cfg(feature = "wireguard")]
+use nlink::Wireguard;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
@@ -44,6 +46,7 @@ impl NodeHandle {
         }
     }
 
+    #[cfg(feature = "wireguard")]
     async fn wireguard_connection(
         &self,
     ) -> std::result::Result<Connection<Wireguard>, nlink::netlink::Error> {
@@ -2576,6 +2579,7 @@ fn decode_wg_key(s: &str) -> std::result::Result<[u8; 32], String> {
 }
 
 /// Find a reachable IP address for a peer node (from link or interface addresses).
+#[cfg(feature = "wireguard")]
 fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Option<IpAddr> {
     // Check link addresses first
     for link in &topology.links {
@@ -2840,12 +2844,13 @@ async fn apply_wireguard_for_node(
 /// - Lab-graph differences (nodes/links/impair/sysctls/etc.) via
 ///   [`crate::diff::diff_topologies`].
 /// - Per-namespace RTNETLINK diff (links/addresses/routes/qdiscs)
-///   by building the same [`NetworkConfig`] step 11c of the
-///   deploy uses and calling its `diff()` against a per-node
-///   `Connection<Route>`.
+///   by building the same [`nlink::netlink::config::NetworkConfig`]
+///   step 11c of the deploy uses and calling its `diff()` against
+///   a per-node `Connection<Route>`.
 /// - Per-namespace nftables diff by building the same
-///   [`NftablesConfig`] step 13 uses and calling its `diff()`
-///   against a per-node `Connection<Nftables>`.
+///   [`nlink::netlink::nftables::config::NftablesConfig`] step 13
+///   uses and calling its `diff()` against a per-node
+///   `Connection<Nftables>`.
 ///
 /// Used by `nlink-lab apply --check` and `apply --dry-run` so
 /// CI and operators see the full set of kernel changes that

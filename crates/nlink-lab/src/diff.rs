@@ -263,7 +263,7 @@ impl std::fmt::Display for TopologyDiff {
 /// nftables state. Plan 158f.
 ///
 /// Each layer's `Display` impl is delegated to:
-/// - [`TopologyDiff::fmt`] for the lab-graph diff
+/// - [`TopologyDiff`]'s `Display` for the lab-graph diff
 /// - [`nlink::netlink::config::ConfigDiff`]'s `Display` (Plan 183
 ///   in nlink 0.18) for RTNETLINK
 /// - [`nlink::netlink::nftables::config::NftablesDiff`]'s `Display`

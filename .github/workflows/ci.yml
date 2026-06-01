@@ -16,17 +16,65 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build
+      - name: Build (default features)
         run: cargo build --all-targets
+
+      - name: Build (--no-default-features)
+        # Catches code that wrongly assumes a feature is on (e.g.
+        # uses `wireguard`-gated types without the cfg gate).
+        run: cargo build -p nlink-lab --no-default-features --all-targets
+
+      - name: Build (--all-features)
+        # Catches code that only compiles with no features
+        # active. Mirrors what downstream consumers see when they
+        # opt into everything (e.g. `legacy-tcpdump-filter`).
+        run: cargo build --all-features --all-targets
+
+      - name: Build (release)
+        # Release vs debug differ in overflow checks and panic
+        # behaviour; catches issues that only surface under -O.
+        run: cargo build --release --all-targets
 
       - name: Unit tests
         run: cargo test -p nlink-lab --lib
 
+      - name: Unit tests (--no-default-features)
+        run: cargo test -p nlink-lab --lib --no-default-features
+
+      - name: Unit tests (--all-features)
+        run: cargo test -p nlink-lab --lib --all-features
+
+      - name: Doctests
+        # cargo test --doc — catches broken `///` examples that
+        # the regular test job doesn't see.
+        run: cargo test -p nlink-lab --doc
+
       - name: Stress tests
         run: cargo test -p nlink-lab --test stress
 
-      - name: Clippy
+      - name: Clippy (default)
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: Clippy (--all-features)
+        # Catches lints that only fire under feature-gated code
+        # (e.g. the wireguard module's clippy needs the gate on).
+        run: cargo clippy --all-features --all-targets -- -D warnings
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo doc (broken-link detection)
+        # `RUSTDOCFLAGS=-D warnings` turns broken intra-doc links
+        # into errors. The bare `cargo doc --no-deps` doesn't run
+        # the doctests but does build every `///` snippet for
+        # link resolution.
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --all-features
 
   fmt:
     runs-on: ubuntu-latest
@@ -46,6 +94,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install wireguard userspace tools
+        # `wg show` is needed by the wireguard integration test;
+        # `iperf3` is used by some benchmark tests. The CI runner
+        # ships neither out of the box.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools iperf3
+
       - name: Load kernel modules for integration tests
         run: |
           sudo modprobe nf_tables || true
@@ -54,5 +110,11 @@ jobs:
           sudo modprobe br_netfilter || true
           sudo modprobe 8021q || true
 
-      - name: Integration tests (requires root)
+      - name: Integration tests (requires root, default features)
         run: sudo -E env PATH="$PATH" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" $(which cargo) test -p nlink-lab --test integration -- --test-threads=1
+
+      - name: Integration tests (requires root, --all-features)
+        # Mirrors the default-features run but with every feature
+        # toggled on, so any feature-gated integration test (e.g.
+        # `legacy-tcpdump-filter`) gets exercised.
+        run: sudo -E env PATH="$PATH" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" $(which cargo) test -p nlink-lab --test integration --all-features -- --test-threads=1

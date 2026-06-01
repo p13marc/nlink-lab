@@ -1318,7 +1318,7 @@ impl RunningLab {
     /// Sample resource usage for a single process inside a node's
     /// namespace. Reads `/proc/<pid>/{stat,status}` plus the entry
     /// count of `/proc/<pid>/fd/`, then assembles into a structured
-    /// [`ProcStat`].
+    /// [`crate::ProcStat`].
     ///
     /// The reads happen via [`exec`](Self::exec) inside the target
     /// namespace, so:

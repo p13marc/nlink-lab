@@ -46,7 +46,7 @@ impl LabCapture {
     /// Start one capture per `(node-namespace-name, iface)` entry.
     ///
     /// Each capture writes to `<temp>/<node>.pcap`. Captures run
-    /// until [`stop`] is called or the helper is dropped.
+    /// until the helper is dropped.
     pub fn start(targets: &[(String, String)]) -> Result<Self> {
         let temp = tempfile::tempdir()
             .map_err(|e| Error::invalid_topology(format!("create temp dir for captures: {e}")))?;

@@ -110,6 +110,14 @@ jobs:
           sudo modprobe br_netfilter || true
           sudo modprobe 8021q || true
 
+      - name: Build CLI binary for integration tests
+        # `apply_check_json_emits_schema_v2_envelope` spawns the
+        # `nlink-lab` CLI to verify the v2 JSON envelope shape end
+        # to end. The integration job is scoped to `-p nlink-lab`
+        # so it doesn't build the bins/lab binary by default;
+        # build it explicitly here.
+        run: cargo build --bin nlink-lab
+
       - name: Integration tests (requires root, default features)
         run: sudo -E env PATH="$PATH" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" $(which cargo) test -p nlink-lab --test integration -- --test-threads=1
 

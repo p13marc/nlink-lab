@@ -3196,6 +3196,32 @@ pub async fn apply_diff(
         let node = &desired.nodes[node_name];
         let handle = node_handle_for(running, node_name)?;
 
+        // Plan 159a Phase 2 follow-up #2 — apply_diff Phase 6 must
+        // create the WG interface BEFORE the Stack pattern runs,
+        // because `WireguardConfig::diff` calls `get_device_by_name`
+        // which fails on a non-existent interface. Mirrors step 6c
+        // of the fresh-deploy path. WG is GENL not RTNETLINK, so
+        // `DeclaredLinkType::Wireguard` doesn't exist; the link
+        // creation has to stay imperative.
+        #[cfg(feature = "wireguard")]
+        if !node.wireguard.is_empty() {
+            let conn: Connection<Route> = handle.connection().map_err(|e| {
+                Error::deploy_failed(format!(
+                    "connection for newly-added node '{node_name}': {e}"
+                ))
+            })?;
+            for wg_name in node.wireguard.keys() {
+                conn.add_link(nlink::netlink::link::WireguardLink::new(wg_name))
+                    .await
+                    .map_err(|e| {
+                        Error::deploy_failed(format!(
+                            "failed to create WireGuard interface '{wg_name}' on \
+                             newly-added node '{node_name}': {e}"
+                        ))
+                    })?;
+            }
+        }
+
         let net = topology_to_network_config(
             node_name,
             node,

@@ -857,7 +857,7 @@ async fn network_config_coexists_with_wireguard() {
 
     let topo = nlink_lab::parser::parse_file(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/wireguard.nll"
+        "/../../examples/wireguard-vpn.nll"
     ))
     .expect("failed to parse topology file");
     let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");

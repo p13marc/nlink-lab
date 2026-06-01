@@ -9,6 +9,15 @@ while implementing the seven-plan 158 arc against nlink 0.18 in
 nlink-lab. Every item is grounded in a concrete downstream
 workaround or test failure; nothing speculative.
 
+> **2026-05-31 status update:** nlink `0.19.0` shipped 2026-05-30
+> and closes **14 of the 16 numbered items, 4 of the 9 wishlist
+> items, and all 6 doc suggestions** in this report. Full
+> closeout, follow-up plans, and per-item disposition table in
+> [`nlink-0.19-realignment.md`](./nlink-0.19-realignment.md).
+> The remaining deferred items (#14 declarative nft sets, W5
+> lazy connection, W9 macvlan Source mode) are low-priority and
+> have no current downstream blocker.
+
 ---
 
 ## TL;DR — read this table first

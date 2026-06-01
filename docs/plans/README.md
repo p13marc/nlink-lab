@@ -4,36 +4,74 @@ Implementation plans for nlink-lab.
 
 ## Active plans
 
-The Plan 158 arc — adopt nlink 0.16/0.17/0.18. Each sub-plan
-ships as its own PR; the workspace `nlink = "0.18"` bump is
-already in. With breaking-compat freedom granted, the arc
-expanded from 4 PRs to 7.
+### 159 arc — adopt nlink 0.19
+
+Workspace dep bumped to `nlink = "0.19"` (commit pending). The
+0.19 release closed 14/16 numbered items + 4/9 wishlist items
++ all 6 doc suggestions from `nlink-feedback.md`. The 159 arc
+adopts the new APIs that 0.19 unlocked. See
+[`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+for the per-item closeout.
 
 | Plan | Title | Effort | Priority | Status |
 |------|-------|--------|----------|--------|
-| [158](158-nlink-0.16-0.17-adoption.md) | Umbrella — what 0.16/0.17/0.18 give us; ship order | — | — | ongoing |
-| [158a](158a-nftables-reconcile.md) | Per-rule nftables reconcile via `NftablesConfig` + atomic `apply()` | M | P1 | ✅ shipped (`792a588`) |
-| [158e](158e-network-config-adoption.md) | Declarative RTNETLINK deploy via `NetworkConfig`; collapses many deploy steps | L | P1 | ✅ Slices 1+2+3 shipped (`4098328` `5ae58a8` `ffb0e5b`); Vxlan still imperative (upstream gap) |
-| [158b](158b-error-ext-ack.md) | Typed `Error::source` chain + `ext_ack()` accessor (BC-break) | M | P2 | ✅ shipped (`22887bd`) |
-| [158f](158f-display-driven-diff.md) | `LayeredDiff` using upstream `Display for *Diff` | S | P2 | ✅ Phase 1 + Phase 2 shipped (`4115099` + `4581be3`) |
-| [158g](158g-rate-limit-reconcile.md) | Adopt `RateLimiter::reconcile` (small upstream + swap) | S | P2 | ⏳ blocked on upstream `RateLimiter::reconcile` PR |
-| [158c](158c-from-parse-error.md) | Parse-error ergonomics + `default_route()` adoption | S | P3 | ✅ shipped (`3af7e7b`) |
-| [158d](158d-watch-nft-events.md) | `nlink-lab watch <lab>` — push-driven nftables event tail | M | P3 | ⏳ unimplemented — power-user feature, "ship if asked" per umbrella plan |
+| [159](159-nlink-0.19-adoption.md) | Umbrella — what 0.19 unlocks; ship order | — | — | proposed |
+| [159a](159a-declarative-vrf-wg-vxlan.md) | Declarative VRF + WireGuard + VXLAN (closes 158e Slice 4) | M | P1 | proposed |
+| [159b](159b-watch-route-events.md) | `nlink-lab watch` covering RTNETLINK + nftables (supersedes 158d) | M | P2 | proposed |
+| [159c](159c-facade-stack-adoption.md) | `facade::Stack` adoption — single per-namespace apply | S–M | P2 | proposed (blocked on 159a) |
+| [159d](159d-serde-layered-diff.md) | `serde` derive on `LayeredDiff`; drop `layered_summary` string fallback | S | P2 | proposed |
+| [159e](159e-confdiff-apply-inherent.md) | `ConfigDiff::apply` inherent + `del_*_if_exists` adoption | XS | P3 | proposed |
+| [159f](159f-chain-walk-refactor.md) | `Error::chain_walk` refactor of `ext_ack`/`errno`/`ext_ack_offset` accessors | XS | P3 | proposed |
 
-Recommended ship order: **A + E in one bundle** (declarative
-deploy shape) → **B** (typed Error chain) → **F** (Display
-shape uses B's `ext_ack` accessor) → **G** (independent, ships
-when upstream `RateLimiter::reconcile` lands) → **C** (janitor)
-→ **D** (power-user, last). See the umbrella plan for the
-rationale.
+Recommended ship order: **159a** (biggest leverage, unblocks 159c)
+→ **159f** (XS cleanup) → **159d** (schema bump, ship early for
+deprecation lead time) → **159e** (janitor) → **159c**
+(architectural cleanup, needs 159a's `WireguardConfig`) → **159b**
+(net-new feature, can ship whenever there's demand).
 
-After the arc lands, nlink-lab's deploy has zero "delete-
-then-rebuild" reconcile paths — every resource layer is
-incremental.
+### 158g — blocked on upstream
+
+The one remaining 158-arc plan that is neither shipped nor
+superseded:
+
+| Plan | Title | Effort | Priority | Status |
+|------|-------|--------|----------|--------|
+| [158g](158g-rate-limit-reconcile.md) | Adopt `RateLimiter::reconcile` (small upstream + swap) | S | P2 | ⏳ blocked — `PerHostLimiter::reconcile` ships in 0.19, but the per-iface `RateLimiter` that nlink-lab uses has only `apply`/`remove`. Awaiting upstream parity. |
+
+### 158 arc — shipped (no longer in this directory)
+
+Plans 158, 158a, 158b, 158c, 158d, 158e, 158f shipped through
+the 0.18 adoption pass and have been removed per the convention
+below. Highlights:
+
+- **158a** — nftables reconcile via `NftablesConfig` + atomic
+  `apply` (commit `792a588`)
+- **158b** — typed `Error::source` chain + `ext_ack` accessor
+  (commit `22887bd`); cosmetic refactor of the accessor onto
+  `chain_walk` now lives in [159f](159f-chain-walk-refactor.md)
+- **158c** — `From<AddrParseError>`/`From<ParseIntError>` +
+  `default_route()` adoption (commit `3af7e7b`)
+- **158d** — push-driven nftables event tail; **superseded by
+  [159b](159b-watch-route-events.md)** which covers both
+  nftables AND RTNETLINK families
+- **158e** — declarative RTNETLINK deploy via `NetworkConfig`;
+  Slices 1+2+3 shipped (commits `4098328`, `5ae58a8`,
+  `ffb0e5b`); **Slice 4 reopened as
+  [159a](159a-declarative-vrf-wg-vxlan.md)** once 0.19 lifted
+  the upstream gaps for VRF/WG/VXLAN
+- **158f** — `LayeredDiff` rendering via upstream `Display`
+  (commits `4115099`, `4581be3`); typed-JSON follow-up in
+  [159d](159d-serde-layered-diff.md)
+
+Full per-commit record in `CHANGELOG.md`. Per-item closeout of
+the upstream feedback that shaped the arc in
+[`nlink-feedback.md`](../../nlink-feedback.md) and
+[`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md).
 
 ## Completed
 
-Plans 050–157 have been implemented and their plan files removed.
+Plans 050–158 (excluding 158g, still active) have been
+implemented and their plan files removed.
 Authoritative ship-record is `CHANGELOG.md` at the repo root.
 
 Highlights, in rough chronological order:

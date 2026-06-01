@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **VXLAN `underlay` keyword in NLL.** Pins the VXLAN tunnel to a
+  specific underlay device via nlink 0.19's
+  `LinkBuilder::vxlan_underlay_dev` (upstream Plan 190 §2.1). NLL
+  syntax: `vxlan vxlan100 { vni 100; underlay eth0; ... }`. Plumbing
+  through AST/parser/interpolator/lower and into the declarative
+  step 11c via `b.vxlan_underlay_dev(u)`.
+- **`nlink-lab watch <lab> --node <name>` + `--include-snapshot`
+  (Plan 159b Phase 3).** Pre-subscription node filter — saves opening
+  connections we don't need — and an opt-in flag to render resync
+  replay frames (default-silenced) with a `[snapshot]` marker.
+- **3 root-gated integration tests for Plan 159a** —
+  `slice4_vrf_reapply_is_zero_ops`, `slice4_vxlan_reapply_is_zero_ops`,
+  `wireguard_config_reapply_is_zero_ops`. Skip cleanly when the
+  kernel `vrf`/`wireguard` modules or the `wg` userspace binary are
+  unavailable, so CI runners without them don't fail.
 - **`nlink-lab watch <lab>` — kernel-event tail (Plan 159b).**
   Subscribes to nftables + RTNETLINK multicast on every node in
   the running lab and emits one line per kernel mutation. Powered

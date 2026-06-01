@@ -375,6 +375,11 @@ pub struct VxlanDef {
     pub local: Option<String>,
     pub remote: Option<String>,
     pub port: Option<u16>,
+    /// Underlay parent device name (`IFLA_VXLAN_LINK`). Plan
+    /// 159b follow-up — nlink 0.19 ships
+    /// `LinkBuilder::vxlan_underlay_dev`, so we surface it in
+    /// NLL too.
+    pub underlay: Option<String>,
     pub addresses: Vec<String>,
 }
 

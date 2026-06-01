@@ -1664,10 +1664,11 @@ fn topology_to_network_config(
             }
             Some(InterfaceKind::Vxlan) => {
                 // Plan 159a Slice 4 — declarative VXLAN via 0.19's
-                // `vxlan_local` + `vxlan_remote` + `vxlan_port`
-                // setters (upstream Plan 190 §2.1). `underlay_dev`
-                // is a 0.19 newcomer too but isn't surfaced in NLL
-                // yet; add the field + DSL syntax in a follow-up.
+                // `vxlan_local` + `vxlan_remote` + `vxlan_port` +
+                // `vxlan_underlay_dev` setters (upstream Plan 190
+                // §2.1). NLL surfaces all four via the `local`,
+                // `remote`, `port`, `underlay` keywords inside the
+                // `vxlan` block.
                 let vni = iface_config.vni.ok_or_else(|| {
                     Error::invalid_topology(format!(
                         "vxlan interface '{iface_name}' on node \
@@ -1695,6 +1696,7 @@ fn topology_to_network_config(
                     None
                 };
                 let port = iface_config.port;
+                let underlay = iface_config.underlay.clone();
                 let mtu = iface_config.mtu;
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.vxlan(vni).up();
@@ -1706,6 +1708,9 @@ fn topology_to_network_config(
                     }
                     if let Some(p) = port {
                         b = b.vxlan_port(p);
+                    }
+                    if let Some(u) = underlay {
+                        b = b.vxlan_underlay_dev(u);
                     }
                     if let Some(m) = mtu {
                         b = b.mtu(m);

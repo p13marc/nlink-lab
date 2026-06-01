@@ -1535,6 +1535,7 @@ fn interpolate_vxlan(vx: &ast::VxlanDef, vars: &HashMap<String, String>) -> ast:
         local: io(&vx.local, vars),
         remote: io(&vx.remote, vars),
         port: vx.port,
+        underlay: io(&vx.underlay, vars),
         addresses: vx.addresses.iter().map(|s| i(s, vars)).collect(),
     }
 }
@@ -1925,6 +1926,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                         local: vx.local.clone(),
                         remote: vx.remote.clone(),
                         port: vx.port,
+                        underlay: vx.underlay.clone(),
                         addresses: vx.addresses.clone(),
                         ..Default::default()
                     },
@@ -2918,6 +2920,28 @@ node vtep1 {
         assert_eq!(iface.remote.as_deref(), Some("10.0.0.2"));
         assert_eq!(iface.port, Some(4789));
         assert_eq!(iface.addresses, vec!["192.168.100.1/24"]);
+    }
+
+    /// Plan 159 follow-up — `underlay` pins the VXLAN tunnel to a
+    /// specific underlay device. nlink 0.19's
+    /// `LinkBuilder::vxlan_underlay_dev` sets `IFLA_VXLAN_LINK`.
+    #[test]
+    fn test_lower_vxlan_with_underlay() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+
+node vtep1 {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    underlay eth0
+  }
+}"#,
+        );
+        let iface = &topo.nodes["vtep1"].interfaces["vxlan100"];
+        assert_eq!(iface.kind, Some(types::InterfaceKind::Vxlan));
+        assert_eq!(iface.underlay.as_deref(), Some("eth0"));
     }
 
     #[test]

@@ -532,6 +532,13 @@ pub struct InterfaceConfig {
     /// VXLAN destination port.
     pub port: Option<u16>,
 
+    /// VXLAN underlay parent device name (`IFLA_VXLAN_LINK`).
+    /// Plan 159 follow-up — surface the 0.19 `vxlan_underlay_dev`
+    /// setter in NLL so users can pin the VXLAN tunnel to a
+    /// specific underlay device (e.g. when the namespace has
+    /// multiple routes to the remote VTEP).
+    pub underlay: Option<String>,
+
     /// MTU.
     pub mtu: Option<u32>,
 

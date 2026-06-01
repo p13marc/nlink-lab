@@ -1569,6 +1569,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
     let mut local = None;
     let mut remote = None;
     let mut port = None;
+    let mut underlay = None;
     let mut addresses = Vec::new();
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -1585,6 +1586,9 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
             remote = Some(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "port") {
             port = Some(expect_int(tokens, pos)? as u16);
+        } else if eat_kw(tokens, pos, "underlay") {
+            // Device name, not a CIDR.
+            underlay = Some(expect_ident(tokens, pos)?);
         } else if eat_kw(tokens, pos, "address") {
             addresses.push(parse_cidr_or_name(tokens, pos)?);
         } else {
@@ -1613,6 +1617,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
         local,
         remote,
         port,
+        underlay,
         addresses,
     })
 }

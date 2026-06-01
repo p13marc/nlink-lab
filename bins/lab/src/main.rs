@@ -721,6 +721,20 @@ enum Commands {
         /// Event family: route, nftables, or both.
         #[arg(long, value_enum, default_value_t = WatchFamilyArg::Both)]
         family: WatchFamilyArg,
+
+        /// Restrict subscription to a single node. Without this
+        /// flag, every node in the lab is subscribed. Filter is
+        /// pre-subscription — we don't open connections we don't
+        /// need.
+        #[arg(long)]
+        node: Option<String>,
+
+        /// Show resync replay frames after ENOBUFS recoveries.
+        /// By default they're silenced — the user only sees
+        /// live multicast deltas. With this flag, snapshot
+        /// frames render with a `[snapshot]` marker.
+        #[arg(long)]
+        include_snapshot: bool,
     },
 
     /// Wait for a service or condition inside a lab node.
@@ -2737,11 +2751,18 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Watch { lab, family } => {
+        Commands::Watch {
+            lab,
+            family,
+            node,
+            include_snapshot,
+        } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let opts = nlink_lab::WatchOpts {
                 family: family.into(),
                 json,
+                node,
+                include_snapshot,
             };
             nlink_lab::watch_loop(&running, opts).await?;
             Ok(())

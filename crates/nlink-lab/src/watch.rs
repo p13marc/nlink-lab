@@ -313,10 +313,19 @@ fn short_kind(k: &WatchEventKind) -> String {
 }
 
 /// Options for [`watch_loop`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct WatchOpts {
     pub family: WatchFamily,
     pub json: bool,
+    /// Restrict subscription to a single node. `None` =
+    /// subscribe to every node in the lab. Plan 159b Phase 3 —
+    /// filters PRE-subscription so we don't open connections we
+    /// don't need.
+    pub node: Option<String>,
+    /// Show resync replay frames after ENOBUFS recoveries. By
+    /// default they're silenced — the user only sees live
+    /// multicast deltas. Plan 159b Phase 3.
+    pub include_snapshot: bool,
 }
 
 impl Default for WatchOpts {
@@ -324,6 +333,8 @@ impl Default for WatchOpts {
         Self {
             family: WatchFamily::Both,
             json: false,
+            node: None,
+            include_snapshot: false,
         }
     }
 }
@@ -338,13 +349,29 @@ impl Default for WatchOpts {
 /// the rest of the lab keeps tailing. Errors are written to
 /// stderr.
 pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
-    let node_names: Vec<String> = lab.topology().nodes.keys().cloned().collect();
+    let node_names: Vec<String> = lab
+        .topology()
+        .nodes
+        .keys()
+        .filter(|n| match &opts.node {
+            Some(target) => target == *n,
+            None => true,
+        })
+        .cloned()
+        .collect();
     if node_names.is_empty() {
+        if opts.node.is_some() {
+            eprintln!(
+                "watch: no nodes match the --node filter (target: {:?})",
+                opts.node
+            );
+        }
         return Ok(());
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<WatchEvent>(1024);
     let mut tasks = Vec::new();
+    let include_snapshot = opts.include_snapshot;
 
     for node in &node_names {
         let ns_name = match lab.namespace_name_of(node) {
@@ -365,7 +392,7 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
             let node = node.clone();
             let ns = ns_name.clone();
             tasks.push(tokio::spawn(async move {
-                if let Err(e) = run_route_subscription(&node, &ns, tx).await {
+                if let Err(e) = run_route_subscription(&node, &ns, tx, include_snapshot).await {
                     eprintln!("[{node}/Route] subscription failed: {e}");
                 }
             }));
@@ -375,7 +402,7 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
             let node = node.clone();
             let ns = ns_name.clone();
             tasks.push(tokio::spawn(async move {
-                if let Err(e) = run_nftables_subscription(&node, &ns, tx).await {
+                if let Err(e) = run_nftables_subscription(&node, &ns, tx, include_snapshot).await {
                     eprintln!("[{node}/Nftables] subscription failed: {e}");
                 }
             }));
@@ -428,6 +455,7 @@ async fn run_route_subscription(
     node: &str,
     ns: &str,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
+    include_snapshot: bool,
 ) -> Result<()> {
     let conn: Connection<Route> = namespace::connection_for(ns)
         .map_err(|e| Error::deploy_failed(format!("watch: route connection for '{node}': {e}")))?;
@@ -453,7 +481,10 @@ async fn run_route_subscription(
         };
         let (kind, from_snapshot) = match item {
             ResyncedEvent::Event(ev) => (WatchEventKind::from_network(ev), false),
-            ResyncedEvent::Resynced(ev) => (WatchEventKind::from_network(ev), true),
+            ResyncedEvent::Resynced(ev) if include_snapshot => {
+                (WatchEventKind::from_network(ev), true)
+            }
+            ResyncedEvent::Resynced(_) => continue,
             ResyncedEvent::Marker(_) => continue,
             _ => continue,
         };
@@ -474,6 +505,7 @@ async fn run_nftables_subscription(
     node: &str,
     ns: &str,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
+    include_snapshot: bool,
 ) -> Result<()> {
     let conn: Connection<Nftables> = namespace::connection_for(ns).map_err(|e| {
         Error::deploy_failed(format!("watch: nftables connection for '{node}': {e}"))
@@ -499,7 +531,10 @@ async fn run_nftables_subscription(
         };
         let (kind, from_snapshot) = match item {
             ResyncedEvent::Event(ev) => (WatchEventKind::from_nftables(ev), false),
-            ResyncedEvent::Resynced(ev) => (WatchEventKind::from_nftables(ev), true),
+            ResyncedEvent::Resynced(ev) if include_snapshot => {
+                (WatchEventKind::from_nftables(ev), true)
+            }
+            ResyncedEvent::Resynced(_) => continue,
             ResyncedEvent::Marker(_) => continue,
             _ => continue,
         };
@@ -584,5 +619,31 @@ mod tests {
             !json.contains("from_snapshot"),
             "from_snapshot should be elided when false: {json}"
         );
+    }
+
+    /// Plan 159b Phase 3 — `WatchOpts::default()` has no node
+    /// filter and silences snapshot replays by default.
+    #[test]
+    fn watch_opts_defaults() {
+        let opts = WatchOpts::default();
+        assert_eq!(opts.family, WatchFamily::Both);
+        assert!(!opts.json);
+        assert!(opts.node.is_none());
+        assert!(!opts.include_snapshot);
+    }
+
+    /// Plan 159b Phase 3 — `WatchOpts` is `Clone` (the watch
+    /// loop clones the node filter into per-task closures).
+    #[test]
+    fn watch_opts_is_clone() {
+        let opts = WatchOpts {
+            family: WatchFamily::Route,
+            json: true,
+            node: Some("router".into()),
+            include_snapshot: true,
+        };
+        let cloned = opts.clone();
+        assert_eq!(opts.family, cloned.family);
+        assert_eq!(opts.node, cloned.node);
     }
 }

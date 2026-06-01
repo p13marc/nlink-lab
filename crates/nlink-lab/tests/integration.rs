@@ -1099,6 +1099,18 @@ async fn slice4_vrf_reapply_is_zero_ops() {
         eprintln!("skipping slice4_vrf_reapply_is_zero_ops: requires root");
         return;
     }
+    // Try to load the vrf kernel module — CI runner kernels may
+    // lack `CONFIG_NET_VRF`, in which case `add_link(kind=vrf)`
+    // returns EOPNOTSUPP. Skip rather than failing the test on
+    // an environment limitation.
+    let _ = std::process::Command::new("modprobe").arg("vrf").status();
+    if !std::path::Path::new("/sys/module/vrf").exists() {
+        eprintln!(
+            "skipping slice4_vrf_reapply_is_zero_ops: kernel `vrf` \
+             module unavailable on this runner"
+        );
+        return;
+    }
     let topo = nlink_lab::parser::parse_file(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../examples/vrf-multitenant.nll"
@@ -1224,6 +1236,31 @@ async fn slice4_vxlan_reapply_is_zero_ops() {
 async fn wireguard_config_reapply_is_zero_ops() {
     if unsafe { libc::geteuid() } != 0 {
         eprintln!("skipping wireguard_config_reapply_is_zero_ops: requires root");
+        return;
+    }
+    // Pre-flight: ensure the wireguard kernel module + the
+    // userspace `wg` binary are available. Many CI runners
+    // ship neither out of the box; skip rather than fail.
+    let _ = std::process::Command::new("modprobe")
+        .arg("wireguard")
+        .status();
+    if !std::path::Path::new("/sys/module/wireguard").exists() {
+        eprintln!(
+            "skipping wireguard_config_reapply_is_zero_ops: \
+             kernel wireguard module unavailable on this runner"
+        );
+        return;
+    }
+    let wg_on_path = std::process::Command::new("which")
+        .arg("wg")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !wg_on_path {
+        eprintln!(
+            "skipping wireguard_config_reapply_is_zero_ops: \
+             `wg` binary not on PATH (install wireguard-tools)"
+        );
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(

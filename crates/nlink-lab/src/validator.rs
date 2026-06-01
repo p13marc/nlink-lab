@@ -199,7 +199,6 @@ impl Topology {
         validate_unreferenced_nodes(self, &interfaces, &mut issues);
         validate_exec_cmds(self, &mut issues);
         validate_container_fields(self, &mut issues);
-        validate_imperative_resource_use(self, &mut issues);
 
         ValidationResult { issues }
     }
@@ -928,15 +927,6 @@ fn validate_exec_cmds(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
         }
     }
 }
-
-/// Rule originally Plan 158e Phase 1; emptied out by Plan 159a
-/// Slices 4 (VRF + VXLAN) and Phase 2 (WireGuard). Every netlink
-/// resource that nlink-lab models now declares via the
-/// `NetworkConfig` (steps 11c) or `WireguardConfig` (step 10d
-/// post-159a Phase 2) paths. Function kept as an empty hook so
-/// the call site in `validate()` doesn't churn; remove in a
-/// follow-up cleanup PR.
-fn validate_imperative_resource_use(_topology: &Topology, _issues: &mut Vec<ValidationIssue>) {}
 
 /// Container field validation: cmd/env/volumes require image.
 fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIssue>) {

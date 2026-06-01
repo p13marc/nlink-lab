@@ -213,7 +213,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (32 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (33 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply`,
 `status` (with `--scan`, reports orphans + stale labs),
 `exec` (`--json`, `--env`, `--workdir`),
@@ -223,6 +223,7 @@ CLI commands (32 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json
 (`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),
 `impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
 `graph`, `diagnose` (`--json`), `capture`, `diff`, `export`,
+`watch` (`--family route|nftables|both`, `--json` for NDJSON),
 `wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
 `ip` (`--iface`, `--cidr`),
 `ps`, `kill`, `init`, `completions`, `daemon`, `metrics`,
@@ -235,12 +236,13 @@ See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 
 ## Deployment Sequence
 
-The deployer executes these steps in order. After the Plan 158
-arc (Plans 158a / 158e Slices 1+2+3 / 158f), the address /
-route / firewall / NAT / dummy / bond / VLAN layers commit
-through `nlink::NetworkConfig` and `nlink::NftablesConfig`
-declarative reconcile — idempotent re-deploys make zero kernel
-calls for those layers.
+The deployer executes these steps in order. After Plan 158 (a/e
+Slices 1–3 / f) **and Plan 159 (a Slice 4 / a Phase 2 / c)**,
+every netlink resource — links / addresses / routes / firewall /
+NAT / VRF / VXLAN / WireGuard — commits through the upstream
+`nlink::NetworkConfig`, `nlink::NftablesConfig`, and
+`nlink::WireguardConfig` declarative reconcile paths. Idempotent
+re-deploys make zero kernel calls on those layers.
 
 ```
  1.  Parse topology file → Topology
@@ -249,12 +251,15 @@ calls for those layers.
  3d. Create host-reachable mgmt bridge (if `mgmt ... host-reachable`)
  4.  Create bridge networks (if any)
  5.  Create veth pairs spanning namespaces
- 6.  Create additional interfaces — *VXLAN + WiFi remain
-     imperative; Dummy / Bond / VLAN now declare in step 11c
-     (Plan 158e Slices 2+3)*
+ 6.  Create additional interfaces — *no-op marker after Plan 159a
+     Slice 4. Dummy/Bond/VLAN/VXLAN/VRF all declare in step 11c.
+     Loopback exists already; WiFi stays imperative.*
  6a. Create macvlan/ipvlan interfaces (host-side, moved to ns)
- 6b. Create VRF interfaces
- 6c. Create WireGuard interfaces
+ 6b. Create VRF interfaces — *no-op marker after Plan 159a Slice 4;
+     VRF link declared in step 11c via `LinkBuilder::vrf(table)`*
+ 6c. Create WireGuard interfaces (still imperative — 0.19
+     `DeclaredLinkType` lacks a `Wireguard` variant; the WG iface
+     must exist before `WireguardConfig::diff` can succeed)
  7.  Assign interfaces to bridges (legacy — bond enslave moved
      to step 11c via `LinkBuilder::master`)
  8.  Configure VLANs on bridge ports
@@ -263,19 +268,31 @@ calls for those layers.
  10. Bring interfaces up
  10b. Enslave bond members — *no-op marker after Plan 158e Slice 2;
       bond `.master()` now declared in step 11c*
- 10c. Enslave to VRFs
- 10d. Configure WireGuard devices
+ 10c. Enslave to VRFs — *no-op marker after Plan 159a Slice 4;
+      VRF master ref declared in step 11c via
+      `LinkBuilder::master(vrf_name)`*
+ 10d. WireGuard key generation (sync, no kernel touch) —
+      `build_wg_public_key_map` collects `(private, public)` per
+      WG iface from NLL declarations so peer cross-references
+      resolve before any kernel mutation
  11. Apply sysctls per namespace
  11b. Auto-generate routes from topology graph (if `routing auto`)
- 11c. Apply `NetworkConfig::diff().apply()` per namespace
-      (Plan 158e: links — dummies + bonds + VLANs, addresses
-      from every source, routes manual + auto, qdiscs)
+ 11c. `apply_stack_for_node` per node — bundles three layers
+      via the Stack pattern (Plan 159c):
+        a) `NetworkConfig::apply` — links (dummies + bonds +
+           VLANs + VRFs + VXLANs), addresses, routes, qdiscs
+        b) `NftablesConfig::apply_reconcile` — firewall + NAT
+        c) `WireguardConfig::apply_reconcile` — WG devices +
+           peers (Plan 159a Phase 2 — replaces step 10d's
+           imperative `wg_conn.set_device(...)` loops)
+      One aggregated `tracing::info!` per node.
  12. Add routes — *no-op marker after Plan 158e Slice 1; routes
      now in step 11c*
  12b. Add VRF routes (still imperative — table knobs not on
       `RouteBuilder`)
- 13. Apply `NftablesConfig::diff().apply_reconcile()` per
-     namespace (Plan 158a: firewall + NAT, one atomic batch)
+ 13. Apply nftables firewall + NAT — *no-op marker after Plan 159c;
+     nftables now applied inside `apply_stack_for_node` in
+     step 11c*
  14. Apply TC qdiscs/impairments per interface (`PerPeerImpairer`)
  14b. Apply per-pair network impairments
  15. Apply rate limits (`RateLimiter::apply` — still rebuilds;
@@ -292,7 +309,15 @@ with the initial-deploy path. `compute_layered_diff(running,
 desired)` (Plan 158f Phase 2) is the dry-run preview that walks
 every node, builds the same per-namespace `NetworkConfig` /
 `NftablesConfig`, and emits a single `LayeredDiff` bundle for
-`apply --check` / `apply --dry-run`.
+`apply --check` / `apply --dry-run`. Plan 159d ships
+`apply --check --json` with typed `network` + `nftables` fields
+under schema v2; the v1 `layered_summary: String` fallback is
+retained for one release as a deprecation window.
+
+`nlink-lab watch <lab>` (Plan 159b) subscribes to every node's
+nftables + RTNETLINK multicast and prints one line per drift —
+useful for spotting hand-edits that bypass `apply`. Powered by
+0.19's `Connection<P>::subscribe_all_with_resync`.
 
 ## Dependencies
 

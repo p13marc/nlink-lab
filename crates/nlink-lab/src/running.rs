@@ -176,6 +176,13 @@ impl RunningLab {
         &self.topology.lab.name
     }
 
+    /// Plan 159b — return the bare-namespace name for a node,
+    /// or `None` when the node runs as a container. Used by the
+    /// `watch` command to open name-based netlink subscriptions.
+    pub fn namespace_name_of(&self, node: &str) -> Option<&str> {
+        self.namespace_names.get(node).map(String::as_str)
+    }
+
     /// Whether DNS hosts entries were injected into /etc/hosts.
     pub fn dns_injected(&self) -> bool {
         self.dns_injected

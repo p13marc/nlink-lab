@@ -24,6 +24,9 @@ legacy-tcpdump-filter = []
 [dependencies]
 nlink = { workspace = true }
 tokio = { workspace = true }
+# Plan 159b — `watch` module consumes nlink's
+# `ResyncStream` through tokio_stream's `StreamExt::next()`.
+tokio-stream = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

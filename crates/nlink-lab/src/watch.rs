@@ -1,0 +1,566 @@
+//! Plan 159b — `nlink-lab watch` event tail.
+//!
+//! Subscribes to nftables and/or RTNETLINK multicast on every
+//! node in a running lab and prints typed events. Powered by
+//! nlink 0.19's `Connection<Route>::subscribe_all_with_resync`
+//! and `Connection<Nftables>::subscribe_all_with_resync`.
+//!
+//! The implementation prints directly to stdout so the CLI
+//! doesn't need to wire its own event loop. Per-node tasks
+//! forward events through an mpsc; the main task drains and
+//! prints.
+
+use std::sync::Arc;
+
+use nlink::netlink::events::NetworkEvent;
+use nlink::netlink::nftables::events::NftablesEvent;
+use nlink::netlink::namespace;
+use nlink::netlink::resync::ResyncedEvent;
+use nlink::{Connection, Nftables, Route};
+use serde::Serialize;
+use tokio_stream::StreamExt;
+
+use crate::error::{Error, Result};
+use crate::running::RunningLab;
+
+/// Which event families to subscribe to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WatchFamily {
+    /// RTNETLINK only (link/addr/route/neighbor/qdisc/filter/...).
+    Route,
+    /// nftables only (table/chain/rule/set/flowtable changes).
+    Nftables,
+    /// Both families on the same stream.
+    Both,
+}
+
+impl WatchFamily {
+    fn wants_route(self) -> bool {
+        matches!(self, WatchFamily::Route | WatchFamily::Both)
+    }
+    fn wants_nftables(self) -> bool {
+        matches!(self, WatchFamily::Nftables | WatchFamily::Both)
+    }
+}
+
+/// One emitted event line.
+#[derive(Debug, Clone, Serialize)]
+pub struct WatchEvent {
+    /// Lab node the event came from.
+    pub node: String,
+    /// Family the event came from. `Both` is never set on an
+    /// individual `WatchEvent` — only on the subscription
+    /// request — because each event has exactly one source.
+    pub family: WatchFamily,
+    /// Event kind + extracted detail.
+    pub kind: WatchEventKind,
+    /// True when this frame came from an ENOBUFS resync replay
+    /// (rather than live multicast). Defaults false on the live
+    /// path.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub from_snapshot: bool,
+}
+
+/// Typed shape per event. We lift only the fields that fit the
+/// human-readable / NDJSON consumer use cases. Anything that
+/// doesn't fit one of the typed variants falls through to
+/// `Other { raw }`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum WatchEventKind {
+    NewLink {
+        ifindex: u32,
+        name: Option<String>,
+        mtu: Option<u32>,
+    },
+    DelLink {
+        ifindex: u32,
+        name: Option<String>,
+    },
+    NewAddress {
+        ifindex: u32,
+    },
+    DelAddress {
+        ifindex: u32,
+    },
+    NewRoute,
+    DelRoute,
+    NewNeighbor,
+    DelNeighbor,
+    NewFdb,
+    DelFdb,
+    NewQdisc,
+    DelQdisc,
+    NewClass,
+    DelClass,
+    NewFilter,
+    DelFilter,
+    NewAction,
+    DelAction,
+    NewTable {
+        table: String,
+        family: String,
+    },
+    DelTable {
+        table: String,
+        family: String,
+    },
+    NewChain {
+        table: String,
+        chain: String,
+        family: String,
+    },
+    DelChain {
+        table: String,
+        chain: String,
+        family: String,
+    },
+    NewRule {
+        table: String,
+        chain: String,
+        family: String,
+        handle: u64,
+    },
+    DelRule {
+        table: String,
+        chain: String,
+        family: String,
+        handle: u64,
+    },
+    NewSet {
+        table: String,
+        family: String,
+    },
+    DelSet {
+        table: String,
+        family: String,
+    },
+    NewFlowtable {
+        table: String,
+        family: String,
+    },
+    DelFlowtable {
+        table: String,
+        family: String,
+    },
+    /// Catch-all for variants we don't render typed. The raw
+    /// string is `format!("{:?}", inner)` of the upstream
+    /// event type.
+    Other {
+        raw: String,
+    },
+}
+
+impl WatchEventKind {
+    fn from_network(ev: NetworkEvent) -> Self {
+        match ev {
+            NetworkEvent::NewLink(lm) => Self::NewLink {
+                ifindex: lm.ifindex(),
+                name: lm.name().map(str::to_owned),
+                mtu: lm.mtu(),
+            },
+            NetworkEvent::DelLink(lm) => Self::DelLink {
+                ifindex: lm.ifindex(),
+                name: lm.name().map(str::to_owned),
+            },
+            NetworkEvent::NewAddress(am) => Self::NewAddress {
+                ifindex: am.ifindex(),
+            },
+            NetworkEvent::DelAddress(am) => Self::DelAddress {
+                ifindex: am.ifindex(),
+            },
+            NetworkEvent::NewRoute(_) => Self::NewRoute,
+            NetworkEvent::DelRoute(_) => Self::DelRoute,
+            NetworkEvent::NewNeighbor(_) => Self::NewNeighbor,
+            NetworkEvent::DelNeighbor(_) => Self::DelNeighbor,
+            NetworkEvent::NewFdb(_) => Self::NewFdb,
+            NetworkEvent::DelFdb(_) => Self::DelFdb,
+            NetworkEvent::NewQdisc(_) => Self::NewQdisc,
+            NetworkEvent::DelQdisc(_) => Self::DelQdisc,
+            NetworkEvent::NewClass(_) => Self::NewClass,
+            NetworkEvent::DelClass(_) => Self::DelClass,
+            NetworkEvent::NewFilter(_) => Self::NewFilter,
+            NetworkEvent::DelFilter(_) => Self::DelFilter,
+            NetworkEvent::NewAction(_) => Self::NewAction,
+            NetworkEvent::DelAction(_) => Self::DelAction,
+            other => Self::Other {
+                raw: format!("{other:?}"),
+            },
+        }
+    }
+
+    fn from_nftables(ev: NftablesEvent) -> Self {
+        match ev {
+            NftablesEvent::NewTable(t) => Self::NewTable {
+                table: t.name,
+                family: format!("{:?}", t.family),
+            },
+            NftablesEvent::DelTable(t) => Self::DelTable {
+                table: t.name,
+                family: format!("{:?}", t.family),
+            },
+            NftablesEvent::NewChain(c) => Self::NewChain {
+                table: c.table,
+                chain: c.name,
+                family: format!("{:?}", c.family),
+            },
+            NftablesEvent::DelChain(c) => Self::DelChain {
+                table: c.table,
+                chain: c.name,
+                family: format!("{:?}", c.family),
+            },
+            NftablesEvent::NewRule(r) => Self::NewRule {
+                table: r.table,
+                chain: r.chain,
+                family: format!("{:?}", r.family),
+                handle: r.handle,
+            },
+            NftablesEvent::DelRule(r) => Self::DelRule {
+                table: r.table,
+                chain: r.chain,
+                family: format!("{:?}", r.family),
+                handle: r.handle,
+            },
+            NftablesEvent::NewSet(s) => Self::NewSet {
+                table: s.table,
+                family: format!("{:?}", s.family),
+            },
+            NftablesEvent::DelSet(s) => Self::DelSet {
+                table: s.table,
+                family: format!("{:?}", s.family),
+            },
+            NftablesEvent::NewFlowtable(f) => Self::NewFlowtable {
+                table: f.table,
+                family: format!("{:?}", f.family),
+            },
+            NftablesEvent::DelFlowtable(f) => Self::DelFlowtable {
+                table: f.table,
+                family: format!("{:?}", f.family),
+            },
+            other => Self::Other {
+                raw: format!("{other:?}"),
+            },
+        }
+    }
+}
+
+impl WatchEvent {
+    /// Render a one-line human-readable form.
+    pub fn render_line(&self) -> String {
+        let snap = if self.from_snapshot { " [snapshot]" } else { "" };
+        format!(
+            "[{}/{:?}]{snap} {}",
+            self.node,
+            self.family,
+            short_kind(&self.kind)
+        )
+    }
+}
+
+fn short_kind(k: &WatchEventKind) -> String {
+    match k {
+        WatchEventKind::NewLink { ifindex, name, mtu } => format!(
+            "NewLink idx={ifindex} name={} mtu={}",
+            name.as_deref().unwrap_or("?"),
+            mtu.map(|m| m.to_string()).unwrap_or_else(|| "?".into())
+        ),
+        WatchEventKind::DelLink { ifindex, name } => format!(
+            "DelLink idx={ifindex} name={}",
+            name.as_deref().unwrap_or("?")
+        ),
+        WatchEventKind::NewAddress { ifindex } => format!("NewAddress idx={ifindex}"),
+        WatchEventKind::DelAddress { ifindex } => format!("DelAddress idx={ifindex}"),
+        WatchEventKind::NewTable { table, family } => format!("NewTable {family}/{table}"),
+        WatchEventKind::DelTable { table, family } => format!("DelTable {family}/{table}"),
+        WatchEventKind::NewChain { table, chain, family } => {
+            format!("NewChain {family}/{table}/{chain}")
+        }
+        WatchEventKind::DelChain { table, chain, family } => {
+            format!("DelChain {family}/{table}/{chain}")
+        }
+        WatchEventKind::NewRule { table, chain, family, handle } => {
+            format!("NewRule {family}/{table}/{chain} handle={handle}")
+        }
+        WatchEventKind::DelRule { table, chain, family, handle } => {
+            format!("DelRule {family}/{table}/{chain} handle={handle}")
+        }
+        WatchEventKind::Other { raw } => format!("Other {raw}"),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Options for [`watch_loop`].
+#[derive(Debug, Clone, Copy)]
+pub struct WatchOpts {
+    pub family: WatchFamily,
+    pub json: bool,
+}
+
+impl Default for WatchOpts {
+    fn default() -> Self {
+        Self {
+            family: WatchFamily::Both,
+            json: false,
+        }
+    }
+}
+
+/// Run the event tail until Ctrl-C or all per-node tasks exit.
+///
+/// Subscribes to every node in the running lab on the requested
+/// families and prints one line per event to stdout. JSON mode
+/// emits one NDJSON record per line for piping to `jq`.
+///
+/// On per-node connection failure, the offending task exits but
+/// the rest of the lab keeps tailing. Errors are written to
+/// stderr.
+pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
+    let node_names: Vec<String> = lab.topology().nodes.keys().cloned().collect();
+    if node_names.is_empty() {
+        return Ok(());
+    }
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<WatchEvent>(1024);
+    let mut tasks = Vec::new();
+
+    for node in &node_names {
+        let ns_name = match lab.namespace_name_of(node) {
+            Some(n) => n.to_owned(),
+            None => {
+                // Container nodes — handled via /proc/<pid>/ns/net.
+                // Skip in Phase 1; container watch is a follow-up.
+                tracing::warn!(
+                    node = %node,
+                    "skipping watch for container node — only bare namespaces supported in 159b Phase 1"
+                );
+                continue;
+            }
+        };
+
+        if opts.family.wants_route() {
+            let tx = tx.clone();
+            let node = node.clone();
+            let ns = ns_name.clone();
+            tasks.push(tokio::spawn(async move {
+                if let Err(e) = run_route_subscription(&node, &ns, tx).await {
+                    eprintln!("[{node}/Route] subscription failed: {e}");
+                }
+            }));
+        }
+        if opts.family.wants_nftables() {
+            let tx = tx.clone();
+            let node = node.clone();
+            let ns = ns_name.clone();
+            tasks.push(tokio::spawn(async move {
+                if let Err(e) = run_nftables_subscription(&node, &ns, tx).await {
+                    eprintln!("[{node}/Nftables] subscription failed: {e}");
+                }
+            }));
+        }
+    }
+
+    // Drop the local sender so the channel closes once all
+    // tasks exit.
+    drop(tx);
+
+    let print_json = opts.json;
+    let printer = tokio::spawn(async move {
+        while let Some(ev) = rx.recv().await {
+            if print_json {
+                match serde_json::to_string(&ev) {
+                    Ok(line) => println!("{line}"),
+                    Err(e) => eprintln!("[watch] json encode failed: {e}"),
+                }
+            } else {
+                println!("{}", ev.render_line());
+            }
+        }
+    });
+
+    // Wait for Ctrl-C OR every subscription task to finish (the
+    // latter happens if every node fails to subscribe).
+    let all_subs = futures_join_all(tasks);
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("watch: Ctrl-C — shutting down");
+        }
+        _ = all_subs => {
+            tracing::info!("watch: all subscriptions ended");
+        }
+    }
+    // Drop the printer task (channel closes when tasks exit).
+    drop(printer);
+    Ok(())
+}
+
+/// Join a Vec of `JoinHandle<()>` futures, awaiting them all
+/// sequentially. We don't pull in `futures_util` just for this.
+async fn futures_join_all(tasks: Vec<tokio::task::JoinHandle<()>>) {
+    for t in tasks {
+        let _ = t.await;
+    }
+}
+
+async fn run_route_subscription(
+    node: &str,
+    ns: &str,
+    tx: tokio::sync::mpsc::Sender<WatchEvent>,
+) -> Result<()> {
+    let conn: Connection<Route> = namespace::connection_for(ns).map_err(|e| {
+        Error::deploy_failed(format!("watch: route connection for '{node}': {e}"))
+    })?;
+
+    let ns_for_factory = ns.to_owned();
+    let factory: nlink::ConnectionFactory<Route> = Arc::new(move || {
+        let ns = ns_for_factory.clone();
+        Box::pin(async move {
+            namespace::connection_for::<Route>(&ns)
+        })
+    });
+
+    let mut stream = conn
+        .into_events_with_resync(factory)
+        .await
+        .map_err(|e| Error::deploy_failed(format!("watch: route subscribe for '{node}': {e}")))?;
+
+    while let Some(item) = stream.next().await {
+        let item = match item {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(node = %node, "watch: route stream error: {e}");
+                continue;
+            }
+        };
+        let (kind, from_snapshot) = match item {
+            ResyncedEvent::Event(ev) => (WatchEventKind::from_network(ev), false),
+            ResyncedEvent::Resynced(ev) => (WatchEventKind::from_network(ev), true),
+            ResyncedEvent::Marker(_) => continue,
+            _ => continue,
+        };
+        let watch_ev = WatchEvent {
+            node: node.to_owned(),
+            family: WatchFamily::Route,
+            kind,
+            from_snapshot,
+        };
+        if tx.send(watch_ev).await.is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+async fn run_nftables_subscription(
+    node: &str,
+    ns: &str,
+    tx: tokio::sync::mpsc::Sender<WatchEvent>,
+) -> Result<()> {
+    let conn: Connection<Nftables> = namespace::connection_for(ns).map_err(|e| {
+        Error::deploy_failed(format!("watch: nftables connection for '{node}': {e}"))
+    })?;
+
+    let ns_for_factory = ns.to_owned();
+    let factory: nlink::ConnectionFactory<Nftables> = Arc::new(move || {
+        let ns = ns_for_factory.clone();
+        Box::pin(async move {
+            namespace::connection_for::<Nftables>(&ns)
+        })
+    });
+
+    let mut stream = conn
+        .into_events_with_resync(factory)
+        .await
+        .map_err(|e| Error::deploy_failed(format!("watch: nftables subscribe for '{node}': {e}")))?;
+
+    while let Some(item) = stream.next().await {
+        let item = match item {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(node = %node, "watch: nftables stream error: {e}");
+                continue;
+            }
+        };
+        let (kind, from_snapshot) = match item {
+            ResyncedEvent::Event(ev) => (WatchEventKind::from_nftables(ev), false),
+            ResyncedEvent::Resynced(ev) => (WatchEventKind::from_nftables(ev), true),
+            ResyncedEvent::Marker(_) => continue,
+            _ => continue,
+        };
+        let watch_ev = WatchEvent {
+            node: node.to_owned(),
+            family: WatchFamily::Nftables,
+            kind,
+            from_snapshot,
+        };
+        if tx.send(watch_ev).await.is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watch_family_subscription_flags() {
+        assert!(WatchFamily::Route.wants_route());
+        assert!(!WatchFamily::Route.wants_nftables());
+        assert!(WatchFamily::Nftables.wants_nftables());
+        assert!(!WatchFamily::Nftables.wants_route());
+        assert!(WatchFamily::Both.wants_route());
+        assert!(WatchFamily::Both.wants_nftables());
+    }
+
+    #[test]
+    fn watch_event_render_line_uses_kind_shape() {
+        let ev = WatchEvent {
+            node: "router".into(),
+            family: WatchFamily::Route,
+            kind: WatchEventKind::NewLink {
+                ifindex: 7,
+                name: Some("eth1".into()),
+                mtu: Some(1500),
+            },
+            from_snapshot: false,
+        };
+        let line = ev.render_line();
+        assert!(line.contains("router"), "node missing: {line}");
+        assert!(line.contains("NewLink"), "kind missing: {line}");
+        assert!(line.contains("idx=7"), "ifindex missing: {line}");
+        assert!(line.contains("name=eth1"), "name missing: {line}");
+    }
+
+    #[test]
+    fn watch_event_snapshot_flag_renders_marker() {
+        let ev = WatchEvent {
+            node: "x".into(),
+            family: WatchFamily::Nftables,
+            kind: WatchEventKind::DelTable {
+                table: "filter".into(),
+                family: "Inet".into(),
+            },
+            from_snapshot: true,
+        };
+        let line = ev.render_line();
+        assert!(line.contains("[snapshot]"), "snapshot marker missing: {line}");
+    }
+
+    #[test]
+    fn watch_event_serializes_skipping_snapshot_when_false() {
+        let ev = WatchEvent {
+            node: "n".into(),
+            family: WatchFamily::Route,
+            kind: WatchEventKind::NewRoute,
+            from_snapshot: false,
+        };
+        let json = serde_json::to_string(&ev).unwrap();
+        assert!(json.contains("\"kind\":\"new_route\""), "tagged kind missing: {json}");
+        assert!(
+            !json.contains("from_snapshot"),
+            "from_snapshot should be elided when false: {json}"
+        );
+    }
+}

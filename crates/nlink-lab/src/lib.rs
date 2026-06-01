@@ -84,6 +84,7 @@ pub mod test_helpers;
 pub mod test_runner;
 pub mod types;
 pub mod validator;
+pub mod watch;
 pub mod wifi;
 
 pub use builder::Lab;
@@ -94,6 +95,7 @@ pub use proc_stat::ProcStat;
 pub use running::{
     ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
 };
+pub use watch::{WatchEvent, WatchEventKind, WatchFamily, WatchOpts, watch_loop};
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
     InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,

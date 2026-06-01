@@ -87,6 +87,25 @@ struct Cli {
     command: Commands,
 }
 
+/// Plan 159b — clap value-enum bridge for
+/// [`nlink_lab::WatchFamily`].
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum WatchFamilyArg {
+    Route,
+    Nftables,
+    Both,
+}
+
+impl From<WatchFamilyArg> for nlink_lab::WatchFamily {
+    fn from(v: WatchFamilyArg) -> Self {
+        match v {
+            WatchFamilyArg::Route => nlink_lab::WatchFamily::Route,
+            WatchFamilyArg::Nftables => nlink_lab::WatchFamily::Nftables,
+            WatchFamilyArg::Both => nlink_lab::WatchFamily::Both,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Deploy a lab from a topology file (.nll).
@@ -687,6 +706,21 @@ enum Commands {
         /// Timeout in seconds (default: 30).
         #[arg(short, long, default_value = "30")]
         timeout: u64,
+    },
+
+    /// Tail nftables + RTNETLINK drift events for a running lab.
+    ///
+    /// Subscribes to every node in the lab and prints one line
+    /// per kernel mutation — useful for spotting hand-edits that
+    /// bypass `nlink-lab apply`. `--json` emits NDJSON for
+    /// piping to `jq`. Plan 159b.
+    Watch {
+        /// Lab name.
+        lab: String,
+
+        /// Event family: route, nftables, or both.
+        #[arg(long, value_enum, default_value_t = WatchFamilyArg::Both)]
+        family: WatchFamilyArg,
     },
 
     /// Wait for a service or condition inside a lab node.
@@ -2706,6 +2740,16 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 t.link_count
             );
 
+            Ok(())
+        }
+
+        Commands::Watch { lab, family } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let opts = nlink_lab::WatchOpts {
+                family: family.into(),
+                json,
+            };
+            nlink_lab::watch_loop(&running, opts).await?;
             Ok(())
         }
 

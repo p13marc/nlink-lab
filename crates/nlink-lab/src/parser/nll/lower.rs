@@ -1523,6 +1523,7 @@ fn interpolate_wg(wg: &ast::WireguardDef, vars: &HashMap<String, String>) -> ast
         name: i(&wg.name, vars),
         key: wg.key.clone(),
         listen_port: wg.listen_port,
+        fwmark: wg.fwmark,
         addresses: wg.addresses.iter().map(|s| i(s, vars)).collect(),
         peers: wg.peers.iter().map(|s| i(s, vars)).collect(),
     }
@@ -1912,6 +1913,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                     types::WireguardConfig {
                         private_key: wg.key.clone(),
                         listen_port: wg.listen_port,
+                        fwmark: wg.fwmark,
                         addresses: wg.addresses.clone(),
                         peers: wg.peers.clone(),
                     },
@@ -2894,8 +2896,31 @@ node gw {
         let wg = &topo.nodes["gw"].wireguard["wg0"];
         assert_eq!(wg.private_key.as_deref(), Some("auto"));
         assert_eq!(wg.listen_port, Some(51820));
+        assert!(wg.fwmark.is_none(), "fwmark defaults to None when omitted");
         assert_eq!(wg.addresses, vec!["192.168.255.1/32"]);
         assert_eq!(wg.peers, vec!["gw-b"]);
+    }
+
+    /// Plan 159 follow-up — `fwmark <u32>` inside a `wireguard`
+    /// block sets the routing mark applied to outbound tunnel
+    /// packets. Threads through to nlink 0.19's
+    /// `DeclaredWgDeviceBuilder::fwmark`.
+    #[test]
+    fn test_lower_wireguard_with_fwmark() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+
+node gw {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    fwmark 100
+    address 192.168.255.1/32
+  }
+}"#,
+        );
+        let wg = &topo.nodes["gw"].wireguard["wg0"];
+        assert_eq!(wg.fwmark, Some(100));
     }
 
     #[test]

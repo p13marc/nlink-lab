@@ -788,6 +788,12 @@ pub struct WireguardConfig {
     /// Listen port.
     pub listen_port: Option<u16>,
 
+    /// Routing mark applied to outbound tunnel packets. Plan 159
+    /// follow-up — surfaces nlink 0.19's
+    /// `DeclaredWgDeviceBuilder::fwmark` in NLL so policy-routing
+    /// setups can match WG-encapsulated traffic.
+    pub fwmark: Option<u32>,
+
     /// Interface addresses in CIDR notation.
     #[serde(default)]
     pub addresses: Vec<String>,

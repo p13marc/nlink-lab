@@ -363,6 +363,10 @@ pub struct WireguardDef {
     pub name: String,
     pub key: Option<String>,
     pub listen_port: Option<u16>,
+    /// Routing mark applied to outbound tunnel packets. Plan 159
+    /// follow-up — surfaces nlink 0.19's
+    /// `DeclaredWgDeviceBuilder::fwmark`.
+    pub fwmark: Option<u32>,
     pub addresses: Vec<String>,
     pub peers: Vec<String>,
 }

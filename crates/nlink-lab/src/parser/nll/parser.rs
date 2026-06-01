@@ -1514,6 +1514,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
 
     let mut key = None;
     let mut listen_port = None;
+    let mut fwmark = None;
     let mut addresses = Vec::new();
     let mut peers = Vec::new();
 
@@ -1527,6 +1528,8 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
             key = Some(parse_value(tokens, pos)?);
         } else if eat_kw(tokens, pos, "listen") {
             listen_port = Some(expect_int(tokens, pos)? as u16);
+        } else if eat_kw(tokens, pos, "fwmark") {
+            fwmark = Some(expect_int(tokens, pos)? as u32);
         } else if eat_kw(tokens, pos, "address") {
             addresses.push(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "peers") {
@@ -1555,6 +1558,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
         name,
         key,
         listen_port,
+        fwmark,
         addresses,
         peers,
     })

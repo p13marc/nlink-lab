@@ -2719,10 +2719,14 @@ fn topology_to_wireguard_config(
 
         let private_key = *private_key;
         let listen_port = wg_config.listen_port;
+        let fwmark = wg_config.fwmark;
         cfg = cfg.device(wg_name.as_str(), move |mut d| {
             d = d.private_key(private_key);
             if let Some(p) = listen_port {
                 d = d.listen_port(p);
+            }
+            if let Some(fw) = fwmark {
+                d = d.fwmark(fw);
             }
             for (pubkey, endpoint, allowed_ips) in peer_specs {
                 d = d.peer(pubkey, move |mut p| {
@@ -4866,6 +4870,7 @@ node host
             crate::types::WireguardConfig {
                 private_key: Some(b64),
                 listen_port: Some(51820),
+                fwmark: None,
                 addresses: vec!["10.0.0.1/24".into()],
                 peers: vec![],
             },
@@ -4896,6 +4901,7 @@ node host
             crate::types::WireguardConfig {
                 private_key: Some("not-base64!@#".into()),
                 listen_port: None,
+                fwmark: None,
                 addresses: vec![],
                 peers: vec![],
             },
@@ -4928,6 +4934,7 @@ node b
             crate::types::WireguardConfig {
                 private_key: None,
                 listen_port: Some(51820),
+                fwmark: None,
                 addresses: vec!["10.99.0.1/24".into()],
                 peers: vec!["b".into()],
             },
@@ -4940,6 +4947,7 @@ node b
             crate::types::WireguardConfig {
                 private_key: None,
                 listen_port: Some(51821),
+                fwmark: None,
                 addresses: vec!["10.99.0.2/24".into()],
                 peers: vec!["a".into()],
             },
@@ -4983,6 +4991,7 @@ node b
             crate::types::WireguardConfig {
                 private_key: None,
                 listen_port: Some(51820),
+                fwmark: None,
                 addresses: vec!["10.99.0.1/24".into()],
                 peers: vec!["b".into()],
             },

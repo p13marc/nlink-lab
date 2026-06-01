@@ -151,61 +151,61 @@ impl Error {
         matches!(self, Self::NotFound { .. } | Self::NodeNotFound { .. })
     }
 
-    /// Walk the source chain looking for a kernel
-    /// `NLMSGERR_ATTR_MSG` payload. Returns the first
-    /// `ext_ack` string found, or `None` if no kernel
-    /// error is in the chain.
+    /// Walk the source chain looking for the first
+    /// `nlink::Error`. Returns `None` if no kernel error is in
+    /// the chain (e.g. `Self::Validation`,
+    /// `Self::InvalidTopology`).
     ///
-    /// Plan 158b — the new typed-source variants
-    /// ([`Self::Namespace`], `[Self::Nlink]`) carry the
-    /// underlying `nlink::Error` on `#[source]`, so this
-    /// accessor finds it even when the top-level error is
-    /// one of our wrapper variants. For the (still legacy)
-    /// stringified call sites that route through
-    /// [`Self::DeployFailed`], `ext_ack` is no longer
-    /// recoverable — its text is flattened into the
-    /// human-readable string at construction time.
-    pub fn ext_ack(&self) -> Option<&str> {
+    /// Once the first `nlink::Error` is located, the
+    /// `ext_ack`/`errno`/`ext_ack_offset` accessors below
+    /// delegate to `nlink::Error::root_cause()` (Plan 187 §2.2
+    /// upstream) to drill to the deepest kernel layer — which
+    /// transparently unwraps `Box<nlink::Error>` sources, side-
+    /// stepping the `downcast_ref` trap described in
+    /// `nlink-feedback.md` item #4.
+    fn first_nlink_error(&self) -> Option<&nlink::Error> {
         let mut src: &dyn std::error::Error = self;
         loop {
-            if let Some(e) = src.downcast_ref::<nlink::Error>()
-                && let Some(s) = e.ext_ack()
-            {
-                return Some(s);
+            if let Some(e) = src.downcast_ref::<nlink::Error>() {
+                return Some(e);
             }
             src = src.source()?;
         }
+    }
+
+    /// Return the kernel `NLMSGERR_ATTR_MSG` ext_ack string
+    /// from this error's source chain, if any.
+    ///
+    /// Plan 158b — the typed-source variants
+    /// ([`Self::Namespace`], [`Self::Nlink`]) carry the
+    /// underlying `nlink::Error` on `#[source]`, so the
+    /// accessor finds it even when the top-level error is one
+    /// of our wrapper variants. For (still legacy) stringified
+    /// call sites that route through [`Self::DeployFailed`],
+    /// `ext_ack` is no longer recoverable — its text is
+    /// flattened into the human-readable string at
+    /// construction time.
+    ///
+    /// Plan 159f — delegates to `nlink::Error::root_cause()` so
+    /// the deepest kernel layer wins, and `Box<nlink::Error>`
+    /// sources are unwrapped transparently.
+    pub fn ext_ack(&self) -> Option<&str> {
+        self.first_nlink_error()?.root_cause().ext_ack()
     }
 
     /// Companion to [`Self::ext_ack`] — returns the offset
     /// (if any) into the request payload where the kernel
     /// said the rejected attribute lives.
     pub fn ext_ack_offset(&self) -> Option<u32> {
-        let mut src: &dyn std::error::Error = self;
-        loop {
-            if let Some(e) = src.downcast_ref::<nlink::Error>()
-                && let Some(o) = e.ext_ack_offset()
-            {
-                return Some(o);
-            }
-            src = src.source()?;
-        }
+        self.first_nlink_error()?.root_cause().ext_ack_offset()
     }
 
     /// Return the kernel errno from the source chain, if any.
-    /// Walks the chain via [`std::error::Error::source`] so
-    /// callers don't have to know which wrapper variant the
-    /// `nlink::Error` is hidden behind.
+    /// nlink 0.19 normalizes errno via `.abs()`, so the value
+    /// is always the positive errno number regardless of how
+    /// the underlying `nlink::Error` was constructed.
     pub fn errno(&self) -> Option<i32> {
-        let mut src: &dyn std::error::Error = self;
-        loop {
-            if let Some(e) = src.downcast_ref::<nlink::Error>()
-                && let Some(n) = e.errno()
-            {
-                return Some(n);
-            }
-            src = src.source()?;
-        }
+        self.first_nlink_error()?.root_cause().errno()
     }
 }
 
@@ -215,8 +215,8 @@ mod tests {
 
     #[test]
     fn ext_ack_walks_through_namespace_variant() {
-        // `from_errno_ext_ack` stores the errno negated; pass 1 →
-        // stored as -1. The accessor returns whatever is stored.
+        // 0.19 normalizes errno via `.abs()`, so `errno()` returns
+        // the positive errno regardless of input sign.
         let kernel = nlink::Error::from_errno_ext_ack(
             1,
             Some("netlink: Could not process attribute".into()),
@@ -227,7 +227,7 @@ mod tests {
             ns: "ns-test".into(),
             source: kernel,
         };
-        assert_eq!(lab_err.errno(), Some(-1));
+        assert_eq!(lab_err.errno(), Some(1));
         assert_eq!(
             lab_err.ext_ack(),
             Some("netlink: Could not process attribute")
@@ -240,7 +240,7 @@ mod tests {
         let kernel =
             nlink::Error::from_errno_ext_ack(17, Some("netlink: duplicate link".into()), None);
         let lab_err: Error = kernel.into();
-        assert_eq!(lab_err.errno(), Some(-17));
+        assert_eq!(lab_err.errno(), Some(17));
         assert_eq!(lab_err.ext_ack(), Some("netlink: duplicate link"));
     }
 
@@ -313,5 +313,50 @@ mod tests {
             rendered.contains("create namespace 'ns-test'"),
             "wrapper context expected in Display: {rendered}"
         );
+    }
+
+    /// Plan 159f — guard against the Box<nlink::Error> source
+    /// trap. Today no nlink-lab variant boxes its source, but
+    /// `root_cause` (via upstream `chain_walk`) transparently
+    /// unwraps boxed sources, so a future refactor that boxes
+    /// (e.g. to mitigate `result_large_err`) would not regress
+    /// `ext_ack`/`errno` retrieval. We construct the boxed
+    /// chain by wrapping the kernel error in `Error::Nlink` —
+    /// `thiserror`'s `#[from] nlink::Error` field gives us a
+    /// chain that `first_nlink_error` walks in one step.
+    #[test]
+    fn root_cause_drills_through_nlink_chain_to_kernel_layer() {
+        let kernel = nlink::Error::from_errno_ext_ack(
+            42,
+            Some("netlink: deep ext_ack".into()),
+            Some(8),
+        );
+        let lab_err: Error = kernel.into();
+        // first_nlink_error walks to the nlink::Error layer;
+        // root_cause then drills (transparently unboxing) to
+        // the deepest kernel-bearing layer.
+        assert_eq!(lab_err.errno(), Some(42));
+        assert_eq!(lab_err.ext_ack(), Some("netlink: deep ext_ack"));
+        assert_eq!(lab_err.ext_ack_offset(), Some(8));
+    }
+
+    /// Same as above but through the typed `Error::Namespace`
+    /// variant — confirms both code paths (From-conversion and
+    /// `#[source]` field) reach the kernel layer via
+    /// `root_cause`.
+    #[test]
+    fn root_cause_drills_through_namespace_variant() {
+        let kernel = nlink::Error::from_errno_ext_ack(
+            13,
+            Some("netlink: namespace wrap".into()),
+            None,
+        );
+        let lab_err = Error::Namespace {
+            op: "create",
+            ns: "rc-test".into(),
+            source: kernel,
+        };
+        assert_eq!(lab_err.errno(), Some(13));
+        assert_eq!(lab_err.ext_ack(), Some("netlink: namespace wrap"));
     }
 }

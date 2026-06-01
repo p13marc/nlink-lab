@@ -3006,9 +3006,9 @@ dependencies = [
 
 [[package]]
 name = "nlink"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92797d349d80354c4168c8b6db6b18250d213b5a350b0b3c90ce70f5af5364b0"
+checksum = "0b642b5390203109dd3a64157f24d22dafcc118077a499eae499eac270d9fbc8"
 dependencies = [
  "bitflags 2.11.1",
  "bytes",
@@ -3049,6 +3049,7 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tokio",
+ "tokio-stream",
  "toml 1.1.2+spec-1.1.0",
  "tracing",
  "winnow 0.7.15",
@@ -3130,9 +3131,9 @@ dependencies = [
 
 [[package]]
 name = "nlink-macros"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ca8297cf3d8f788fd91f1dd29200c09b55ebb60e4881d48bd9ca745303e86d5"
+checksum = "0444cf60a882b8f10d8ba95db53470d6a87447142a3d946d8d71e97e5a55bfcd"
 dependencies = [
  "proc-macro2",
  "quote",

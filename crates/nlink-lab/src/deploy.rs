@@ -3179,25 +3179,40 @@ pub async fn apply_diff(
         HashMap::new()
     };
 
+    // Plan 159a Phase 2 follow-up — `apply_diff` Phase 6 previously
+    // didn't configure WireGuard for newly-added nodes; the deploy
+    // path did but apply_diff missed it. Build the WG key map once
+    // (sync) and let `apply_stack_for_node` orchestrate all three
+    // layers per node, matching the deploy step 11c shape.
+    #[cfg(feature = "wireguard")]
+    let wg_public_keys = build_wg_public_key_map(desired)?;
+
     for node_name in &diff.nodes_added {
         let node = &desired.nodes[node_name];
         let handle = node_handle_for(running, node_name)?;
 
-        let cfg = topology_to_network_config(
+        let net = topology_to_network_config(
             node_name,
             node,
             desired,
             auto_routes_for_apply.get(node_name),
         )?;
-        apply_network_config_for_node(&handle, node_name, cfg).await?;
-
-        // Firewall + NAT (Plan 158a — declarative reconcile in one
-        // atomic batch per node).
         let fw = desired.effective_firewall(node);
         let nat = node.nat.as_ref();
-        if fw.is_some() || nat.is_some() {
-            apply_nftables_for_node(&handle, node_name, fw, nat).await?;
-        }
+        #[cfg(feature = "wireguard")]
+        let wg = if node.wireguard.is_empty() {
+            None
+        } else {
+            Some(topology_to_wireguard_config(
+                node_name,
+                node,
+                desired,
+                &wg_public_keys,
+            )?)
+        };
+        #[cfg(not(feature = "wireguard"))]
+        let wg: Option<()> = None;
+        apply_stack_for_node(&handle, node_name, net, fw, nat, wg).await?;
     }
 
     // ── Phase 7: Apply impairment changes ──────────────────────────

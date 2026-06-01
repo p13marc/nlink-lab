@@ -1,0 +1,203 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nlink-lab.example/schemas/layered-diff.v2.schema.json",
+  "title": "nlink-lab apply --check / --dry-run --json output (v2)",
+  "description": "Typed v2 envelope emitted by `nlink-lab apply --check --json` and `apply --dry-run --json` starting in nlink-lab >= 0.6.0. Replaces the v1 envelope (kept alongside as `layered-diff.schema.json` during the deprecation window). v2 adds typed per-namespace diffs at `.network.<node>` (upstream `nlink::ConfigDiff` under `nlink/serde`) and `.nftables.<node>` (upstream `nlink::NftablesDiff`). The v1 fields `.diff` (alias of `.topology`) and `.layered_summary` (formatted `Display` output) are retained for one release as a deprecation period; both will be removed in schema v3. The presence of `\"layered_summary_deprecated\": true` marks the deprecation window. Plan 159d.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "lab",
+    "no_op",
+    "change_count",
+    "topology"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 2,
+      "description": "Schema version marker. v1 omitted this field entirely; v2 sets it to 2; v3 will set it to 3 and drop the deprecated mirror fields."
+    },
+    "lab": {
+      "type": "string",
+      "description": "Lab name (matches `desired.lab.name` in the parsed topology)."
+    },
+    "no_op": {
+      "type": "boolean",
+      "description": "True when `LayeredDiff::is_empty()` is true — every subdiff reports zero changes across topology + per-namespace network + per-namespace nftables. `apply --check` exits 0 iff `no_op == true`."
+    },
+    "change_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Aggregate `LayeredDiff::change_count()` across all subdiff layers."
+    },
+    "topology": {
+      "$ref": "#/definitions/TopologyDiff",
+      "description": "Lab-graph layer: node/link adds and removes, sysctls, route changes, network impairments, rate limits, and nftables_changed (a coarse 'something in nftables changed' marker; the per-rule typed view lives in `.nftables.<node>`)."
+    },
+    "network": {
+      "type": "object",
+      "description": "Per-namespace upstream `ConfigDiff` (links + addresses + routes + qdiscs) keyed by node name. Empty map elided. Sub-shape owned by upstream nlink; consumers should use defensive defaults like `.links_to_add // []` to survive future field additions.",
+      "additionalProperties": {
+        "$ref": "#/definitions/ConfigDiff"
+      }
+    },
+    "nftables": {
+      "type": "object",
+      "description": "Per-namespace upstream `NftablesDiff` (tables + chains + rules + sets + elements) keyed by node name. Empty map elided. Same forward-compat caveat as `network`.",
+      "additionalProperties": {
+        "$ref": "#/definitions/NftablesDiff"
+      }
+    },
+    "diff": {
+      "description": "DEPRECATED — v1 mirror of `topology`. Identical shape; kept for one release while downstream consumers migrate. Removed in v3.",
+      "$ref": "#/definitions/TopologyDiff"
+    },
+    "layered_summary": {
+      "type": "string",
+      "description": "DEPRECATED — human-readable `LayeredDiff::Display` rendering. Migrate to the typed `topology`/`network`/`nftables` fields and consume them through `jq` directly. Removed in v3."
+    },
+    "layered_summary_deprecated": {
+      "const": true,
+      "description": "Marker — flips to false (or the field disappears) when the v3 schema lands and the deprecated mirror fields are removed."
+    }
+  },
+  "definitions": {
+    "TopologyDiff": {
+      "type": "object",
+      "description": "Lab-graph diff (nodes + links + sysctls + routes + impairments + rate-limits + per-node nftables markers). Field shape is owned by nlink-lab and stable across the deprecation window.",
+      "additionalProperties": true,
+      "properties": {
+        "nodes_added": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node names declared in `desired` but missing from the running lab."
+        },
+        "nodes_removed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node names in the running lab but absent from `desired`."
+        },
+        "links_added": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Lab-graph link entries to be added (carries `endpoints` + optional `addresses`/`mtu`)."
+        },
+        "links_removed": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "sysctls_changed": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "routes_changed": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "rate_limits_changed": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "network_impairs_changed": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "nftables_changed": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Coarse markers indicating which nodes have ANY nftables change. The per-rule typed view lives in `.nftables.<node>`."
+        }
+      }
+    },
+    "ConfigDiff": {
+      "type": "object",
+      "description": "Upstream `nlink::netlink::config::ConfigDiff` serialized via the `nlink/serde` feature. Sub-fields use kebab-case per upstream serde rename. See https://docs.rs/nlink/0.19/nlink/netlink/config/struct.ConfigDiff.html for the authoritative shape.",
+      "additionalProperties": true,
+      "properties": {
+        "links-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "links-to-modify": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "links-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "addresses-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "addresses-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "routes-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "routes-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "qdiscs-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "qdiscs-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "NftablesDiff": {
+      "type": "object",
+      "description": "Upstream `nlink::netlink::nftables::config::NftablesDiff` serialized via the `nlink/serde` feature. Same forward-compat caveat as `ConfigDiff` above.",
+      "additionalProperties": true,
+      "properties": {
+        "tables-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "tables-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "chains-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "chains-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "rules-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "rules-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "sets-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "sets-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "elements-to-add": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "elements-to-remove": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    }
+  }
+}

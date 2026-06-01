@@ -7,6 +7,14 @@ use serde::Serialize;
 
 use crate::types::{Impairment, Link, NetworkImpairment, RateLimit, RouteConfig, Topology};
 
+/// Re-export upstream `ConfigDiff` so downstream binaries (e.g.
+/// `bins/lab`) don't need a direct `nlink` dep to construct the
+/// 159d typed JSON envelope.
+pub use nlink::netlink::config::ConfigDiff;
+/// Re-export upstream `NftablesDiff` for the same reason as
+/// [`ConfigDiff`] above.
+pub use nlink::netlink::nftables::config::NftablesDiff;
+
 /// A structured diff between two topologies.
 #[derive(Debug, Default, Serialize)]
 pub struct TopologyDiff {
@@ -266,10 +274,17 @@ impl std::fmt::Display for TopologyDiff {
 /// whole bundle is empty. The `apply --check` / `apply --dry-run`
 /// commands print `LayeredDiff` directly; the JSON form serializes
 /// each subdiff under its own top-level key.
-#[derive(Debug, Default)]
+///
+/// Plan 159d — `Serialize` derive ships under the workspace nlink
+/// `serde` feature (transitive via `full`). Empty layer maps are
+/// elided from the JSON output via `skip_serializing_if`, so the
+/// "no changes" case still emits a tight envelope.
+#[derive(Debug, Default, Serialize)]
 pub struct LayeredDiff {
     pub topology: TopologyDiff,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub network: std::collections::HashMap<String, nlink::netlink::config::ConfigDiff>,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub nftables: std::collections::HashMap<String, nlink::netlink::nftables::config::NftablesDiff>,
 }
 

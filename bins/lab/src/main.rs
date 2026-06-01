@@ -1218,23 +1218,54 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     .expect("layered_view is Some when dry_run");
                 #[derive(serde::Serialize)]
                 struct DryRunReport<'a> {
+                    /// Plan 159d — typed-shape schema marker.
+                    /// `2` = v2 (this format). Downstream `jq`
+                    /// consumers should branch on this.
+                    schema_version: u32,
                     lab: &'a str,
                     no_op: bool,
                     change_count: usize,
+                    /// Plan 159d — typed per-namespace
+                    /// `NetworkConfig` diff under
+                    /// `nlink/serde`. Empty map elided.
+                    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+                    network: &'a std::collections::HashMap<
+                        String,
+                        nlink_lab::diff::ConfigDiff,
+                    >,
+                    /// Plan 159d — typed per-namespace
+                    /// `NftablesDiff`. Empty map elided.
+                    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+                    nftables: &'a std::collections::HashMap<
+                        String,
+                        nlink_lab::diff::NftablesDiff,
+                    >,
+                    /// v1 alias of `topology` — kept for one
+                    /// release for backwards compat. Removed in
+                    /// schema v3.
                     diff: &'a nlink_lab::TopologyDiff,
-                    /// Plan 158f Phase 2 — human-readable view of
-                    /// the full layered diff (topology + per-
-                    /// namespace upstream subdiffs). Useful as a
-                    /// preview alongside the structured `diff`
-                    /// field above.
+                    /// Plan 158f Phase 2 — human-readable view
+                    /// of the full layered diff. Marked
+                    /// **deprecated** in 159d; downstream
+                    /// consumers should switch to the typed
+                    /// `network`/`nftables` fields. Removed in
+                    /// schema v3.
                     layered_summary: String,
+                    /// Plan 159d — true while `layered_summary`
+                    /// is still emitted. Flip to false (or drop
+                    /// the field) when schema v3 ships.
+                    layered_summary_deprecated: bool,
                 }
                 let report = DryRunReport {
+                    schema_version: 2,
                     lab: lab_name,
                     no_op: layered.is_empty(),
                     change_count: layered.change_count(),
+                    network: &layered.network,
+                    nftables: &layered.nftables,
                     diff: &diff,
                     layered_summary: layered.to_string(),
+                    layered_summary_deprecated: true,
                 };
                 println!("{}", serde_json::to_string_pretty(&report)?);
                 if check && !layered.is_empty() {

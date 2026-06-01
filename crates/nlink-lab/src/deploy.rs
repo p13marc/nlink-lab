@@ -18,7 +18,7 @@ use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_duration, parse_percent, parse_rate_bps};
 use crate::running::RunningLab;
 use crate::state::{self, ContainerState, LabState};
-use crate::types::{DnsMode, EndpointRef, InterfaceKind, Topology};
+use crate::types::{DnsMode, EndpointRef, Topology};
 
 /// Abstraction over bare namespace vs container node.
 enum NodeHandle {
@@ -546,88 +546,15 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 6: Create additional interfaces (loopback addresses handled in step 9) ──
-    for (node_name, node) in &topology.nodes {
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (iface_name, iface_config) in &node.interfaces {
-            match &iface_config.kind {
-                Some(InterfaceKind::Dummy) => {
-                    // Plan 158e Slice 2 — dummy creation absorbed
-                    // into the declarative NetworkConfig path
-                    // (step 11c).
-                }
-                Some(InterfaceKind::Vxlan) => {
-                    let vni = iface_config.vni.ok_or_else(|| {
-                        Error::invalid_topology(format!(
-                            "vxlan interface '{iface_name}' on node '{node_name}' missing vni"
-                        ))
-                    })?;
-                    let mut vxlan = nlink::netlink::link::VxlanLink::new(iface_name, vni);
-                    if let Some(local) = &iface_config.local {
-                        let addr: std::net::Ipv4Addr = local.parse().map_err(|e| {
-                            Error::invalid_topology(format!(
-                                "bad vxlan local address '{local}': {e}"
-                            ))
-                        })?;
-                        vxlan = vxlan.local(addr);
-                    }
-                    if let Some(remote) = &iface_config.remote {
-                        let addr: std::net::Ipv4Addr = remote.parse().map_err(|e| {
-                            Error::invalid_topology(format!(
-                                "bad vxlan remote address '{remote}': {e}"
-                            ))
-                        })?;
-                        vxlan = vxlan.remote(addr);
-                    }
-                    if let Some(port) = iface_config.port {
-                        vxlan = vxlan.port(port);
-                    }
-                    conn.add_link(vxlan).await.map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to create vxlan '{iface_name}' on node '{node_name}': {e}"
-                        ))
-                    })?;
-                }
-                Some(InterfaceKind::Bond) => {
-                    // Plan 158e Slice 2 — bond creation +
-                    // member enslave absorbed into the declarative
-                    // NetworkConfig path (step 11c, replaces step
-                    // 10b).
-                }
-                Some(InterfaceKind::Vlan) => {
-                    // Plan 158e Slice 3 — VLAN creation absorbed
-                    // into the declarative NetworkConfig path
-                    // (step 11c).
-                }
-                // loopback or no kind — skip creation (lo exists already, addresses set in step 9)
-                None => {}
-                Some(InterfaceKind::Loopback) => {
-                    // loopback exists already, addresses set in step 9
-                }
-            }
-
-            // Set MTU if specified.
-            //
-            // Plan 158e Slices 2 + 3 moved Dummy / Bond / Vlan
-            // creation to step 11c's declarative NetworkConfig path,
-            // which sets MTU via `LinkBuilder::mtu` inline. Those
-            // kinds no longer exist when this step runs, so calling
-            // `set_link_mtu` on them would fail with ENODEV. Restrict
-            // the imperative MTU set to Vxlan (still created here).
-            if let Some(mtu) = iface_config.mtu
-                && iface_config.kind == Some(InterfaceKind::Vxlan)
-            {
-                conn.set_link_mtu(iface_name, mtu).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to set MTU on '{node_name}'.{iface_name}: {e}"
-                    ))
-                })?;
-            }
-        }
-    }
+    //
+    // After Plan 159a Slice 4, every `InterfaceKind` (Dummy,
+    // Bond, Vlan, Vxlan) creates declaratively in step 11c:
+    // - 158e Slice 2 — Dummy + Bond (+ member enslave that was 10b)
+    // - 158e Slice 3 — Vlan sub-interfaces
+    // - 159a Slice 4 — Vxlan (incl. `vxlan_local` / `_remote` / `_port`)
+    // Loopback exists already; addresses for every kind get
+    // handled by step 11c's address-application pass. This step
+    // is now an empty marker for the step-numbering audit trail.
 
     // ── Step 6a: Create macvlan/ipvlan interfaces ───────────────────
     // These are created on the host and moved into namespaces because the
@@ -696,33 +623,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     }
 
     // ── Step 6b: Create VRF interfaces ─────────────────────────────
-    for (node_name, node) in &topology.nodes {
-        if node.vrfs.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (vrf_name, vrf_config) in &node.vrfs {
-            conn.add_link(nlink::netlink::link::VrfLink::new(
-                vrf_name,
-                vrf_config.table,
-            ))
-            .await
-            .map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to create VRF '{vrf_name}' on node '{node_name}': {e}"
-                ))
-            })?;
-            conn.set_link_up(vrf_name).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to bring up VRF '{vrf_name}' on node '{node_name}': {e}"
-                ))
-            })?;
-        }
-    }
+    //
+    // Plan 159a Slice 4 — VRF creation + bring-up absorbed into
+    // the declarative NetworkConfig path (step 11c). Uses
+    // `LinkBuilder::vrf(table)` from nlink 0.19 (upstream Plan
+    // 190 §2.3). Empty marker kept for the step-numbering audit
+    // trail.
 
     // ── Step 6c: Create WireGuard interfaces ─────────────────────
     // Phase 1: Create the netlink interfaces (configuration happens after Step 10)
@@ -785,30 +691,22 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // audit trail; the imperative body is gone.
 
     // ── Step 10c: Enslave interfaces to VRFs ─────────────────────
-    for (node_name, node) in &topology.nodes {
-        if node.vrfs.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
+    //
+    // Plan 159a Slice 4 — VRF enslave absorbed into the declarative
+    // NetworkConfig path (step 11c, `LinkBuilder::master(vrf)`).
+    // Empty marker kept for the step-numbering audit trail.
 
-        for (vrf_name, vrf_config) in &node.vrfs {
-            for iface in &vrf_config.interfaces {
-                conn.set_link_master(iface, vrf_name).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to enslave '{iface}' to VRF '{vrf_name}' on '{node_name}': {e}"
-                    ))
-                })?;
-            }
-        }
-    }
-
-    // ── Step 10d: Configure WireGuard devices ────────────────────
-    // Phase 2: Generate keys and configure peers.
-    // We collect all generated public keys first, then configure peers.
-    let mut wg_public_keys: HashMap<String, HashMap<String, [u8; 32]>> = HashMap::new();
+    // ── Step 10d: Configure WireGuard devices (declarative) ───────
+    //
+    // Plan 159a Phase 2 — replace the two-pass imperative
+    // `wg_conn.set_device(...)` loops with a per-node
+    // `WireguardConfig::apply_reconcile()` call (upstream Plan 196).
+    // Key generation (sync, no kernel touch) still happens in a
+    // pre-pass so peer cross-references resolve. The WG interface
+    // itself is still created imperatively in step 6c — 0.19's
+    // `DeclaredLinkType` doesn't have a `Wireguard` variant, so
+    // `LinkBuilder` can't model it; `WireguardConfig::diff` needs
+    // the interface to exist before it can succeed.
 
     #[cfg(not(feature = "wireguard"))]
     {
@@ -821,128 +719,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     }
 
-    // First pass: set private keys and listen ports, collect public keys
     #[cfg(feature = "wireguard")]
-    for (node_name, node) in &topology.nodes {
-        if node.wireguard.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let wg_conn = node_handle.wireguard_connection().await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to create WireGuard connection for '{node_name}': {e}"
-            ))
-        })?;
-
-        let mut node_keys = HashMap::new();
-        for (wg_name, wg_config) in &node.wireguard {
-            let private_key = match wg_config.private_key.as_deref() {
-                Some("auto") | None => generate_wg_private_key()?,
-                Some(key_str) => decode_wg_key(key_str).map_err(|e| {
-                    Error::invalid_topology(format!(
-                        "invalid WireGuard private key for '{wg_name}' on '{node_name}': {e}"
-                    ))
-                })?,
-            };
-
-            let public_key = derive_wg_public_key(&private_key);
-            node_keys.insert(wg_name.clone(), public_key);
-
-            wg_conn
-                .set_device(wg_name.as_str(), |dev| {
-                    let mut dev = dev.private_key(private_key);
-                    if let Some(port) = wg_config.listen_port {
-                        dev = dev.listen_port(port);
-                    }
-                    dev
-                })
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to configure WireGuard '{wg_name}' on '{node_name}': {e}"
-                    ))
-                })?;
-        }
-        wg_public_keys.insert(node_name.clone(), node_keys);
-    }
-
-    // Second pass: configure peers
-    #[cfg(feature = "wireguard")]
-    for (node_name, node) in &topology.nodes {
-        if node.wireguard.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let wg_conn = node_handle.wireguard_connection().await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to create WireGuard connection for '{node_name}': {e}"
-            ))
-        })?;
-
-        for (wg_name, wg_config) in &node.wireguard {
-            if wg_config.peers.is_empty() {
-                continue;
-            }
-
-            for peer_node_name in &wg_config.peers {
-                // Find the peer's WireGuard public key and endpoint
-                let peer_keys = wg_public_keys.get(peer_node_name).ok_or_else(|| {
-                    Error::invalid_topology(format!(
-                        "WireGuard peer '{peer_node_name}' referenced by '{node_name}'.{wg_name} has no WireGuard interfaces"
-                    ))
-                })?;
-
-                // Find the matching WG interface on the peer (first one that lists us as a peer)
-                let peer_node = &topology.nodes[peer_node_name];
-                for (peer_wg_name, peer_wg_config) in &peer_node.wireguard {
-                    if !peer_wg_config.peers.contains(node_name) {
-                        continue;
-                    }
-                    let peer_pubkey = peer_keys.get(peer_wg_name).ok_or_else(|| {
-                        Error::deploy_failed(format!(
-                            "missing public key for '{peer_node_name}'.{peer_wg_name}"
-                        ))
-                    })?;
-
-                    let mut peer_builder =
-                        nlink::netlink::genl::wireguard::WgPeerBuilder::new(*peer_pubkey);
-
-                    // Set endpoint if peer has a listen port and an address we can reach
-                    if let Some(port) = peer_wg_config.listen_port {
-                        // Try to find a reachable address for the peer from link addresses
-                        if let Some(addr) = find_peer_endpoint(topology, peer_node_name) {
-                            let endpoint = std::net::SocketAddr::new(addr, port);
-                            peer_builder = peer_builder.endpoint(endpoint);
-                        }
-                    }
-
-                    // Add allowed IPs from the peer's WireGuard addresses
-                    for addr_str in &peer_wg_config.addresses {
-                        if let Ok((ip, prefix)) = parse_cidr(addr_str) {
-                            let allowed_ip = match ip {
-                                IpAddr::V4(v4) => {
-                                    nlink::netlink::genl::wireguard::AllowedIp::v4(v4, prefix)
-                                }
-                                IpAddr::V6(v6) => {
-                                    nlink::netlink::genl::wireguard::AllowedIp::v6(v6, prefix)
-                                }
-                            };
-                            peer_builder = peer_builder.allowed_ip(allowed_ip);
-                        }
-                    }
-
-                    wg_conn
-                        .set_device(wg_name.as_str(), |dev| dev.peer(peer_builder))
-                        .await
-                        .map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to add peer '{peer_node_name}' to WireGuard '{wg_name}' on '{node_name}': {e}"
-                            ))
-                        })?;
-                }
-            }
-        }
-    }
+    let wg_public_keys = build_wg_public_key_map(topology)?;
 
     // ── Step 11: Apply sysctls ─────────────────────────────────────
     for (node_name, node) in &topology.nodes {
@@ -969,20 +747,39 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         HashMap::new()
     };
 
-    // ── Step 11c: Apply NetworkConfig per namespace ────────────────
+    // ── Step 11c + 10d + 13: Per-node Stack-pattern apply ──────────
     //
-    // Plan 158e Slice 1 — single per-namespace
-    // `NetworkConfig::diff().apply()` covering all addresses
-    // (steps 9.1-9.5) and routes (step 12 main + 11b auto). VRF
-    // routes (12b) remain imperative because `RouteBuilder` doesn't
-    // expose every VRF table knob the older code path used. Re-
-    // deploys on unchanged topologies make zero kernel calls.
-    tracing::info!("step 11c: applying NetworkConfig per namespace (addresses + routes)");
+    // Plan 159c — collapse the three previously-separate per-node
+    // loops (network/step 11c, WireGuard/step 10d, nftables/step 13)
+    // into one orchestrated pass via `apply_stack_for_node`. Each
+    // node sees: build configs → apply network → apply nftables →
+    // apply WireGuard, with one aggregated `tracing::info!` per
+    // node. Mirrors upstream `facade::Stack` shape but routes
+    // through `NodeHandle::connection<P>()` so container namespaces
+    // (`connection_for_pid`) work alongside bare namespaces
+    // (`connection_for(name)`) — upstream `Stack::apply_in_namespace`
+    // only accepts a name.
+    tracing::info!("step 11c+10d+13: applying network + nftables + WireGuard per node");
     for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
-        let cfg =
+        let net =
             topology_to_network_config(node_name, node, topology, auto_routes.get(node_name))?;
-        apply_network_config_for_node(node_handle, node_name, cfg).await?;
+        let fw = topology.effective_firewall(node);
+        let nat = node.nat.as_ref();
+        #[cfg(feature = "wireguard")]
+        let wg = if node.wireguard.is_empty() {
+            None
+        } else {
+            Some(topology_to_wireguard_config(
+                node_name,
+                node,
+                topology,
+                &wg_public_keys,
+            )?)
+        };
+        #[cfg(not(feature = "wireguard"))]
+        let wg: Option<()> = None;
+        apply_stack_for_node(node_handle, node_name, net, fw, nat, wg).await?;
     }
 
     // ── Step 12b: Add VRF routes ───────────────────────────────────
@@ -1008,26 +805,6 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 .await?;
             }
         }
-    }
-
-    // ── Step 13: Apply nftables firewall + NAT (declarative reconcile) ──
-    //
-    // Plan 158a — `NftablesConfig::diff().apply_reconcile()` commits
-    // every chain/rule/table mutation in one kernel batch per node.
-    // Idempotent re-deploy makes zero kernel calls. Both firewall
-    // and NAT live in the same `nlink-lab` table, so we apply the
-    // unified config in a single call rather than two atomic
-    // batches (each of which would see the other's chains as
-    // foreign).
-    tracing::info!("step 13/18: applying firewall + NAT (declarative reconcile)");
-    for (node_name, node) in &topology.nodes {
-        let fw = topology.effective_firewall(node);
-        let nat = node.nat.as_ref();
-        if fw.is_none() && nat.is_none() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
     }
 
     // ── Step 14: Apply netem impairments ───────────────────────────
@@ -1353,7 +1130,10 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
     // ── Step 18: Write state file ──────────────────────────────────
     tracing::info!("step 18/18: writing state file");
-    // Encode WG public keys as base64 for state persistence
+    // Encode WG public keys as base64 for state persistence.
+    // Plan 159a Phase 2 — `wg_public_keys` now stores
+    // `(private_key, public_key)` tuples per WG iface; the state
+    // file only persists the public half.
     let wg_public_keys_b64 = {
         #[cfg(feature = "wireguard")]
         {
@@ -1361,7 +1141,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             let mut map = HashMap::new();
             for (node, keys) in &wg_public_keys {
                 let mut node_map = HashMap::new();
-                for (iface, pubkey) in keys {
+                for (iface, (_priv, pubkey)) in keys {
                     node_map.insert(
                         iface.clone(),
                         base64::engine::general_purpose::STANDARD.encode(pubkey),
@@ -1373,7 +1153,6 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
         #[cfg(not(feature = "wireguard"))]
         {
-            let _: &HashMap<String, HashMap<String, [u8; 32]>> = &wg_public_keys;
             HashMap::new()
         }
     };
@@ -1848,6 +1627,12 @@ fn topology_to_network_config(
     // in step 6a, etc.) work either way; the two-pass shape only
     // matters when the parent is also declarative.
     use crate::types::InterfaceKind;
+
+    // Pass 1 — parentless single-namespace kinds (Dummy, Bond,
+    // VRF, Vxlan). The 0.19 upstream topo-sort handles dependency
+    // ordering across `links_to_add`, but declaring parents
+    // before children inside the config is still the cleanest
+    // shape and matches what apply iterates.
     for (iface_name, iface_config) in &node.interfaces {
         match iface_config.kind {
             Some(InterfaceKind::Dummy) => {
@@ -1877,11 +1662,70 @@ fn topology_to_network_config(
                     cfg = cfg.link(member, move |b| b.master(&bond_name));
                 }
             }
-            // Pass 2 below handles Vlan. Vxlan, Loopback, None stay
-            // imperative for now. Vxlan needs `local` + `port` knobs
-            // that upstream `LinkBuilder::vxlan` doesn't yet expose.
+            Some(InterfaceKind::Vxlan) => {
+                // Plan 159a Slice 4 — declarative VXLAN via 0.19's
+                // `vxlan_local` + `vxlan_remote` + `vxlan_port`
+                // setters (upstream Plan 190 §2.1). `underlay_dev`
+                // is a 0.19 newcomer too but isn't surfaced in NLL
+                // yet; add the field + DSL syntax in a follow-up.
+                let vni = iface_config.vni.ok_or_else(|| {
+                    Error::invalid_topology(format!(
+                        "vxlan interface '{iface_name}' on node \
+                         '{node_name}' missing vni"
+                    ))
+                })?;
+                let local = if let Some(l) = &iface_config.local {
+                    Some(l.parse::<std::net::Ipv4Addr>().map_err(|e| {
+                        Error::invalid_topology(format!(
+                            "bad vxlan local address '{l}' on \
+                             '{node_name}:{iface_name}': {e}"
+                        ))
+                    })?)
+                } else {
+                    None
+                };
+                let remote = if let Some(r) = &iface_config.remote {
+                    Some(r.parse::<std::net::Ipv4Addr>().map_err(|e| {
+                        Error::invalid_topology(format!(
+                            "bad vxlan remote address '{r}' on \
+                             '{node_name}:{iface_name}': {e}"
+                        ))
+                    })?)
+                } else {
+                    None
+                };
+                let port = iface_config.port;
+                let mtu = iface_config.mtu;
+                cfg = cfg.link(iface_name, move |mut b| {
+                    b = b.vxlan(vni).up();
+                    if let Some(l) = local {
+                        b = b.vxlan_local(std::net::IpAddr::V4(l));
+                    }
+                    if let Some(r) = remote {
+                        b = b.vxlan_remote(std::net::IpAddr::V4(r));
+                    }
+                    if let Some(p) = port {
+                        b = b.vxlan_port(p);
+                    }
+                    if let Some(m) = mtu {
+                        b = b.mtu(m);
+                    }
+                    b
+                });
+            }
+            // Pass 2 below handles Vlan. VRF declares below (parent-
+            // less but separate iteration on `node.vrfs`). Loopback
+            // / None stay implicit.
             _ => {}
         }
+    }
+
+    // Pass 1.x — VRF link declarations (Plan 159a Slice 4 — closes
+    // the VRF half of the 158e Slice 4 gap; 0.19 ships
+    // `LinkBuilder::vrf(table)` per upstream Plan 190 §2.3).
+    for (vrf_name, vrf_config) in &node.vrfs {
+        let table = vrf_config.table;
+        cfg = cfg.link(vrf_name, move |b| b.vrf(table).up());
     }
 
     // Pass 2 — VLAN sub-interfaces. Declared AFTER their potential
@@ -1917,6 +1761,17 @@ fn topology_to_network_config(
             }
             b
         });
+    }
+
+    // Pass 3 — VRF enslave. Declared AFTER VRF link + VLAN children
+    // so an iface enslaved to a VRF — including a declarative VLAN
+    // — has both endpoints declared before the master ref. Plan
+    // 159a Slice 4 (folds in what was step 10c).
+    for (vrf_name, vrf_config) in &node.vrfs {
+        for iface in &vrf_config.interfaces {
+            let master = vrf_name.clone();
+            cfg = cfg.link(iface, move |b| b.master(&master));
+        }
     }
 
     // ── Addresses, in the same order step 9 used to apply them ──
@@ -2743,6 +2598,241 @@ fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Opt
     None
 }
 
+/// Map of `(node, wg_iface) → (private_key, public_key)`.
+///
+/// Plan 159a Phase 2 — replaces the imperative pass-1 logic in
+/// step 10d that generated/decoded keys and called
+/// `set_device(private_key + listen_port)` in the same loop. We
+/// split key resolution from device application so peer cross-
+/// references resolve before any kernel mutation happens.
+#[cfg(feature = "wireguard")]
+type WgKeys = HashMap<String, HashMap<String, ([u8; 32], [u8; 32])>>;
+
+#[cfg(feature = "wireguard")]
+fn build_wg_public_key_map(topology: &crate::types::Topology) -> Result<WgKeys> {
+    let mut out: WgKeys = HashMap::new();
+    for (node_name, node) in &topology.nodes {
+        if node.wireguard.is_empty() {
+            continue;
+        }
+        let mut per_node = HashMap::new();
+        for (wg_name, wg_config) in &node.wireguard {
+            let private_key = match wg_config.private_key.as_deref() {
+                Some("auto") | None => generate_wg_private_key()?,
+                Some(key_str) => decode_wg_key(key_str).map_err(|e| {
+                    Error::invalid_topology(format!(
+                        "invalid WireGuard private key for '{wg_name}' on '{node_name}': {e}"
+                    ))
+                })?,
+            };
+            let public_key = derive_wg_public_key(&private_key);
+            per_node.insert(wg_name.clone(), (private_key, public_key));
+        }
+        out.insert(node_name.clone(), per_node);
+    }
+    Ok(out)
+}
+
+/// Build a declarative `WireguardConfig` for one node from its
+/// `node.wireguard` entries. Plan 159a Phase 2 — replaces the
+/// imperative pass-2 `set_device(peer)` loops in step 10d.
+///
+/// Resolves peer cross-references via the pre-computed
+/// `public_keys` map. Each peer's allowed_ips come from the
+/// peer's declared WG addresses; the endpoint resolves through
+/// `find_peer_endpoint` (existing helper, unchanged).
+#[cfg(feature = "wireguard")]
+fn topology_to_wireguard_config(
+    node_name: &str,
+    node: &crate::types::Node,
+    topology: &crate::types::Topology,
+    public_keys: &WgKeys,
+) -> Result<nlink::netlink::genl::wireguard::WireguardConfig> {
+    use nlink::netlink::genl::wireguard::{AllowedIp, WireguardConfig};
+
+    let mut cfg = WireguardConfig::new();
+    let own_keys = public_keys.get(node_name).ok_or_else(|| {
+        Error::deploy_failed(format!(
+            "internal: no key map for WireGuard node '{node_name}'"
+        ))
+    })?;
+
+    for (wg_name, wg_config) in &node.wireguard {
+        let (private_key, _own_pub) = own_keys.get(wg_name).ok_or_else(|| {
+            Error::deploy_failed(format!(
+                "internal: no key for '{node_name}'.{wg_name}"
+            ))
+        })?;
+
+        // Snapshot the per-peer data before moving into the
+        // builder closure (the closure takes `self` by value).
+        let mut peer_specs: Vec<(
+            [u8; 32],
+            Option<std::net::SocketAddr>,
+            Vec<AllowedIp>,
+        )> = Vec::new();
+
+        for peer_node_name in &wg_config.peers {
+            let peer_keys = public_keys.get(peer_node_name).ok_or_else(|| {
+                Error::invalid_topology(format!(
+                    "WireGuard peer '{peer_node_name}' referenced by \
+                     '{node_name}'.{wg_name} has no WireGuard interfaces"
+                ))
+            })?;
+
+            let peer_node = topology.nodes.get(peer_node_name).ok_or_else(|| {
+                Error::invalid_topology(format!(
+                    "WireGuard peer '{peer_node_name}' referenced by \
+                     '{node_name}'.{wg_name} is not a topology node"
+                ))
+            })?;
+
+            for (peer_wg_name, peer_wg_config) in &peer_node.wireguard {
+                if !peer_wg_config.peers.iter().any(|p| p == node_name) {
+                    continue;
+                }
+                let (_peer_priv, peer_pub) =
+                    peer_keys.get(peer_wg_name).ok_or_else(|| {
+                        Error::deploy_failed(format!(
+                            "missing public key for '{peer_node_name}'.{peer_wg_name}"
+                        ))
+                    })?;
+
+                let endpoint = peer_wg_config
+                    .listen_port
+                    .and_then(|port| {
+                        find_peer_endpoint(topology, peer_node_name).map(|addr| {
+                            std::net::SocketAddr::new(addr, port)
+                        })
+                    });
+
+                let mut allowed_ips = Vec::new();
+                for addr_str in &peer_wg_config.addresses {
+                    if let Ok((ip, prefix)) = parse_cidr(addr_str) {
+                        let allowed = match ip {
+                            IpAddr::V4(v4) => AllowedIp::v4(v4, prefix),
+                            IpAddr::V6(v6) => AllowedIp::v6(v6, prefix),
+                        };
+                        allowed_ips.push(allowed);
+                    }
+                }
+
+                peer_specs.push((*peer_pub, endpoint, allowed_ips));
+            }
+        }
+
+        let private_key = *private_key;
+        let listen_port = wg_config.listen_port;
+        cfg = cfg.device(wg_name.as_str(), move |mut d| {
+            d = d.private_key(private_key);
+            if let Some(p) = listen_port {
+                d = d.listen_port(p);
+            }
+            for (pubkey, endpoint, allowed_ips) in peer_specs {
+                d = d.peer(pubkey, move |mut p| {
+                    if let Some(ep) = endpoint {
+                        p = p.endpoint(ep);
+                    }
+                    for ai in allowed_ips {
+                        p = p.allowed_ip(ai);
+                    }
+                    p
+                });
+            }
+            d
+        });
+    }
+
+    Ok(cfg)
+}
+
+/// Plan 159c — per-node Stack-pattern orchestrator.
+///
+/// Bundles the three declarative reconcile calls
+/// (`apply_network_config_for_node`, `apply_nftables_for_node`,
+/// `apply_wireguard_for_node`) into a single per-node call site
+/// with one aggregated `tracing::info!` for the whole stack.
+/// Mirrors upstream `facade::Stack::apply` semantics (no
+/// pre-flight validation across layers — we don't double-dump),
+/// but routes through `NodeHandle::connection<P>()` so the
+/// container case (`connection_for_pid`) keeps working
+/// alongside the bare-namespace case. Upstream's
+/// `Stack::apply_in_namespace(&str)` only accepts a name, so
+/// adopting it directly would break containers.
+#[cfg(feature = "wireguard")]
+async fn apply_stack_for_node(
+    node_handle: &NodeHandle,
+    node_name: &str,
+    network: nlink::netlink::config::NetworkConfig,
+    fw: Option<&crate::types::FirewallConfig>,
+    nat: Option<&crate::types::NatConfig>,
+    wireguard: Option<nlink::netlink::genl::wireguard::WireguardConfig>,
+) -> Result<()> {
+    apply_network_config_for_node(node_handle, node_name, network).await?;
+    if fw.is_some() || nat.is_some() {
+        apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
+    }
+    if let Some(cfg) = wireguard {
+        apply_wireguard_for_node(node_handle, node_name, cfg).await?;
+    }
+    tracing::info!(node = %node_name, "stack reconcile complete");
+    Ok(())
+}
+
+/// Plan 159c — WG-less variant for builds without
+/// `--features wireguard`.
+#[cfg(not(feature = "wireguard"))]
+async fn apply_stack_for_node(
+    node_handle: &NodeHandle,
+    node_name: &str,
+    network: nlink::netlink::config::NetworkConfig,
+    fw: Option<&crate::types::FirewallConfig>,
+    nat: Option<&crate::types::NatConfig>,
+    _wireguard: Option<()>,
+) -> Result<()> {
+    apply_network_config_for_node(node_handle, node_name, network).await?;
+    if fw.is_some() || nat.is_some() {
+        apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
+    }
+    tracing::info!(node = %node_name, "stack reconcile complete");
+    Ok(())
+}
+
+/// Apply a node's `WireguardConfig` via `apply_reconcile`.
+/// Plan 159a Phase 2 — mirrors `apply_network_config_for_node` /
+/// `apply_nftables_for_node` shape for the WG GENL layer.
+#[cfg(feature = "wireguard")]
+async fn apply_wireguard_for_node(
+    node_handle: &NodeHandle,
+    node_name: &str,
+    cfg: nlink::netlink::genl::wireguard::WireguardConfig,
+) -> Result<()> {
+    use nlink::netlink::nftables::config::ReconcileOptions;
+
+    let wg_conn = node_handle.wireguard_connection().await.map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to create WireGuard connection for '{node_name}': {e}"
+        ))
+    })?;
+
+    let report = cfg
+        .apply_reconcile(&wg_conn, ReconcileOptions::default())
+        .await
+        .map_err(|e| {
+            Error::deploy_failed(format!(
+                "WireguardConfig::apply_reconcile on '{node_name}': {e}"
+            ))
+        })?;
+
+    tracing::info!(
+        node = %node_name,
+        attempts = report.attempts,
+        changes = report.change_count,
+        "WireguardConfig reconcile complete",
+    );
+    Ok(())
+}
+
 /// Compute the full layered diff between a running lab's live
 /// state and a desired topology. Plan 158f Phase 2.
 ///
@@ -3482,7 +3572,7 @@ async fn apply_network_impair_diff(
                     }
                     impairer = impairer.impair_dst_ip(*dst_ip, peer);
                 }
-                impairer.reconcile(&conn).await.map_err(|e| {
+                let _report = impairer.reconcile(&conn).await.map_err(|e| {
                     Error::deploy_failed(format!(
                         "network '{}': failed to reconcile impair on '{}:{}': {e}",
                         change.network, change.src_node, iface,
@@ -4601,6 +4691,312 @@ node host
             err.to_string().contains("missing vni"),
             "want 'missing vni' error, got: {err}"
         );
+    }
+
+    /// Plan 159a Slice 4 — VRF declared at the link level with
+    /// `LinkBuilder::vrf(table)` (upstream Plan 190 §2.3).
+    #[test]
+    fn network_config_vrf_declares_link_with_table() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.vrfs.insert(
+            "vrf-blue".into(),
+            crate::types::VrfConfig {
+                table: 100,
+                interfaces: vec![],
+                routes: HashMap::new(),
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        assert!(
+            names.contains(&"vrf-blue"),
+            "expected 'vrf-blue' in declared links, got {names:?}"
+        );
+    }
+
+    /// Plan 159a Slice 4 — VRF enslave runs in pass 3, so the
+    /// declared `links_to_add` lists the VRF strictly before any
+    /// enslave entries referencing it. Defeats HashMap iteration
+    /// order over `node.vrfs.interfaces`.
+    #[test]
+    fn network_config_vrf_master_enslave_after_vrf_link() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.vrfs.insert(
+            "vrf-blue".into(),
+            crate::types::VrfConfig {
+                table: 100,
+                interfaces: vec!["eth0".into(), "eth1".into()],
+                routes: HashMap::new(),
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        let vrf_pos = names.iter().position(|n| *n == "vrf-blue").unwrap();
+        let eth0_pos = names.iter().position(|n| *n == "eth0").unwrap();
+        let eth1_pos = names.iter().position(|n| *n == "eth1").unwrap();
+        assert!(
+            vrf_pos < eth0_pos,
+            "VRF link must be declared before enslaved 'eth0'; \
+             got order {names:?}"
+        );
+        assert!(
+            vrf_pos < eth1_pos,
+            "VRF link must be declared before enslaved 'eth1'; \
+             got order {names:?}"
+        );
+    }
+
+    /// Plan 159a Slice 4 — VXLAN declared via
+    /// `LinkBuilder::vxlan` + `vxlan_local` + `vxlan_remote` +
+    /// `vxlan_port` (upstream Plan 190 §2.1).
+    #[test]
+    fn network_config_vxlan_declares_with_local_remote_port() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "vx100".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vxlan),
+                vni: Some(100),
+                local: Some("10.0.0.1".into()),
+                remote: Some("10.0.0.2".into()),
+                port: Some(4789),
+                mtu: Some(1450),
+                ..Default::default()
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        assert!(
+            names.contains(&"vx100"),
+            "expected 'vx100' VXLAN link declared, got {names:?}"
+        );
+    }
+
+    /// Plan 159a Slice 4 — VXLAN missing VNI produces an
+    /// `InvalidTopology` error before any kernel call.
+    #[test]
+    fn network_config_vxlan_missing_vni_errors() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "vx".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vxlan),
+                vni: None,
+                ..Default::default()
+            },
+        );
+        let err = topology_to_network_config("host", &node, &topo, None).unwrap_err();
+        assert!(
+            err.to_string().contains("missing vni"),
+            "want 'missing vni' error, got: {err}"
+        );
+    }
+
+    /// Plan 159a Slice 4 — VXLAN with a bad IPv4 literal in
+    /// `local` errors out at config-build time, not deploy time.
+    #[test]
+    fn network_config_vxlan_bad_local_addr_errors() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "vx".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vxlan),
+                vni: Some(42),
+                local: Some("not-an-ip".into()),
+                ..Default::default()
+            },
+        );
+        let err = topology_to_network_config("host", &node, &topo, None).unwrap_err();
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("bad vxlan local address"),
+            "want 'bad vxlan local address' error, got: {rendered}"
+        );
+    }
+
+    /// Plan 159a Phase 2 — `build_wg_public_key_map` decodes
+    /// the explicit base64 private key and returns the
+    /// deterministic public key.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn build_wg_public_key_map_decodes_explicit_key() {
+        // Generate a known key once.
+        let priv_key = generate_wg_private_key().unwrap();
+        let pub_key = derive_wg_public_key(&priv_key);
+        let b64 = {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(priv_key)
+        };
+
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.wireguard.insert(
+            "wg0".into(),
+            crate::types::WireguardConfig {
+                private_key: Some(b64),
+                listen_port: Some(51820),
+                addresses: vec!["10.0.0.1/24".into()],
+                peers: vec![],
+            },
+        );
+        let mut topo = topo;
+        topo.nodes.insert("host".into(), node);
+
+        let map = build_wg_public_key_map(&topo).unwrap();
+        let (got_priv, got_pub) = map["host"]["wg0"];
+        assert_eq!(got_priv, priv_key);
+        assert_eq!(got_pub, pub_key);
+    }
+
+    /// Plan 159a Phase 2 — bad base64 in `private_key` surfaces
+    /// as `InvalidTopology` before any kernel call.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn build_wg_public_key_map_bad_key_errors() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.wireguard.insert(
+            "wg0".into(),
+            crate::types::WireguardConfig {
+                private_key: Some("not-base64!@#".into()),
+                listen_port: None,
+                addresses: vec![],
+                peers: vec![],
+            },
+        );
+        let mut topo = topo;
+        topo.nodes.insert("host".into(), node);
+
+        let err = build_wg_public_key_map(&topo).unwrap_err();
+        assert!(matches!(err, Error::InvalidTopology(_)));
+    }
+
+    /// Plan 159a Phase 2 — `topology_to_wireguard_config`
+    /// declares one device per WG iface and resolves peer
+    /// cross-references to the right public key.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn topology_to_wireguard_config_declares_devices_and_peers() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+"#,
+        )
+        .unwrap();
+        let mut topo = topo;
+
+        let mut a = topo.nodes["a"].clone();
+        a.wireguard.insert(
+            "wg0".into(),
+            crate::types::WireguardConfig {
+                private_key: None,
+                listen_port: Some(51820),
+                addresses: vec!["10.99.0.1/24".into()],
+                peers: vec!["b".into()],
+            },
+        );
+        topo.nodes.insert("a".into(), a);
+
+        let mut b = topo.nodes["b"].clone();
+        b.wireguard.insert(
+            "wg0".into(),
+            crate::types::WireguardConfig {
+                private_key: None,
+                listen_port: Some(51821),
+                addresses: vec!["10.99.0.2/24".into()],
+                peers: vec!["a".into()],
+            },
+        );
+        topo.nodes.insert("b".into(), b);
+
+        let keys = build_wg_public_key_map(&topo).unwrap();
+        let cfg = topology_to_wireguard_config("a", &topo.nodes["a"], &topo, &keys).unwrap();
+        assert_eq!(cfg.devices().len(), 1, "expected 1 WG device for node 'a'");
+        let device = &cfg.devices()[0];
+        assert_eq!(device.ifname, "wg0");
+        // Peer should reference 'b'.wg0's public key.
+        let expected_peer_pub = keys["b"]["wg0"].1;
+        let has_expected_peer = device
+            .peers
+            .iter()
+            .any(|p| p.public_key == expected_peer_pub);
+        assert!(
+            has_expected_peer,
+            "expected peer with b.wg0's public key in cfg",
+        );
+    }
+
+    /// Plan 159a Phase 2 — peer reference to a node with no WG
+    /// surfaces as `InvalidTopology`.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn topology_to_wireguard_config_unknown_peer_node_errors() {
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node a
+node b
+"#,
+        )
+        .unwrap();
+        let mut topo = topo;
+
+        let mut a = topo.nodes["a"].clone();
+        a.wireguard.insert(
+            "wg0".into(),
+            crate::types::WireguardConfig {
+                private_key: None,
+                listen_port: Some(51820),
+                addresses: vec!["10.99.0.1/24".into()],
+                peers: vec!["b".into()],
+            },
+        );
+        topo.nodes.insert("a".into(), a);
+        // b has no WG config — peer-from-a references it.
+
+        let keys = build_wg_public_key_map(&topo).unwrap();
+        let err = topology_to_wireguard_config("a", &topo.nodes["a"], &topo, &keys).unwrap_err();
+        assert!(matches!(err, Error::InvalidTopology(_)));
     }
 
     #[test]

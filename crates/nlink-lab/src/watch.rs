@@ -23,6 +23,35 @@ use tokio_stream::StreamExt;
 use crate::error::{Error, Result};
 use crate::running::RunningLab;
 
+/// Plan 159b Phase 4 — shape needed to open a netlink connection
+/// inside a node's namespace. Bare namespaces resolve by name
+/// (`/var/run/netns/<name>`); container namespaces resolve by
+/// init PID (`/proc/<pid>/ns/net`). The watch loop branches on
+/// this when constructing the per-task connection factory.
+#[derive(Debug, Clone)]
+pub enum NsResolver {
+    /// Bare namespace — `/var/run/netns/<name>`.
+    Name(String),
+    /// Container init PID — `/proc/<pid>/ns/net`.
+    Pid(u32),
+}
+
+impl NsResolver {
+    fn open_route(&self) -> std::result::Result<Connection<Route>, nlink::Error> {
+        match self {
+            NsResolver::Name(n) => namespace::connection_for(n),
+            NsResolver::Pid(p) => namespace::connection_for_pid(*p),
+        }
+    }
+
+    fn open_nftables(&self) -> std::result::Result<Connection<Nftables>, nlink::Error> {
+        match self {
+            NsResolver::Name(n) => namespace::connection_for(n),
+            NsResolver::Pid(p) => namespace::connection_for_pid(*p),
+        }
+    }
+}
+
 /// Which event families to subscribe to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -374,14 +403,14 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
     let include_snapshot = opts.include_snapshot;
 
     for node in &node_names {
-        let ns_name = match lab.namespace_name_of(node) {
-            Some(n) => n.to_owned(),
+        // Plan 159b Phase 4 — `NsResolver` handles both bare
+        // namespaces (name-based) and container nodes (pid-based).
+        let resolver = match lab.ns_resolver_of(node) {
+            Some(r) => r,
             None => {
-                // Container nodes — handled via /proc/<pid>/ns/net.
-                // Skip in Phase 1; container watch is a follow-up.
                 tracing::warn!(
                     node = %node,
-                    "skipping watch for container node — only bare namespaces supported in 159b Phase 1"
+                    "skipping watch — no namespace handle (node not running?)"
                 );
                 continue;
             }
@@ -390,9 +419,9 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
         if opts.family.wants_route() {
             let tx = tx.clone();
             let node = node.clone();
-            let ns = ns_name.clone();
+            let r = resolver.clone();
             tasks.push(tokio::spawn(async move {
-                if let Err(e) = run_route_subscription(&node, &ns, tx, include_snapshot).await {
+                if let Err(e) = run_route_subscription(&node, r, tx, include_snapshot).await {
                     eprintln!("[{node}/Route] subscription failed: {e}");
                 }
             }));
@@ -400,9 +429,9 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
         if opts.family.wants_nftables() {
             let tx = tx.clone();
             let node = node.clone();
-            let ns = ns_name.clone();
+            let r = resolver.clone();
             tasks.push(tokio::spawn(async move {
-                if let Err(e) = run_nftables_subscription(&node, &ns, tx, include_snapshot).await {
+                if let Err(e) = run_nftables_subscription(&node, r, tx, include_snapshot).await {
                     eprintln!("[{node}/Nftables] subscription failed: {e}");
                 }
             }));
@@ -453,17 +482,18 @@ async fn futures_join_all(tasks: Vec<tokio::task::JoinHandle<()>>) {
 
 async fn run_route_subscription(
     node: &str,
-    ns: &str,
+    resolver: NsResolver,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
 ) -> Result<()> {
-    let conn: Connection<Route> = namespace::connection_for(ns)
+    let conn: Connection<Route> = resolver
+        .open_route()
         .map_err(|e| Error::deploy_failed(format!("watch: route connection for '{node}': {e}")))?;
 
-    let ns_for_factory = ns.to_owned();
+    let resolver_for_factory = resolver.clone();
     let factory: nlink::ConnectionFactory<Route> = Arc::new(move || {
-        let ns = ns_for_factory.clone();
-        Box::pin(async move { namespace::connection_for::<Route>(&ns) })
+        let r = resolver_for_factory.clone();
+        Box::pin(async move { r.open_route() })
     });
 
     let mut stream = conn
@@ -503,18 +533,18 @@ async fn run_route_subscription(
 
 async fn run_nftables_subscription(
     node: &str,
-    ns: &str,
+    resolver: NsResolver,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
 ) -> Result<()> {
-    let conn: Connection<Nftables> = namespace::connection_for(ns).map_err(|e| {
+    let conn: Connection<Nftables> = resolver.open_nftables().map_err(|e| {
         Error::deploy_failed(format!("watch: nftables connection for '{node}': {e}"))
     })?;
 
-    let ns_for_factory = ns.to_owned();
+    let resolver_for_factory = resolver.clone();
     let factory: nlink::ConnectionFactory<Nftables> = Arc::new(move || {
-        let ns = ns_for_factory.clone();
-        Box::pin(async move { namespace::connection_for::<Nftables>(&ns) })
+        let r = resolver_for_factory.clone();
+        Box::pin(async move { r.open_nftables() })
     });
 
     let mut stream = conn.into_events_with_resync(factory).await.map_err(|e| {
@@ -645,5 +675,22 @@ mod tests {
         let cloned = opts.clone();
         assert_eq!(opts.family, cloned.family);
         assert_eq!(opts.node, cloned.node);
+    }
+
+    /// Plan 159b Phase 4 — `NsResolver` distinguishes
+    /// name-based (bare namespace) from pid-based (container)
+    /// resolution. The watch loop branches on the variant to
+    /// build the right `Connection<P>`.
+    #[test]
+    fn ns_resolver_variants_are_distinguishable() {
+        let by_name = NsResolver::Name("router".into());
+        let by_pid = NsResolver::Pid(42);
+        assert!(matches!(by_name, NsResolver::Name(ref n) if n == "router"));
+        assert!(matches!(by_pid, NsResolver::Pid(42)));
+        // Clone — required by the watch loop which spawns one
+        // tokio task per (node, family) and gives each task its
+        // own owned copy.
+        let _: NsResolver = by_name.clone();
+        let _: NsResolver = by_pid.clone();
     }
 }

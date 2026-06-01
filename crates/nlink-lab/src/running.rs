@@ -183,6 +183,22 @@ impl RunningLab {
         self.namespace_names.get(node).map(String::as_str)
     }
 
+    /// Plan 159b Phase 4 — return the resolver shape needed to
+    /// open a netlink connection inside a node's namespace.
+    /// Bare namespaces use a name-based path
+    /// (`/var/run/netns/<name>`); container namespaces use the
+    /// init PID's `/proc/<pid>/ns/net`. Returns `None` if the
+    /// node isn't running.
+    pub fn ns_resolver_of(&self, node: &str) -> Option<crate::watch::NsResolver> {
+        if let Some(name) = self.namespace_names.get(node) {
+            return Some(crate::watch::NsResolver::Name(name.clone()));
+        }
+        if let Some(state) = self.containers.get(node) {
+            return Some(crate::watch::NsResolver::Pid(state.pid));
+        }
+        None
+    }
+
     /// Whether DNS hosts entries were injected into /etc/hosts.
     pub fn dns_injected(&self) -> bool {
         self.dns_injected

@@ -10,6 +10,35 @@ like closed, features we'd like added. Everything here is
 grounded in a concrete downstream workaround or test failure;
 nothing speculative.
 
+> **2026-06-08 status update against 0.21.0.** nlink shipped 0.20.0
+> (emergency wire-format fixes), 0.20.1 (additive typed-API
+> tightening), and 0.21.0 (the typed-API closeout) together on
+> 2026-06-04. nlink-lab is now on 0.21.0 (commit `777ef52`).
+>
+> Per-item status:
+>
+> - **#1 WireguardConfigDiff Serialize** — still open in 0.21.
+>   `WireguardConfigDiff` at `config.rs:629` has no
+>   `#[cfg_attr(feature = "serde", derive(serde::Serialize))]`.
+> - **#2 WireguardConfig::diff requires the device to exist** —
+>   still open in 0.21. The same `get_device_by_name(&ifname).await?`
+>   line is at `config.rs:247`. nlink-lab's imperative
+>   `add_link(WireguardLink::new(name))` prelude in `deploy.rs`
+>   step 6c and `apply_diff` Phase 6 stay imperative.
+> - **#3 DeclaredLinkType::Wireguard variant** — still open.
+> - **#4 Stack::apply_in_namespace name-only** — still open.
+> - **#5 RateLimiter::reconcile** — still open. Plan 158g
+>   remains parked.
+> - **#6 RTNETLINK `_if_exists` family** — still open.
+> - **#7 facade::apply WG `_in_namespace_path/_pid`** — still open.
+> - **#8 `NETNS_RUN_DIR` not re-exported** — still open.
+> - **#9 `DeclaredWgPeerBuilder::endpoint_hostname`** — still open.
+> - **#10 `StackDiff::change_count()`** — still open.
+>
+> The 0.20/0.21 cycle was scoped to emergency wire-format
+> corrections + typed-API closeout, not the feedback items. The
+> 10 items here are still open for the next cycle.
+
 > **First — thank you.** 0.19 closed 14 of the 16 numbered items,
 > 4 of the 9 wishlist items, and **all 6 documentation
 > suggestions** from `nlink-feedback.md` (2026-05-30). Several

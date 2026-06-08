@@ -278,11 +278,52 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn temp_state_env() -> tempfile::TempDir {
+    /// Process-wide lock serializing the tests that mutate
+    /// `XDG_STATE_HOME`. Without this, `cargo test`'s default
+    /// multi-thread runner would let two parallel tests overwrite
+    /// the env var mid-run — tests A and B both set their own
+    /// tempdir; B's setter wins; A's `save("test-lab")` then
+    /// writes to B's tempdir; A's `assert!(exists("test-lab"))`
+    /// reads back through B's env value, but B may have already
+    /// dropped its `TempDir` and torn down the directory. Net
+    /// result: random `assertion failed: exists("test-lab")`
+    /// failures on busy runners. The mutex also doubles as a
+    /// safety guard around the `unsafe std::env::set_var` —
+    /// modern Rust requires no other thread to be reading the
+    /// env while we mutate it, and serializing the
+    /// state-test set is the cleanest way to honor that.
+    fn xdg_state_lock() -> std::sync::MutexGuard<'static, ()> {
+        use std::sync::{Mutex, OnceLock};
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let m = LOCK.get_or_init(|| Mutex::new(()));
+        // Poisoning is fine — the panic that poisoned the lock
+        // is already reported by the test runner; we just keep
+        // going so the remaining tests run cleanly.
+        m.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// `_dir` keeps the tempdir alive; the returned guard keeps
+    /// the process-wide env-var-mutating critical section closed
+    /// for the test's lifetime. Both have to outlive every
+    /// `save`/`load`/`exists`/`remove` call the test makes.
+    struct StateTestEnv {
+        _dir: tempfile::TempDir,
+        _guard: std::sync::MutexGuard<'static, ()>,
+    }
+
+    fn temp_state_env() -> StateTestEnv {
+        let guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
-        // SAFETY: Tests run single-threaded; no other threads reading env vars.
+        // SAFETY: `xdg_state_lock` above serializes every test in
+        // this module that touches `XDG_STATE_HOME`. Only one
+        // such test can be inside this critical section at a
+        // time, so no other thread is concurrently reading the
+        // env var.
         unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
-        dir
+        StateTestEnv {
+            _dir: dir,
+            _guard: guard,
+        }
     }
 
     #[test]

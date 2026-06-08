@@ -55,28 +55,59 @@ All notable changes to this project will be documented in this file.
     so no migration needed.
 
 ### Added
-- **`nlink-lab watch` now surfaces enriched RTNETLINK metadata.**
-  `WatchEventKind::NewLink` / `DelLink` add `link_kind`
-  (`vrf`/`vxlan`/`wireguard`/`bond`/...), `operstate`, and
-  `master` (enslave-parent ifindex). `NewAddress` / `DelAddress`
-  add a `cidr` field (`address/prefix_len` rendered) and a
-  `scope`. `NewRoute` / `DelRoute` add `dst` (CIDR, or
-  `"default"` for the default route), `gateway`, `oif`, and
-  `table` (the routing table id — surfaces VRF routes by their
-  custom table). All new fields are `Option<>` + serde
+- **`nlink-lab watch` now surfaces enriched RTNETLINK metadata
+  across every event variant.** Two-commit follow-on (`06a31b1`
+  + `4e08d2e`) to the 0.21 bump that lifts the additional
+  accessors that have been on `LinkMessage` / `AddressMessage` /
+  `RouteMessage` / `NeighborMessage` / `TcMessage` since 0.19+
+  but that the watch loop wasn't reading.
+
+  Per-variant new fields:
+  - `NewLink` / `DelLink`: `link_kind` (`vrf`/`vxlan`/
+    `wireguard`/`bond`/...), `operstate`, `master`
+    (enslave-parent ifindex).
+  - `NewAddress` / `DelAddress`: `cidr` (full
+    `address/prefix_len`), `scope`.
+  - `NewRoute` / `DelRoute`: `dst` (CIDR, or `"default"` for
+    the default route — matches `ip route show`), `gateway`,
+    `oif`, `table` (the routing table id — surfaces VRF
+    routes by their custom table).
+  - `NewNeighbor` / `DelNeighbor`: `ifindex`, `dst` (IP),
+    `lladdr` (MAC), `state` (`Reachable`/`Stale`/`Failed`/...).
+  - `NewFdb` / `DelFdb`: `ifindex`, `lladdr` (MAC, via
+    `FdbEntry::mac_str()`).
+  - `NewQdisc` / `DelQdisc`: `ifindex`, `handle` (in
+    `major:minor` hex form), `tc_kind` (`htb` / `netem` / ...).
+  - `NewClass` / `DelClass`: `ifindex`, `handle`, `parent`.
+  - `NewFilter` / `DelFilter`: `ifindex`, `handle`, `parent`,
+    `tc_kind` (e.g. `flower` for our per-pair impairers).
+
+  All new fields are `Option<>` with serde
   `skip_serializing_if = "Option::is_none"`, so the JSON
   envelope only carries fields the kernel actually emitted —
   consumers reading the 0.19-era 3-field shape (`ifindex`,
-  `name`, `mtu`) keep working unchanged. Backed by nlink
-  0.21's existing `LinkMessage` / `AddressMessage` /
-  `RouteMessage` accessor surface (no new APIs needed; just
-  using accessors that already shipped). Field-name caveat:
-  the new `link_kind` field on `NewLink` / `DelLink` is
-  spelled `link_kind` rather than `kind` because the
-  `WatchEventKind` enum is tagged with
+  `name`, `mtu` on link events; bare `NewRoute,` for route
+  events) keep working unchanged. Backed by nlink 0.21's
+  existing `*Message` / `FdbEntry` accessor surface — no new
+  upstream APIs needed; just using accessors that already
+  shipped.
+
+  Field-name caveat: the new `link_kind` field on
+  `NewLink` / `DelLink` is spelled `link_kind` rather than
+  `kind` because the `WatchEventKind` enum is tagged with
   `#[serde(tag = "kind")]` — calling the field `kind` would
-  collide. **Six new unit tests** cover the enriched lifting +
-  the JSON elision contract.
+  collide. Same rationale for `tc_kind` on qdisc/filter
+  variants.
+
+  **Nine new unit tests** cover the enriched lifting + the
+  JSON elision contract (`new_link_renders_and_serializes_enriched_fields`,
+  `new_link_elides_unset_enriched_fields_in_json`,
+  `new_address_renders_cidr_when_set`,
+  `new_route_renders_dst_default_for_default_route`,
+  `new_route_serializes_table_for_vrf_routes`,
+  `new_neighbor_renders_ip_mac_state`,
+  `new_qdisc_renders_handle_and_kind`,
+  `new_filter_renders_parent_and_kind`).
 - **WireGuard `fwmark` keyword in NLL.** Surfaces nlink 0.19's
   `DeclaredWgDeviceBuilder::fwmark` so policy-routing setups can
   match WG-encapsulated outbound traffic by routing mark. Syntax:

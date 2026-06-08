@@ -55,6 +55,28 @@ All notable changes to this project will be documented in this file.
     so no migration needed.
 
 ### Added
+- **`nlink-lab watch` now surfaces enriched RTNETLINK metadata.**
+  `WatchEventKind::NewLink` / `DelLink` add `link_kind`
+  (`vrf`/`vxlan`/`wireguard`/`bond`/...), `operstate`, and
+  `master` (enslave-parent ifindex). `NewAddress` / `DelAddress`
+  add a `cidr` field (`address/prefix_len` rendered) and a
+  `scope`. `NewRoute` / `DelRoute` add `dst` (CIDR, or
+  `"default"` for the default route), `gateway`, `oif`, and
+  `table` (the routing table id — surfaces VRF routes by their
+  custom table). All new fields are `Option<>` + serde
+  `skip_serializing_if = "Option::is_none"`, so the JSON
+  envelope only carries fields the kernel actually emitted —
+  consumers reading the 0.19-era 3-field shape (`ifindex`,
+  `name`, `mtu`) keep working unchanged. Backed by nlink
+  0.21's existing `LinkMessage` / `AddressMessage` /
+  `RouteMessage` accessor surface (no new APIs needed; just
+  using accessors that already shipped). Field-name caveat:
+  the new `link_kind` field on `NewLink` / `DelLink` is
+  spelled `link_kind` rather than `kind` because the
+  `WatchEventKind` enum is tagged with
+  `#[serde(tag = "kind")]` — calling the field `kind` would
+  collide. **Six new unit tests** cover the enriched lifting +
+  the JSON elision contract.
 - **WireGuard `fwmark` keyword in NLL.** Surfaces nlink 0.19's
   `DeclaredWgDeviceBuilder::fwmark` so policy-routing setups can
   match WG-encapsulated outbound traffic by routing mark. Syntax:

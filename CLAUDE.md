@@ -257,9 +257,10 @@ re-deploys make zero kernel calls on those layers.
  6a. Create macvlan/ipvlan interfaces (host-side, moved to ns)
  6b. Create VRF interfaces — *no-op marker after Plan 159a Slice 4;
      VRF link declared in step 11c via `LinkBuilder::vrf(table)`*
- 6c. Create WireGuard interfaces (still imperative — 0.19
+ 6c. Create WireGuard interfaces (still imperative — through 0.21
      `DeclaredLinkType` lacks a `Wireguard` variant; the WG iface
-     must exist before `WireguardConfig::diff` can succeed)
+     must exist before `WireguardConfig::diff` can succeed.
+     Reported as feedback item #3 against 0.19)
  7.  Assign interfaces to bridges (legacy — bond enslave moved
      to step 11c via `LinkBuilder::master`)
  8.  Configure VLANs on bridge ports

@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Bumped workspace `nlink` dep `0.19` → `0.21`.** The 0.20 emergency
+  release shipped critical wire-format fixes — pre-0.20 nlink had two
+  classes of bugs that nlink-lab silently inherited:
+
+  - **`Connection<Xfrm>::flush_sp` flushed all SAs instead of policies**
+    (XFRM constants were miscounted from the kernel UAPI enum). Not
+    a path nlink-lab uses today, but worth noting that anyone
+    running nlink-lab pre-0.20 on a kernel with XFRM userspace
+    would have seen incorrect behavior.
+  - **`NftablesConfig::diff` had latent phantom-diff bugs** —
+    several matcher writers emitted shapes that didn't byte-compare
+    against the kernel's canonical dump form, so every reapply
+    re-emitted the rule. nlink-lab's `apply_nftables_for_node`
+    reconcile path uses `NftablesConfig::diff().apply_reconcile()`
+    heavily, so this was hitting us on every redeploy.
+    **Migration impact:** the first reapply after the bump on an
+    EXISTING running lab will diff non-empty as the kernel rules
+    get rewritten with the canonical form. Subsequent reapplies
+    converge to zero. Fresh deploys (the CI default) are
+    unaffected.
+  - **`Verdict::Jump` / `Verdict::Goto` were emitting `NFT_BREAK = -2`**
+    (already fixed in 0.19 — flagged in `nlink-feedback.md` as
+    transitively benefiting nlink-lab's firewall chains).
+
+  The 0.20.1 and 0.21 cycles also tightened the typed-API surface
+  (`AddressFamily`, `Percent`, `ChainName`, `Verdict::JumpTo` /
+  `GotoTo`, `RuleMessage` and 5 sibling `*Message` types per-field
+  accessors). nlink-lab already adopted `Percent` in `build_netem`,
+  uses RTNETLINK `*Message` types through accessor methods only
+  (e.g. `watch::WatchEventKind::from_network` calls `lm.ifindex()`),
+  and doesn't expose raw `Verdict` or raw-`u8` `AddressFamily`
+  through its public API — so the bump compiled and tested clean
+  with no nlink-lab-side code changes required.
+
+  New 0.21 capabilities not yet adopted but available:
+  - **Plan 234 — `Connection<P>::dispatcher()`** for broadcast-side
+    `Arc<Connection>` sharing. Could allow multiplexing watch
+    subscriptions on one connection per node. Not adopted yet —
+    our current per-(node, family) connection-per-subscription
+    model works fine for typical lab scale.
+  - **Plan 197 — Declarative `OvpnConfig`** for OpenVPN data-
+    channel offload. No nlink-lab NLL surface for OpenVPN
+    currently; future work if there's demand.
+  - **Plan 228 extension** — declarative `QdiscBuilder` netem parity
+    setters (`duplicate_pct`, `corrupt_pct`, `reorder_pct`,
+    `loss_correlation_pct`, `delay_correlation_pct`). nlink-lab
+    uses the imperative `NetemConfig` (which already had these),
+    so no migration needed.
+
 ### Added
 - **WireGuard `fwmark` keyword in NLL.** Surfaces nlink 0.19's
   `DeclaredWgDeviceBuilder::fwmark` so policy-routing setups can

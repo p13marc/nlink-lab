@@ -175,16 +175,69 @@ pub enum WatchEventKind {
         oif: Option<u32>,
         table: u32,
     },
-    NewNeighbor,
-    DelNeighbor,
-    NewFdb,
-    DelFdb,
-    NewQdisc,
-    DelQdisc,
-    NewClass,
-    DelClass,
-    NewFilter,
-    DelFilter,
+    NewNeighbor {
+        ifindex: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dst: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lladdr: Option<String>,
+        /// Neighbor state — `Debug` rendering of
+        /// `NeighborState` (e.g. `Reachable`, `Stale`,
+        /// `Failed`, `Permanent`).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        state: Option<String>,
+    },
+    DelNeighbor {
+        ifindex: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dst: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lladdr: Option<String>,
+    },
+    NewFdb {
+        ifindex: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lladdr: Option<String>,
+    },
+    DelFdb {
+        ifindex: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lladdr: Option<String>,
+    },
+    NewQdisc {
+        ifindex: u32,
+        /// TC handle in `major:minor` form (e.g. `1:0` for a
+        /// root qdisc, `1:10` for a class on it).
+        handle: String,
+        /// Qdisc kind (`htb`, `netem`, `pfifo_fast`, etc.).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tc_kind: Option<String>,
+    },
+    DelQdisc {
+        ifindex: u32,
+        handle: String,
+    },
+    NewClass {
+        ifindex: u32,
+        handle: String,
+        /// Parent handle the class hangs under.
+        parent: String,
+    },
+    DelClass {
+        ifindex: u32,
+        handle: String,
+    },
+    NewFilter {
+        ifindex: u32,
+        handle: String,
+        parent: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tc_kind: Option<String>,
+    },
+    DelFilter {
+        ifindex: u32,
+        handle: String,
+    },
     NewAction,
     DelAction,
     NewTable {
@@ -278,16 +331,53 @@ impl WatchEventKind {
                 oif: rm.oif(),
                 table: rm.table_id(),
             },
-            NetworkEvent::NewNeighbor(_) => Self::NewNeighbor,
-            NetworkEvent::DelNeighbor(_) => Self::DelNeighbor,
-            NetworkEvent::NewFdb(_) => Self::NewFdb,
-            NetworkEvent::DelFdb(_) => Self::DelFdb,
-            NetworkEvent::NewQdisc(_) => Self::NewQdisc,
-            NetworkEvent::DelQdisc(_) => Self::DelQdisc,
-            NetworkEvent::NewClass(_) => Self::NewClass,
-            NetworkEvent::DelClass(_) => Self::DelClass,
-            NetworkEvent::NewFilter(_) => Self::NewFilter,
-            NetworkEvent::DelFilter(_) => Self::DelFilter,
+            NetworkEvent::NewNeighbor(nm) => Self::NewNeighbor {
+                ifindex: nm.ifindex(),
+                dst: nm.destination().map(|d| d.to_string()),
+                lladdr: nm.mac_address(),
+                state: Some(format!("{:?}", nm.state())),
+            },
+            NetworkEvent::DelNeighbor(nm) => Self::DelNeighbor {
+                ifindex: nm.ifindex(),
+                dst: nm.destination().map(|d| d.to_string()),
+                lladdr: nm.mac_address(),
+            },
+            NetworkEvent::NewFdb(fe) => Self::NewFdb {
+                ifindex: fdb_ifindex(&fe),
+                lladdr: fdb_lladdr(&fe),
+            },
+            NetworkEvent::DelFdb(fe) => Self::DelFdb {
+                ifindex: fdb_ifindex(&fe),
+                lladdr: fdb_lladdr(&fe),
+            },
+            NetworkEvent::NewQdisc(tm) => Self::NewQdisc {
+                ifindex: tm.ifindex(),
+                handle: tc_handle(&tm),
+                tc_kind: tm.kind().map(str::to_owned),
+            },
+            NetworkEvent::DelQdisc(tm) => Self::DelQdisc {
+                ifindex: tm.ifindex(),
+                handle: tc_handle(&tm),
+            },
+            NetworkEvent::NewClass(tm) => Self::NewClass {
+                ifindex: tm.ifindex(),
+                handle: tc_handle(&tm),
+                parent: tc_parent(&tm),
+            },
+            NetworkEvent::DelClass(tm) => Self::DelClass {
+                ifindex: tm.ifindex(),
+                handle: tc_handle(&tm),
+            },
+            NetworkEvent::NewFilter(tm) => Self::NewFilter {
+                ifindex: tm.ifindex(),
+                handle: tc_handle(&tm),
+                parent: tc_parent(&tm),
+                tc_kind: tm.kind().map(str::to_owned),
+            },
+            NetworkEvent::DelFilter(tm) => Self::DelFilter {
+                ifindex: tm.ifindex(),
+                handle: tc_handle(&tm),
+            },
             NetworkEvent::NewAction(_) => Self::NewAction,
             NetworkEvent::DelAction(_) => Self::DelAction,
             other => Self::Other {
@@ -385,6 +475,32 @@ fn route_dst(rm: &nlink::netlink::messages::RouteMessage) -> Option<String> {
         return Some("default".to_string());
     }
     rm.destination().map(|d| format!("{d}/{}", rm.dst_len()))
+}
+
+/// FDB entries expose `ifindex` directly on the parsed shape.
+fn fdb_ifindex(fe: &nlink::netlink::fdb::FdbEntry) -> u32 {
+    fe.ifindex()
+}
+
+/// FDB entries expose the layer-2 address as a 6-byte MAC array
+/// via `FdbEntry::mac()`. nlink 0.19+ also ships a pre-formatted
+/// `mac_str()` helper; use that directly.
+fn fdb_lladdr(fe: &nlink::netlink::fdb::FdbEntry) -> Option<String> {
+    Some(fe.mac_str())
+}
+
+/// Render a `TcMessage::handle()` value as `major:minor`. nlink
+/// 0.21's `TcHandle` exposes `major()` and `minor()` accessors
+/// (also `Display` does the same — we use the accessors to be
+/// explicit about the format).
+fn tc_handle(tm: &nlink::netlink::messages::TcMessage) -> String {
+    let h = tm.handle();
+    format!("{:x}:{:x}", h.major(), h.minor())
+}
+
+fn tc_parent(tm: &nlink::netlink::messages::TcMessage) -> String {
+    let p = tm.parent();
+    format!("{:x}:{:x}", p.major(), p.minor())
 }
 
 fn short_kind(k: &WatchEventKind) -> String {
@@ -511,6 +627,89 @@ fn short_kind(k: &WatchEventKind) -> String {
             handle,
         } => {
             format!("DelRule {family}/{table}/{chain} handle={handle}")
+        }
+        WatchEventKind::NewNeighbor {
+            ifindex,
+            dst,
+            lladdr,
+            state,
+        } => {
+            let mut s = format!("NewNeighbor if={ifindex}");
+            if let Some(d) = dst {
+                s.push_str(&format!(" dst={d}"));
+            }
+            if let Some(l) = lladdr {
+                s.push_str(&format!(" lladdr={l}"));
+            }
+            if let Some(st) = state {
+                s.push_str(&format!(" state={st}"));
+            }
+            s
+        }
+        WatchEventKind::DelNeighbor {
+            ifindex,
+            dst,
+            lladdr,
+        } => {
+            let mut s = format!("DelNeighbor if={ifindex}");
+            if let Some(d) = dst {
+                s.push_str(&format!(" dst={d}"));
+            }
+            if let Some(l) = lladdr {
+                s.push_str(&format!(" lladdr={l}"));
+            }
+            s
+        }
+        WatchEventKind::NewFdb { ifindex, lladdr } => {
+            let mut s = format!("NewFdb if={ifindex}");
+            if let Some(l) = lladdr {
+                s.push_str(&format!(" mac={l}"));
+            }
+            s
+        }
+        WatchEventKind::DelFdb { ifindex, lladdr } => {
+            let mut s = format!("DelFdb if={ifindex}");
+            if let Some(l) = lladdr {
+                s.push_str(&format!(" mac={l}"));
+            }
+            s
+        }
+        WatchEventKind::NewQdisc {
+            ifindex,
+            handle,
+            tc_kind,
+        } => {
+            let mut s = format!("NewQdisc if={ifindex} handle={handle}");
+            if let Some(k) = tc_kind {
+                s.push_str(&format!(" kind={k}"));
+            }
+            s
+        }
+        WatchEventKind::DelQdisc { ifindex, handle } => {
+            format!("DelQdisc if={ifindex} handle={handle}")
+        }
+        WatchEventKind::NewClass {
+            ifindex,
+            handle,
+            parent,
+        } => format!("NewClass if={ifindex} handle={handle} parent={parent}"),
+        WatchEventKind::DelClass { ifindex, handle } => {
+            format!("DelClass if={ifindex} handle={handle}")
+        }
+        WatchEventKind::NewFilter {
+            ifindex,
+            handle,
+            parent,
+            tc_kind,
+        } => {
+            let mut s = format!("NewFilter if={ifindex} handle={handle} parent={parent}");
+            if let Some(k) = tc_kind {
+                s.push_str(&format!(" kind={k}"));
+            }
+            s
+        }
+        WatchEventKind::DelFilter { ifindex, handle } => {
+            format!("DelFilter if={ifindex} handle={handle}")
         }
         WatchEventKind::Other { raw } => format!("Other {raw}"),
         other => format!("{other:?}"),
@@ -998,6 +1197,74 @@ mod tests {
         assert!(line.contains("via=10.0.0.1"), "via missing: {line}");
         assert!(line.contains("oif=2"), "oif missing: {line}");
         assert!(line.contains("table=254"), "table missing: {line}");
+    }
+
+    /// 0.21 adoption — `NewNeighbor` lifts `dst`, `lladdr`,
+    /// and `state` so operators can see what changed in the
+    /// ARP/ND table.
+    #[test]
+    fn new_neighbor_renders_ip_mac_state() {
+        let ev = WatchEvent {
+            node: "n".into(),
+            family: WatchFamily::Route,
+            kind: WatchEventKind::NewNeighbor {
+                ifindex: 5,
+                dst: Some("10.0.0.2".into()),
+                lladdr: Some("aa:bb:cc:dd:ee:ff".into()),
+                state: Some("Reachable".into()),
+            },
+            from_snapshot: false,
+        };
+        let line = ev.render_line();
+        assert!(line.contains("dst=10.0.0.2"), "dst missing: {line}");
+        assert!(
+            line.contains("lladdr=aa:bb:cc:dd:ee:ff"),
+            "lladdr missing: {line}"
+        );
+        assert!(line.contains("state=Reachable"), "state missing: {line}");
+    }
+
+    /// 0.21 adoption — qdisc events carry `ifindex`, `handle`
+    /// (in `major:minor` form), and qdisc kind. This is what
+    /// lets `nlink-lab watch` show "an HTB root qdisc was just
+    /// added to eth0" rather than an opaque `NewQdisc`.
+    #[test]
+    fn new_qdisc_renders_handle_and_kind() {
+        let ev = WatchEvent {
+            node: "n".into(),
+            family: WatchFamily::Route,
+            kind: WatchEventKind::NewQdisc {
+                ifindex: 3,
+                handle: "1:0".into(),
+                tc_kind: Some("htb".into()),
+            },
+            from_snapshot: false,
+        };
+        let line = ev.render_line();
+        assert!(line.contains("if=3"), "ifindex missing: {line}");
+        assert!(line.contains("handle=1:0"), "handle missing: {line}");
+        assert!(line.contains("kind=htb"), "tc kind missing: {line}");
+    }
+
+    /// 0.21 adoption — filter events carry the parent handle
+    /// (which qdisc / class the filter hangs under) plus the
+    /// filter kind (e.g. `flower` for our per-pair impairers).
+    #[test]
+    fn new_filter_renders_parent_and_kind() {
+        let ev = WatchEvent {
+            node: "n".into(),
+            family: WatchFamily::Route,
+            kind: WatchEventKind::NewFilter {
+                ifindex: 3,
+                handle: "1:1".into(),
+                parent: "1:0".into(),
+                tc_kind: Some("flower".into()),
+            },
+            from_snapshot: false,
+        };
+        let line = ev.render_line();
+        assert!(line.contains("parent=1:0"), "parent missing: {line}");
+        assert!(line.contains("kind=flower"), "filter kind missing: {line}");
     }
 
     /// 0.21 adoption — VRF traffic goes through a non-`main`

@@ -4,7 +4,67 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-08
+
+The "159 arc" release. Closes the seven-plan declarative-netlink
+adoption arc against nlink 0.19/0.20/0.21 — every netlink resource
+nlink-lab models (VRF, VXLAN, WireGuard, bridges, dummies, bonds,
+VLANs, addresses, routes, qdiscs, nftables) now commits through
+upstream declarative reconcile paths. New `nlink-lab watch <lab>`
+power-user CLI surfaces RTNETLINK + nftables drift across every
+node (bare namespaces AND containers) with rich event detail. JSON
+schema v2 for `apply --check --json` exposes typed per-namespace
+diffs.
+
+**Migration impact for upgraders from 0.5.0 with existing labs:**
+The first `nlink-lab apply` on a lab deployed pre-0.20 nlink will
+diff non-empty for nftables — upstream nlink 0.20 fixed phantom-diff
+bugs (matchers that didn't byte-compare against the kernel's
+canonical dump form), so the in-kernel rules get rewritten with the
+canonical attributes on first reapply. Subsequent reapplies converge
+to zero. Fresh deploys are unaffected.
+
+The JSON schema v2 for `apply --check --json` is additive — v1
+fields (`.diff`, `.layered_summary`) are retained for one release
+with `"layered_summary_deprecated": true`; both are removed in 0.7.
+
 ### Changed
+- **Bumped workspace `netring` dep `0.11` → `0.18`.** Seven minor
+  versions worth of API growth — none of the breaking changes
+  (`ProtocolEvent` variants, `Severity::Default`, flowscope 0.10
+  bumps) hit nlink-lab's surface, since we only consume the
+  capture-path types (`Capture`, `BpfFilter`, `BpfInsn`,
+  `RingProfile`, `CaptureStats`, `Timestamp`). Compiled clean
+  with no nlink-lab-side migration.
+
+  New CLI capability adopted from the bump: `nlink-lab capture
+  --filter-ports 80,443,8080` / `--filter-src-ports` /
+  `--filter-dst-ports`. Backed by netring 0.16's
+  `BpfFilter::builder::ports()` multi-port shortcut — compiles
+  to one BPF branch per port, atomic in-kernel. Pre-bump users
+  had to capture all traffic and filter offline if they cared
+  about more than one port. Two new unit tests
+  (`capture_config_accepts_multi_port_bpf_filter`,
+  `capture_config_accepts_icmp_chain_filter`) smoke-test the
+  typed-builder integration boundary.
+
+  Not-yet-adopted 0.12–0.18 capabilities (no current need):
+
+  - **0.18 unified-driver `ProtocolMonitor`** — multi-protocol
+    L7 monitor sharing one capture across N parsers (collapses
+    5×tpacket_v3 rings to one). nlink-lab doesn't currently
+    expose protocol-aware capture.
+  - **0.15 `StreamSetFilter`** — atomic in-kernel BPF swap on
+    a built stream. Useful for long-running monitors that
+    change focus; nlink-lab's capture is one-shot.
+  - **0.14 per-parser `on_tick`** — flowscope detector lifecycle
+    hook. No detectors yet.
+  - **0.13 async-stream maturity** — observability + offline
+    replay primitives. Future work.
+  - **0.12 typed XDP loader** — XDP packet capture path. nlink-lab
+    uses tpacket_v3 (AF_PACKET) which is simpler and works inside
+    namespaces.
+
 - **Bumped workspace `nlink` dep `0.19` → `0.21`.** The 0.20 emergency
   release shipped critical wire-format fixes — pre-0.20 nlink had two
   classes of bugs that nlink-lab silently inherited:

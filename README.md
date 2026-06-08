@@ -120,7 +120,19 @@ side-by-side examples, and migration notes — lives at
 
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
-on [`nlink`](https://github.com/p13marc/nlink) 0.15.
+on [`nlink`](https://github.com/p13marc/nlink) 0.21 as of
+nlink-lab 0.6.0.
+
+Current release: **0.6.0** (2026-06-08) — the "159 arc" release.
+Every netlink resource nlink-lab models (VRF, VXLAN, WireGuard,
+bridges, dummies, bonds, VLANs, addresses, routes, qdiscs,
+nftables) commits through upstream declarative reconcile paths.
+New `nlink-lab watch <lab>` CLI surfaces RTNETLINK + nftables
+drift across every node with rich event detail (link kind,
+operstate, master, address CIDR, route table, TC handle, …).
+JSON schema v2 for `apply --check --json` exposes typed
+per-namespace diffs. See `CHANGELOG.md` for the full per-commit
+record + migration notes from 0.5.0.
 
 ## Requirements
 

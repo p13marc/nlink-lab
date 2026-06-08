@@ -656,6 +656,23 @@ enum Commands {
         #[arg(long = "filter-dst-port", value_name = "PORT")]
         filter_dst_port: Option<u16>,
 
+        /// Match any of these L4 ports (either source OR
+        /// destination). Comma-separated, e.g. `80,443,8080`.
+        /// Backed by netring 0.16's `BpfFilter::builder::ports()`
+        /// multi-port shortcut — compiles to one BPF program
+        /// branch per port. Requires `--filter-tcp` or
+        /// `--filter-udp`.
+        #[arg(long = "filter-ports", value_name = "PORTS", value_delimiter = ',')]
+        filter_ports: Vec<u16>,
+
+        /// Match any of these L4 source ports.
+        #[arg(long = "filter-src-ports", value_name = "PORTS", value_delimiter = ',')]
+        filter_src_ports: Vec<u16>,
+
+        /// Match any of these L4 destination ports.
+        #[arg(long = "filter-dst-ports", value_name = "PORTS", value_delimiter = ',')]
+        filter_dst_ports: Vec<u16>,
+
         /// Negate the entire filter (capture everything that does
         /// NOT match the other `--filter-*` flags).
         #[arg(long = "filter-not")]
@@ -2273,6 +2290,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             filter_port,
             filter_src_port,
             filter_dst_port,
+            filter_ports,
+            filter_src_ports,
+            filter_dst_ports,
             filter_not,
             duration,
             snap_len,
@@ -2313,6 +2333,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 || filter_port.is_some()
                 || filter_src_port.is_some()
                 || filter_dst_port.is_some()
+                || !filter_ports.is_empty()
+                || !filter_src_ports.is_empty()
+                || !filter_dst_ports.is_empty()
                 || filter_not;
             if filter.is_some() && any_typed_filter {
                 return Err(nlink_lab::Error::invalid_topology(
@@ -2380,6 +2403,18 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 }
                 if let Some(p) = filter_dst_port {
                     b = b.dst_port(p);
+                }
+                // netring 0.16 multi-port shortcuts. Passing an
+                // empty Vec is harmless (the builder treats it as
+                // a no-op), so we just forward unconditionally.
+                if !filter_ports.is_empty() {
+                    b = b.ports(filter_ports.iter().copied());
+                }
+                if !filter_src_ports.is_empty() {
+                    b = b.src_ports(filter_src_ports.iter().copied());
+                }
+                if !filter_dst_ports.is_empty() {
+                    b = b.dst_ports(filter_dst_ports.iter().copied());
                 }
                 if filter_not {
                     b = b.negate();

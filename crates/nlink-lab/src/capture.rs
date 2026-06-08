@@ -634,4 +634,55 @@ mod tests {
         };
         assert!(cfg.bpf_filter.is_some());
     }
+
+    /// netring 0.16 adoption — `BpfFilter::builder().ports([...])`
+    /// multi-port OR shortcut. nlink-lab exposes this via
+    /// `nlink-lab capture --filter-ports 80,443,8080` (versus
+    /// the single `--filter-port`). Smoke-test that the typed
+    /// builder accepts the multi-port form.
+    #[test]
+    fn capture_config_accepts_multi_port_bpf_filter() {
+        let filter = netring::BpfFilter::builder()
+            .ipv4()
+            .tcp()
+            .ports([80u16, 443, 8080])
+            .build()
+            .expect("builder produces a valid filter for tcp ports 80/443/8080");
+        assert!(!filter.is_empty(), "compiled filter must be non-empty");
+
+        let cfg = CaptureConfig {
+            interface: "eth0".into(),
+            snap_len: 65536,
+            count: None,
+            duration: None,
+            bpf_filter: Some(filter),
+            profile: RingProfile::Default,
+            ignore_outgoing: false,
+        };
+        assert!(cfg.bpf_filter.is_some());
+    }
+
+    /// netring 0.16 adoption — combined v4+v6 ICMP filter via
+    /// the chain DSL. nlink-lab's `--filter-icmp` flag now
+    /// covers both IP versions through the existing `.icmp()`
+    /// shortcut (which 0.16 made smarter about v6 handling).
+    #[test]
+    fn capture_config_accepts_icmp_chain_filter() {
+        let filter = netring::BpfFilter::builder()
+            .icmp()
+            .build()
+            .expect("builder produces a valid filter for any ICMP");
+        assert!(!filter.is_empty(), "compiled filter must be non-empty");
+
+        let cfg = CaptureConfig {
+            interface: "eth0".into(),
+            snap_len: 65536,
+            count: None,
+            duration: None,
+            bpf_filter: Some(filter),
+            profile: RingProfile::Default,
+            ignore_outgoing: false,
+        };
+        assert!(cfg.bpf_filter.is_some());
+    }
 }

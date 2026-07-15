@@ -17,6 +17,36 @@ pub struct MetricsSnapshot {
 pub struct NodeMetrics {
     pub interfaces: Vec<InterfaceMetrics>,
     pub issues: Vec<String>,
+    /// Top TCP flows by goodput in this node's namespace, attributed to
+    /// the owning process where resolvable (Plan 160 / nlink 0.24
+    /// sockdiag). Empty for container nodes and when no flow moved data
+    /// between the last two collector ticks. `#[serde(default)]` keeps
+    /// the snapshot wire-compatible with backends that predate the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sockets: Vec<SocketRateMetric>,
+}
+
+/// One TCP flow's goodput over the last collector interval, attributed
+/// to a process. Plain data (no nlink dependency) — the backend
+/// collector fills it from nlink's `SocketRateTracker` +
+/// `SocketOwnerMap`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SocketRateMetric {
+    /// Owning process command name, or `"-"` when unresolved (a
+    /// short-lived or other-user process the `/proc` walk couldn't see).
+    pub comm: String,
+    /// Owning PID, when resolved.
+    pub pid: Option<u32>,
+    /// Local `ip:port`.
+    pub local: String,
+    /// Remote `ip:port`.
+    pub remote: String,
+    /// Transmit goodput (application bytes/second the peer acked).
+    pub tx_bytes_per_sec: u64,
+    /// Receive goodput (application bytes/second).
+    pub rx_bytes_per_sec: u64,
+    /// Retransmission overhead: Δbytes_retrans / Δbytes_sent.
+    pub retrans_ratio: f64,
 }
 
 /// Metrics for a single interface.
@@ -58,5 +88,27 @@ mod tests {
         assert_eq!(format_rate(1_500), "1.5 Kbps");
         assert_eq!(format_rate(45_200_000), "45.2 Mbps");
         assert_eq!(format_rate(1_000_000_000), "1.0 Gbps");
+    }
+
+    /// The `sockets` field is `#[serde(default)]`, so a snapshot from a
+    /// backend that predates it (no `sockets` key) still deserializes.
+    #[test]
+    fn node_metrics_deserializes_without_sockets_field() {
+        let json = r#"{"interfaces":[],"issues":[]}"#;
+        let nm: NodeMetrics = serde_json::from_str(json).unwrap();
+        assert!(nm.sockets.is_empty());
+    }
+
+    /// An empty `sockets` vec is omitted from the serialized form
+    /// (`skip_serializing_if`), keeping the common no-flows case compact.
+    #[test]
+    fn empty_sockets_are_not_serialized() {
+        let nm = NodeMetrics {
+            interfaces: vec![],
+            issues: vec![],
+            sockets: vec![],
+        };
+        let json = serde_json::to_string(&nm).unwrap();
+        assert!(!json.contains("sockets"), "sockets should be elided: {json}");
     }
 }

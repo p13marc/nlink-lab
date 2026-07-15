@@ -1043,16 +1043,12 @@ impl RunningLab {
             .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
 
         // Delete the root qdisc (removes all netem config). Idempotent:
-        // a missing qdisc is the same as "already cleared".
-        match conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT).await {
-            Ok(()) => {}
-            Err(nlink::Error::QdiscNotFound { .. }) => {}
-            Err(e) => {
-                return Err(Error::deploy_failed(format!(
-                    "clear impairment on '{endpoint}': {e}"
-                )));
-            }
-        }
+        // a missing qdisc is the same as "already cleared" —
+        // `del_qdisc_if_exists` (nlink 0.24) returns Ok(false) rather
+        // than a `QdiscNotFound` error we'd have to match.
+        conn.del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
 
         // Drop any "is partitioned" bookkeeping for this endpoint and
         // persist. Without this, a follow-up `partition()` would see
@@ -1202,12 +1198,19 @@ impl RunningLab {
             let mut sorted_nodes: Vec<&str> =
                 self.namespace_names.keys().map(|s| s.as_str()).collect();
             sorted_nodes.sort();
+            // `del_link_if_exists` (nlink 0.24) treats an
+            // already-absent link as Ok(false); a real failure is
+            // logged but never aborts best-effort teardown.
             for (idx, _) in sorted_nodes.iter().enumerate() {
                 let peer = self.topology.lab.mgmt_peer_name(idx);
-                let _ = root_conn.del_link(&peer).await;
+                if let Err(e) = root_conn.del_link_if_exists(peer.as_str()).await {
+                    tracing::warn!("failed to delete mgmt veth peer '{peer}': {e}");
+                }
             }
             let bridge_name = self.topology.lab.mgmt_bridge_name();
-            let _ = root_conn.del_link(&bridge_name).await;
+            if let Err(e) = root_conn.del_link_if_exists(bridge_name.as_str()).await {
+                tracing::warn!("failed to delete mgmt bridge '{bridge_name}': {e}");
+            }
         }
 
         // 4. Delete namespaces

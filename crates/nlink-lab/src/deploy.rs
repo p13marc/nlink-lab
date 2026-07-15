@@ -207,11 +207,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         } else {
             // Bare namespace node
             let ns_name = topology.namespace_name(node_name);
-            if namespace::exists(&ns_name) {
-                return Err(Error::AlreadyExists {
-                    name: format!("namespace '{ns_name}' already exists"),
-                });
-            }
+            guard_namespace_absent(&ns_name)?;
             namespace::create(&ns_name).map_err(|e| Error::Namespace {
                 op: "create",
                 ns: ns_name.clone(),
@@ -634,26 +630,13 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // trail.
 
     // ── Step 6c: Create WireGuard interfaces ─────────────────────
-    // Phase 1: Create the netlink interfaces (configuration happens after Step 10)
-    for (node_name, node) in &topology.nodes {
-        if node.wireguard.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for wg_name in node.wireguard.keys() {
-            conn.add_link(nlink::netlink::link::WireguardLink::new(wg_name))
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to create WireGuard interface '{wg_name}' on node '{node_name}': {e}"
-                    ))
-                })?;
-        }
-    }
+    //
+    // Plan 160 (nlink 0.25) — the imperative
+    // `add_link(WireguardLink::new(...))` loop is gone. The WG link
+    // is now bootstrapped idempotently inside the declarative WG
+    // apply (step 10d) via `WireguardConfig::ensure_devices`
+    // (nlink 0.24, #169) — no separate pre-create pass. Empty
+    // marker kept for the step-numbering audit trail.
 
     // ── Step 9: Set interface addresses ────────────────────────────
     //
@@ -705,11 +688,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // `wg_conn.set_device(...)` loops with a per-node
     // `WireguardConfig::apply_reconcile()` call (upstream Plan 196).
     // Key generation (sync, no kernel touch) still happens in a
-    // pre-pass so peer cross-references resolve. The WG interface
-    // itself is still created imperatively in step 6c — 0.19's
-    // `DeclaredLinkType` doesn't have a `Wireguard` variant, so
-    // `LinkBuilder` can't model it; `WireguardConfig::diff` needs
-    // the interface to exist before it can succeed.
+    // pre-pass so peer cross-references resolve. Plan 160 (nlink
+    // 0.25) — the WG link itself is now bootstrapped here too, via
+    // `WireguardConfig::ensure_devices` (nlink 0.24, #169), which
+    // creates any missing declared WG interface idempotently
+    // through a same-namespace Route connection before the GENL
+    // apply. This retired the imperative step-6c pre-create loop.
 
     #[cfg(not(feature = "wireguard"))]
     {
@@ -861,11 +845,20 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             })?;
             limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
         }
-        limiter.apply(&conn).await.map_err(|e| {
+        // Plan 160 (nlink 0.24) — `reconcile` converges idempotently
+        // instead of `apply`'s delete-root-qdisc-then-rebuild, so an
+        // unchanged rate limit makes zero kernel calls on re-deploy
+        // and there's no packet-drop window.
+        let report = limiter.reconcile(&conn).await.map_err(|e| {
             Error::deploy_failed(format!(
-                "failed to apply rate limit on '{endpoint_str}': {e}"
+                "failed to reconcile rate limit on '{endpoint_str}': {e}"
             ))
         })?;
+        tracing::debug!(
+            endpoint = %endpoint_str,
+            changes = report.changes_made,
+            "rate limit reconcile complete"
+        );
     }
 
     // ── Step 15b: Inject DNS hosts entries ──────────────────────────
@@ -2772,6 +2765,13 @@ async fn apply_stack_for_node(
     nat: Option<&crate::types::NatConfig>,
     wireguard: Option<nlink::netlink::genl::wireguard::WireguardConfig>,
 ) -> Result<()> {
+    // Plan 160 — bootstrap WG links *before* the NetworkConfig apply
+    // so their tunnel addresses (declared on the network layer) land
+    // on an existing interface. `ensure_devices` is idempotent, so
+    // the live-reconcile path re-runs it harmlessly.
+    if let Some(cfg) = &wireguard {
+        ensure_wireguard_devices_for_node(node_handle, node_name, cfg).await?;
+    }
     apply_network_config_for_node(node_handle, node_name, network).await?;
     if fw.is_some() || nat.is_some() {
         apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
@@ -2802,9 +2802,41 @@ async fn apply_stack_for_node(
     Ok(())
 }
 
+/// Bootstrap a node's declared WireGuard links (Plan 160, nlink
+/// 0.24 #169). `WireguardConfig::ensure_devices` creates any
+/// declared-but-absent WG interface idempotently (swallowing
+/// already-exists) through a same-namespace Route connection —
+/// covering both the bare-namespace and container
+/// (`connection_for_pid`) cases via `NodeHandle`, which the
+/// name-only `facade::apply::wireguard*` helpers would not. Runs
+/// before the `NetworkConfig` apply so the WG interfaces exist when
+/// their tunnel addresses are assigned; this retired the imperative
+/// step-6c pre-create loop.
+#[cfg(feature = "wireguard")]
+async fn ensure_wireguard_devices_for_node(
+    node_handle: &NodeHandle,
+    node_name: &str,
+    cfg: &nlink::netlink::genl::wireguard::WireguardConfig,
+) -> Result<()> {
+    let route_conn: Connection<Route> = node_handle.connection().map_err(|e| {
+        Error::deploy_failed(format!(
+            "failed to open Route connection for WireGuard bootstrap on '{node_name}': {e}"
+        ))
+    })?;
+    cfg.ensure_devices(&route_conn).await.map_err(|e| {
+        Error::deploy_failed(format!(
+            "WireguardConfig::ensure_devices on '{node_name}': {e}"
+        ))
+    })?;
+    Ok(())
+}
+
 /// Apply a node's `WireguardConfig` via `apply_reconcile`.
 /// Plan 159a Phase 2 — mirrors `apply_network_config_for_node` /
 /// `apply_nftables_for_node` shape for the WG GENL layer.
+/// The WG link is bootstrapped earlier (via
+/// `ensure_wireguard_devices_for_node`) so `NetworkConfig` can
+/// assign its addresses; this fn only configures the GENL device.
 #[cfg(feature = "wireguard")]
 async fn apply_wireguard_for_node(
     node_handle: &NodeHandle,
@@ -2957,10 +2989,12 @@ pub async fn apply_diff(
             endpoint: link.endpoints[0].clone(),
         })?;
 
-        // Get a connection to the node's namespace (bare or container)
+        // Get a connection to the node's namespace (bare or container).
+        // `del_link_if_exists` (nlink 0.24) treats an already-removed
+        // veth (e.g. its pair was deleted first) as Ok(false).
         if let Ok(handle) = node_handle_for(running, &ep.node)
             && let Ok(conn) = handle.connection::<Route>()
-            && let Err(e) = conn.del_link(&ep.iface).await
+            && let Err(e) = conn.del_link_if_exists(ep.iface.as_str()).await
         {
             tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
         }
@@ -3059,11 +3093,7 @@ pub async fn apply_diff(
         } else {
             // Bare namespace node
             let ns_name = desired.namespace_name(node_name);
-            if namespace::exists(&ns_name) {
-                return Err(Error::AlreadyExists {
-                    name: format!("namespace '{ns_name}' already exists"),
-                });
-            }
+            guard_namespace_absent(&ns_name)?;
             namespace::create(&ns_name).map_err(|e| Error::Namespace {
                 op: "create",
                 ns: ns_name.clone(),
@@ -3196,31 +3226,11 @@ pub async fn apply_diff(
         let node = &desired.nodes[node_name];
         let handle = node_handle_for(running, node_name)?;
 
-        // Plan 159a Phase 2 follow-up #2 — apply_diff Phase 6 must
-        // create the WG interface BEFORE the Stack pattern runs,
-        // because `WireguardConfig::diff` calls `get_device_by_name`
-        // which fails on a non-existent interface. Mirrors step 6c
-        // of the fresh-deploy path. WG is GENL not RTNETLINK, so
-        // `DeclaredLinkType::Wireguard` doesn't exist; the link
-        // creation has to stay imperative.
-        #[cfg(feature = "wireguard")]
-        if !node.wireguard.is_empty() {
-            let conn: Connection<Route> = handle.connection().map_err(|e| {
-                Error::deploy_failed(format!(
-                    "connection for newly-added node '{node_name}': {e}"
-                ))
-            })?;
-            for wg_name in node.wireguard.keys() {
-                conn.add_link(nlink::netlink::link::WireguardLink::new(wg_name))
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to create WireGuard interface '{wg_name}' on \
-                             newly-added node '{node_name}': {e}"
-                        ))
-                    })?;
-            }
-        }
+        // Plan 160 — the WG interface for a newly-added node is
+        // bootstrapped inside `apply_stack_for_node` (via
+        // `WireguardConfig::ensure_devices`, before the NetworkConfig
+        // apply), so the imperative pre-create loop that mirrored
+        // step 6c is gone here too.
 
         let net = topology_to_network_config(
             node_name,
@@ -3353,29 +3363,38 @@ async fn apply_routes_diff(
 }
 
 /// Delete a single static route from a node. Mirrors `add_route` but
-/// uses nlink's `del_route_v4` / `del_route_v6` based on the
-/// destination form.
+/// uses nlink's `del_route_v4_if_exists` / `del_route_v6_if_exists`
+/// (nlink 0.24) based on the destination form — an already-absent
+/// route is Ok(false), which is the right idempotent semantics for a
+/// diff-driven removal.
 async fn del_route_for_node(conn: &Connection<Route>, node_name: &str, dest: &str) -> Result<()> {
     let is_default = dest == "default";
     let is_v6 = !is_default && dest.contains(':');
 
     if is_default {
-        // Delete default route — try v4 first, then v6.
-        let _ = conn.del_route_v4("0.0.0.0", 0).await;
-        let _ = conn.del_route_v6("::", 0).await;
+        // Delete default route — one family won't exist; if_exists
+        // returns Ok(false) for it rather than an error.
+        conn.del_route_v4_if_exists("0.0.0.0", 0)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("del default route on '{node_name}': {e}")))?;
+        conn.del_route_v6_if_exists("::", 0)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("del default route on '{node_name}': {e}")))?;
         return Ok(());
     }
 
     let (addr, prefix) = parse_cidr(dest)?;
     let result = if is_v6 {
-        conn.del_route_v6(&addr.to_string(), prefix).await
+        conn.del_route_v6_if_exists(&addr.to_string(), prefix).await
     } else {
         match addr {
-            IpAddr::V4(_) => conn.del_route_v4(&addr.to_string(), prefix).await,
-            IpAddr::V6(_) => conn.del_route_v6(&addr.to_string(), prefix).await,
+            IpAddr::V4(_) => conn.del_route_v4_if_exists(&addr.to_string(), prefix).await,
+            IpAddr::V6(_) => conn.del_route_v6_if_exists(&addr.to_string(), prefix).await,
         }
     };
-    result.map_err(|e| Error::deploy_failed(format!("del route '{dest}' on '{node_name}': {e}")))
+    result
+        .map(|_| ())
+        .map_err(|e| Error::deploy_failed(format!("del route '{dest}' on '{node_name}': {e}")))
 }
 
 /// Reconcile per-node nftables ruleset (firewall + NAT).
@@ -3416,17 +3435,12 @@ async fn apply_nftables_diff(
 
 /// Reconcile per-endpoint rate-limits (Plan 152 Phase B/3).
 ///
-/// For added / changed entries we re-run `RateLimiter::apply`
-/// (which is itself destructive — it deletes the root qdisc and
-/// installs a fresh HTB tree, the same way deploy step 15 does).
-/// For removed entries we delete the root qdisc explicitly.
-///
-/// This is a coarse reconcile compared to the per-pair impair
-/// path: a single egress/ingress edit causes the whole HTB tree
-/// to be rebuilt, which can drop a few packets in flight. A
-/// fully-incremental rate-limit reconcile is doable but requires
-/// upstreaming a `PerHostLimiter::reconcile()` to nlink (mirror of
-/// `PerPeerImpairer::reconcile`) — out of scope for this PR.
+/// Plan 160 (nlink 0.24) — added / changed entries converge via
+/// `RateLimiter::reconcile`, which diffs the live HTB tree and
+/// mutates only what drifted (no root-qdisc teardown, no
+/// packet-drop window), closing the "coarse reconcile / Plan 158g"
+/// caveat that used to live here. Removed entries clear the root
+/// qdisc via `del_qdisc_if_exists`.
 async fn apply_rate_limits_diff(
     running: &mut RunningLab,
     diff: &crate::diff::TopologyDiff,
@@ -3464,18 +3478,27 @@ async fn apply_rate_limits_diff(
                     })?;
                     limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
                 }
-                limiter.apply(&conn).await.map_err(|e| {
+                let report = limiter.reconcile(&conn).await.map_err(|e| {
                     Error::deploy_failed(format!(
-                        "failed to apply rate limit on '{}': {e}",
+                        "failed to reconcile rate limit on '{}': {e}",
                         change.endpoint,
                     ))
                 })?;
+                tracing::debug!(
+                    endpoint = %change.endpoint,
+                    changes = report.changes_made,
+                    "rate limit reconcile complete"
+                );
             }
             None => {
                 use nlink::TcHandle;
-                if let Err(e) = conn.del_qdisc(ep.iface.as_str(), TcHandle::ROOT).await {
+                // Plan 160 — idempotent removal; not-found is Ok(false).
+                if let Err(e) = conn
+                    .del_qdisc_if_exists(ep.iface.as_str(), TcHandle::ROOT)
+                    .await
+                {
                     tracing::warn!(
-                        "failed to clear rate-limit on '{}': {e} (already cleared?)",
+                        "failed to clear rate-limit on '{}': {e}",
                         change.endpoint,
                     );
                 }
@@ -3885,6 +3908,35 @@ fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NodeHandle> 
 }
 
 /// Build a NetemConfig from an Impairment.
+/// Pre-create guard for a bare-namespace node (Plan 160, nlink 0.25).
+///
+/// Rejects only a namespace that is *live* (`is_namespace` — an nsfs
+/// bind-mount), so a genuine collision still errors. A leftover marker
+/// file with no live mount is a stale artifact of an unclean shutdown
+/// (`exists` true but `is_namespace` false); we clear it so the deploy
+/// self-heals instead of hard-failing "already exists" and forcing a
+/// manual `destroy --orphans`. `create` refuses any existing marker, so
+/// the clear is required before it can proceed. Under the deploy flock
+/// this detect-and-clear is race-free.
+fn guard_namespace_absent(ns_name: &str) -> Result<()> {
+    if namespace::is_namespace(ns_name) {
+        return Err(Error::AlreadyExists {
+            name: format!("namespace '{ns_name}' already exists"),
+        });
+    }
+    if namespace::exists(ns_name) {
+        tracing::warn!(
+            "clearing stale namespace marker '{ns_name}' (no live mount — likely an unclean prior shutdown)"
+        );
+        namespace::delete(ns_name).map_err(|e| Error::Namespace {
+            op: "clear-stale",
+            ns: ns_name.to_string(),
+            source: e,
+        })?;
+    }
+    Ok(())
+}
+
 pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<NetemConfig> {
     use nlink::util::{Percent, Rate};
 

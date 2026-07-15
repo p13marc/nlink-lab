@@ -120,19 +120,22 @@ side-by-side examples, and migration notes — lives at
 
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
-on [`nlink`](https://github.com/p13marc/nlink) 0.21 as of
-nlink-lab 0.6.0.
+on [`nlink`](https://github.com/p13marc/nlink) 0.25 as of
+nlink-lab 0.7.0.
 
-Current release: **0.6.0** (2026-06-08) — the "159 arc" release.
-Every netlink resource nlink-lab models (VRF, VXLAN, WireGuard,
-bridges, dummies, bonds, VLANs, addresses, routes, qdiscs,
-nftables) commits through upstream declarative reconcile paths.
-New `nlink-lab watch <lab>` CLI surfaces RTNETLINK + nftables
-drift across every node with rich event detail (link kind,
-operstate, master, address CIDR, route table, TC handle, …).
-JSON schema v2 for `apply --check --json` exposes typed
-per-namespace diffs. See `CHANGELOG.md` for the full per-commit
-record + migration notes from 0.5.0.
+Current release: **0.7.0** (2026-07-15) — the "Plan 160 / nlink
+0.25" arc. WireGuard is fully declarative (device bootstrap via
+`WireguardConfig::ensure_devices`), rate limits reconcile instead
+of rebuild (`RateLimiter::reconcile`), teardown uses the typed
+`del_*_if_exists` helpers, and deploy self-heals a stale namespace
+marker. `watch` shows per-rule nftables counters, and live metrics
+gain per-process TCP bandwidth (sockdiag goodput + attribution).
+The nlink bump also makes traffic shaping correct (psched-tick
+fixes) and installs firewall rules in declared order. `apply
+--check --json` is now schema v3 — the deprecated v1 `diff` /
+`layered_summary` / `layered_summary_deprecated` fields are
+removed; read the typed `network` / `nftables` maps. See
+`CHANGELOG.md` for the full per-commit record + migration notes.
 
 ## Requirements
 

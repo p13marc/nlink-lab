@@ -1,5 +1,9 @@
 #![allow(clippy::result_large_err)]
 #![allow(clippy::large_enum_variant)]
+// The `run()` CLI dispatcher awaits the full deploy/apply future graph
+// inline; its layout computation exceeds the default query-depth limit
+// (compile-time only, no runtime effect).
+#![recursion_limit = "256"]
 
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
@@ -1284,8 +1288,11 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 #[derive(serde::Serialize)]
                 struct DryRunReport<'a> {
                     /// Plan 159d — typed-shape schema marker.
-                    /// `2` = v2 (this format). Downstream `jq`
-                    /// consumers should branch on this.
+                    /// `3` = v3 (this format). Downstream `jq`
+                    /// consumers should branch on this. v3 dropped
+                    /// the v1 `diff` / `layered_summary` /
+                    /// `layered_summary_deprecated` fields (Plan
+                    /// 160 / 0.7.0) — use `network`/`nftables`.
                     schema_version: u32,
                     lab: &'a str,
                     no_op: bool,
@@ -1299,32 +1306,14 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     /// `NftablesDiff`. Empty map elided.
                     #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
                     nftables: &'a std::collections::HashMap<String, nlink_lab::diff::NftablesDiff>,
-                    /// v1 alias of `topology` — kept for one
-                    /// release for backwards compat. Removed in
-                    /// schema v3.
-                    diff: &'a nlink_lab::TopologyDiff,
-                    /// Plan 158f Phase 2 — human-readable view
-                    /// of the full layered diff. Marked
-                    /// **deprecated** in 159d; downstream
-                    /// consumers should switch to the typed
-                    /// `network`/`nftables` fields. Removed in
-                    /// schema v3.
-                    layered_summary: String,
-                    /// Plan 159d — true while `layered_summary`
-                    /// is still emitted. Flip to false (or drop
-                    /// the field) when schema v3 ships.
-                    layered_summary_deprecated: bool,
                 }
                 let report = DryRunReport {
-                    schema_version: 2,
+                    schema_version: 3,
                     lab: lab_name,
                     no_op: layered.is_empty(),
                     change_count: layered.change_count(),
                     network: &layered.network,
                     nftables: &layered.nftables,
-                    diff: &diff,
-                    layered_summary: layered.to_string(),
-                    layered_summary_deprecated: true,
                 };
                 println!("{}", serde_json::to_string_pretty(&report)?);
                 if check && !layered.is_empty() {
@@ -2718,6 +2707,23 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                                     for issue in &metrics.issues {
                                         println!("  [WARN] {node_name}: {issue}");
                                     }
+                                    // Top TCP flows by goodput (nlink 0.24 sockdiag),
+                                    // published by the backend collector.
+                                    for s in &metrics.sockets {
+                                        println!(
+                                            "  {:<20} {} -> {}  tx {}  rx {}{}",
+                                            format!("{} (pid {})", s.comm, s.pid.map_or_else(|| "-".to_string(), |p| p.to_string())),
+                                            s.local,
+                                            s.remote,
+                                            nlink_lab_shared::metrics::format_rate(s.tx_bytes_per_sec * 8),
+                                            nlink_lab_shared::metrics::format_rate(s.rx_bytes_per_sec * 8),
+                                            if s.retrans_ratio > 0.0 {
+                                                format!("  retr {:.1}%", s.retrans_ratio * 100.0)
+                                            } else {
+                                                String::new()
+                                            },
+                                        );
+                                    }
                                 }
                             }
 
@@ -3412,6 +3418,10 @@ fn diags_to_snapshot(
             NodeMetrics {
                 interfaces: iface_metrics,
                 issues,
+                // Per-socket goodput needs two samples over time; only
+                // the daemon collector keeps the tracker for that. The
+                // one-shot CLI snapshot reports none.
+                sockets: Vec::new(),
             },
         );
     }

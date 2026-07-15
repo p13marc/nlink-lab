@@ -4,6 +4,129 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-15
+
+The "Plan 160 / nlink 0.25" arc. Adopts nlink `0.21 → 0.25` — four minor
+versions of upstream correctness work, taken clean — and turns the new
+declarative/ergonomic APIs into three long-standing "pending" closeouts:
+WireGuard is now **fully declarative** (the imperative device pre-create is
+gone, bootstrapped via `WireguardConfig::ensure_devices` — closes feedback item
+#3 against 0.19); rate limits **reconcile** instead of rebuild
+(`RateLimiter::reconcile`, closing Plan 158g); and teardown/removal paths move to
+the typed `del_*_if_exists` family. Deploy now **self-heals a stale namespace
+marker** left by an unclean shutdown (`namespace::is_namespace`). Two new
+observability wins: `watch` shows per-rule nftables counters, and live metrics
+gain a **per-process TCP bandwidth** dimension (sockdiag goodput + process
+attribution). The bump alone also fixes latent runtime bugs nlink-lab could not
+reach — **traffic shaping is now correct** (psched/HTB/TBF tick fixes, previously
+15–125× off) and **firewall rules install in declared order** (the reversed
+insertion is fixed upstream).
+
+**Migration impact for 0.6.0 → 0.7.0 upgraders:**
+
+- **Shaping numbers change — to the correct value.** Impairment RTT/loss and
+  rate-limit caps on existing labs were silently mis-programmed by nlink's old
+  psched-tick math; they now match what the topology declares. Re-check any
+  hand-tuned burst you set to *compensate* for the old behaviour.
+- **Firewall rule order is now honored.** If a lab "worked" by accident under
+  the old reversed insertion, its policy changes; rules now take effect in the
+  order written (first-match-wins).
+- **`apply --check --json` is schema v3 (breaking for `jq` consumers of the v1
+  fields).** The v1 `diff`, `layered_summary`, and `layered_summary_deprecated`
+  fields — deprecated in 0.6.0 for a one-release window — are **removed**. Branch
+  on `schema_version == 3` and read the typed `network` / `nftables` maps. The
+  human-readable `apply --check` output is unchanged.
+
+### Removed
+- **v1 `apply --check --json` fields (schema v3).** `diff`, `layered_summary`,
+  and `layered_summary_deprecated` are gone from the `--check --json` /
+  `--dry-run --json` envelope; `schema_version` is now `3`. This lands the
+  one-release deprecation announced in 0.6.0. The typed per-namespace `network`
+  (`ConfigDiff`) and `nftables` (`NftablesDiff`) maps — the v2 replacement — plus
+  `schema_version` / `lab` / `no_op` / `change_count` are unchanged, and the
+  human-readable path never used the removed fields.
+
+### Added
+- **Per-process TCP bandwidth in live metrics (nlink 0.24 sockdiag).**
+  The backend metrics collector now dumps each bare-namespace node's
+  TCP sockets (`Connection<SockDiag>` in the node's netns), diffs
+  consecutive dumps with a per-node `SocketRateTracker` for goodput,
+  and attributes each flow to its owning process via one amortized
+  `SocketOwnerMap` `/proc` walk. The top flows per node ride on a new
+  `NodeMetrics.sockets` field (`SocketRateMetric`: comm/pid,
+  local/remote, tx/rx goodput, retransmit ratio) — `#[serde(default)]`
+  for wire-compat — and render in the `metrics` stream. Container nodes
+  and the one-shot `stats` snapshot report none (goodput needs two
+  samples over time).
+- **`watch` nftables rule drift shows per-rule counters.** `NewRule`
+  events decode the typed `(packets, bytes)` counter via nlink 0.24's
+  `RuleInfo::counter()` and render `counter pkts=… bytes=…` (and a
+  `counter` JSON field) when the rule carries one. (The `Store`/
+  reflector watch-cache was evaluated and deferred — the `watch`
+  command is a pure per-drift printer with no snapshot consumer, so a
+  cache would add bookkeeping nothing reads.)
+
+### Changed
+- **Rate limits now reconcile instead of rebuild (closes Plan 158g).**
+  Deploy step 15 and the live `apply --check`/`apply` rate-limit path
+  use `RateLimiter::reconcile` (nlink 0.24) instead of the destructive
+  `RateLimiter::apply` (delete-root-qdisc-then-rebuild). An unchanged
+  rate limit now makes zero kernel calls on re-deploy, and an
+  egress/ingress edit mutates only the drifted class instead of tearing
+  down the whole HTB tree — no packet-drop window. The removal path uses
+  `del_qdisc_if_exists`.
+- **Deploy self-heals a stale namespace marker (nlink 0.25).** The
+  bare-namespace pre-create guard now rejects only a *live* namespace
+  (`namespace::is_namespace`, an nsfs bind-mount check). A leftover
+  `/var/run/netns/<name>` marker with no live mount — the residue of an
+  unclean shutdown — is cleared and the deploy proceeds, instead of
+  hard-failing "already exists" and forcing a manual
+  `destroy --orphans`. Destroy/removal paths keep the plain `exists`
+  check so they still sweep stale markers.
+- **Teardown/removal paths use `del_*_if_exists` (nlink 0.24).**
+  `clear_impairment`, mgmt veth/bridge teardown, `apply_diff` link
+  removal, and static-route removal now use the typed
+  `del_qdisc/link/route_*_if_exists` helpers instead of hand-rolled
+  `QdiscNotFound` matching or `let _ = del_*` error swallowing —
+  already-absent resources are `Ok(false)` and genuine failures are
+  surfaced (logged on best-effort paths, propagated otherwise).
+- **WireGuard deployment is now fully declarative.** The imperative
+  `add_link(WireguardLink::new(...))` pre-create loop (deploy step
+  6c, and its mirror in the live-reconcile `apply_diff` path) is
+  gone. The WG interface is bootstrapped by
+  `WireguardConfig::ensure_devices` (nlink 0.24 #169) inside
+  `apply_stack_for_node`, before the `NetworkConfig` apply so the
+  tunnel addresses land on an existing link. Idempotent, so
+  re-deploys create nothing. Closes the long-standing "feedback
+  item #3 against 0.19".
+- **Bumped workspace `nlink` dep `0.21` → `0.25`.** Four minor
+  versions of upstream correctness work, adopted clean — no
+  nlink-lab-side compile change (verified: the sole `NamespaceGuard`
+  is confined to a synchronous capture thread so 0.25's `!Send`
+  guard is a non-issue; the `Chain::new` `Result`, `LinkStats`
+  accessor, and `#[non_exhaustive]` diff/nl80211/sockdiag changes
+  touch no nlink-lab call site). nlink-lab's value path was already
+  immune to 0.25's silent tc-string unit changes (`mbps`→bytes,
+  bare-number→µs) because it hands nlink only typed
+  `Rate::bits_per_sec` / `Duration` / `Percent::new`, never a
+  tc-string.
+
+  **Behaviour-visible upstream fixes now in effect (no config
+  change needed):**
+  - **Traffic shaping is now correct.** nlink 0.25 fixed the
+    psched-tick conversion for HTB/TBF token buckets (#191–#218);
+    previously every `RateLimiter` and `PerPeerImpairer` shape was
+    mis-programmed by 15.6–125×. Impairments and rate-limits now
+    shape at the configured rate for the first time. Measured
+    RTT/rate on existing labs will change — to the correct value.
+  - **Firewall rules install in declared order.** nlink 0.25 fixed
+    the reversed rule insertion (#195, first-match-wins was
+    inverted). nlink-lab emits rules in written order and does not
+    compensate, so ordered `accept`/`drop` policies now take effect
+    as written. `reject` really rejects (#205), and the flower
+    filters behind per-pair impairments now match IPv6/ARP/VLAN too
+    (#201).
+
 ## [0.6.0] - 2026-06-08
 
 The "159 arc" release. Closes the seven-plan declarative-netlink

@@ -9,6 +9,9 @@
 //! doesn't need to wire its own event loop. Per-node tasks
 //! forward events through an mpsc; the main task drains and
 //! prints.
+//!
+//! Plan 160 (nlink 0.25) — nftables `NewRule` drift lines carry the
+//! typed per-rule `(packets, bytes)` counter via `RuleInfo::counter()`.
 
 use std::sync::Arc;
 
@@ -263,6 +266,12 @@ pub enum WatchEventKind {
         chain: String,
         family: String,
         handle: u64,
+        /// Per-rule `(packets, bytes)` counter, when the rule carries
+        /// a `counter` expression. Decoded via nlink 0.24's typed
+        /// `RuleInfo::counter()` (Plan 160). `None` when the rule has
+        /// no counter — most drift-inducing hand-edits don't.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        counter: Option<(u64, u64)>,
     },
     DelRule {
         table: String,
@@ -406,12 +415,18 @@ impl WatchEventKind {
                 chain: c.name,
                 family: format!("{:?}", c.family),
             },
-            NftablesEvent::NewRule(r) => Self::NewRule {
-                table: r.table,
-                chain: r.chain,
-                family: format!("{:?}", r.family),
-                handle: r.handle,
-            },
+            NftablesEvent::NewRule(r) => {
+                // Decode the typed per-rule counter before moving
+                // fields out of `r` (nlink 0.24 `RuleInfo::counter()`).
+                let counter = r.counter();
+                Self::NewRule {
+                    table: r.table,
+                    chain: r.chain,
+                    family: format!("{:?}", r.family),
+                    handle: r.handle,
+                    counter,
+                }
+            }
             NftablesEvent::DelRule(r) => Self::DelRule {
                 table: r.table,
                 chain: r.chain,
@@ -617,8 +632,13 @@ fn short_kind(k: &WatchEventKind) -> String {
             chain,
             family,
             handle,
+            counter,
         } => {
-            format!("NewRule {family}/{table}/{chain} handle={handle}")
+            let mut s = format!("NewRule {family}/{table}/{chain} handle={handle}");
+            if let Some((packets, bytes)) = counter {
+                s.push_str(&format!(" counter pkts={packets} bytes={bytes}"));
+            }
+            s
         }
         WatchEventKind::DelRule {
             table,
@@ -1244,6 +1264,45 @@ mod tests {
         assert!(line.contains("if=3"), "ifindex missing: {line}");
         assert!(line.contains("handle=1:0"), "handle missing: {line}");
         assert!(line.contains("kind=htb"), "tc kind missing: {line}");
+    }
+
+    /// Plan 160 — nftables NewRule drift lines carry the typed
+    /// per-rule counter (nlink 0.24 `RuleInfo::counter()`) when the
+    /// rule has one, and omit it otherwise.
+    #[test]
+    fn new_rule_renders_counter_when_present() {
+        let with = WatchEvent {
+            node: "n".into(),
+            family: WatchFamily::Nftables,
+            kind: WatchEventKind::NewRule {
+                table: "filter".into(),
+                chain: "input".into(),
+                family: "Inet".into(),
+                handle: 7,
+                counter: Some((10, 640)),
+            },
+            from_snapshot: false,
+        };
+        let line = with.render_line();
+        assert!(line.contains("handle=7"), "handle missing: {line}");
+        assert!(line.contains("pkts=10"), "packets missing: {line}");
+        assert!(line.contains("bytes=640"), "bytes missing: {line}");
+
+        let without = WatchEvent {
+            node: "n".into(),
+            family: WatchFamily::Nftables,
+            kind: WatchEventKind::NewRule {
+                table: "filter".into(),
+                chain: "input".into(),
+                family: "Inet".into(),
+                handle: 8,
+                counter: None,
+            },
+            from_snapshot: false,
+        };
+        let line = without.render_line();
+        assert!(line.contains("handle=8"), "handle missing: {line}");
+        assert!(!line.contains("counter"), "counter should be absent: {line}");
     }
 
     /// 0.21 adoption — filter events carry the parent handle

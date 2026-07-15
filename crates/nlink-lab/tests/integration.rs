@@ -1424,15 +1424,17 @@ async fn compute_layered_diff_reports_non_empty_when_address_changes() {
     lab.destroy().await.expect("destroy failed");
 }
 
-// Plan 159d — `apply --check --json` emits a v2 envelope with
-// schema_version, network, nftables, diff, layered_summary, and
-// layered_summary_deprecated fields. Exercises the end-to-end
-// CLI shape against a real deployed lab.
+// Plan 160 (0.7.0) — `apply --check --json` emits a v3 envelope
+// with schema_version, lab, no_op, change_count, network and
+// nftables. v3 dropped the v1 `diff` / `layered_summary` /
+// `layered_summary_deprecated` fields (their one-release
+// deprecation window ended). Exercises the end-to-end CLI shape
+// against a real deployed lab.
 //
 // Spawns the CLI rather than calling library code directly so
 // regressions in `bins/lab/src/main.rs` can't slip past.
 #[tokio::test]
-async fn apply_check_json_emits_schema_v2_envelope() {
+async fn apply_check_json_emits_schema_v3_envelope() {
     if unsafe { libc::geteuid() } != 0 {
         eprintln!("skipping apply_check_json_emits_schema_v2_envelope: requires root");
         return;
@@ -1483,8 +1485,8 @@ async fn apply_check_json_emits_schema_v2_envelope() {
         .unwrap_or_else(|e| panic!("envelope not valid JSON: {e}; stdout:\n{stdout}"));
 
     assert_eq!(
-        envelope["schema_version"], 2,
-        "schema_version must be 2; got {envelope}"
+        envelope["schema_version"], 3,
+        "schema_version must be 3; got {envelope}"
     );
     assert!(
         envelope["lab"].is_string(),
@@ -1498,17 +1500,18 @@ async fn apply_check_json_emits_schema_v2_envelope() {
         envelope["change_count"].is_number(),
         "change_count must be a number; got {envelope}"
     );
+    // v3 dropped the v1 fields; they must no longer be emitted.
     assert!(
-        envelope["diff"].is_object(),
-        "diff (v1 alias) must be an object; got {envelope}"
+        envelope["diff"].is_null(),
+        "v1 `diff` field must be gone in schema v3; got {envelope}"
     );
     assert!(
-        envelope["layered_summary"].is_string(),
-        "layered_summary must be a string during the deprecation window"
+        envelope["layered_summary"].is_null(),
+        "v1 `layered_summary` field must be gone in schema v3; got {envelope}"
     );
-    assert_eq!(
-        envelope["layered_summary_deprecated"], true,
-        "deprecation marker must be true; got {envelope}"
+    assert!(
+        envelope["layered_summary_deprecated"].is_null(),
+        "v1 `layered_summary_deprecated` field must be gone in schema v3; got {envelope}"
     );
 
     std::mem::forget(_guard);

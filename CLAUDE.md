@@ -237,12 +237,14 @@ See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 ## Deployment Sequence
 
 The deployer executes these steps in order. After Plan 158 (a/e
-Slices 1–3 / f) **and Plan 159 (a Slice 4 / a Phase 2 / c)**,
-every netlink resource — links / addresses / routes / firewall /
-NAT / VRF / VXLAN / WireGuard — commits through the upstream
-`nlink::NetworkConfig`, `nlink::NftablesConfig`, and
-`nlink::WireguardConfig` declarative reconcile paths. Idempotent
-re-deploys make zero kernel calls on those layers.
+Slices 1–3 / f), **Plan 159 (a Slice 4 / a Phase 2 / c)**, and
+**Plan 160 (nlink 0.25 adoption)**, every netlink resource — links /
+addresses / routes / firewall / NAT / VRF / VXLAN / WireGuard (incl.
+device bootstrap) / rate-limits — commits through the upstream
+`nlink::NetworkConfig`, `nlink::NftablesConfig`,
+`nlink::WireguardConfig`, and `RateLimiter::reconcile` declarative /
+reconcile paths. Idempotent re-deploys make zero kernel calls on those
+layers.
 
 ```
  1.  Parse topology file → Topology
@@ -257,10 +259,12 @@ re-deploys make zero kernel calls on those layers.
  6a. Create macvlan/ipvlan interfaces (host-side, moved to ns)
  6b. Create VRF interfaces — *no-op marker after Plan 159a Slice 4;
      VRF link declared in step 11c via `LinkBuilder::vrf(table)`*
- 6c. Create WireGuard interfaces (still imperative — through 0.21
-     `DeclaredLinkType` lacks a `Wireguard` variant; the WG iface
-     must exist before `WireguardConfig::diff` can succeed.
-     Reported as feedback item #3 against 0.19)
+ 6c. Create WireGuard interfaces — *no-op marker after Plan 160
+     (nlink 0.25). The WG iface is now bootstrapped declaratively
+     in step 11c via `WireguardConfig::ensure_devices` (nlink 0.24
+     #169), which creates any missing declared WG link idempotently
+     before the NetworkConfig apply. This closed feedback item #3
+     against 0.19.*
  7.  Assign interfaces to bridges (legacy — bond enslave moved
      to step 11c via `LinkBuilder::master`)
  8.  Configure VLANs on bridge ports
@@ -280,6 +284,9 @@ re-deploys make zero kernel calls on those layers.
  11b. Auto-generate routes from topology graph (if `routing auto`)
  11c. `apply_stack_for_node` per node — bundles three layers
       via the Stack pattern (Plan 159c):
+        a0) `WireguardConfig::ensure_devices` — bootstraps any
+            declared WG link (Plan 160 / nlink 0.24 #169) before
+            (a) so their tunnel addresses can be assigned
         a) `NetworkConfig::apply` — links (dummies + bonds +
            VLANs + VRFs + VXLANs), addresses, routes, qdiscs
         b) `NftablesConfig::apply_reconcile` — firewall + NAT
@@ -296,8 +303,9 @@ re-deploys make zero kernel calls on those layers.
      step 11c*
  14. Apply TC qdiscs/impairments per interface (`PerPeerImpairer`)
  14b. Apply per-pair network impairments
- 15. Apply rate limits (`RateLimiter::apply` — still rebuilds;
-     `RateLimiter::reconcile` upstream pending, Plan 158g)
+ 15. Apply rate limits (`RateLimiter::reconcile` — idempotent
+     since Plan 160 / nlink 0.24; diffs the live HTB tree and
+     mutates only drift, no root-qdisc teardown. Closes Plan 158g)
  15b. Inject /etc/hosts entries (if `dns hosts`)
  16. Spawn background processes (topo-sorted by depends_on,
      with healthcheck polling, stdout/stderr captured to logs)
@@ -311,9 +319,10 @@ desired)` (Plan 158f Phase 2) is the dry-run preview that walks
 every node, builds the same per-namespace `NetworkConfig` /
 `NftablesConfig`, and emits a single `LayeredDiff` bundle for
 `apply --check` / `apply --dry-run`. Plan 159d ships
-`apply --check --json` with typed `network` + `nftables` fields
-under schema v2; the v1 `layered_summary: String` fallback is
-retained for one release as a deprecation window.
+`apply --check --json` with typed `network` + `nftables` fields;
+Plan 160 (0.7.0) bumped it to **schema v3**, removing the v1
+`diff` / `layered_summary` / `layered_summary_deprecated`
+fallback fields after their one-release deprecation window.
 
 `nlink-lab watch <lab>` (Plan 159b) subscribes to every node's
 nftables + RTNETLINK multicast and prints one line per drift —

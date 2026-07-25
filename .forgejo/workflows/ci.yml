@@ -43,7 +43,7 @@ jobs:
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2
         with:
-          key: t${{ strategy.job-index }}
+          key: t-${{ matrix.features || 'default' }}
       - run: cargo build --workspace --all-targets ${{ matrix.features }}
       - run: cargo test --workspace ${{ matrix.features }}
 

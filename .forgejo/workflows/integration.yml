@@ -19,7 +19,7 @@ jobs:
       - uses: https://github.com/Swatinem/rust-cache@v2
         with:
           key: integration
-      - name: Guard: kernel modules preloaded on runner VM
+      - name: Guard that kernel modules are preloaded on the runner VM
         run: |
           for m in nf_tables vrf wireguard bridge; do
             test -d "/sys/module/$m" || echo "::warning::module $m not loaded; dependent tests will skip"

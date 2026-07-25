@@ -1,0 +1,35 @@
+name: Integration
+# Privileged runner lane (label `integration`); wireguard module preloaded
+# on the runner VM (myserver docs/vm-runner.md).
+on:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: integration
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v6
+      - run: sudo apt-get update && sudo apt-get install -y wireguard-tools iperf3
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://github.com/Swatinem/rust-cache@v2
+        with:
+          key: integration
+      - name: Guard: kernel modules preloaded on runner VM
+        run: |
+          for m in nf_tables vrf wireguard bridge; do
+            test -d "/sys/module/$m" || echo "::warning::module $m not loaded; dependent tests will skip"
+          done
+      - run: cargo build --bin nlink-lab
+      - name: Integration tests
+        run: |
+          sudo -E env "PATH=$PATH" "CARGO_HOME=$CARGO_HOME" "RUSTUP_HOME=$RUSTUP_HOME" \
+            "$(which cargo)" test -p nlink-lab --test integration -- --test-threads=1
+      - name: Integration tests (all features)
+        run: |
+          sudo -E env "PATH=$PATH" "CARGO_HOME=$CARGO_HOME" "RUSTUP_HOME=$RUSTUP_HOME" \
+            "$(which cargo)" test -p nlink-lab --all-features --test integration -- --test-threads=1

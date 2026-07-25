@@ -25,3 +25,32 @@ jobs:
           sha: ${{ github.sha }}
           release-dir: dist/release
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  flatpak:
+    runs-on: flatpak
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v6
+      - name: Build flatpak (unsigned; vm-edge signs on publish)
+        run: |
+          flatpak-builder --user --force-clean --disable-rofiles-fuse \
+            --install-deps-from=flathub \
+            --repo=export-repo builddir flatpak/com.github.p13marc.NlinkLab.yml
+          mkdir -p dist/release
+          flatpak build-bundle export-repo \
+            "dist/release/nlink-lab-topoviewer-${GITHUB_REF_NAME}.flatpak" com.github.p13marc.NlinkLab
+      - name: Publish export branch for vm-edge
+        run: |
+          cd export-repo
+          git init -q -b flatpak-export
+          git add -A
+          git -c user.name=ci -c user.email=ci@marcpardo.eu commit -q -m "flatpak export ${GITHUB_REF_NAME}"
+          git push --force "http://forgejo:${{ secrets.GITHUB_TOKEN }}@10.10.0.30:3000/${GITHUB_REPOSITORY}.git" HEAD:flatpak-export
+      - uses: https://data.forgejo.org/actions/forgejo-release@v2
+        with:
+          direction: upload
+          url: http://10.10.0.30:3000
+          repo: ${{ github.repository }}
+          tag: ${{ github.ref_name }}
+          sha: ${{ github.sha }}
+          release-dir: dist/release
+          token: ${{ secrets.GITHUB_TOKEN }}

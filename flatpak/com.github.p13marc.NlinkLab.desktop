@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Nlink Lab Topoviewer
+Comment=Visualize nlink-lab network topologies
+Exec=nlink-lab-topoviewer
+Icon=com.github.p13marc.NlinkLab
+Terminal=false
+Type=Application
+Categories=Network;Development;
+Keywords=network;topology;netlink;lab;

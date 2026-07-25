@@ -1,0 +1,43 @@
+app-id: com.github.p13marc.NlinkLab
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: nlink-lab-topoviewer
+
+finish-args:
+  # Wayland and X11 display access
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # GPU acceleration for Iced/wgpu
+  - --device=dri
+  # Network access to reach the nlink-lab backend
+  - --share=network
+  # Access to config directory
+  - --filesystem=xdg-config/nlink-lab:create
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/nlink-lab-topoviewer/cargo
+    RUST_BACKTRACE: "1"
+
+modules:
+  - name: nlink-lab-topoviewer
+    buildsystem: simple
+    build-options:
+      # Allow network during build to fetch crates
+      build-args:
+        - --share=network
+    build-commands:
+      - cargo fetch --manifest-path Cargo.toml
+      - cargo build --release -p nlink-lab-topoviewer
+      - install -Dm755 target/release/nlink-lab-topoviewer ${FLATPAK_DEST}/bin/nlink-lab-topoviewer
+      - install -Dm644 flatpak/com.github.p13marc.NlinkLab.desktop ${FLATPAK_DEST}/share/applications/com.github.p13marc.NlinkLab.desktop
+      - install -Dm644 flatpak/com.github.p13marc.NlinkLab.metainfo.xml ${FLATPAK_DEST}/share/metainfo/com.github.p13marc.NlinkLab.metainfo.xml
+      - install -Dm644 flatpak/icons/hicolor/scalable/apps/com.github.p13marc.NlinkLab.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/com.github.p13marc.NlinkLab.svg
+    sources:
+      - type: dir
+        path: ..

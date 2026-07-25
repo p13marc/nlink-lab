@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.p13marc.NlinkLab</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Nlink Lab Topoviewer</name>
+  <summary>Visualize nlink-lab network topologies</summary>
+  <description>
+    <p>
+      Topoviewer is the graphical companion to nlink-lab: it renders the
+      network namespaces, links, bridges, and routing topologies that
+      nlink-lab builds, live from the running lab backend.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.github.p13marc.NlinkLab.desktop</launchable>
+  <url type="homepage">https://git.marcpardo.eu/marcpardo/nlink-lab</url>
+  <url type="vcs-browser">https://git.marcpardo.eu/marcpardo/nlink-lab</url>
+  <developer id="eu.marcpardo">
+    <name>Marc Pardo</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-07-25"/>
+  </releases>
+</component>

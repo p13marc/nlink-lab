@@ -143,10 +143,9 @@ fn parse_duration_ms(s: &str) -> Option<f64> {
         (rest, 1.0)
     } else if let Some(rest) = s.strip_suffix("us") {
         (rest, 0.001)
-    } else if let Some(rest) = s.strip_suffix('s') {
-        (rest, 1000.0)
     } else {
-        return None;
+        let rest = s.strip_suffix('s')?;
+        (rest, 1000.0)
     };
     num.parse::<f64>().ok().map(|v| v * mul)
 }
@@ -168,10 +167,9 @@ fn parse_rate_bps(s: &str) -> Option<u64> {
         (rest, 1_000_000u64)
     } else if let Some(rest) = s_low.strip_suffix("kbit") {
         (rest, 1_000u64)
-    } else if let Some(rest) = s_low.strip_suffix("bit") {
-        (rest, 1u64)
     } else {
-        return None;
+        let rest = s_low.strip_suffix("bit")?;
+        (rest, 1u64)
     };
     num.parse::<f64>().ok().map(|v| (v * mul as f64) as u64)
 }

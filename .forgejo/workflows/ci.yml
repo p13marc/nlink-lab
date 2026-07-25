@@ -45,7 +45,11 @@ jobs:
         with:
           key: t-${{ matrix.features || 'default' }}
       - run: cargo build --workspace --all-targets ${{ matrix.features }}
-      - run: cargo test --workspace ${{ matrix.features }}
+      # crates/nlink-lab/tests/integration.rs needs root/netns — it runs on
+      # the privileged lane (integration.yml); everything else runs here.
+      - run: cargo test --workspace ${{ matrix.features }} --exclude nlink-lab
+      - run: cargo test -p nlink-lab ${{ matrix.features }} --lib
+      - run: cargo test -p nlink-lab ${{ matrix.features }} --doc
 
   stress:
     runs-on: ubuntu-24.04

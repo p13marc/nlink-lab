@@ -7,9 +7,7 @@ use nlink::netlink::{Connection, SockDiag, namespace};
 use nlink::sockdiag::{SocketFilter, SocketOwnerMap, SocketRateTracker};
 use nlink_lab::RunningLab;
 use nlink_lab_shared::messages::{LabEvent, LabEventKind};
-use nlink_lab_shared::metrics::{
-    InterfaceMetrics, MetricsSnapshot, NodeMetrics, SocketRateMetric,
-};
+use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics, SocketRateMetric};
 
 /// Top TCP flows (by goodput) reported per node.
 const TOP_FLOWS: usize = 5;
@@ -49,7 +47,10 @@ impl MetricsCollector {
             }
         };
         // TCP byte counters ride in TCP_INFO — it must be requested.
-        let snapshot = match conn.query(&SocketFilter::tcp().with_tcp_info().build()).await {
+        let snapshot = match conn
+            .query(&SocketFilter::tcp().with_tcp_info().build())
+            .await
+        {
             Ok(s) => s,
             Err(e) => {
                 tracing::debug!("sockdiag query for '{node}' failed: {e}");
@@ -60,7 +61,12 @@ impl MetricsCollector {
         // cookie -> (inode, local, remote) join keys for this snapshot.
         let keys: HashMap<u64, (u32, String, String)> = inet
             .iter()
-            .map(|s| (s.cookie, (s.inode, s.local.to_string(), s.remote.to_string())))
+            .map(|s| {
+                (
+                    s.cookie,
+                    (s.inode, s.local.to_string(), s.remote.to_string()),
+                )
+            })
             .collect();
 
         let tracker = self.socket_trackers.entry(node.to_string()).or_default();
@@ -71,10 +77,10 @@ impl MetricsCollector {
             .iter()
             .take(TOP_FLOWS)
             .map(|r| {
-                let (inode, local, remote) = keys
-                    .get(&r.cookie)
-                    .cloned()
-                    .unwrap_or((0, String::new(), String::new()));
+                let (inode, local, remote) =
+                    keys.get(&r.cookie)
+                        .cloned()
+                        .unwrap_or((0, String::new(), String::new()));
                 let owner = owners.resolve(inode).first();
                 SocketRateMetric {
                     comm: owner.map_or_else(|| "-".to_string(), |p| p.comm.clone()),

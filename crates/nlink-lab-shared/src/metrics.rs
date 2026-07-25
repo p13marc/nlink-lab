@@ -109,6 +109,9 @@ mod tests {
             sockets: vec![],
         };
         let json = serde_json::to_string(&nm).unwrap();
-        assert!(!json.contains("sockets"), "sockets should be elided: {json}");
+        assert!(
+            !json.contains("sockets"),
+            "sockets should be elided: {json}"
+        );
     }
 }

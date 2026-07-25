@@ -1302,7 +1302,10 @@ mod tests {
         };
         let line = without.render_line();
         assert!(line.contains("handle=8"), "handle missing: {line}");
-        assert!(!line.contains("counter"), "counter should be absent: {line}");
+        assert!(
+            !line.contains("counter"),
+            "counter should be absent: {line}"
+        );
     }
 
     /// 0.21 adoption — filter events carry the parent handle

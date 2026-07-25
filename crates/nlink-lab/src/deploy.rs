@@ -3376,10 +3376,12 @@ async fn del_route_for_node(conn: &Connection<Route>, node_name: &str, dest: &st
         // returns Ok(false) for it rather than an error.
         conn.del_route_v4_if_exists("0.0.0.0", 0)
             .await
-            .map_err(|e| Error::deploy_failed(format!("del default route on '{node_name}': {e}")))?;
-        conn.del_route_v6_if_exists("::", 0)
-            .await
-            .map_err(|e| Error::deploy_failed(format!("del default route on '{node_name}': {e}")))?;
+            .map_err(|e| {
+                Error::deploy_failed(format!("del default route on '{node_name}': {e}"))
+            })?;
+        conn.del_route_v6_if_exists("::", 0).await.map_err(|e| {
+            Error::deploy_failed(format!("del default route on '{node_name}': {e}"))
+        })?;
         return Ok(());
     }
 
@@ -3497,10 +3499,7 @@ async fn apply_rate_limits_diff(
                     .del_qdisc_if_exists(ep.iface.as_str(), TcHandle::ROOT)
                     .await
                 {
-                    tracing::warn!(
-                        "failed to clear rate-limit on '{}': {e}",
-                        change.endpoint,
-                    );
+                    tracing::warn!("failed to clear rate-limit on '{}': {e}", change.endpoint,);
                 }
             }
         }

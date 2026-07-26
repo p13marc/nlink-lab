@@ -9,6 +9,12 @@ concurrency:
   group: integration-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # shared compiler cache: sccache (mounted from the runner VM) -> garage S3
+  # on vm-runner-01; S3 endpoint+credentials come from the runner's env_file
+  RUSTC_WRAPPER: /srv/cache/bin/sccache
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   integration:
     runs-on: integration
@@ -19,6 +25,7 @@ jobs:
       - uses: https://github.com/Swatinem/rust-cache@v2
         with:
           key: integration
+          cache-targets: false
       - name: Guard that kernel modules are preloaded on the runner VM
         run: |
           for m in nf_tables vrf wireguard bridge; do

@@ -2,6 +2,7 @@ name: Integration
 # Privileged runner lane (label `integration`); wireguard module preloaded
 # on the runner VM (myserver docs/vm-runner.md).
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
 

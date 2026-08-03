@@ -19,7 +19,7 @@ jobs:
   fmt:
     runs-on: ubuntu-24.04
     steps:
-      - uses: https://data.forgejo.org/actions/checkout@v6
+      - uses: https://data.forgejo.org/actions/checkout@v6.1.0
       - uses: https://github.com/dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
@@ -28,11 +28,11 @@ jobs:
   clippy:
     runs-on: ubuntu-24.04
     steps:
-      - uses: https://data.forgejo.org/actions/checkout@v6
+      - uses: https://data.forgejo.org/actions/checkout@v6.1.0
       - uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: https://github.com/Swatinem/rust-cache@v2
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.1
         with:
           cache-targets: false
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -45,9 +45,9 @@ jobs:
       matrix:
         features: ["", "--no-default-features", "--all-features"]
     steps:
-      - uses: https://data.forgejo.org/actions/checkout@v6
+      - uses: https://data.forgejo.org/actions/checkout@v6.1.0
       - uses: https://github.com/dtolnay/rust-toolchain@stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.1
         with:
           key: t-
           cache-targets: false${{ matrix.features || 'default' }}
@@ -61,9 +61,9 @@ jobs:
   stress:
     runs-on: ubuntu-24.04
     steps:
-      - uses: https://data.forgejo.org/actions/checkout@v6
+      - uses: https://data.forgejo.org/actions/checkout@v6.1.0
       - uses: https://github.com/dtolnay/rust-toolchain@stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.1
         with:
           cache-targets: false
       - run: cargo test -p nlink-lab --test stress
@@ -73,9 +73,9 @@ jobs:
     env:
       RUSTDOCFLAGS: -D warnings
     steps:
-      - uses: https://data.forgejo.org/actions/checkout@v6
+      - uses: https://data.forgejo.org/actions/checkout@v6.1.0
       - uses: https://github.com/dtolnay/rust-toolchain@stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.1
         with:
           cache-targets: false
       - run: cargo doc --no-deps --all-features

@@ -20,10 +20,10 @@ jobs:
   integration:
     runs-on: integration
     steps:
-      - uses: https://data.forgejo.org/actions/checkout@v6
+      - uses: https://data.forgejo.org/actions/checkout@v6.1.0
       - run: sudo apt-get update && sudo apt-get install -y wireguard-tools iperf3
       - uses: https://github.com/dtolnay/rust-toolchain@stable
-      - uses: https://github.com/Swatinem/rust-cache@v2
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.1
         with:
           key: integration
           cache-targets: false

@@ -42,8 +42,8 @@ libc = "0.2"
 
 # Crypto (WireGuard key generation)
 x25519-dalek = { version = "2", features = ["static_secrets"] }
-base64 = "0.22"
-getrandom = "0.3"
+base64 = "0.23"
+getrandom = "0.4"
 time = { version = "0.3", features = ["formatting"] }
 
 # Zenoh pub/sub
@@ -52,7 +52,7 @@ zenoh-ext = "1.8"
 
 # Networking
 nlink = { version = "0.25", features = ["full"] }
-netring = "0.18"
+netring = "0.29"
 
 # Workspace crates
 nlink-lab = { path = "crates/nlink-lab" }

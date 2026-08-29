@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-29
+
+The fleet-uniformity release (myserver#33) — and the first release whose
+assets actually exist: every release since v0.6.0 was tagged `vX.Y.Z` while
+the workflow matched bare semver, so the release lane (including the
+topoviewer flatpak) never ran. This tag is bare `0.8.0`; the flatpak
+`com.github.p13marc.NlinkLab` is built and published to flatpak.marcpardo.eu
+for the first time from CI.
+
+- **zenoh 1.8 → 1.10** (fleet alignment; no code changes required).
+- CI: fleet-standard rollout — `workflow_dispatch` re-runs with a tag input
+  on the release workflow, cargo-deny supply-chain lane, pinned
+  rust-toolchain 1.97, MSRV declared (`rust-version = "1.97"`).
+- `atty` removed (RUSTSEC-2024-0375/2021-0145) in favour of
+  `std::io::IsTerminal`; advisory-driven lockfile refreshes.
+- Versioned flatpak bundle name (`nlink-lab-topoviewer-0.8.0.flatpak`).
+
 ## [0.7.0] - 2026-07-15
 
 The "Plan 160 / nlink 0.25" arc. Adopts nlink `0.21 → 0.25` — four minor

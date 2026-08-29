@@ -3,6 +3,9 @@ name = "nlink-lab-cli"
 description = "CLI for nlink-lab network lab engine"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+# not on crates.io: releases are Forgejo tarballs + flatpak (deny.toml relies on this)
+publish = false
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
@@ -30,7 +33,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 libc = { workspace = true }
-atty = "0.2"
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

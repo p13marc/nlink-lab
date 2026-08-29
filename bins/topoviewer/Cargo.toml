@@ -2,6 +2,9 @@
 name = "nlink-lab-topoviewer"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+# not on crates.io: releases are Forgejo tarballs + flatpak (deny.toml relies on this)
+publish = false
 license.workspace = true
 authors.workspace = true
 description = "Interactive topology visualizer for nlink-lab"

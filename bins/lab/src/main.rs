@@ -6,6 +6,7 @@
 #![recursion_limit = "256"]
 
 use clap::{CommandFactory, Parser, Subcommand};
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -13,7 +14,7 @@ use std::time::Instant;
 // ─── Color helpers ───────────────────────────────────────
 
 fn use_color() -> bool {
-    std::env::var("NO_COLOR").is_err() && atty::is(atty::Stream::Stderr)
+    std::env::var("NO_COLOR").is_err() && std::io::stderr().is_terminal()
 }
 
 fn green(s: &str) -> String {

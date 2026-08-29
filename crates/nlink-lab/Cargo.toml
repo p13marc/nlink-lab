@@ -3,6 +3,9 @@ name = "nlink-lab"
 description = "Network lab engine for creating isolated, reproducible network topologies using Linux namespaces"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+# not on crates.io: releases are Forgejo tarballs + flatpak (deny.toml relies on this)
+publish = false
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

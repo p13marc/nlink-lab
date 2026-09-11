@@ -144,8 +144,8 @@ impl MetricsCollector {
                 iface_metrics.push(InterfaceMetrics {
                     name: iface.name.clone(),
                     state: state_str,
-                    rx_bps: iface.rates.rx_bps,
-                    tx_bps: iface.rates.tx_bps,
+                    rx_bps: iface.rates.rx_bps(),
+                    tx_bps: iface.rates.tx_bps(),
                     rx_pps: iface.rates.rx_pps,
                     tx_pps: iface.rates.tx_pps,
                     rx_errors: iface.stats.rx_errors(),

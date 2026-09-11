@@ -417,36 +417,49 @@ pub fn run_capture(
     let start = Instant::now();
     let mut count: u64 = 0;
 
-    for pkt in capture.packets() {
-        if shutdown.load(Ordering::Relaxed) {
-            break;
-        }
+    // `Packets` is a lending iterator (netring 0.30): each packet borrows the
+    // current ring block, which is recycled on the next `next_packet` call.
+    // Scoped so the `&mut capture` borrow ends before `capture.stats()`.
+    {
+        let mut packets = capture.packets();
 
-        if let Some(max_duration) = config.duration
-            && start.elapsed() >= max_duration
-        {
-            break;
-        }
-
-        let ts = pkt.timestamp();
-        let data = pkt.data();
-        let orig_len = pkt.original_len() as u32;
-
-        match &mut pcap {
-            PcapSink::None => {
-                println!("{}.{:09}  {} bytes", ts.sec, ts.nsec, data.len(),);
+        while let Some(pkt) = packets.next_packet() {
+            if shutdown.load(Ordering::Relaxed) {
+                break;
             }
-            _ => {
-                pcap.write_packet(ts, data, orig_len)?;
+
+            if let Some(max_duration) = config.duration
+                && start.elapsed() >= max_duration
+            {
+                break;
+            }
+
+            let ts = pkt.timestamp();
+            let data = pkt.data();
+            let orig_len = pkt.original_len() as u32;
+
+            match &mut pcap {
+                PcapSink::None => {
+                    println!("{}.{:09}  {} bytes", ts.sec, ts.nsec, data.len(),);
+                }
+                _ => {
+                    pcap.write_packet(ts, data, orig_len)?;
+                }
+            }
+
+            count += 1;
+
+            if let Some(max_count) = config.count
+                && count >= max_count
+            {
+                break;
             }
         }
 
-        count += 1;
-
-        if let Some(max_count) = config.count
-            && count >= max_count
-        {
-            break;
+        // `next_packet` returns `None` on I/O error as well as on a clean
+        // stop; surface the error rather than reporting a short capture.
+        if let Some(e) = packets.take_error() {
+            return Err(Error::Capture(format!("netring: {e}")));
         }
     }
 

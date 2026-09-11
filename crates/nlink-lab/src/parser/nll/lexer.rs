@@ -17,7 +17,9 @@ pub struct Spanned {
 /// top-level structural keywords that start statements are reserved.
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t]+")]
-#[logos(skip r"#[^\n]*")]
+// Line comments run to end-of-line; the greedy `*` is bounded by `\n`,
+// so opt out of logos 0.16's unbounded-repetition lint.
+#[logos(skip("#[^\n]*", allow_greedy = true))]
 pub enum Token {
     // ── Reserved top-level keywords ─────────────
     #[token("import")]
@@ -146,7 +148,12 @@ pub enum Token {
     #[regex(r"[0-9]+(\.[0-9]+)?%", |lex| lex.slice().to_string())]
     Percent(String),
 
-    #[regex(r"[0-9]+", |lex| lex.slice().to_string(), priority = 2)]
+    // Numeric literal, with an optional fractional part (`cpu 0.5`).
+    // Until logos 0.16 the bare `[0-9]+` regex also matched `0.5`; the
+    // fraction is spelled out here now that logos matches it correctly.
+    // Longer literals (`10.0.0.1`, `1.5ms`, `0.1%`) still win by longest
+    // match, and `1..5` ranges still lex as `Int DotDot Int`.
+    #[regex(r"[0-9]+(\.[0-9]+)?", |lex| lex.slice().to_string(), priority = 2)]
     Int(String),
 
     // ── Strings and identifiers ─────────────────
@@ -718,6 +725,40 @@ link router:eth0 -- host:eth0 {
                 Token::Ident("env-file".into()),
                 Token::Ident("vlan-filtering".into()),
                 Token::Ident("mesh-id".into()),
+            ]
+        );
+    }
+
+    /// Fractional literals (`cpu 0.5`) lex as one `Int`, while the longer
+    /// numeric forms and `..` ranges keep their own tokenization. Until
+    /// logos 0.16 the bare `[0-9]+` regex matched `0.5` by accident; this
+    /// pins the behaviour so a future lexer change cannot silently split
+    /// `0.5` into `Int Dot Int` again.
+    #[test]
+    fn test_fractional_literals_lex_as_one_int() {
+        assert_eq!(lex_tokens("0.5"), vec![Token::Int("0.5".into())]);
+        assert_eq!(lex_tokens("1.25"), vec![Token::Int("1.25".into())]);
+        assert_eq!(lex_tokens("2"), vec![Token::Int("2".into())]);
+
+        // Longer numeric literals still win by longest match.
+        assert_eq!(
+            lex_tokens("10.0.0.1"),
+            vec![Token::Ipv4Addr("10.0.0.1".into())]
+        );
+        assert_eq!(
+            lex_tokens("10.0.0.0/24"),
+            vec![Token::Cidr("10.0.0.0/24".into())]
+        );
+        assert_eq!(lex_tokens("1.5ms"), vec![Token::Duration("1.5ms".into())]);
+        assert_eq!(lex_tokens("0.1%"), vec![Token::Percent("0.1%".into())]);
+
+        // `for i in 1..5` must not swallow the range operator.
+        assert_eq!(
+            lex_tokens("1..5"),
+            vec![
+                Token::Int("1".into()),
+                Token::DotDot,
+                Token::Int("5".into())
             ]
         );
     }

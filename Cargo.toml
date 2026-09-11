@@ -16,7 +16,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/p13marc/nlink-lab"
 authors = ["Marc Pardo <p13marc@gmail.com>"]
-rust-version = "1.97"
+rust-version = "1.98"
 
 [workspace.dependencies]
 # Async runtime
@@ -43,8 +43,8 @@ libc = "0.2"
 
 # Crypto (WireGuard key generation)
 x25519-dalek = { version = "3", features = ["static_secrets"] }
-base64 = "0.22"
-getrandom = "0.3"
+base64 = "0.23"
+getrandom = "0.4"
 time = { version = "0.3", features = ["formatting"] }
 
 # Zenoh pub/sub
@@ -53,7 +53,7 @@ zenoh-ext = "1.10"
 
 # Networking
 nlink = { version = "0.25", features = ["full"] }
-netring = "0.18"
+netring = "0.30"
 
 # Workspace crates
 nlink-lab = { path = "crates/nlink-lab" }

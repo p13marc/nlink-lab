@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **nlink 0.25 → 0.26.** Upstream renamed `diagnostics::LinkRates`'
+  `rx_bps`/`tx_bps` **fields** to `rx_bytes_per_sec`/`tx_bytes_per_sec`
+  and added `rx_bps()`/`tx_bps()` **accessors** that convert to bits
+  (nlink#274 — the fields were named `*_bps` while holding bytes, so
+  `total_bps()` read 8x low). nlink-lab had inherited that bug: it
+  copied the byte-valued fields straight into
+  `InterfaceMetrics::rx_bps`/`tx_bps`, which `format_rate` renders as
+  bits. Switching to the accessors fixes the compile break and the
+  **8x understatement in `nlink-lab metrics`, `watch` and topoviewer
+  interface rates** in one move. The units are now stated on the
+  `InterfaceMetrics` fields.
+
+### Fixed
+
+- Adapted to the weekly dependency batch: netring 0.18 → 0.30 (the
+  capture loop uses the new lending `Packets::next_packet` and now
+  surfaces `take_error()` instead of silently reporting a short
+  capture), logos 0.15 → 0.16 (`allow_greedy` on the line-comment skip;
+  fractional literals such as `cpu 0.5` are spelled out in the `Int`
+  regex now that logos no longer matches them by accident), and
+  rust-toolchain 1.97 → 1.98.
+
 ## [0.8.0] - 2026-08-29
 
 The fleet-uniformity release (myserver#33) — and the first release whose

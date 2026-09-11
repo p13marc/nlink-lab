@@ -3401,8 +3401,8 @@ fn diags_to_snapshot(
             .map(|iface| InterfaceMetrics {
                 name: iface.name.clone(),
                 state: format!("{:?}", iface.state),
-                rx_bps: iface.rates.rx_bps,
-                tx_bps: iface.rates.tx_bps,
+                rx_bps: iface.rates.rx_bps(),
+                tx_bps: iface.rates.tx_bps(),
                 rx_pps: iface.rates.rx_pps,
                 tx_pps: iface.rates.tx_pps,
                 rx_errors: iface.stats.rx_errors(),

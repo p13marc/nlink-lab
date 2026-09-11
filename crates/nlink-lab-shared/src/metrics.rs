@@ -54,7 +54,11 @@ pub struct SocketRateMetric {
 pub struct InterfaceMetrics {
     pub name: String,
     pub state: String,
+    /// Receive rate in **bits** per second — the unit [`format_rate`]
+    /// expects. nlink's `LinkRates` counts bytes, so these are populated
+    /// from its `rx_bps()`/`tx_bps()` accessors, which convert.
     pub rx_bps: u64,
+    /// Transmit rate in **bits** per second. See [`Self::rx_bps`].
     pub tx_bps: u64,
     pub rx_pps: u64,
     pub tx_pps: u64,

@@ -52,7 +52,7 @@ zenoh = { version = "1.10", features = ["unstable"] }
 zenoh-ext = "1.10"
 
 # Networking
-nlink = { version = "0.25", features = ["full"] }
+nlink = { version = "0.26", features = ["full"] }
 netring = "0.30"
 
 # Workspace crates

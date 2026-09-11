@@ -3,6 +3,10 @@
 //! Runs as root (or CAP_NET_ADMIN), collects metrics from deployed labs,
 //! and exposes them via Zenoh pub/sub and query/reply.
 
+// `nlink_lab::Error` is deliberately unboxed (see the Plan 159f note in
+// `nlink-lab/src/error.rs`); match the allow the library and CLI already carry.
+#![allow(clippy::result_large_err)]
+
 use std::time::{Duration, Instant};
 
 use clap::Parser;

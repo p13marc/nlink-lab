@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — formatter, live edits, metrics endpoint, cgroup limits (issues #54, #64, #66, #69)
+
+- **`nlink-lab fmt`** (#54): a token-level formatter — the real lexer
+  fixes token boundaries, comments come from the gaps between tokens, and
+  only layout changes (two-space indentation per brace level, touching
+  tokens stay touching, one space otherwise, braces set off, blank-line
+  runs collapsed and none next to a brace, trailing newline). Guaranteed
+  identical token sequence and `Topology`; `--check` (exit 2, CI runs it
+  on `examples/`), `-w`, `-` for stdin. The examples are formatted.
+- **`nlink-lab edit <lab>`** (#69): `--add-node NAME[:PROFILE]`,
+  `--remove-node`, `--add-link A:IF--B:IF[=ADDR--ADDR]`, `--remove-link`,
+  `--set-impair NODE:IF=k=v,…`, `--clear-impair`, `--dry-run` — edits the
+  stored topology and reconciles through `apply`.
+- **HTTP / OpenMetrics endpoint** (#64): `nlink-lab daemon --http ADDR`
+  (and `nlink-lab-backend --http`) serve `GET /metrics` (per-interface
+  throughput, packet rates, errors, drops, qdisc stats, top flows, node
+  issues, health gauges) plus `/api/v1/snapshot`, `/api/v1/health`,
+  `/api/v1/topology` as JSON; no new dependencies, zenoh unchanged.
+- **cgroup v2 limits for namespace nodes** (#66): `node x { cpu 0.5
+  memory 256m }` now applies to namespace nodes too — background
+  processes from `run … background` and `spawn` are moved into
+  `/sys/fs/cgroup/nlink-lab/<lab>/<node>` with `cpu.max`/`memory.max`;
+  `stats` shows CPU seconds, memory, limit and pid count for them
+  (`--json` rows with `kind: "namespace"`); `destroy` removes the
+  subtree; `doctor` reports cgroup v2 availability. The validator no
+  longer rejects `cpu`/`memory` on nodes without an `image`.
+
 ### Added — CLI (issues #55, #57, #58, #60, #61, #62, #68)
 
 - **`nlink-lab verify <lab> [--topology FILE]`** (#58): drift check of a

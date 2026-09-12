@@ -356,6 +356,26 @@ impl RunningLab {
         self.exec_pids = exec_pids;
     }
 
+    /// Move a spawned pid into the node's cgroup when the node declares
+    /// `cpu`/`memory` (issue #66). Best effort.
+    fn attach_cgroup(&self, node: &str, pid: u32) {
+        let Some(n) = self.topology.nodes.get(node) else {
+            return;
+        };
+        match crate::cgroup::ensure_node(self.name(), node, n.cpu.as_deref(), n.memory.as_deref()) {
+            Ok(Some(dir)) => {
+                if let Err(e) = crate::cgroup::attach(&dir, pid) {
+                    tracing::warn!(
+                        "node '{node}': cannot move pid {pid} into {}: {e}",
+                        dir.display()
+                    );
+                }
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!("node '{node}': cgroup limits: {e}"),
+        }
+    }
+
     pub(crate) fn set_starttimes(&mut self, starttimes: BTreeMap<u32, u64>) {
         self.starttimes = starttimes;
     }
@@ -676,6 +696,7 @@ impl RunningLab {
         let pid = crate::ns_exec::spawn_detached(ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         self.track_pid(node, pid);
+        self.attach_cgroup(node, pid);
         Ok(pid)
     }
 
@@ -797,6 +818,7 @@ impl RunningLab {
         let pid = crate::ns_exec::spawn_detached(&ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         self.track_pid(node, pid);
+        self.attach_cgroup(node, pid);
         self.process_logs.insert(
             pid,
             (
@@ -1331,6 +1353,9 @@ impl RunningLab {
                 }
             }
         }
+
+        // 1b. Drop the lab's cgroups now that its processes are gone
+        crate::cgroup::remove_lab(&self.topology.lab.name);
 
         // 2. Remove containers
         if let Some(binary) = &self.runtime_binary {

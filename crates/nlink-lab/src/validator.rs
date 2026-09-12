@@ -1929,8 +1929,6 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
             // Note: healthcheck, startup-delay, and depends-on work on
             // namespace nodes too (for integration testing orchestration).
             let container_checks: &[(&str, bool)] = &[
-                ("cpu", node.cpu.is_some()),
-                ("memory", node.memory.is_some()),
                 ("entrypoint", node.entrypoint.is_some()),
                 ("hostname", node.hostname.is_some()),
                 ("workdir", node.workdir.is_some()),

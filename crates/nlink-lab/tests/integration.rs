@@ -1898,6 +1898,67 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
     lab.destroy().await.expect("destroy failed");
 }
 
+// Issue #66: `cpu` / `memory` on a namespace node become a cgroup v2
+// subtree holding its background processes; destroy removes it.
+#[tokio::test]
+async fn namespace_node_cpu_memory_limits_apply_via_cgroups() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping namespace_node_cpu_memory_limits_apply_via_cgroups: requires root");
+        return;
+    }
+    if !nlink_lab::cgroup::available() {
+        eprintln!("skipping: no cgroup v2");
+        return;
+    }
+    let src = r#"lab "cg"
+node a { cpu 0.5  memory 64m  run ["sleep", "1000"] background }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let dir = nlink_lab::cgroup::node_dir("cg", "a");
+    let usage = nlink_lab::cgroup::usage("cg", "a");
+    if !dir.is_dir() {
+        // read-only hierarchy (unprivileged container): limits are best effort
+        eprintln!(
+            "skipping assertions: cgroup dir not created ({})",
+            dir.display()
+        );
+    } else {
+        let pid = *lab.exec_pids().get("a:0").unwrap();
+        let procs = std::fs::read_to_string(dir.join("cgroup.procs")).unwrap();
+        assert!(
+            procs.lines().any(|l| l.trim() == pid.to_string()),
+            "pid {pid} not in {procs}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("memory.max"))
+                .unwrap()
+                .trim(),
+            "67108864"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("cpu.max")).unwrap().trim(),
+            "50000 100000"
+        );
+        let u = usage.expect("usage readable");
+        assert_eq!(u.pids, 1);
+        assert_eq!(u.memory_max, Some(67108864));
+        // a manual spawn joins the same cgroup
+        let spawned = lab.spawn_with_logs("a", &["sleep", "999"], None).unwrap();
+        let procs = std::fs::read_to_string(dir.join("cgroup.procs")).unwrap();
+        assert!(
+            procs.lines().any(|l| l.trim() == spawned.to_string()),
+            "{procs}"
+        );
+    }
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+    assert!(!dir.exists(), "cgroup {} survived destroy", dir.display());
+}
+
 // Issue #83: a VRF-table route removed from the topology must be
 // deleted on apply. nlink's purge only converges the main table, so the
 // engine owns non-main-table routes as explicit ops.

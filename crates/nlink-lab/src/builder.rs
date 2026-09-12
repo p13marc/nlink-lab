@@ -210,7 +210,7 @@ impl NodeBuilder {
 
     /// Set the profile to inherit from.
     pub fn profile(mut self, name: &str) -> Self {
-        self.node.profile = Some(name.to_string());
+        self.node.profiles.push(name.to_string());
         self
     }
 
@@ -860,7 +860,7 @@ mod tests {
         assert_eq!(topo.profiles.len(), 1);
         assert_eq!(topo.profiles["router"].sysctls["net.ipv4.ip_forward"], "1");
         assert_eq!(topo.nodes.len(), 2);
-        assert_eq!(topo.nodes["r1"].profile.as_deref(), Some("router"));
+        assert_eq!(topo.nodes["r1"].profiles, vec!["router"]);
         assert_eq!(
             topo.nodes["r1"].interfaces["lo"].addresses,
             vec!["10.255.0.1/32"]
@@ -1142,8 +1142,8 @@ impair router:eth0 delay 10ms jitter 2ms
         );
         assert_eq!(built.nodes.len(), parsed.nodes.len());
         assert_eq!(
-            built.nodes["router"].profile,
-            parsed.nodes["router"].profile
+            built.nodes["router"].profiles,
+            parsed.nodes["router"].profiles
         );
         assert_eq!(built.links.len(), parsed.links.len());
         assert_eq!(built.links[0].endpoints, parsed.links[0].endpoints);

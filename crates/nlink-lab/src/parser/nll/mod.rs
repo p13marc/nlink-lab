@@ -62,22 +62,28 @@ pub fn parse_file_with_params(
 
 /// Parse an NLL string, producing rich diagnostics with source context on error.
 pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
-    match parse(input) {
-        Ok(topo) => Ok(topo),
-        Err(crate::Error::NllParse(msg)) => {
+    parse(input).map_err(|e| attach_source(e, input, filename))
+}
+
+/// Turn a bare `NllParse` error into an `NllDiagnostic` carrying the
+/// source it was raised against, so miette points at the right file —
+/// an error inside an imported module is attributed to that module,
+/// not to the importing file. Errors that already carry a source (or
+/// are not parse errors) pass through unchanged.
+pub(crate) fn attach_source(err: crate::Error, input: &str, filename: &str) -> crate::Error {
+    match err {
+        crate::Error::NllParse(msg) => {
             let span = extract_span(&msg, input);
             let clean_msg = msg.split(" [at byte ").next().unwrap_or(&msg).to_string();
-            Err(crate::Error::NllDiagnostic(Box::new(
-                crate::error::NllDiagnostic {
-                    message: clean_msg,
-                    src: miette::NamedSource::new(filename, input.to_string()),
-                    span: span.into(),
-                    label: "here".to_string(),
-                    help: None,
-                },
-            )))
+            crate::Error::NllDiagnostic(Box::new(crate::error::NllDiagnostic {
+                message: clean_msg,
+                src: miette::NamedSource::new(filename, input.to_string()),
+                span: span.into(),
+                label: "here".to_string(),
+                help: None,
+            }))
         }
-        Err(e) => Err(e),
+        other => other,
     }
 }
 

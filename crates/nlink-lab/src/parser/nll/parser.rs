@@ -233,6 +233,50 @@ fn expect_string(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     }
 }
 
+/// Parse an integer literal and check it against an inclusive range,
+/// reporting the offending value with its span. Every integer that is
+/// narrowed into a kernel-facing field (ports, VLAN ids, VNIs, MTUs,
+/// prefix lengths, …) goes through here instead of an `as` cast, so
+/// `vlan 65636` is an error rather than silently wrapping to 100.
+fn expect_int_range(
+    tokens: &[Spanned],
+    pos: &mut usize,
+    what: &str,
+    lo: i64,
+    hi: i64,
+) -> Result<i64> {
+    let at = *pos;
+    let v = expect_int(tokens, pos)?;
+    if v < lo || v > hi {
+        return Err(err(
+            tokens,
+            at,
+            format!("{what} must be between {lo} and {hi}, got {v}"),
+        ));
+    }
+    Ok(v)
+}
+
+/// [`expect_int_range`] for `u16`-sized fields (ports).
+fn expect_port(tokens: &[Spanned], pos: &mut usize, what: &str) -> Result<u16> {
+    Ok(expect_int_range(tokens, pos, what, 1, u16::MAX as i64)? as u16)
+}
+
+/// [`expect_int_range`] for 802.1Q VLAN ids.
+fn expect_vlan_id(tokens: &[Spanned], pos: &mut usize, what: &str) -> Result<u16> {
+    Ok(expect_int_range(tokens, pos, what, 1, 4094)? as u16)
+}
+
+/// [`expect_int_range`] for MTUs (IPv4 minimum 68, kernel maximum 65535).
+fn expect_mtu(tokens: &[Spanned], pos: &mut usize) -> Result<u32> {
+    Ok(expect_int_range(tokens, pos, "mtu", 68, u16::MAX as i64)? as u32)
+}
+
+/// [`expect_int_range`] for non-negative `u32` fields.
+fn expect_u32(tokens: &[Spanned], pos: &mut usize, what: &str, lo: i64) -> Result<u32> {
+    Ok(expect_int_range(tokens, pos, what, lo, u32::MAX as i64)? as u32)
+}
+
 fn expect_int(tokens: &[Spanned], pos: &mut usize) -> Result<i64> {
     if *pos >= tokens.len() {
         return Err(err(
@@ -1096,7 +1140,7 @@ fn parse_route_defs(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Rout
                 dev = Some(parse_name(tokens, pos)?);
             } else if check_kw(tokens, *pos, "metric") {
                 *pos += 1;
-                metric = Some(expect_int(tokens, pos)? as u32);
+                metric = Some(expect_u32(tokens, pos, "metric", 0)?);
             } else {
                 break;
             }
@@ -1139,7 +1183,7 @@ fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef>
             dev = Some(parse_name(tokens, pos)?);
         } else if check_kw(tokens, *pos, "metric") {
             *pos += 1;
-            metric = Some(expect_int(tokens, pos)? as u32);
+            metric = Some(expect_u32(tokens, pos, "metric", 0)?);
         } else {
             break;
         }
@@ -1182,6 +1226,13 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                     (*start..=*end).map(|i| i.to_string()).collect::<Vec<_>>()
                 }
                 ast::ForRange::List(items) => items.clone(),
+                ast::ForRange::DynRange { .. } => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "for loops inside a nat block need literal bounds (`${…}` bounds are expanded during lowering, which nat blocks do not go through yet)".into(),
+                    ));
+                }
             };
             for val in &values {
                 for rule in &inner.rules {
@@ -1223,7 +1274,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             let target = parse_cidr_or_name(tokens, pos)?;
             // Optional :port (only if Colon follows, not already consumed by CIDR)
             let target_port = if eat(tokens, pos, &Token::Colon) {
-                Some(expect_int(tokens, pos)? as u16)
+                Some(expect_port(tokens, pos, "port")?)
             } else {
                 None
             };
@@ -1462,9 +1513,9 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
 // ─── VRF ──────────────────────────────────────────────────
 
 fn parse_vrf_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VrfDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
     expect_kw(tokens, pos, "table")?;
-    let table = expect_int(tokens, pos)? as u32;
+    let table = expect_u32(tokens, pos, "vrf table", 1)?;
 
     let mut interfaces = Vec::new();
     let mut routes = Vec::new();
@@ -1510,7 +1561,7 @@ fn parse_vrf_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VrfDef> {
 // ─── WireGuard ────────────────────────────────────────────
 
 fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WireguardDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
 
     let mut key = None;
     let mut listen_port = None;
@@ -1527,9 +1578,9 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
         if eat_kw(tokens, pos, "key") {
             key = Some(parse_value(tokens, pos)?);
         } else if eat_kw(tokens, pos, "listen") {
-            listen_port = Some(expect_int(tokens, pos)? as u16);
+            listen_port = Some(expect_port(tokens, pos, "listen port")?);
         } else if eat_kw(tokens, pos, "fwmark") {
-            fwmark = Some(expect_int(tokens, pos)? as u32);
+            fwmark = Some(expect_u32(tokens, pos, "fwmark", 0)?);
         } else if eat_kw(tokens, pos, "address") {
             addresses.push(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "peers") {
@@ -1567,7 +1618,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
 // ─── VXLAN ────────────────────────────────────────────────
 
 fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
 
     let mut vni = 0;
     let mut local = None;
@@ -1583,13 +1634,13 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
             break;
         }
         if eat_kw(tokens, pos, "vni") {
-            vni = expect_int(tokens, pos)? as u32;
+            vni = expect_int_range(tokens, pos, "vni", 1, 16_777_215)? as u32;
         } else if eat_kw(tokens, pos, "local") {
             local = Some(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "remote") {
             remote = Some(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "port") {
-            port = Some(expect_int(tokens, pos)? as u16);
+            port = Some(expect_port(tokens, pos, "port")?);
         } else if eat_kw(tokens, pos, "underlay") {
             // Device name, not a CIDR.
             underlay = Some(expect_ident(tokens, pos)?);
@@ -1629,7 +1680,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
 // ─── Dummy ────────────────────────────────────────────────
 
 fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
     let mut addresses = Vec::new();
 
     if eat(tokens, pos, &Token::LBrace) {
@@ -1668,7 +1719,7 @@ fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef>
 
 // macvlan IDENT parent STRING (mode IDENT)? block?
 fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::MacvlanDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
     expect_kw(tokens, pos, "parent")?;
     let parent = parse_value(tokens, pos)?;
     let mut mode = None;
@@ -1727,7 +1778,7 @@ fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Macvlan
 
 // ipvlan IDENT parent STRING (mode IDENT)? block?
 fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
     expect_kw(tokens, pos, "parent")?;
     let parent = parse_value(tokens, pos)?;
     let mut mode = None;
@@ -1785,7 +1836,7 @@ fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDe
 
 // wifi IDENT mode (ap|station|mesh) block?
 fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
-    let name = expect_ident(tokens, pos)?;
+    let name = parse_name(tokens, pos)?;
 
     // Expect "mode" as a context-sensitive ident
     if !check_kw(tokens, *pos, "mode") {
@@ -1822,7 +1873,7 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
                 ssid = Some(expect_string(tokens, pos)?);
             } else if check_kw(tokens, *pos, "channel") {
                 *pos += 1;
-                channel = Some(expect_int(tokens, pos)? as u32);
+                channel = Some(expect_int_range(tokens, pos, "channel", 1, 233)? as u32);
             } else if eat_kw(tokens, pos, "wpa2") {
                 passphrase = Some(expect_string(tokens, pos)?);
             } else if eat_kw(tokens, pos, "mesh-id") {
@@ -1941,10 +1992,18 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 | Some(Token::Interp(_))
                 | Some(Token::Int(_)) => {
                     let first_addr = parse_cidr_or_name(tokens, pos)?;
-                    expect(tokens, pos, &Token::DashDash)?;
-                    let right_addr = parse_cidr_or_name(tokens, pos)?;
-                    link.left_addr = Some(first_addr);
-                    link.right_addr = Some(right_addr);
+                    if eat(tokens, pos, &Token::DashDash) {
+                        let right_addr = parse_cidr_or_name(tokens, pos)?;
+                        link.left_addr = Some(first_addr);
+                        link.right_addr = Some(right_addr);
+                    } else if matches!(at(tokens, *pos), Some(Token::Newline) | Some(Token::RBrace))
+                    {
+                        // A lone CIDR is shorthand for `subnet <cidr>`:
+                        // `{ 10.0.0.0/30 }` → .1 and .2.
+                        link.subnet = Some(first_addr);
+                    } else {
+                        expect(tokens, pos, &Token::DashDash)?;
+                    }
                 }
                 // Subnet auto-assignment: subnet 10.0.0.0/30
                 Some(Token::Ident(s)) if s == "subnet" => {
@@ -1954,7 +2013,7 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 // MTU
                 Some(Token::Ident(s)) if s == "mtu" => {
                     *pos += 1;
-                    link.mtu = Some(expect_int(tokens, pos)? as u32);
+                    link.mtu = Some(expect_mtu(tokens, pos)?);
                 }
                 // Pool reference
                 Some(Token::Pool) => {
@@ -1964,26 +2023,38 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 // Directional impairment ->
                 Some(Token::ArrowRight) => {
                     *pos += 1;
-                    link.left_impair = Some(parse_impair_props(tokens, pos)?);
+                    let parsed = parse_impair_props(tokens, pos)?;
+                    link.left_impair
+                        .get_or_insert_with(Default::default)
+                        .merge(parsed);
                 }
                 // Directional impairment <-
                 Some(Token::ArrowLeft) => {
                     *pos += 1;
-                    link.right_impair = Some(parse_impair_props(tokens, pos)?);
+                    let parsed = parse_impair_props(tokens, pos)?;
+                    link.right_impair
+                        .get_or_insert_with(Default::default)
+                        .merge(parsed);
                 }
                 // Rate
                 Some(Token::Rate) => {
                     *pos += 1;
-                    link.rate = Some(parse_rate_props(tokens, pos)?);
+                    let parsed = parse_rate_props(tokens, pos)?;
+                    link.rate.get_or_insert_with(Default::default).merge(parsed);
                 }
-                // Symmetric impairment (delay, jitter, loss, corrupt, reorder)
+                // Symmetric impairment (delay, jitter, loss, corrupt, reorder).
+                // Properties may be spread over several lines; each line
+                // is merged into the accumulated set (issue #16).
                 Some(Token::Ident(s))
                     if matches!(
                         s.as_str(),
                         "delay" | "jitter" | "loss" | "corrupt" | "reorder"
                     ) =>
                 {
-                    link.impairment = Some(parse_impair_props(tokens, pos)?);
+                    let parsed = parse_impair_props(tokens, pos)?;
+                    link.impairment
+                        .get_or_insert_with(Default::default)
+                        .merge(parsed);
                 }
                 Some(other) => {
                     return Err(err(
@@ -2092,9 +2163,9 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
         } else if eat_kw(tokens, pos, "subnet") {
             net.subnet = Some(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "mtu") {
-            net.mtu = Some(expect_int(tokens, pos)? as u32);
+            net.mtu = Some(expect_mtu(tokens, pos)?);
         } else if eat_kw(tokens, pos, "vlan") {
-            let id = expect_int(tokens, pos)? as u16;
+            let id = expect_vlan_id(tokens, pos, "vlan id")?;
             let vlan_name = match at(tokens, *pos) {
                 Some(Token::String(_)) => Some(expect_string(tokens, pos)?),
                 _ => None,
@@ -2104,7 +2175,15 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
                 name: vlan_name,
             });
         } else if eat_kw(tokens, pos, "port") {
-            let endpoint = parse_name(tokens, pos)?;
+            // `port <node> { … }` or `port <node>:<iface> { … }` — the
+            // bare form is resolved to the node's member interface in
+            // lowering; the explicit form disambiguates a node that
+            // has several interfaces on the same network.
+            let mut endpoint = parse_name(tokens, pos)?;
+            if eat(tokens, pos, &Token::Colon) {
+                let iface = parse_name(tokens, pos)?;
+                endpoint = format!("{endpoint}:{iface}");
+            }
             let port_def = parse_port_block(tokens, pos, endpoint)?;
             net.ports.push(port_def);
         } else if eat(tokens, pos, &Token::Impair) {
@@ -2227,6 +2306,13 @@ fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Net
     let values: Vec<String> = match &range {
         ast::ForRange::IntRange { start, end } => (*start..=*end).map(|i| i.to_string()).collect(),
         ast::ForRange::List(items) => items.clone(),
+        ast::ForRange::DynRange { .. } => {
+            return Err(err(
+                tokens,
+                *pos,
+                "for loops inside a network block need literal bounds (`${…}` bounds are expanded during lowering, which network blocks do not go through yet)".into(),
+            ));
+        }
     };
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -2314,7 +2400,7 @@ fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Re
         }
 
         if eat_kw(tokens, pos, "pvid") {
-            port.pvid = Some(expect_int(tokens, pos)? as u16);
+            port.pvid = Some(expect_vlan_id(tokens, pos, "pvid")?);
         } else if eat_kw(tokens, pos, "vlans") {
             port.vlans = parse_int_list(tokens, pos)?;
         } else if eat_kw(tokens, pos, "tagged") {
@@ -2422,23 +2508,49 @@ fn parse_defaults(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DefaultsDe
         }
 
         match (&kind, at(tokens, *pos)) {
-            (ast::DefaultsKind::Link, Some(Token::Ident(s))) if s == "mtu" => {
+            (ast::DefaultsKind::Link, Some(Token::Ident(s)))
+            | (ast::DefaultsKind::Named(_), Some(Token::Ident(s)))
+                if s == "mtu" =>
+            {
                 *pos += 1;
-                def.mtu = Some(expect_int(tokens, pos)? as u32);
+                def.mtu = Some(expect_mtu(tokens, pos)?);
             }
-            (ast::DefaultsKind::Impair, _) => {
-                def.impair = Some(parse_impair_props(tokens, pos)?);
+            // `parse_impair_props` / `parse_rate_props` return without
+            // consuming anything when the current token is not one of
+            // their properties, so an unknown item (or EOF) must be
+            // turned into an error here — otherwise the loop spins
+            // forever (issue #13).
+            (ast::DefaultsKind::Impair, Some(_)) | (ast::DefaultsKind::Named(_), Some(_)) => {
+                let before = *pos;
+                let parsed = parse_impair_props(tokens, pos)?;
+                if *pos == before {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!(
+                            "unexpected {} in defaults block (expected delay, jitter, loss, rate, corrupt or reorder)",
+                            tokens[*pos].token
+                        ),
+                    ));
+                }
+                def.impair
+                    .get_or_insert_with(Default::default)
+                    .merge(parsed);
             }
-            (ast::DefaultsKind::Rate, _) => {
-                def.rate = Some(parse_rate_props(tokens, pos)?);
-            }
-            (ast::DefaultsKind::Named(_), Some(Token::Ident(s))) if s == "mtu" => {
-                *pos += 1;
-                def.mtu = Some(expect_int(tokens, pos)? as u32);
-            }
-            (ast::DefaultsKind::Named(_), _) => {
-                // Named profiles accept impairment properties
-                def.impair = Some(parse_impair_props(tokens, pos)?);
+            (ast::DefaultsKind::Rate, Some(_)) => {
+                let before = *pos;
+                let parsed = parse_rate_props(tokens, pos)?;
+                if *pos == before {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!(
+                            "unexpected {} in defaults block (expected egress, ingress or burst)",
+                            tokens[*pos].token
+                        ),
+                    ));
+                }
+                def.rate.get_or_insert_with(Default::default).merge(parsed);
             }
             (_, Some(other)) => {
                 return Err(err(
@@ -2497,7 +2609,23 @@ fn parse_pattern(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PatternDef>
         } else if eat_kw(tokens, pos, "spokes") {
             spokes = parse_ident_list(tokens, pos)?;
         } else {
-            *pos += 1; // skip unknown
+            // Never skip silently: a typo in `hub`/`spokes` would be
+            // swallowed, and at EOF `*pos += 1` spun forever (issue #13).
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "unexpected {other} in {} block (expected nodes, count, pool, profile, hub or spokes)",
+                        kind_token
+                    ),
+                ),
+                None => err(
+                    tokens,
+                    *pos,
+                    format!("unexpected end of input in {kind_token} block"),
+                ),
+            });
         }
     }
 
@@ -2528,7 +2656,7 @@ fn parse_pool(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PoolDef> {
     let base = parse_cidr_or_name(tokens, pos)?;
     // Parse allocation prefix: /30, /31, /24, etc.
     expect(tokens, pos, &Token::Slash)?;
-    let prefix = expect_int(tokens, pos)? as u8;
+    let prefix = expect_int_range(tokens, pos, "pool prefix length", 0, 128)? as u8;
     Ok(ast::PoolDef { name, base, prefix })
 }
 
@@ -2548,24 +2676,24 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
             break;
         }
         if eat_kw(tokens, pos, "reach") {
-            let from = expect_ident(tokens, pos)?;
-            let to = expect_ident(tokens, pos)?;
+            let from = parse_name(tokens, pos)?;
+            let to = parse_name(tokens, pos)?;
             assertions.push(ast::AssertionDef::Reach { from, to });
         } else if eat_kw(tokens, pos, "no-reach") {
-            let from = expect_ident(tokens, pos)?;
-            let to = expect_ident(tokens, pos)?;
+            let from = parse_name(tokens, pos)?;
+            let to = parse_name(tokens, pos)?;
             assertions.push(ast::AssertionDef::NoReach { from, to });
         } else if eat_kw(tokens, pos, "tcp-connect") {
-            let from = expect_ident(tokens, pos)?;
-            let to = expect_ident(tokens, pos)?;
-            let port = expect_int(tokens, pos)? as u16;
+            let from = parse_name(tokens, pos)?;
+            let to = parse_name(tokens, pos)?;
+            let port = expect_port(tokens, pos, "port")?;
             let timeout = if eat_kw(tokens, pos, "timeout") {
                 Some(expect_duration_or_value(tokens, pos)?)
             } else {
                 None
             };
             let retries = if eat_kw(tokens, pos, "retries") {
-                Some(expect_int(tokens, pos)? as u32)
+                Some(expect_u32(tokens, pos, "retries", 0)?)
             } else {
                 None
             };
@@ -2583,11 +2711,11 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
                 interval,
             });
         } else if eat_kw(tokens, pos, "latency-under") {
-            let from = expect_ident(tokens, pos)?;
-            let to = expect_ident(tokens, pos)?;
+            let from = parse_name(tokens, pos)?;
+            let to = parse_name(tokens, pos)?;
             let max = expect_duration_or_value(tokens, pos)?;
             let samples = if eat_kw(tokens, pos, "samples") {
-                Some(expect_int(tokens, pos)? as u32)
+                Some(expect_u32(tokens, pos, "samples", 1)?)
             } else {
                 None
             };
@@ -2598,7 +2726,7 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
                 samples,
             });
         } else if eat_kw(tokens, pos, "route-has") {
-            let node = expect_ident(tokens, pos)?;
+            let node = parse_name(tokens, pos)?;
             let destination = parse_value(tokens, pos)?;
             let mut via = None;
             let mut dev = None;
@@ -2620,7 +2748,7 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
                 dev,
             });
         } else if eat_kw(tokens, pos, "dns-resolves") {
-            let from = expect_ident(tokens, pos)?;
+            let from = parse_name(tokens, pos)?;
             let name = parse_value(tokens, pos)?;
             let expected_ip = parse_value(tokens, pos)?;
             assertions.push(ast::AssertionDef::DnsResolves {
@@ -2687,7 +2815,7 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
                 let assertions = parse_assertion_block(tokens, pos)?;
                 actions.push(ast::ScenarioActionDef::Validate(assertions));
             } else if eat_kw(tokens, pos, "exec") {
-                let node = expect_ident(tokens, pos)?;
+                let node = parse_name(tokens, pos)?;
                 let mut cmd = Vec::new();
                 while matches!(at(tokens, *pos), Some(Token::String(_))) {
                     cmd.push(expect_string(tokens, pos)?);
@@ -2739,8 +2867,8 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
         }
         if check_kw(tokens, *pos, "iperf3") {
             *pos += 1;
-            let from = expect_ident(tokens, pos)?;
-            let to = expect_ident(tokens, pos)?;
+            let from = parse_name(tokens, pos)?;
+            let to = parse_name(tokens, pos)?;
             let mut duration = None;
             let mut streams = None;
             let mut udp = false;
@@ -2755,7 +2883,7 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                     if eat_kw(tokens, pos, "duration") {
                         duration = Some(expect_duration_or_value(tokens, pos)?);
                     } else if eat_kw(tokens, pos, "streams") {
-                        streams = Some(expect_int(tokens, pos)? as u32);
+                        streams = Some(expect_u32(tokens, pos, "streams", 1)?);
                     } else if eat_kw(tokens, pos, "udp") {
                         udp = true;
                     } else if eat_kw(tokens, pos, "assert") {
@@ -2791,8 +2919,8 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
             });
         } else if check_kw(tokens, *pos, "ping") {
             *pos += 1;
-            let from = expect_ident(tokens, pos)?;
-            let to = expect_ident(tokens, pos)?;
+            let from = parse_name(tokens, pos)?;
+            let to = parse_name(tokens, pos)?;
             let mut count = None;
             let mut assertions = Vec::new();
 
@@ -2803,7 +2931,7 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                         break;
                     }
                     if eat_kw(tokens, pos, "count") {
-                        count = Some(expect_int(tokens, pos)? as u32);
+                        count = Some(expect_u32(tokens, pos, "count", 1)?);
                     } else if eat_kw(tokens, pos, "assert") {
                         assertions.push(parse_benchmark_assertion(tokens, pos)?);
                     } else {
@@ -2863,7 +2991,27 @@ fn parse_benchmark_assertion(
     pos: &mut usize,
 ) -> Result<ast::BenchmarkAssertionDef> {
     let metric = expect_ident(tokens, pos)?;
-    let op = expect_ident(tokens, pos)?;
+    // `above`/`below` words or the comparison operators, which lex as
+    // dedicated tokens (so `render` can emit `>=`/`<=` for Gte/Lte).
+    let op = match at(tokens, *pos) {
+        Some(Token::GtEq) => {
+            *pos += 1;
+            ">=".to_string()
+        }
+        Some(Token::LtEq) => {
+            *pos += 1;
+            "<=".to_string()
+        }
+        Some(Token::Gt) => {
+            *pos += 1;
+            ">".to_string()
+        }
+        Some(Token::Lt) => {
+            *pos += 1;
+            "<".to_string()
+        }
+        _ => expect_ident(tokens, pos)?,
+    };
     let value = parse_value(tokens, pos)?;
     Ok(ast::BenchmarkAssertionDef { metric, op, value })
 }
@@ -2972,11 +3120,30 @@ fn parse_for_range(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForRange>
         }
         Ok(ast::ForRange::List(items))
     } else {
-        // Integer range: for i in 1..4
-        let start = expect_int(tokens, pos)?;
+        // Integer range: for i in 1..4 — either bound may be an
+        // interpolation (`1..${count}`), resolved when the loop expands.
+        // Ok(n) = literal bound, Err(text) = interpolated bound
+        type Bound = std::result::Result<i64, String>;
+        let bound = |tokens: &[Spanned], pos: &mut usize| -> Result<Bound> {
+            match at(tokens, *pos) {
+                Some(Token::Interp(v)) => {
+                    let v = v.clone();
+                    *pos += 1;
+                    Ok(Err(v))
+                }
+                _ => expect_int(tokens, pos).map(Ok),
+            }
+        };
+        let start = bound(tokens, pos)?;
         expect(tokens, pos, &Token::DotDot)?;
-        let end = expect_int(tokens, pos)?;
-        Ok(ast::ForRange::IntRange { start, end })
+        let end = bound(tokens, pos)?;
+        Ok(match (start, end) {
+            (Ok(start), Ok(end)) => ast::ForRange::IntRange { start, end },
+            (start, end) => ast::ForRange::DynRange {
+                start: start.map_or_else(|s| s, |n| n.to_string()),
+                end: end.map_or_else(|s| s, |n| n.to_string()),
+            },
+        })
     }
 }
 
@@ -3123,7 +3290,7 @@ fn parse_int_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<u16>> {
                 break;
             }
         }
-        items.push(expect_int(tokens, pos)? as u16);
+        items.push(expect_vlan_id(tokens, pos, "vlan id")?);
     }
 
     Ok(items)

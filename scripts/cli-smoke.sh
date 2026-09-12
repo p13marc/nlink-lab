@@ -28,6 +28,12 @@ say "== known-bad inputs must fail fast (exit 1, never hang)"
 printf 'lab "t"\nnode a\nnode a\n' > "$tmp/bad1.nll"
 printf 'lab "t"\nnode a\nlink a:eth0 -- ghost:eth0\n' > "$tmp/bad2.nll"
 printf 'lab "t"\nnode a {\n' > "$tmp/bad3.nll"
+# these two used to hang the parser forever (#13)
+printf 'lab "t"\nnode a\ndefaults impair { bogus }\n' > "$tmp/bad4.nll"
+printf 'lab "t"\nnode a\nmesh m {\n' > "$tmp/bad5.nll"
+# 2001:db8::1 must lex as IPv6 (#14) and multi-line props must merge (#16)
+printf 'lab "t"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {\n  2001:db8::1/64 -- 2001:db8::2/64\n  delay 10ms\n  loss 1%%\n}\n' > "$tmp/good1.nll"
+timeout 10 "$bin" render "$tmp/good1.nll" | grep -q 'delay 10ms loss 1%' || { say "FAIL: multi-line impairment not merged / IPv6 not lexed"; fail=1; }
 for f in "$tmp"/bad*.nll; do
   set +e; timeout 10 "$bin" validate "$f" >/dev/null 2>&1; rc=$?; set -e
   case $rc in

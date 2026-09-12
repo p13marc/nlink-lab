@@ -92,14 +92,22 @@ fn lower_with_base_dir_and_params(
             }
         }
     } else {
-        // Without CLI params, check that no required params are missing
+        // Without CLI params every declared param must carry a default;
+        // this used to leave `${name}` unresolved and only fail later
+        // (or not at all) instead of naming the missing parameter.
         for stmt in &file.statements {
-            if let ast::Statement::Param(p) = stmt
-                && let Some(ref default) = p.default
-            {
-                ctx.variables.insert(p.name.clone(), default.clone());
-                // If no default and no CLI value, it will fail during interpolation
-                // (unresolved variable) — which gives a decent error message.
+            if let ast::Statement::Param(p) = stmt {
+                match &p.default {
+                    Some(default) => {
+                        ctx.variables.insert(p.name.clone(), default.clone());
+                    }
+                    None => {
+                        return Err(crate::Error::NllParse(format!(
+                            "required parameter '{}' not provided (use --set {}=<value>)",
+                            p.name, p.name
+                        )));
+                    }
+                }
             }
         }
     }
@@ -118,21 +126,52 @@ fn lower_with_base_dir_and_params(
                 }
             },
             ast::Statement::Pool(p) => {
-                if let Ok((ip, prefix)) = crate::helpers::parse_cidr(&p.base)
-                    && let std::net::IpAddr::V4(v4) = ip
-                {
-                    let base = u32::from(v4);
-                    let pool_size = 1u32.checked_shl(32 - prefix as u32).unwrap_or(0);
-                    ctx.pools.insert(
-                        p.name.clone(),
-                        PoolState {
-                            base,
-                            pool_size,
-                            alloc_prefix: p.prefix,
-                            next_offset: 0,
-                        },
-                    );
+                let (ip, prefix) = crate::helpers::parse_cidr(&p.base).map_err(|e| {
+                    crate::Error::NllParse(format!(
+                        "pool '{}': invalid base '{}': {e}",
+                        p.name, p.base
+                    ))
+                })?;
+                let std::net::IpAddr::V4(v4) = ip else {
+                    return Err(crate::Error::NllParse(format!(
+                        "pool '{}': only IPv4 pools are supported (got '{}')",
+                        p.name, p.base
+                    )));
+                };
+                if p.prefix > 32 || p.prefix < prefix {
+                    return Err(crate::Error::NllParse(format!(
+                        "pool '{}': allocation prefix /{} must be between the pool prefix /{prefix} and /32",
+                        p.name, p.prefix
+                    )));
                 }
+                // Mask to the network address so `pool p 10.0.0.5/8 /30`
+                // allocates from 10.0.0.0.
+                let base = if prefix == 0 {
+                    0
+                } else {
+                    u32::from(v4) & (u32::MAX << (32 - prefix as u32))
+                };
+                // A /0 pool has 2^32 addresses, which does not fit u32;
+                // saturate — no lab will exhaust it.
+                let pool_size = 1u64
+                    .checked_shl(32 - prefix as u32)
+                    .map(|n| n.min(u32::MAX as u64) as u32)
+                    .unwrap_or(u32::MAX);
+                if ctx.pools.contains_key(&p.name) {
+                    return Err(crate::Error::NllParse(format!(
+                        "duplicate pool name '{}'",
+                        p.name
+                    )));
+                }
+                ctx.pools.insert(
+                    p.name.clone(),
+                    PoolState {
+                        base,
+                        pool_size,
+                        alloc_prefix: p.prefix,
+                        next_offset: 0,
+                    },
+                );
             }
             _ => {}
         }
@@ -157,7 +196,7 @@ fn lower_with_base_dir_and_params(
 
     // Third pass: lower to Topology
     let mut topology = types::Topology::default();
-    topology.lab = lower_lab(&file.lab);
+    topology.lab = lower_lab(&file.lab)?;
 
     // Resolve imports before lowering statements
     if !file.imports.is_empty() {
@@ -177,11 +216,11 @@ fn lower_with_base_dir_and_params(
     for stmt in &expanded {
         match stmt {
             ast::Statement::Node(n) => lower_node(&mut topology, n, &mut ctx)?,
-            ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx),
+            ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx)?,
             ast::Statement::Network(n) => lower_network(&mut topology, n)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
-            ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx),
+            ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx)?,
             ast::Statement::Validate(v) => {
                 for a in &v.assertions {
                     match a {
@@ -258,70 +297,16 @@ fn lower_with_base_dir_and_params(
                 topology.scenarios.push(lower_scenario(s)?);
             }
             ast::Statement::Benchmark(b) => {
-                topology.benchmarks.push(lower_benchmark(b));
+                topology.benchmarks.push(lower_benchmark(b)?);
             }
-            ast::Statement::Site(s) => {
-                // Expand site: prefix all node/link names and re-lower
-                let prefix = format!("{}-", s.name);
-                for inner in &s.body {
-                    match inner {
-                        ast::Statement::Node(n) => {
-                            let mut prefixed = n.clone();
-                            prefixed.name = format!("{}{}", prefix, n.name);
-                            lower_node(&mut topology, &prefixed, &mut ctx)?;
-                        }
-                        ast::Statement::Link(l) => {
-                            let mut prefixed = l.clone();
-                            prefixed.left_node = format!("{}{}", prefix, l.left_node);
-                            prefixed.right_node = format!("{}{}", prefix, l.right_node);
-                            lower_link(&mut topology, &prefixed, &mut ctx);
-                        }
-                        ast::Statement::Network(n) => {
-                            let mut prefixed = n.clone();
-                            prefixed.name = format!("{}{}", prefix, n.name);
-                            // Prefix member endpoints
-                            prefixed.members = n
-                                .members
-                                .iter()
-                                .map(|m| {
-                                    if let Some((node, iface)) = m.split_once(':') {
-                                        format!("{}{}:{}", prefix, node, iface)
-                                    } else {
-                                        format!("{}{}", prefix, m)
-                                    }
-                                })
-                                .collect();
-                            lower_network(&mut topology, &prefixed)?;
-                        }
-                        _ => {} // Other statements inside sites ignored for now
-                    }
-                }
-            }
-            ast::Statement::If(if_def) => {
-                // Evaluate condition with current variables
-                let resolved_cond = interpolate(&if_def.condition, &ctx.variables);
-                if eval_condition(&resolved_cond, &ctx.variables) {
-                    // Recursively lower the body statements
-                    // (push them onto a queue to process)
-                    for inner in &if_def.body {
-                        match inner {
-                            ast::Statement::Node(n) => {
-                                lower_node(&mut topology, n, &mut ctx)?;
-                            }
-                            ast::Statement::Link(l) => {
-                                lower_link(&mut topology, l, &mut ctx);
-                            }
-                            ast::Statement::Network(n) => {
-                                lower_network(&mut topology, n)?;
-                            }
-                            _ => {} // Other statement types inside if
-                        }
-                    }
-                }
-            }
+            // Handled in the first pass (profiles, defaults, pools,
+            // params) or consumed by `expand_statements` (let / for /
+            // if / site never reach this loop).
             ast::Statement::Profile(_)
             | ast::Statement::Let(_)
             | ast::Statement::For(_)
+            | ast::Statement::If(_)
+            | ast::Statement::Site(_)
             | ast::Statement::Defaults(_)
             | ast::Statement::Param(_)
             | ast::Statement::Pool(_) => {}
@@ -367,8 +352,11 @@ fn resolve_imports(
         let content = std::fs::read_to_string(&import_path).map_err(|e| {
             crate::Error::NllParse(format!("cannot read import '{}': {e}", imp.path))
         })?;
-        let tokens = super::lexer::lex(&content)?;
-        let mut ast = super::parser::parse_tokens(&tokens, &content)?;
+        let import_name = import_path.display().to_string();
+        let tokens = super::lexer::lex(&content)
+            .map_err(|e| super::attach_source(e, &content, &import_name))?;
+        let mut ast = super::parser::parse_tokens(&tokens, &content)
+            .map_err(|e| super::attach_source(e, &content, &import_name))?;
 
         // Resolve parametric import: inject caller params, apply defaults from `param` stmts
         if !imp.params.is_empty()
@@ -381,7 +369,8 @@ fn resolve_imports(
         }
 
         let import_base = import_path.parent().unwrap_or(base_dir);
-        let imported = lower_with_base_dir(&ast, Some(import_base), visited)?;
+        let imported = lower_with_base_dir(&ast, Some(import_base), visited)
+            .map_err(|e| super::attach_source(e, &content, &import_name))?;
 
         // Merge imported topology with alias prefix
         merge_import(topology, &imp.alias, imported);
@@ -446,8 +435,20 @@ fn resolve_import_params(caller_params: &[(String, String)], ast: &mut ast::File
 }
 
 fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topology) {
-    // Merge nodes with prefixed names (use - separator for parser compatibility)
-    for (name, node) in imported.nodes {
+    // Merge nodes with prefixed names (use - separator for parser compatibility).
+    // Profile references are prefixed alongside the profiles themselves so
+    // the validator's dangling-profile check keeps matching.
+    for (name, mut node) in imported.nodes {
+        node.profiles = node
+            .profiles
+            .iter()
+            .map(|p| format!("{alias}-{p}"))
+            .collect();
+        node.depends_on = node
+            .depends_on
+            .into_iter()
+            .map(|d| format!("{alias}-{d}"))
+            .collect();
         main.nodes.insert(format!("{alias}-{name}"), node);
     }
 
@@ -486,6 +487,106 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
     for (name, profile) in imported.profiles {
         main.profiles.insert(format!("{alias}-{name}"), profile);
     }
+
+    // Assertions, scenarios and benchmarks travel with the module too
+    // (they used to be dropped silently), with their node references
+    // prefixed like everything else.
+    let pn = |n: &str| format!("{alias}-{n}");
+    for a in imported.assertions {
+        main.assertions.push(prefix_lowered_assertion(a, &pn));
+    }
+    for mut sc in imported.scenarios {
+        for step in &mut sc.steps {
+            for action in &mut step.actions {
+                match action {
+                    types::ScenarioAction::Down(ep)
+                    | types::ScenarioAction::Up(ep)
+                    | types::ScenarioAction::Clear(ep) => *ep = prefix_endpoint(alias, ep),
+                    types::ScenarioAction::Validate(list) => {
+                        *list = std::mem::take(list)
+                            .into_iter()
+                            .map(|a| prefix_lowered_assertion(a, &pn))
+                            .collect();
+                    }
+                    types::ScenarioAction::Exec { node, .. } => *node = pn(node),
+                    types::ScenarioAction::Log(_) => {}
+                }
+            }
+        }
+        main.scenarios.push(sc);
+    }
+    for mut b in imported.benchmarks {
+        for t in &mut b.tests {
+            match t {
+                types::BenchmarkTest::Iperf3 { from, to, .. }
+                | types::BenchmarkTest::Ping { from, to, .. } => {
+                    *from = pn(from);
+                    *to = pn(to);
+                }
+            }
+        }
+        main.benchmarks.push(b);
+    }
+}
+
+fn prefix_lowered_assertion(a: types::Assertion, pn: &dyn Fn(&str) -> String) -> types::Assertion {
+    use types::Assertion as A;
+    match a {
+        A::Reach { from, to } => A::Reach {
+            from: pn(&from),
+            to: pn(&to),
+        },
+        A::NoReach { from, to } => A::NoReach {
+            from: pn(&from),
+            to: pn(&to),
+        },
+        A::TcpConnect {
+            from,
+            to,
+            port,
+            timeout,
+            retries,
+            interval,
+        } => A::TcpConnect {
+            from: pn(&from),
+            to: pn(&to),
+            port,
+            timeout,
+            retries,
+            interval,
+        },
+        A::LatencyUnder {
+            from,
+            to,
+            max,
+            samples,
+        } => A::LatencyUnder {
+            from: pn(&from),
+            to: pn(&to),
+            max,
+            samples,
+        },
+        A::RouteHas {
+            node,
+            destination,
+            via,
+            dev,
+        } => A::RouteHas {
+            node: pn(&node),
+            destination,
+            via,
+            dev,
+        },
+        A::DnsResolves {
+            from,
+            name,
+            expected_ip,
+        } => A::DnsResolves {
+            from: pn(&from),
+            name,
+            expected_ip,
+        },
+    }
 }
 
 fn prefix_endpoint(alias: &str, endpoint: &str) -> String {
@@ -517,6 +618,17 @@ fn build_address_map(topology: &types::Topology) -> HashMap<String, String> {
                 let ip = addr.split('/').next().unwrap_or(addr);
                 let key = format!("{node_name}:{iface_name}");
                 map.entry(key).or_insert_with(|| ip.to_string());
+            }
+        }
+    }
+    // …and bridge-network port addresses (keys are `node:iface`), so
+    // `${host.eth0}` and `translate` work for members of a `network`.
+    for network in topology.networks.values() {
+        for (endpoint, port) in &network.ports {
+            if let Some(addr) = port.addresses.first() {
+                let ip = addr.split('/').next().unwrap_or(addr);
+                map.entry(endpoint.clone())
+                    .or_insert_with(|| ip.to_string());
             }
         }
     }
@@ -728,13 +840,30 @@ struct PoolState {
 }
 
 impl PoolState {
+    /// Allocate the next `/alloc_prefix` block, returned as a CIDR
+    /// string, or an error when the pool is exhausted.
+    fn allocate_subnet(&mut self, pool_name: &str) -> Result<String> {
+        let subnet_size = 1u64 << (32 - self.alloc_prefix as u32);
+        let next = self.next_offset as u64 + subnet_size;
+        let exhausted = next > self.pool_size as u64
+            || (self.base as u64 + self.next_offset as u64 + subnet_size) > (u32::MAX as u64 + 1);
+        if exhausted {
+            return Err(crate::Error::NllParse(format!(
+                "pool '{pool_name}' exhausted: {} /{} blocks of {} addresses already allocated",
+                self.next_offset as u64 / subnet_size,
+                self.alloc_prefix,
+                self.pool_size
+            )));
+        }
+        let network = self.base + self.next_offset;
+        self.next_offset = next as u32;
+        let ip = std::net::Ipv4Addr::from(network);
+        Ok(format!("{ip}/{}", self.alloc_prefix))
+    }
+
     /// Allocate a single address from the pool (for /32 loopback, etc.)
-    fn allocate(&mut self) -> String {
-        let subnet_size = 1u32.checked_shl(32 - self.alloc_prefix as u32).unwrap_or(1);
-        let addr = self.base + self.next_offset;
-        self.next_offset += subnet_size;
-        let ip = std::net::Ipv4Addr::from(addr);
-        format!("{ip}/{}", self.alloc_prefix)
+    fn allocate(&mut self, pool_name: &str) -> Result<String> {
+        self.allocate_subnet(pool_name)
     }
 }
 
@@ -776,23 +905,56 @@ impl LowerCtx {
     }
 
     fn expand_statements(&self, stmts: &[ast::Statement]) -> Result<Vec<ast::Statement>> {
-        let mut result = Vec::new();
         let mut vars = self.variables.clone();
+        self.expand_into(stmts, &mut vars)
+    }
+
+    /// Expand `for` / `let` / `if` / `site` into a flat list of concrete,
+    /// fully interpolated statements.
+    ///
+    /// Scoping: `let` bindings and loop variables are visible to the
+    /// statements that follow them *inside the same block* and are
+    /// restored to their previous value (or removed) when the block
+    /// ends, so an outer `let i = 99` survives an inner `for i in …`
+    /// and a `let` inside a loop body does not leak past the loop
+    /// (issue #20). `site` blocks are expanded like any other block
+    /// and every resulting statement — nodes, links, networks,
+    /// impairments, assertions, scenarios, benchmarks, patterns — is
+    /// name-prefixed with `<site>-` (issue #18).
+    fn expand_into(
+        &self,
+        stmts: &[ast::Statement],
+        vars: &mut HashMap<String, String>,
+    ) -> Result<Vec<ast::Statement>> {
+        let mut result = Vec::new();
 
         for stmt in stmts {
             match stmt {
                 ast::Statement::For(f) => {
-                    let expanded = self.expand_for(f, &mut vars)?;
-                    result.extend(expanded);
+                    result.extend(self.expand_for(f, vars)?);
                 }
                 ast::Statement::Let(l) => {
-                    // Process variable — may contain interpolation
-                    let value = interpolate(&l.value, &vars);
+                    let value = interpolate(&l.value, vars);
                     vars.insert(l.name.clone(), value);
                 }
+                ast::Statement::If(if_def) => {
+                    let cond = interpolate(&if_def.condition, vars);
+                    if eval_condition(&cond, vars) {
+                        let saved = vars.clone();
+                        let inner = self.expand_into(&if_def.body, vars)?;
+                        *vars = saved;
+                        result.extend(inner);
+                    }
+                }
+                ast::Statement::Site(site) => {
+                    let prefix = format!("{}-", interpolate(&site.name, vars));
+                    let saved = vars.clone();
+                    let inner = self.expand_into(&site.body, vars)?;
+                    *vars = saved;
+                    result.extend(inner.into_iter().map(|st| prefix_statement(st, &prefix)));
+                }
                 other => {
-                    let expanded = interpolate_statement(other, &vars);
-                    result.push(expanded);
+                    result.push(interpolate_statement(other, vars));
                 }
             }
         }
@@ -805,45 +967,245 @@ impl LowerCtx {
         for_loop: &ast::ForLoop,
         vars: &mut HashMap<String, String>,
     ) -> Result<Vec<ast::Statement>> {
+        let values = range_values(&for_loop.range, &for_loop.var, vars)?;
+        let len = values.len();
+        let saved = vars.clone();
         let mut result = Vec::new();
 
-        let values: Vec<String> = match &for_loop.range {
-            ast::ForRange::IntRange { start, end } => {
-                (*start..=*end).map(|i| i.to_string()).collect()
-            }
-            ast::ForRange::List(items) => items.clone(),
-        };
-        let len = values.len();
-
         for (idx, value) in values.iter().enumerate() {
+            // Each iteration starts from the enclosing scope so a `let`
+            // from a previous iteration cannot bleed into the next one.
+            *vars = saved.clone();
             vars.insert(for_loop.var.clone(), value.clone());
             vars.insert("loop.index".into(), idx.to_string());
             vars.insert("loop.first".into(), (idx == 0).to_string());
-            vars.insert("loop.last".into(), (idx == len - 1).to_string());
+            vars.insert("loop.last".into(), (idx + 1 == len).to_string());
+            result.extend(self.expand_into(&for_loop.body, vars)?);
+        }
 
-            for stmt in &for_loop.body {
-                match stmt {
-                    ast::Statement::For(nested) => {
-                        let expanded = self.expand_for(nested, vars)?;
-                        result.extend(expanded);
-                    }
-                    ast::Statement::Let(l) => {
-                        let value = interpolate(&l.value, vars);
-                        vars.insert(l.name.clone(), value);
-                    }
-                    other => {
-                        let expanded = interpolate_statement(other, vars);
-                        result.push(expanded);
+        *vars = saved;
+        Ok(result)
+    }
+}
+
+/// Upper bound on the iterations of one `for` range. A typo such as
+/// `for i in 1..999999999` used to materialise the whole range as a
+/// `Vec<String>` before any check ran (issue #21).
+pub const MAX_LOOP_ITERATIONS: i64 = 100_000;
+
+/// Materialise a `for` range, rejecting empty and oversized ranges.
+/// `DynRange` bounds (`1..${count}`) are interpolated with `vars` first.
+fn range_values(
+    range: &ast::ForRange,
+    var: &str,
+    vars: &HashMap<String, String>,
+) -> Result<Vec<String>> {
+    match range {
+        ast::ForRange::DynRange { start, end } => {
+            let bound = |raw: &str, which: &str| -> Result<i64> {
+                let v = interpolate(raw, vars);
+                v.trim().parse::<i64>().map_err(|_| {
+                    crate::Error::NllParse(format!(
+                        "for loop '{var}': {which} bound '{raw}' resolved to '{v}', which is not an integer"
+                    ))
+                })
+            };
+            let resolved = ast::ForRange::IntRange {
+                start: bound(start, "start")?,
+                end: bound(end, "end")?,
+            };
+            range_values(&resolved, var, vars)
+        }
+        ast::ForRange::IntRange { start, end } => {
+            if end < start {
+                return Err(crate::Error::NllParse(format!(
+                    "for loop '{var}' has empty range {start}..{end}"
+                )));
+            }
+            let n = (*end as i128) - (*start as i128) + 1;
+            if n > MAX_LOOP_ITERATIONS as i128 {
+                return Err(crate::Error::NllParse(format!(
+                    "for loop '{var}' would iterate {n} times; the limit is {MAX_LOOP_ITERATIONS}"
+                )));
+            }
+            Ok((*start..=*end).map(|i| i.to_string()).collect())
+        }
+        ast::ForRange::List(items) => {
+            if items.is_empty() {
+                return Err(crate::Error::NllParse(format!(
+                    "for loop '{var}' has empty list"
+                )));
+            }
+            Ok(items.clone())
+        }
+    }
+}
+
+// ─── Site prefixing ───────────────────────────────────────
+
+/// `node:iface` → `<prefix>node:iface`; bare names are prefixed too.
+fn prefix_ep(prefix: &str, ep: &str) -> String {
+    match ep.split_once(':') {
+        Some((node, iface)) => format!("{prefix}{node}:{iface}"),
+        None => format!("{prefix}{ep}"),
+    }
+}
+
+fn prefix_assertion(a: ast::AssertionDef, prefix: &str) -> ast::AssertionDef {
+    use ast::AssertionDef as A;
+    match a {
+        A::Reach { from, to } => A::Reach {
+            from: format!("{prefix}{from}"),
+            to: format!("{prefix}{to}"),
+        },
+        A::NoReach { from, to } => A::NoReach {
+            from: format!("{prefix}{from}"),
+            to: format!("{prefix}{to}"),
+        },
+        A::TcpConnect {
+            from,
+            to,
+            port,
+            timeout,
+            retries,
+            interval,
+        } => A::TcpConnect {
+            from: format!("{prefix}{from}"),
+            to: format!("{prefix}{to}"),
+            port,
+            timeout,
+            retries,
+            interval,
+        },
+        A::LatencyUnder {
+            from,
+            to,
+            max,
+            samples,
+        } => A::LatencyUnder {
+            from: format!("{prefix}{from}"),
+            to: format!("{prefix}{to}"),
+            max,
+            samples,
+        },
+        A::RouteHas {
+            node,
+            destination,
+            via,
+            dev,
+        } => A::RouteHas {
+            node: format!("{prefix}{node}"),
+            destination,
+            via,
+            dev,
+        },
+        A::DnsResolves {
+            from,
+            name,
+            expected_ip,
+        } => A::DnsResolves {
+            from: format!("{prefix}{from}"),
+            name,
+            expected_ip,
+        },
+    }
+}
+
+/// Apply a `site` prefix to every name a statement introduces or
+/// references. Statements that carry no topology names (profiles,
+/// defaults, pools, params) pass through unchanged.
+fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
+    use ast::Statement as S;
+    match st {
+        S::Node(mut n) => {
+            n.name = format!("{prefix}{}", n.name);
+            n.depends_on = n
+                .depends_on
+                .into_iter()
+                .map(|d| format!("{prefix}{d}"))
+                .collect();
+            S::Node(n)
+        }
+        S::Link(mut l) => {
+            l.left_node = format!("{prefix}{}", l.left_node);
+            l.right_node = format!("{prefix}{}", l.right_node);
+            S::Link(l)
+        }
+        S::Network(mut n) => {
+            n.name = format!("{prefix}{}", n.name);
+            n.members = n.members.iter().map(|m| prefix_ep(prefix, m)).collect();
+            for port in &mut n.ports {
+                port.endpoint = prefix_ep(prefix, &port.endpoint);
+            }
+            for imp in &mut n.impairments {
+                imp.src = prefix_ep(prefix, &imp.src);
+                imp.dst = prefix_ep(prefix, &imp.dst);
+            }
+            S::Network(n)
+        }
+        S::Impair(mut i) => {
+            i.node = format!("{prefix}{}", i.node);
+            S::Impair(i)
+        }
+        S::Rate(mut r) => {
+            r.node = format!("{prefix}{}", r.node);
+            S::Rate(r)
+        }
+        S::Pattern(mut p) => {
+            p.name = format!("{prefix}{}", p.name);
+            S::Pattern(p)
+        }
+        S::Validate(v) => S::Validate(ast::ValidateDef {
+            assertions: v
+                .assertions
+                .into_iter()
+                .map(|a| prefix_assertion(a, prefix))
+                .collect(),
+        }),
+        S::Scenario(mut sc) => {
+            for step in &mut sc.steps {
+                step.actions = std::mem::take(&mut step.actions)
+                    .into_iter()
+                    .map(|a| match a {
+                        ast::ScenarioActionDef::Down(ep) => {
+                            ast::ScenarioActionDef::Down(prefix_ep(prefix, &ep))
+                        }
+                        ast::ScenarioActionDef::Up(ep) => {
+                            ast::ScenarioActionDef::Up(prefix_ep(prefix, &ep))
+                        }
+                        ast::ScenarioActionDef::Clear(ep) => {
+                            ast::ScenarioActionDef::Clear(prefix_ep(prefix, &ep))
+                        }
+                        ast::ScenarioActionDef::Validate(list) => ast::ScenarioActionDef::Validate(
+                            list.into_iter()
+                                .map(|a| prefix_assertion(a, prefix))
+                                .collect(),
+                        ),
+                        ast::ScenarioActionDef::Exec { node, cmd } => {
+                            ast::ScenarioActionDef::Exec {
+                                node: format!("{prefix}{node}"),
+                                cmd,
+                            }
+                        }
+                        other => other,
+                    })
+                    .collect();
+            }
+            S::Scenario(sc)
+        }
+        S::Benchmark(mut b) => {
+            for t in &mut b.tests {
+                match t {
+                    ast::BenchmarkTestDef::Iperf3 { from, to, .. }
+                    | ast::BenchmarkTestDef::Ping { from, to, .. } => {
+                        *from = format!("{prefix}{from}");
+                        *to = format!("{prefix}{to}");
                     }
                 }
             }
+            S::Benchmark(b)
         }
-
-        vars.remove(&for_loop.var);
-        vars.remove("loop.index");
-        vars.remove("loop.first");
-        vars.remove("loop.last");
-        Ok(result)
+        other => other,
     }
 }
 
@@ -1378,10 +1740,102 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) 
         ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
         ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
         ast::Statement::Pool(p) => ast::Statement::Pool(p.clone()),
-        ast::Statement::Pattern(p) => ast::Statement::Pattern(p.clone()),
-        ast::Statement::Validate(v) => ast::Statement::Validate(v.clone()),
-        ast::Statement::Scenario(s) => ast::Statement::Scenario(s.clone()),
-        ast::Statement::Benchmark(b) => ast::Statement::Benchmark(b.clone()),
+        ast::Statement::Pattern(p) => ast::Statement::Pattern(ast::PatternDef {
+            kind: match &p.kind {
+                ast::PatternKind::Star { hub } => ast::PatternKind::Star { hub: i(hub, vars) },
+                other => other.clone(),
+            },
+            name: i(&p.name, vars),
+            nodes: p.nodes.iter().map(|n| i(n, vars)).collect(),
+            count: p.count,
+            pool: io(&p.pool, vars),
+            profile: io(&p.profile, vars),
+        }),
+        ast::Statement::Validate(v) => ast::Statement::Validate(ast::ValidateDef {
+            assertions: v
+                .assertions
+                .iter()
+                .map(|a| interpolate_assertion(a, vars))
+                .collect(),
+        }),
+        ast::Statement::Scenario(sc) => ast::Statement::Scenario(ast::ScenarioDef {
+            name: i(&sc.name, vars),
+            steps: sc
+                .steps
+                .iter()
+                .map(|step| ast::ScenarioStepDef {
+                    time: i(&step.time, vars),
+                    actions: step
+                        .actions
+                        .iter()
+                        .map(|a| match a {
+                            ast::ScenarioActionDef::Down(ep) => {
+                                ast::ScenarioActionDef::Down(i(ep, vars))
+                            }
+                            ast::ScenarioActionDef::Up(ep) => {
+                                ast::ScenarioActionDef::Up(i(ep, vars))
+                            }
+                            ast::ScenarioActionDef::Clear(ep) => {
+                                ast::ScenarioActionDef::Clear(i(ep, vars))
+                            }
+                            ast::ScenarioActionDef::Validate(list) => {
+                                ast::ScenarioActionDef::Validate(
+                                    list.iter()
+                                        .map(|a| interpolate_assertion(a, vars))
+                                        .collect(),
+                                )
+                            }
+                            ast::ScenarioActionDef::Exec { node, cmd } => {
+                                ast::ScenarioActionDef::Exec {
+                                    node: i(node, vars),
+                                    cmd: cmd.iter().map(|c| i(c, vars)).collect(),
+                                }
+                            }
+                            ast::ScenarioActionDef::Log(m) => {
+                                ast::ScenarioActionDef::Log(i(m, vars))
+                            }
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }),
+        ast::Statement::Benchmark(b) => ast::Statement::Benchmark(ast::BenchmarkDef {
+            name: i(&b.name, vars),
+            tests: b
+                .tests
+                .iter()
+                .map(|t| match t {
+                    ast::BenchmarkTestDef::Iperf3 {
+                        from,
+                        to,
+                        duration,
+                        streams,
+                        udp,
+                        assertions,
+                    } => ast::BenchmarkTestDef::Iperf3 {
+                        from: i(from, vars),
+                        to: i(to, vars),
+                        duration: io(duration, vars),
+                        streams: *streams,
+                        udp: *udp,
+                        assertions: assertions.clone(),
+                    },
+                    ast::BenchmarkTestDef::Ping {
+                        from,
+                        to,
+                        count,
+                        assertions,
+                    } => ast::BenchmarkTestDef::Ping {
+                        from: i(from, vars),
+                        to: i(to, vars),
+                        count: *count,
+                        assertions: assertions.clone(),
+                    },
+                })
+                .collect(),
+        }),
+        // Consumed by `expand_into` before interpolation; never reach
+        // this function through that path.
         ast::Statement::Site(s) => ast::Statement::Site(s.clone()),
         ast::Statement::If(f) => ast::Statement::If(f.clone()),
         ast::Statement::Param(p) => ast::Statement::Param(p.clone()),
@@ -1394,6 +1848,69 @@ fn i(s: &str, vars: &HashMap<String, String>) -> String {
     interpolate(s, vars)
 }
 
+fn interpolate_assertion(
+    a: &ast::AssertionDef,
+    vars: &HashMap<String, String>,
+) -> ast::AssertionDef {
+    use ast::AssertionDef as A;
+    match a {
+        A::Reach { from, to } => A::Reach {
+            from: i(from, vars),
+            to: i(to, vars),
+        },
+        A::NoReach { from, to } => A::NoReach {
+            from: i(from, vars),
+            to: i(to, vars),
+        },
+        A::TcpConnect {
+            from,
+            to,
+            port,
+            timeout,
+            retries,
+            interval,
+        } => A::TcpConnect {
+            from: i(from, vars),
+            to: i(to, vars),
+            port: *port,
+            timeout: io(timeout, vars),
+            retries: *retries,
+            interval: io(interval, vars),
+        },
+        A::LatencyUnder {
+            from,
+            to,
+            max,
+            samples,
+        } => A::LatencyUnder {
+            from: i(from, vars),
+            to: i(to, vars),
+            max: i(max, vars),
+            samples: *samples,
+        },
+        A::RouteHas {
+            node,
+            destination,
+            via,
+            dev,
+        } => A::RouteHas {
+            node: i(node, vars),
+            destination: i(destination, vars),
+            via: io(via, vars),
+            dev: io(dev, vars),
+        },
+        A::DnsResolves {
+            from,
+            name,
+            expected_ip,
+        } => A::DnsResolves {
+            from: i(from, vars),
+            name: i(name, vars),
+            expected_ip: i(expected_ip, vars),
+        },
+    }
+}
+
 fn io(s: &Option<String>, vars: &HashMap<String, String>) -> Option<String> {
     s.as_ref().map(|s| interpolate(s, vars))
 }
@@ -1403,24 +1920,27 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
         name: i(&n.name, vars),
         profiles: n.profiles.iter().map(|s| i(s, vars)).collect(),
         image: n.image.as_ref().map(|s| i(s, vars)),
-        cmd: n.cmd.clone(),
+        cmd: n
+            .cmd
+            .as_ref()
+            .map(|c| c.iter().map(|s| i(s, vars)).collect()),
         env: n.env.iter().map(|s| i(s, vars)).collect(),
         volumes: n.volumes.iter().map(|s| i(s, vars)).collect(),
         cpu: io(&n.cpu, vars),
         memory: io(&n.memory, vars),
         privileged: n.privileged,
-        cap_add: n.cap_add.clone(),
-        cap_drop: n.cap_drop.clone(),
+        cap_add: n.cap_add.iter().map(|s| i(s, vars)).collect(),
+        cap_drop: n.cap_drop.iter().map(|s| i(s, vars)).collect(),
         entrypoint: io(&n.entrypoint, vars),
         hostname: io(&n.hostname, vars),
         workdir: io(&n.workdir, vars),
         labels: n.labels.iter().map(|s| i(s, vars)).collect(),
-        pull: n.pull.clone(),
+        pull: io(&n.pull, vars),
         container_exec: n.container_exec.iter().map(|s| i(s, vars)).collect(),
         healthcheck: io(&n.healthcheck, vars),
-        healthcheck_interval: n.healthcheck_interval.clone(),
-        healthcheck_timeout: n.healthcheck_timeout.clone(),
-        startup_delay: n.startup_delay.clone(),
+        healthcheck_interval: io(&n.healthcheck_interval, vars),
+        healthcheck_timeout: io(&n.healthcheck_timeout, vars),
+        startup_delay: io(&n.startup_delay, vars),
         env_file: io(&n.env_file, vars),
         configs: n
             .configs
@@ -1487,12 +2007,31 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
             mode: w.mode.clone(),
             ssid: w.ssid.as_ref().map(|s| i(s, vars)),
             channel: w.channel,
-            passphrase: w.passphrase.clone(),
+            passphrase: io(&w.passphrase, vars),
             mesh_id: w.mesh_id.as_ref().map(|s| i(s, vars)),
             addresses: w.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
-        ast::NodeProp::Run(r) => ast::NodeProp::Run(r.clone()),
-        ast::NodeProp::ForLoop(f) => ast::NodeProp::ForLoop(f.clone()),
+        ast::NodeProp::Run(r) => ast::NodeProp::Run(ast::RunDef {
+            cmd: r.cmd.iter().map(|s| i(s, vars)).collect(),
+            background: r.background,
+        }),
+        // Outer variables are substituted now; the loop's own variable
+        // is unknown here and stays as a literal `${var}` until
+        // `expand_node_props` binds it.
+        ast::NodeProp::ForLoop(f) => ast::NodeProp::ForLoop(ast::PropForLoop {
+            var: f.var.clone(),
+            range: match &f.range {
+                ast::ForRange::List(items) => {
+                    ast::ForRange::List(items.iter().map(|s| i(s, vars)).collect())
+                }
+                ast::ForRange::DynRange { start, end } => ast::ForRange::DynRange {
+                    start: i(start, vars),
+                    end: i(end, vars),
+                },
+                other => other.clone(),
+            },
+            body: f.body.iter().map(|p| interpolate_prop(p, vars)).collect(),
+        }),
     }
 }
 
@@ -1717,35 +2256,54 @@ fn lower_profile(profile: &ast::ProfileDef) -> types::Profile {
     p
 }
 
-fn lower_lab(lab: &ast::LabDecl) -> types::LabConfig {
-    types::LabConfig {
+fn lower_lab(lab: &ast::LabDecl) -> Result<types::LabConfig> {
+    let runtime = match lab.runtime.as_deref() {
+        None => None,
+        Some("auto") => Some(types::ContainerRuntime::Auto),
+        Some("docker") => Some(types::ContainerRuntime::Docker),
+        Some("podman") => Some(types::ContainerRuntime::Podman),
+        Some(other) => {
+            return Err(crate::Error::NllParse(format!(
+                "unknown runtime '{other}' (expected auto, docker or podman)"
+            )));
+        }
+    };
+    let dns = match lab.dns.as_deref() {
+        None | Some("off") => types::DnsMode::Off,
+        Some("hosts") => types::DnsMode::Hosts,
+        Some(other) => {
+            return Err(crate::Error::NllParse(format!(
+                "unknown dns mode '{other}' (expected off or hosts)"
+            )));
+        }
+    };
+    let routing = match lab.routing.as_deref() {
+        None | Some("manual") => types::RoutingMode::Manual,
+        Some("auto") => types::RoutingMode::Auto,
+        Some(other) => {
+            return Err(crate::Error::NllParse(format!(
+                "unknown routing mode '{other}' (expected manual or auto)"
+            )));
+        }
+    };
+    Ok(types::LabConfig {
         name: lab.name.clone(),
         description: lab.description.clone(),
         prefix: lab.prefix.clone(),
-        runtime: lab.runtime.as_deref().map(|s| match s {
-            "docker" => types::ContainerRuntime::Docker,
-            "podman" => types::ContainerRuntime::Podman,
-            _ => types::ContainerRuntime::Auto,
-        }),
+        runtime,
         version: lab.version.clone(),
         author: lab.author.clone(),
         tags: lab.tags.clone(),
         mgmt_subnet: lab.mgmt.clone(),
         mgmt_host_reachable: lab.mgmt_host_reachable,
-        dns: match lab.dns.as_deref() {
-            Some("hosts") => types::DnsMode::Hosts,
-            _ => types::DnsMode::Off,
-        },
-        routing: match lab.routing.as_deref() {
-            Some("auto") => types::RoutingMode::Auto,
-            _ => types::RoutingMode::Manual,
-        },
-    }
+        dns,
+        routing,
+    })
 }
 
 fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCtx) -> Result<()> {
     let mut n = types::Node {
-        profile: node.profiles.first().cloned(),
+        profiles: node.profiles.clone(),
         image: node.image.clone(),
         cmd: node.cmd.clone(),
         cpu: node.cpu.clone(),
@@ -1794,11 +2352,11 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
         .filter_map(|name| ctx.profiles.get(name).map(|p| p.props.clone()))
         .collect();
     for props in &profile_props {
-        apply_node_props(&mut n, props, ctx);
+        apply_node_props(&mut n, props, ctx)?;
     }
 
     // Apply node's own properties (overrides profile)
-    apply_node_props(&mut n, &node.props, ctx);
+    apply_node_props(&mut n, &node.props, ctx)?;
 
     if topo.nodes.contains_key(&node.name) {
         return Err(crate::Error::NllParse(format!(
@@ -1810,8 +2368,57 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
     Ok(())
 }
 
-fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut LowerCtx) {
+/// Flatten `for` loops inside a node/profile block into a plain
+/// property list, binding the loop variable (and `loop.index` /
+/// `loop.first` / `loop.last`) for every iteration and recursing into
+/// nested loops. Every property kind is supported — previously only
+/// `route` and `nat` survived a loop (issue #18).
+fn expand_node_props(
+    props: &[ast::NodeProp],
+    vars: &HashMap<String, String>,
+) -> Result<Vec<ast::NodeProp>> {
+    let mut out = Vec::with_capacity(props.len());
     for prop in props {
+        match prop {
+            ast::NodeProp::ForLoop(f) => {
+                let values = range_values(&f.range, &f.var, vars)?;
+                let len = values.len();
+                for (idx, value) in values.iter().enumerate() {
+                    let mut inner = vars.clone();
+                    inner.insert(f.var.clone(), value.clone());
+                    inner.insert("loop.index".into(), idx.to_string());
+                    inner.insert("loop.first".into(), (idx == 0).to_string());
+                    inner.insert("loop.last".into(), (idx + 1 == len).to_string());
+                    let body: Vec<ast::NodeProp> =
+                        f.body.iter().map(|q| interpolate_prop(q, &inner)).collect();
+                    out.extend(expand_node_props(&body, &inner)?);
+                }
+            }
+            other => out.push(other.clone()),
+        }
+    }
+    Ok(out)
+}
+
+fn lower_nat_action(action: &str) -> Result<types::NatAction> {
+    match action {
+        "masquerade" => Ok(types::NatAction::Masquerade),
+        "snat" => Ok(types::NatAction::Snat),
+        "dnat" => Ok(types::NatAction::Dnat),
+        "translate" => Ok(types::NatAction::Translate),
+        other => Err(crate::Error::NllParse(format!(
+            "unknown NAT action '{other}' (expected masquerade, snat, dnat or translate)"
+        ))),
+    }
+}
+
+fn apply_node_props(
+    node: &mut types::Node,
+    props: &[ast::NodeProp],
+    ctx: &mut LowerCtx,
+) -> Result<()> {
+    let props = expand_node_props(props, &ctx.variables)?;
+    for prop in &props {
         match prop {
             ast::NodeProp::Forward(version) => {
                 let key = match version {
@@ -1828,7 +2435,7 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                 if let Some(pool_name) = addr.strip_prefix("pool:") {
                     // Allocate from pool
                     if let Some(pool) = ctx.pools.get_mut(pool_name) {
-                        let allocated = pool.allocate();
+                        let allocated = pool.allocate(pool_name)?;
                         lo.addresses.push(allocated);
                     } else {
                         tracing::warn!("unknown pool '{pool_name}' for loopback");
@@ -1864,25 +2471,25 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
             }
             ast::NodeProp::Nat(nat) => {
                 let vars = &ctx.variables;
-                node.nat = Some(types::NatConfig {
-                    rules: nat
-                        .rules
-                        .iter()
-                        .map(|r| types::NatRule {
-                            action: match r.action.as_str() {
-                                "masquerade" => types::NatAction::Masquerade,
-                                "snat" => types::NatAction::Snat,
-                                "dnat" => types::NatAction::Dnat,
-                                "translate" => types::NatAction::Translate,
-                                _ => types::NatAction::Masquerade,
-                            },
+                let rules = nat
+                    .rules
+                    .iter()
+                    .map(|r| {
+                        Ok(types::NatRule {
+                            action: lower_nat_action(&r.action)?,
                             src: r.src.as_ref().map(|s| interpolate(s, vars)),
                             dst: r.dst.as_ref().map(|s| interpolate(s, vars)),
                             target: r.target.as_ref().map(|s| interpolate(s, vars)),
                             target_port: r.target_port,
                         })
-                        .collect(),
-                });
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                // Several `nat` blocks (or loop iterations) accumulate
+                // rules instead of the last one replacing the rest.
+                match &mut node.nat {
+                    Some(existing) => existing.rules.extend(rules),
+                    None => node.nat = Some(types::NatConfig { rules }),
+                }
             }
             ast::NodeProp::Vrf(v) => {
                 node.vrfs.insert(
@@ -1949,10 +2556,16 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                     name: m.name.clone(),
                     parent: m.parent.clone(),
                     mode: match m.mode.as_deref() {
+                        None | Some("bridge") => types::MacvlanMode::Bridge,
                         Some("private") => types::MacvlanMode::Private,
                         Some("vepa") => types::MacvlanMode::Vepa,
                         Some("passthru") => types::MacvlanMode::Passthru,
-                        _ => types::MacvlanMode::Bridge,
+                        Some(other) => {
+                            return Err(crate::Error::NllParse(format!(
+                                "unknown macvlan mode '{other}' on '{}' (expected bridge, private, vepa or passthru)",
+                                m.name
+                            )));
+                        }
                     },
                     addresses: m.addresses.clone(),
                 });
@@ -1962,9 +2575,15 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                     name: iv.name.clone(),
                     parent: iv.parent.clone(),
                     mode: match iv.mode.as_deref() {
+                        None | Some("l3") => types::IpvlanMode::L3,
                         Some("l2") => types::IpvlanMode::L2,
                         Some("l3s") => types::IpvlanMode::L3S,
-                        _ => types::IpvlanMode::L3,
+                        Some(other) => {
+                            return Err(crate::Error::NllParse(format!(
+                                "unknown ipvlan mode '{other}' on '{}' (expected l2, l3 or l3s)",
+                                iv.name
+                            )));
+                        }
                     },
                     addresses: iv.addresses.clone(),
                 });
@@ -1976,7 +2595,12 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                         "ap" => types::WifiMode::Ap,
                         "station" => types::WifiMode::Station,
                         "mesh" => types::WifiMode::Mesh,
-                        _ => types::WifiMode::Station,
+                        other => {
+                            return Err(crate::Error::NllParse(format!(
+                                "unknown wifi mode '{other}' on '{}' (expected ap, station or mesh)",
+                                w.name
+                            )));
+                        }
                     },
                     ssid: w.ssid.clone(),
                     channel: w.channel,
@@ -1991,66 +2615,14 @@ fn apply_node_props(node: &mut types::Node, props: &[ast::NodeProp], ctx: &mut L
                     background: r.background,
                 });
             }
-            ast::NodeProp::ForLoop(f) => {
-                // Expand the for loop: for each value, interpolate and process props
-                let values = expand_range(&f.range);
-                for val in &values {
-                    let mut vars = std::collections::HashMap::new();
-                    vars.insert(f.var.clone(), val.clone());
-                    for inner_prop in &f.body {
-                        let expanded = interpolate_prop(inner_prop, &vars);
-                        // Recursively process the expanded prop (handles nested for loops too)
-                        // We need to call the same match logic, so use a small vec and re-iterate
-                        match &expanded {
-                            ast::NodeProp::Route(r) => {
-                                node.routes.insert(
-                                    r.destination.clone(),
-                                    types::RouteConfig {
-                                        via: r.via.clone(),
-                                        dev: r.dev.clone(),
-                                        metric: r.metric,
-                                    },
-                                );
-                            }
-                            ast::NodeProp::Nat(nat) => {
-                                let vars = &ctx.variables;
-                                node.nat = Some(types::NatConfig {
-                                    rules: nat
-                                        .rules
-                                        .iter()
-                                        .map(|r| types::NatRule {
-                                            action: match r.action.as_str() {
-                                                "masquerade" => types::NatAction::Masquerade,
-                                                "snat" => types::NatAction::Snat,
-                                                "dnat" => types::NatAction::Dnat,
-                                                _ => types::NatAction::Masquerade,
-                                            },
-                                            src: r.src.as_ref().map(|s| interpolate(s, vars)),
-                                            dst: r.dst.as_ref().map(|s| interpolate(s, vars)),
-                                            target: r.target.as_ref().map(|s| interpolate(s, vars)),
-                                            target_port: r.target_port,
-                                        })
-                                        .collect(),
-                                });
-                            }
-                            // For other prop types, just ignore in for-loop context
-                            _ => {}
-                        }
-                    }
-                }
-            }
+            // Flattened by `expand_node_props` above.
+            ast::NodeProp::ForLoop(_) => {}
         }
     }
+    Ok(())
 }
 
 /// Expand a ForRange into a list of string values.
-fn expand_range(range: &ast::ForRange) -> Vec<String> {
-    match range {
-        ast::ForRange::IntRange { start, end } => (*start..=*end).map(|i| i.to_string()).collect(),
-        ast::ForRange::List(items) => items.clone(),
-    }
-}
-
 /// Split a subnet CIDR into two endpoint addresses.
 ///
 /// - `/31`: `.0` and `.1` (RFC 3021 point-to-point)
@@ -2071,40 +2643,85 @@ fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
         Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
     } else {
         // Standard: network+1 and network+2
-        let mask = !((1u32 << (32 - prefix)) - 1);
+        let mask = if prefix == 0 {
+            0
+        } else {
+            u32::MAX << (32 - prefix)
+        };
         let network = bits & mask;
-        let a = std::net::Ipv4Addr::from(network + 1);
-        let b = std::net::Ipv4Addr::from(network + 2);
+        let a = std::net::Ipv4Addr::from(network.checked_add(1).ok_or(())?);
+        let b = std::net::Ipv4Addr::from(network.checked_add(2).ok_or(())?);
         Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
     }
 }
 
-/// Allocate a subnet from a pool, returning the two endpoint addresses.
-fn allocate_from_pool(pool: &mut PoolState, pool_name: &str) -> Option<[String; 2]> {
-    let subnet_size = 1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
-    if pool.next_offset + subnet_size > pool.pool_size {
-        tracing::error!("pool '{pool_name}' exhausted");
-        return None;
-    }
-    let network = pool.base + pool.next_offset;
-    pool.next_offset += subnet_size;
-    let cidr = format!(
-        "{}/{}",
-        std::net::Ipv4Addr::from(network),
-        pool.alloc_prefix
-    );
-    split_subnet(&cidr).ok()
+/// Allocate the next subnet from a pool and split it into the two
+/// endpoint addresses of a point-to-point link.
+///
+/// Exhaustion (and address-space overflow) is an error, not a link
+/// without addresses: `mesh`, `ring` and `star` all go through here
+/// now — `ring`/`star` used to copy the arithmetic without the bounds
+/// check and handed out subnets outside the pool (issue #19).
+fn allocate_from_pool(pool: &mut PoolState, pool_name: &str) -> Result<[String; 2]> {
+    let cidr = pool.allocate_subnet(pool_name)?;
+    split_subnet(&cidr).map_err(|_| {
+        crate::Error::NllParse(format!(
+            "pool '{pool_name}': cannot split /{} into two endpoint addresses (use /31 or larger)",
+            pool.alloc_prefix
+        ))
+    })
 }
 
 /// Expand a topology pattern (mesh, ring, star) into nodes and links.
-fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &mut LowerCtx) {
+/// A node generated by a pattern: carries the pattern's profile and,
+/// like `node x : p`, the profile's properties (sysctls, firewall, …)
+/// applied to it. Previously only the reference was recorded, so
+/// `effective_sysctls` saw them but `render`/`diff` did not.
+fn pattern_node(pattern: &ast::PatternDef, ctx: &mut LowerCtx) -> Result<types::Node> {
+    let mut node = types::Node::default();
+    if let Some(profile) = &pattern.profile {
+        let props = ctx
+            .profiles
+            .get(profile)
+            .map(|p| p.props.clone())
+            .ok_or_else(|| {
+                crate::Error::NllParse(format!(
+                    "pattern '{}' references undefined profile '{profile}'",
+                    pattern.name
+                ))
+            })?;
+        apply_node_props(&mut node, &props, ctx)?;
+        node.profiles = vec![profile.clone()];
+    }
+    Ok(node)
+}
+
+/// Addresses for one pattern link: allocated from the pattern's pool
+/// when it names one, `None` otherwise.
+fn pattern_addresses(pattern: &ast::PatternDef, ctx: &mut LowerCtx) -> Result<Option<[String; 2]>> {
+    match &pattern.pool {
+        None => Ok(None),
+        Some(pool_name) => match ctx.pools.get_mut(pool_name.as_str()) {
+            Some(pool) => allocate_from_pool(pool, pool_name).map(Some),
+            None => Err(crate::Error::NllParse(format!(
+                "pattern '{}' references undefined pool '{pool_name}'",
+                pattern.name
+            ))),
+        },
+    }
+}
+
+fn expand_pattern(
+    topo: &mut types::Topology,
+    pattern: &ast::PatternDef,
+    ctx: &mut LowerCtx,
+) -> Result<()> {
     match &pattern.kind {
         ast::PatternKind::Mesh => {
             // Generate nodes
             for name in &pattern.nodes {
                 let node_name = format!("{}.{}", pattern.name, name);
-                let mut node = types::Node::default();
-                node.profile = pattern.profile.clone();
+                let node = pattern_node(pattern, ctx)?;
                 topo.nodes.insert(node_name, node);
             }
             // Generate full-mesh links (all pairwise, i < j)
@@ -2115,15 +2732,7 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
                     let left_iface = format!("to-{b}");
                     let right_iface = format!("to-{a}");
 
-                    let addresses = if let Some(pool_name) = &pattern.pool {
-                        if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                            allocate_from_pool(pool, pool_name)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
+                    let addresses = pattern_addresses(pattern, ctx)?;
 
                     topo.links.push(types::Link {
                         endpoints: [
@@ -2137,7 +2746,13 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
             }
         }
         ast::PatternKind::Ring => {
-            let n = pattern.count.unwrap_or(pattern.nodes.len() as i64) as usize;
+            let n = pattern.count.unwrap_or(pattern.nodes.len() as i64);
+            if !(0..=MAX_LOOP_ITERATIONS).contains(&n) {
+                return Err(crate::Error::NllParse(format!(
+                    "ring '{}': count {n} is out of range (0..={MAX_LOOP_ITERATIONS})",
+                    pattern.name
+                )));
+            }
             let names: Vec<String> = if pattern.nodes.is_empty() {
                 (1..=n).map(|i| format!("r{i}")).collect()
             } else {
@@ -2147,8 +2762,7 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
             // Generate nodes
             for name in &names {
                 let node_name = format!("{}.{}", pattern.name, name);
-                let mut node = types::Node::default();
-                node.profile = pattern.profile.clone();
+                let node = pattern_node(pattern, ctx)?;
                 topo.nodes.insert(node_name, node);
             }
 
@@ -2158,24 +2772,7 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
                 let left = format!("{}.{}", pattern.name, names[i]);
                 let right = format!("{}.{}", pattern.name, names[j]);
 
-                let addresses = if let Some(pool_name) = &pattern.pool {
-                    if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                        let subnet_size =
-                            1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
-                        let network = pool.base + pool.next_offset;
-                        pool.next_offset += subnet_size;
-                        let cidr = format!(
-                            "{}/{}",
-                            std::net::Ipv4Addr::from(network),
-                            pool.alloc_prefix
-                        );
-                        split_subnet(&cidr).ok()
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
+                let addresses = pattern_addresses(pattern, ctx)?;
 
                 topo.links.push(types::Link {
                     endpoints: [format!("{left}:right"), format!("{right}:left")],
@@ -2187,35 +2784,16 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
         ast::PatternKind::Star { hub } => {
             // Generate hub node
             let hub_name = format!("{}.{}", pattern.name, hub);
-            let mut hub_node = types::Node::default();
-            hub_node.profile = pattern.profile.clone();
+            let hub_node = pattern_node(pattern, ctx)?;
             topo.nodes.insert(hub_name.clone(), hub_node);
 
             // Generate spoke nodes and links
             for (i, spoke) in pattern.nodes.iter().enumerate() {
                 let spoke_name = format!("{}.{}", pattern.name, spoke);
-                let mut spoke_node = types::Node::default();
-                spoke_node.profile = pattern.profile.clone();
+                let spoke_node = pattern_node(pattern, ctx)?;
                 topo.nodes.insert(spoke_name.clone(), spoke_node);
 
-                let addresses = if let Some(pool_name) = &pattern.pool {
-                    if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                        let subnet_size =
-                            1u32.checked_shl(32 - pool.alloc_prefix as u32).unwrap_or(0);
-                        let network = pool.base + pool.next_offset;
-                        pool.next_offset += subnet_size;
-                        let cidr = format!(
-                            "{}/{}",
-                            std::net::Ipv4Addr::from(network),
-                            pool.alloc_prefix
-                        );
-                        split_subnet(&cidr).ok()
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
+                let addresses = pattern_addresses(pattern, ctx)?;
 
                 topo.links.push(types::Link {
                     endpoints: [format!("{hub_name}:eth{i}"), format!("{spoke_name}:eth0")],
@@ -2225,9 +2803,10 @@ fn expand_pattern(topo: &mut types::Topology, pattern: &ast::PatternDef, ctx: &m
             }
         }
     }
+    Ok(())
 }
 
-fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCtx) {
+fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCtx) -> Result<()> {
     let endpoints = [
         format!("{}:{}", link.left_node, link.left_iface),
         format!("{}:{}", link.right_node, link.right_iface),
@@ -2235,15 +2814,29 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
 
     let addresses = match (&link.left_addr, &link.right_addr, &link.subnet, &link.pool) {
         (Some(l), Some(r), _, _) => Some([l.clone(), r.clone()]),
-        (_, _, Some(subnet), _) => split_subnet(subnet).ok(),
-        (_, _, _, Some(pool_name)) => {
-            if let Some(pool) = ctx.pools.get_mut(pool_name.as_str()) {
-                allocate_from_pool(pool, pool_name)
-            } else {
-                tracing::warn!("undefined pool '{pool_name}'");
+        (_, _, Some(subnet), _) => {
+            // `auto/N` placeholders are substituted at deploy time by
+            // the host-wide subnet pool; leave them alone here.
+            if subnet.starts_with("auto") || subnet.contains("${") {
                 None
+            } else {
+                Some(split_subnet(subnet).map_err(|_| {
+                    crate::Error::NllParse(format!(
+                        "link {} -- {}: cannot derive two endpoint addresses from subnet '{subnet}' (IPv4 /31 or larger required)",
+                        endpoints[0], endpoints[1]
+                    ))
+                })?)
             }
         }
+        (_, _, _, Some(pool_name)) => match ctx.pools.get_mut(pool_name.as_str()) {
+            Some(pool) => Some(allocate_from_pool(pool, pool_name)?),
+            None => {
+                return Err(crate::Error::NllParse(format!(
+                    "link {} -- {} references undefined pool '{pool_name}'",
+                    endpoints[0], endpoints[1]
+                )));
+            }
+        },
         _ => None,
     };
 
@@ -2300,6 +2893,7 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
         topo.rate_limits.insert(left_ep, rl.clone());
         topo.rate_limits.insert(right_ep, rl);
     }
+    Ok(())
 }
 
 /// Increment an IP address by a host number offset.
@@ -2396,8 +2990,47 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
     }
 
     for port in &net.ports {
+        // Canonical port key is the member endpoint `node:iface`; a bare
+        // node name is resolved against the member list so every consumer
+        // (deploy, dns, validator) can rely on one shape.
+        let key = if port.endpoint.contains(':') {
+            port.endpoint.clone()
+        } else {
+            let node = port.endpoint.as_str();
+            let matches: Vec<&String> = network
+                .members
+                .iter()
+                .filter(|m| m.split_once(':').map(|(n, _)| n) == Some(node))
+                .collect();
+            match matches.as_slice() {
+                [one] => (*one).clone(),
+                [] => {
+                    return Err(crate::Error::NllParse(format!(
+                        "network '{}': port '{node}' is not a member of this network",
+                        net.name
+                    )));
+                }
+                many => {
+                    return Err(crate::Error::NllParse(format!(
+                        "network '{}': node '{node}' has {} interfaces on this network ({}); use `port {node}:<iface>`",
+                        net.name,
+                        many.len(),
+                        many.iter()
+                            .map(|m| m.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )));
+                }
+            }
+        };
+        if network.ports.contains_key(&key) {
+            return Err(crate::Error::NllParse(format!(
+                "network '{}': duplicate port block for '{key}'",
+                net.name
+            )));
+        }
         network.ports.insert(
-            port.endpoint.clone(),
+            key,
             types::PortConfig {
                 interface: None,
                 vlans: port.vlans.clone(),
@@ -2418,13 +3051,33 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
         });
     }
 
-    // Subnet auto-assignment: assign sequential IPs to members without explicit addresses
+    // Subnet auto-assignment: sequential host addresses for members
+    // without an explicit `port … { address … }`. Port entries are keyed
+    // by the member endpoint `node:iface` (issue #19). `auto/N` and
+    // unresolved placeholders are left for deploy time.
     if let Some(subnet) = &net.subnet {
         network.subnet = Some(subnet.clone());
-        if let Ok((base_ip, prefix)) = crate::helpers::parse_cidr(subnet) {
-            let mut host_num: u32 = 1;
+        if !subnet.starts_with("auto") && !subnet.contains("${") {
+            let (base_ip, prefix) = crate::helpers::parse_cidr(subnet).map_err(|e| {
+                crate::Error::NllParse(format!(
+                    "network '{}': invalid subnet '{subnet}': {e}",
+                    net.name
+                ))
+            })?;
+            let base_ip = crate::helpers::network_address(base_ip, prefix);
+            let host_bits = match base_ip {
+                std::net::IpAddr::V4(_) => 32u32.saturating_sub(prefix as u32),
+                std::net::IpAddr::V6(_) => 128u32.saturating_sub(prefix as u32),
+            };
+            // usable hosts: 2^bits - 2 (network + broadcast), capped so the
+            // comparison below cannot overflow
+            let max_host: u64 = if host_bits >= 63 {
+                u64::MAX
+            } else {
+                (1u64 << host_bits).saturating_sub(2)
+            };
+            let mut host_num: u64 = 1;
             for member in &network.members {
-                // Skip members that already have explicit port addresses
                 if network
                     .ports
                     .get(member)
@@ -2432,7 +3085,14 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
                 {
                     continue;
                 }
-                let ip = increment_ip(base_ip, host_num);
+                if host_num > max_host {
+                    return Err(crate::Error::NllParse(format!(
+                        "network '{}': subnet {subnet} has only {max_host} usable host address(es) but {} members need one",
+                        net.name,
+                        network.members.len()
+                    )));
+                }
+                let ip = increment_ip(base_ip, host_num as u32);
                 let addr = format!("{ip}/{prefix}");
                 network
                     .ports
@@ -2472,7 +3132,7 @@ fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
     );
 }
 
-fn lower_benchmark(b: &ast::BenchmarkDef) -> types::Benchmark {
+fn lower_benchmark(b: &ast::BenchmarkDef) -> Result<types::Benchmark> {
     let tests = b
         .tests
         .iter()
@@ -2484,48 +3144,55 @@ fn lower_benchmark(b: &ast::BenchmarkDef) -> types::Benchmark {
                 streams,
                 udp,
                 assertions,
-            } => types::BenchmarkTest::Iperf3 {
+            } => Ok(types::BenchmarkTest::Iperf3 {
                 from: from.clone(),
                 to: to.clone(),
                 duration: duration.clone(),
                 streams: *streams,
                 udp: *udp,
-                assertions: lower_benchmark_assertions(assertions),
-            },
+                assertions: lower_benchmark_assertions(assertions)?,
+            }),
             ast::BenchmarkTestDef::Ping {
                 from,
                 to,
                 count,
                 assertions,
-            } => types::BenchmarkTest::Ping {
+            } => Ok(types::BenchmarkTest::Ping {
                 from: from.clone(),
                 to: to.clone(),
                 count: *count,
-                assertions: lower_benchmark_assertions(assertions),
-            },
+                assertions: lower_benchmark_assertions(assertions)?,
+            }),
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
 
-    types::Benchmark {
+    Ok(types::Benchmark {
         name: b.name.clone(),
         tests,
-    }
+    })
 }
 
 fn lower_benchmark_assertions(
     defs: &[ast::BenchmarkAssertionDef],
-) -> Vec<types::BenchmarkAssertion> {
+) -> Result<Vec<types::BenchmarkAssertion>> {
     defs.iter()
-        .map(|a| types::BenchmarkAssertion {
-            metric: a.metric.clone(),
-            op: match a.op.as_str() {
-                "above" | ">" => types::CompareOp::Gt,
-                "below" | "<" => types::CompareOp::Lt,
-                ">=" => types::CompareOp::Gte,
-                "<=" => types::CompareOp::Lte,
-                _ => types::CompareOp::Gt, // default
-            },
-            value: a.value.clone(),
+        .map(|a| {
+            Ok(types::BenchmarkAssertion {
+                metric: a.metric.clone(),
+                op: match a.op.as_str() {
+                    "above" | ">" => types::CompareOp::Gt,
+                    "below" | "<" => types::CompareOp::Lt,
+                    ">=" => types::CompareOp::Gte,
+                    "<=" => types::CompareOp::Lte,
+                    other => {
+                        return Err(crate::Error::NllParse(format!(
+                            "unknown benchmark comparison '{other}' for metric '{}' (expected above, below, >, <, >= or <=)",
+                            a.metric
+                        )));
+                    }
+                },
+                value: a.value.clone(),
+            })
         })
         .collect()
 }
@@ -3016,8 +3683,264 @@ network fabric {
         assert_eq!(net.members, vec!["switch:br0", "host1:eth0"]);
         assert_eq!(net.vlan_filtering, Some(true));
         assert_eq!(net.vlans[&100].name.as_deref(), Some("sales"));
-        assert_eq!(net.ports["host1"].pvid, Some(100));
-        assert_eq!(net.ports["host1"].untagged, Some(true));
+        // port keys are canonicalised to the member endpoint
+        assert_eq!(net.ports["host1:eth0"].pvid, Some(100));
+        assert_eq!(net.ports["host1:eth0"].untagged, Some(true));
+    }
+
+    fn lower_err(input: &str) -> String {
+        match nll::parse(input) {
+            Ok(_) => panic!("expected parsing/lowering to fail"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    #[test]
+    fn port_block_accepts_node_iface_and_rejects_ambiguity() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+network n {
+  members [a:eth0, a:eth1, b:eth0]
+  port a:eth1 { pvid 7 }
+}"#,
+        );
+        assert_eq!(topo.networks["n"].ports["a:eth1"].pvid, Some(7));
+        let e = lower_err(
+            r#"lab "t"
+network n {
+  members [a:eth0, a:eth1]
+  port a { pvid 7 }
+}"#,
+        );
+        assert!(e.contains("use `port a:<iface>`"), "{e}");
+        let e = lower_err(
+            r#"lab "t"
+network n {
+  members [a:eth0]
+  port zz { pvid 7 }
+}"#,
+        );
+        assert!(e.contains("not a member"), "{e}");
+    }
+
+    #[test]
+    fn network_subnet_autoassign_respects_explicit_port_and_bounds() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+node c
+network lan {
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.0.1.0/24
+  port b { 10.0.1.200/24 }
+}"#,
+        );
+        let net = &topo.networks["lan"];
+        assert_eq!(net.ports["a:eth0"].addresses, vec!["10.0.1.1/24"]);
+        assert_eq!(net.ports["b:eth0"].addresses, vec!["10.0.1.200/24"]);
+        assert_eq!(net.ports["c:eth0"].addresses, vec!["10.0.1.2/24"]);
+        assert_eq!(net.ports.len(), 3, "no second, differently-keyed entry");
+
+        let e = lower_err(
+            r#"lab "t"
+network lan {
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.0.1.0/30
+}"#,
+        );
+        assert!(e.contains("only 2 usable host address"), "{e}");
+        // base is masked to the network address
+        let topo = parse_and_lower(
+            r#"lab "t"
+network lan { members [a:eth0]  subnet 10.0.1.5/24 }"#,
+        );
+        assert_eq!(
+            topo.networks["lan"].ports["a:eth0"].addresses,
+            vec!["10.0.1.1/24"]
+        );
+    }
+
+    #[test]
+    fn star_pool_exhaustion_is_an_error() {
+        let e = lower_err(
+            r#"lab "t"
+pool access 10.0.0.0/24 /24
+star campus { hub r  spokes [a, b]  pool access }"#,
+        );
+        assert!(e.contains("pool 'access' exhausted"), "{e}");
+        // and ring/mesh/star all share the checked allocator
+        let e = lower_err(
+            r#"lab "t"
+pool p 10.0.0.0/30 /30
+ring r { count 3  pool p }"#,
+        );
+        assert!(e.contains("exhausted"), "{e}");
+        let e = lower_err(
+            r#"lab "t"
+pool p 10.0.0.0/24 /8
+node a"#,
+        );
+        assert!(e.contains("allocation prefix"), "{e}");
+    }
+
+    #[test]
+    fn undefined_pool_is_an_error() {
+        let e = lower_err(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { pool nope }"#,
+        );
+        assert!(e.contains("undefined pool 'nope'"), "{e}");
+    }
+
+    #[test]
+    fn validate_and_scenario_inside_for_are_interpolated() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node spine
+for i in 1..2 {
+  node leaf${i}
+  validate { reach leaf${i} spine }
+}
+scenario "s" {
+  at 1s { down leaf1:eth0  validate { no-reach leaf1 spine } }
+}"#,
+        );
+        let names: Vec<String> = topo
+            .assertions
+            .iter()
+            .map(|a| match a {
+                crate::types::Assertion::Reach { from, to } => format!("{from}->{to}"),
+                _ => "?".into(),
+            })
+            .collect();
+        assert_eq!(names, vec!["leaf1->spine", "leaf2->spine"]);
+        assert!(!format!("{:?}", topo.assertions).contains("${"));
+    }
+
+    #[test]
+    fn site_bodies_keep_every_statement_kind() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+site dc {
+  for i in 1..2 { node r${i} }
+  link r1:eth0 -- r2:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }
+  impair r1:eth0 delay 5ms
+  validate { reach r1 r2 }
+}"#,
+        );
+        assert!(topo.nodes.contains_key("dc-r1"), "{:?}", topo.nodes.keys());
+        assert!(topo.nodes.contains_key("dc-r2"));
+        assert_eq!(topo.links[0].endpoints, ["dc-r1:eth0", "dc-r2:eth0"]);
+        assert!(topo.impairments.contains_key("dc-r1:eth0"));
+        assert!(matches!(
+            &topo.assertions[0],
+            crate::types::Assertion::Reach { from, to } if from == "dc-r1" && to == "dc-r2"
+        ));
+    }
+
+    #[test]
+    fn if_bodies_keep_every_statement_kind_and_see_loop_vars() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+for i in 1..3 {
+  if ${i} == 2 {
+    node only${i}
+    validate { reach only${i} a }
+  }
+}"#,
+        );
+        assert_eq!(topo.nodes.len(), 2);
+        assert!(topo.nodes.contains_key("only2"));
+        assert_eq!(topo.assertions.len(), 1);
+    }
+
+    #[test]
+    fn node_level_for_handles_every_prop_and_accumulates_nat() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node r {
+  for i in 1..2 {
+    sysctl "net.ipv4.conf.eth${i}.rp_filter" "0"
+    nat { masquerade src 10.${i}.0.0/24 }
+    dummy d${i} { address 192.0.2.1/32 }
+  }
+  nat { masquerade }
+}"#,
+        );
+        let r = &topo.nodes["r"];
+        assert_eq!(r.sysctls.len(), 2);
+        assert!(r.sysctls.contains_key("net.ipv4.conf.eth2.rp_filter"));
+        assert_eq!(r.nat.as_ref().unwrap().rules.len(), 3, "{:?}", r.nat);
+        assert!(r.interfaces.contains_key("d1") && r.interfaces.contains_key("d2"));
+    }
+
+    #[test]
+    fn loop_variables_are_scoped() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let i = 99
+for i in 1..2 {
+  let inner = "x${i}"
+  node n${i}
+}
+node after${i}
+node leaked${inner}"#,
+        );
+        assert!(
+            topo.nodes.contains_key("after99"),
+            "{:?}",
+            topo.nodes.keys()
+        );
+        assert!(
+            topo.nodes.contains_key("leaked${inner}"),
+            "inner let must not leak: {:?}",
+            topo.nodes.keys()
+        );
+    }
+
+    #[test]
+    fn oversized_for_range_is_rejected() {
+        let e = lower_err("lab \"t\"\nfor i in 1..999999999 { node n${i} }");
+        assert!(e.contains("would iterate"), "{e}");
+    }
+
+    #[test]
+    fn unknown_enum_strings_are_errors() {
+        for (src, needle) in [
+            (
+                "lab \"t\" { dns bogus }\nnode a",
+                "unknown dns mode 'bogus'",
+            ),
+            (
+                "lab \"t\" { runtime \"containerd\" }\nnode a",
+                "unknown runtime 'containerd'",
+            ),
+            (
+                "lab \"t\" { routing bogus }\nnode a",
+                "unknown routing mode 'bogus'",
+            ),
+            ("lab \"t\"\nnode a { nat { frobnicate } }", "NAT"),
+            (
+                "lab \"t\"\nnode a { macvlan m parent eth0 { mode weird } }",
+                "macvlan mode",
+            ),
+        ] {
+            let e = nll::parse(src)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default();
+            assert!(e.contains(needle), "{src}: {e}");
+        }
+    }
+
+    #[test]
+    fn param_without_default_is_always_an_error() {
+        let e = lower_err("lab \"t\"\nparam count\nnode a");
+        assert!(e.contains("required parameter 'count'"), "{e}");
     }
 
     #[test]
@@ -3067,16 +3990,6 @@ network radio {
         let r1 = &net.impairments[1];
         assert_eq!(r1.dst, "bravo");
         assert_eq!(r1.rate_cap.as_deref(), Some("100mbit"));
-    }
-
-    #[test]
-    #[allow(dead_code)]
-    fn test_lower_network_port_address_placeholder() {
-        // Port address override with subnet requires "port node:iface" parsing
-        // which uses parse_name (can't parse node:iface as a name).
-        // This needs the port block to use parse_endpoint or a different parser.
-        // For now, port addresses work via direct "port node { cidr }" syntax
-        // (existing vlan-trunk style), and subnet auto-assigns.
     }
 
     #[test]

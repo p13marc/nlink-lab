@@ -353,11 +353,39 @@ pub struct Profile {
     pub firewall: Option<FirewallConfig>,
 }
 
+/// Accept `"router"`, `null`, or `["a", "b"]` for `Node::profiles`.
+fn deserialize_profiles<'de, D>(d: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+        None,
+    }
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(s) => vec![s],
+        OneOrMany::Many(v) => v,
+        OneOrMany::None => Vec::new(),
+    })
+}
+
 /// Node definition — becomes a network namespace or container.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Node {
-    /// Profile to inherit from.
-    pub profile: Option<String>,
+    /// Profiles to inherit from, in order (later ones override earlier
+    /// ones — `node r : base, override`). Serialised as `profiles`;
+    /// state files written before 0.9 carry a single `profile` string,
+    /// which is still accepted.
+    #[serde(
+        default,
+        alias = "profile",
+        deserialize_with = "deserialize_profiles",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub profiles: Vec<String>,
 
     /// Container image (when set, node is deployed as a container instead of bare namespace).
     pub image: Option<String>,
@@ -959,11 +987,12 @@ impl Topology {
     pub fn effective_sysctls(&self, node: &Node) -> HashMap<String, String> {
         let mut sysctls = HashMap::new();
 
-        // Start with profile sysctls
-        if let Some(profile_name) = &node.profile
-            && let Some(profile) = self.profiles.get(profile_name)
-        {
-            sysctls.extend(profile.sysctls.clone());
+        // Start with profile sysctls, in declaration order (later
+        // profiles override earlier ones)
+        for profile_name in &node.profiles {
+            if let Some(profile) = self.profiles.get(profile_name) {
+                sysctls.extend(profile.sysctls.clone());
+            }
         }
 
         // Node-level sysctls override profile
@@ -977,12 +1006,12 @@ impl Topology {
         if node.firewall.is_some() {
             return node.firewall.as_ref();
         }
-        if let Some(profile_name) = &node.profile
-            && let Some(profile) = self.profiles.get(profile_name)
-        {
-            return profile.firewall.as_ref();
-        }
-        None
+        // Last profile carrying a firewall wins (later profiles override
+        // earlier ones, mirroring sysctl merge order).
+        node.profiles
+            .iter()
+            .rev()
+            .find_map(|name| self.profiles.get(name).and_then(|p| p.firewall.as_ref()))
     }
 }
 

@@ -98,14 +98,14 @@ import "wan-overlay.nll" as wan
 lab "multi-site"
 
 # Reference imported nodes with alias prefix
-link dc.spine1:wan0 -- wan.pe1:eth0 {
+link dc-spine1:wan0 -- wan-pe1:eth0 {
     10.0.0.1/30 -- 10.0.0.2/30
 }
 ```
 
 **Semantics:**
 - Imports must appear before the `lab` declaration
-- All node, network, profile, and endpoint names are prefixed: `dc.spine1`, `dc.r1:eth0`
+- All node, network, profile, and endpoint names are prefixed with `<alias>-`: `dc-spine1`, `dc-r1:eth0` (a dash, so the names stay valid hostnames; cross-references use `${dc-r1.eth0}`)
 - The `lab` name comes from the root file only
 - Imports can be recursive (imported files can import others)
 - Circular imports are detected and rejected
@@ -1126,7 +1126,8 @@ healthcheck_block = "{" ("interval" DURATION | "timeout" DURATION | "retries" IN
 
 # ── Link block ───────────────────────────────────
 link_block     = "{" link_item* "}"
-link_item      = addr_pair | "subnet" CIDR | "pool" IDENT
+link_item      = addr_pair | CIDR | "subnet" CIDR | "pool" IDENT
+                 (* a lone CIDR is shorthand for "subnet" CIDR *)
                | "mtu" INT | impair_props | dir_impair | rate_props
 
 # ── Network block ────────────────────────────────
@@ -1280,9 +1281,16 @@ Impairments are link properties. Inline keeps related info together.
 Real links are often asymmetric (satellite, LTE, ADSL). Without arrows,
 impairments apply symmetrically.
 
-### Why loops but not conditionals?
-`for` with integer ranges covers 90% of generation needs (spine-leaf, ring,
-mesh). Conditionals add complexity without proportional benefit.
+### Loops and conditionals
+`for` with integer ranges covers most generation needs (spine-leaf, ring,
+mesh). Range bounds may be interpolated (`for i in 1..${count}`) so a
+parametric module can size itself from a `param`; a single range is capped
+at 100 000 iterations. `if <cond> { … }` (with `==`, `!=`, `<`, `>`, `&&`,
+`||` over variables and loop variables) is deliberately minimal: it selects
+statements, it does not compute values — use `${a ? b : c}` for that.
+Both `for` and `if` bodies accept every statement kind, including nested
+loops, `site` blocks, `validate`, `scenario` and `benchmark`; `let`
+bindings and loop variables are scoped to the enclosing block.
 
 ### Why not YAML?
 Implicit typing (`NO` → false, `3.10` → 3.1), indentation sensitivity.
@@ -1311,17 +1319,17 @@ modules directly under `crates/nlink-lab/src/parser/nll/`.
   Lexer (logos)          → Token stream
     │
     ▼
-  Parser (winnow)        → AST (with for/let nodes)
+  Parser (recursive descent) → AST (with for/let/if/site nodes)
     │
     ▼
   Lowering               → Expand loops, substitute variables
     │
     ▼
-  Topology               → Same struct as TOML path
+  Topology               → The one model every command consumes
     │
     ▼
-  Validator              → Same rules (unchanged)
+  Validator              → 41 rules with stable ids (`validate`)
 ```
 
-Both `.toml` and `.nll` compile to the same `Topology` struct.
-The CLI auto-detects format by file extension.
+NLL is the only topology input format; `Topology` is also produced by the
+Rust builder DSL and read back from the TOML snapshot in a lab's state dir.

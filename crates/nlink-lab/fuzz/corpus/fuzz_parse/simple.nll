@@ -1,0 +1,24 @@
+# Simple 2-node topology for testing.
+#
+# Creates two namespaces connected by a veth pair with addresses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms

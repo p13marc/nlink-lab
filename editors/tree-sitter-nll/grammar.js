@@ -488,8 +488,12 @@ module.exports = grammar({
     ipv4_address: ($) =>
       token(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/),
 
+    // Mirrors the Rust lexer (crates/nlink-lab/src/parser/nll/lexer.rs):
+    // compressed (`::` anywhere, optional trailing IPv4), fully expanded
+    // 8-group, or 6 groups + IPv4. A token is IPv6 only with a `::` or
+    // seven colons, so `node:iface` endpoints never match.
     ipv6_address: ($) =>
-      token(/[0-9a-fA-F]*::[0-9a-fA-F:]*/),
+      token(/(([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?::(([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4}|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))?|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){5}:[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/),
 
     _name: ($) =>
       prec.right(
@@ -526,7 +530,7 @@ module.exports = grammar({
 
     ipv6_cidr: ($) =>
       token(
-        /[0-9a-fA-F]*::[0-9a-fA-F:]*\/[0-9]+/,
+        /(([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?::(([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4}|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))?|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){5}:[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/[0-9]+/,
       ),
 
     duration: ($) => token(/[0-9]+(ms|s|m|h)/),

@@ -4,6 +4,17 @@
 
 use std::io::IsTerminal;
 
+/// Global flags shared by every subcommand handler.
+#[derive(Debug, Clone, Copy)]
+pub struct Ctx {
+    /// `--json`: machine-readable output where supported.
+    pub json: bool,
+    /// `--quiet`: suppress informational output.
+    pub quiet: bool,
+    /// `--verbose`: extra detail (also raises the tracing level).
+    pub verbose: bool,
+}
+
 // ─── Color helpers ───────────────────────────────────────
 
 fn use_color() -> bool {

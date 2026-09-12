@@ -133,7 +133,7 @@ impl ValidationResult {
 }
 
 /// A single validation issue.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ValidationIssue {
     /// Severity level.
     pub severity: Severity,
@@ -156,7 +156,7 @@ impl fmt::Display for ValidationIssue {
 }
 
 /// Issue severity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Severity {
     /// Blocks deployment.
     Error,

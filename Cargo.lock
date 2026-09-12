@@ -3228,13 +3228,14 @@ dependencies = [
 name = "nlink-lab-backend"
 version = "0.8.0"
 dependencies = [
- "anyhow",
  "clap",
+ "libc",
  "nlink",
  "nlink-lab",
  "nlink-lab-shared",
  "serde",
  "serde_json",
+ "thiserror 2.0.20",
  "time",
  "tokio",
  "tracing",
@@ -3254,10 +3255,12 @@ dependencies = [
  "netring",
  "nlink",
  "nlink-lab",
+ "nlink-lab-backend",
  "nlink-lab-shared",
  "regex",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
  "tracing",

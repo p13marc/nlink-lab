@@ -24,7 +24,7 @@ for f in $(find examples -name '*.nll' -not -path 'examples/imports/*' | sort); 
   timeout 20 "$bin" render --json "$f" | python3 -c 'import json,sys; json.load(sys.stdin)' || { say "FAIL render --json $f"; fail=1; }
 done
 
-say "== known-bad inputs must fail fast (exit 1, never hang)"
+say "== known-bad inputs must fail fast (exit 2 = validation/parse error, never hang)"
 printf 'lab "t"\nnode a\nnode a\n' > "$tmp/bad1.nll"
 printf 'lab "t"\nnode a\nlink a:eth0 -- ghost:eth0\n' > "$tmp/bad2.nll"
 printf 'lab "t"\nnode a {\n' > "$tmp/bad3.nll"
@@ -37,11 +37,18 @@ timeout 10 "$bin" render "$tmp/good1.nll" | grep -q 'delay 10ms loss 1%' || { sa
 for f in "$tmp"/bad*.nll; do
   set +e; timeout 10 "$bin" validate "$f" >/dev/null 2>&1; rc=$?; set -e
   case $rc in
-    1) ;;
+    2) ;;
     124) say "FAIL: $f hung"; fail=1 ;;
-    *) say "FAIL: $f exit $rc (expected 1)"; fail=1 ;;
+    *) say "FAIL: $f exit $rc (expected 2)"; fail=1 ;;
   esac
 done
+
+say "== validate --json / graph --mermaid / exit codes"
+"$bin" --json validate examples/simple.nll | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["valid"] is True, d' || { say "FAIL validate --json"; fail=1; }
+set +e; "$bin" --json validate "$tmp/bad1.nll" >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 2 ] || { say "FAIL: validate --json on a bad file exited $rc (expected 2)"; fail=1; }
+"$bin" graph --mermaid examples/simple.nll | grep -q '^graph LR' || { say "FAIL graph --mermaid"; fail=1; }
+"$bin" graph examples/cookbook/satellite-mesh.nll | grep -q 'net:' || { say "FAIL: graph ignores network blocks"; fail=1; }
 
 say "== completions"
 for sh in bash zsh fish; do "$bin" completions "$sh" >/dev/null || { say "FAIL completions $sh"; fail=1; }; done

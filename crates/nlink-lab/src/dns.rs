@@ -392,7 +392,7 @@ pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
 /// takes the `.nlink-lab` ownership tag with it. That is intentional and
 /// does not conflict with [`crate::netns_tag::untag`] — `untag` tolerates
 /// a missing tag and directory, so callers may run either or both in any
-/// order. An unsafe name (see [`check_netns_name`]) is logged and skipped
+/// order. An unsafe name (see `check_netns_name`) is logged and skipped
 /// rather than acted on.
 pub fn remove_netns_etc(ns_name: &str) {
     if let Err(e) = check_netns_name(ns_name) {

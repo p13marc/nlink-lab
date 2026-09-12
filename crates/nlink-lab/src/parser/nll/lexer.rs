@@ -1,6 +1,6 @@
 //! Lexer for the NLL language using logos.
 
-use logos::Logos;
+use logos::{FilterResult, Logos};
 
 use crate::error::Result;
 
@@ -11,15 +11,80 @@ pub struct Spanned {
     pub span: std::ops::Range<usize>,
 }
 
+/// Lexer-level error kinds.
+///
+/// `UnexpectedCharacter` is logos's default (produced when no pattern
+/// matches); `UnterminatedBlockComment` is raised by the `/* ... */`
+/// callback (`lex_block_comment`) when the input ends inside a comment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LexError {
+    #[default]
+    UnexpectedCharacter,
+    UnterminatedBlockComment,
+}
+
+/// Callback for block comments, attached to the `Newline` variant.
+///
+/// Logos has already consumed the opening `/*`; scan the remainder for
+/// the matching `*/`, honouring nesting (`/* outer /* inner */ */`), and
+/// bump the lexer past it. A comment that spans at least one line break
+/// is emitted as a single `Newline` token (so it separates statements
+/// exactly like the newlines it hides — consecutive newlines collapse
+/// anyway); a comment contained on one line is skipped like whitespace.
+///
+/// Handling this inside the lexer (rather than pre-stripping the source)
+/// means a `/*` inside a `"string"` or after a `#` line comment never
+/// opens a comment — those patterns are longer matches and win — and
+/// every token span still indexes the original input, so diagnostics
+/// point at the right byte.
+fn lex_block_comment(lex: &mut logos::Lexer<Token>) -> FilterResult<(), LexError> {
+    let bytes = lex.remainder().as_bytes();
+    let mut depth = 1usize;
+    let mut saw_newline = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        match (bytes[i], bytes.get(i + 1)) {
+            (b'/', Some(b'*')) => {
+                depth += 1;
+                i += 2;
+            }
+            (b'*', Some(b'/')) => {
+                depth -= 1;
+                i += 2;
+                if depth == 0 {
+                    lex.bump(i);
+                    return if saw_newline {
+                        FilterResult::Emit(())
+                    } else {
+                        FilterResult::Skip
+                    };
+                }
+            }
+            (b'\n', _) => {
+                saw_newline = true;
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    // Unterminated: consume to end-of-input so the error span starts at
+    // the opening `/*` and covers the rest of the file.
+    lex.bump(bytes.len());
+    FilterResult::Error(LexError::UnterminatedBlockComment)
+}
+
 /// NLL tokens.
 ///
 /// Most keywords are context-sensitive and lex as `Ident`.  Only the
 /// top-level structural keywords that start statements are reserved.
 #[derive(Logos, Debug, Clone, PartialEq)]
+#[logos(error = LexError)]
 #[logos(skip r"[ \t]+")]
 // Line comments run to end-of-line; the greedy `*` is bounded by `\n`,
 // so opt out of logos 0.16's unbounded-repetition lint.
 #[logos(skip("#[^\n]*", allow_greedy = true))]
+// Block comments (`/* ... */`, nestable) are handled by a callback on the
+// `Newline` variant; see `lex_block_comment`.
 pub enum Token {
     // ── Reserved top-level keywords ─────────────
     #[token("import")]
@@ -119,16 +184,41 @@ pub enum Token {
 
     // ── Typed literals (order matters: longer matches first) ──
 
-    // IPv6 CIDR: fd00::1/64, 2001:db8::1/48, ::1/128
-    // Prefix must contain a digit to distinguish from ident::ident
-    #[regex(r"[0-9a-fA-F]*[0-9][0-9a-fA-F]*::[0-9a-fA-F:.]*/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
-    #[regex(r"::[0-9a-fA-F:.]*/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
+    // ── IPv6 ────────────────────────────────────
+    //
+    // Disambiguation rule: an IPv6 token must contain either a `::`
+    // (compressed form) or exactly seven single colons (the fully
+    // expanded 8-group form). Anything with fewer colons and no `::`
+    // — `a:eth0`, `r1:eth0`, `dead:beef`, `2001:db8:1` — is NOT an
+    // address and lexes as `Ident`/`Int` + `Colon` + ..., which is what
+    // the `node:iface` endpoint syntax needs. Real topologies always
+    // write addresses in one of the two accepted forms.
+    //
+    // Group = 1–4 hex digits. After the `::` (or as the last two groups
+    // of the expanded form) an embedded dotted IPv4 is accepted
+    // (`::ffff:10.0.0.1`). Group counts are otherwise not bounded here;
+    // semantic validation happens when the string is parsed into an
+    // `Ipv6Addr` downstream.
+    //
+    // Accepted shapes (each also with a `/N` prefix length → `Ipv6Cidr`):
+    //   `::`  `::1`  `fd00::`  `fd00::1`  `2001:db8::1`  `2001:db8::`
+    //   `fd00:0:0:1::1`  `::ffff:10.0.0.1`  `2001:db8:1:2:3:4:5:6`
+    //   `0:0:0:0:0:ffff:10.0.0.1`
+
+    // IPv6 CIDR — compressed form (contains `::`)
+    #[regex(r"([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?::(([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4}|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))?/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
+    // IPv6 CIDR — fully expanded 8-group form
+    #[regex(r"[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
+    // IPv6 CIDR — 6 groups + embedded IPv4
+    #[regex(r"[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){5}:[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
     Ipv6Cidr(String),
 
-    // IPv6 address: fd00::1, 2001:db8::1, ::1
-    // Prefix must contain a digit to distinguish from ident::ident
-    #[regex(r"[0-9a-fA-F]*[0-9][0-9a-fA-F]*::[0-9a-fA-F:.]*", |lex| lex.slice().to_string(), priority = 4)]
-    #[regex(r"::[0-9a-fA-F]+", |lex| lex.slice().to_string(), priority = 4)]
+    // IPv6 address — compressed form (contains `::`)
+    #[regex(r"([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?::(([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4}|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))?", |lex| lex.slice().to_string(), priority = 4)]
+    // IPv6 address — fully expanded 8-group form
+    #[regex(r"[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}", |lex| lex.slice().to_string(), priority = 4)]
+    // IPv6 address — 6 groups + embedded IPv4
+    #[regex(r"[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){5}:[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+", |lex| lex.slice().to_string(), priority = 4)]
     Ipv6Addr(String),
 
     // IPv4 CIDR: 10.0.0.1/24
@@ -170,7 +260,11 @@ pub enum Token {
     Ident(String),
 
     // ── Newline ─────────────────────────────────
+    // Also produced by a block comment that spans a line break; a
+    // single-line block comment is skipped instead (see
+    // `lex_block_comment`).
     #[token("\n")]
+    #[regex(r"/\*", lex_block_comment)]
     Newline,
 }
 
@@ -241,53 +335,30 @@ impl std::fmt::Display for Token {
 
 /// Lex an NLL source string into a token stream.
 ///
-/// Strips leading/trailing newlines and collapses consecutive newlines.
-/// Strip block comments (`/* ... */`) from input, preserving line numbers.
-/// Supports nested block comments.
-fn strip_block_comments(input: &str) -> Result<String> {
-    let mut result = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    let mut depth: usize = 0;
-
-    while let Some(c) = chars.next() {
-        if c == '/' && chars.peek() == Some(&'*') {
-            chars.next();
-            depth += 1;
-        } else if c == '*' && chars.peek() == Some(&'/') && depth > 0 {
-            chars.next();
-            depth -= 1;
-        } else if depth == 0 {
-            result.push(c);
-        } else if c == '\n' {
-            result.push('\n'); // preserve line numbers for error reporting
-        }
-    }
-
-    if depth > 0 {
-        return Err(crate::Error::NllParse("unterminated block comment".into()));
-    }
-
-    Ok(result)
-}
-
+/// Whitespace, `#` line comments and `/* ... */` block comments (which
+/// may nest) are handled by the lexer itself, so every span indexes the
+/// original `input`. Strips leading/trailing newlines and collapses
+/// consecutive newlines.
 pub fn lex(input: &str) -> Result<Vec<Spanned>> {
-    // Pre-process: strip block comments (/* ... */) before lexing
-    let input = strip_block_comments(input)?;
     let mut tokens = Vec::new();
-    let mut lexer = Token::lexer(&input);
+    let mut lexer = Token::lexer(input);
 
     while let Some(result) = lexer.next() {
         let span = lexer.span();
         match result {
             Ok(token) => tokens.push(Spanned { token, span }),
-            Err(()) => {
-                let line = input[..span.start].matches('\n').count() + 1;
-                let line_start = input[..span.start].rfind('\n').map_or(0, |p| p + 1);
-                let col = input[line_start..span.start].chars().count() + 1;
-                return Err(crate::Error::NllParse(format!(
-                    "unexpected character at line {line}, column {col}: {:?}",
-                    &input[span.start..span.end]
-                )));
+            Err(kind) => {
+                let (line, col) = line_col(input, span.start);
+                let msg = match kind {
+                    LexError::UnexpectedCharacter => format!(
+                        "unexpected character at line {line}, column {col}: {:?}",
+                        &input[span.start..span.end]
+                    ),
+                    LexError::UnterminatedBlockComment => {
+                        format!("unterminated block comment at line {line}, column {col}")
+                    }
+                };
+                return Err(crate::Error::NllParse(msg));
             }
         }
     }
@@ -298,12 +369,23 @@ pub fn lex(input: &str) -> Result<Vec<Spanned>> {
     Ok(tokens)
 }
 
+/// 1-based (line, column) of a byte offset; the column counts chars.
+fn line_col(input: &str, offset: usize) -> (usize, usize) {
+    let line = input[..offset].matches('\n').count() + 1;
+    let line_start = input[..offset].rfind('\n').map_or(0, |p| p + 1);
+    let col = input[line_start..offset].chars().count() + 1;
+    (line, col)
+}
+
 /// Remove leading/trailing newlines and collapse consecutive newlines into one.
 fn strip_newlines(tokens: &mut Vec<Spanned>) {
-    // Remove leading newlines
-    while tokens.first().is_some_and(|t| t.token == Token::Newline) {
-        tokens.remove(0);
-    }
+    // Drop the leading run of newlines with one shift instead of a
+    // `remove(0)` loop, which is quadratic in the length of the run.
+    let leading = tokens
+        .iter()
+        .take_while(|t| t.token == Token::Newline)
+        .count();
+    tokens.drain(..leading);
     // Remove trailing newlines
     while tokens.last().is_some_and(|t| t.token == Token::Newline) {
         tokens.pop();
@@ -761,5 +843,375 @@ link router:eth0 -- host:eth0 {
                 Token::Int("5".into())
             ]
         );
+    }
+
+    // ── IPv6 (issue #14) ───────────────────────────────────────────
+
+    /// Every accepted IPv6 shape lexes as one `Ipv6Addr`, and the same
+    /// shape with a `/N` suffix lexes as one `Ipv6Cidr`.
+    #[test]
+    fn test_ipv6_shapes_addr_and_cidr() {
+        let shapes = [
+            "::",
+            "::1",
+            "fd00::",
+            "fd00::1",
+            "2001:db8::1",
+            "2001:db8::",
+            "dead:beef::1",
+            "fd00:0:0:1::1",
+            "::ffff:10.0.0.1",
+            "2001:db8:1:2:3:4:5:6",
+            "0:0:0:0:0:ffff:10.0.0.1",
+            "2001:0db8:0000:0000:0000:ff00:0042:8329",
+        ];
+        for addr in shapes {
+            assert_eq!(
+                lex_tokens(addr),
+                vec![Token::Ipv6Addr(addr.into())],
+                "address form of {addr}"
+            );
+            let cidr = format!("{addr}/64");
+            assert_eq!(
+                lex_tokens(&cidr),
+                vec![Token::Ipv6Cidr(cidr.clone())],
+                "cidr form of {cidr}"
+            );
+        }
+        assert_eq!(
+            lex_tokens("::1/128"),
+            vec![Token::Ipv6Cidr("::1/128".into())]
+        );
+        assert_eq!(
+            lex_tokens("::ffff:10.0.0.1/96"),
+            vec![Token::Ipv6Cidr("::ffff:10.0.0.1/96".into())]
+        );
+    }
+
+    /// The `node:iface` endpoint syntax must never be swallowed by the
+    /// IPv6 patterns, even when the pieces look like hex groups. The
+    /// rule: no `::` and fewer than seven colons means "not an address".
+    #[test]
+    fn test_ipv6_does_not_swallow_endpoints() {
+        let ident = |s: &str| Token::Ident(s.into());
+        let int = |s: &str| Token::Int(s.into());
+
+        assert_eq!(
+            lex_tokens("a:eth0"),
+            vec![ident("a"), Token::Colon, ident("eth0")]
+        );
+        assert_eq!(
+            lex_tokens("r1:eth0"),
+            vec![ident("r1"), Token::Colon, ident("eth0")]
+        );
+        assert_eq!(
+            lex_tokens("db8:eth0"),
+            vec![ident("db8"), Token::Colon, ident("eth0")]
+        );
+        assert_eq!(
+            lex_tokens("dead:beef"),
+            vec![ident("dead"), Token::Colon, ident("beef")]
+        );
+        assert_eq!(
+            lex_tokens("a:b"),
+            vec![ident("a"), Token::Colon, ident("b")]
+        );
+        // Two single colons, no `::` — not an address.
+        assert_eq!(
+            lex_tokens("2001:db8:1"),
+            vec![
+                int("2001"),
+                Token::Colon,
+                ident("db8"),
+                Token::Colon,
+                int("1")
+            ]
+        );
+        // Seven groups (six colons) without `::` — not an address either.
+        assert_eq!(
+            lex_tokens("1:2:3:4:5:6:7"),
+            vec![
+                int("1"),
+                Token::Colon,
+                int("2"),
+                Token::Colon,
+                int("3"),
+                Token::Colon,
+                int("4"),
+                Token::Colon,
+                int("5"),
+                Token::Colon,
+                int("6"),
+                Token::Colon,
+                int("7"),
+            ]
+        );
+        // `host:port` style IPv4 endpoints are untouched.
+        assert_eq!(
+            lex_tokens("10.0.0.1:8080"),
+            vec![
+                Token::Ipv4Addr("10.0.0.1".into()),
+                Token::Colon,
+                int("8080")
+            ]
+        );
+        // Interpolated endpoints are untouched.
+        assert_eq!(
+            lex_tokens("spine${i}:eth0"),
+            vec![
+                ident("spine"),
+                Token::Interp("${i}".into()),
+                Token::Colon,
+                ident("eth0"),
+            ]
+        );
+    }
+
+    /// The exact reproduction from issue #14.
+    #[test]
+    fn test_ipv6_link_addresses_issue_14() {
+        let tokens = lex_tokens("link a:eth0 -- b:eth0 { 2001:db8::1/64 -- 2001:db8::2/64 }");
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Link,
+                Token::Ident("a".into()),
+                Token::Colon,
+                Token::Ident("eth0".into()),
+                Token::DashDash,
+                Token::Ident("b".into()),
+                Token::Colon,
+                Token::Ident("eth0".into()),
+                Token::LBrace,
+                Token::Ipv6Cidr("2001:db8::1/64".into()),
+                Token::DashDash,
+                Token::Ipv6Cidr("2001:db8::2/64".into()),
+                Token::RBrace,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ipv6_in_statement_context() {
+        // `route default via fd00:0:0:1::1` and `address 2001:db8::/32`.
+        assert_eq!(
+            lex_tokens("route default via fd00:0:0:1::1"),
+            vec![
+                Token::Ident("route".into()),
+                Token::Ident("default".into()),
+                Token::Ident("via".into()),
+                Token::Ipv6Addr("fd00:0:0:1::1".into()),
+            ]
+        );
+        assert_eq!(
+            lex_tokens("address 2001:db8::/32"),
+            vec![
+                Token::Ident("address".into()),
+                Token::Ipv6Cidr("2001:db8::/32".into()),
+            ]
+        );
+    }
+
+    // ── Block comments (issue #22) ─────────────────────────────────
+
+    #[test]
+    fn test_block_comment_single_line_is_whitespace() {
+        assert_eq!(
+            lex_tokens("lab /* hidden */ node"),
+            vec![Token::Lab, Token::Node]
+        );
+        assert_eq!(lex_tokens("/* leading */ lab"), vec![Token::Lab]);
+        assert_eq!(lex_tokens("lab /* trailing */"), vec![Token::Lab]);
+        assert_eq!(lex_tokens("lab /**/ node"), vec![Token::Lab, Token::Node]);
+    }
+
+    /// A multi-line block comment separates statements like the newlines
+    /// it hides (pre-strip used to preserve them), and collapses with
+    /// adjacent newlines.
+    #[test]
+    fn test_block_comment_multi_line_acts_as_newline() {
+        assert_eq!(
+            lex_tokens("lab /* a\nb */ node"),
+            vec![Token::Lab, Token::Newline, Token::Node]
+        );
+        assert_eq!(
+            lex_tokens("lab\n/* a\nb\nc */\nnode"),
+            vec![Token::Lab, Token::Newline, Token::Node]
+        );
+        // Commented-out statement in the middle of a file.
+        assert_eq!(
+            lex_tokens("node a\n/* node b\n*/\nnode c"),
+            vec![
+                Token::Node,
+                Token::Ident("a".into()),
+                Token::Newline,
+                Token::Node,
+                Token::Ident("c".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_block_comment_nested() {
+        assert_eq!(
+            lex_tokens("lab /* outer /* inner */ still commented */ node"),
+            vec![Token::Lab, Token::Node]
+        );
+        assert_eq!(
+            lex_tokens("lab /* a /* b /* c */ */ */ node"),
+            vec![Token::Lab, Token::Node]
+        );
+        // An inner comment that is not closed leaves the outer one open.
+        let err = lex("lab /* outer /* inner */ node").unwrap_err();
+        assert!(
+            err.to_string().contains("unterminated block comment"),
+            "{err}"
+        );
+    }
+
+    /// `/*` inside a string literal is string content, not a comment.
+    #[test]
+    fn test_block_comment_opener_inside_string() {
+        assert_eq!(
+            lex_tokens(r#"lab "a /* b" node"#),
+            vec![Token::Lab, Token::String("a /* b".into()), Token::Node]
+        );
+        assert_eq!(
+            lex_tokens(r#"run ["sh", "-c", "echo /* not a comment */ hi"]"#),
+            vec![
+                Token::Ident("run".into()),
+                Token::LBracket,
+                Token::String("sh".into()),
+                Token::Comma,
+                Token::String("-c".into()),
+                Token::Comma,
+                Token::String("echo /* not a comment */ hi".into()),
+                Token::RBracket,
+            ]
+        );
+        // Unterminated-looking opener in a string must NOT error, and
+        // must not eat the following lines.
+        assert_eq!(
+            lex_tokens("lab \"x /* y\"\nnode a"),
+            vec![
+                Token::Lab,
+                Token::String("x /* y".into()),
+                Token::Newline,
+                Token::Node,
+                Token::Ident("a".into()),
+            ]
+        );
+        // Quotes are not special inside a comment: the first `*/`
+        // closes it, as in C/Rust.
+        assert_eq!(
+            lex_tokens("lab /* \"*/ node"),
+            vec![Token::Lab, Token::Node]
+        );
+    }
+
+    /// `/*` after a `#` line comment is part of the line comment.
+    #[test]
+    fn test_block_comment_opener_inside_line_comment() {
+        assert_eq!(
+            lex_tokens("lab # see /* below\nnode a"),
+            vec![
+                Token::Lab,
+                Token::Newline,
+                Token::Node,
+                Token::Ident("a".into())
+            ]
+        );
+        // The old pre-strip would have swallowed everything up to `*/`.
+        assert_eq!(
+            lex_tokens("lab # /*\nnode a\nnode b # */\nnode c"),
+            vec![
+                Token::Lab,
+                Token::Newline,
+                Token::Node,
+                Token::Ident("a".into()),
+                Token::Newline,
+                Token::Node,
+                Token::Ident("b".into()),
+                Token::Newline,
+                Token::Node,
+                Token::Ident("c".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_block_comment_unterminated_reports_position() {
+        let err = lex("lab \"t\"\nnode a\n  /* never closed\nnode b").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("unterminated block comment"), "{msg}");
+        // Points at the opening `/*`: line 3, column 3.
+        assert!(msg.contains("line 3, column 3"), "{msg}");
+        // `extract_span` must be able to map it back to a byte offset.
+        let src = "lab \"t\"\nnode a\n  /* never closed\nnode b";
+        let (offset, _) = super::super::extract_span(&msg, src);
+        assert_eq!(&src[offset..offset + 2], "/*");
+    }
+
+    /// Spans index the original input, so a token after a block comment
+    /// carries its real byte offset (the pre-strip used to shift them).
+    #[test]
+    fn test_block_comment_preserves_spans() {
+        let src = "lab /* twelve chars */ node";
+        let tokens = lex(src).unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(&src[tokens[0].span.clone()], "lab");
+        assert_eq!(&src[tokens[1].span.clone()], "node");
+
+        let src = "node a\n/* node b\n*/\nnode c";
+        let tokens = lex(src).unwrap();
+        for t in &tokens {
+            let text = &src[t.span.clone()];
+            match &t.token {
+                Token::Ident(s) => assert_eq!(text, s),
+                Token::Node => assert_eq!(text, "node"),
+                Token::Newline => {}
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+        // An error after a comment points at the real offset too.
+        let src = "node a /* x */ @";
+        let err = lex(src).unwrap_err().to_string();
+        assert!(err.contains("line 1, column 16"), "{err}");
+    }
+
+    /// A lone `/` (the `Slash` token) and `*` (`Asterisk`) are unaffected.
+    #[test]
+    fn test_slash_and_asterisk_still_lex() {
+        assert_eq!(
+            lex_tokens("a / b * c"),
+            vec![
+                Token::Ident("a".into()),
+                Token::Slash,
+                Token::Ident("b".into()),
+                Token::Asterisk,
+                Token::Ident("c".into()),
+            ]
+        );
+        assert_eq!(
+            lex_tokens("*-black:fo"),
+            vec![
+                Token::Asterisk,
+                Token::Dash,
+                Token::Ident("black".into()),
+                Token::Colon,
+                Token::Ident("fo".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_strip_newlines_long_leading_run() {
+        let src = format!("{}lab\n\n\nnode\n\n", "\n".repeat(5000));
+        assert_eq!(
+            lex_tokens(&src),
+            vec![Token::Lab, Token::Newline, Token::Node]
+        );
+        assert!(lex_tokens("\n\n\n").is_empty());
+        assert!(lex_tokens("").is_empty());
     }
 }

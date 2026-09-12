@@ -34,6 +34,8 @@ pub(super) struct ApplyEnv {
     pub containers: BTreeMap<String, ContainerState>,
     pub pids: Vec<(String, u32)>,
     pub starttimes: BTreeMap<u32, u64>,
+    /// `"<node>:<index>"` → pid of a background `exec` block (#84).
+    pub exec_pids: BTreeMap<String, u32>,
     pub process_logs: BTreeMap<u32, (String, String)>,
     pub mgmt_peers: BTreeMap<String, String>,
     pub dns_injected: bool,
@@ -60,6 +62,7 @@ impl ApplyEnv {
             containers: BTreeMap::new(),
             pids: Vec::new(),
             starttimes: BTreeMap::new(),
+            exec_pids: BTreeMap::new(),
             process_logs: BTreeMap::new(),
             mgmt_peers: BTreeMap::new(),
             dns_injected: false,
@@ -94,6 +97,8 @@ impl ApplyEnv {
         }
         env.pids = running.pids().to_vec();
         env.starttimes = running.starttimes().clone();
+        env.exec_pids = running.exec_pids().clone();
+        env.process_logs = running.process_logs_map().clone();
         env.mgmt_peers = running.mgmt_peers().clone();
         env.dns_injected = running.dns_injected();
         env.wifi_loaded = running.wifi_loaded();
@@ -737,6 +742,23 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     })?;
             }
         }
+        Op::KillExec { node, index } => {
+            let key = format!("{node}:{index}");
+            match env.exec_pids.remove(&key) {
+                Some(pid) => {
+                    let outcome =
+                        crate::running::kill_tracked(pid, env.starttimes.get(&pid).copied());
+                    tracing::info!("stop exec[{index}] of '{node}' (pid {pid}): {outcome:?}");
+                    env.starttimes.remove(&pid);
+                    env.process_logs.remove(&pid);
+                    env.pids.retain(|(_, p)| *p != pid);
+                }
+                None => tracing::warn!(
+                    "exec[{index}] of '{node}': no tracked pid (started before 0.9, or a \
+                     container exec); its process is left running"
+                ),
+            }
+        }
         Op::KillNodeProcesses { node } => {
             let mine: Vec<u32> = env
                 .pids
@@ -750,6 +772,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 env.process_logs.remove(&pid);
             }
             env.pids.retain(|(n, _)| n != node);
+            env.exec_pids
+                .retain(|k, _| k.split_once(':').map(|(n, _)| n) != Some(node));
         }
         Op::RemoveDns { lab } => {
             if let Err(e) = crate::dns::remove_hosts(lab) {
@@ -873,6 +897,7 @@ fn exec_op(
     if let Some(st) = started {
         env.starttimes.insert(pid, st);
     }
+    env.exec_pids.insert(format!("{node}:{index}"), pid);
     let final_stdout = log_dir.join(format!("{node}-{basename}-{pid}.stdout"));
     let final_stderr = log_dir.join(format!("{node}-{basename}-{pid}.stderr"));
     let _ = std::fs::rename(&stdout_path, &final_stdout);

@@ -72,6 +72,12 @@ pub struct LabState {
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub process_logs: std::collections::BTreeMap<u32, (String, String)>,
+    /// Background `exec` blocks → pid, keyed `"<node>:<index>"`, so
+    /// `apply` can stop exactly the process an edited or removed `exec`
+    /// line started (#84). Absent in files written before 0.9: those
+    /// processes are never signalled by index (only by node removal).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub exec_pids: std::collections::BTreeMap<String, u32>,
 }
 
 fn schema_v1() -> u32 {
@@ -97,6 +103,7 @@ impl LabState {
             wifi_loaded: false,
             saved_impairments: Default::default(),
             process_logs: Default::default(),
+            exec_pids: Default::default(),
         }
     }
 }
@@ -531,6 +538,7 @@ link r1:eth0 -- h1:eth0
         assert_eq!(st.schema_version, 1);
         assert!(st.starttimes.is_empty());
         assert!(st.mgmt_peers.is_empty());
+        assert!(st.exec_pids.is_empty());
         let fresh = LabState::new("n", "t");
         assert_eq!(fresh.schema_version, SCHEMA_VERSION);
         let back: LabState = serde_json::from_str(&serde_json::to_string(&fresh).unwrap()).unwrap();

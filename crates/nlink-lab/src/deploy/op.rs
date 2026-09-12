@@ -378,6 +378,11 @@ pub enum Op {
     KillNodeProcesses {
         node: String,
     },
+    /// Stop the process a background `exec` block started (#84).
+    KillExec {
+        node: String,
+        index: usize,
+    },
     RemoveDns {
         lab: String,
     },
@@ -411,9 +416,11 @@ impl Op {
             | ClearQdisc { .. }
             | RemoveRateLimit { .. } => Stage::Tc,
             DnsInject { .. } | DnsNetnsEtc { .. } | RemoveDns { .. } => Stage::Dns,
-            StartupDelay { .. } | Exec { .. } | Healthcheck { .. } | KillNodeProcesses { .. } => {
-                Stage::Processes
-            }
+            StartupDelay { .. }
+            | Exec { .. }
+            | Healthcheck { .. }
+            | KillNodeProcesses { .. }
+            | KillExec { .. } => Stage::Processes,
             WifiDaemon { .. } => Stage::Wifi,
         }
     }
@@ -456,7 +463,7 @@ impl Op {
             DnsInject { lab } | RemoveDns { lab } => format!("dns:{lab}"),
             DnsNetnsEtc { ns, .. } => format!("dns-etc:{ns}"),
             StartupDelay { node, .. } => format!("delay:{node}"),
-            Exec { node, index, .. } => format!("exec:{node}:{index}"),
+            Exec { node, index, .. } | KillExec { node, index } => format!("exec:{node}:{index}"),
             Healthcheck { node, .. } => format!("healthcheck:{node}"),
             WifiDaemon { node, wifi } => format!("wifi:{node}:{}", wifi.name),
             KillNodeProcesses { node } => format!("procs:{node}"),
@@ -514,7 +521,12 @@ impl Op {
                 iface: iface.clone(),
             },
             DnsInject { lab } => RemoveDns { lab: lab.clone() },
-            Exec { node, exec, .. } if exec.background => KillNodeProcesses { node: node.clone() },
+            Exec {
+                node, index, exec, ..
+            } if exec.background => KillExec {
+                node: node.clone(),
+                index: *index,
+            },
             _ => return None,
         })
     }
@@ -532,6 +544,7 @@ impl Op {
                 | ClearQdisc { .. }
                 | RemoveRateLimit { .. }
                 | KillNodeProcesses { .. }
+                | KillExec { .. }
                 | RemoveDns { .. }
         )
     }
@@ -598,6 +611,7 @@ impl Op {
             ClearQdisc { node, iface } => format!("clear qdisc on {node}:{iface}"),
             RemoveRateLimit { node, iface } => format!("remove rate limit on {node}:{iface}"),
             KillNodeProcesses { node } => format!("stop background processes of {node}"),
+            KillExec { node, index } => format!("{node}: stop exec[{index}]"),
             RemoveDns { lab } => format!("remove /etc/hosts entries for {lab}"),
         }
     }
@@ -653,7 +667,8 @@ impl Plan {
             | Op::DelRoute { node, .. }
             | Op::ClearQdisc { node, .. }
             | Op::RemoveRateLimit { node, .. }
-            | Op::KillNodeProcesses { node } => !dying.contains(node.as_str()),
+            | Op::KillNodeProcesses { node }
+            | Op::KillExec { node, .. } => !dying.contains(node.as_str()),
             _ => true,
         });
         removals.sort_by_key(|o| std::cmp::Reverse(o.stage()));
@@ -662,6 +677,8 @@ impl Plan {
         removals.retain(|o| seen.insert(o.key() + &format!("{:?}", o.stage())));
 
         let mut changes: Vec<Op> = Vec::new();
+        // nodes whose background exec was restarted → healthcheck again
+        let mut restarted: std::collections::BTreeSet<String> = Default::default();
         for op in &desired.ops {
             match cur.get(&op.key()) {
                 None => changes.push(op.clone()),
@@ -672,11 +689,25 @@ impl Plan {
                     | Op::NetworkImpairments
                     | Op::DnsInject { .. }
                     | Op::DnsNetnsEtc { .. } => changes.push(op.clone()),
+                    // an edited exec is stopped (background) and re-run;
+                    // an unchanged one is left alone (#84)
+                    Op::Exec { node, .. } => {
+                        if format!("{existing:?}") != format!("{op:?}") {
+                            if let Some(inv) = existing.inverse() {
+                                removals.push(inv);
+                            }
+                            changes.push(op.clone());
+                            restarted.insert(node.clone());
+                        }
+                    }
+                    Op::Healthcheck { node, .. } => {
+                        if restarted.contains(node) || format!("{existing:?}") != format!("{op:?}")
+                        {
+                            changes.push(op.clone());
+                        }
+                    }
                     // one-shot process ops only run for new nodes
-                    Op::Exec { .. }
-                    | Op::Healthcheck { .. }
-                    | Op::StartupDelay { .. }
-                    | Op::WifiDaemon { .. } => {}
+                    Op::StartupDelay { .. } | Op::WifiDaemon { .. } => {}
                     // everything else: re-create when the payload changed
                     _ => {
                         if format!("{existing:?}") != format!("{op:?}") {

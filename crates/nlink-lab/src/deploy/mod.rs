@@ -120,6 +120,7 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     lab_state.namespaces = env.namespace_names.clone();
     lab_state.pids = env.pids.clone();
     lab_state.starttimes = env.starttimes.clone();
+    lab_state.exec_pids = env.exec_pids.clone();
     lab_state.mgmt_peers = env.mgmt_peers.clone();
     lab_state.wg_public_keys = wg_public_keys_b64;
     lab_state.containers = env.containers.clone();
@@ -139,6 +140,7 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
         env.wifi_loaded,
     );
     running.set_starttimes(env.starttimes);
+    running.set_exec_pids(env.exec_pids);
     running.set_mgmt_peers(env.mgmt_peers);
     running.set_process_logs(env.process_logs);
 
@@ -249,6 +251,7 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
         env.containers,
         env.pids,
         env.starttimes,
+        env.exec_pids,
         env.process_logs,
         env.mgmt_peers,
         env.dns_injected,
@@ -263,6 +266,7 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     lab_state.namespaces = running.namespace_names().clone();
     lab_state.pids = running.pids().to_vec();
     lab_state.starttimes = running.starttimes().clone();
+    lab_state.exec_pids = running.exec_pids().clone();
     lab_state.mgmt_peers = running.mgmt_peers().clone();
     lab_state.containers = running.containers().clone();
     lab_state.runtime = running.runtime_binary().map(|s| s.to_string());

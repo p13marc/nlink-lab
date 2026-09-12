@@ -37,6 +37,9 @@ pub struct RunningLab {
     /// `/proc/<pid>/stat` start time per tracked PID (see
     /// `LabState::starttimes`). A PID without an entry is never signalled.
     starttimes: BTreeMap<u32, u64>,
+    /// Background `exec` block → pid (`"<node>:<index>"`, see
+    /// `LabState::exec_pids`).
+    exec_pids: BTreeMap<String, u32>,
     /// node → root-namespace mgmt veth peer name (see `LabState::mgmt_peers`).
     mgmt_peers: std::collections::BTreeMap<String, String>,
     /// Outcome of the `validate { … }` assertions run at deploy step 19.
@@ -171,6 +174,7 @@ impl RunningLab {
             dns_injected,
             wifi_loaded,
             starttimes: BTreeMap::new(),
+            exec_pids: BTreeMap::new(),
             mgmt_peers: std::collections::BTreeMap::new(),
             saved_impairments: BTreeMap::new(),
             process_logs: BTreeMap::new(),
@@ -343,6 +347,15 @@ impl RunningLab {
     }
 
     /// Record PID start times captured at deploy time.
+    /// Background `exec` block (`"<node>:<index>"`) → pid.
+    pub fn exec_pids(&self) -> &BTreeMap<String, u32> {
+        &self.exec_pids
+    }
+
+    pub(crate) fn set_exec_pids(&mut self, exec_pids: BTreeMap<String, u32>) {
+        self.exec_pids = exec_pids;
+    }
+
     pub(crate) fn set_starttimes(&mut self, starttimes: BTreeMap<u32, u64>) {
         self.starttimes = starttimes;
     }
@@ -383,6 +396,7 @@ impl RunningLab {
         containers: BTreeMap<String, ContainerState>,
         pids: Vec<(String, u32)>,
         starttimes: BTreeMap<u32, u64>,
+        exec_pids: BTreeMap<String, u32>,
         process_logs: BTreeMap<u32, (String, String)>,
         mgmt_peers: BTreeMap<String, String>,
         dns_injected: bool,
@@ -392,6 +406,7 @@ impl RunningLab {
         self.containers = containers;
         self.pids = pids;
         self.starttimes = starttimes;
+        self.exec_pids = exec_pids;
         self.process_logs = process_logs;
         self.mgmt_peers = mgmt_peers;
         self.dns_injected = dns_injected;
@@ -677,6 +692,7 @@ impl RunningLab {
         lab_state.wifi_loaded = self.wifi_loaded;
         lab_state.pids = self.pids.clone();
         lab_state.starttimes = self.starttimes.clone();
+        lab_state.exec_pids = self.exec_pids.clone();
         lab_state.mgmt_peers = self.mgmt_peers.clone();
         lab_state.saved_impairments = self.saved_impairments.clone();
         lab_state.process_logs = self.process_logs.clone();
@@ -1427,6 +1443,7 @@ impl RunningLab {
             saved_impairments: lab_state.saved_impairments,
             process_logs: lab_state.process_logs,
             starttimes: lab_state.starttimes,
+            exec_pids: lab_state.exec_pids,
             mgmt_peers: lab_state.mgmt_peers,
             assertion_results: Vec::new(),
         })

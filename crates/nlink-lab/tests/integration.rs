@@ -1687,6 +1687,77 @@ async fn state_persistence(lab: RunningLab) {
     assert_eq!(loaded.namespace_count(), lab.namespace_count());
 }
 
+// Issue #84: editing a background `run` line and applying must stop the
+// old process and start the new one; removing the line stops it.
+#[tokio::test]
+async fn apply_restarts_edited_background_exec() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_restarts_edited_background_exec: requires root");
+        return;
+    }
+    let src = r#"lab "apply-exec-edit"
+node s { run ["sleep", "1000"] background }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let old = *lab
+        .exec_pids()
+        .get("s:0")
+        .expect("exec pid tracked after deploy");
+    let comm =
+        |pid: u32| std::fs::read_to_string(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+    assert!(comm(old).contains("1000"), "{}", comm(old));
+
+    let desired = nlink_lab::parser::parse(&src.replace("1000", "999")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let new = *lab
+        .exec_pids()
+        .get("s:0")
+        .expect("exec pid tracked after apply");
+    assert_ne!(new, old);
+    assert!(comm(new).contains("999"), "{}", comm(new));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::path::Path::new(&format!("/proc/{old}")).exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "old exec pid {old} still alive"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let alive: Vec<u32> = lab
+        .process_status_alive_only()
+        .iter()
+        .map(|p| p.pid)
+        .collect();
+    assert_eq!(alive, vec![new], "exactly the new process is tracked");
+    // persisted
+    let reloaded = RunningLab::load(lab.name()).unwrap();
+    assert_eq!(reloaded.exec_pids().get("s:0"), Some(&new));
+
+    // Removing the line stops it without touching anything else.
+    let desired = nlink_lab::parser::parse("lab \"apply-exec-edit\"\nnode s\n").unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::path::Path::new(&format!("/proc/{new}")).exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "removed exec pid {new} still alive"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(lab.exec_pids().is_empty(), "{:?}", lab.exec_pids());
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Issue #83: a VRF-table route removed from the topology must be
 // deleted on apply. nlink's purge only converges the main table, so the
 // engine owns non-main-table routes as explicit ops.

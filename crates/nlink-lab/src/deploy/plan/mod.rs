@@ -528,6 +528,65 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
     }
 
     #[test]
+    fn diff_edited_background_exec_kills_then_reexecs() {
+        let src = format!(
+            "{SIMPLE}\nnode s {{ run [\"sleep\", \"1000\"] background  healthcheck \"true\" }}\n"
+        );
+        let cur = plan_of(&src);
+        let des = plan_of(&src.replace("1000", "999"));
+        let d = Plan::diff(&cur, &des);
+        let kill = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::KillExec { node, index: 0 } if node == "s"));
+        let exec = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Exec { node, .. } if node == "s"));
+        assert!(kill.is_some() && exec.is_some(), "{:?}", d.ops);
+        assert!(kill < exec, "stop must precede the re-exec");
+        assert!(
+            d.ops
+                .iter()
+                .any(|o| matches!(o, Op::Healthcheck { node, .. } if node == "s")),
+            "healthcheck must re-run after a restart: {:?}",
+            d.ops
+        );
+        assert!(
+            !d.ops
+                .iter()
+                .any(|o| matches!(o, Op::KillNodeProcesses { .. })),
+            "a targeted kill, never the node-wide one: {:?}",
+            d.ops
+        );
+        // unchanged: nothing on the process layer
+        let same = Plan::diff(&cur, &plan_of(&src));
+        assert!(
+            !same.ops.iter().any(|o| o.stage() == Stage::Processes),
+            "{:?}",
+            same.ops
+        );
+    }
+
+    #[test]
+    fn diff_removed_exec_line_stops_only_that_process() {
+        let src = format!(
+            "{SIMPLE}\nnode s {{ run [\"sleep\", \"1000\"] background  run [\"sleep\", \"2000\"] background }}\n"
+        );
+        let cur = plan_of(&src);
+        let des = plan_of(&src.replace("  run [\"sleep\", \"2000\"] background", ""));
+        let d = Plan::diff(&cur, &des);
+        let kills: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::KillExec { .. }))
+            .collect();
+        assert_eq!(kills.len(), 1, "{:?}", d.ops);
+        assert!(matches!(kills[0], Op::KillExec { node, index: 1 } if node == "s"));
+        assert!(!d.ops.iter().any(|o| matches!(o, Op::Exec { .. })));
+    }
+
+    #[test]
     fn diff_one_shot_process_ops_only_run_for_new_nodes() {
         let src = format!("{SIMPLE}\nnode s {{ run [\"sleep\", \"1\"] background }}\n");
         let cur = plan_of(&src);

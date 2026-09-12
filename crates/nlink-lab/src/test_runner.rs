@@ -39,11 +39,20 @@ pub struct AssertionResult {
 
 /// Run a topology test: parse → deploy → validate → destroy.
 pub async fn run_test(path: &Path) -> Result<TestResult> {
+    run_test_with_params(path, &[]).await
+}
+
+/// [`run_test`] with `param` values (`--set key=value`) applied to the file.
+pub async fn run_test_with_params(path: &Path, params: &[(String, String)]) -> Result<TestResult> {
     let file = path.display().to_string();
     let total_start = Instant::now();
 
     // Parse
-    let topology = crate::parser::parse_file(path)?;
+    let topology = if params.is_empty() {
+        crate::parser::parse_file(path)?
+    } else {
+        crate::parser::parse_file_with_params(path, params)?
+    };
     topology.validate().bail()?;
 
     // Deploy

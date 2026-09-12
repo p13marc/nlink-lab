@@ -111,6 +111,13 @@ impl From<WatchFamilyArg> for nlink_lab::WatchFamily {
     }
 }
 
+/// `metrics --format` values.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum MetricsFormat {
+    Table,
+    Json,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Deploy a lab from a topology file (.nll).
@@ -150,6 +157,11 @@ enum Commands {
         #[arg(long)]
         suffix: Option<String>,
 
+        /// Fail (exit 2) when any `validate { … }` assertion fails after
+        /// deploy. The lab stays deployed for inspection.
+        #[arg(long)]
+        strict: bool,
+
         /// Auto-generate unique lab name suffix (appends PID).
         #[arg(long)]
         unique: bool,
@@ -164,6 +176,11 @@ enum Commands {
     Apply {
         /// Path to the updated topology file (.nll).
         topology: PathBuf,
+
+        /// Set a `param` value (repeatable): --set wan_delay=50ms. Use the
+        /// same values the lab was deployed with.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
 
         /// Show what would change without applying.
         #[arg(long)]
@@ -360,6 +377,10 @@ enum Commands {
         /// Topology file or directory of .nll files.
         path: PathBuf,
 
+        /// Set a `param` value (repeatable) for every file: --set k=v.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
+
         /// Write JUnit XML results to file.
         #[arg(long)]
         junit: Option<PathBuf>,
@@ -381,6 +402,7 @@ enum Commands {
     ///
     /// Without `--show`, applies impairment changes; output is plain
     /// confirmation text.
+    #[command(group = clap::ArgGroup::new("impair_mode").args(["show", "clear", "partition", "heal"]).multiple(false))]
     Impair {
         /// Lab name.
         lab: String,
@@ -453,10 +475,40 @@ enum Commands {
         heal: bool,
     },
 
+    /// Run a `scenario` block from a deployed lab's topology.
+    ///
+    /// JSON OUTPUT (with `--json`): the full `ScenarioResult` (steps,
+    /// actions, assertion outcomes, timings). Exit 2 when any step fails.
+    Scenario {
+        /// Lab name (must be deployed).
+        lab: String,
+
+        /// Scenario name as declared in the topology (`scenario "name" { … }`).
+        /// Omit to list the scenarios the lab defines.
+        name: Option<String>,
+    },
+
+    /// Regenerate `docs/cli/*.md` from the clap definitions (maintainers).
+    #[command(hide = true)]
+    DocsGen {
+        /// Output directory.
+        #[arg(long, default_value = "docs/cli")]
+        out: PathBuf,
+    },
+
     /// Print topology as DOT graph.
     Graph {
         /// Path to the topology file (.nll).
         topology: PathBuf,
+
+        /// Set a `param` value (repeatable): --set k=v.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
+
+        /// Emit a Mermaid `graph LR` block instead of DOT (renders inline
+        /// in Forgejo/GitHub markdown).
+        #[arg(long)]
+        mermaid: bool,
     },
 
     /// Render a topology file with all loops, variables, and imports expanded.
@@ -807,11 +859,15 @@ enum Commands {
 
     /// Compare two topology files and show differences.
     Diff {
-        /// First topology file (or lab name with --lab).
+        /// First topology file.
         a: PathBuf,
 
         /// Second topology file.
         b: PathBuf,
+
+        /// Set a `param` value (repeatable) for both files: --set k=v.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
     },
 
     /// Export a running lab's topology as serialized data.
@@ -921,6 +977,10 @@ enum Commands {
     Pull {
         /// Path to the topology file (.nll).
         topology: PathBuf,
+
+        /// Set a `param` value (repeatable): --set k=v.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        params: Vec<String>,
     },
 
     /// Show container resource usage.
@@ -975,9 +1035,9 @@ enum Commands {
         #[arg(short, long)]
         node: Option<String>,
 
-        /// Output format: table (default), json.
-        #[arg(short, long, default_value = "table")]
-        format: String,
+        /// Output format (`--json` selects json too).
+        #[arg(short, long, value_enum, default_value_t = MetricsFormat::Table)]
+        format: MetricsFormat,
 
         /// Number of samples then exit.
         #[arg(short, long)]
@@ -1001,9 +1061,6 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Output format.
-        #[arg(short, long, default_value = "nll")]
-        format: String,
 
         /// Override the lab name.
         #[arg(short, long)]
@@ -1013,6 +1070,33 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+}
+
+/// Process exit status chosen by a subcommand that completed its work
+/// but wants a non-zero status (a child's exit code, an assertion
+/// failure, …). `run()` keeps returning `Result<()>`; arms call
+/// [`set_exit_code`] instead of `std::process::exit` so buffered
+/// output and destructors still run.
+static EXIT_CODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Exit codes: 0 ok · 1 error · 2 validation / assertion / drift
+/// failure · 124 timeout · `exec`/`shell` pass the child's code through.
+const EXIT_FAILURE: u8 = 1;
+const EXIT_VALIDATION: u8 = 2;
+const EXIT_TIMEOUT: u8 = 124;
+
+fn set_exit_code(code: u8) {
+    EXIT_CODE.store(code, std::sync::atomic::Ordering::SeqCst);
+}
+
+fn exit_code_for(err: &nlink_lab::Error) -> u8 {
+    match err {
+        nlink_lab::Error::Validation(_)
+        | nlink_lab::Error::ValidationErrors(_)
+        | nlink_lab::Error::InvalidTopology(_) => EXIT_VALIDATION,
+        nlink_lab::Error::Timeout(_) => EXIT_TIMEOUT,
+        _ => EXIT_FAILURE,
+    }
 }
 
 fn main() -> ExitCode {
@@ -1042,16 +1126,22 @@ fn main() -> ExitCode {
     // stderr to keep stdout clean for tools piping JSON output).
     let want_json_errors = cli.json;
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("error: cannot start the async runtime: {e}");
+            return ExitCode::from(EXIT_FAILURE);
+        }
+    };
     match rt.block_on(run(cli)) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) => ExitCode::from(EXIT_CODE.load(std::sync::atomic::Ordering::SeqCst)),
         Err(nlink_lab::Error::NllDiagnostic(diag)) => {
             // NLL diagnostics get their own rich miette renderer
             // even under --json; the structured envelope below is
             // for kernel/runtime errors.
             let report = miette::Report::new(*diag);
             eprintln!("{report:?}");
-            ExitCode::FAILURE
+            ExitCode::from(EXIT_VALIDATION)
         }
         Err(e) if want_json_errors => {
             let envelope = render_error_json(&e);
@@ -1062,11 +1152,11 @@ fn main() -> ExitCode {
                 "{}",
                 serde_json::to_string_pretty(&envelope).unwrap_or_else(|_| format!("error: {e}"))
             );
-            ExitCode::FAILURE
+            ExitCode::from(exit_code_for(&e))
         }
         Err(e) => {
             eprintln!("error: {e}");
-            ExitCode::FAILURE
+            ExitCode::from(exit_code_for(&e))
         }
     }
 }
@@ -1087,13 +1177,30 @@ fn render_error_json(err: &nlink_lab::Error) -> serde_json::Value {
             None => break,
         }
     }
-    serde_json::json!({
+    let mut envelope = serde_json::json!({
         "error": err.to_string(),
         "error_chain": chain,
         "errno": err.errno(),
         "ext_ack": err.ext_ack(),
         "ext_ack_offset": err.ext_ack_offset(),
-    })
+        "exit_code": exit_code_for(err),
+    });
+    // Validation failures carry the structured issues so `--json`
+    // consumers do not have to scrape "see errors above".
+    if let nlink_lab::Error::ValidationErrors(issues) = err {
+        envelope["issues"] = serde_json::to_value(issues).unwrap_or(serde_json::Value::Null);
+    }
+    envelope
+}
+
+/// Turn a failed validation into the structured error (exit 2, issues
+/// in the JSON envelope), printing the human-readable list first.
+fn validation_failed(lab: &str, result: &nlink_lab::ValidationResult) -> nlink_lab::Error {
+    eprintln!("Validation failed for {lab:?}:");
+    for e in result.errors() {
+        eprintln!("  {} {e}", red("ERROR"));
+    }
+    nlink_lab::Error::ValidationErrors(result.errors().cloned().collect())
 }
 
 /// Parse a topology file, optionally with CLI `--set` parameters.
@@ -1132,6 +1239,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             daemon,
             skip_validate,
             params,
+            strict,
             suffix,
             unique,
         } => {
@@ -1152,11 +1260,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
 
             if result.has_errors() {
-                eprintln!("Validation failed for {:?}:", topo.lab.name);
-                for e in result.errors() {
-                    eprintln!("  {} {e}", red("ERROR"));
-                }
-                return Err(nlink_lab::Error::Validation("see errors above".into()));
+                return Err(validation_failed(&topo.lab.name, &result));
             }
 
             if dry_run {
@@ -1176,22 +1280,25 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 }
             }
 
-            check_root();
+            require_root()?;
 
             let start = Instant::now();
             let lab = topo.deploy().await?;
             let elapsed = start.elapsed();
+            let assertions_failed = lab.assertions_failed();
 
             if json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "name": topo.lab.name,
-                        "nodes": topo.nodes.len(),
-                        "links": topo.links.len(),
-                        "deploy_time_ms": elapsed.as_millis() as u64,
-                    })
-                );
+                let mut report = serde_json::json!({
+                    "name": topo.lab.name,
+                    "nodes": topo.nodes.len(),
+                    "links": topo.links.len(),
+                    "deploy_time_ms": elapsed.as_millis() as u64,
+                });
+                if !lab.assertion_results().is_empty() {
+                    report["assertions"] = serde_json::to_value(lab.assertion_results())?;
+                    report["assertions_failed"] = serde_json::Value::Bool(assertions_failed);
+                }
+                println!("{report}");
             } else {
                 println!(
                     "{} Lab {:?} deployed in {:.0?}",
@@ -1224,6 +1331,31 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     );
                     println!("  nlink-lab destroy {}         # tear down", topo.lab.name);
                 }
+                for a in lab.assertion_results() {
+                    if !a.passed {
+                        eprintln!(
+                            "  {} {}{}",
+                            red("FAIL"),
+                            a.description,
+                            a.detail.as_ref().map(|d| format!(": {d}")).unwrap_or_default()
+                        );
+                    }
+                }
+            }
+
+            if assertions_failed {
+                if strict {
+                    return Err(nlink_lab::Error::Validation(format!(
+                        "{} of {} assertion(s) failed (lab {:?} left deployed for inspection)",
+                        lab.assertion_results().iter().filter(|a| !a.passed).count(),
+                        lab.assertion_results().len(),
+                        topo.lab.name
+                    )));
+                }
+                eprintln!(
+                    "  {} assertions failed; pass --strict to make this fatal",
+                    yellow("WARN")
+                );
             }
 
             if daemon {
@@ -1234,18 +1366,21 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
         Commands::Apply {
             topology,
+            params,
             dry_run,
             check,
         } => {
             // --check implies --dry-run.
             let dry_run = dry_run || check;
 
-            let desired = nlink_lab::parser::parse_file(&topology)?;
+            let desired = parse_topology(&topology, &params)?;
             let result = desired.validate();
             for w in result.warnings() {
                 eprintln!("  {} {w}", yellow("WARN"));
             }
             if result.has_errors() {
+                return Err(validation_failed(&desired.lab.name, &result));
+                #[allow(unreachable_code)]
                 for e in result.errors() {
                     eprintln!("  {} {e}", red("ERROR"));
                 }
@@ -1379,7 +1514,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 return Ok(());
             }
 
-            check_root();
+            require_root()?;
             let start = Instant::now();
             nlink_lab::apply_diff(&mut running, &desired, &diff).await?;
             let elapsed = start.elapsed();
@@ -1400,7 +1535,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             all,
             orphans,
         } => {
-            check_root();
+            require_root()?;
             if all {
                 let labs = nlink_lab::RunningLab::list()?;
                 if labs.is_empty() && !orphans {
@@ -1604,7 +1739,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             timeout,
             cmd,
         } => {
-            check_root();
+            require_root()?;
             let env_pairs = parse_env_pairs(&env_vars)?;
             let env_refs: Vec<(&str, &str)> = env_pairs
                 .iter()
@@ -1636,7 +1771,16 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                     }))
                 })();
                 match result {
-                    Ok(json) => println!("{json}"),
+                    Ok(json) => {
+                        // The process exits with the child's code, exactly
+                        // like the non-JSON path (#42); the envelope still
+                        // carries it for consumers.
+                        let code = json["exit_code"].as_i64().unwrap_or(0);
+                        println!("{json}");
+                        if code != 0 {
+                            set_exit_code(u8::try_from(code.clamp(0, 255)).unwrap_or(EXIT_FAILURE));
+                        }
+                    }
                     Err(nlink_lab::Error::Timeout(d)) => {
                         // Timeout in --json: emit a structured error and
                         // exit 124 so scripts can distinguish "child
@@ -1651,9 +1795,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                                 "duration_ms": d.as_millis() as u64,
                             })
                         );
-                        std::process::exit(124);
+                        set_exit_code(EXIT_TIMEOUT);
                     }
                     Err(e) => {
+                        // Lab-level error (lab/node not found, exec failed):
+                        // the same exec-shaped envelope on stdout so
+                        // consumers keep one parser, plus the structured
+                        // error envelope on stderr and a non-zero exit.
                         println!(
                             "{}",
                             serde_json::json!({
@@ -1664,6 +1812,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                                 "duration_ms": 0,
                             })
                         );
+                        return Err(e);
                     }
                 }
                 return Ok(());
@@ -1676,21 +1825,21 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let node_names: Vec<&str> = running.node_names().collect();
             if !node_names.contains(&node.as_str()) {
-                eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
                 eprintln!("Available nodes: {}", node_names.join(", "));
-                std::process::exit(1);
+                return Err(nlink_lab::Error::NodeNotFound { name: node });
             }
             let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
             match running.exec_attached_with_opts(&node, &cmd[0], &args, opts) {
                 Ok(code) => {
                     if code != 0 {
-                        std::process::exit(code);
+                        set_exit_code(u8::try_from(code.clamp(0, 255)).unwrap_or(EXIT_FAILURE));
                     }
                     Ok(())
                 }
                 Err(nlink_lab::Error::Timeout(d)) => {
                     eprintln!("nlink-lab exec: command timed out after {d:?}");
-                    std::process::exit(124);
+                    set_exit_code(EXIT_TIMEOUT);
+                    Ok(())
                 }
                 Err(e) => Err(e),
             }
@@ -1710,7 +1859,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             wait_timeout,
             cmd,
         } => {
-            check_root();
+            require_root()?;
             let env_pairs = parse_env_pairs(&env_vars)?;
             let env_refs: Vec<(&str, &str)> = env_pairs
                 .iter()
@@ -1816,16 +1965,34 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let topo = parse_topology(&topology, &params)?;
             let result = topo.validate();
 
+            if json {
+                // One envelope for both outcomes; exit 2 on errors (#46).
+                let issues: Vec<&nlink_lab::ValidationIssue> = result.issues().iter().collect();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "lab": topo.lab.name,
+                        "valid": !result.has_errors(),
+                        "nodes": topo.nodes.len(),
+                        "links": topo.links.len(),
+                        "networks": topo.networks.len(),
+                        "errors": result.errors().count(),
+                        "warnings": result.warnings().count(),
+                        "issues": issues,
+                    }))?
+                );
+                if result.has_errors() {
+                    set_exit_code(EXIT_VALIDATION);
+                }
+                return Ok(());
+            }
+
             for w in result.warnings() {
                 eprintln!("  {} {w}", yellow("WARN"));
             }
 
             if result.has_errors() {
-                eprintln!("Validation failed for {:?}:", topo.lab.name);
-                for e in result.errors() {
-                    eprintln!("  {} {e}", red("ERROR"));
-                }
-                return Err(nlink_lab::Error::Validation("see errors above".into()));
+                return Err(validation_failed(&topo.lab.name, &result));
             }
 
             println!("Topology {:?} is valid", topo.lab.name);
@@ -1875,11 +2042,24 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
         Commands::Test {
             path,
+            params,
             junit,
             tap,
             fail_fast,
         } => {
-            check_root();
+            require_root()?;
+            let cli_params: Vec<(String, String)> = params
+                .iter()
+                .map(|p| {
+                    p.split_once('=')
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .ok_or_else(|| {
+                            nlink_lab::Error::invalid_topology(format!(
+                                "invalid --set format: '{p}' (expected KEY=VALUE)"
+                            ))
+                        })
+                })
+                .collect::<nlink_lab::Result<Vec<_>>>()?;
 
             // Collect .nll files
             let files: Vec<PathBuf> = if path.is_dir() {
@@ -1904,7 +2084,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             for file in &files {
                 eprint!("Testing {} ... ", file.display());
-                match nlink_lab::test_runner::run_test(file).await {
+                match nlink_lab::test_runner::run_test_with_params(file, &cli_params).await {
                     Ok(result) => {
                         let pass_count = result.assertions.iter().filter(|a| a.passed).count();
                         let total = result.assertions.len();
@@ -1962,7 +2142,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             }
 
             if any_failed {
-                std::process::exit(1);
+                set_exit_code(EXIT_VALIDATION);
             }
             Ok(())
         }
@@ -1987,7 +2167,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             partition,
             heal,
         } => {
-            check_root();
+            require_root()?;
             let mut running = nlink_lab::RunningLab::load(&lab)?;
 
             if show {
@@ -2016,15 +2196,28 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 nlink_lab::Error::invalid_topology("endpoint required (use --show to inspect)")
             })?;
 
+            let report = |action: &str, endpoint: &str, peer: Option<&str>| {
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({ "lab": lab, "endpoint": endpoint, "action": action, "peer": peer })
+                    );
+                } else {
+                    match peer {
+                        Some(p) => println!("{action} {endpoint} (via {p})"),
+                        None => println!("{action} {endpoint}"),
+                    }
+                }
+            };
             if partition {
                 running.partition(&endpoint).await?;
-                println!("Partitioned {endpoint}");
+                report("partitioned", &endpoint, None);
             } else if heal {
                 running.heal(&endpoint).await?;
-                println!("Healed {endpoint}");
+                report("healed", &endpoint, None);
             } else if clear {
                 running.clear_impairment(&endpoint).await?;
-                println!("Cleared impairment on {endpoint}");
+                report("cleared", &endpoint, None);
             } else {
                 let has_directional = out_delay.is_some()
                     || out_jitter.is_some()
@@ -2061,12 +2254,12 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
                     if egress != nlink_lab::Impairment::default() {
                         running.set_impairment(&endpoint, &egress).await?;
-                        println!("Updated egress impairment on {endpoint}");
+                        report("updated egress impairment on", &endpoint, None);
                     }
                     if ingress != nlink_lab::Impairment::default() {
                         let peer = running.peer_endpoint(&endpoint)?;
                         running.set_impairment(&peer, &ingress).await?;
-                        println!("Updated ingress impairment on {endpoint} (via {peer})");
+                        report("updated ingress impairment on", &endpoint, Some(&peer));
                     }
                 } else {
                     let impairment = nlink_lab::Impairment {
@@ -2077,15 +2270,91 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                         ..Default::default()
                     };
                     running.set_impairment(&endpoint, &impairment).await?;
-                    println!("Updated impairment on {endpoint}");
+                    report("updated impairment on", &endpoint, None);
                 }
             }
             Ok(())
         }
 
-        Commands::Graph { topology } => {
-            let topo = nlink_lab::parser::parse_file(&topology)?;
-            print!("{}", topology_to_dot(&topo));
+        Commands::Scenario { lab, name } => {
+            let running = nlink_lab::RunningLab::load(&lab)?;
+            let scenarios = &running.topology().scenarios;
+            let Some(name) = name else {
+                if json {
+                    let names: Vec<&str> = scenarios.iter().map(|s| s.name.as_str()).collect();
+                    println!("{}", serde_json::to_string_pretty(&names)?);
+                } else if scenarios.is_empty() {
+                    println!("Lab '{lab}' defines no scenarios.");
+                } else {
+                    for sc in scenarios {
+                        println!("{}  ({} steps)", sc.name, sc.steps.len());
+                    }
+                }
+                return Ok(());
+            };
+            let scenario = scenarios
+                .iter()
+                .find(|s| s.name == name)
+                .cloned()
+                .ok_or_else(|| {
+                    nlink_lab::Error::invalid_topology(format!(
+                        "lab '{lab}' has no scenario '{name}' (run without a name to list them)"
+                    ))
+                })?;
+            require_root()?;
+            let result = nlink_lab::scenario::run_scenario(&running, &scenario).await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                println!("Scenario {:?}: {}", scenario.name, if result.passed { green("PASS") } else { red("FAIL") });
+                for (index, step) in result.steps.iter().enumerate() {
+                    println!("  t={:>6}ms  step {index}", step.time_ms);
+                    for action in &step.actions {
+                        let mark = if action.ok { green("ok") } else { red("FAIL") };
+                        let detail = action.detail.as_deref().map(|d| format!(" — {d}")).unwrap_or_default();
+                        println!("    {mark}  {}{detail}", action.description);
+                    }
+                }
+            }
+            if !result.passed {
+                set_exit_code(EXIT_VALIDATION);
+            }
+            Ok(())
+        }
+
+        Commands::DocsGen { out } => {
+            let cmd = Cli::command();
+            std::fs::create_dir_all(&out)?;
+            let mut written = Vec::new();
+            for sub in cmd.get_subcommands() {
+                if sub.is_hide_set() {
+                    continue;
+                }
+                let name = sub.get_name().to_string();
+                let mut sub = sub.clone().name(clap::builder::Str::from(format!("nlink-lab {name}").leak() as &'static str));
+                let help = sub.render_long_help().to_string();
+                let page = format!(
+                    "# `nlink-lab {name}`\n\n<!-- generated by `nlink-lab docs-gen`; do not edit by hand -->\n\n```text\n{}\n```\n",
+                    help.trim_end()
+                );
+                std::fs::write(out.join(format!("{name}.md")), page)?;
+                written.push(name);
+            }
+            eprintln!("wrote {} pages to {}", written.len(), out.display());
+            Ok(())
+        }
+
+        Commands::Graph {
+            topology,
+            params,
+            mermaid,
+        } => {
+            let topo = parse_topology(&topology, &params)?;
+            if mermaid {
+                print!("{}", topology_to_mermaid(&topo));
+            } else {
+                print!("{}", topology_to_dot(&topo));
+            }
             Ok(())
         }
 
@@ -2109,7 +2378,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         }
 
         Commands::Shell { lab, node, shell } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             // Validate node exists
             let node_names: Vec<&str> = running.node_names().collect();
@@ -2164,7 +2433,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         }
 
         Commands::Kill { lab, pid } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             running.kill_process(pid)?;
             println!("Killed process {pid}");
@@ -2177,7 +2446,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             pid,
             watch,
         } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             // Single sample = one shot then exit. --watch = NDJSON
             // (or text) stream until Ctrl-C.
@@ -2213,7 +2482,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         }
 
         Commands::Diagnose { lab, node } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             let results = running.diagnose(node.as_deref()).await?;
             if json {
@@ -2298,7 +2567,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             rotate,
             keep,
         } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             let ep = nlink_lab::EndpointRef::parse(&endpoint).ok_or_else(|| {
                 nlink_lab::Error::InvalidEndpoint {
@@ -2480,9 +2749,9 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Diff { a, b } => {
-            let topo_a = nlink_lab::parser::parse_file(&a)?;
-            let topo_b = nlink_lab::parser::parse_file(&b)?;
+        Commands::Diff { a, b, params } => {
+            let topo_a = parse_topology(&a, &params)?;
+            let topo_b = parse_topology(&b, &params)?;
             let diff = nlink_lab::diff_topologies(&topo_a, &topo_b);
             if json {
                 // For JSON, output a simple summary
@@ -2627,7 +2896,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             zenoh_listen: _zenoh_listen,
             zenoh_connect: _zenoh_connect,
         } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             println!(
                 "Starting Zenoh backend for lab '{}' ({} nodes)",
@@ -2672,7 +2941,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                         if let Ok(snapshot) = serde_json::from_slice::<nlink_lab_shared::metrics::MetricsSnapshot>(&payload) {
                             samples += 1;
 
-                            if fmt == "json" {
+                            if fmt == MetricsFormat::Json || json {
                                 println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
                             } else {
                                 // Clear screen for table mode
@@ -2753,7 +3022,6 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             template,
             list,
             output,
-            format: _,
             name,
             force,
         } => {
@@ -2845,7 +3113,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             timeout,
             interval,
         } => {
-            check_root();
+            require_root()?;
             let running = nlink_lab::RunningLab::load(&lab)?;
             let timeout = std::time::Duration::from_secs(timeout);
             let interval = std::time::Duration::from_millis(interval);
@@ -3072,13 +3340,15 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
         Commands::Containers { lab } => {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let containers = running.containers();
-            if containers.is_empty() {
-                println!("No container nodes in lab '{lab}'.");
-            } else if json {
-                let data: Vec<serde_json::Value> = containers.iter().map(|(name, state)| {
+            if json {
+                // `[]` when there are none — never prose under --json (#46)
+                let mut data: Vec<serde_json::Value> = containers.iter().map(|(name, state)| {
                     serde_json::json!({ "node": name, "image": state.image, "id": state.id, "pid": state.pid })
                 }).collect();
+                data.sort_by_key(|v| v["node"].as_str().unwrap_or_default().to_string());
                 println!("{}", serde_json::to_string_pretty(&data)?);
+            } else if containers.is_empty() {
+                println!("No container nodes in lab '{lab}'.");
             } else {
                 println!(
                     "  {:<16} {:<20} {:<14} PID",
@@ -3116,16 +3386,17 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 let (stdout_path, stderr_path) = running.log_paths(pid).ok_or_else(|| {
                     nlink_lab::Error::deploy_failed(format!("no log files found for PID {pid}"))
                 })?;
-                let path = if stderr { stderr_path } else { stdout_path };
-                let content = std::fs::read_to_string(path).map_err(|e| {
-                    nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
-                })?;
-                let initial: String = if let Some(n) = tail {
-                    let lines: Vec<&str> = content.lines().collect();
-                    let start = lines.len().saturating_sub(n as usize);
-                    lines[start..].join("\n")
-                } else {
-                    content.clone()
+                let path = std::path::Path::new(if stderr { stderr_path } else { stdout_path });
+                // `--tail N` reads only the tail of the file (a service log
+                // can be gigabytes); without it the whole file is streamed.
+                let file_len = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                let initial: String = match tail {
+                    Some(n) => tail_lines(path, n as usize).map_err(|e| {
+                        nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
+                    })?,
+                    None => std::fs::read_to_string(path).map_err(|e| {
+                        nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
+                    })?,
                 };
                 if !initial.is_empty() {
                     print!("{initial}");
@@ -3136,7 +3407,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                 if follow {
                     // tail -F semantics: resume reading from current EOF,
                     // poll, and reopen if the file is rotated/truncated.
-                    tail_follow(std::path::Path::new(path), content.len() as u64)?;
+                    tail_follow(path, file_len)?;
                 }
                 return Ok(());
             }
@@ -3173,8 +3444,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             Ok(())
         }
 
-        Commands::Pull { topology } => {
-            let topo = nlink_lab::parser::parse_file(&topology)?;
+        Commands::Pull { topology, params } => {
+            let topo = parse_topology(&topology, &params)?;
             let images: std::collections::BTreeSet<&str> = topo
                 .nodes
                 .values()
@@ -3198,27 +3469,48 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             let running = nlink_lab::RunningLab::load(&lab)?;
             let containers = running.containers();
             if containers.is_empty() {
-                println!("No container nodes in lab '{lab}'.");
+                if json {
+                    println!("[]");
+                } else {
+                    println!("No container nodes in lab '{lab}'.");
+                }
+                return Ok(());
+            }
+            let rt = running.runtime_binary().unwrap_or("docker");
+            let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
+            let format = if json {
+                "{{json .}}"
             } else {
-                let rt = running.runtime_binary().unwrap_or("docker");
-                let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
-                let output = std::process::Command::new(rt)
-                    .args([
-                        "stats",
-                        "--no-stream",
-                        "--format",
-                        "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}",
-                    ])
-                    .args(&ids)
-                    .output()
-                    .map_err(|e| nlink_lab::Error::deploy_failed(format!("stats failed: {e}")))?;
+                "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
+            };
+            let output = std::process::Command::new(rt)
+                .args(["stats", "--no-stream", "--format", format])
+                .args(&ids)
+                .output()
+                .map_err(|e| nlink_lab::Error::deploy_failed(format!("{rt} stats failed: {e}")))?;
+            if !output.status.success() {
+                return Err(nlink_lab::Error::deploy_failed(format!(
+                    "{rt} stats exited with {}: {}",
+                    output.status.code().unwrap_or(-1),
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
+            if json {
+                // docker/podman emit one JSON object per line; wrap as an array
+                let rows: Vec<serde_json::Value> = String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .map(serde_json::from_str)
+                    .collect::<std::result::Result<_, _>>()?;
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else {
                 print!("{}", String::from_utf8_lossy(&output.stdout));
             }
             Ok(())
         }
 
         Commands::Restart { lab, node } => {
-            check_root();
+            require_root()?;
             // Same per-lab flock deploy/destroy take: the PID refresh
             // below rewrites state.json and must not race an `apply`.
             let _lock = nlink_lab::state::lock(&lab)?;
@@ -3514,8 +3806,12 @@ fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
     out += "  node [shape=box];\n";
 
     for link in &topo.links {
-        let a = EndpointRef::parse(&link.endpoints[0]).unwrap();
-        let b = EndpointRef::parse(&link.endpoints[1]).unwrap();
+        let (Some(a), Some(b)) = (
+            EndpointRef::parse(&link.endpoints[0]),
+            EndpointRef::parse(&link.endpoints[1]),
+        ) else {
+            continue;
+        };
 
         let mut label_parts = Vec::new();
         if let Some(addrs) = &link.addresses {
@@ -3552,7 +3848,126 @@ fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
         }
     }
 
+    // Bridge networks: one ellipse per network, an edge per member,
+    // per-pair impairments as dashed labelled edges (#47).
+    let mut net_names: Vec<&String> = topo.networks.keys().collect();
+    net_names.sort();
+    for name in net_names {
+        let net = &topo.networks[name];
+        let label = match &net.subnet {
+            Some(sn) => format!("{name}\\n{sn}"),
+            None => name.clone(),
+        };
+        out += &format!("  \"net:{name}\" [shape=ellipse, label=\"{label}\"];\n");
+        for member in &net.members {
+            if let Some(ep) = EndpointRef::parse(member) {
+                let addr = net
+                    .ports
+                    .get(member)
+                    .and_then(|p| p.addresses.first())
+                    .map(|a| format!(", label=\"{a}\""))
+                    .unwrap_or_default();
+                out += &format!(
+                    "  \"{}\" -- \"net:{name}\" [taillabel=\"{}\"{addr}];\n",
+                    ep.node, ep.iface
+                );
+            }
+        }
+        for imp in &net.impairments {
+            let mut parts = Vec::new();
+            if let Some(d) = &imp.impairment.delay {
+                parts.push(format!("delay={d}"));
+            }
+            if let Some(l) = &imp.impairment.loss {
+                parts.push(format!("loss={l}"));
+            }
+            if let Some(r) = &imp.rate_cap {
+                parts.push(format!("cap={r}"));
+            }
+            out += &format!(
+                "  \"{}\" -> \"{}\" [style=dashed, color=gray, label=\"{}\"];\n",
+                imp.src,
+                imp.dst,
+                parts.join(" ")
+            );
+        }
+    }
+
     out += "}\n";
+    out
+}
+
+/// Mermaid `graph LR` rendering (renders inline in Forgejo/GitHub markdown).
+fn topology_to_mermaid(topo: &nlink_lab::Topology) -> String {
+    use nlink_lab::EndpointRef;
+    fn id(s: &str) -> String {
+        s.chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect()
+    }
+    let mut out = String::from("graph LR\n");
+    let mut nodes: Vec<&String> = topo.nodes.keys().collect();
+    nodes.sort();
+    for n in nodes {
+        let kind = if topo.nodes[n].image.is_some() { "[[" } else { "[" };
+        let close = if topo.nodes[n].image.is_some() { "]]" } else { "]" };
+        out += &format!("  {}{kind}\"{n}\"{close}\n", id(n));
+    }
+    for link in &topo.links {
+        let (Some(a), Some(b)) = (
+            EndpointRef::parse(&link.endpoints[0]),
+            EndpointRef::parse(&link.endpoints[1]),
+        ) else {
+            continue;
+        };
+        let mut label = format!("{} — {}", a.iface, b.iface);
+        if let Some(addrs) = &link.addresses {
+            label = format!("{label}<br/>{} / {}", addrs[0], addrs[1]);
+        }
+        if let Some(imp) = topo.impairments.get(&link.endpoints[0]) {
+            let mut parts = Vec::new();
+            if let Some(d) = &imp.delay {
+                parts.push(format!("delay {d}"));
+            }
+            if let Some(l) = &imp.loss {
+                parts.push(format!("loss {l}"));
+            }
+            if !parts.is_empty() {
+                label = format!("{label}<br/>{}", parts.join(", "));
+            }
+        }
+        out += &format!("  {} ---|\"{label}\"| {}\n", id(&a.node), id(&b.node));
+    }
+    let mut net_names: Vec<&String> = topo.networks.keys().collect();
+    net_names.sort();
+    for name in net_names {
+        let net = &topo.networks[name];
+        let label = match &net.subnet {
+            Some(sn) => format!("{name}<br/>{sn}"),
+            None => name.clone(),
+        };
+        out += &format!("  net_{}((\"{label}\"))\n", id(name));
+        for member in &net.members {
+            if let Some(ep) = EndpointRef::parse(member) {
+                out += &format!("  {} ---|\"{}\"| net_{}\n", id(&ep.node), ep.iface, id(name));
+            }
+        }
+        for imp in &net.impairments {
+            let mut parts = Vec::new();
+            if let Some(d) = &imp.impairment.delay {
+                parts.push(format!("delay {d}"));
+            }
+            if let Some(l) = &imp.impairment.loss {
+                parts.push(format!("loss {l}"));
+            }
+            out += &format!(
+                "  {} -.->|\"{}\"| {}\n",
+                id(&imp.src),
+                parts.join(", "),
+                id(&imp.dst)
+            );
+        }
+    }
     out
 }
 
@@ -3592,6 +4007,43 @@ fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
                 parts.push(format!("mtu={mtu}"));
             }
             out.push_str(&format!("{}\n", parts.join("  ")));
+        }
+    }
+
+    if !topo.networks.is_empty() {
+        out.push_str("\nNetworks:\n");
+        let mut names: Vec<&String> = topo.networks.keys().collect();
+        names.sort();
+        for name in names {
+            let net = &topo.networks[name];
+            let subnet = net
+                .subnet
+                .as_deref()
+                .map(|s| format!("  subnet={s}"))
+                .unwrap_or_default();
+            out.push_str(&format!("  {name}{subnet}\n"));
+            for member in &net.members {
+                let addr = net
+                    .ports
+                    .get(member)
+                    .and_then(|p| p.addresses.first())
+                    .map(|a| format!("  {a}"))
+                    .unwrap_or_default();
+                out.push_str(&format!("    {member}{addr}\n"));
+            }
+            for imp in &net.impairments {
+                let mut parts = Vec::new();
+                if let Some(d) = &imp.impairment.delay {
+                    parts.push(format!("delay={d}"));
+                }
+                if let Some(l) = &imp.impairment.loss {
+                    parts.push(format!("loss={l}"));
+                }
+                if let Some(r) = &imp.rate_cap {
+                    parts.push(format!("rate-cap={r}"));
+                }
+                out.push_str(&format!("    {} -> {}  {}\n", imp.src, imp.dst, parts.join(" ")));
+            }
         }
     }
 
@@ -3663,23 +4115,39 @@ fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
     out
 }
 
-fn check_root() {
-    if unsafe { libc::geteuid() } != 0 {
-        // Check if we have effective capabilities via /proc/self/status
-        let has_caps = std::fs::read_to_string("/proc/self/status")
-            .ok()
-            .and_then(|s| {
-                s.lines().find(|l| l.starts_with("CapEff:")).map(|l| {
-                    let hex = l.split_whitespace().nth(1).unwrap_or("0");
-                    u64::from_str_radix(hex, 16).unwrap_or(0) != 0
-                })
-            })
-            .unwrap_or(false);
-        if !has_caps {
-            eprintln!(
-                "warning: nlink-lab requires root, SUID, or capabilities (CAP_NET_ADMIN+CAP_SYS_ADMIN)"
-            );
-        }
+const CAP_NET_ADMIN: u64 = 12;
+const CAP_SYS_ADMIN: u64 = 21;
+
+/// Whether a `CapEff` bitmask (hex, as in `/proc/self/status`) grants
+/// both capabilities nlink-lab needs.
+fn cap_eff_has_net_and_sys_admin(hex: &str) -> bool {
+    u64::from_str_radix(hex.trim(), 16)
+        .map(|bits| bits & (1 << CAP_NET_ADMIN) != 0 && bits & (1 << CAP_SYS_ADMIN) != 0)
+        .unwrap_or(false)
+}
+
+/// Fail fast, before any namespace/netlink work, unless this process is
+/// root or holds CAP_NET_ADMIN *and* CAP_SYS_ADMIN. The old check only
+/// warned and accepted any capability bit at all (#44).
+fn require_root() -> nlink_lab::Result<()> {
+    if unsafe { libc::geteuid() } == 0 {
+        return Ok(());
+    }
+    let ok = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("CapEff:"))
+                .and_then(|l| l.split_whitespace().nth(1).map(cap_eff_has_net_and_sys_admin))
+        })
+        .unwrap_or(false);
+    if ok {
+        Ok(())
+    } else {
+        Err(nlink_lab::Error::deploy_failed(
+            "this command needs root (sudo), a SUID binary, or CAP_NET_ADMIN+CAP_SYS_ADMIN \
+             (see `just install-caps`)",
+        ))
     }
 }
 
@@ -4089,6 +4557,38 @@ fn tail_follow_to<W: std::io::Write>(
 
 /// Wrapper used by the CLI: runs forever (until Ctrl-C) and writes to
 /// stdout.
+/// Last `n` lines of a file, read backwards in 64 KiB chunks so a
+/// multi-gigabyte log is never loaded into memory (#46).
+fn tail_lines(path: &std::path::Path, n: usize) -> std::io::Result<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    if n == 0 {
+        return Ok(String::new());
+    }
+    let mut f = std::fs::File::open(path)?;
+    let len = f.metadata()?.len();
+    let mut end = len;
+    let mut buf: Vec<u8> = Vec::new();
+    const CHUNK: u64 = 64 * 1024;
+    while end > 0 {
+        let start = end.saturating_sub(CHUNK);
+        let mut chunk = vec![0u8; (end - start) as usize];
+        f.seek(SeekFrom::Start(start))?;
+        f.read_exact(&mut chunk)?;
+        chunk.extend_from_slice(&buf);
+        buf = chunk;
+        end = start;
+        // count newlines, ignoring a single trailing one
+        let body = if buf.last() == Some(&b'\n') { &buf[..buf.len() - 1] } else { &buf[..] };
+        if body.iter().filter(|&&b| b == b'\n').count() >= n {
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&buf);
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines.len().saturating_sub(n);
+    Ok(lines[start..].join("\n"))
+}
+
 fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<()> {
     let mut stdout = std::io::stdout();
     tail_follow_to(path, start_offset, &mut stdout, || true)

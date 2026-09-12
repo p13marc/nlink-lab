@@ -6,11 +6,21 @@
 // NLL is a topology definition DSL with context-sensitive keywords,
 // interpolation, typed literals (CIDR, duration, rate, percent),
 // and block-based structure.
+//
+// Conformance: `tree-sitter parse` must succeed on every file under
+// `examples/`, and `crates/nlink-lab/tests/editor_keywords.rs` checks
+// that every keyword the Rust lexer/parser knows appears here (and that
+// nothing here claims a keyword the language does not have).
 
 module.exports = grammar({
   name: "nll",
 
   extras: ($) => [/\s/, $.line_comment, $.block_comment],
+
+  // Keyword extraction: a string literal that also matches `identifier`
+  // is a keyword only where the grammar expects it, so `node mode` and
+  // `wifi wlan0 mode ap` both parse.
+  word: ($) => $.identifier,
 
   conflicts: ($) => [[$._value, $._name]],
 
@@ -18,7 +28,6 @@ module.exports = grammar({
     source_file: ($) => repeat($._statement),
 
     // ── Top-level statements ────────────────────────
-
     _statement: ($) =>
       choice(
         $.import_statement,
@@ -43,7 +52,6 @@ module.exports = grammar({
       ),
 
     // ── Import ──────────────────────────────────────
-
     import_statement: ($) =>
       choice(
         seq(
@@ -53,6 +61,7 @@ module.exports = grammar({
           $.identifier,
           optional(seq("(", $.param_list, ")")),
         ),
+        // fleet import: one instance per alias
         seq("import", $.string, "for_each", "{", repeat($.import_item), "}"),
       ),
 
@@ -65,7 +74,6 @@ module.exports = grammar({
     param_assign: ($) => seq($.identifier, "=", $._value),
 
     // ── Lab declaration ─────────────────────────────
-
     lab_declaration: ($) =>
       seq("lab", $.string, optional(seq("{", repeat($.lab_property), "}"))),
 
@@ -77,25 +85,23 @@ module.exports = grammar({
         seq("version", $.string),
         seq("author", $.string),
         seq("tags", $.list),
-        seq("mgmt", $.cidr),
+        seq("mgmt", $.cidr, optional("host-reachable")),
         seq("dns", choice("hosts", "off")),
         seq("routing", choice("auto", "manual")),
       ),
 
     // ── Profile ─────────────────────────────────────
-
     profile_definition: ($) =>
       seq("profile", $.identifier, "{", repeat($._node_property), "}"),
 
     // ── Node ────────────────────────────────────────
-
     node_definition: ($) =>
       prec.right(
         seq(
           "node",
           $._name,
           optional(seq(":", $.profile_list)),
-          optional($.image_property),
+          optional($.node_image),
           optional($.node_body),
         ),
       ),
@@ -132,13 +138,13 @@ module.exports = grammar({
     sysctl_property: ($) => seq("sysctl", $.string, $.string),
 
     loopback_property: ($) =>
-      seq("lo", choice($.cidr, seq("pool", $.identifier))),
+      seq("lo", choice($._value, seq("pool", $.identifier))),
 
     route_property: ($) =>
       seq("route", $.route_destination, $.route_params),
 
     route_destination: ($) =>
-      choice("default", $.cidr, $.list),
+      choice("default", $._value, $.list),
 
     route_params: ($) =>
       repeat1(
@@ -150,12 +156,11 @@ module.exports = grammar({
       ),
 
     // ── Firewall ────────────────────────────────────
-
     firewall_block: ($) =>
       seq(
         "firewall",
         "policy",
-        choice("accept", "drop"),
+        choice("accept", "drop", "reject"),
         "{",
         repeat($.firewall_rule),
         "}",
@@ -163,7 +168,7 @@ module.exports = grammar({
 
     firewall_rule: ($) =>
       seq(
-        choice("accept", "drop"),
+        choice("accept", "drop", "reject"),
         optional($.match_expression),
       ),
 
@@ -172,14 +177,15 @@ module.exports = grammar({
         choice(
           seq(choice("src", "dst"), $._value),
           seq(choice("tcp", "udp"), choice("dport", "sport"), $._value),
-          seq("icmp", "type", $._value),
-          seq("ct", "state", $._value),
+          seq(choice("icmp", "icmpv6"), optional($._value)),
+          seq("ct", $.ct_states),
           seq("mark", $._value),
         ),
       ),
 
-    // ── NAT ─────────────────────────────────────────
+    ct_states: ($) => seq($.identifier, repeat(seq(",", $.identifier))),
 
+    // ── NAT ─────────────────────────────────────────
     nat_block: ($) =>
       seq("nat", "{", repeat($._nat_content), "}"),
 
@@ -193,33 +199,41 @@ module.exports = grammar({
         seq("translate", $._value, "to", $._value),
       ),
 
-    // ── VRF / WireGuard / VXLAN / Dummy ─────────────
-
+    // ── VRF / WireGuard / VXLAN / Dummy / macvlan / ipvlan / wifi ──
     vrf_block: ($) =>
       seq("vrf", $.identifier, "table", $.integer, optional($.generic_block)),
 
     wireguard_block: ($) =>
-      seq("wireguard", $.identifier, $.generic_block),
+      seq("wireguard", $.identifier, repeat($.inline_property), $.generic_block),
 
     vxlan_block: ($) =>
-      seq("vxlan", $.identifier, $.generic_block),
+      seq("vxlan", $.identifier, repeat($.inline_property), $.generic_block),
 
     dummy_block: ($) =>
       seq("dummy", $.identifier, $.generic_block),
 
     macvlan_block: ($) =>
-      seq("macvlan", $.identifier, $.generic_block),
+      seq("macvlan", $.identifier, repeat($.inline_property), $.generic_block),
 
     ipvlan_block: ($) =>
-      seq("ipvlan", $.identifier, $.generic_block),
+      seq("ipvlan", $.identifier, repeat($.inline_property), $.generic_block),
 
     wifi_block: ($) =>
-      seq("wifi", $.identifier, $.generic_block),
+      seq("wifi", $.identifier, repeat($.inline_property), $.generic_block),
+
+    // `parent "enp3s0" mode l3` / `mode ap` before the block.
+    inline_property: ($) =>
+      choice(
+        seq("parent", $._value),
+        seq("mode", $.identifier),
+      ),
 
     // ── Container properties ────────────────────────
+    image_property: ($) => seq("image", $.string),
 
-    image_property: ($) =>
-      seq("image", $.string, optional(seq("cmd", choice($.string, $.list)))),
+    // header form: `node r image "alpine" cmd "sleep infinity"`
+    node_image: ($) =>
+      prec.right(seq("image", $.string, optional(seq("cmd", choice($.string, $.list))))),
 
     container_property: ($) =>
       choice(
@@ -231,7 +245,9 @@ module.exports = grammar({
         seq("labels", $.list),
         seq("pull", $.identifier),
         seq("exec", $.string),
+        seq("cmd", choice($.string, $.list)),
         seq("healthcheck", $.string, optional($.generic_block)),
+        seq(choice("healthcheck-interval", "healthcheck-timeout"), $.duration),
         seq("startup-delay", $.duration),
         seq(choice("env-file", "overlay"), $.string),
         seq("config", $.string, $.string),
@@ -241,10 +257,9 @@ module.exports = grammar({
       ),
 
     run_property: ($) =>
-      seq("run", optional("background"), choice($.string, $.list)),
+      seq("run", optional("background"), choice($.string, $.list), optional("background")),
 
     // ── Link ────────────────────────────────────────
-
     link_definition: ($) =>
       seq(
         "link",
@@ -260,7 +275,9 @@ module.exports = grammar({
     _link_item: ($) =>
       choice(
         $.address_pair,
-        seq("subnet", $.cidr),
+        // single-CIDR shorthand: `10.0.${i}.0/31` → both ends from one /31
+        $.link_subnet,
+        seq("subnet", $._value),
         seq("pool", choice($.identifier, "auto")),
         seq("mtu", $.integer),
         $.impairment_properties,
@@ -270,8 +287,9 @@ module.exports = grammar({
 
     address_pair: ($) => seq($._value, "--", $._value),
 
-    // ── Network ─────────────────────────────────────
+    link_subnet: ($) => choice($.cidr, $.ipv6_cidr, $.interpolation, $.function_cidr),
 
+    // ── Network ─────────────────────────────────────
     network_definition: ($) =>
       seq("network", $.identifier, "{", repeat($._network_item), "}"),
 
@@ -283,22 +301,39 @@ module.exports = grammar({
         seq("subnet", $._value),
         seq("vlan", $.integer, optional($.string)),
         $.port_definition,
+        $.network_impair,
+        $.for_loop,
       ),
 
     port_definition: ($) =>
-      seq("port", $.endpoint, "{", repeat($._port_item), "}"),
+      seq(
+        "port",
+        choice($.endpoint, $._name),
+        optional(seq("{", repeat($._port_item), "}")),
+      ),
 
     _port_item: ($) =>
       choice(
-        $.cidr,
+        $._value,
         seq("pvid", $.integer),
         seq("vlans", $.list),
         "tagged",
         "untagged",
       ),
 
-    // ── Impairment / Rate ───────────────────────────
+    // Per-pair impairment matrix: `impair a -- b { delay … rate-cap … }`.
+    network_impair: ($) =>
+      seq(
+        "impair",
+        $._name,
+        "--",
+        $._name,
+        "{",
+        repeat(choice($.impairment_properties, seq("rate-cap", $.rate))),
+        "}",
+      ),
 
+    // ── Impairment / Rate ───────────────────────────
     impairment_statement: ($) =>
       seq("impair", $.endpoint, $.impairment_properties),
 
@@ -309,12 +344,12 @@ module.exports = grammar({
       prec.left(
         repeat1(
           choice(
-            seq("delay", $.duration),
-            seq("jitter", $.duration),
-            seq("loss", $.percent),
-            seq("corrupt", $.percent),
-            seq("reorder", $.percent),
-            seq("rate", $.rate),
+            seq("delay", $._value),
+            seq("jitter", $._value),
+            seq("loss", $._value),
+            seq("corrupt", $._value),
+            seq("reorder", $._value),
+            seq("rate", $._value),
           ),
         ),
       ),
@@ -323,10 +358,13 @@ module.exports = grammar({
       seq(choice("->", "<-"), $.impairment_properties),
 
     rate_properties: ($) =>
-      prec.left(repeat1(seq(choice("egress", "ingress"), $.rate))),
+      prec.left(
+        repeat1(
+          seq(choice("egress", "ingress"), $._value, optional(seq("burst", $._value))),
+        ),
+      ),
 
     // ── Defaults / Pool / Pattern ───────────────────
-
     defaults_definition: ($) =>
       seq("defaults", $.identifier, $.generic_block),
 
@@ -353,42 +391,47 @@ module.exports = grammar({
       ),
 
     // ── Validate / Scenario / Benchmark ─────────────
-
     validate_block: ($) =>
       seq("validate", "{", repeat($.assertion), "}"),
 
     assertion: ($) =>
       choice(
-        seq(choice("reach", "no-reach"), $.identifier, $.identifier),
+        seq(choice("reach", "no-reach"), $._name, $._name),
         seq(
           "tcp-connect",
-          $.identifier,
-          $.identifier,
+          $._name,
+          $._name,
           $.integer,
-          optional(seq("timeout", $.duration)),
+          repeat(
+            choice(
+              seq("timeout", $.duration),
+              seq("retries", $.integer),
+              seq("interval", $.duration),
+            ),
+          ),
         ),
         seq(
           "latency-under",
-          $.identifier,
-          $.identifier,
+          $._name,
+          $._name,
           $.duration,
           optional(seq("samples", $.integer)),
         ),
         seq(
           "route-has",
-          $.identifier,
+          $._name,
           $._value,
           optional(seq("via", $._value)),
           optional(seq("dev", $.identifier)),
         ),
-        seq("dns-resolves", $.identifier, $._value, $._value),
+        seq("dns-resolves", $._name, $._value, $._value),
       ),
 
     scenario_block: ($) =>
       seq("scenario", $.string, "{", repeat($.scenario_step), "}"),
 
     scenario_step: ($) =>
-      seq("at", $.duration, "{", repeat($.scenario_action), "}"),
+      seq("at", optional("+"), $.duration, "{", repeat($.scenario_action), "}"),
 
     scenario_action: ($) =>
       choice(
@@ -396,7 +439,7 @@ module.exports = grammar({
         seq("up", $.endpoint),
         seq("clear", $.endpoint),
         seq("validate", "{", repeat($.assertion), "}"),
-        seq("exec", $.identifier, repeat1($.string)),
+        seq("exec", $._name, repeat1($.string)),
         seq("log", $.string),
       ),
 
@@ -406,8 +449,8 @@ module.exports = grammar({
     benchmark_test: ($) =>
       seq(
         choice("iperf3", "ping"),
-        $.identifier,
-        $.identifier,
+        $._name,
+        $._name,
         optional(seq("{", repeat($.benchmark_property), "}")),
       ),
 
@@ -421,7 +464,6 @@ module.exports = grammar({
       ),
 
     // ── Control flow ────────────────────────────────
-
     let_binding: ($) => seq("let", $.identifier, "=", $._value),
 
     param_definition: ($) =>
@@ -432,7 +474,11 @@ module.exports = grammar({
 
     for_range: ($) =>
       choice(
-        seq($.integer, "..", $.integer),
+        seq(
+          choice($.integer, $.interpolation),
+          "..",
+          choice($.integer, $.interpolation),
+        ),
         $.list,
       ),
 
@@ -447,28 +493,51 @@ module.exports = grammar({
         repeat(seq(choice("&&", "||"), $._value, choice("==", "!=", "<", ">", "<=", ">="), $._value)),
       ),
 
-    _statement_or_prop: ($) => choice($._statement, $._node_property),
+    _statement_or_prop: ($) => choice($._statement, $._node_property, $.nat_rule, $.network_impair),
 
     site_block: ($) =>
       seq("site", $.identifier, optional($.string), "{", repeat($._statement), "}"),
 
     // ── Generic block (for VRF, WireGuard, etc.) ────
-
     generic_block: ($) =>
       seq("{", repeat($._generic_item), "}"),
 
     _generic_item: ($) =>
       choice(
+        $.known_property,
         seq($.identifier, $._value),
         seq($.identifier, $.list),
         seq($.identifier, $.generic_block),
         $.route_property,
-        $.cidr,
+        // bare address lines: `10.0.0.1/24`, `fd00::1/64`, `${addr}/24`
+        choice($.cidr, $.ipv6_cidr, $.interpolation, $.function_cidr),
         $.for_loop,
       ),
 
-    // ── Expressions and literals ────────────────────
+    // Properties the language defines for wireguard / vxlan / wifi / vrf
+    // / healthcheck blocks (kept explicit so highlighters can name them).
+    known_property: ($) =>
+      choice(
+        seq("interfaces", $.list),
+        seq("listen", $.integer),
+        seq("key", $._value),
+        seq("peers", $.list),
+        seq("fwmark", $.integer),
+        seq("address", $._value),
+        seq("vni", $.integer),
+        seq("local", $._value),
+        seq("remote", $._value),
+        seq("underlay", $.identifier),
+        seq("ssid", $.string),
+        seq("channel", $.integer),
+        seq("wpa2", $.string),
+        seq("mesh-id", $.string),
+        seq("interval", $.duration),
+        seq("timeout", $.duration),
+        seq("retries", $.integer),
+      ),
 
+    // ── Expressions and literals ────────────────────
     _value: ($) =>
       choice(
         $.cidr,
@@ -478,12 +547,17 @@ module.exports = grammar({
         $.duration,
         $.rate,
         $.percent,
+        $.float,
         $.integer,
         $.string,
         $.interpolation,
+        $.function_cidr,
         $.function_call,
         $._name,
       ),
+
+    // `host(${lan}, 1)/24` — a computed address with a prefix.
+    function_cidr: ($) => seq($.function_call, "/", $.integer),
 
     ipv4_address: ($) =>
       token(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/),
@@ -495,10 +569,9 @@ module.exports = grammar({
     ipv6_address: ($) =>
       token(/(([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?::(([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4}|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))?|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){5}:[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/),
 
-    _name: ($) =>
-      prec.right(
-        repeat1(choice($.identifier, $.interpolation)),
-      ),
+    // `spine${s}` is one `interpolation` token, so a name is one token.
+    // `*-black` is a glob (network members only, but harmless elsewhere).
+    _name: ($) => choice($.identifier, $.interpolation, $.glob),
 
     endpoint: ($) => seq($._name, ":", $._name),
 
@@ -511,17 +584,28 @@ module.exports = grammar({
       ),
 
     list: ($) =>
-      seq("[", optional(seq($._list_item, repeat(seq(",", $._list_item)))), "]"),
+      seq(
+        "[",
+        optional(seq($._list_item, repeat(seq(",", $._list_item)), optional(","))),
+        "]",
+      ),
 
-    _list_item: ($) => choice($._value, $.endpoint),
+    _list_item: ($) => choice($._value, $.endpoint, $.list_for),
+
+    // `[for i in 1..4 : r${i}:mgmt0]`
+    list_for: ($) =>
+      seq("for", $.identifier, "in", $.for_range, ":", choice($.endpoint, $._value)),
 
     // ── Tokens ──────────────────────────────────────
-
     identifier: ($) => /[a-zA-Z_][a-zA-Z0-9_-]*/,
+
+    glob: ($) => token(/(\*[a-zA-Z0-9_*-]*|[a-zA-Z_][a-zA-Z0-9_-]*\*[a-zA-Z0-9_*-]*)/),
 
     string: ($) => /"[^"]*"/,
 
     integer: ($) => /[0-9]+/,
+
+    float: ($) => token(/[0-9]+\.[0-9]+/),
 
     cidr: ($) =>
       token(
@@ -533,13 +617,20 @@ module.exports = grammar({
         /(([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})*)?::(([0-9a-fA-F]{1,4}:)*([0-9a-fA-F]{1,4}|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))?|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){5}:[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/[0-9]+/,
       ),
 
-    duration: ($) => token(/[0-9]+(ms|s|m|h)/),
+    duration: ($) => token(/[0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h)/),
 
-    rate: ($) => token(/[0-9]+(kbit|mbit|gbit|kbps|mbps|gbps)/),
+    rate: ($) =>
+      token(/[0-9]+(\.[0-9]+)?(bit|bps|kbit|kbps|mbit|mbps|gbit|gbps|kbyte|mbyte|gbyte)/),
 
     percent: ($) => token(/[0-9]+(\.[0-9]+)?%/),
 
-    interpolation: ($) => /\$\{[^}]+\}/,
+    // A token containing `${…}`: `spine${s}`, `10.255.0.${s}/32`,
+    // `${(i + 1) % 12}`. Mirrors the Rust lexer, which keeps
+    // interpolated text as one unit until lowering.
+    interpolation: ($) =>
+      token(
+        /([A-Za-z0-9_\/%-]+(\.[A-Za-z0-9_\/%-]+)*\.?)?(\$\{[^}]+\}(\.?[A-Za-z0-9_\/%-]+)*\.?)+/,
+      ),
 
     line_comment: ($) => /#[^\n]*/,
 

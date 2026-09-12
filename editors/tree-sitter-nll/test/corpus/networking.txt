@@ -6,12 +6,17 @@ network lan {
   subnet 10.0.0.0/24
 }
 ---
+
 (source_file
   (network_definition
     (identifier)
     (list
-      (endpoint (identifier) (identifier))
-      (endpoint (identifier) (identifier)))
+      (endpoint
+        (identifier)
+        (identifier))
+      (endpoint
+        (identifier)
+        (identifier)))
     (cidr)))
 
 ================
@@ -26,15 +31,23 @@ node fw {
   }
 }
 ---
+
 (source_file
   (node_definition
     (identifier)
     (node_body
       (nat_block
-        (nat_rule (cidr))
-        (nat_rule (cidr) (ipv4_address))
-        (nat_rule (cidr) (ipv4_address))
-        (nat_rule (cidr) (cidr))))))
+        (nat_rule
+          (cidr))
+        (nat_rule
+          (cidr)
+          (ipv4_address))
+        (nat_rule
+          (cidr)
+          (ipv4_address))
+        (nat_rule
+          (cidr)
+          (cidr))))))
 
 ================
 Firewall block
@@ -46,15 +59,18 @@ node fw {
   }
 }
 ---
+
 (source_file
   (node_definition
     (identifier)
     (node_body
       (firewall_block
         (firewall_rule
-          (match_expression (integer)))
+          (match_expression
+            (integer)))
         (firewall_rule
-          (match_expression (cidr)))))))
+          (match_expression
+            (cidr)))))))
 
 ================
 Validate block
@@ -64,20 +80,26 @@ validate {
   no-reach c d
 }
 ---
+
 (source_file
   (validate_block
-    (assertion (identifier) (identifier))
-    (assertion (identifier) (identifier))))
+    (assertion
+      (identifier)
+      (identifier))
+    (assertion
+      (identifier)
+      (identifier))))
 
 ================
 Container node
 ================
 node web image "nginx:latest" cmd "nginx -g daemon off"
 ---
+
 (source_file
   (node_definition
     (identifier)
-    (image_property
+    (node_image
       (string)
       (string))))
 
@@ -86,8 +108,13 @@ Impairment statement
 ================
 impair router:eth0 delay 10ms jitter 2ms loss 0.1%
 ---
+
 (source_file
   (impairment_statement
-    (endpoint (identifier) (identifier))
+    (endpoint
+      (identifier)
+      (identifier))
     (impairment_properties
-      (duration) (duration) (percent))))
+      (duration)
+      (duration)
+      (percent))))

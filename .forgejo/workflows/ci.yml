@@ -175,6 +175,32 @@ jobs:
       # docs/cli reference blocks are generated from clap; a stale page fails here
       - run: target/debug/nlink-lab docs-gen --out docs/cli && git diff --exit-code -- docs/cli
 
+  # Editor grammar conformance (issue #27): the committed parser must be
+  # what grammar.js generates, the corpus must pass, and every example
+  # topology must parse without ERROR/MISSING nodes. `just tree-sitter`
+  # runs the same locally.
+  tree-sitter:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: editors/tree-sitter-nll
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - run: npm install --no-save --no-audit --no-fund tree-sitter-cli@0.27.0
+      - name: Generated parser is committed
+        run: ./node_modules/.bin/tree-sitter generate && git diff --exit-code -- src/
+      - name: Corpus
+        run: ./node_modules/.bin/tree-sitter test
+      - name: Every example parses
+        run: |
+          status=0
+          for f in ../../examples/*.nll ../../examples/*/*.nll; do
+            if ./node_modules/.bin/tree-sitter parse "$f" | grep -qE 'ERROR|MISSING'; then
+              echo "::error::$f does not parse with the tree-sitter grammar"; status=1
+            fi
+          done
+          exit $status
+
   # Short libFuzzer run of the three parser targets. Informational: it
   # runs weekly and on demand, never blocks a PR, and uploads any crash
   # or timeout artifact. `just fuzz` runs the same locally.

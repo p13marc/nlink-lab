@@ -98,3 +98,14 @@ stats:
     @echo "Tests:" && cargo test -p nlink-lab --lib --test stress 2>&1 | grep "test result"
     @echo "Examples:" && find examples -name "*.nll" | wc -l
     @echo "Lines:" && find crates bins -name "*.rs" | xargs wc -l | tail -1
+
+# Editor grammar conformance: regenerate the tree-sitter parser, run its
+# corpus and parse every example (mirrors the `tree-sitter` CI job).
+tree-sitter:
+    cd editors/tree-sitter-nll && \
+    { test -x node_modules/.bin/tree-sitter || npm install --no-save --no-audit --no-fund tree-sitter-cli@0.27.0; } && \
+    ./node_modules/.bin/tree-sitter generate && \
+    ./node_modules/.bin/tree-sitter test && \
+    status=0; for f in ../../examples/*.nll ../../examples/*/*.nll; do \
+      if ./node_modules/.bin/tree-sitter parse "$f" | grep -qE 'ERROR|MISSING'; then echo "FAIL $f"; status=1; fi; \
+    done; exit $status

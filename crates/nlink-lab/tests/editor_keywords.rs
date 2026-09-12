@@ -87,33 +87,7 @@ fn vscode_grammar_highlights_every_keyword() {
 
 /// Keywords the tree-sitter grammar does not model yet. Shrink this
 /// list as `grammar.js` grows; never let it grow.
-const TREE_SITTER_GAPS: &[&str] = &[
-    "address",
-    "burst",
-    "channel",
-    "fwmark",
-    "healthcheck-interval",
-    "healthcheck-timeout",
-    "host-reachable",
-    "icmpv6",
-    "interfaces",
-    "interval",
-    "key",
-    "listen",
-    "local",
-    "mesh-id",
-    "mode",
-    "parent",
-    "peers",
-    "rate-cap",
-    "reject",
-    "remote",
-    "retries",
-    "ssid",
-    "underlay",
-    "vni",
-    "wpa2",
-];
+const TREE_SITTER_GAPS: &[&str] = &[];
 
 #[test]
 fn tree_sitter_grammar_mentions_every_keyword() {
@@ -135,5 +109,48 @@ fn tree_sitter_grammar_mentions_every_keyword() {
     assert!(
         closed.is_empty(),
         "these keywords are now in grammar.js — remove them from TREE_SITTER_GAPS: {closed:?}"
+    );
+}
+
+/// Words the grammar spells as keywords that are not language keywords
+/// but are accepted contextually by the parser as plain identifiers
+/// (enum-like values such as `hosts`/`off`, `ipv4`/`ipv6`, `above`/`below`).
+const GRAMMAR_VALUE_WORDS: &[&str] = &[
+    "above", "auto", "below", "hosts", "ipv4", "ipv6", "manual", "off",
+];
+
+/// The reverse gate: every quoted word in `grammar.js` that looks like a
+/// keyword must be a language keyword (or a value word above), so the
+/// grammar cannot invent syntax the parser rejects.
+#[test]
+fn tree_sitter_grammar_has_no_foreign_keywords() {
+    let file = root().join("editors/tree-sitter-nll/grammar.js");
+    let grammar = std::fs::read_to_string(&file).unwrap();
+    let kws = language_keywords();
+    let mut foreign: BTreeSet<String> = BTreeSet::new();
+    for line in grammar
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//") && !l.contains("name:"))
+    {
+        let mut rest = line;
+        while let Some(i) = rest.find('"') {
+            let after = &rest[i + 1..];
+            let Some(j) = after.find('"') else { break };
+            let word = &after[..j];
+            rest = &after[j + 1..];
+            let looks_like_keyword = word
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_lowercase())
+                && word.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c == '_');
+            if looks_like_keyword && !kws.contains(word) && !GRAMMAR_VALUE_WORDS.contains(&word)
+            {
+                foreign.insert(word.to_string());
+            }
+        }
+    }
+    assert!(
+        foreign.is_empty(),
+        "grammar.js spells keywords the language does not have: {foreign:?}"
     );
 }

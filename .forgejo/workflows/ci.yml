@@ -2,9 +2,9 @@ name: CI
 on:
   push:
     branches: [main, master]
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE*']
+    paths-ignore: ['LICENSE*']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE*']
+    paths-ignore: ['LICENSE*']
   # manual re-run path (flaky job, runner was offline, cache experiments)
   workflow_dispatch:
 
@@ -15,7 +15,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # shared compiler cache: sccache (mounted from the runner VM) -> garage S3
-  # on vm-runner-01; S3 endpoint+credentials come from the runner's env_file
+  # on vm-runner-01; S3 endpoint+credentials come from the runner's env_file.
+  # Every job runs the "sccache guard" step first, which unsets this when the
+  # cache mount is missing so an infra hiccup does not look like a compile error.
   RUSTC_WRAPPER: /srv/cache/bin/sccache
   CARGO_INCREMENTAL: "0"
   # Cap build parallelism: cargo otherwise defaults to nproc (6 on
@@ -27,6 +29,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       - uses: https://github.com/dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
@@ -36,6 +40,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       - uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -53,6 +59,8 @@ jobs:
         features: ["", "--no-default-features", "--all-features"]
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2.9.2
         with:
@@ -64,11 +72,15 @@ jobs:
       - run: cargo test --workspace ${{ matrix.features }} --exclude nlink-lab
       - run: cargo test -p nlink-lab ${{ matrix.features }} --lib
       - run: cargo test -p nlink-lab ${{ matrix.features }} --doc
+      # doc-CI gate: every ```nll block and relative link under docs/ (Plan 150 D)
+      - run: cargo test -p nlink-lab ${{ matrix.features }} --test docs_examples
 
   stress:
     runs-on: ubuntu-24.04
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2.9.2
         with:
@@ -81,6 +93,8 @@ jobs:
       RUSTDOCFLAGS: -D warnings
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2.9.2
         with:
@@ -91,9 +105,67 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       # the docker cargo-deny action cannot see deny.toml -> install directly
       - uses: https://github.com/taiki-e/install-action@v2.87.7
         with:
           tool: cargo-deny
       - run: cargo deny check
+
+  # rust-toolchain.toml pins the fleet rustc; this job proves the declared
+  # MSRV (Cargo.toml rust-version) still builds and tests, independent of it.
+  msrv:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      - name: Read rust-version from Cargo.toml
+        run: echo "MSRV=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_ENV"
+      - uses: https://github.com/dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.2
+        with:
+          key: msrv
+          cache-targets: false
+      - run: rustup override set "$MSRV"
+      - run: cargo build --workspace --all-targets
+      - run: cargo test -p nlink-lab --lib
+
+  # ...and this one proves current stable does not reject the tree (new
+  # lints, edition changes) before the next toolchain pin bump.
+  stable-latest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.2
+        with:
+          key: stable-latest
+          cache-targets: false
+      - run: rustup override set stable
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test -p nlink-lab --lib
+
+  # rootless smoke test of the built binary: exercises clap wiring, every
+  # example topology, and the JSON envelopes without a single namespace.
+  cli-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.2
+        with:
+          key: cli-smoke
+          cache-targets: false
+      - run: cargo build -p nlink-lab-cli
+      - run: ./scripts/cli-smoke.sh target/debug/nlink-lab

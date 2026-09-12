@@ -24,13 +24,33 @@ jobs:
           git fetch --force origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null || true
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
           echo "RELEASE_SHA=$(git rev-parse "$tag^{commit}")" >> "$GITHUB_ENV"
+      - name: Assert Cargo.toml version matches the tag
+        # every release from v0.6.0 to v0.7.0 silently produced no assets
+        # because the tag did not match the workflow pattern; make the
+        # version/tag relationship a hard check instead of a convention.
+        run: |
+          v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "$v" = "$RELEASE_TAG" || { echo "::error::Cargo.toml version $v != tag $RELEASE_TAG"; exit 1; }
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.2
+        with:
+          key: release
+          cache-targets: false
       - name: Build release artifacts
         run: |
           mkdir -p dist/release
           name="${GITHUB_REPOSITORY#*/}"
           git archive --format=tar.gz --prefix="${name}-${RELEASE_TAG}/" \
             -o "dist/release/${name}-${RELEASE_TAG}.tar.gz" "${RELEASE_TAG}"
-          (cd dist/release && sha256sum * > SHA256SUMS)
+          # the product itself: the CLI (+ backend) as a plain x86_64 gnu
+          # binary tarball, with generated completions and a man page
+          cargo build --release -p nlink-lab-cli -p nlink-lab-backend
+          stage="dist/stage/nlink-lab-${RELEASE_TAG}-x86_64-linux-gnu"
+          mkdir -p "$stage/completions"
+          cp target/release/nlink-lab target/release/nlink-lab-backend "$stage/"
+          for sh in bash zsh fish; do target/release/nlink-lab completions "$sh" > "$stage/completions/nlink-lab.$sh"; done
+          cp README.md LICENSE-MIT LICENSE-APACHE CHANGELOG.md "$stage/"
+          tar -C dist/stage -czf "dist/release/nlink-lab-${RELEASE_TAG}-x86_64-linux-gnu.tar.gz" "$(basename "$stage")"
       - name: Create release if missing
         # API-driven so a workflow_dispatch re-run of an existing tag is
         # idempotent: forgejo-release@v2 tries to create and 409s when the
@@ -121,3 +141,31 @@ jobs:
             curl -sf -X POST -H "Authorization: token $TOKEN" -F "attachment=@$f" "$api/releases/$rid/assets?name=$name" >/dev/null
             echo "attached $name"
           done
+
+  checksums:
+    # runs last so SHA256SUMS covers every asset, including the flatpak
+    # bundle (previously computed in the release job before flatpak ran)
+    runs-on: ubuntu-24.04
+    needs: [release, flatpak]
+    if: always() && needs.release.result == 'success'
+    steps:
+      - name: Resolve release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
+      - name: Download every asset and attach SHA256SUMS
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          api="http://10.10.0.30:3000/api/v1/repos/${GITHUB_REPOSITORY}"
+          rid=$(curl -sf -H "Authorization: token $TOKEN" "$api/releases/tags/${RELEASE_TAG}" | jq -r .id)
+          mkdir -p sums && cd sums
+          curl -sf -H "Authorization: token $TOKEN" "$api/releases/$rid/assets" \
+            | jq -r '.[] | select(.name != "SHA256SUMS") | "\(.id) \(.name)"' \
+            | while read -r aid name; do
+                curl -sfL -H "Authorization: token $TOKEN" -o "$name" "$api/releases/$rid/assets/$aid"
+              done
+          sha256sum * > SHA256SUMS
+          for aid in $(curl -sf -H "Authorization: token $TOKEN" "$api/releases/$rid/assets" | jq -r '.[] | select(.name=="SHA256SUMS") | .id'); do
+            curl -sf -X DELETE -H "Authorization: token $TOKEN" "$api/releases/$rid/assets/$aid" >/dev/null
+          done
+          curl -sf -X POST -H "Authorization: token $TOKEN" -F "attachment=@SHA256SUMS" "$api/releases/$rid/assets?name=SHA256SUMS" >/dev/null
+          cat SHA256SUMS

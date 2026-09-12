@@ -694,24 +694,51 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
     // for the step-numbering audit trail.
 
     // ── Step 10: Bring interfaces up ───────────────────────────────
+    // Only the interfaces nlink-lab created imperatively (veth ends,
+    // bridge-network members, mgmt0, macvlan/ipvlan, wifi) plus `lo`.
+    // Everything declared in step 11c carries its own `.up()`. Bringing
+    // up *every* link by ifindex used to fail on hosts whose kernel
+    // populates each namespace with gre0/gretap0/sit0/tunl0 —
+    // `gretap0` answers EADDRNOTAVAIL — and took the deploy down with it.
     tracing::info!("step 10/18: bringing interfaces up");
-    for node_name in topology.nodes.keys() {
+    for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
         let conn: Connection<Route> = node_handle
             .connection()
             .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-        let links = conn.get_links().await.map_err(|e| {
-            Error::deploy_failed(format!("failed to list links in '{node_name}': {e}"))
-        })?;
-        for link_msg in &links {
-            conn.set_link_up_by_index(link_msg.ifindex())
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to bring up interface idx {} in '{node_name}': {e}",
-                        link_msg.ifindex()
-                    ))
-                })?;
+        let mut ifaces: Vec<String> = vec!["lo".to_string()];
+        for link in &topology.links {
+            for ep_str in &link.endpoints {
+                if let Some(ep) = EndpointRef::parse(ep_str)
+                    && &ep.node == node_name
+                {
+                    ifaces.push(ep.iface);
+                }
+            }
+        }
+        for network in topology.networks.values() {
+            for member in &network.members {
+                if let Some(ep) = EndpointRef::parse(member)
+                    && &ep.node == node_name
+                {
+                    ifaces.push(ep.iface);
+                }
+            }
+        }
+        if topology.lab.mgmt_host_reachable && topology.lab.mgmt_subnet.is_some() {
+            ifaces.push("mgmt0".to_string());
+        }
+        ifaces.extend(node.macvlans.iter().map(|m| m.name.clone()));
+        ifaces.extend(node.ipvlans.iter().map(|i| i.name.clone()));
+        ifaces.extend(node.wifi.iter().map(|w| w.name.clone()));
+        ifaces.sort();
+        ifaces.dedup();
+        for iface in &ifaces {
+            conn.set_link_up(iface.as_str()).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up interface '{iface}' in '{node_name}': {e}"
+                ))
+            })?;
         }
     }
 
@@ -1491,6 +1518,26 @@ async fn apply_nftables_for_node(
             "failed to create nftables connection for '{node_name}': {e}"
         ))
     })?;
+
+    // Nothing declared at all: an empty `NftablesConfig` declares no
+    // table, so its diff has nothing to reconcile against and a table
+    // left from an earlier deploy/apply would survive. Delete it
+    // outright (idempotent) so `apply` after removing a node's last
+    // firewall/NAT block really clears the rules.
+    if fw.is_none() && nat.is_none() {
+        let removed = nft_conn
+            .del_table_if_exists(NLINK_LAB_TABLE, nlink::netlink::nftables::Family::Inet)
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to remove nftables table on '{node_name}': {e}"
+                ))
+            })?;
+        if removed {
+            tracing::info!(node = %node_name, "nftables: removed table {NLINK_LAB_TABLE}");
+        }
+        return Ok(());
+    }
 
     let diff = cfg.diff(&nft_conn).await.map_err(|e| {
         Error::deploy_failed(format!(
@@ -2895,6 +2942,21 @@ async fn ensure_wireguard_devices_for_node(
             "WireguardConfig::ensure_devices on '{node_name}': {e}"
         ))
     })?;
+    // `ensure_devices` only creates the link. The NetworkConfig applied
+    // right after declares routes *via* the tunnel, and the kernel
+    // rejects a nexthop on a down device ("Device for nexthop is not
+    // up"), so bring every declared WG interface up here.
+    for dev in cfg.devices() {
+        route_conn
+            .set_link_up(dev.ifname.as_str())
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up WireGuard interface '{}' on '{node_name}': {e}",
+                    dev.ifname
+                ))
+            })?;
+    }
     Ok(())
 }
 

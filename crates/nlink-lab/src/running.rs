@@ -39,6 +39,10 @@ pub struct RunningLab {
     starttimes: HashMap<u32, u64>,
     /// node → root-namespace mgmt veth peer name (see `LabState::mgmt_peers`).
     mgmt_peers: std::collections::BTreeMap<String, String>,
+    /// Outcome of the `validate { … }` assertions run at deploy step 19.
+    /// Empty when the topology has no assertions or the lab was
+    /// [`load`](Self::load)ed from state (results are not persisted).
+    assertion_results: Vec<crate::test_runner::AssertionResult>,
 }
 
 /// Output from executing a command in a lab node.
@@ -170,12 +174,38 @@ impl RunningLab {
             mgmt_peers: std::collections::BTreeMap::new(),
             saved_impairments: HashMap::new(),
             process_logs: HashMap::new(),
+            assertion_results: Vec::new(),
         }
     }
 
     /// Get the topology used to deploy this lab.
     pub fn topology(&self) -> &Topology {
         &self.topology
+    }
+
+    /// Structured results of the topology's `validate { … }` assertions
+    /// as evaluated at the end of `deploy()` (step 19), in declaration
+    /// order. Empty if the topology has no assertions or this handle
+    /// was loaded from saved state.
+    pub fn assertion_results(&self) -> &[crate::test_runner::AssertionResult] {
+        &self.assertion_results
+    }
+
+    /// `true` if at least one deploy-time assertion did not pass —
+    /// including assertions that could not be evaluated (no target
+    /// address, exec failure). This is the check `deploy --strict`
+    /// should make before deciding to tear the lab down / exit non-zero.
+    pub fn assertions_failed(&self) -> bool {
+        self.assertion_results.iter().any(|r| !r.passed)
+    }
+
+    /// Record deploy-time assertion results (crate-internal, set by
+    /// `deploy()` step 19).
+    pub(crate) fn set_assertion_results(
+        &mut self,
+        results: Vec<crate::test_runner::AssertionResult>,
+    ) {
+        self.assertion_results = results;
     }
 
     /// Get the lab name.
@@ -1358,6 +1388,7 @@ impl RunningLab {
             process_logs: lab_state.process_logs,
             starttimes: lab_state.starttimes,
             mgmt_peers: lab_state.mgmt_peers,
+            assertion_results: Vec::new(),
         })
     }
 

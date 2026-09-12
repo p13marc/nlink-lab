@@ -1276,9 +1276,13 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
     running.set_mgmt_peers(mgmt_peers);
 
     // ── Step 19: Run validate assertions ─────────────────────────
+    // Never fails the deploy; the structured results ride on the
+    // returned lab so callers (`deploy --strict`) can decide.
+    let mut running = running;
     if !topology.assertions.is_empty() {
         tracing::info!("step 19: running validate assertions");
-        run_assertions(&running, topology);
+        let results = run_assertions(&running, topology);
+        running.set_assertion_results(results);
     }
 
     Ok(running)
@@ -3798,211 +3802,38 @@ async fn apply_network_impair_diff(
     Ok(())
 }
 
-/// Resolve a node name to a [`NodeHandle`] from a [`RunningLab`].
+/// Run post-deploy `validate { … }` assertions (step 19).
 ///
-/// Looks up namespace nodes first, then container nodes.
-/// Run post-deploy reachability assertions from the validate block.
-fn run_assertions(running: &RunningLab, topology: &Topology) {
-    use crate::types::Assertion;
-
-    // Build address map to find target IPs
-    let mut ip_map: HashMap<String, String> = HashMap::new();
-    for link in &topology.links {
-        if let Some(addrs) = &link.addresses {
-            for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
-                if let Some(ep_ref) = EndpointRef::parse(ep) {
-                    let ip = addr.split('/').next().unwrap_or(addr);
-                    ip_map
-                        .entry(ep_ref.node.clone())
-                        .or_insert_with(|| ip.to_string());
-                }
-            }
+/// Thin wrapper over [`crate::test_runner::run_assertions`] — the one
+/// assertion engine shared with `nlink-lab test` and the scenario
+/// engine — that additionally emits the `PASS:` / `FAIL:` log lines
+/// operators grep for. Target addresses come from
+/// [`crate::ipmap::build_ip_map`], so bridge-`network` topologies no
+/// longer log `SKIP: no IP found` for every assertion (issue #34).
+///
+/// Never bails: `deploy()` succeeds regardless of the outcome. The
+/// results are stored on the returned [`RunningLab`] (see
+/// [`RunningLab::assertion_results`] / [`RunningLab::assertions_failed`])
+/// so the CLI can implement `deploy --strict` without changing this
+/// function's signature.
+fn run_assertions(
+    running: &RunningLab,
+    topology: &Topology,
+) -> Vec<crate::test_runner::AssertionResult> {
+    let results = crate::test_runner::run_assertions(running, topology);
+    for r in &results {
+        match (r.passed, r.detail.as_deref()) {
+            (true, Some(detail)) => tracing::info!("PASS: {} ({detail})", r.description),
+            (true, None) => tracing::info!("PASS: {}", r.description),
+            (false, Some(detail)) => tracing::warn!("FAIL: {}: {detail}", r.description),
+            (false, None) => tracing::warn!("FAIL: {}", r.description),
         }
     }
-
-    for assertion in &topology.assertions {
-        match assertion {
-            Assertion::Reach { from, to } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    match running.exec(from, "ping", &["-c1", "-W2", target_ip]) {
-                        Ok(out) if out.exit_code == 0 => {
-                            tracing::info!("PASS: {from} can reach {to} ({target_ip})");
-                        }
-                        _ => {
-                            tracing::warn!("FAIL: {from} cannot reach {to} ({target_ip})");
-                        }
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::NoReach { from, to } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    match running.exec(from, "ping", &["-c1", "-W2", target_ip]) {
-                        Ok(out) if out.exit_code != 0 => {
-                            tracing::info!("PASS: {from} cannot reach {to} (expected)");
-                        }
-                        _ => {
-                            tracing::warn!("FAIL: {from} CAN reach {to} (should be blocked)");
-                        }
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::TcpConnect {
-                from,
-                to,
-                port,
-                timeout,
-                retries,
-                interval,
-            } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    let timeout_secs = timeout
-                        .as_deref()
-                        .and_then(|t| crate::helpers::parse_duration(t).ok())
-                        .map(|d| d.as_secs().max(1).to_string())
-                        .unwrap_or_else(|| "3".to_string());
-                    let max_attempts = retries.unwrap_or(1);
-                    let retry_interval = interval
-                        .as_deref()
-                        .and_then(|i| crate::helpers::parse_duration(i).ok())
-                        .unwrap_or(std::time::Duration::from_millis(500));
-
-                    let mut passed = false;
-                    for attempt in 0..max_attempts {
-                        match running.exec(
-                            from,
-                            "bash",
-                            &[
-                                "-c",
-                                &format!(
-                                    "timeout {timeout_secs} bash -c 'echo > /dev/tcp/{target_ip}/{port}'"
-                                ),
-                            ],
-                        ) {
-                            Ok(out) if out.exit_code == 0 => {
-                                passed = true;
-                                break;
-                            }
-                            _ => {
-                                if attempt + 1 < max_attempts {
-                                    std::thread::sleep(retry_interval);
-                                }
-                            }
-                        }
-                    }
-                    if passed {
-                        tracing::info!("PASS: {from} tcp-connect {to}:{port}");
-                    } else {
-                        tracing::warn!("FAIL: {from} cannot tcp-connect {to}:{port}");
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::LatencyUnder {
-                from,
-                to,
-                max,
-                samples,
-            } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    let count = samples.unwrap_or(5).to_string();
-                    match running.exec(from, "ping", &["-c", &count, "-q", target_ip]) {
-                        Ok(out) if out.exit_code == 0 => {
-                            // Parse avg from "rtt min/avg/max/mdev = 0.1/0.2/0.3/0.1 ms"
-                            if let Some(avg_ms) = parse_ping_avg(&out.stdout) {
-                                let max_ms = crate::helpers::parse_duration(max)
-                                    .map(|d| d.as_secs_f64() * 1000.0)
-                                    .unwrap_or(f64::MAX);
-                                if avg_ms <= max_ms {
-                                    tracing::info!(
-                                        "PASS: {from} -> {to} latency {avg_ms:.1}ms <= {max}"
-                                    );
-                                } else {
-                                    tracing::warn!(
-                                        "FAIL: {from} -> {to} latency {avg_ms:.1}ms > {max}"
-                                    );
-                                }
-                            } else {
-                                tracing::warn!(
-                                    "FAIL: could not parse ping output for latency check"
-                                );
-                            }
-                        }
-                        _ => {
-                            tracing::warn!("FAIL: {from} cannot reach {to} for latency check");
-                        }
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::RouteHas {
-                node,
-                destination,
-                via,
-                dev,
-            } => match running.exec(node, "ip", &["route", "show", destination]) {
-                Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
-                    let route_line = out.stdout.trim();
-                    let via_ok = via
-                        .as_ref()
-                        .is_none_or(|v| route_line.contains(&format!("via {v}")));
-                    let dev_ok = dev
-                        .as_ref()
-                        .is_none_or(|d| route_line.contains(&format!("dev {d}")));
-                    if via_ok && dev_ok {
-                        tracing::info!("PASS: {node} route-has {destination}");
-                    } else {
-                        tracing::warn!("FAIL: {node} route-has {destination}: got '{route_line}'");
-                    }
-                }
-                _ => {
-                    tracing::warn!("FAIL: {node} has no route for {destination}");
-                }
-            },
-            Assertion::DnsResolves {
-                from,
-                name,
-                expected_ip,
-            } => match running.exec(from, "getent", &["hosts", name]) {
-                Ok(out) if out.exit_code == 0 => {
-                    if out.stdout.contains(expected_ip) {
-                        tracing::info!("PASS: {from} dns-resolves {name} -> {expected_ip}");
-                    } else {
-                        tracing::warn!(
-                            "FAIL: {from} dns-resolves {name}: expected {expected_ip}, got '{}'",
-                            out.stdout.trim()
-                        );
-                    }
-                }
-                _ => {
-                    tracing::warn!("FAIL: {from} cannot resolve {name}");
-                }
-            },
-        }
+    let failed = results.iter().filter(|r| !r.passed).count();
+    if failed > 0 {
+        tracing::warn!("{failed} of {} validate assertion(s) failed", results.len());
     }
-}
-
-/// Parse average latency from ping -q output.
-/// Looks for "rtt min/avg/max/mdev = X/Y/Z/W ms" and returns Y.
-fn parse_ping_avg(output: &str) -> Option<f64> {
-    for line in output.lines() {
-        if line.contains("min/avg/max") {
-            // Format: "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms"
-            let parts: Vec<&str> = line.split('=').collect();
-            if parts.len() >= 2 {
-                let stats: Vec<&str> = parts[1].trim().split('/').collect();
-                if stats.len() >= 2 {
-                    return stats[1].trim().parse::<f64>().ok();
-                }
-            }
-        }
-    }
-    None
+    results
 }
 
 /// Build container CreateOpts from a Node's fields.
@@ -4407,18 +4238,64 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         );
     }
 
+    /// Step 19 wrapper: returns the structured vector (not `()`), and a
+    /// rootless / undeployed lab yields non-pass results with details
+    /// rather than a silent pass. `parse_ping_avg` tests moved to
+    /// `test_runner` alongside the single remaining implementation.
     #[test]
-    fn test_parse_ping_avg() {
-        let output = "PING 10.0.0.1 (10.0.0.1) 56(84) bytes of data.\n\
-            --- 10.0.0.1 ping statistics ---\n\
-            5 packets transmitted, 5 received, 0% packet loss, time 4006ms\n\
-            rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms\n";
-        assert_eq!(parse_ping_avg(output), Some(0.456));
-    }
+    fn test_run_assertions_returns_structured_results() {
+        let topology = crate::parser::parse(
+            r#"
+lab "t"
+node a
+node b
+network lan {
+  members [a:eth0, b:eth0]
+  subnet 10.0.1.0/24
+}
+validate {
+  reach a b
+  route-has a 10.0.1.0/24
+}
+"#,
+        )
+        .unwrap();
+        let namespace_names = topology
+            .nodes
+            .keys()
+            .map(|n| (n.clone(), format!("nlink-lab-test-nonexistent-{n}")))
+            .collect();
+        let mut running = RunningLab::new(
+            topology.clone(),
+            namespace_names,
+            Default::default(),
+            None,
+            Vec::new(),
+            false,
+            false,
+        );
+        assert!(running.assertion_results().is_empty());
+        assert!(!running.assertions_failed());
 
-    #[test]
-    fn test_parse_ping_avg_no_stats() {
-        assert_eq!(parse_ping_avg("no rtt line here"), None);
+        let results = run_assertions(&running, &topology);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| !r.passed));
+        assert!(results.iter().all(|r| r.detail.is_some()));
+        // Bridge-network address resolved (issue #34): the failure is
+        // the missing namespace, not a missing IP.
+        assert!(
+            !results[0]
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("no IP found"),
+            "{:?}",
+            results[0].detail
+        );
+
+        running.set_assertion_results(results);
+        assert_eq!(running.assertion_results().len(), 2);
+        assert!(running.assertions_failed());
     }
 
     #[test]

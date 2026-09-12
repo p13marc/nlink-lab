@@ -3,28 +3,8 @@
 //! struct are the help text (`docs/cli/*.md` is generated from them).
 
 use clap::Subcommand;
-use std::path::PathBuf;
 
 use crate::cmd;
-use crate::util::parse_byte_size;
-
-/// Stream selector for `nlink-lab spawn --wait-log-stream`.
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
-pub enum WaitLogStream {
-    Stdout,
-    Stderr,
-    Both,
-}
-
-impl From<WaitLogStream> for nlink_lab::LogStream {
-    fn from(s: WaitLogStream) -> Self {
-        match s {
-            WaitLogStream::Stdout => nlink_lab::LogStream::Stdout,
-            WaitLogStream::Stderr => nlink_lab::LogStream::Stderr,
-            WaitLogStream::Both => nlink_lab::LogStream::Both,
-        }
-    }
-}
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -71,34 +51,7 @@ pub enum Commands {
     Status(cmd::status::Args),
 
     /// Run a command in a lab node.
-    Exec {
-        /// Lab name.
-        lab: String,
-
-        /// Node name.
-        node: String,
-
-        /// Set environment variables (can be repeated: --env KEY=VALUE).
-        #[arg(long = "env", value_name = "KEY=VALUE")]
-        env_vars: Vec<String>,
-
-        /// Working directory for the command. For namespace nodes this is
-        /// `chdir()` on the host filesystem; for container nodes it's passed
-        /// as `-w <path>` to docker/podman.
-        #[arg(long, value_name = "DIR")]
-        workdir: Option<PathBuf>,
-
-        /// Maximum wall-clock time the command may run, in seconds. On
-        /// expiry the child is sent SIGTERM, then SIGKILL after a 1s
-        /// grace period. Exit code 124 on timeout (matches
-        /// `coreutils timeout(1)`). Default: no timeout.
-        #[arg(long, value_name = "SECS")]
-        timeout: Option<u64>,
-
-        /// Command and arguments.
-        #[arg(trailing_var_arg = true, required = true)]
-        cmd: Vec<String>,
-    },
+    Exec(cmd::exec::Args),
 
     /// Spawn a background process in a lab node.
     ///
@@ -117,75 +70,7 @@ pub enum Commands {
     /// `pid` and `host_pid` are aliases — equal values today because
     /// nlink-lab does not use `CLONE_NEWPID`. See ARCHITECTURE.md
     /// "Process & namespace model" for why.
-    Spawn {
-        /// Lab name.
-        lab: String,
-
-        /// Node name.
-        node: String,
-
-        /// Directory for stdout/stderr log files (default: lab state dir).
-        #[arg(long)]
-        log_dir: Option<PathBuf>,
-
-        /// Set environment variables (can be repeated: --env KEY=VALUE).
-        #[arg(long = "env", value_name = "KEY=VALUE")]
-        env_vars: Vec<String>,
-
-        /// Working directory for the spawned process (chdir before exec).
-        #[arg(long, value_name = "DIR")]
-        workdir: Option<PathBuf>,
-
-        /// Wait for TCP port after spawn (e.g., "127.0.0.1:8080" or "8080").
-        ///
-        /// The probe runs inside the node's namespace, so `127.0.0.1:<port>`
-        /// only matches a service that bound to the loopback interface. If
-        /// your service binds to a specific node IP (e.g., the interface
-        /// address), pass that address here instead of `127.0.0.1`.
-        #[arg(long)]
-        wait_tcp: Option<String>,
-
-        /// Wait for a stdout/stderr line matching REGEX before returning.
-        ///
-        /// Useful for services that signal readiness via a log line
-        /// rather than a port (e.g., `[STARTED] tunnel established`).
-        /// Combinable with --wait-tcp; both must succeed before spawn
-        /// returns. Fails the spawn on timeout.
-        #[arg(long, value_name = "REGEX")]
-        wait_log: Option<String>,
-
-        /// Which stream to monitor for --wait-log: stdout, stderr, or
-        /// both. Default: both.
-        #[arg(long, value_name = "STREAM", default_value = "both")]
-        wait_log_stream: WaitLogStream,
-
-        /// Wait until the spawned process has a TCP listener on PORT
-        /// inside its namespace. Reads `/proc/<pid>/net/tcp{,6}` —
-        /// no actual `connect(2)` is attempted, so this works for
-        /// services that bind to non-routable addresses or that
-        /// would log connection-refused on probe attempts. Combinable
-        /// with --wait-tcp / --wait-log (all AND-compose). Round-5
-        /// §2.4.
-        #[arg(long, value_name = "PORT")]
-        wait_port: Option<u16>,
-
-        /// Wait until the spawned process's open-fd count has been
-        /// stable for SECS seconds. Heuristic — prefer --wait-log or
-        /// --wait-port when a deterministic signal is available. A
-        /// process can open more files later in its lifecycle.
-        /// Round-5 §2.4.
-        #[arg(long, value_name = "SECS")]
-        wait_fd_stable: Option<f64>,
-
-        /// Timeout for --wait-tcp / --wait-log / --wait-port /
-        /// --wait-fd-stable in seconds (default: 30).
-        #[arg(long, default_value = "30")]
-        wait_timeout: u64,
-
-        /// Command and arguments.
-        #[arg(trailing_var_arg = true, required = true)]
-        cmd: Vec<String>,
-    },
+    Spawn(cmd::spawn::Args),
 
     /// Validate a topology file without deploying.
     Validate(cmd::validate::Args),
@@ -202,77 +87,7 @@ pub enum Commands {
     /// Without `--show`, applies impairment changes; output is plain
     /// confirmation text.
     #[command(group = clap::ArgGroup::new("impair_mode").args(["show", "clear", "partition", "heal"]).multiple(false))]
-    Impair {
-        /// Lab name.
-        lab: String,
-
-        /// Endpoint (e.g., "router:eth0"). Not required with --show.
-        endpoint: Option<String>,
-
-        /// Show current impairments on all interfaces.
-        #[arg(long)]
-        show: bool,
-
-        /// Delay (e.g., "10ms").
-        #[arg(long)]
-        delay: Option<String>,
-
-        /// Jitter (e.g., "2ms").
-        #[arg(long)]
-        jitter: Option<String>,
-
-        /// Packet loss (e.g., "0.1%").
-        #[arg(long)]
-        loss: Option<String>,
-
-        /// Rate limit (e.g., "100mbit").
-        #[arg(long)]
-        rate: Option<String>,
-
-        /// Remove impairment.
-        #[arg(long)]
-        clear: bool,
-
-        /// Egress delay (applied to named endpoint).
-        #[arg(long)]
-        out_delay: Option<String>,
-
-        /// Egress jitter.
-        #[arg(long)]
-        out_jitter: Option<String>,
-
-        /// Egress packet loss.
-        #[arg(long)]
-        out_loss: Option<String>,
-
-        /// Egress rate limit.
-        #[arg(long)]
-        out_rate: Option<String>,
-
-        /// Ingress delay (applied to peer endpoint).
-        #[arg(long)]
-        in_delay: Option<String>,
-
-        /// Ingress jitter.
-        #[arg(long)]
-        in_jitter: Option<String>,
-
-        /// Ingress packet loss.
-        #[arg(long)]
-        in_loss: Option<String>,
-
-        /// Ingress rate limit.
-        #[arg(long)]
-        in_rate: Option<String>,
-
-        /// Simulate a network partition (save impairments, apply 100% loss).
-        #[arg(long)]
-        partition: bool,
-
-        /// Restore pre-partition impairments.
-        #[arg(long)]
-        heal: bool,
-    },
+    Impair(cmd::impair::Args),
 
     /// Run a `scenario` block from a deployed lab's topology.
     ///
@@ -291,17 +106,7 @@ pub enum Commands {
     Render(cmd::render::Args),
 
     /// Open an interactive shell in a lab node.
-    Shell {
-        /// Lab name.
-        lab: String,
-
-        /// Node name.
-        node: String,
-
-        /// Shell to use (default: /bin/sh).
-        #[arg(long, default_value = "/bin/sh")]
-        shell: String,
-    },
+    Shell(cmd::shell::Args),
 
     /// List background processes (alive and exited) tracked by `spawn`.
     ///
@@ -316,25 +121,10 @@ pub enum Commands {
     ///   [ { "node": str, "pid": int, "host_pid": int, "alive": bool,
     ///       "stdout_log": str | null, "stderr_log": str | null }, ... ]
     /// Schema: docs/json-schemas/ps.schema.json
-    Ps {
-        /// Lab name.
-        lab: String,
-
-        /// Hide processes whose tracked PID has exited (alive == false).
-        /// Useful for "is X still running?" polling loops where exited
-        /// post-mortem entries would otherwise be misread as alive.
-        #[arg(long)]
-        alive_only: bool,
-    },
+    Ps(cmd::ps::Args),
 
     /// Kill a tracked background process.
-    Kill {
-        /// Lab name.
-        lab: String,
-
-        /// Process ID to kill.
-        pid: u32,
-    },
+    Kill(cmd::kill::Args),
 
     /// Sample resource usage of a process inside a lab node.
     ///
@@ -354,186 +144,13 @@ pub enum Commands {
     ///
     /// CPU ticks are in `sysconf(_SC_CLK_TCK)` units (typically 100
     /// per second); convert by dividing.
-    ProcStat {
-        /// Lab name.
-        lab: String,
-
-        /// Node name.
-        node: String,
-
-        /// Process ID (host PID — same as ns PID; see ARCHITECTURE.md).
-        pid: u32,
-
-        /// Sample every SECS seconds, emitting one record per
-        /// sample. NDJSON (one JSON object per line) when combined
-        /// with `--json`. Stops on Ctrl-C.
-        #[arg(long, value_name = "SECS")]
-        watch: Option<f64>,
-    },
+    ProcStat(cmd::proc_stat::Args),
 
     /// Run diagnostics on a lab.
-    Diagnose {
-        /// Lab name.
-        lab: String,
-
-        /// Node name (omit to diagnose all).
-        node: Option<String>,
-    },
+    Diagnose(cmd::diagnose::Args),
 
     /// Capture packets on an interface using netring.
-    Capture {
-        /// Lab name.
-        lab: String,
-
-        /// Endpoint (e.g., "router:eth0").
-        endpoint: String,
-
-        /// Write to pcap file (default: print summaries to stdout).
-        #[arg(short, long)]
-        write: Option<PathBuf>,
-
-        /// Capture N packets then stop.
-        #[arg(short, long)]
-        count: Option<u64>,
-
-        /// Legacy: full tcpdump filter expression (e.g., "tcp port
-        /// 80"). Requires nlink-lab built with the
-        /// `legacy-tcpdump-filter` feature *and* `tcpdump` on PATH.
-        /// Default builds prefer the typed `--filter-*` flags below.
-        #[arg(short, long)]
-        filter: Option<String>,
-
-        /// Match only TCP (sets ip_proto=6).
-        #[arg(long = "filter-tcp")]
-        filter_tcp: bool,
-
-        /// Match only UDP (sets ip_proto=17).
-        #[arg(long = "filter-udp")]
-        filter_udp: bool,
-
-        /// Match only ICMP (sets ip_proto=1).
-        #[arg(long = "filter-icmp")]
-        filter_icmp: bool,
-
-        /// Match a specific IP protocol number (e.g. 47 for GRE).
-        #[arg(long = "filter-ip-proto", value_name = "PROTO")]
-        filter_ip_proto: Option<u8>,
-
-        /// Restrict to IPv4 traffic.
-        #[arg(long = "filter-ipv4")]
-        filter_ipv4: bool,
-
-        /// Restrict to IPv6 traffic.
-        #[arg(long = "filter-ipv6")]
-        filter_ipv6: bool,
-
-        /// Match ARP frames (ethertype 0x0806).
-        #[arg(long = "filter-arp")]
-        filter_arp: bool,
-
-        /// Match 802.1Q VLAN-tagged frames.
-        #[arg(long = "filter-vlan")]
-        filter_vlan: bool,
-
-        /// Match a specific VLAN ID. Implies `--filter-vlan`.
-        #[arg(long = "filter-vlan-id", value_name = "VID")]
-        filter_vlan_id: Option<u16>,
-
-        /// Match either source or destination IP address.
-        #[arg(long = "filter-host", value_name = "ADDR")]
-        filter_host: Option<std::net::IpAddr>,
-
-        /// Match a specific source IP address.
-        #[arg(long = "filter-src-host", value_name = "ADDR")]
-        filter_src_host: Option<std::net::IpAddr>,
-
-        /// Match a specific destination IP address.
-        #[arg(long = "filter-dst-host", value_name = "ADDR")]
-        filter_dst_host: Option<std::net::IpAddr>,
-
-        /// Match either source or destination network (CIDR).
-        #[arg(long = "filter-net", value_name = "CIDR")]
-        filter_net: Option<String>,
-
-        /// Match a source network (CIDR).
-        #[arg(long = "filter-src-net", value_name = "CIDR")]
-        filter_src_net: Option<String>,
-
-        /// Match a destination network (CIDR).
-        #[arg(long = "filter-dst-net", value_name = "CIDR")]
-        filter_dst_net: Option<String>,
-
-        /// Match either source or destination L4 port. Requires
-        /// `--filter-tcp` or `--filter-udp`.
-        #[arg(long = "filter-port", value_name = "PORT")]
-        filter_port: Option<u16>,
-
-        /// Match L4 source port.
-        #[arg(long = "filter-src-port", value_name = "PORT")]
-        filter_src_port: Option<u16>,
-
-        /// Match L4 destination port.
-        #[arg(long = "filter-dst-port", value_name = "PORT")]
-        filter_dst_port: Option<u16>,
-
-        /// Match any of these L4 ports (either source OR
-        /// destination). Comma-separated, e.g. `80,443,8080`.
-        /// Backed by netring 0.16's `BpfFilter::builder::ports()`
-        /// multi-port shortcut — compiles to one BPF program
-        /// branch per port. Requires `--filter-tcp` or
-        /// `--filter-udp`.
-        #[arg(long = "filter-ports", value_name = "PORTS", value_delimiter = ',')]
-        filter_ports: Vec<u16>,
-
-        /// Match any of these L4 source ports.
-        #[arg(long = "filter-src-ports", value_name = "PORTS", value_delimiter = ',')]
-        filter_src_ports: Vec<u16>,
-
-        /// Match any of these L4 destination ports.
-        #[arg(long = "filter-dst-ports", value_name = "PORTS", value_delimiter = ',')]
-        filter_dst_ports: Vec<u16>,
-
-        /// Negate the entire filter (capture everything that does
-        /// NOT match the other `--filter-*` flags).
-        #[arg(long = "filter-not")]
-        filter_not: bool,
-
-        /// Stop after N seconds.
-        #[arg(long)]
-        duration: Option<f64>,
-
-        /// Snap length -- truncate packets to N bytes.
-        #[arg(long, default_value = "262144")]
-        snap_len: u32,
-
-        /// Drop outgoing packets at the kernel via
-        /// `PACKET_IGNORE_OUTGOING`. Use this when capturing on `lo`
-        /// to halve the packet count: loopback otherwise reports each
-        /// packet twice (once outgoing, once incoming). No effect on
-        /// non-loopback interfaces. (Requires kernel >= 4.20.)
-        #[arg(long)]
-        dedupe_loopback: bool,
-
-        /// Rotate the pcap file when the active segment exceeds this
-        /// size (suffixes K/M/G accepted; e.g. `100M`). On rotation
-        /// the active `<base>.pcap` becomes `<base>.pcap.1`, the
-        /// previous `.1` becomes `.2`, etc. Requires `--write`.
-        /// Round-5 §2.3.
-        #[arg(long, value_name = "SIZE", value_parser = parse_byte_size)]
-        max_size: Option<u64>,
-
-        /// Rotate the pcap file every SECS seconds since the last
-        /// rotation. Composes with `--max-size` (whichever threshold
-        /// fires first triggers the rotation). Requires `--write`.
-        #[arg(long, value_name = "SECS")]
-        rotate: Option<f64>,
-
-        /// Number of *rotated* segments to keep (`<base>.pcap.1`
-        /// through `<base>.pcap.<keep>`). The active `<base>.pcap`
-        /// is always retained and doesn't count. Default: 5.
-        #[arg(long, default_value = "5", value_name = "N")]
-        keep: usize,
-    },
+    Capture(cmd::capture::Args),
 
     /// Wait for a lab to be ready.
     Wait(cmd::wait::Args),
@@ -547,50 +164,10 @@ pub enum Commands {
     Watch(cmd::watch::Args),
 
     /// Wait for a service or condition inside a lab node.
-    WaitFor {
-        /// Lab name.
-        lab: String,
-
-        /// Node name.
-        node: String,
-
-        /// Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost).
-        #[arg(long)]
-        tcp: Option<String>,
-
-        /// Wait for command to succeed (exit 0).
-        #[arg(long = "exec")]
-        exec_cmd: Option<String>,
-
-        /// Wait for file to exist.
-        #[arg(long)]
-        file: Option<String>,
-
-        /// Timeout in seconds (default: 30).
-        #[arg(short, long, default_value = "30")]
-        timeout: u64,
-
-        /// Poll interval in milliseconds (default: 500).
-        #[arg(long, default_value = "500")]
-        interval: u64,
-    },
+    WaitFor(cmd::wait_for::Args),
 
     /// Show IP addresses assigned to a node.
-    Ip {
-        /// Lab name.
-        lab: String,
-
-        /// Node name.
-        node: String,
-
-        /// Filter by interface name.
-        #[arg(long)]
-        iface: Option<String>,
-
-        /// Show CIDR notation (include prefix length).
-        #[arg(long)]
-        cidr: bool,
-    },
+    Ip(cmd::ip::Args),
 
     /// Compare two topology files and show differences.
     Diff(cmd::diff::Args),
@@ -620,10 +197,7 @@ pub enum Commands {
     Inspect(cmd::inspect::Args),
 
     /// List container nodes in a running lab.
-    Containers {
-        /// Lab name.
-        lab: String,
-    },
+    Containers(cmd::containers::Args),
 
     /// Show container logs or per-process logs from `nlink-lab spawn`.
     ///
@@ -635,44 +209,16 @@ pub enum Commands {
     ///
     /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
     /// path is stable; consumers can read it directly.
-    Logs {
-        /// Lab name.
-        lab: String,
-        /// Node name (for container logs).
-        node: Option<String>,
-        /// Process ID (for background process logs).
-        #[arg(long)]
-        pid: Option<u32>,
-        /// Show stderr instead of stdout (with --pid).
-        #[arg(long)]
-        stderr: bool,
-        /// Stream logs in tail -F style. Works for container nodes (via
-        /// the runtime) and for tracked background processes (via
-        /// `--pid`). Re-opens the file on rotation/truncation. Stops on
-        /// Ctrl-C.
-        #[arg(long)]
-        follow: bool,
-        /// Show last N lines.
-        #[arg(long)]
-        tail: Option<u32>,
-    },
+    Logs(cmd::logs::Args),
 
     /// Pre-pull all container images from a topology.
     Pull(cmd::pull::Args),
 
     /// Show container resource usage.
-    Stats {
-        /// Lab name.
-        lab: String,
-    },
+    Stats(cmd::stats::Args),
 
     /// Restart a container node.
-    Restart {
-        /// Lab name.
-        lab: String,
-        /// Node name (must be a container node).
-        node: String,
-    },
+    Restart(cmd::restart::Args),
 
     /// Generate shell completions.
     Completions {

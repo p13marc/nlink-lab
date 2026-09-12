@@ -161,11 +161,24 @@ bare namespace node enters exactly **one** Linux namespace via
 | Flag             | Active? | Notes |
 |------------------|---------|-------|
 | `CLONE_NEWNET`   | always  | Network ns — the reason nlink-lab exists. Source: `crates/nlink/src/netlink/namespace.rs:405`. |
-| `CLONE_NEWNS`    | sometimes | Only when `dns hosts` (or any `/etc/netns/<ns>/` overlay) is configured. The mount ns is private to the spawned process; needed for the `/etc/hosts` bind-mount to be visible to the child without polluting the host. Source: `namespace.rs:1016`. |
+| `CLONE_NEWNS`    | sometimes | Only when `/etc/netns/<ns>/` holds overlay files (`dns hosts`). The mount ns is private to the spawned process; needed for the `/etc/hosts` bind-mount to be visible to the child without polluting the host. Best effort: where the runtime denies `unshare`/`mount`/the sysfs remount (container job profiles), the process still runs in the network namespace with the host `/etc` (`crates/nlink-lab/src/ns_exec.rs`). |
 | `CLONE_NEWPID`   | **no**  | PIDs are shared with the host. **`host_pid == ns_pid` for every spawned process.** |
 | `CLONE_NEWUTS`   | no      | Hostname/domainname inherited from host. |
 | `CLONE_NEWIPC`   | no      | SysV IPC, POSIX message queues shared with host. |
 | `CLONE_NEWUSER`  | no      | No UID mapping. Root in the namespace is root on the host. |
+
+### Lifetime
+
+Background processes (`run … background` in the topology, `nlink-lab
+spawn`) are started **detached**: `ns_exec::spawn_detached` double-forks
+— an intermediate child calls `setsid(2)`, forks the real process and
+exits at once — so nlink-lab never has a child to reap (no zombies,
+whatever the deploying process does next) and the process is reparented
+to init, outliving the terminal session that deployed the lab. The pid
+handed back is the real process; it is recorded together with its
+`/proc/<pid>/stat` start time, and every later signal (`destroy`,
+`kill`, an `apply` that edits or removes the `run` line) verifies that
+start time first. Foreground `exec`s stay attached and are waited on.
 
 ### UID
 

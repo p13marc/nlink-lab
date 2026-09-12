@@ -717,7 +717,7 @@ the field; 159d types it.
 - Plan 158e (shipped — Slices 1+2+3 in commits `4098328`,
   `5ae58a8`, `ffb0e5b`; Slice 4 deferred there and is reopened
   in this plan)
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md)
   — item #10/#11/#12/#13 closures cited
 - nlink 0.19 sources at `/home/mpardo/git/rip`:
   - `crates/nlink/src/netlink/link/builder.rs` — VRF + VXLAN setters

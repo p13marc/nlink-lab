@@ -340,7 +340,7 @@ deferred.
 - [Plan 159 umbrella](159-nlink-0.19-adoption.md)
 - [Plan 159c](159c-facade-stack-adoption.md) — supersedes
   Phase 2 if shipped first
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md)
   — items #5, W8 cited
 - nlink 0.19 sources at `/home/mpardo/git/rip`:
   - `crates/nlink/src/netlink/config/types.rs` — `ConfigDiff::apply` inherent

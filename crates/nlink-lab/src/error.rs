@@ -162,7 +162,7 @@ impl Error {
     /// upstream) to drill to the deepest kernel layer — which
     /// transparently unwraps `Box<nlink::Error>` sources, side-
     /// stepping the `downcast_ref` trap described in
-    /// `nlink-feedback.md` item #4.
+    /// `docs/upstream/nlink-feedback.md` item #4.
     fn first_nlink_error(&self) -> Option<&nlink::Error> {
         let mut src: &dyn std::error::Error = self;
         loop {

@@ -282,10 +282,10 @@ These are listed so future-me doesn't re-discover them.
 
 ## Cross-references
 
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md) — per-item closeout against `nlink-feedback.md`
-- [`nlink-feedback.md`](../../nlink-feedback.md) — the 2026-05-30 feedback report
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md) — per-item closeout against `nlink-feedback.md`
+- [`nlink-feedback.md`](../upstream/nlink-feedback.md) — the 2026-05-30 feedback report
 - Plan 158 arc (shipped — see `CHANGELOG.md` and
-  [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+  [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md)
   for what landed in 0.16/0.17/0.18 adoption); plan files for
   158, 158a-f removed per the "completed plans get removed"
   convention. Notable references:

@@ -4,24 +4,25 @@ Implementation plans for nlink-lab.
 
 ## Active plans
 
-### 159 arc — adopt nlink 0.19
+### 159 arc — adopt nlink 0.19 — **shipped** (0.6.0 / 0.7.0)
 
-Workspace dep bumped to `nlink = "0.19"` (commit pending). The
-0.19 release closed 14/16 numbered items + 4/9 wishlist items
-+ all 6 doc suggestions from `nlink-feedback.md`. The 159 arc
-adopts the new APIs that 0.19 unlocked. See
-[`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
-for the per-item closeout.
+The plan files are kept for reference; every plan below landed
+(see `CHANGELOG.md` 0.6.0 and 0.7.0). 158g shipped in 0.7.0 via
+`RateLimiter::reconcile` (nlink 0.24). Per-item closeout of the
+upstream feedback is archived under
+[`docs/upstream/`](../upstream/README.md). The next arc is tracked
+as issues: the deploy plan/apply redesign (#73), the CLI module
+split (#74) and the nlink 0.26 adoption backlog (#75).
 
 | Plan | Title | Effort | Priority | Status |
 |------|-------|--------|----------|--------|
-| [159](159-nlink-0.19-adoption.md) | Umbrella — what 0.19 unlocks; ship order | — | — | proposed |
-| [159a](159a-declarative-vrf-wg-vxlan.md) | Declarative VRF + WireGuard + VXLAN (closes 158e Slice 4) | M | P1 | proposed |
-| [159b](159b-watch-route-events.md) | `nlink-lab watch` covering RTNETLINK + nftables (supersedes 158d) | M | P2 | proposed |
-| [159c](159c-facade-stack-adoption.md) | `facade::Stack` adoption — single per-namespace apply | S–M | P2 | proposed (blocked on 159a) |
-| [159d](159d-serde-layered-diff.md) | `serde` derive on `LayeredDiff`; drop `layered_summary` string fallback | S | P2 | proposed |
-| [159e](159e-confdiff-apply-inherent.md) | `ConfigDiff::apply` inherent + `del_*_if_exists` adoption | XS | P3 | proposed |
-| [159f](159f-chain-walk-refactor.md) | `Error::chain_walk` refactor of `ext_ack`/`errno`/`ext_ack_offset` accessors | XS | P3 | proposed |
+| [159](159-nlink-0.19-adoption.md) | Umbrella — what 0.19 unlocks; ship order | — | — | shipped |
+| [159a](159a-declarative-vrf-wg-vxlan.md) | Declarative VRF + WireGuard + VXLAN (closes 158e Slice 4) | M | P1 | shipped |
+| [159b](159b-watch-route-events.md) | `nlink-lab watch` covering RTNETLINK + nftables (supersedes 158d) | M | P2 | shipped |
+| [159c](159c-facade-stack-adoption.md) | `facade::Stack` adoption — single per-namespace apply | S–M | P2 | shipped |
+| [159d](159d-serde-layered-diff.md) | `serde` derive on `LayeredDiff`; drop `layered_summary` string fallback | S | P2 | shipped |
+| [159e](159e-confdiff-apply-inherent.md) | `ConfigDiff::apply` inherent + `del_*_if_exists` adoption | XS | P3 | shipped |
+| [159f](159f-chain-walk-refactor.md) | `Error::chain_walk` refactor of `ext_ack`/`errno`/`ext_ack_offset` accessors | XS | P3 | shipped |
 
 Recommended ship order: **159a** (biggest leverage, unblocks 159c)
 → **159f** (XS cleanup) → **159d** (schema bump, ship early for
@@ -29,14 +30,12 @@ deprecation lead time) → **159e** (janitor) → **159c**
 (architectural cleanup, needs 159a's `WireguardConfig`) → **159b**
 (net-new feature, can ship whenever there's demand).
 
-### 158g — blocked on upstream
+### 158g — shipped
 
-The one remaining 158-arc plan that is neither shipped nor
-superseded:
 
 | Plan | Title | Effort | Priority | Status |
 |------|-------|--------|----------|--------|
-| [158g](158g-rate-limit-reconcile.md) | Adopt `RateLimiter::reconcile` (small upstream + swap) | S | P2 | ⏳ blocked — `PerHostLimiter::reconcile` ships in 0.19, but the per-iface `RateLimiter` that nlink-lab uses has only `apply`/`remove`. Awaiting upstream parity. |
+| [158g](158g-rate-limit-reconcile.md) | Adopt `RateLimiter::reconcile` (small upstream + swap) | S | P2 | shipped in 0.7.0 (nlink 0.24 `RateLimiter::reconcile`) |
 
 ### 158 arc — shipped (no longer in this directory)
 
@@ -65,8 +64,8 @@ below. Highlights:
 
 Full per-commit record in `CHANGELOG.md`. Per-item closeout of
 the upstream feedback that shaped the arc in
-[`nlink-feedback.md`](../../nlink-feedback.md) and
-[`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md).
+[`nlink-feedback.md`](../upstream/nlink-feedback.md) and
+[`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md).
 
 ## Completed
 

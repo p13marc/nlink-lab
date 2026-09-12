@@ -533,7 +533,7 @@ nlink-lab apply --check --json | jq '
   — original `layered_summary` design
 - [Plan 159a Phase 3](159a-declarative-vrf-wg-vxlan.md) — adds
   the `wireguard` field
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md)
   — item #9 closure cited
 - nlink 0.19 sources at `/home/mpardo/git/rip`:
   - `Cargo.toml` — `serde` feature

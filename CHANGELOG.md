@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — runtime safety (wave 3 of the deep-analysis series)
+
+- **PIDs are never signalled blindly (#30).** `state.json` records each
+  background process's `/proc/<pid>/stat` start time; `destroy`, `kill`
+  and `apply` signal a PID only when it still matches. A PID recorded by
+  an older state file (no start time) or one that now belongs to another
+  process is reported and left alone. `RunningLab::kill_process` returns
+  an error in those cases instead of killing an unrelated process as root.
+- **`apply` no longer wipes the state file (#28).** WireGuard public keys,
+  partition bookkeeping (`saved_impairments`), process log paths and
+  `created_at` survive an `apply`; the writer is a read-modify-write of
+  the existing file.
+- **Rollback covers what deploy created (#32).** A failed deploy now
+  unwinds spawned processes, the root-namespace mgmt bridge and veth
+  peers, host-side macvlan/ipvlan interfaces that had not been moved
+  yet, the per-lab log directory and wifi configs — in addition to the
+  namespaces, containers, DNS entries and hwsim it already handled.
+  Wifi configs were only cleaned when DNS injection had also run.
+- **`destroy` deletes the mgmt veth peers deploy actually created (#32).**
+  Peer names are persisted (`mgmt_peers`); for older state files the
+  fallback enumerates namespaces *and* containers like deploy does, so a
+  mixed lab no longer deletes the wrong peers.
+- **Namespace ownership tags (#29).** Every namespace nlink-lab creates
+  is tagged under `/etc/netns/<ns>/.nlink-lab` and untagged on destroy,
+  apply-remove and rollback; the orphan reaper trusts only tags.
+- **State durability (#38).** Lock files live in `<state>/.locks/` (so
+  `remove()` can no longer unlink a lock another process holds), state
+  writes fsync the file and directory, `save_state` takes the lab lock,
+  and a root process with no `HOME` uses `/var/lib/nlink-lab` instead of
+  the world-writable `/tmp/nlink-lab`.
+- **Container nodes** get `impair`, `partition`, `heal` and `clear`
+  (they returned "node not found") (#39).
+- `set_impairment` uses the idempotent `replace_qdisc`; the previous
+  change-then-add fallback swallowed every error from the first attempt.
+- `startup-delay`, `healthcheck-interval` and `healthcheck-timeout`
+  reject malformed values instead of silently using the default, and the
+  waits are async (they used to block a tokio worker) (#33, #40).
+- The mgmt subnet must hold the bridge plus every node; the first level
+  of the `depends_on` order runs alphabetically as documented (#40).
+
+### Changed — runtime (breaking)
+
+- `state.json` is schema 2 (`schema_version`, `starttimes`, `mgmt_peers`);
+  schema-1 files still load. `LabState` is `#[non_exhaustive]` — construct
+  it with `LabState::new`.
+- Lock files moved from `<lab>/.lock` to `<state>/.locks/<lab>.lock`.
+- `RunningLab::kill_process` errors (and `destroy` warns) for PIDs whose
+  identity cannot be verified.
+
 ### Fixed — NLL language core (wave 2 of the deep-analysis series)
 
 - **Parser no longer hangs** on an unknown item or EOF inside `defaults

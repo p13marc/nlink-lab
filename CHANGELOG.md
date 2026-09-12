@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — CI and containers
+
+- **`/etc/hosts` injection works inside containers again.** The wave-3
+  atomic writer (temp file + rename) failed with `EBUSY` where the file
+  is a bind mount — every Docker/Podman job container, including the
+  Forgejo integration runner — so `dns hosts` labs could not deploy
+  there. The writer now falls back to an in-place rewrite when the rename
+  hits `EBUSY`/`EXDEV` (#81).
+- **`exec`/`spawn` work where the `/etc/netns` overlay cannot be mounted.**
+  Namespace exec mirrors `ip netns exec` by bind-mounting
+  `/etc/netns/<ns>/*` over `/etc` in a private mount namespace. Container
+  runtimes deny that `unshare`/`mount` even to root with `CAP_SYS_ADMIN`
+  (AppArmor/seccomp), so every exec in a `dns hosts` lab failed with
+  `Operation not permitted` on the CI runner. nlink-lab now enters
+  namespaces through its own `ns_exec` sequence where every step after
+  `setns` (mount namespace, `/sys` remount, each bind) is best effort, and
+  a one-time strict probe warns when the overlay is degraded (#81).
+- **Integration lane finds its test binary under coloured cargo output.**
+  The lane grepped cargo's human output for the executable path; with
+  `CARGO_TERM_COLOR=always` the match failed silently and the lane ran
+  `sudo env ""`. It now reads `--message-format=json` and fails loudly on
+  an empty path; same for `just test-integration` (#81).
+
 ### Fixed — CLI, backend, test macro (wave 4 of the deep-analysis series)
 
 - **One exit-code policy (#42, #46).** 0 success · 1 error · 2 validation /

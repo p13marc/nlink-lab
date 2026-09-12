@@ -78,7 +78,7 @@ impl NodeHandle {
         cmd: std::process::Command,
     ) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
         match self {
-            NodeHandle::Namespace { ns_name } => namespace::spawn_output_with_etc(ns_name, cmd),
+            NodeHandle::Namespace { ns_name } => crate::ns_exec::spawn_output(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_output_path(ns_path, cmd),
         }
     }
@@ -88,7 +88,7 @@ impl NodeHandle {
         cmd: std::process::Command,
     ) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
         match self {
-            NodeHandle::Namespace { ns_name } => namespace::spawn_with_etc(ns_name, cmd),
+            NodeHandle::Namespace { ns_name } => crate::ns_exec::spawn(ns_name, cmd),
             NodeHandle::Container { ns_path, .. } => namespace::spawn_path(ns_path, cmd),
         }
     }

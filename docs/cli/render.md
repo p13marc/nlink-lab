@@ -45,6 +45,9 @@ Options:
       --ascii
           Output as ASCII diagram
 
+      --mermaid
+          Output as a Mermaid `graph LR` block (renders inline in Forgejo/GitHub markdown)
+
       --set <KEY=VALUE>
           Set NLL parameters (can be repeated: --set key=value)
 

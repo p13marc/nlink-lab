@@ -1,4 +1,4 @@
-//! Mermaid rendering (`graph --mermaid`).
+//! Mermaid rendering (`graph --mermaid`, `render --mermaid`).
 
 /// Mermaid `graph LR` rendering (renders inline in Forgejo/GitHub markdown).
 pub fn topology_to_mermaid(topo: &nlink_lab::Topology) -> String {
@@ -85,4 +85,42 @@ pub fn topology_to_mermaid(topo: &nlink_lab::Topology) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renders_links_networks_and_pair_impairments() {
+        let topo = nlink_lab::parser::parse(
+            r#"lab "m"
+node r { forward ipv4 }
+node h
+node c image "alpine"
+link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
+network lan { subnet 10.9.0.0/24  members [h:eth1, c:eth0]  impair h -- c { loss 1% } }
+"#,
+        )
+        .unwrap();
+        let out = topology_to_mermaid(&topo);
+        assert!(out.starts_with("graph LR\n"), "{out}");
+        assert!(out.contains("c[[\"c\"]]"), "containers use [[ ]]: {out}");
+        assert!(
+            out.contains("r ---|\"eth0 — eth0<br/>10.0.0.1/24 / 10.0.0.2/24<br/>delay 5ms\"| h"),
+            "{out}"
+        );
+        assert!(out.contains("net_lan((\"lan<br/>10.9.0.0/24\"))"), "{out}");
+        assert!(out.contains("h ---|\"eth1\"| net_lan"), "{out}");
+        assert!(out.contains("h -.->|\"loss 1%\"| c"), "{out}");
+        // deterministic: identical on a second render
+        assert_eq!(out, topology_to_mermaid(&topo));
+    }
+
+    #[test]
+    fn identifiers_are_sanitised() {
+        let topo = nlink_lab::parser::parse("lab \"m\"\nnode dc1-fw\n").unwrap();
+        let out = topology_to_mermaid(&topo);
+        assert!(out.contains("dc1_fw[\"dc1-fw\"]"), "{out}");
+    }
 }

@@ -108,7 +108,9 @@ pub use types::{
     RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig, mgmt_bridge_name_for,
     network_peer_name_for,
 };
-pub use validator::{Severity, ValidationIssue, ValidationResult};
+pub use validator::{
+    RuleOptions, Severity, ValidationIssue, ValidationResult, rule_ids, rule_severity,
+};
 pub use watch::{NsResolver, WatchEvent, WatchEventKind, WatchFamily, WatchOpts, watch_loop};
 
 /// Proc macro for integration testing. See [`lab_test`] for details.

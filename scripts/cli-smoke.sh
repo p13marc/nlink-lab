@@ -48,6 +48,12 @@ say "== validate --json / graph --mermaid / exit codes"
 set +e; "$bin" --json validate "$tmp/bad1.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: validate --json on a bad file exited $rc (expected 2)"; fail=1; }
 "$bin" graph --mermaid examples/simple.nll | grep -q '^graph LR' || { say "FAIL graph --mermaid"; fail=1; }
+"$bin" render --mermaid examples/cookbook/satellite-mesh.nll | grep -q 'net_' || { say "FAIL render --mermaid"; fail=1; }
+"$bin" validate --list-rules | grep -q 'unreferenced-node *warning' || { say "FAIL validate --list-rules"; fail=1; }
+printf 'lab "w"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\nnode lonely\n' > "$tmp/warn.nll"
+set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 2 ] || { say "FAIL: validate --strict exited $rc (expected 2)"; fail=1; }
+"$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep -q WARN && { say "FAIL: --allow did not silence the warning"; fail=1; }
 "$bin" graph examples/cookbook/satellite-mesh.nll | grep -q 'net:' || { say "FAIL: graph ignores network blocks"; fail=1; }
 
 say "== completions"

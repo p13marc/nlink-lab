@@ -1278,7 +1278,6 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
     // ── Step 19: Run validate assertions ─────────────────────────
     // Never fails the deploy; the structured results ride on the
     // returned lab so callers (`deploy --strict`) can decide.
-    let mut running = running;
     if !topology.assertions.is_empty() {
         tracing::info!("step 19: running validate assertions");
         let results = run_assertions(&running, topology);

@@ -9,6 +9,10 @@ license.workspace = true
 authors.workspace = true
 description = "Zenoh backend daemon for nlink-lab — publishes live metrics and handles RPC"
 
+[lib]
+name = "nlink_lab_backend"
+path = "src/lib.rs"
+
 [[bin]]
 name = "nlink-lab-backend"
 path = "src/main.rs"
@@ -26,4 +30,5 @@ clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
-anyhow = "1"
+thiserror = { workspace = true }
+libc = { workspace = true }

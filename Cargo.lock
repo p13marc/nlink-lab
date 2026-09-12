@@ -3228,13 +3228,14 @@ dependencies = [
 name = "nlink-lab-backend"
 version = "0.8.0"
 dependencies = [
- "anyhow",
  "clap",
+ "libc",
  "nlink",
  "nlink-lab",
  "nlink-lab-shared",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "time",
  "tokio",
  "tracing",

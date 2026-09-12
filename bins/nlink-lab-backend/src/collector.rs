@@ -1,11 +1,12 @@
 //! Metrics collector — gathers live stats from all lab nodes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use nlink::netlink::{Connection, SockDiag, namespace};
 use nlink::sockdiag::{SocketFilter, SocketOwnerMap, SocketRateTracker};
 use nlink_lab::RunningLab;
+use nlink_lab_shared::WIRE_VERSION;
 use nlink_lab_shared::messages::{LabEvent, LabEventKind};
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics, SocketRateMetric};
 
@@ -19,6 +20,11 @@ pub struct MetricsCollector {
     /// across ticks so `ingest` can diff consecutive dumps; the first
     /// tick for a node only establishes the baseline.
     socket_trackers: HashMap<String, SocketRateTracker>,
+    /// Tracked background PIDs that were alive at the previous tick.
+    /// `None` until the first tick establishes the baseline, so a
+    /// process that was already dead when the daemon started never
+    /// fires a `ProcessExited`.
+    alive_pids: Option<HashSet<u32>>,
 }
 
 impl MetricsCollector {
@@ -26,6 +32,7 @@ impl MetricsCollector {
         Self {
             prev_states: HashMap::new(),
             socket_trackers: HashMap::new(),
+            alive_pids: None,
         }
     }
 
@@ -95,16 +102,48 @@ impl MetricsCollector {
             .collect()
     }
 
-    /// Collect a snapshot and detect interface state change events.
+    /// Diff the lab's tracked PIDs against the previous tick and emit a
+    /// `ProcessExited` for each one that was alive and is not any more.
+    fn process_events(&mut self, lab: &RunningLab, timestamp: u64) -> Vec<LabEvent> {
+        let status = lab.process_status();
+        let now_alive: HashSet<u32> = status.iter().filter(|p| p.alive).map(|p| p.pid).collect();
+
+        let mut events = Vec::new();
+        if let Some(prev) = &self.alive_pids {
+            for proc_info in status.iter().filter(|p| !p.alive && prev.contains(&p.pid)) {
+                let exit_code = reap_exit_code(proc_info.pid);
+                tracing::info!(
+                    node = proc_info.node,
+                    pid = proc_info.pid,
+                    exit_code = ?exit_code,
+                    "tracked process exited"
+                );
+                events.push(LabEvent::new(
+                    lab.name(),
+                    timestamp,
+                    LabEventKind::ProcessExited {
+                        node: proc_info.node.clone(),
+                        pid: proc_info.pid,
+                        exit_code,
+                    },
+                ));
+            }
+        }
+        self.alive_pids = Some(now_alive);
+        events
+    }
+
+    /// Collect a snapshot and detect interface state change and process
+    /// exit events.
     pub async fn snapshot(
         &mut self,
         lab: &RunningLab,
     ) -> Result<(MetricsSnapshot, Vec<LabEvent>), nlink_lab::Error> {
         let diagnostics = lab.diagnose(None).await?;
         let mut nodes = HashMap::new();
-        let mut events = Vec::new();
         let lab_name = lab.name().to_string();
         let timestamp = crate::now_unix();
+        let mut events = self.process_events(lab, timestamp);
 
         // One amortized `/proc` walk joins socket inodes to owning
         // processes for every node this tick (inodes are global, so a
@@ -133,11 +172,7 @@ impl MetricsCollector {
                             interface: iface.name.clone(),
                         }
                     };
-                    events.push(LabEvent {
-                        lab_name: lab_name.clone(),
-                        timestamp,
-                        kind,
-                    });
+                    events.push(LabEvent::new(&lab_name, timestamp, kind));
                 }
                 prev_node.insert(iface.name.clone(), state_str.clone());
 
@@ -181,11 +216,72 @@ impl MetricsCollector {
         }
 
         let snapshot = MetricsSnapshot {
+            wire_version: WIRE_VERSION,
             lab_name,
             timestamp,
             nodes,
         };
 
         Ok((snapshot, events))
+    }
+}
+
+/// Best-effort exit status for a tracked process that just died.
+///
+/// Only the parent can collect it: when the daemon runs inline in the
+/// process that spawned the lab (`deploy --daemon`) the child is a zombie
+/// nobody has waited on, and `waitpid(WNOHANG)` reaps it and yields the
+/// status. In the standalone binary `waitpid` fails with `ECHILD` and
+/// this returns `None`. Signal deaths are reported shell-style as
+/// `128 + signo`.
+fn reap_exit_code(pid: u32) -> Option<i32> {
+    let mut status: libc::c_int = 0;
+    // SAFETY: waitpid with a valid out-pointer and WNOHANG never blocks
+    // and only affects a child of this process.
+    let rc = unsafe { libc::waitpid(pid as libc::pid_t, &mut status, libc::WNOHANG) };
+    if rc != pid as libc::pid_t {
+        return None;
+    }
+    if libc::WIFEXITED(status) {
+        Some(libc::WEXITSTATUS(status))
+    } else if libc::WIFSIGNALED(status) {
+        Some(128 + libc::WTERMSIG(status))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A child we spawned and never waited on is reaped with its status.
+    // The test reaps by hand through `reap_exit_code` (that is the point);
+    // a `wait()` would steal the status it is checking for.
+    #[allow(clippy::zombie_processes)]
+    #[test]
+    fn reap_exit_code_reads_own_child() {
+        let child = std::process::Command::new("sh")
+            .args(["-c", "exit 3"])
+            .spawn()
+            .expect("spawn sh");
+        let pid = child.id();
+        // Poll until the zombie is collectable (never wait() ourselves —
+        // that would reap it first).
+        let mut code = None;
+        for _ in 0..200 {
+            code = reap_exit_code(pid);
+            if code.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(code, Some(3));
+    }
+
+    /// A PID that is not our child yields `None` rather than an error.
+    #[test]
+    fn reap_exit_code_none_for_foreign_pid() {
+        assert_eq!(reap_exit_code(1), None);
     }
 }

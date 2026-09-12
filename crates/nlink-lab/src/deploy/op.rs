@@ -110,6 +110,18 @@ impl NsRef {
         }
     }
 
+    /// Spawn a detached background process inside the namespace and
+    /// return its pid (see [`crate::ns_exec::spawn_detached`]).
+    pub fn spawn_detached(
+        &self,
+        cmd: std::process::Command,
+    ) -> std::result::Result<u32, nlink::netlink::Error> {
+        match self {
+            NsRef::Named { name } => crate::ns_exec::spawn_detached(name, cmd),
+            _ => crate::ns_exec::spawn_detached_path(&self.ns_path(), cmd),
+        }
+    }
+
     /// Run a process to completion inside the namespace.
     pub fn spawn_output(
         &self,

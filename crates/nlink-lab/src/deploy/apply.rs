@@ -842,12 +842,11 @@ fn exec_op(
     let stderr_path = log_dir.join(format!("{node}-{basename}-{index}.stderr"));
     cmd.stdout(std::fs::File::create(&stdout_path)?);
     cmd.stderr(std::fs::File::create(&stderr_path)?);
-    let child = handle.spawn(cmd).map_err(|e| {
+    let pid = handle.spawn_detached(cmd).map_err(|e| {
         Error::deploy_failed(format!(
             "failed to spawn background process on '{node}' exec[{index}]: {e}"
         ))
     })?;
-    let pid = child.id();
     let started = crate::running::host_starttime(pid);
     journal.record(Undo::KillProcess {
         pid,

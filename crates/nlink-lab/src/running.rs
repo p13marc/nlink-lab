@@ -658,9 +658,8 @@ impl RunningLab {
         let mut command = std::process::Command::new(cmd[0]);
         command.args(&cmd[1..]);
 
-        let child = crate::ns_exec::spawn(ns_name, command)
+        let pid = crate::ns_exec::spawn_detached(ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
-        let pid = child.id();
         self.track_pid(node, pid);
         Ok(pid)
     }
@@ -779,9 +778,8 @@ impl RunningLab {
             command.env(k, v);
         }
 
-        let child = crate::ns_exec::spawn(&ns_name, command)
+        let pid = crate::ns_exec::spawn_detached(&ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
-        let pid = child.id();
         self.track_pid(node, pid);
         self.process_logs.insert(
             pid,
@@ -1442,13 +1440,12 @@ impl RunningLab {
     /// Check status of tracked background processes.
     ///
     /// `alive` is `true` only if the PID still exists **and** is not a
-    /// zombie. This matters because `spawn_with_logs` returns a
-    /// `std::process::Child` that the caller drops without
-    /// `wait()`-ing, so an exited child becomes a zombie that
-    /// `kill(pid, 0)` will continue to report as deliverable
-    /// (returning 0). Without the zombie check, "is this process
-    /// still running?" polling would never see a quick-exiting child
-    /// transition to dead.
+    /// zombie. Spawned processes are detached (double-forked and
+    /// reparented to init, see [`crate::ns_exec::spawn_detached`]), so
+    /// nlink-lab itself never leaves zombies; the check still matters
+    /// for processes a spawned program forks and abandons (hostapd's
+    /// `-B` parent, shell wrappers), which `kill(pid, 0)` keeps
+    /// reporting as deliverable.
     pub fn process_status(&self) -> Vec<ProcessInfo> {
         self.pids
             .iter()
@@ -1737,10 +1734,10 @@ pub(crate) fn kill_tracked(pid: u32, expected_starttime: Option<u64>) -> KillOut
 ///
 /// `kill(pid, 0)` alone is insufficient: a zombie (a process that has
 /// exited but hasn't been waited-on by its parent) still has an entry
-/// in the kernel process table and `kill(pid, 0)` returns 0. Since
-/// [`spawn_with_logs`](RunningLab::spawn_with_logs) drops its
-/// `std::process::Child` without `wait()`-ing, every quick-exiting
-/// child stays a zombie indefinitely from this process's POV.
+/// in the kernel process table and `kill(pid, 0)` returns 0. nlink-lab's
+/// own spawns are detached and reaped by init
+/// ([`crate::ns_exec::spawn_detached`]), but a tracked pid may still be
+/// a zombie of *its* parent (a daemon's `-B` wrapper, a shell).
 ///
 /// To match the user-facing meaning of "alive" (the process is
 /// actually running), we also read `/proc/<pid>/stat` and treat the

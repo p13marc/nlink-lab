@@ -261,6 +261,53 @@ async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
     );
 }
 
+// Issue #30 (second half): background spawns are double-forked and
+// session-detached. The pid we hand back must be the real process (not
+// an intermediate), it must not be our child (so it can never become our
+// zombie), and a quick-exiting one must vanish from /proc rather than
+// linger in state Z.
+#[lab_test("examples/simple.nll")]
+async fn spawn_leaves_no_zombie_and_returns_real_pid(mut lab: RunningLab) {
+    let me = std::process::id();
+    let pid = lab.spawn_with_logs("host", &["sleep", "30"], None).unwrap();
+    let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
+    assert_eq!(
+        comm.trim(),
+        "sleep",
+        "pid {pid} must be the spawned program"
+    );
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+    let after_comm = &stat[stat.rfind(')').unwrap() + 2..];
+    let ppid: u32 = after_comm
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(ppid, me, "detached process must not be our child");
+    let _ = lab.kill_process(pid);
+
+    let quick = lab.spawn_with_logs("host", &["true"], None).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match std::fs::read_to_string(format!("/proc/{quick}/stat")) {
+            Err(_) => break, // reaped by init: gone entirely
+            Ok(st) => {
+                let state = st[st.rfind(')').unwrap() + 2..].chars().next().unwrap();
+                assert_ne!(
+                    state, 'Z',
+                    "quick-exiting spawn must not linger as a zombie"
+                );
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "pid {quick} still present after 5s"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 // `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
 // by wrapping in `/usr/bin/env`. Verifies both visibility of the new var
 // and additive semantics — inherited PATH must remain set.

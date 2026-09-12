@@ -5,6 +5,7 @@
 //! on destroy. Each lab gets its own delimited section to avoid conflicts.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 use crate::types::{EndpointRef, Topology};
@@ -130,14 +131,7 @@ pub(crate) fn inject_hosts_to(path: &str, lab_name: &str, entries: &[HostsEntry]
     }
     result.push_str(&section);
 
-    // Atomic write: temp file + rename
-    let tmp = format!("{path}.nlink-tmp");
-    std::fs::write(&tmp, &result)
-        .map_err(|e| Error::deploy_failed(format!("failed to write {tmp}: {e}")))?;
-    std::fs::rename(&tmp, path)
-        .map_err(|e| Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}")))?;
-
-    Ok(())
+    replace_file_preserving(path, &result)
 }
 
 /// Remove lab host entries from /etc/hosts.
@@ -161,13 +155,7 @@ pub(crate) fn remove_hosts_from(path: &str, lab_name: &str) -> Result<()> {
         return Ok(()); // nothing to do
     }
 
-    let tmp = format!("{path}.nlink-tmp");
-    std::fs::write(&tmp, &cleaned)
-        .map_err(|e| Error::deploy_failed(format!("failed to write {tmp}: {e}")))?;
-    std::fs::rename(&tmp, path)
-        .map_err(|e| Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}")))?;
-
-    Ok(())
+    replace_file_preserving(path, &cleaned)
 }
 
 /// Remove all NLINK-LAB sections from /etc/hosts (for `destroy --all`).
@@ -208,11 +196,107 @@ pub(crate) fn remove_all_hosts_from(path: &str) -> Result<()> {
         return Ok(());
     }
 
-    let tmp = format!("{path}.nlink-tmp");
-    std::fs::write(&tmp, &result)
-        .map_err(|e| Error::deploy_failed(format!("failed to write {tmp}: {e}")))?;
-    std::fs::rename(&tmp, path)
-        .map_err(|e| Error::deploy_failed(format!("failed to rename {tmp} -> {path}: {e}")))?;
+    replace_file_preserving(path, &result)
+}
+
+/// Atomically replace the contents of `path`, keeping its identity.
+///
+/// `/etc/hosts` is a system file other tools care about, so a plain
+/// `fs::write(tmp)` + `rename` is not good enough (issue #38): it would
+/// create the file with `0666 & !umask` and the caller's owner, drop the
+/// ACL / SELinux label the original carried, replace a symlinked
+/// `/etc/hosts` (e.g. one pointing into `/run` or a config-management
+/// tree) with a regular file, and never fsync. This helper:
+///
+/// * writes through a symlink to its target (`fs::canonicalize`), so the
+///   link itself is preserved;
+/// * creates the temp file in the target's own directory (same
+///   filesystem, so the `rename` is atomic) with the original's exact
+///   mode and owner (`fchmod` + `fchown`, not subject to the umask);
+/// * `fsync`s the temp file before the rename and the directory after it,
+///   so a crash leaves either the old or the complete new content.
+///
+/// ACLs and security labels are not copied — a file that relies on them
+/// is out of scope, but it at least keeps its mode/owner and its path.
+/// If `path` does not exist yet it is created with mode 0644.
+fn replace_file_preserving(path: &str, content: &str) -> Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+    let target = match std::fs::canonicalize(path) {
+        Ok(p) => p,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => PathBuf::from(path),
+        Err(e) => {
+            return Err(Error::deploy_failed(format!(
+                "failed to resolve {path}: {e}"
+            )));
+        }
+    };
+    let original = match std::fs::metadata(&target) {
+        Ok(m) => Some(m),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            return Err(Error::deploy_failed(format!(
+                "failed to stat {}: {e}",
+                target.display()
+            )));
+        }
+    };
+    let mode = original.as_ref().map_or(0o644, |m| m.mode() & 0o7777);
+
+    let dir = target
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let file_name = target
+        .file_name()
+        .ok_or_else(|| Error::deploy_failed(format!("{}: not a file path", target.display())))?
+        .to_string_lossy();
+    let tmp = dir.join(format!(".{file_name}.nlink-tmp"));
+    let tmp_disp = tmp.display();
+
+    // Never follow a stale temp entry (it could be a symlink planted by
+    // another user in a shared dir): remove it, then create with O_EXCL.
+    let _ = std::fs::remove_file(&tmp);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(mode)
+        .open(&tmp)
+        .map_err(|e| Error::deploy_failed(format!("failed to create {tmp_disp}: {e}")))?;
+
+    // Mirror the original's exact mode (OpenOptions::mode is umask-masked)
+    // and owner, so the replacement is indistinguishable for other tools.
+    let write = (|| -> std::io::Result<()> {
+        file.set_permissions(PermissionsExt::from_mode(mode))?;
+        if let Some(m) = &original {
+            std::os::unix::fs::fchown(&file, Some(m.uid()), Some(m.gid()))?;
+        }
+        file.write_all(content.as_bytes())?;
+        file.sync_all()
+    })();
+    if let Err(e) = write {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(Error::deploy_failed(format!(
+            "failed to write {tmp_disp}: {e}"
+        )));
+    }
+    drop(file);
+
+    if let Err(e) = std::fs::rename(&tmp, &target) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(Error::deploy_failed(format!(
+            "failed to rename {tmp_disp} -> {}: {e}",
+            target.display()
+        )));
+    }
+
+    // Make the directory entry durable too; a failure here is not fatal
+    // (the content is already in place), so only log it.
+    if let Err(e) = std::fs::File::open(&dir).and_then(|d| d.sync_all()) {
+        tracing::debug!("fsync {} after replacing {path}: {e}", dir.display());
+    }
 
     Ok(())
 }
@@ -243,12 +327,38 @@ fn remove_section(content: &str, lab_name: &str) -> String {
     result
 }
 
+/// Reject a namespace name that could escape `/etc/netns/`.
+///
+/// The validator already refuses such node names; this is defence in depth
+/// for the two functions below, which `create_dir_all` / `remove_dir_all`
+/// a path built from the name. Rejects an empty name, path separators,
+/// `..`, NUL bytes, and names starting with `.` (which would collide with
+/// hidden entries such as the [`crate::netns_tag::TAG_FILE`]).
+pub(crate) fn check_netns_name(ns_name: &str) -> Result<()> {
+    let bad = ns_name.is_empty()
+        || ns_name.starts_with('.')
+        || ns_name.contains('/')
+        || ns_name.contains('\0')
+        || ns_name.contains("..");
+    if bad {
+        return Err(Error::deploy_failed(format!(
+            "refusing to touch /etc/netns for unsafe namespace name {ns_name:?}"
+        )));
+    }
+    Ok(())
+}
+
 /// Create per-namespace `/etc/netns/<ns_name>/` directory with `hosts` and `resolv.conf`.
 ///
 /// When processes are spawned via `namespace::spawn_with_etc()`, these files are
 /// bind-mounted over `/etc/hosts` and `/etc/resolv.conf` inside the namespace.
+///
+/// The directory is shared with [`crate::netns_tag`], which keeps the
+/// lab-ownership tag `/etc/netns/<ns_name>/.nlink-lab` in it; finding the
+/// directory already created and tagged is fine.
 pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
-    let dir = format!("/etc/netns/{ns_name}");
+    check_netns_name(ns_name)?;
+    let dir = format!("{}/{ns_name}", crate::netns_tag::NETNS_ETC_DIR);
     std::fs::create_dir_all(&dir)
         .map_err(|e| Error::deploy_failed(format!("failed to create {dir}: {e}")))?;
 
@@ -277,9 +387,24 @@ pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
 }
 
 /// Remove per-namespace `/etc/netns/<ns_name>/` directory.
+///
+/// Removes the whole directory: it is the lab's own overlay, so this also
+/// takes the `.nlink-lab` ownership tag with it. That is intentional and
+/// does not conflict with [`crate::netns_tag::untag`] — `untag` tolerates
+/// a missing tag and directory, so callers may run either or both in any
+/// order. An unsafe name (see [`check_netns_name`]) is logged and skipped
+/// rather than acted on.
 pub fn remove_netns_etc(ns_name: &str) {
-    let dir = format!("/etc/netns/{ns_name}");
-    let _ = std::fs::remove_dir_all(&dir);
+    if let Err(e) = check_netns_name(ns_name) {
+        tracing::warn!("{e}");
+        return;
+    }
+    let dir = format!("{}/{ns_name}", crate::netns_tag::NETNS_ETC_DIR);
+    match std::fs::remove_dir_all(&dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => tracing::warn!("failed to remove {dir}: {e}"),
+    }
 }
 
 /// Detect the host's upstream DNS server.
@@ -640,5 +765,128 @@ link a:eth0 -- b:eth0 { fd00::1/64 -- fd00::2/64 }
         let result = std::fs::read_to_string(&path).unwrap();
         assert!(result.contains("localhost"));
         assert!(!result.contains("NLINK-LAB"));
+    }
+
+    // ── replace_file_preserving (#38) ───────────────────────────────
+
+    #[test]
+    fn replace_keeps_mode_and_owner_and_leaves_no_temp() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        std::fs::write(&path, "127.0.0.1\tlocalhost\n").unwrap();
+        // An unusual mode that a fresh `fs::write` (0666 & !umask) would lose.
+        std::fs::set_permissions(&path, PermissionsExt::from_mode(0o640)).unwrap();
+        let before = std::fs::metadata(&path).unwrap();
+
+        replace_file_preserving(path.to_str().unwrap(), "new content\n").unwrap();
+
+        let after = std::fs::metadata(&path).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new content\n");
+        assert_eq!(after.mode() & 0o7777, 0o640, "mode must be preserved");
+        assert_eq!(after.uid(), before.uid(), "owner must be preserved");
+        assert_eq!(after.gid(), before.gid(), "group must be preserved");
+        assert_ne!(
+            after.ino(),
+            before.ino(),
+            "rename must have swapped the inode"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(leftovers, vec![std::ffi::OsString::from("hosts")]);
+    }
+
+    #[test]
+    fn replace_writes_through_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real-hosts");
+        let link = dir.path().join("hosts");
+        std::fs::write(&real, "127.0.0.1\tlocalhost\n").unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let entries = vec![HostsEntry {
+            ip: "10.0.0.1".into(),
+            names: vec!["server".into()],
+        }];
+        inject_hosts_to(link.to_str().unwrap(), "mylab", &entries).unwrap();
+
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "/etc/hosts symlink must survive"
+        );
+        assert_eq!(std::fs::read_link(&link).unwrap(), real);
+        let content = std::fs::read_to_string(&real).unwrap();
+        assert!(content.contains("NLINK-LAB-mylab-START"));
+        assert!(content.contains("10.0.0.1\tserver"));
+
+        remove_hosts_from(link.to_str().unwrap(), "mylab").unwrap();
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert!(
+            !std::fs::read_to_string(&real)
+                .unwrap()
+                .contains("NLINK-LAB")
+        );
+    }
+
+    #[test]
+    fn replace_creates_missing_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        replace_file_preserving(path.to_str().unwrap(), "x\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "x\n");
+        // Mode 0644 (possibly narrowed by umask, never widened).
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode & !0o644, 0);
+    }
+
+    #[test]
+    fn replace_ignores_planted_temp_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        let victim = dir.path().join("victim");
+        std::fs::write(&path, "orig\n").unwrap();
+        std::fs::write(&victim, "untouched").unwrap();
+        std::os::unix::fs::symlink(&victim, dir.path().join(".hosts.nlink-tmp")).unwrap();
+
+        replace_file_preserving(path.to_str().unwrap(), "new\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new\n");
+    }
+
+    // ── netns name guard ────────────────────────────────────────────
+
+    #[test]
+    fn netns_name_guard() {
+        for ok in ["lab-r1", "simple_router", "a.b", "x1"] {
+            assert!(check_netns_name(ok).is_ok(), "{ok:?} should be accepted");
+        }
+        for bad in [
+            "",
+            "..",
+            "../etc",
+            "a/../b",
+            "/etc",
+            "lab/r1",
+            ".nlink-lab",
+            ".hidden",
+            "a\0b",
+        ] {
+            assert!(check_netns_name(bad).is_err(), "{bad:?} should be rejected");
+        }
+        // remove_netns_etc on a rejected name is a silent no-op.
+        remove_netns_etc("../etc");
+        assert!(create_netns_etc("../etc", &[]).is_err());
     }
 }

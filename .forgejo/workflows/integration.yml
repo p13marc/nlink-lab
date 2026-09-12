@@ -22,6 +22,17 @@ jobs:
     runs-on: integration
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: Ping issue 81
+        run: |
+          set +e
+          post() { # $1 = markdown file
+            for base in "${{ github.api_url }}" "${{ github.server_url }}/api/v1"; do
+              code=$(curl -sS -m 20 -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" --data-urlencode "body@$1" "$base/repos/${{ github.repository }}/issues/81/comments" -o /dev/null -w '%{http_code}')
+              echo "post via $base -> $code"; [ "$code" = 201 ] && return 0
+            done; return 0
+          }
+          { echo "### diag run ${{ github.run_number }} on ${{ github.sha }} started"; echo '```'; uname -a; cat /etc/os-release | head -1; free -m | head -2; echo '```'; } > /tmp/ping.md
+          post /tmp/ping.md
       - name: sccache guard
         run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
       # The tests exec `ip`/`nft`/`ping`/`tc`/`wg`/`getent` INSIDE the lab
@@ -52,14 +63,34 @@ jobs:
         run: |
           bin=$(cargo test -p nlink-lab --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
           test -n "$bin" || { echo "::error::integration test binary not found"; exit 1; }
-          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1 > /tmp/it-default.log 2>&1; rc=$?; cat /tmp/it-default.log; echo "rc=$rc" >> /tmp/it-default.log; exit $rc
       - name: Integration tests (all features)
+        if: always()
         run: |
           bin=$(cargo test -p nlink-lab --all-features --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
           test -n "$bin" || { echo "::error::integration test binary (all features) not found"; exit 1; }
-          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1 > /tmp/it-all.log 2>&1; rc=$?; cat /tmp/it-all.log; echo "rc=$rc" >> /tmp/it-all.log; exit $rc
       - name: No lab debris left behind
         if: always()
         run: |
+          { echo "## ip netns list"; sudo ip netns list; echo "## /etc/netns"; sudo ls -laR /etc/netns; } > /tmp/debris.log 2>&1 || true
           sudo ip netns list | tee /dev/stderr | grep -q . && { echo "::error::leftover network namespaces"; exit 1; } || true
           test -z "$(sudo ls /etc/netns 2>/dev/null)" || { echo "::error::leftover /etc/netns tags"; sudo ls /etc/netns; exit 1; }
+      - name: Report diagnostics to issue 81
+        if: always()
+        run: |
+          set +e
+          post() { # $1 = markdown file
+            for base in "${{ github.api_url }}" "${{ github.server_url }}/api/v1"; do
+              code=$(curl -sS -m 20 -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" --data-urlencode "body@$1" "$base/repos/${{ github.repository }}/issues/81/comments" -o /dev/null -w '%{http_code}')
+              echo "post via $base -> $code"; [ "$code" = 201 ] && return 0
+            done; return 0
+          }
+          {
+            echo "### diag run ${{ github.run_number }} on ${{ github.sha }} finished"
+            echo '```'
+            for f in /tmp/it-default.log /tmp/it-all.log; do echo "== $f (non-ok lines, tail)"; grep -vE '^test .* ok$' "$f" 2>&1 | tail -80; done
+            echo "== debris"; cat /tmp/debris.log 2>&1
+            echo '```'
+          } > /tmp/report.md
+          post /tmp/report.md

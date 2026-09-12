@@ -171,9 +171,13 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
                 "rate" => imp.rate = v,
                 "corrupt" => imp.corrupt = v,
                 "reorder" => imp.reorder = v,
+                "duplicate" => imp.duplicate = v,
+                "delay-correlation" => imp.delay_correlation = v,
+                "loss-correlation" => imp.loss_correlation = v,
+                "limit" => imp.limit = v,
                 other => {
                     return Err(nlink_lab::Error::invalid_topology(format!(
-                        "--set-impair {spec:?}: unknown property {other:?} (delay, jitter, loss, rate, corrupt, reorder)"
+                        "--set-impair {spec:?}: unknown property {other:?} (delay, jitter, loss, rate, corrupt, reorder, duplicate, delay-correlation, loss-correlation, limit)"
                     )));
                 }
             }

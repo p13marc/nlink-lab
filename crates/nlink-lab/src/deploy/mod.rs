@@ -18,7 +18,7 @@ use crate::types::{EndpointRef, Topology};
 
 mod apply;
 pub mod op;
-mod plan;
+pub(crate) mod plan;
 pub mod rollback;
 
 use rollback::{Journal, Undo};

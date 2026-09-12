@@ -18,7 +18,7 @@
 (nat_block "nat" @keyword)
 (nat_rule ["masquerade" "dnat" "snat" "translate"] @keyword)
 (nat_rule ["src" "dst" "to"] @keyword)
-(impairment_properties ["delay" "jitter" "loss" "corrupt" "reorder" "rate"] @keyword)
+(impairment_properties ["delay" "jitter" "loss" "corrupt" "reorder" "rate" "duplicate" "delay-correlation" "loss-correlation" "limit"] @keyword)
 (directional_impairment ["->" "<-"] @keyword.operator)
 (rate_properties ["egress" "ingress"] @keyword)
 (sysctl_property "sysctl" @keyword)

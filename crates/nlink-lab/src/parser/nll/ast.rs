@@ -43,6 +43,9 @@ pub struct LabDecl {
 }
 
 /// Top-level statement.
+// A syntax tree, not a hot data structure: variant size differences are
+// fine and boxing would only obscure the grammar.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum Statement {
     Profile(ProfileDef),
@@ -429,6 +432,10 @@ pub struct ImpairProps {
     pub rate: Option<String>,
     pub corrupt: Option<String>,
     pub reorder: Option<String>,
+    pub duplicate: Option<String>,
+    pub delay_correlation: Option<String>,
+    pub loss_correlation: Option<String>,
+    pub limit: Option<String>,
 }
 
 impl ImpairProps {
@@ -437,31 +444,21 @@ impl ImpairProps {
     /// spread over several lines of a block accumulate instead of the
     /// last line replacing the earlier ones.
     pub fn merge(&mut self, other: ImpairProps) {
-        let ImpairProps {
-            delay,
-            jitter,
-            loss,
-            rate,
-            corrupt,
-            reorder,
-        } = other;
-        if delay.is_some() {
-            self.delay = delay;
-        }
-        if jitter.is_some() {
-            self.jitter = jitter;
-        }
-        if loss.is_some() {
-            self.loss = loss;
-        }
-        if rate.is_some() {
-            self.rate = rate;
-        }
-        if corrupt.is_some() {
-            self.corrupt = corrupt;
-        }
-        if reorder.is_some() {
-            self.reorder = reorder;
+        for (mine, theirs) in [
+            (&mut self.delay, other.delay),
+            (&mut self.jitter, other.jitter),
+            (&mut self.loss, other.loss),
+            (&mut self.rate, other.rate),
+            (&mut self.corrupt, other.corrupt),
+            (&mut self.reorder, other.reorder),
+            (&mut self.duplicate, other.duplicate),
+            (&mut self.delay_correlation, other.delay_correlation),
+            (&mut self.loss_correlation, other.loss_correlation),
+            (&mut self.limit, other.limit),
+        ] {
+            if theirs.is_some() {
+                *mine = theirs;
+            }
         }
     }
 }

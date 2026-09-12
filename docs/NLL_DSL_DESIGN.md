@@ -1238,6 +1238,8 @@ dir_impair     = ("->" | "<-") impair_props
 impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
                  ("loss" PERCENT)? ("rate" RATE)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
+                 ("duplicate" PERCENT)? ("delay-correlation" PERCENT)?
+                 ("loss-correlation" PERCENT)? ("limit" INT)?
 rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" RATE)?
 
 # ── Collections ──────────────────────────────────

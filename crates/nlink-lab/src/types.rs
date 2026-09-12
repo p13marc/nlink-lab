@@ -711,6 +711,22 @@ pub struct Impairment {
 
     /// Packet reordering (e.g., "0.5%").
     pub reorder: Option<String>,
+
+    /// Packet duplication (e.g., "1%").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate: Option<String>,
+
+    /// Correlation of successive delay values (e.g., "25%").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_correlation: Option<String>,
+
+    /// Correlation of successive loss decisions (e.g., "25%").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loss_correlation: Option<String>,
+
+    /// netem queue limit in packets (default 1000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<String>,
 }
 
 /// Per-interface rate limiting.

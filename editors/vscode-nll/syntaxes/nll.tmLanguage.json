@@ -2,15 +2,31 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "NLL",
   "scopeName": "source.nll",
-  "fileTypes": ["nll"],
+  "fileTypes": [
+    "nll"
+  ],
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#interpolation" },
-    { "include": "#keywords" },
-    { "include": "#literals" },
-    { "include": "#operators" },
-    { "include": "#punctuation" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#interpolation"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#literals"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
   ],
   "repository": {
     "comments": {
@@ -24,7 +40,9 @@
           "begin": "/\\*",
           "end": "\\*/",
           "patterns": [
-            { "include": "#comments" }
+            {
+              "include": "#comments"
+            }
           ]
         }
       ]
@@ -36,7 +54,9 @@
           "begin": "\"",
           "end": "\"",
           "patterns": [
-            { "include": "#interpolation" }
+            {
+              "include": "#interpolation"
+            }
           ]
         }
       ]
@@ -53,11 +73,11 @@
       "patterns": [
         {
           "name": "keyword.control.nll",
-          "match": "\\b(lab|node|link|network|profile|for|in|let|import|as|if|site|param|defaults|pool|validate|scenario|benchmark|for_each|with)\\b"
+          "match": "\\b(lab|node|link|network|profile|for|in|let|import|as|if|site|param|defaults|pool|validate|scenario|benchmark|for_each)\\b"
         },
         {
           "name": "keyword.other.nll",
-          "match": "\\b(forward|ipv4|ipv6|route|via|dev|default|firewall|policy|accept|drop|nat|masquerade|dnat|snat|translate|delay|jitter|loss|rate|corrupt|reorder|src|dst|to|vrf|table|wireguard|vxlan|macvlan|ipvlan|wifi|dummy|mode|ssid|channel|passphrase|run|background|image|cmd|cpu|memory|privileged|dns|hosts|routing|auto|manual|mesh|ring|star|members|subnet|lo|sysctl|mtu|container|egress|ingress|vlan|port|pvid|tagged|untagged|parent|reach|no-reach|tcp-connect|latency-under|route-has|dns-resolves|at|down|up|clear|exec|log|ping|iperf3|duration|streams|udp|count|assert|above|below|healthcheck|depends-on|startup-delay|env-file|config|overlay|env|volumes|cap-add|cap-drop|entrypoint|hostname|workdir|labels|pull|metric|description|prefix|version|author|tags|mgmt|off|vlan-filtering|ct|mark|sport|dport|icmp|type|state)\\b"
+          "match": "\\b(healthcheck-interval|healthcheck-timeout|host-reachable|vlan-filtering|latency-under|startup-delay|dns-resolves|description|healthcheck|tcp-connect|background|depends-on|entrypoint|interfaces|masquerade|passphrase|privileged|container|route-has|translate|wireguard|cap-drop|duration|env-file|firewall|hostname|interval|no-reach|rate-cap|underlay|untagged|address|cap-add|channel|corrupt|default|forward|ingress|macvlan|members|mesh-id|overlay|reorder|retries|routing|runtime|samples|streams|timeout|version|volumes|workdir|accept|assert|author|config|egress|fwmark|icmpv6|impair|iperf3|ipvlan|jitter|labels|listen|manual|memory|metric|parent|policy|prefix|reject|remote|spokes|subnet|sysctl|tagged|above|below|burst|clear|count|delay|dport|dummy|hosts|image|local|peers|reach|route|sport|state|table|vlans|vxlan|auto|dnat|down|drop|exec|icmp|ipv4|ipv6|loss|mark|mesh|mgmt|mode|ping|port|pull|pvid|rate|ring|snat|ssid|star|tags|type|vlan|wifi|wpa2|cmd|cpu|dev|dns|dst|env|hub|key|log|mtu|nat|off|run|src|tcp|udp|via|vni|vrf|at|ct|lo|to|up)\\b"
         }
       ]
     },

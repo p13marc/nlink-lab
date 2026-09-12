@@ -51,8 +51,10 @@ pub async fn run_test(path: &Path) -> Result<TestResult> {
     let lab = topology.deploy().await?;
     let deploy_ms = deploy_start.elapsed().as_millis() as u64;
 
-    // Run assertions
-    let assertions = run_assertions_with_results(&lab, &topology);
+    // Run assertions. `deploy()` already ran them once (step 19) and
+    // stored the outcome on the lab; re-run here so the test gets a
+    // fresh timing sample rather than the deploy-time one.
+    let assertions = run_assertions(&lab, &topology);
 
     let passed = assertions.iter().all(|a| a.passed);
 
@@ -70,29 +72,27 @@ pub async fn run_test(path: &Path) -> Result<TestResult> {
     })
 }
 
-/// Run assertions and return structured results.
-fn run_assertions_with_results(
+/// Evaluate every `validate { … }` assertion of `topology` against a
+/// deployed lab and return one structured result per assertion, in
+/// declaration order.
+///
+/// This is the single assertion engine: `deploy()` step 19, the CI
+/// `test` runner, and the scenario engine's `validate` action all go
+/// through it. Target addresses come from
+/// [`crate::ipmap::build_ip_map`], so nodes addressed only through a
+/// bridge `network`, a dummy / loopback interface, or a WireGuard
+/// tunnel resolve just like link endpoints (issue #34).
+///
+/// Never panics and never bails: an assertion whose target has no
+/// address, or whose `exec` fails (missing namespace, rootless run),
+/// comes back as `passed == false` with the reason in `detail`.
+pub fn run_assertions(
     lab: &crate::running::RunningLab,
     topology: &crate::types::Topology,
 ) -> Vec<AssertionResult> {
-    use std::collections::HashMap;
+    let ip_map = crate::ipmap::build_ip_map(topology);
 
-    // Build IP map
-    let mut ip_map: HashMap<String, String> = HashMap::new();
-    for link in &topology.links {
-        if let Some(addrs) = &link.addresses {
-            for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
-                if let Some(ep_ref) = crate::types::EndpointRef::parse(ep) {
-                    let ip = addr.split('/').next().unwrap_or(addr);
-                    ip_map
-                        .entry(ep_ref.node.clone())
-                        .or_insert_with(|| ip.to_string());
-                }
-            }
-        }
-    }
-
-    let mut results = Vec::new();
+    let mut results = Vec::with_capacity(topology.assertions.len());
 
     for assertion in &topology.assertions {
         let start = Instant::now();
@@ -273,7 +273,8 @@ fn eval_assertion(
 }
 
 /// Parse average latency from ping -q output.
-fn parse_ping_avg(output: &str) -> Option<f64> {
+/// Looks for "rtt min/avg/max/mdev = X/Y/Z/W ms" and returns Y.
+pub(crate) fn parse_ping_avg(output: &str) -> Option<f64> {
     for line in output.lines() {
         if line.contains("min/avg/max") {
             let parts: Vec<&str> = line.split('=').collect();
@@ -455,6 +456,125 @@ mod tests {
     #[test]
     fn test_parse_ping_avg_no_stats() {
         assert_eq!(parse_ping_avg("no rtt line"), None);
+    }
+
+    #[test]
+    fn test_parse_ping_avg_full_output() {
+        let output = "PING 10.0.0.1 (10.0.0.1) 56(84) bytes of data.\n\
+            --- 10.0.0.1 ping statistics ---\n\
+            5 packets transmitted, 5 received, 0% packet loss, time 4006ms\n\
+            rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms\n";
+        assert_eq!(parse_ping_avg(output), Some(0.456));
+    }
+
+    /// Build a `RunningLab` without deploying anything. Every node maps
+    /// to a namespace that does not exist, so `exec` fails with
+    /// `NamespaceNotFound` — exactly what a rootless run sees.
+    fn undeployed_lab(src: &str) -> (crate::running::RunningLab, crate::types::Topology) {
+        let topology = crate::parser::parse(src).unwrap();
+        let namespace_names = topology
+            .nodes
+            .keys()
+            .map(|n| (n.clone(), format!("nlink-lab-test-nonexistent-{n}")))
+            .collect();
+        let lab = crate::running::RunningLab::new(
+            topology.clone(),
+            namespace_names,
+            Default::default(),
+            None,
+            Vec::new(),
+            false,
+            false,
+        );
+        (lab, topology)
+    }
+
+    /// Issue #34: a `reach` whose target has no address must surface
+    /// as a structured non-pass, not vanish into a log line.
+    #[test]
+    fn test_run_assertions_no_ip_is_structured_failure() {
+        let (lab, topology) = undeployed_lab(
+            r#"
+lab "t"
+node a
+node b
+link a:eth0 -- b:eth0
+validate {
+  reach a b
+  no-reach b a
+  tcp-connect a b 80
+  latency-under a b 10ms
+}
+"#,
+        );
+        let results = run_assertions(&lab, &topology);
+        assert_eq!(results.len(), 4);
+        for r in &results {
+            assert!(
+                !r.passed,
+                "{} must not pass without an address",
+                r.description
+            );
+            let detail = r.detail.as_deref().unwrap_or("");
+            assert!(
+                detail.contains("no IP found"),
+                "{}: expected a 'no IP found' detail, got {detail:?}",
+                r.description
+            );
+        }
+        assert_eq!(results[0].description, "reach a b");
+        assert_eq!(results[1].description, "no-reach b a");
+        assert_eq!(results[2].description, "tcp-connect a b:80");
+        assert_eq!(results[3].description, "latency-under a b 10ms");
+    }
+
+    /// With an address resolved but no namespace to exec in, every
+    /// assertion kind must report the exec error rather than pass —
+    /// including `no-reach`, whose "ping failed" branch is the easy
+    /// one to get wrong.
+    #[test]
+    fn test_run_assertions_exec_failure_is_structured_failure() {
+        let (lab, topology) = undeployed_lab(
+            r#"
+lab "t"
+node a
+node b
+network lan {
+  members [a:eth0, b:eth0]
+  subnet 10.0.1.0/24
+}
+validate {
+  reach a b
+  no-reach a b
+  tcp-connect a b 22
+  latency-under a b 10ms
+  route-has a 10.0.1.0/24 dev eth0
+  dns-resolves a b 10.0.1.2
+}
+"#,
+        );
+        let results = run_assertions(&lab, &topology);
+        assert_eq!(results.len(), 6);
+        for r in &results {
+            assert!(!r.passed, "{} must not pass on exec failure", r.description);
+            assert!(
+                r.detail.is_some(),
+                "{} must carry a detail on failure",
+                r.description
+            );
+            assert!(
+                !r.detail.as_deref().unwrap().contains("no IP found"),
+                "{}: bridge-network address must have been resolved (issue #34), got {:?}",
+                r.description,
+                r.detail
+            );
+        }
+    }
+
+    #[test]
+    fn test_run_assertions_empty_topology() {
+        let (lab, topology) = undeployed_lab("lab \"t\"\nnode a\n");
+        assert!(run_assertions(&lab, &topology).is_empty());
     }
 
     #[test]

@@ -26,6 +26,9 @@ legacy-tcpdump-filter = ["nlink-lab/legacy-tcpdump-filter"]
 
 [dependencies]
 nlink-lab = { workspace = true }
+# Orphan reaper / force cleanup: namespace list+delete and root-ns link
+# dump+delete go through nlink instead of shelling out to `ip` (#29).
+nlink = { workspace = true }
 netring = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }

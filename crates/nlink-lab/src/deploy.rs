@@ -130,14 +130,33 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             crate::subnet_pool::allocate(&lab_name, prefix)
         })?;
     let topology = &owned_topology;
-    let mut cleanup = Cleanup::new();
+    let mut cleanup = Cleanup::new(lab_name.clone());
     if !allocated_subnets.is_empty() {
         cleanup.set_subnet_pool_lab(lab_name.clone());
     }
+
+    // Every kernel/host mutation happens in `deploy_inner`; on any error
+    // the journal of what was created so far is unwound (async, so
+    // root-namespace links can be deleted through netlink) before the
+    // error propagates. `Cleanup`'s `Drop` remains as a synchronous
+    // last resort for panics.
+    match deploy_inner(topology, &mut cleanup).await {
+        Ok(running) => Ok(running),
+        Err(e) => {
+            tracing::warn!("deploy of '{lab_name}' failed: {e}; rolling back");
+            cleanup.rollback().await;
+            Err(e)
+        }
+    }
+}
+
+async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<RunningLab> {
     let mut node_handles: HashMap<String, NodeHandle> = HashMap::new();
     let mut namespace_names: HashMap<String, String> = HashMap::new();
     let mut container_states: HashMap<String, ContainerState> = HashMap::new();
     let mut pids: Vec<(String, u32)> = Vec::new();
+    let mut starttimes: HashMap<u32, u64> = HashMap::new();
+    let mut mgmt_peers: std::collections::BTreeMap<String, String> = Default::default();
     let mut process_logs: HashMap<u32, (String, String)> = HashMap::new();
 
     // Detect container runtime if any node uses an image
@@ -214,6 +233,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                 source: e,
             })?;
             cleanup.add_namespace(ns_name.clone());
+            // Ownership tag: the only thing `destroy --orphans` trusts.
+            crate::netns_tag::tag(&ns_name, &topology.lab.name)?;
             namespace_names.insert(node_name.clone(), ns_name.clone());
             node_handles.insert(node_name.clone(), NodeHandle::Namespace { ns_name });
         }
@@ -224,7 +245,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     let mut wifi_loaded = false;
     if wifi_radio_count > 0 {
         tracing::info!("step 3b: loading mac80211_hwsim with {wifi_radio_count} radios");
-        crate::wifi::load_hwsim(wifi_radio_count)?;
+        let _ = crate::wifi::load_hwsim_for(&topology.lab.name, wifi_radio_count)?;
         wifi_loaded = true;
         cleanup.wifi_loaded = true;
 
@@ -285,6 +306,17 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             return Err(Error::deploy_failed("mgmt subnet must be IPv4"));
         };
         let base_u32 = u32::from(base_v4);
+        // The bridge takes .1 and every node .2, .3, … — make sure the
+        // subnet actually holds them instead of silently spilling into
+        // the next subnet (issue #40).
+        let usable_hosts = (1u64 << (32 - prefix.min(32) as u32)).saturating_sub(2);
+        if node_handles.len() as u64 + 1 > usable_hosts {
+            return Err(Error::deploy_failed(format!(
+                "mgmt subnet {mgmt_subnet} has {usable_hosts} usable host address(es) but the bridge plus {} nodes need {}",
+                node_handles.len(),
+                node_handles.len() + 1
+            )));
+        }
 
         let bridge_name = topology.lab.mgmt_bridge_name();
 
@@ -296,6 +328,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         root_conn.add_link(bridge).await.map_err(|e| {
             Error::deploy_failed(format!("failed to create mgmt bridge '{bridge_name}': {e}"))
         })?;
+        cleanup.add_host_link(bridge_name.clone());
         root_conn.set_link_up(&bridge_name).await.map_err(|e| {
             Error::deploy_failed(format!(
                 "failed to bring up mgmt bridge '{bridge_name}': {e}"
@@ -333,6 +366,8 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     "failed to create mgmt veth for node '{node_name}': {e}"
                 ))
             })?;
+            cleanup.add_host_link(peer_name.clone());
+            mgmt_peers.insert(node_name.to_string(), peer_name.clone());
 
             // Attach our end (peer_name) to the bridge
             root_conn
@@ -376,6 +411,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             source: e,
         })?;
         cleanup.add_namespace(mgmt_ns.clone());
+        crate::netns_tag::tag(&mgmt_ns, &topology.lab.name)?;
 
         let mgmt_conn: Connection<Route> = namespace::connection_for(&mgmt_ns)
             .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
@@ -590,6 +626,9 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         mv.name
                     ))
                 })?;
+                // Still on the host until the move below succeeds; a
+                // rollback deletes it from the host if it is still there.
+                cleanup.add_host_link(mv.name.clone());
                 host_conn
                     .set_link_netns_fd(&mv.name, ns_fd.as_raw_fd())
                     .await
@@ -615,6 +654,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         iv.name
                     ))
                 })?;
+                cleanup.add_host_link(iv.name.clone());
                 host_conn
                     .set_link_netns_fd(&iv.name, ns_fd.as_raw_fd())
                     .await
@@ -652,27 +692,53 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
     // into a single per-namespace `NetworkConfig::diff().apply()`
     // call (step 11c below). This step is now a no-op marker kept
     // for the step-numbering audit trail.
-    tracing::info!("step 9/18: (addresses now applied declaratively in step 11c)");
 
     // ── Step 10: Bring interfaces up ───────────────────────────────
+    // Only the interfaces nlink-lab created imperatively (veth ends,
+    // bridge-network members, mgmt0, macvlan/ipvlan, wifi) plus `lo`.
+    // Everything declared in step 11c carries its own `.up()`. Bringing
+    // up *every* link by ifindex used to fail on hosts whose kernel
+    // populates each namespace with gre0/gretap0/sit0/tunl0 —
+    // `gretap0` answers EADDRNOTAVAIL — and took the deploy down with it.
     tracing::info!("step 10/18: bringing interfaces up");
-    for node_name in topology.nodes.keys() {
+    for (node_name, node) in &topology.nodes {
         let node_handle = &node_handles[node_name];
         let conn: Connection<Route> = node_handle
             .connection()
             .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-        let links = conn.get_links().await.map_err(|e| {
-            Error::deploy_failed(format!("failed to list links in '{node_name}': {e}"))
-        })?;
-        for link_msg in &links {
-            conn.set_link_up_by_index(link_msg.ifindex())
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to bring up interface idx {} in '{node_name}': {e}",
-                        link_msg.ifindex()
-                    ))
-                })?;
+        let mut ifaces: Vec<String> = vec!["lo".to_string()];
+        for link in &topology.links {
+            for ep_str in &link.endpoints {
+                if let Some(ep) = EndpointRef::parse(ep_str)
+                    && &ep.node == node_name
+                {
+                    ifaces.push(ep.iface);
+                }
+            }
+        }
+        for network in topology.networks.values() {
+            for member in &network.members {
+                if let Some(ep) = EndpointRef::parse(member)
+                    && &ep.node == node_name
+                {
+                    ifaces.push(ep.iface);
+                }
+            }
+        }
+        if topology.lab.mgmt_host_reachable && topology.lab.mgmt_subnet.is_some() {
+            ifaces.push("mgmt0".to_string());
+        }
+        ifaces.extend(node.macvlans.iter().map(|m| m.name.clone()));
+        ifaces.extend(node.ipvlans.iter().map(|i| i.name.clone()));
+        ifaces.extend(node.wifi.iter().map(|w| w.name.clone()));
+        ifaces.sort();
+        ifaces.dedup();
+        for iface in &ifaces {
+            conn.set_link_up(iface.as_str()).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up interface '{iface}' in '{node_name}': {e}"
+                ))
+            })?;
         }
     }
 
@@ -900,12 +966,16 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         let node = &topology.nodes[node_name.as_str()];
         let node_handle = &node_handles[node_name];
 
-        // Apply startup_delay before spawning
-        if let Some(ref delay_str) = node.startup_delay
-            && let Ok(delay) = crate::helpers::parse_duration(delay_str)
-        {
+        // Apply startup_delay before spawning. A malformed value is an
+        // error, not a silently skipped delay (issue #40).
+        if let Some(ref delay_str) = node.startup_delay {
+            let delay = crate::helpers::parse_duration(delay_str).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "node '{node_name}': invalid startup-delay '{delay_str}': {e}"
+                ))
+            })?;
             tracing::debug!("startup-delay {delay_str} for node '{node_name}'");
-            std::thread::sleep(delay);
+            tokio::time::sleep(delay).await;
         }
 
         for (i, exec_config) in node.exec.iter().enumerate() {
@@ -992,6 +1062,12 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     })?;
                     let pid = child.id();
                     pids.push((node_name.clone(), pid));
+                    let started = crate::running::host_starttime(pid);
+                    if let Some(st) = started {
+                        starttimes.insert(pid, st);
+                    }
+                    cleanup.add_pid(pid, started);
+                    cleanup.set_logs_dir(log_dir.clone());
 
                     // Rename log files to include actual PID
                     let final_stdout =
@@ -1026,16 +1102,27 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 
         // Poll healthcheck until healthy (or timeout)
         if let Some(ref hc_cmd) = node.healthcheck {
-            let hc_interval = node
-                .healthcheck_interval
-                .as_deref()
-                .and_then(|s| crate::helpers::parse_duration(s).ok())
-                .unwrap_or(std::time::Duration::from_secs(1));
-            let hc_timeout = node
-                .healthcheck_timeout
-                .as_deref()
-                .and_then(|s| crate::helpers::parse_duration(s).ok())
-                .unwrap_or(std::time::Duration::from_secs(30));
+            let parse_dur =
+                |what: &str, v: Option<&str>, default: u64| -> Result<std::time::Duration> {
+                    match v {
+                        None => Ok(std::time::Duration::from_secs(default)),
+                        Some(s) => crate::helpers::parse_duration(s).map_err(|e| {
+                            Error::deploy_failed(format!(
+                                "node '{node_name}': invalid {what} '{s}': {e}"
+                            ))
+                        }),
+                    }
+                };
+            let hc_interval = parse_dur(
+                "healthcheck-interval",
+                node.healthcheck_interval.as_deref(),
+                1,
+            )?;
+            let hc_timeout = parse_dur(
+                "healthcheck-timeout",
+                node.healthcheck_timeout.as_deref(),
+                30,
+            )?;
 
             tracing::info!("waiting for healthcheck on '{node_name}': {hc_cmd}");
             let deadline = std::time::Instant::now() + hc_timeout;
@@ -1052,7 +1139,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                         "healthcheck timeout for node '{node_name}': {hc_cmd}"
                     )));
                 }
-                std::thread::sleep(hc_interval);
+                tokio::time::sleep(hc_interval).await;
             }
         }
     }
@@ -1160,25 +1247,23 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         }
     };
 
-    let lab_state = LabState {
-        name: topology.lab.name.clone(),
-        created_at: now_iso8601(),
-        namespaces: namespace_names.clone(),
-        pids: pids.clone(),
-        wg_public_keys: wg_public_keys_b64,
-        containers: container_states.clone(),
-        runtime: container_runtime.as_ref().map(|rt| rt.binary().to_string()),
-        dns_injected,
-        wifi_loaded,
-        saved_impairments: HashMap::new(),
-        process_logs: process_logs.clone(),
-    };
+    let mut lab_state = LabState::new(topology.lab.name.clone(), now_iso8601());
+    lab_state.namespaces = namespace_names.clone();
+    lab_state.pids = pids.clone();
+    lab_state.starttimes = starttimes.clone();
+    lab_state.mgmt_peers = mgmt_peers.clone();
+    lab_state.wg_public_keys = wg_public_keys_b64;
+    lab_state.containers = container_states.clone();
+    lab_state.runtime = container_runtime.as_ref().map(|rt| rt.binary().to_string());
+    lab_state.dns_injected = dns_injected;
+    lab_state.wifi_loaded = wifi_loaded;
+    lab_state.process_logs = process_logs.clone();
     state::save(&lab_state, topology)?;
 
     // Disarm cleanup — deployment succeeded
     cleanup.disarm();
 
-    let running = RunningLab::new(
+    let mut running = RunningLab::new(
         topology.clone(),
         namespace_names,
         container_states,
@@ -1187,11 +1272,16 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         dns_injected,
         wifi_loaded,
     );
+    running.set_starttimes(starttimes);
+    running.set_mgmt_peers(mgmt_peers);
 
     // ── Step 19: Run validate assertions ─────────────────────────
+    // Never fails the deploy; the structured results ride on the
+    // returned lab so callers (`deploy --strict`) can decide.
     if !topology.assertions.is_empty() {
         tracing::info!("step 19: running validate assertions");
-        run_assertions(&running, topology);
+        let results = run_assertions(&running, topology);
+        running.set_assertion_results(results);
     }
 
     Ok(running)
@@ -1431,6 +1521,26 @@ async fn apply_nftables_for_node(
             "failed to create nftables connection for '{node_name}': {e}"
         ))
     })?;
+
+    // Nothing declared at all: an empty `NftablesConfig` declares no
+    // table, so its diff has nothing to reconcile against and a table
+    // left from an earlier deploy/apply would survive. Delete it
+    // outright (idempotent) so `apply` after removing a node's last
+    // firewall/NAT block really clears the rules.
+    if fw.is_none() && nat.is_none() {
+        let removed = nft_conn
+            .del_table_if_exists(NLINK_LAB_TABLE, nlink::netlink::nftables::Family::Inet)
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to remove nftables table on '{node_name}': {e}"
+                ))
+            })?;
+        if removed {
+            tracing::info!(node = %node_name, "nftables: removed table {NLINK_LAB_TABLE}");
+        }
+        return Ok(());
+    }
 
     let diff = cfg.diff(&nft_conn).await.map_err(|e| {
         Error::deploy_failed(format!(
@@ -1793,9 +1903,6 @@ fn topology_to_network_config(
                 continue;
             };
             if ep.node != node_name {
-                continue;
-            }
-            if j >= addresses.len() {
                 continue;
             }
             cfg = cfg.address(&ep.iface, &addresses[j]).map_err(|e| {
@@ -2756,8 +2863,11 @@ fn topology_to_wireguard_config(
 /// (`apply_network_config_for_node`, `apply_nftables_for_node`,
 /// `apply_wireguard_for_node`) into a single per-node call site
 /// with one aggregated `tracing::info!` for the whole stack.
-/// Mirrors upstream `facade::Stack::apply` semantics (no
-/// pre-flight validation across layers — we don't double-dump),
+/// Close to upstream `facade::Stack::apply_in`, which is not adopted
+/// because it applies WireGuard *after* the network layer and takes no
+/// `ApplyOptions` (we need `ensure_devices` before addresses land and
+/// purge on apply — see the nlink 0.26 adoption epic). No pre-flight
+/// validation across layers — we don't double-dump;
 /// but routes through `NodeHandle::connection<P>()` so the
 /// container case (`connection_for_pid`) keeps working
 /// alongside the bare-namespace case. Upstream's
@@ -2835,6 +2945,21 @@ async fn ensure_wireguard_devices_for_node(
             "WireguardConfig::ensure_devices on '{node_name}': {e}"
         ))
     })?;
+    // `ensure_devices` only creates the link. The NetworkConfig applied
+    // right after declares routes *via* the tunnel, and the kernel
+    // rejects a nexthop on a down device ("Device for nexthop is not
+    // up"), so bring every declared WG interface up here.
+    for dev in cfg.devices() {
+        route_conn
+            .set_link_up(dev.ifname.as_str())
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to bring up WireGuard interface '{}' on '{node_name}': {e}",
+                    dev.ifname
+                ))
+            })?;
+    }
     Ok(())
 }
 
@@ -3012,17 +3137,18 @@ pub async fn apply_diff(
         // Kill any background processes on this node
         for (pnode, pid) in running.pids() {
             if pnode == node_name {
-                unsafe {
-                    libc::kill(*pid as i32, libc::SIGKILL);
-                }
+                // identity-checked: never signal a reused PID (issue #30)
+                let _ = crate::running::kill_tracked(*pid, running.starttimes().get(pid).copied());
             }
         }
 
-        if let Some(ns_name) = running.namespace_names_mut().remove(node_name)
-            && namespace::exists(&ns_name)
-            && let Err(e) = namespace::delete(&ns_name)
-        {
-            tracing::warn!("failed to delete namespace '{ns_name}': {e}");
+        if let Some(ns_name) = running.namespace_names_mut().remove(node_name) {
+            if namespace::exists(&ns_name)
+                && let Err(e) = namespace::delete(&ns_name)
+            {
+                tracing::warn!("failed to delete namespace '{ns_name}': {e}");
+            }
+            crate::netns_tag::untag(&ns_name);
         }
         // Container removal
         if let Some(container) = running.containers_mut().remove(node_name)
@@ -3309,23 +3435,29 @@ pub async fn apply_diff(
     // ── Phase 8: Update state file ─────────────────────────────────
     running.set_topology(desired.clone());
 
-    let lab_state = LabState {
-        name: desired.lab.name.clone(),
-        created_at: now_iso8601(),
-        namespaces: running.namespace_names().clone(),
-        pids: running.pids().to_vec(),
-        wg_public_keys: HashMap::new(),
-        containers: running
-            .containers()
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-        runtime: running.runtime_binary().map(|s| s.to_string()),
-        dns_injected: running.dns_injected(),
-        wifi_loaded: running.wifi_loaded(),
-        saved_impairments: HashMap::new(),
-        process_logs: HashMap::new(),
+    // Read-modify-write: keep created_at, wg_public_keys,
+    // saved_impairments and process_logs — apply used to rebuild the
+    // file from scratch and wipe them (issue #28).
+    let mut lab_state = match state::load(&desired.lab.name) {
+        Ok((existing, _)) => existing,
+        Err(_) => LabState::new(desired.lab.name.clone(), now_iso8601()),
     };
+    lab_state.schema_version = state::SCHEMA_VERSION;
+    lab_state.namespaces = running.namespace_names().clone();
+    lab_state.pids = running.pids().to_vec();
+    lab_state.starttimes = running.starttimes().clone();
+    lab_state.mgmt_peers = running.mgmt_peers().clone();
+    lab_state.containers = running
+        .containers()
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
+    lab_state.dns_injected = running.dns_injected();
+    lab_state.wifi_loaded = running.wifi_loaded();
+    lab_state.pids.retain(|(n, _)| {
+        running.namespace_names().contains_key(n) || running.containers().contains_key(n)
+    });
     state::save(&lab_state, desired)?;
 
     Ok(())
@@ -3669,211 +3801,38 @@ async fn apply_network_impair_diff(
     Ok(())
 }
 
-/// Resolve a node name to a [`NodeHandle`] from a [`RunningLab`].
+/// Run post-deploy `validate { … }` assertions (step 19).
 ///
-/// Looks up namespace nodes first, then container nodes.
-/// Run post-deploy reachability assertions from the validate block.
-fn run_assertions(running: &RunningLab, topology: &Topology) {
-    use crate::types::Assertion;
-
-    // Build address map to find target IPs
-    let mut ip_map: HashMap<String, String> = HashMap::new();
-    for link in &topology.links {
-        if let Some(addrs) = &link.addresses {
-            for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
-                if let Some(ep_ref) = EndpointRef::parse(ep) {
-                    let ip = addr.split('/').next().unwrap_or(addr);
-                    ip_map
-                        .entry(ep_ref.node.clone())
-                        .or_insert_with(|| ip.to_string());
-                }
-            }
+/// Thin wrapper over [`crate::test_runner::run_assertions`] — the one
+/// assertion engine shared with `nlink-lab test` and the scenario
+/// engine — that additionally emits the `PASS:` / `FAIL:` log lines
+/// operators grep for. Target addresses come from
+/// [`crate::ipmap::build_ip_map`], so bridge-`network` topologies no
+/// longer log `SKIP: no IP found` for every assertion (issue #34).
+///
+/// Never bails: `deploy()` succeeds regardless of the outcome. The
+/// results are stored on the returned [`RunningLab`] (see
+/// [`RunningLab::assertion_results`] / [`RunningLab::assertions_failed`])
+/// so the CLI can implement `deploy --strict` without changing this
+/// function's signature.
+fn run_assertions(
+    running: &RunningLab,
+    topology: &Topology,
+) -> Vec<crate::test_runner::AssertionResult> {
+    let results = crate::test_runner::run_assertions(running, topology);
+    for r in &results {
+        match (r.passed, r.detail.as_deref()) {
+            (true, Some(detail)) => tracing::info!("PASS: {} ({detail})", r.description),
+            (true, None) => tracing::info!("PASS: {}", r.description),
+            (false, Some(detail)) => tracing::warn!("FAIL: {}: {detail}", r.description),
+            (false, None) => tracing::warn!("FAIL: {}", r.description),
         }
     }
-
-    for assertion in &topology.assertions {
-        match assertion {
-            Assertion::Reach { from, to } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    match running.exec(from, "ping", &["-c1", "-W2", target_ip]) {
-                        Ok(out) if out.exit_code == 0 => {
-                            tracing::info!("PASS: {from} can reach {to} ({target_ip})");
-                        }
-                        _ => {
-                            tracing::warn!("FAIL: {from} cannot reach {to} ({target_ip})");
-                        }
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::NoReach { from, to } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    match running.exec(from, "ping", &["-c1", "-W2", target_ip]) {
-                        Ok(out) if out.exit_code != 0 => {
-                            tracing::info!("PASS: {from} cannot reach {to} (expected)");
-                        }
-                        _ => {
-                            tracing::warn!("FAIL: {from} CAN reach {to} (should be blocked)");
-                        }
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::TcpConnect {
-                from,
-                to,
-                port,
-                timeout,
-                retries,
-                interval,
-            } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    let timeout_secs = timeout
-                        .as_deref()
-                        .and_then(|t| crate::helpers::parse_duration(t).ok())
-                        .map(|d| d.as_secs().max(1).to_string())
-                        .unwrap_or_else(|| "3".to_string());
-                    let max_attempts = retries.unwrap_or(1);
-                    let retry_interval = interval
-                        .as_deref()
-                        .and_then(|i| crate::helpers::parse_duration(i).ok())
-                        .unwrap_or(std::time::Duration::from_millis(500));
-
-                    let mut passed = false;
-                    for attempt in 0..max_attempts {
-                        match running.exec(
-                            from,
-                            "bash",
-                            &[
-                                "-c",
-                                &format!(
-                                    "timeout {timeout_secs} bash -c 'echo > /dev/tcp/{target_ip}/{port}'"
-                                ),
-                            ],
-                        ) {
-                            Ok(out) if out.exit_code == 0 => {
-                                passed = true;
-                                break;
-                            }
-                            _ => {
-                                if attempt + 1 < max_attempts {
-                                    std::thread::sleep(retry_interval);
-                                }
-                            }
-                        }
-                    }
-                    if passed {
-                        tracing::info!("PASS: {from} tcp-connect {to}:{port}");
-                    } else {
-                        tracing::warn!("FAIL: {from} cannot tcp-connect {to}:{port}");
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::LatencyUnder {
-                from,
-                to,
-                max,
-                samples,
-            } => {
-                if let Some(target_ip) = ip_map.get(to) {
-                    let count = samples.unwrap_or(5).to_string();
-                    match running.exec(from, "ping", &["-c", &count, "-q", target_ip]) {
-                        Ok(out) if out.exit_code == 0 => {
-                            // Parse avg from "rtt min/avg/max/mdev = 0.1/0.2/0.3/0.1 ms"
-                            if let Some(avg_ms) = parse_ping_avg(&out.stdout) {
-                                let max_ms = crate::helpers::parse_duration(max)
-                                    .map(|d| d.as_secs_f64() * 1000.0)
-                                    .unwrap_or(f64::MAX);
-                                if avg_ms <= max_ms {
-                                    tracing::info!(
-                                        "PASS: {from} -> {to} latency {avg_ms:.1}ms <= {max}"
-                                    );
-                                } else {
-                                    tracing::warn!(
-                                        "FAIL: {from} -> {to} latency {avg_ms:.1}ms > {max}"
-                                    );
-                                }
-                            } else {
-                                tracing::warn!(
-                                    "FAIL: could not parse ping output for latency check"
-                                );
-                            }
-                        }
-                        _ => {
-                            tracing::warn!("FAIL: {from} cannot reach {to} for latency check");
-                        }
-                    }
-                } else {
-                    tracing::warn!("SKIP: no IP found for node '{to}'");
-                }
-            }
-            Assertion::RouteHas {
-                node,
-                destination,
-                via,
-                dev,
-            } => match running.exec(node, "ip", &["route", "show", destination]) {
-                Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
-                    let route_line = out.stdout.trim();
-                    let via_ok = via
-                        .as_ref()
-                        .is_none_or(|v| route_line.contains(&format!("via {v}")));
-                    let dev_ok = dev
-                        .as_ref()
-                        .is_none_or(|d| route_line.contains(&format!("dev {d}")));
-                    if via_ok && dev_ok {
-                        tracing::info!("PASS: {node} route-has {destination}");
-                    } else {
-                        tracing::warn!("FAIL: {node} route-has {destination}: got '{route_line}'");
-                    }
-                }
-                _ => {
-                    tracing::warn!("FAIL: {node} has no route for {destination}");
-                }
-            },
-            Assertion::DnsResolves {
-                from,
-                name,
-                expected_ip,
-            } => match running.exec(from, "getent", &["hosts", name]) {
-                Ok(out) if out.exit_code == 0 => {
-                    if out.stdout.contains(expected_ip) {
-                        tracing::info!("PASS: {from} dns-resolves {name} -> {expected_ip}");
-                    } else {
-                        tracing::warn!(
-                            "FAIL: {from} dns-resolves {name}: expected {expected_ip}, got '{}'",
-                            out.stdout.trim()
-                        );
-                    }
-                }
-                _ => {
-                    tracing::warn!("FAIL: {from} cannot resolve {name}");
-                }
-            },
-        }
+    let failed = results.iter().filter(|r| !r.passed).count();
+    if failed > 0 {
+        tracing::warn!("{failed} of {} validate assertion(s) failed", results.len());
     }
-}
-
-/// Parse average latency from ping -q output.
-/// Looks for "rtt min/avg/max/mdev = X/Y/Z/W ms" and returns Y.
-fn parse_ping_avg(output: &str) -> Option<f64> {
-    for line in output.lines() {
-        if line.contains("min/avg/max") {
-            // Format: "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms"
-            let parts: Vec<&str> = line.split('=').collect();
-            if parts.len() >= 2 {
-                let stats: Vec<&str> = parts[1].trim().split('/').collect();
-                if stats.len() >= 2 {
-                    return stats[1].trim().parse::<f64>().ok();
-                }
-            }
-        }
-    }
-    None
+    results
 }
 
 /// Build container CreateOpts from a Node's fields.
@@ -4005,6 +3964,8 @@ fn now_iso8601() -> String {
 
 /// Cleanup guard that removes namespaces on drop if deployment fails.
 struct Cleanup {
+    /// Lab being deployed (wifi config cleanup, logs dir, tags).
+    lab_name: String,
     namespaces: Vec<String>,
     containers: Vec<String>,
     runtime_binary: Option<String>,
@@ -4014,19 +3975,99 @@ struct Cleanup {
     /// rollback. Set when `auto/N` placeholders were resolved at the
     /// top of `deploy()`.
     subnet_pool_lab: Option<String>,
+    /// Root-namespace links created so far (mgmt bridge + veth peers,
+    /// host-side macvlan/ipvlan before their move), in creation order.
+    host_links: Vec<String>,
+    /// Background processes spawned so far, with the start time that
+    /// proves the PID is still theirs.
+    pids: Vec<(u32, Option<u64>)>,
+    /// Per-lab log directory created for spawned processes.
+    logs_dir: Option<std::path::PathBuf>,
     armed: bool,
 }
 
 impl Cleanup {
-    fn new() -> Self {
+    fn new(lab_name: String) -> Self {
         Self {
+            lab_name,
             namespaces: Vec::new(),
             containers: Vec::new(),
             runtime_binary: None,
             dns_lab: None,
             wifi_loaded: false,
             subnet_pool_lab: None,
+            host_links: Vec::new(),
+            pids: Vec::new(),
+            logs_dir: None,
             armed: true,
+        }
+    }
+
+    fn add_host_link(&mut self, name: String) {
+        self.host_links.push(name);
+    }
+
+    fn add_pid(&mut self, pid: u32, starttime: Option<u64>) {
+        self.pids.push((pid, starttime));
+    }
+
+    fn set_logs_dir(&mut self, dir: std::path::PathBuf) {
+        self.logs_dir = Some(dir);
+    }
+
+    /// Unwind everything recorded so far, newest first where order
+    /// matters. Async so root-namespace links go through netlink.
+    async fn rollback(&mut self) {
+        if !self.armed {
+            return;
+        }
+        for (pid, st) in self.pids.iter().rev() {
+            let _ = crate::running::kill_tracked(*pid, *st);
+        }
+        if !self.host_links.is_empty()
+            && let Ok(conn) = Connection::<Route>::new()
+        {
+            for link in self.host_links.iter().rev() {
+                if let Err(e) = conn.del_link_if_exists(link.as_str()).await {
+                    tracing::warn!("rollback: failed to delete host link '{link}': {e}");
+                }
+            }
+        }
+        self.sync_cleanup();
+        self.armed = false;
+    }
+
+    /// The synchronous part of a rollback, shared with `Drop`.
+    fn sync_cleanup(&mut self) {
+        if let Some(lab_name) = &self.subnet_pool_lab {
+            let _ = crate::subnet_pool::free_for_lab(lab_name);
+        }
+        if let Some(lab_name) = &self.dns_lab {
+            let _ = crate::dns::remove_hosts(lab_name);
+        }
+        for ns in &self.namespaces {
+            // Clean up per-namespace DNS files
+            crate::dns::remove_netns_etc(ns);
+            if namespace::exists(ns) {
+                let _ = namespace::delete(ns);
+            }
+            crate::netns_tag::untag(ns);
+        }
+        if let Some(binary) = &self.runtime_binary {
+            for id in &self.containers {
+                let _ = std::process::Command::new(binary)
+                    .args(["rm", "-f", id])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+            }
+        }
+        if self.wifi_loaded {
+            crate::wifi::release_hwsim(&self.lab_name);
+            crate::wifi::cleanup_configs(&self.lab_name);
+        }
+        if let Some(dir) = &self.logs_dir {
+            let _ = std::fs::remove_dir_all(dir);
         }
     }
 
@@ -4056,39 +4097,18 @@ impl Cleanup {
 }
 
 impl Drop for Cleanup {
+    /// Last resort for panics: `rollback()` is the normal path and
+    /// disarms this. Host links cannot be deleted here (no async), so a
+    /// panic mid-deploy may still leave `nl*`/`nm*` links for
+    /// `destroy --orphans`.
     fn drop(&mut self) {
         if !self.armed {
             return;
         }
-        if let Some(lab_name) = &self.subnet_pool_lab {
-            let _ = crate::subnet_pool::free_for_lab(lab_name);
+        for (pid, st) in self.pids.iter().rev() {
+            let _ = crate::running::kill_tracked(*pid, *st);
         }
-        if let Some(lab_name) = &self.dns_lab {
-            let _ = crate::dns::remove_hosts(lab_name);
-        }
-        for ns in &self.namespaces {
-            // Clean up per-namespace DNS files
-            crate::dns::remove_netns_etc(ns);
-            if namespace::exists(ns) {
-                let _ = namespace::delete(ns);
-            }
-        }
-        if let Some(binary) = &self.runtime_binary {
-            for id in &self.containers {
-                let _ = std::process::Command::new(binary)
-                    .args(["rm", "-f", id])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
-            }
-        }
-        // Clean up WiFi module if loaded
-        if self.wifi_loaded {
-            crate::wifi::unload_hwsim();
-            if let Some(lab_name) = &self.dns_lab {
-                crate::wifi::cleanup_configs(lab_name);
-            }
-        }
+        self.sync_cleanup();
     }
 }
 
@@ -4115,7 +4135,10 @@ fn topo_sort_nodes(nodes: &HashMap<String, crate::types::Node>) -> Vec<String> {
         .filter(|(_, d)| **d == 0)
         .map(|(n, _)| *n)
         .collect();
-    queue.sort(); // Deterministic order within each level
+    // Deterministic order within each level: `pop()` takes from the
+    // back, so sort descending to yield names alphabetically.
+    queue.sort();
+    queue.reverse();
 
     while let Some(n) = queue.pop() {
         result.push(n.to_string());
@@ -4214,18 +4237,64 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         );
     }
 
+    /// Step 19 wrapper: returns the structured vector (not `()`), and a
+    /// rootless / undeployed lab yields non-pass results with details
+    /// rather than a silent pass. `parse_ping_avg` tests moved to
+    /// `test_runner` alongside the single remaining implementation.
     #[test]
-    fn test_parse_ping_avg() {
-        let output = "PING 10.0.0.1 (10.0.0.1) 56(84) bytes of data.\n\
-            --- 10.0.0.1 ping statistics ---\n\
-            5 packets transmitted, 5 received, 0% packet loss, time 4006ms\n\
-            rtt min/avg/max/mdev = 0.123/0.456/0.789/0.012 ms\n";
-        assert_eq!(parse_ping_avg(output), Some(0.456));
-    }
+    fn test_run_assertions_returns_structured_results() {
+        let topology = crate::parser::parse(
+            r#"
+lab "t"
+node a
+node b
+network lan {
+  members [a:eth0, b:eth0]
+  subnet 10.0.1.0/24
+}
+validate {
+  reach a b
+  route-has a 10.0.1.0/24
+}
+"#,
+        )
+        .unwrap();
+        let namespace_names = topology
+            .nodes
+            .keys()
+            .map(|n| (n.clone(), format!("nlink-lab-test-nonexistent-{n}")))
+            .collect();
+        let mut running = RunningLab::new(
+            topology.clone(),
+            namespace_names,
+            Default::default(),
+            None,
+            Vec::new(),
+            false,
+            false,
+        );
+        assert!(running.assertion_results().is_empty());
+        assert!(!running.assertions_failed());
 
-    #[test]
-    fn test_parse_ping_avg_no_stats() {
-        assert_eq!(parse_ping_avg("no rtt line here"), None);
+        let results = run_assertions(&running, &topology);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| !r.passed));
+        assert!(results.iter().all(|r| r.detail.is_some()));
+        // Bridge-network address resolved (issue #34): the failure is
+        // the missing namespace, not a missing IP.
+        assert!(
+            !results[0]
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("no IP found"),
+            "{:?}",
+            results[0].detail
+        );
+
+        running.set_assertion_results(results);
+        assert_eq!(running.assertion_results().len(), 2);
+        assert!(running.assertions_failed());
     }
 
     #[test]

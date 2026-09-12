@@ -137,9 +137,10 @@ async fn execute_action(lab: &RunningLab, action: &ScenarioAction) -> ActionResu
         ScenarioAction::Validate(assertions) => {
             let mut all_ok = true;
             let mut details = Vec::new();
+            // Use the test runner's assertion evaluator with the shared
+            // node → IP lookup (links, bridge networks, dummies, WG, …).
+            let ip_map = build_ip_map(lab.topology());
             for assertion in assertions {
-                // Use the test runner's assertion evaluator
-                let ip_map = build_ip_map(lab.topology());
                 let (d, passed, detail) =
                     crate::test_runner::eval_assertion_pub(lab, assertion, &ip_map);
                 if !passed {
@@ -239,63 +240,14 @@ async fn clear_impairment(lab: &RunningLab, endpoint: &str) -> Result<()> {
     Ok(())
 }
 
-/// Build IP map from a topology (public for testing).
-pub fn build_ip_map(
-    topology: &crate::types::Topology,
-) -> std::collections::HashMap<String, String> {
-    let mut ip_map = std::collections::HashMap::new();
-    for link in &topology.links {
-        if let Some(addrs) = &link.addresses {
-            for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
-                if let Some(ep_ref) = EndpointRef::parse(ep) {
-                    let ip = addr.split('/').next().unwrap_or(addr);
-                    ip_map
-                        .entry(ep_ref.node.clone())
-                        .or_insert_with(|| ip.to_string());
-                }
-            }
-        }
-    }
-    ip_map
-}
+/// Node → first-IP lookup, kept as a re-export for callers that reached
+/// it through this module. The canonical implementation (and its
+/// tests) live in [`crate::ipmap`].
+pub use crate::ipmap::build_ip_map;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_build_ip_map() {
-        let topo = crate::parser::parse(
-            r#"
-lab "t"
-node a
-node b
-link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
-"#,
-        )
-        .unwrap();
-        let ip_map = build_ip_map(&topo);
-        assert_eq!(ip_map.get("a").unwrap(), "10.0.0.1");
-        assert_eq!(ip_map.get("b").unwrap(), "10.0.0.2");
-    }
-
-    #[test]
-    fn test_build_ip_map_multi_homed() {
-        let topo = crate::parser::parse(
-            r#"
-lab "t"
-node r
-node a
-node b
-link r:eth0 -- a:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
-link r:eth1 -- b:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
-"#,
-        )
-        .unwrap();
-        let ip_map = build_ip_map(&topo);
-        // First IP wins for multi-homed nodes
-        assert_eq!(ip_map.get("r").unwrap(), "10.0.1.1");
-    }
 
     #[test]
     fn test_scenario_result_types() {

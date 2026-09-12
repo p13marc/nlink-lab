@@ -113,7 +113,8 @@ crates/nlink-lab/src/
   wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim mgmt)
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
-  state.rs          # State persistence (~/.nlink-lab/)
+  state.rs          # State persistence ($XDG_STATE_HOME/nlink-lab/labs, schema 2, flock in .locks/)
+  netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
   templates/        # Built-in topology templates for `nlink-lab init`
 
@@ -121,7 +122,7 @@ bins/lab/src/
   main.rs           # CLI binary (clap)
 
 examples/
-  *.nll             # NLL topology examples (28 files)
+  *.nll             # NLL topology examples (34 top-level; 43 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -213,7 +214,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (33 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (34 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply`,
 `status` (with `--scan`, reports orphans + stale labs),
 `exec` (`--json`, `--env`, `--workdir`),
@@ -222,11 +223,11 @@ CLI commands (33 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json
 (`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),
 `impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
-`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`,
+`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`, `import`,
 `watch` (`--family route|nftables|both`, `--json` for NDJSON),
 `wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
 `ip` (`--iface`, `--cidr`),
-`ps`, `kill`, `init`, `completions`, `daemon`, `metrics`,
+`ps`, `kill`, `proc-stat`, `init`, `completions`, `daemon`, `metrics`,
 `containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `stats`, `restart`.
 
@@ -308,10 +309,25 @@ layers.
      mutates only drift, no root-qdisc teardown. Closes Plan 158g)
  15b. Inject /etc/hosts entries (if `dns hosts`)
  16. Spawn background processes (topo-sorted by depends_on,
-     with healthcheck polling, stdout/stderr captured to logs)
- 17. Run validation (connectivity checks, tcp-connect with retries)
- 18. Write state file
+     with healthcheck polling, stdout/stderr captured to logs;
+     each PID's /proc start time is recorded so it can be
+     signalled safely later)
+ 18. Write state file (schema 2: namespaces, pids + starttimes,
+     mgmt_peers, containers, wg public keys, process logs)
+ 19. Run `validate { … }` assertions (results are kept on the
+     returned `RunningLab`; the deploy is already persisted so a
+     failing lab can be inspected)
 ```
+
+`deploy()` is a thin wrapper around `deploy_inner()`: every kernel/host
+mutation records its inverse in a `Cleanup` journal (namespaces + their
+ownership tag, containers, root-namespace links such as the mgmt bridge
+and veth peers or host-side macvlan/ipvlan, spawned PIDs, the log dir,
+/etc/hosts entries, hwsim, wifi configs, subnet-pool entries). On any
+error the wrapper awaits `Cleanup::rollback()` before returning it;
+`Drop` is the synchronous last resort for panics. Namespaces created by
+nlink-lab carry a tag (`/etc/netns/<ns>/.nlink-lab`, see
+`netns_tag.rs`) and `destroy --orphans` only ever reaps tagged ones.
 
 `apply_diff` (live reconcile) shares the declarative builders
 with the initial-deploy path. `compute_layered_diff(running,

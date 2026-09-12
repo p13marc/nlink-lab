@@ -5,7 +5,7 @@
 
 use crate::error::Result;
 use crate::running::RunningLab;
-use crate::types::{Benchmark, BenchmarkAssertion, BenchmarkTest, CompareOp, EndpointRef};
+use crate::types::{Benchmark, BenchmarkAssertion, BenchmarkTest, CompareOp};
 
 /// Result of running a benchmark.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -36,22 +36,7 @@ pub struct AssertionEval {
 
 /// Run all tests in a benchmark.
 pub fn run_benchmark(lab: &RunningLab, benchmark: &Benchmark) -> Result<BenchmarkResult> {
-    let topology = lab.topology();
-
-    // Build IP map
-    let mut ip_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    for link in &topology.links {
-        if let Some(addrs) = &link.addresses {
-            for (ep, addr) in link.endpoints.iter().zip(addrs.iter()) {
-                if let Some(ep_ref) = EndpointRef::parse(ep) {
-                    let ip = addr.split('/').next().unwrap_or(addr);
-                    ip_map
-                        .entry(ep_ref.node.clone())
-                        .or_insert_with(|| ip.to_string());
-                }
-            }
-        }
-    }
+    let ip_map = crate::ipmap::build_ip_map(lab.topology());
 
     let mut test_results = Vec::new();
     let mut all_passed = true;
@@ -178,8 +163,8 @@ fn run_iperf3_benchmark(
     from: &str,
     to: &str,
     duration: Option<&str>,
-    _streams: Option<u32>,
-    _udp: bool,
+    streams: Option<u32>,
+    udp: bool,
     assertions: &[BenchmarkAssertion],
     ip_map: &std::collections::HashMap<String, String>,
 ) -> BenchmarkTestResult {
@@ -194,8 +179,14 @@ fn run_iperf3_benchmark(
         };
     };
 
-    // Check if iperf3 is available
-    if lab.exec(from, "which", &["iperf3"]).is_err() {
+    // Check if iperf3 is available. `exec` returns `Ok` with a
+    // non-zero exit code when `which` finds nothing, so the exit code
+    // is the signal — `is_err()` only fires when the exec itself fails.
+    let iperf3_present = matches!(
+        lab.exec(from, "which", &["iperf3"]),
+        Ok(out) if out.exit_code == 0
+    );
+    if !iperf3_present {
         tracing::warn!("iperf3 not found in namespace '{from}'; skipping benchmark");
         return BenchmarkTestResult {
             description: desc,
@@ -229,26 +220,14 @@ fn run_iperf3_benchmark(
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Run client
-    let output = lab.exec(from, "iperf3", &["-c", target_ip, "-t", &secs_str, "-J"]);
+    let args = iperf3_client_args(target_ip, &secs_str, streams, udp);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = lab.exec(from, "iperf3", &arg_refs);
 
     let mut metrics = std::collections::HashMap::new();
 
     if let Ok(out) = &output {
-        // Parse JSON output
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&out.stdout)
-            && let Some(end) = json.get("end")
-        {
-            if let Some(sum_sent) = end.get("sum_sent")
-                && let Some(bps) = sum_sent.get("bits_per_second").and_then(|v| v.as_f64())
-            {
-                metrics.insert("bandwidth".into(), bps);
-            }
-            if let Some(sum) = end.get("sum")
-                && let Some(jitter) = sum.get("jitter_ms").and_then(|v| v.as_f64())
-            {
-                metrics.insert("jitter".into(), jitter);
-            }
-        }
+        parse_iperf3_json(&out.stdout, &mut metrics);
     }
 
     let evals = evaluate_assertions(assertions, &metrics);
@@ -259,6 +238,61 @@ fn run_iperf3_benchmark(
         metrics,
         assertions: evals,
         passed,
+    }
+}
+
+/// Build the iperf3 client argument list. `streams` maps to `-P`, `udp`
+/// to `-u`; both were previously parsed from NLL and silently dropped.
+fn iperf3_client_args(
+    target_ip: &str,
+    secs_str: &str,
+    streams: Option<u32>,
+    udp: bool,
+) -> Vec<String> {
+    let mut args = vec![
+        "-c".to_string(),
+        target_ip.to_string(),
+        "-t".to_string(),
+        secs_str.to_string(),
+        "-J".to_string(),
+    ];
+    if let Some(n) = streams.filter(|n| *n > 1) {
+        args.push("-P".to_string());
+        args.push(n.to_string());
+    }
+    if udp {
+        args.push("-u".to_string());
+    }
+    args
+}
+
+/// Extract `bandwidth` / `jitter` / `loss` from `iperf3 -J` output.
+///
+/// TCP runs report the sender side under `end.sum_sent`; UDP runs
+/// (and multi-stream summaries) put everything under `end.sum`, which
+/// also carries `jitter_ms` and `lost_percent`.
+fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::HashMap<String, f64>) {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(stdout) else {
+        return;
+    };
+    let Some(end) = json.get("end") else {
+        return;
+    };
+    let bps_of = |key: &str| {
+        end.get(key)
+            .and_then(|s| s.get("bits_per_second"))
+            .and_then(|v| v.as_f64())
+    };
+    if let Some(bps) = bps_of("sum_sent").or_else(|| bps_of("sum")) {
+        metrics.insert("bandwidth".into(), bps);
+    }
+    if let Some(sum) = end.get("sum") {
+        if let Some(jitter) = sum.get("jitter_ms").and_then(|v| v.as_f64()) {
+            metrics.insert("jitter".into(), jitter);
+        }
+        if let Some(loss) = sum.get("lost_percent").and_then(|v| v.as_f64()) {
+            metrics.insert("loss".into(), loss);
+        }
     }
 }
 
@@ -356,6 +390,51 @@ mod tests {
         let evals = evaluate_assertions(&assertions, &metrics);
         assert!(evals[0].passed); // 10 < 50
         assert!(evals[1].passed); // 0 < 5
+    }
+
+    #[test]
+    fn test_iperf3_client_args_defaults() {
+        let args = iperf3_client_args("10.0.0.2", "5", None, false);
+        assert_eq!(args, vec!["-c", "10.0.0.2", "-t", "5", "-J"]);
+        // A single stream is iperf3's default; don't emit a no-op -P 1.
+        let args = iperf3_client_args("10.0.0.2", "5", Some(1), false);
+        assert_eq!(args, vec!["-c", "10.0.0.2", "-t", "5", "-J"]);
+    }
+
+    #[test]
+    fn test_iperf3_client_args_streams_and_udp() {
+        let args = iperf3_client_args("10.0.0.2", "10", Some(4), true);
+        assert_eq!(
+            args,
+            vec!["-c", "10.0.0.2", "-t", "10", "-J", "-P", "4", "-u"]
+        );
+    }
+
+    #[test]
+    fn test_parse_iperf3_json_tcp() {
+        let json = r#"{"end":{"sum_sent":{"bits_per_second":941000000.0},"sum_received":{"bits_per_second":939000000.0}}}"#;
+        let mut m = std::collections::HashMap::new();
+        parse_iperf3_json(json, &mut m);
+        assert_eq!(m.get("bandwidth"), Some(&941000000.0));
+        assert!(!m.contains_key("jitter"));
+    }
+
+    #[test]
+    fn test_parse_iperf3_json_udp() {
+        let json =
+            r#"{"end":{"sum":{"bits_per_second":1048576.0,"jitter_ms":0.031,"lost_percent":0.5}}}"#;
+        let mut m = std::collections::HashMap::new();
+        parse_iperf3_json(json, &mut m);
+        assert_eq!(m.get("bandwidth"), Some(&1048576.0));
+        assert_eq!(m.get("jitter"), Some(&0.031));
+        assert_eq!(m.get("loss"), Some(&0.5));
+    }
+
+    #[test]
+    fn test_parse_iperf3_json_garbage() {
+        let mut m = std::collections::HashMap::new();
+        parse_iperf3_json("iperf3: error - unable to connect", &mut m);
+        assert!(m.is_empty());
     }
 
     #[test]

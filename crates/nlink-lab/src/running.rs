@@ -34,6 +34,15 @@ pub struct RunningLab {
     saved_impairments: HashMap<String, crate::types::Impairment>,
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
     process_logs: HashMap<u32, (String, String)>,
+    /// `/proc/<pid>/stat` start time per tracked PID (see
+    /// `LabState::starttimes`). A PID without an entry is never signalled.
+    starttimes: HashMap<u32, u64>,
+    /// node → root-namespace mgmt veth peer name (see `LabState::mgmt_peers`).
+    mgmt_peers: std::collections::BTreeMap<String, String>,
+    /// Outcome of the `validate { … }` assertions run at deploy step 19.
+    /// Empty when the topology has no assertions or the lab was
+    /// [`load`](Self::load)ed from state (results are not persisted).
+    assertion_results: Vec<crate::test_runner::AssertionResult>,
 }
 
 /// Output from executing a command in a lab node.
@@ -161,14 +170,42 @@ impl RunningLab {
             pids,
             dns_injected,
             wifi_loaded,
+            starttimes: HashMap::new(),
+            mgmt_peers: std::collections::BTreeMap::new(),
             saved_impairments: HashMap::new(),
             process_logs: HashMap::new(),
+            assertion_results: Vec::new(),
         }
     }
 
     /// Get the topology used to deploy this lab.
     pub fn topology(&self) -> &Topology {
         &self.topology
+    }
+
+    /// Structured results of the topology's `validate { … }` assertions
+    /// as evaluated at the end of `deploy()` (step 19), in declaration
+    /// order. Empty if the topology has no assertions or this handle
+    /// was loaded from saved state.
+    pub fn assertion_results(&self) -> &[crate::test_runner::AssertionResult] {
+        &self.assertion_results
+    }
+
+    /// `true` if at least one deploy-time assertion did not pass —
+    /// including assertions that could not be evaluated (no target
+    /// address, exec failure). This is the check `deploy --strict`
+    /// should make before deciding to tear the lab down / exit non-zero.
+    pub fn assertions_failed(&self) -> bool {
+        self.assertion_results.iter().any(|r| !r.passed)
+    }
+
+    /// Record deploy-time assertion results (crate-internal, set by
+    /// `deploy()` step 19).
+    pub(crate) fn set_assertion_results(
+        &mut self,
+        results: Vec<crate::test_runner::AssertionResult>,
+    ) {
+        self.assertion_results = results;
     }
 
     /// Get the lab name.
@@ -305,6 +342,53 @@ impl RunningLab {
     /// Access background PIDs (crate-internal).
     pub(crate) fn pids(&self) -> &[(String, u32)] {
         &self.pids
+    }
+
+    /// Recorded start times of tracked PIDs (see [`LabState::starttimes`]).
+    pub(crate) fn starttimes(&self) -> &HashMap<u32, u64> {
+        &self.starttimes
+    }
+
+    /// Record PID start times captured at deploy time.
+    pub(crate) fn set_starttimes(&mut self, starttimes: HashMap<u32, u64>) {
+        self.starttimes = starttimes;
+    }
+
+    /// node → mgmt veth peer name created by deploy (see [`LabState::mgmt_peers`]).
+    pub(crate) fn mgmt_peers(&self) -> &std::collections::BTreeMap<String, String> {
+        &self.mgmt_peers
+    }
+
+    /// Record the mgmt veth peers created by deploy.
+    pub(crate) fn set_mgmt_peers(&mut self, peers: std::collections::BTreeMap<String, String>) {
+        self.mgmt_peers = peers;
+    }
+
+    /// RTNETLINK connection into a node's network namespace — bare
+    /// namespace or container (via its init PID). Impairment, partition
+    /// and heal used to go through `namespace_for`, which only knows
+    /// namespace nodes, so container nodes got `NodeNotFound` (issue #39).
+    pub(crate) fn route_conn_for(&self, node: &str) -> Result<Connection<Route>> {
+        if let Some(container) = self.containers.get(node) {
+            return namespace::connection_for_pid(container.pid).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "connection for container node '{node}' (pid {}): {e}",
+                    container.pid
+                ))
+            });
+        }
+        let ns_name = self.namespace_for(node)?;
+        namespace::connection_for(ns_name)
+            .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))
+    }
+
+    /// Track a freshly spawned background process: its PID and the start
+    /// time that proves the PID still belongs to it later.
+    fn track_pid(&mut self, node: &str, pid: u32) {
+        self.pids.push((node.to_string(), pid));
+        if let Some(st) = host_starttime(pid) {
+            self.starttimes.insert(pid, st);
+        }
     }
 
     /// Runtime binary (docker or podman).
@@ -554,17 +638,41 @@ impl RunningLab {
         let child = namespace::spawn_with_etc(ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         let pid = child.id();
-        self.pids.push((node.to_string(), pid));
+        self.track_pid(node, pid);
         Ok(pid)
     }
 
     /// Re-save the current state to disk (e.g., after spawning a new process).
     pub fn save_state(&self) -> Result<()> {
-        let (mut lab_state, _) = state::load(self.name())?;
+        // Take turns with a concurrent deploy/apply/destroy: this is a
+        // read-modify-write of state.json (issue #38).
+        let _lock = crate::state::lock_blocking(&self.topology.lab.name)?;
+        let (mut lab_state, _) = state::load(&self.topology.lab.name)?;
+        lab_state.namespaces = self.namespace_names.clone();
+        lab_state.containers = self.containers.clone();
+        lab_state.runtime = self.runtime_binary.clone();
+        lab_state.dns_injected = self.dns_injected;
+        lab_state.wifi_loaded = self.wifi_loaded;
         lab_state.pids = self.pids.clone();
+        lab_state.starttimes = self.starttimes.clone();
+        lab_state.mgmt_peers = self.mgmt_peers.clone();
         lab_state.saved_impairments = self.saved_impairments.clone();
         lab_state.process_logs = self.process_logs.clone();
         state::save(&lab_state, &self.topology)
+    }
+
+    /// Record a container node's new init PID (after `restart`) so every
+    /// later `/proc/<pid>/ns/net` reference targets the live container.
+    pub fn set_container_pid(&mut self, node: &str, pid: u32) -> Result<()> {
+        match self.containers.get_mut(node) {
+            Some(c) => {
+                c.pid = pid;
+                Ok(())
+            }
+            None => Err(Error::NodeNotFound {
+                name: node.to_string(),
+            }),
+        }
     }
 
     /// Spawn a background process with stdout/stderr captured to log files.
@@ -651,7 +759,7 @@ impl RunningLab {
         let child = nlink::netlink::namespace::spawn_with_etc(&ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         let pid = child.id();
-        self.pids.push((node.to_string(), pid));
+        self.track_pid(node, pid);
         self.process_logs.insert(
             pid,
             (
@@ -998,23 +1106,16 @@ impl RunningLab {
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
-        let ns_name = self.namespace_for(&ep.node)?;
-        let conn: Connection<Route> = namespace::connection_for(ns_name)
-            .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
+        let conn = self.route_conn_for(&ep.node)?;
 
         let netem = crate::deploy::build_netem(impairment)?;
 
-        // Try change first (update existing qdisc), fall back to add
-        match conn
-            .change_qdisc(&ep.iface, nlink::TcHandle::ROOT, netem.clone())
+        // `replace_qdisc` is add-or-update in one idempotent call, so no
+        // change-then-add fallback that used to swallow every error from
+        // the first attempt (issue #40).
+        conn.replace_qdisc(&ep.iface, netem)
             .await
-        {
-            Ok(()) => Ok(()),
-            Err(_) => conn
-                .add_qdisc(&ep.iface, netem)
-                .await
-                .map_err(|e| Error::deploy_failed(format!("set impairment on '{endpoint}': {e}"))),
-        }
+            .map_err(|e| Error::deploy_failed(format!("set impairment on '{endpoint}': {e}")))
     }
 
     /// Whether the given endpoint is currently in
@@ -1038,9 +1139,7 @@ impl RunningLab {
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
-        let ns_name = self.namespace_for(&ep.node)?;
-        let conn: Connection<Route> = namespace::connection_for(ns_name)
-            .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
+        let conn = self.route_conn_for(&ep.node)?;
 
         // Delete the root qdisc (removes all netem config). Idempotent:
         // a missing qdisc is the same as "already cleared" —
@@ -1155,11 +1254,20 @@ impl RunningLab {
     pub fn kill_process(&self, pid: u32) -> Result<()> {
         if !self.pids.iter().any(|(_, p)| *p == pid) {
             return Err(Error::deploy_failed(format!(
-                "PID {pid} not tracked by this lab"
+                "pid {pid} is not tracked by lab '{}'",
+                self.topology.lab.name
             )));
         }
-        kill_process(pid);
-        Ok(())
+        match kill_tracked(pid, self.starttimes.get(&pid).copied()) {
+            KillOutcome::Signalled | KillOutcome::Gone => Ok(()),
+            KillOutcome::Unverified => Err(Error::deploy_failed(format!(
+                "refusing to signal pid {pid}: its start time was not recorded (state file \
+                 written by an older release) so it cannot be proven to still be the lab's process"
+            ))),
+            KillOutcome::Reused => Err(Error::deploy_failed(format!(
+                "refusing to signal pid {pid}: it now belongs to a different process"
+            ))),
+        }
     }
 
     /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
@@ -1173,9 +1281,18 @@ impl RunningLab {
         // concurrent free_for_lab calls.
         let _ = crate::subnet_pool::free_for_lab(&self.topology.lab.name);
 
-        // 1. Kill background processes
+        // 1. Kill background processes — only those whose recorded start
+        // time still matches (issue #30).
         for (_node, pid) in &self.pids {
-            kill_process(*pid);
+            match kill_tracked(*pid, self.starttimes.get(pid).copied()) {
+                KillOutcome::Signalled | KillOutcome::Gone => {}
+                KillOutcome::Unverified => tracing::warn!(
+                    "pid {pid}: start time not recorded (older state file); not signalled"
+                ),
+                KillOutcome::Reused => {
+                    tracing::warn!("pid {pid}: now belongs to another process; not signalled")
+                }
+            }
         }
 
         // 2. Remove containers
@@ -1195,14 +1312,29 @@ impl RunningLab {
         if self.topology.lab.mgmt_host_reachable
             && let Ok(root_conn) = Connection::<Route>::new()
         {
-            let mut sorted_nodes: Vec<&str> =
-                self.namespace_names.keys().map(|s| s.as_str()).collect();
-            sorted_nodes.sort();
+            // Prefer the peer names deploy persisted; fall back to the
+            // index scheme over *every* node (namespaces and containers,
+            // matching deploy's enumeration) for state files that predate
+            // `mgmt_peers` (issue #32).
+            let peers: Vec<String> = if !self.mgmt_peers.is_empty() {
+                self.mgmt_peers.values().cloned().collect()
+            } else {
+                let mut all: Vec<&str> = self
+                    .namespace_names
+                    .keys()
+                    .chain(self.containers.keys())
+                    .map(|s| s.as_str())
+                    .collect();
+                all.sort();
+                all.dedup();
+                (0..all.len())
+                    .map(|idx| self.topology.lab.mgmt_peer_name(idx))
+                    .collect()
+            };
             // `del_link_if_exists` (nlink 0.24) treats an
             // already-absent link as Ok(false); a real failure is
             // logged but never aborts best-effort teardown.
-            for (idx, _) in sorted_nodes.iter().enumerate() {
-                let peer = self.topology.lab.mgmt_peer_name(idx);
+            for peer in &peers {
                 if let Err(e) = root_conn.del_link_if_exists(peer.as_str()).await {
                     tracing::warn!("failed to delete mgmt veth peer '{peer}': {e}");
                 }
@@ -1213,13 +1345,14 @@ impl RunningLab {
             }
         }
 
-        // 4. Delete namespaces
+        // 4. Delete namespaces (and their ownership tags)
         for ns_name in self.namespace_names.values() {
             if namespace::exists(ns_name)
                 && let Err(e) = namespace::delete(ns_name)
             {
                 tracing::warn!("failed to delete namespace '{ns_name}': {e}");
             }
+            crate::netns_tag::untag(ns_name);
         }
 
         // 4b. Delete management namespace (bridges) if it exists
@@ -1230,6 +1363,7 @@ impl RunningLab {
             {
                 tracing::warn!("failed to delete management namespace '{mgmt_ns}': {e}");
             }
+            crate::netns_tag::untag(&mgmt_ns);
         }
 
         // 5. Remove DNS hosts entries from /etc/hosts
@@ -1248,7 +1382,7 @@ impl RunningLab {
 
         // 5c. Unload mac80211_hwsim and clean up WiFi configs
         if self.wifi_loaded {
-            crate::wifi::unload_hwsim();
+            crate::wifi::release_hwsim(&self.topology.lab.name);
             crate::wifi::cleanup_configs(&self.topology.lab.name);
         }
 
@@ -1271,6 +1405,9 @@ impl RunningLab {
             wifi_loaded: lab_state.wifi_loaded,
             saved_impairments: lab_state.saved_impairments,
             process_logs: lab_state.process_logs,
+            starttimes: lab_state.starttimes,
+            mgmt_peers: lab_state.mgmt_peers,
+            assertion_results: Vec::new(),
         })
     }
 
@@ -1520,17 +1657,57 @@ fn run_with_optional_timeout(
     }
 }
 
-/// Best-effort kill of a process.
-fn kill_process(pid: u32) {
+/// Start time (clock ticks since boot, field 22 of `/proc/<pid>/stat`)
+/// of a process on the host, or `None` when it no longer exists.
+///
+/// PIDs are recycled; the pair `(pid, starttime)` is not. Everything
+/// that signals a tracked PID checks this first (issue #30).
+pub(crate) fn host_starttime(pid: u32) -> Option<u64> {
+    let text = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // `comm` may contain spaces/parens: parse from the last ')'.
+    let rest = &text[text.rfind(')')? + 1..];
+    // fields after ')' start at field 3 (state); starttime is field 22.
+    rest.split_whitespace().nth(22 - 3)?.parse().ok()
+}
+
+/// Result of an identity-checked signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KillOutcome {
+    /// The process was ours and has been signalled.
+    Signalled,
+    /// The PID no longer exists — nothing to do.
+    Gone,
+    /// No start time was recorded for this PID, so it cannot be proven
+    /// to be ours; not signalled.
+    Unverified,
+    /// The PID exists but its start time differs — reused by another
+    /// process; not signalled.
+    Reused,
+}
+
+/// Best-effort, identity-checked kill of a tracked process: SIGTERM,
+/// a short grace period, then SIGKILL — but only when the PID's current
+/// start time matches the one recorded at spawn.
+pub(crate) fn kill_tracked(pid: u32, expected_starttime: Option<u64>) -> KillOutcome {
+    let Some(current) = host_starttime(pid) else {
+        return KillOutcome::Gone;
+    };
+    match expected_starttime {
+        None => return KillOutcome::Unverified,
+        Some(expected) if expected != current => return KillOutcome::Reused,
+        Some(_) => {}
+    }
     unsafe {
-        // Try SIGTERM first
         libc::kill(pid as i32, libc::SIGTERM);
     }
-    // Give it a moment, then SIGKILL
     std::thread::sleep(std::time::Duration::from_millis(100));
-    unsafe {
-        libc::kill(pid as i32, libc::SIGKILL);
+    // Re-check before the SIGKILL: the grace period is a window too.
+    if host_starttime(pid) == Some(current) {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGKILL);
+        }
     }
+    KillOutcome::Signalled
 }
 
 /// Check whether a process is alive **and not a zombie**.
@@ -1697,5 +1874,37 @@ mod proc_net_tcp_tests {
             "  sl  local_address ...\n",
             "1F90"
         ));
+    }
+}
+
+#[cfg(test)]
+mod pid_identity_tests {
+    use super::*;
+
+    #[test]
+    fn host_starttime_of_self_is_stable_and_nonzero() {
+        let me = std::process::id();
+        let a = host_starttime(me).expect("own /proc entry");
+        let b = host_starttime(me).expect("own /proc entry");
+        assert_eq!(a, b);
+        assert!(a > 0);
+    }
+
+    #[test]
+    fn host_starttime_of_missing_pid_is_none() {
+        // PID_MAX is 4194304 on 64-bit; nothing lives above it.
+        assert_eq!(host_starttime(4_194_305), None);
+    }
+
+    #[test]
+    fn kill_tracked_never_signals_unverified_or_reused() {
+        let me = std::process::id();
+        let real = host_starttime(me).unwrap();
+        // No recorded start time → refuse (would otherwise SIGTERM the test runner).
+        assert_eq!(kill_tracked(me, None), KillOutcome::Unverified);
+        // Wrong start time → the PID was reused → refuse.
+        assert_eq!(kill_tracked(me, Some(real + 1)), KillOutcome::Reused);
+        // Gone PID → nothing to do, regardless of the recorded value.
+        assert_eq!(kill_tracked(4_194_305, Some(1)), KillOutcome::Gone);
     }
 }

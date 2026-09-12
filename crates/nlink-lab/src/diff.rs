@@ -414,7 +414,7 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
             None => {
                 diff.impairments_added.push((ep.clone(), new_imp.clone()));
             }
-            Some(old_imp) if impairment_differs(old_imp, new_imp) => {
+            Some(old_imp) if old_imp != new_imp => {
                 diff.impairments_changed.push(ImpairmentChange {
                     endpoint: ep.clone(),
                     old: old_imp.clone(),
@@ -620,15 +620,6 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     diff.nftables_changed.sort_by(|a, b| a.node.cmp(&b.node));
 
     diff
-}
-
-fn impairment_differs(a: &Impairment, b: &Impairment) -> bool {
-    a.delay != b.delay
-        || a.jitter != b.jitter
-        || a.loss != b.loss
-        || a.rate != b.rate
-        || a.corrupt != b.corrupt
-        || a.reorder != b.reorder
 }
 
 #[cfg(test)]

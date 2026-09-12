@@ -139,10 +139,17 @@ fn parse_root_qdisc(kind: &str, tokens: &[&str]) -> ImpairShow {
 /// `"10ms"` → 10.0; `"50.0ms"` → 50.0; `"1s"` → 1000.0; `"500us"` →
 /// 0.5. Returns `None` for anything that doesn't end in a known unit.
 fn parse_duration_ms(s: &str) -> Option<f64> {
+    // Same unit set as the lexer / `helpers::parse_duration` (issue #26).
     let (num, mul) = if let Some(rest) = s.strip_suffix("ms") {
         (rest, 1.0)
     } else if let Some(rest) = s.strip_suffix("us") {
         (rest, 0.001)
+    } else if let Some(rest) = s.strip_suffix("ns") {
+        (rest, 0.000_001)
+    } else if let Some(rest) = s.strip_suffix('h') {
+        (rest, 3_600_000.0)
+    } else if let Some(rest) = s.strip_suffix('m') {
+        (rest, 60_000.0)
     } else {
         let rest = s.strip_suffix('s')?;
         (rest, 1000.0)
@@ -210,6 +217,17 @@ mod tests {
                 .unwrap();
         assert_eq!(out.delay_ms, Some(50.0));
         assert_eq!(out.jitter_ms, None);
+    }
+
+    #[test]
+    fn duration_units_match_the_lexer() {
+        assert_eq!(parse_duration_ms("10ms"), Some(10.0));
+        assert_eq!(parse_duration_ms("500us"), Some(0.5));
+        assert_eq!(parse_duration_ms("2000ns"), Some(0.002));
+        assert_eq!(parse_duration_ms("2s"), Some(2000.0));
+        assert_eq!(parse_duration_ms("1m"), Some(60_000.0));
+        assert_eq!(parse_duration_ms("1h"), Some(3_600_000.0));
+        assert_eq!(parse_duration_ms("7"), None);
     }
 
     #[test]

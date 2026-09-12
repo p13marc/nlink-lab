@@ -15,9 +15,22 @@ use crate::error::{Error, Result};
 /// cgroup v2 mount point.
 pub const ROOT: &str = "/sys/fs/cgroup";
 
-/// Whether a writable cgroup v2 hierarchy is mounted.
+/// Whether a cgroup v2 hierarchy is mounted at [`ROOT`].
 pub fn available() -> bool {
     Path::new(ROOT).join("cgroup.controllers").is_file()
+}
+
+/// Whether the `cpu` and `memory` controllers are enabled for children
+/// of [`ROOT`]. Inside a container the visible root is the container's
+/// own (populated) cgroup, whose `cgroup.subtree_control` cannot be
+/// changed (cgroup v2's "no internal processes" rule) and is usually
+/// empty — the hierarchy is there but limits cannot be enforced.
+pub fn controllers_delegated() -> bool {
+    let Ok(ctl) = std::fs::read_to_string(Path::new(ROOT).join("cgroup.subtree_control")) else {
+        return false;
+    };
+    let has = |c: &str| ctl.split_whitespace().any(|x| x == c);
+    has("cpu") && has("memory")
 }
 
 fn lab_dir(lab: &str) -> PathBuf {
@@ -103,8 +116,29 @@ pub fn ensure_node(
         );
         return Ok(None);
     }
+    // The real root accepts this (it is exempt from the no-internal-
+    // processes rule); a container's namespaced root refuses with EBUSY.
+    enable_controllers(Path::new(ROOT));
     enable_controllers(Path::new(ROOT).join("nlink-lab").as_path());
     enable_controllers(&lab_dir(lab));
+    let missing: Vec<&str> = [
+        (cpu_line.is_some(), "cpu", "cpu.max"),
+        (mem_bytes.is_some(), "memory", "memory.max"),
+    ]
+    .into_iter()
+    .filter(|(wanted, _, file)| *wanted && !dir.join(file).is_file())
+    .map(|(_, ctl, _)| ctl)
+    .collect();
+    if !missing.is_empty() {
+        tracing::warn!(
+            "node '{node}': cgroup controller(s) {} not delegated below {ROOT} \
+             (container without cgroup delegation?); limits ignored",
+            missing.join(", ")
+        );
+        let _ = std::fs::remove_dir(&dir);
+        let _ = std::fs::remove_dir(lab_dir(lab));
+        return Ok(None);
+    }
     if let Some(line) = cpu_line
         && let Err(e) = std::fs::write(dir.join("cpu.max"), &line)
     {
@@ -123,12 +157,31 @@ pub fn attach(dir: &Path, pid: u32) -> std::io::Result<()> {
     std::fs::write(dir.join("cgroup.procs"), pid.to_string())
 }
 
-/// Remove every cgroup of the lab (processes must be gone). Best effort.
+/// Remove every cgroup of the lab. Best effort: the lab's tracked
+/// processes have already been signalled, but a cgroup cannot be
+/// removed until they have actually exited (and untracked children of
+/// a spawned shell may still be inside), so each node cgroup is asked
+/// to kill its members (`cgroup.kill`, Linux ≥ 5.14) and given a moment
+/// to drain before the `rmdir`.
 pub fn remove_lab(lab: &str) {
     let dir = lab_dir(lab);
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for e in entries.flatten() {
-            let _ = std::fs::remove_dir(e.path());
+            let node = e.path();
+            let _ = std::fs::write(node.join("cgroup.kill"), "1");
+            let procs = node.join("cgroup.procs");
+            for _ in 0..20 {
+                let populated = std::fs::read_to_string(&procs)
+                    .map(|p| p.lines().any(|l| !l.trim().is_empty()))
+                    .unwrap_or(false);
+                if !populated {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            if let Err(err) = std::fs::remove_dir(&node) {
+                tracing::warn!("cgroup {}: not removed: {err}", node.display());
+            }
         }
     }
     let _ = std::fs::remove_dir(&dir);

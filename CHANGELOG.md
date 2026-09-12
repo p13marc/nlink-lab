@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — audit leftovers (issues #26, #27, #53)
+
+- **One loop engine (#26).** `for` inside `nat { }` and `network { }`
+  blocks and `[for i in a..b : t]` list expressions used three different
+  substitution rules and skipped the iteration cap. nat/network loops are
+  now AST nodes expanded during lowering — `${count}` bounds, arithmetic,
+  `loop.index/first/last` and the enclosing `let`/`param` scope all work,
+  NAT rule order is preserved — and list expressions go through the same
+  engine (literal bounds only; a `${…}` bound is a clear error).
+- **Parse errors carry their offset as data (#26).** `Error::NllParseAt {
+  message, offset }` replaces the `[at byte N]` text that was scraped back
+  out in three places; end-of-input errors now point at the end of the
+  last token. `parser::nll::{ast, parser, lower}` are crate-private
+  (`lexer::lex` stays public for the fuzz target). Template node/link
+  counts are verified by a test (spine-leaf and wireguard were wrong);
+  `lab "my lab"` renders; the tc duration parser accepts `ns`/`m`/`h`.
+- **Editor grammar is conformance-tested (#27).** The tree-sitter grammar
+  now parses every file under `examples/` (18 of 43 failed before:
+  floats, inline `parent`/`mode`, `host-reachable`, `ct established,related`,
+  interpolated names and addresses, `host(…)/24`, per-pair `impair` and
+  `for` inside `network`, `${…}` loop bounds, list for-expressions, globs,
+  trailing commas, bare `port x`, late `cmd`, trailing `background`, `at
+  +5s`, tcp-connect `retries`/`interval`, `burst`, `healthcheck-*`), uses
+  keyword extraction, and no longer spells keywords the language lacks
+  (`interface`, `type`, `state`); the `TREE_SITTER_GAPS` list is empty and
+  a reverse gate keeps it honest. New CI job `tree-sitter` (generate +
+  diff, corpus, parse every example) and `just tree-sitter`. The design
+  doc's grammar section is synced (statement list, network `impair`/`for`,
+  `port name`, relative `at +`, interpolated bounds, list for-expressions).
+- **Release lane (#53).** Refuses to release unless `ci.yml` is green for
+  the tagged commit; the internal API base is defined once; the flatpak
+  export push authenticates through a credential helper instead of a
+  token in the URL; the AppStream metainfo gets a `<release>` entry per
+  tag.
+
 ### Changed — apply completeness (issues #83–#86, #30)
 
 - **VRF-table routes converge on apply (#83).** They are explicit

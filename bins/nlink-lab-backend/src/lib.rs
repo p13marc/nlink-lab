@@ -17,7 +17,7 @@
 //!
 //! - publishes the topology once on the `topology` topic and holds a
 //!   liveliness token on the `health` key;
-//! - publishes [`HealthStatus`](nlink_lab_shared::messages::HealthStatus)
+//! - publishes `HealthStatus`
 //!   every [`HEALTH_INTERVAL`] and a
 //!   [`MetricsSnapshot`](nlink_lab_shared::metrics::MetricsSnapshot) (plus
 //!   one per-interface sample) every [`BackendOpts::interval`];

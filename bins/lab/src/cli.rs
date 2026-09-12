@@ -26,32 +26,6 @@ impl From<WaitLogStream> for nlink_lab::LogStream {
     }
 }
 
-/// Plan 159b — clap value-enum bridge for
-/// [`nlink_lab::WatchFamily`].
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
-pub enum WatchFamilyArg {
-    Route,
-    Nftables,
-    Both,
-}
-
-impl From<WatchFamilyArg> for nlink_lab::WatchFamily {
-    fn from(v: WatchFamilyArg) -> Self {
-        match v {
-            WatchFamilyArg::Route => nlink_lab::WatchFamily::Route,
-            WatchFamilyArg::Nftables => nlink_lab::WatchFamily::Nftables,
-            WatchFamilyArg::Both => nlink_lab::WatchFamily::Both,
-        }
-    }
-}
-
-/// `metrics --format` values.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MetricsFormat {
-    Table,
-    Json,
-}
-
 #[derive(Subcommand)]
 pub enum Commands {
     /// Deploy a lab from a topology file (.nll).
@@ -63,43 +37,7 @@ pub enum Commands {
     /// Combined with `--unique`, the `name` field is the chosen unique
     /// lab name (original name + PID suffix). Useful for scripted
     /// teardown.
-    Deploy {
-        /// Path to the topology file (.nll).
-        topology: PathBuf,
-
-        /// Validate only, don't actually deploy.
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Destroy existing lab with same name before deploying.
-        #[arg(long)]
-        force: bool,
-
-        /// Start the Zenoh backend daemon after deploying.
-        #[arg(long)]
-        daemon: bool,
-
-        /// Skip validate block assertions after deploy.
-        #[arg(long)]
-        skip_validate: bool,
-
-        /// Set NLL parameters (can be repeated: --set key=value).
-        #[arg(long = "set", value_name = "KEY=VALUE")]
-        params: Vec<String>,
-
-        /// Append suffix to lab name (for parallel test safety).
-        #[arg(long)]
-        suffix: Option<String>,
-
-        /// Fail (exit 2) when any `validate { … }` assertion fails after
-        /// deploy. The lab stays deployed for inspection.
-        #[arg(long)]
-        strict: bool,
-
-        /// Auto-generate unique lab name suffix (appends PID).
-        #[arg(long)]
-        unique: bool,
-    },
+    Deploy(cmd::deploy::Args),
 
     /// Apply topology changes to a running lab.
     ///
@@ -107,44 +45,10 @@ pub enum Commands {
     /// issuing only the deltas. Add `--check` to fail on any drift
     /// (a CI gate). Add `--json --dry-run` for machine-parseable
     /// diff output.
-    Apply {
-        /// Path to the updated topology file (.nll).
-        topology: PathBuf,
-
-        /// Set a `param` value (repeatable): --set wan_delay=50ms. Use the
-        /// same values the lab was deployed with.
-        #[arg(long = "set", value_name = "KEY=VALUE")]
-        params: Vec<String>,
-
-        /// Show what would change without applying.
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Drift check — exit non-zero if the live lab differs from
-        /// the NLL. Useful as a CI gate. Implies --dry-run.
-        #[arg(long)]
-        check: bool,
-    },
+    Apply(cmd::apply::Args),
 
     /// Tear down a running lab.
-    Destroy {
-        /// Lab name (omit with --all or --orphans).
-        name: Option<String>,
-
-        /// Continue cleanup even if some resources are already gone.
-        #[arg(long)]
-        force: bool,
-
-        /// Destroy all running labs.
-        #[arg(long)]
-        all: bool,
-
-        /// Also reap mgmt bridges / veths / namespaces with no state file
-        /// (left behind by a crashed deploy). Implies best-effort cleanup;
-        /// can be combined with --all or used on its own.
-        #[arg(long)]
-        orphans: bool,
-    },
+    Destroy(cmd::destroy::Args),
 
     /// Show running labs or details of a specific lab.
     ///
@@ -164,16 +68,7 @@ pub enum Commands {
     ///   + a `host_resources` block (mgmt bridge, declared subnets).
     ///
     /// Schema: docs/json-schemas/status-lab.schema.json
-    Status {
-        /// Lab name (omit to list all).
-        name: Option<String>,
-
-        /// Also scan the host for mgmt bridges / namespaces with no
-        /// matching state file (orphans), and labs whose state file
-        /// claims namespaces no longer present on the host (stale).
-        #[arg(long)]
-        scan: bool,
-    },
+    Status(cmd::status::Args),
 
     /// Run a command in a lab node.
     Exec {
@@ -296,26 +191,7 @@ pub enum Commands {
     Validate(cmd::validate::Args),
 
     /// Run topology tests: deploy, validate, destroy.
-    Test {
-        /// Topology file or directory of .nll files.
-        path: PathBuf,
-
-        /// Set a `param` value (repeatable) for every file: --set k=v.
-        #[arg(long = "set", value_name = "KEY=VALUE")]
-        params: Vec<String>,
-
-        /// Write JUnit XML results to file.
-        #[arg(long)]
-        junit: Option<PathBuf>,
-
-        /// Write TAP output to stdout.
-        #[arg(long)]
-        tap: bool,
-
-        /// Stop on first failure.
-        #[arg(long)]
-        fail_fast: bool,
-    },
+    Test(cmd::test::Args),
 
     /// Modify link impairment at runtime.
     ///
@@ -402,14 +278,7 @@ pub enum Commands {
     ///
     /// JSON OUTPUT (with `--json`): the full `ScenarioResult` (steps,
     /// actions, assertion outcomes, timings). Exit 2 when any step fails.
-    Scenario {
-        /// Lab name (must be deployed).
-        lab: String,
-
-        /// Scenario name as declared in the topology (`scenario "name" { … }`).
-        /// Omit to list the scenarios the lab defines.
-        name: Option<String>,
-    },
+    Scenario(cmd::scenario::Args),
 
     /// Regenerate `docs/cli/*.md` from the clap definitions (maintainers).
     #[command(hide = true)]
@@ -667,14 +536,7 @@ pub enum Commands {
     },
 
     /// Wait for a lab to be ready.
-    Wait {
-        /// Lab name.
-        name: String,
-
-        /// Timeout in seconds (default: 30).
-        #[arg(short, long, default_value = "30")]
-        timeout: u64,
-    },
+    Wait(cmd::wait::Args),
 
     /// Tail nftables + RTNETLINK drift events for a running lab.
     ///
@@ -682,28 +544,7 @@ pub enum Commands {
     /// per kernel mutation — useful for spotting hand-edits that
     /// bypass `nlink-lab apply`. `--json` emits NDJSON for
     /// piping to `jq`. Plan 159b.
-    Watch {
-        /// Lab name.
-        lab: String,
-
-        /// Event family: route, nftables, or both.
-        #[arg(long, value_enum, default_value_t = WatchFamilyArg::Both)]
-        family: WatchFamilyArg,
-
-        /// Restrict subscription to a single node. Without this
-        /// flag, every node in the lab is subscribed. Filter is
-        /// pre-subscription — we don't open connections we don't
-        /// need.
-        #[arg(long)]
-        node: Option<String>,
-
-        /// Show resync replay frames after ENOBUFS recoveries.
-        /// By default they're silenced — the user only sees
-        /// live multicast deltas. With this flag, snapshot
-        /// frames render with a `[snapshot]` marker.
-        #[arg(long)]
-        include_snapshot: bool,
-    },
+    Watch(cmd::watch::Args),
 
     /// Wait for a service or condition inside a lab node.
     WaitFor {
@@ -760,30 +601,7 @@ pub enum Commands {
     /// or `--output FILE`. With `--archive`, produces a portable
     /// `.nlz` lab archive (tar.gz with manifest + topology + params
     /// + rendered + checksums) suitable for sharing repros.
-    Export {
-        /// Lab name (or path to an .nll file with --archive).
-        lab: String,
-
-        /// Output file (default: stdout for plain export, `./<lab>.nlz` with `--archive`).
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-
-        /// Produce a portable `.nlz` archive instead of plain TOML/JSON.
-        #[arg(long)]
-        archive: bool,
-
-        /// (with --archive) Include live state (PIDs, ns names) for inspection.
-        #[arg(long, requires = "archive")]
-        include_running_state: bool,
-
-        /// (with --archive) Skip the rendered.toml snapshot.
-        #[arg(long, requires = "archive")]
-        no_rendered: bool,
-
-        /// (with --archive) NLL `param` overrides recorded in the archive.
-        #[arg(long = "set", value_name = "KEY=VALUE", requires = "archive")]
-        set_params: Vec<String>,
-    },
+    Export(cmd::export::Args),
 
     /// Import a `.nlz` lab archive.
     ///
@@ -792,32 +610,14 @@ pub enum Commands {
     /// validate without deploying; `--no-reparse` to use the bundled
     /// rendered.toml directly (useful when the archive was produced
     /// by a newer nlink-lab whose NLL syntax we don't fully understand).
-    Import {
-        /// Path to a `.nlz` archive.
-        archive: PathBuf,
-
-        /// Extract to this directory. Default: `./<lab-name>/`
-        #[arg(short = 'd', long)]
-        dir: Option<PathBuf>,
-
-        /// Extract + validate only; don't deploy.
-        #[arg(long)]
-        no_deploy: bool,
-
-        /// Use the archive's rendered.toml as-is, skip re-parsing the NLL.
-        #[arg(long)]
-        no_reparse: bool,
-    },
+    Import(cmd::import::Args),
 
     /// Show comprehensive lab details, OR summarize a `.nlz` archive.
     ///
     /// If LAB is a path ending in `.nlz`, summarizes the archive
     /// (manifest + node/link/network counts) without extracting.
     /// Otherwise, behaves as before — runs against a deployed lab.
-    Inspect {
-        /// Lab name, or path to a `.nlz` archive.
-        lab: String,
-    },
+    Inspect(cmd::inspect::Args),
 
     /// List container nodes in a running lab.
     Containers {
@@ -882,48 +682,10 @@ pub enum Commands {
     },
 
     /// Start the Zenoh backend daemon for a running lab.
-    Daemon {
-        /// Lab name (must be deployed).
-        lab: String,
-
-        /// Metrics collection interval in seconds.
-        #[arg(short, long, default_value = "2")]
-        interval: u64,
-
-        /// Zenoh mode: peer or client.
-        #[arg(long, default_value = "peer")]
-        zenoh_mode: String,
-
-        /// Zenoh listen endpoint.
-        #[arg(long)]
-        zenoh_listen: Option<String>,
-
-        /// Zenoh connect endpoint.
-        #[arg(long)]
-        zenoh_connect: Option<String>,
-    },
+    Daemon(cmd::daemon::Args),
 
     /// Stream live metrics from a lab via Zenoh (no root required).
-    Metrics {
-        /// Lab name.
-        lab: String,
-
-        /// Filter to specific node.
-        #[arg(short, long)]
-        node: Option<String>,
-
-        /// Output format (`--json` selects json too).
-        #[arg(short, long, value_enum, default_value_t = MetricsFormat::Table)]
-        format: MetricsFormat,
-
-        /// Number of samples then exit.
-        #[arg(short, long)]
-        count: Option<usize>,
-
-        /// Zenoh connect endpoint.
-        #[arg(long)]
-        zenoh_connect: Option<String>,
-    },
+    Metrics(cmd::metrics::Args),
 
     /// Create a topology file from a built-in template.
     Init(cmd::init::Args),

@@ -35,7 +35,7 @@ type Result<T> = std::result::Result<T, Error>;
 /// `"[^"]*"`, so it cannot be escaped), a node name the name grammar
 /// cannot express, a firewall match expression outside the `match_expr`
 /// grammar, or an interface kind (bond/vlan) the language has no block
-/// for (a `"` in a name, an interface kind NLL cannot spell, …).
+/// for.
 pub fn try_render(topology: &Topology) -> Result<String> {
     let mut out = String::new();
 

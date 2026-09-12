@@ -23,6 +23,11 @@ pub struct Args {
     /// Zenoh connect endpoint.
     #[arg(long)]
     pub zenoh_connect: Option<String>,
+
+    /// Also serve /metrics (OpenMetrics) and /api/v1/{snapshot,health,topology}
+    /// over HTTP on this address, e.g. 127.0.0.1:9464 (#64).
+    #[arg(long, value_name = "ADDR")]
+    pub http: Option<std::net::SocketAddr>,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -32,6 +37,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         zenoh_mode,
         zenoh_listen,
         zenoh_connect,
+        http,
     } = args;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
@@ -43,6 +49,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         zenoh_mode: zenoh_mode.parse()?,
         zenoh_listen: zenoh_listen.into_iter().collect(),
         zenoh_connect: zenoh_connect.into_iter().collect(),
+        http,
     };
     if !ctx.quiet {
         println!(

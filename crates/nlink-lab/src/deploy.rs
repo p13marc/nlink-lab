@@ -459,8 +459,15 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
                     ))
                 })?;
 
-                // Apply VLAN configuration for this port if defined
-                if let Some(port_config) = network.ports.get(&ep.node) {
+                // Apply VLAN configuration for this port if defined. Port
+                // keys are `node:iface` since the port-key normalisation;
+                // fall back to the bare node for topologies persisted by
+                // older releases.
+                if let Some(port_config) = network
+                    .ports
+                    .get(&format!("{}:{}", ep.node, ep.iface))
+                    .or_else(|| network.ports.get(&ep.node))
+                {
                     // Apply tagged VLANs
                     for &vid in &port_config.vlans {
                         let mut vlan = BridgeVlanBuilder::new(vid).dev(&peer_name);

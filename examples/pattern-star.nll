@@ -4,7 +4,7 @@
 
 lab "pattern-star"
 
-pool access 10.0.0.0/24 /24
+pool access 10.0.0.0/16 /24
 
 profile router { forward ipv4 }
 

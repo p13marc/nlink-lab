@@ -412,12 +412,77 @@ pub struct ImpairProps {
     pub reorder: Option<String>,
 }
 
+impl ImpairProps {
+    /// True when no property is set.
+    pub fn is_empty(&self) -> bool {
+        self.delay.is_none()
+            && self.jitter.is_none()
+            && self.loss.is_none()
+            && self.rate.is_none()
+            && self.corrupt.is_none()
+            && self.reorder.is_none()
+    }
+
+    /// Overlay `other` onto `self`: every property set in `other` wins,
+    /// properties absent from `other` are kept. Used so that properties
+    /// spread over several lines of a block accumulate instead of the
+    /// last line replacing the earlier ones.
+    pub fn merge(&mut self, other: ImpairProps) {
+        let ImpairProps {
+            delay,
+            jitter,
+            loss,
+            rate,
+            corrupt,
+            reorder,
+        } = other;
+        if delay.is_some() {
+            self.delay = delay;
+        }
+        if jitter.is_some() {
+            self.jitter = jitter;
+        }
+        if loss.is_some() {
+            self.loss = loss;
+        }
+        if rate.is_some() {
+            self.rate = rate;
+        }
+        if corrupt.is_some() {
+            self.corrupt = corrupt;
+        }
+        if reorder.is_some() {
+            self.reorder = reorder;
+        }
+    }
+}
+
 /// Rate limiting properties.
 #[derive(Debug, Clone, Default)]
 pub struct RateProps {
     pub egress: Option<String>,
     pub ingress: Option<String>,
     pub burst: Option<String>,
+}
+
+impl RateProps {
+    /// Overlay `other` onto `self` (see [`ImpairProps::merge`]).
+    pub fn merge(&mut self, other: RateProps) {
+        let RateProps {
+            egress,
+            ingress,
+            burst,
+        } = other;
+        if egress.is_some() {
+            self.egress = egress;
+        }
+        if ingress.is_some() {
+            self.ingress = ingress;
+        }
+        if burst.is_some() {
+            self.burst = burst;
+        }
+    }
 }
 
 /// Link definition.

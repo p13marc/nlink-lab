@@ -10,4 +10,4 @@ lab "ring-with-monitor"
 
 node monitor { route default via ${backbone.r1.eth0} }
 
-link backbone.r1:mon0 -- monitor:eth0 { 172.16.0.0/30 }
+link backbone.r1:mon0 -- monitor:eth0 { subnet 172.16.0.0/30 }

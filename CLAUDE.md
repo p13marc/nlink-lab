@@ -80,7 +80,7 @@ nlink-lab render examples/spine-leaf.nll
 # Capture packets on an interface (uses netring, zero-copy AF_PACKET)
 sudo nlink-lab capture simple router:eth0
 sudo nlink-lab capture simple router:eth0 -w trace.pcap
-sudo nlink-lab capture simple router:eth0 -f "tcp port 80" -c 100 --duration 30
+sudo nlink-lab capture simple router:eth0 --filter-tcp --filter-port 80 -c 100 --duration 30
 
 # Show process logs (captured automatically for all background processes)
 nlink-lab logs simple --pid 12345

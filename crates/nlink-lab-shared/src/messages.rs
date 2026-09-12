@@ -3,7 +3,7 @@
 //! All fields are `#[serde(default)]` and the top-level messages carry a
 //! `wire_version` (see the crate docs for the compatibility contract).
 //! The `Default` impls of versioned messages stamp
-//! [`WIRE_VERSION`](crate::WIRE_VERSION) so `Msg { field, ..Default::default() }`
+//! `WIRE_VERSION` so `Msg { field, ..Default::default() }`
 //! produces a correctly-tagged message; a *decoded* message whose sender
 //! omitted the field reads `0`.
 

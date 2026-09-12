@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — CLI, backend, test macro (wave 4 of the deep-analysis series)
+
+- **One exit-code policy (#42, #46).** 0 success · 1 error · 2 validation /
+  assertion / drift failure · 124 timeout · `exec`/`shell` pass the child's
+  code through. `exec --json` used to exit 0 on a failed command *and* on
+  a lab error; `test` and `validate` now exit 2 on failures; every
+  `std::process::exit` in a subcommand arm is gone (destructors and
+  buffered output run). The `--json` error envelope carries `exit_code`
+  and, for validation failures, the structured `issues`.
+- **Privilege check is fatal and correct (#44).** It used to *warn* and
+  accept any capability bit (`CapEff != 0`); it now requires root or
+  CAP_NET_ADMIN + CAP_SYS_ADMIN and fails before any namespace work, on
+  every command that needs it (`import` included).
+- **`--set KEY=VALUE` on every topology-reading command (#45):** `apply`
+  (a lab deployed with `--set` could not be reconciled), `graph`, `diff`,
+  `pull`, `test`.
+- **`--json` everywhere it was missing or broken (#46):** `validate`
+  (`{lab, valid, errors, warnings, issues[]}`), `containers`/`stats` emit
+  `[]` instead of prose when there are no containers (`stats --json` is
+  the runtime's per-container JSON), `impair` mutations report
+  `{lab, endpoint, action, peer}`, `deploy --json` includes the assertion
+  results, `metrics --format` is a value enum and honours the global
+  `--json`. `init --format` (parsed and ignored) is removed. `impair`'s
+  `--show/--clear/--partition/--heal` are mutually exclusive at parse time.
+- **`graph` and `render --ascii` render `network` blocks (#47)** — the
+  README's headline example produced an empty graph. New `graph --mermaid`
+  for inline diagrams in markdown. Malformed endpoints no longer panic.
+- **`logs --tail N`** reads the tail of the file instead of loading a
+  service log wholesale.
+- **`deploy --strict`** exits 2 when a `validate { … }` assertion fails
+  (the lab stays deployed for inspection); failures are listed either way.
+- **`nlink-lab scenario <lab> [name]`** runs (or lists) the `scenario`
+  blocks of a deployed lab — the docs described this command but it did
+  not exist.
+- **`daemon` runs the real backend (#43).** `nlink-lab-backend` is a
+  library + thin binary; the CLI's private fork (which ignored
+  `--interval`/`--zenoh-*`, served no RPC and published no events) is
+  deleted. `deploy --daemon` uses it too.
+- **Wire format (#49):** every field on every zenoh message is
+  `#[serde(default)]` and top-level messages carry `wire_version`;
+  `ImpairmentRequest` gains `rate` (the RPC used to wipe an existing rate
+  cap) and an explicit `clear`; `ProcessExited` events are emitted;
+  `container_count` is real.
+- **`#[lab_test]` (#50):** hygienic expansion (consumers need only
+  `nlink-lab` as a dev-dependency — documented), **fails** instead of
+  silently passing without root unless `NLINK_LAB_SKIP_ROOT_TESTS=1`,
+  destroys before disarming its guard, and cleans up through nlink
+  (namespaces + tags, mgmt links, containers, `/etc/hosts`, hwsim, subnet
+  pool, state) instead of shelling out to `ip`.
+- **`docs/cli/*.md` reference blocks are generated** (`nlink-lab docs-gen`,
+  `just docs-cli`) and diffed in CI; hand-written prose above the marker
+  is kept. Pages for `watch`, `proc-stat` and `scenario` exist now;
+  `apply.md` documents the v3 JSON envelope; `docs/cli/README.md`'s exit
+  codes and global flags match the binary (#51).
+
+### Changed — CLI (breaking)
+
+- Exit codes: validation/assertion/drift failures are **2** (were 1);
+  `exec --json` exits with the child's code (was 0).
+- `init --format` removed; `metrics --format` accepts `table|json` only.
+- `impair` rejects combinations of `--show/--clear/--partition/--heal`.
+- The privilege warning is now an error.
+
 ### Fixed — runtime safety (wave 3 of the deep-analysis series)
 
 - **PIDs are never signalled blindly (#30).** `state.json` records each

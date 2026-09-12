@@ -127,7 +127,7 @@ test) but does not run named scenarios. To execute the
 `partition-and-heal` scenario:
 
 ```bash
-sudo nlink-lab scenario run p2p-partition partition-and-heal
+sudo nlink-lab scenario p2p-partition partition-and-heal
 ```
 
 Output:
@@ -199,7 +199,7 @@ Run as part of an integration suite:
 
 ```bash
 sudo nlink-lab deploy examples/cookbook/p2p-partition.nll
-sudo nlink-lab scenario run --json p2p-partition partition-and-heal > /tmp/result.json
+sudo nlink-lab --json scenario p2p-partition partition-and-heal > /tmp/result.json
 RC=$?
 sudo nlink-lab destroy p2p-partition
 exit $RC
@@ -217,7 +217,7 @@ machine-readable CI reports.
   [`impair`](../cli/impair.md) CLI.
 - **Multiple scenarios per topology**: declare several `scenario
   "name" { … }` blocks and run them by name. The deploy step
-  installs all of them; `scenario run` selects which fires.
+  installs all of them; `scenario <lab> <name>` selects which fires.
 - **Long scenarios with periodic checks**: a scenario can run
   for hours. Common pattern: `at 0s` to start, then `at 60s`,
   `at 120s`, `at 180s`, … each with a quick `validate` to catch

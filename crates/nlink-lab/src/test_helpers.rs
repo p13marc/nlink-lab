@@ -270,7 +270,7 @@ pub fn cleanup_lab_blocking(topology: &Topology) -> CleanupReport {
         warnings: vec![msg],
         ..CleanupReport::default()
     };
-    let handle = thread::Builder::new()
+    let handle = std::thread::Builder::new()
         .name(format!("lab-cleanup-{lab_name}"))
         .spawn(move || {
             match tokio::runtime::Builder::new_current_thread()
@@ -296,7 +296,7 @@ pub fn cleanup_lab_blocking(topology: &Topology) -> CleanupReport {
 /// `run_capture` uses — so the namespace `setns` never touches the
 /// test's tokio workers. All captures share one `AtomicBool` stop
 /// flag, which the loop polls every [`crate::capture::POLL_QUANTUM`]
-/// (~200 ms), so [`LabCapture::stop`] returns within a bounded time
+/// (~200 ms), so `LabCapture::stop` returns within a bounded time
 /// even on a completely idle link. On `persist_on_failure`, the
 /// pcaps are moved from the temp dir to a discoverable location only
 /// if the caller flagged failure; otherwise the temp dir is wiped on

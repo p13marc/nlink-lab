@@ -69,8 +69,12 @@ Things you'd reach for in a chaos test.
 | [`import`](import.md) | Import a `.nlz` archive — verify, extract, deploy |
 | [`pull`](pull.md) | Pre-pull container images for a topology |
 | [`completions`](completions.md) | Generate shell completions |
-| [`daemon`](daemon.md) | Run as a long-lived daemon (used by integrations) |
-| [`wait`](wait.md) | Block until a deployed lab finishes its scenario |
+| [`daemon`](daemon.md) | Run the zenoh backend for a lab (metrics, RPC, events) |
+| [`metrics`](metrics.md) | Stream live metrics published by `daemon` |
+| [`watch`](watch.md) | Print RTNETLINK + nftables drift events for a lab |
+| [`scenario`](scenario.md) | Run a `scenario` block from a deployed lab's topology |
+| [`proc-stat`](proc-stat.md) | Resource snapshot of a spawned process |
+| [`wait`](wait.md) | Block until a lab's state file exists (deploy finished) |
 
 ## Global flags
 
@@ -78,19 +82,24 @@ These are accepted by every subcommand:
 
 | Flag | What |
 |------|------|
-| `--json` | Emit machine-parseable JSON instead of human text |
-| `--verbose`, `-v` | Increase log verbosity (repeatable) |
+| `--json` | Emit machine-parseable JSON instead of human text (errors become a JSON envelope on stderr) |
+| `--verbose`, `-v` | Show deployment steps / tracing (`info` level) |
 | `--quiet`, `-q` | Suppress non-error output |
-| `--skip-validate` | Skip topology validation in `deploy`/`apply` |
+
+`--skip-validate` belongs to `deploy` only (it drops the `validate {}`
+assertions); `--set KEY=VALUE` is accepted by every command that reads a
+topology (`deploy`, `apply`, `validate`, `render`, `graph`, `diff`,
+`pull`, `test`, `export --archive`).
 
 ## Exit codes
 
-Convention across all subcommands:
+One policy for every subcommand (the `--json` error envelope carries the
+same value in `exit_code`):
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | User error (bad args, validation failure) |
-| 2 | Operation failed (deploy failed; lab not found) |
-| 3 | Lock contention or partial state present |
-| ≥10 | Subcommand-specific (see each page) |
+| 1 | Error (bad arguments, lab not found, kernel/netlink failure, lock held by another process) |
+| 2 | Validation, assertion or drift failure: `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `apply --check` |
+| 124 | Timeout (`exec --timeout`, `wait-for`) |
+| child's code | `exec` and `shell` pass the command's exit status through |

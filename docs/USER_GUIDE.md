@@ -373,7 +373,7 @@ Run it:
 
 ```bash
 sudo nlink-lab apply wan.nll
-sudo nlink-lab scenario run wan wan-flap
+sudo nlink-lab scenario wan wan-flap
 ```
 
 The scenario runner emits a timeline:
@@ -881,7 +881,7 @@ Modify netem parameters at runtime without redeploying. `--show` displays curren
 ### capture
 
 ```bash
-sudo nlink-lab capture <lab> <endpoint> [-w capture.pcap] [-c 100] [-f "tcp port 80"]
+sudo nlink-lab capture <lab> <endpoint> [-w capture.pcap] [-c 100] [--filter-tcp --filter-port 80]
 ```
 
 Runs tcpdump inside the node's namespace. `-w` writes to pcap file. `-c` limits packet count. `-f` sets BPF filter.
@@ -930,7 +930,7 @@ sudo nlink-lab impair mylab --show
 Capture traffic on any interface:
 
 ```bash
-sudo nlink-lab capture mylab router:eth0 -w /tmp/router-eth0.pcap -f "icmp"
+sudo nlink-lab capture mylab router:eth0 -w /tmp/router-eth0.pcap --filter-icmp
 ```
 
 Open the pcap with Wireshark or tcpdump for analysis.

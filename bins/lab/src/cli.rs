@@ -75,6 +75,14 @@ pub enum Commands {
     /// Validate a topology file without deploying.
     Validate(cmd::validate::Args),
 
+    /// Style and portability advice for a topology file (never blocks deploy).
+    ///
+    /// Missing `validate` blocks, background processes without a
+    /// healthcheck, one-sided impairments, disconnected node groups, no
+    /// description. `--strict` exits 2 on any finding; `--allow RULE`
+    /// silences one.
+    Lint(cmd::lint::Args),
+
     /// Check a running lab for drift against its topology (exit 2 on drift).
     ///
     /// Compares every node's live links/addresses/routes/nftables with

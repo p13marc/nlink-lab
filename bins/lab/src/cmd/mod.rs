@@ -22,6 +22,7 @@ pub mod init;
 pub mod inspect;
 pub mod ip;
 pub mod kill;
+pub mod lint;
 pub mod logs;
 pub mod metrics;
 pub mod proc_stat;
@@ -55,6 +56,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Spawn(args) => spawn::run(ctx, args).await,
         Commands::Validate(args) => validate::run(ctx, args),
         Commands::Verify(args) => verify::run(ctx, args).await,
+        Commands::Lint(args) => lint::run(ctx, args),
         Commands::Doctor(args) => doctor::run(ctx, args).await,
         Commands::Test(args) => test::run(ctx, args).await,
         Commands::Impair(args) => impair::run(ctx, args).await,

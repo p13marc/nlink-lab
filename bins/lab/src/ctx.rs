@@ -151,6 +151,16 @@ pub fn node_completer() -> clap_complete::ArgValueCompleter {
     })
 }
 
+/// Lint rule ids (for `lint --allow`).
+pub fn lint_rule_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        candidates(
+            current,
+            nlink_lab::LINT_RULE_IDS.iter().map(|s| s.to_string()),
+        )
+    })
+}
+
 /// Validation rule ids (for `validate --deny/--allow`).
 pub fn rule_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {

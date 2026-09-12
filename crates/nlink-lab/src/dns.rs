@@ -286,10 +286,29 @@ fn replace_file_preserving(path: &str, content: &str) -> Result<()> {
 
     if let Err(e) = std::fs::rename(&tmp, &target) {
         let _ = std::fs::remove_file(&tmp);
-        return Err(Error::deploy_failed(format!(
-            "failed to rename {tmp_disp} -> {}: {e}",
+        // A target that is itself a mount point cannot be replaced by
+        // rename: containers bind-mount their own `/etc/hosts` over the
+        // rootfs, and the kernel answers EBUSY (EXDEV when the temp file
+        // landed on another filesystem). Fall back to rewriting the file
+        // in place — not atomic, but the only way to change a mount
+        // point's contents, and what nlink-lab did before 0.9.
+        let busy = matches!(e.raw_os_error(), Some(libc::EBUSY) | Some(libc::EXDEV));
+        if !busy {
+            return Err(Error::deploy_failed(format!(
+                "failed to rename {tmp_disp} -> {}: {e}",
+                target.display()
+            )));
+        }
+        tracing::debug!(
+            "{} is a mount point ({e}); rewriting it in place",
             target.display()
-        )));
+        );
+        return write_in_place(&target, content).map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to rewrite {} in place: {e}",
+                target.display()
+            ))
+        });
     }
 
     // Make the directory entry durable too; a failure here is not fatal
@@ -299,6 +318,20 @@ fn replace_file_preserving(path: &str, content: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Truncate-and-rewrite `target` without touching its inode (mode, owner
+/// and mount binding stay as they are). Used when the atomic rename in
+/// [`replace_file_preserving`] is impossible because the target is a
+/// mount point.
+fn write_in_place(target: &Path, content: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(target)?;
+    file.write_all(content.as_bytes())?;
+    file.sync_all()
 }
 
 /// Remove the managed section for a specific lab from file content.
@@ -849,6 +882,27 @@ link a:eth0 -- b:eth0 { fd00::1/64 -- fd00::2/64 }
         // Mode 0644 (possibly narrowed by umask, never widened).
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode & !0o644, 0);
+    }
+
+    #[test]
+    fn write_in_place_keeps_inode_and_mode() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        std::fs::write(&path, "orig\n").unwrap();
+        std::fs::set_permissions(&path, PermissionsExt::from_mode(0o640)).unwrap();
+        let before = std::fs::metadata(&path).unwrap();
+
+        write_in_place(&path, "new\n").unwrap();
+
+        let after = std::fs::metadata(&path).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new\n");
+        assert_eq!(after.ino(), before.ino(), "inode must be reused");
+        assert_eq!(after.permissions().mode() & 0o777, 0o640);
+        assert!(
+            !dir.path().join(".hosts.nlink-tmp").exists(),
+            "no temp file left behind"
+        );
     }
 
     #[test]

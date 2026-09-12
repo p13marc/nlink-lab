@@ -261,6 +261,53 @@ async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
     );
 }
 
+// Issue #30 (second half): background spawns are double-forked and
+// session-detached. The pid we hand back must be the real process (not
+// an intermediate), it must not be our child (so it can never become our
+// zombie), and a quick-exiting one must vanish from /proc rather than
+// linger in state Z.
+#[lab_test("examples/simple.nll")]
+async fn spawn_leaves_no_zombie_and_returns_real_pid(mut lab: RunningLab) {
+    let me = std::process::id();
+    let pid = lab.spawn_with_logs("host", &["sleep", "30"], None).unwrap();
+    let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
+    assert_eq!(
+        comm.trim(),
+        "sleep",
+        "pid {pid} must be the spawned program"
+    );
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+    let after_comm = &stat[stat.rfind(')').unwrap() + 2..];
+    let ppid: u32 = after_comm
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(ppid, me, "detached process must not be our child");
+    let _ = lab.kill_process(pid);
+
+    let quick = lab.spawn_with_logs("host", &["true"], None).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match std::fs::read_to_string(format!("/proc/{quick}/stat")) {
+            Err(_) => break, // reaped by init: gone entirely
+            Ok(st) => {
+                let state = st[st.rfind(')').unwrap() + 2..].chars().next().unwrap();
+                assert_ne!(
+                    state, 'Z',
+                    "quick-exiting spawn must not linger as a zombie"
+                );
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "pid {quick} still present after 5s"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 // `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
 // by wrapping in `/usr/bin/env`. Verifies both visibility of the new var
 // and additive semantics — inherited PATH must remain set.
@@ -1638,6 +1685,267 @@ async fn state_persistence(lab: RunningLab) {
     // Load from state and verify
     let loaded = nlink_lab::RunningLab::load(&name).unwrap();
     assert_eq!(loaded.namespace_count(), lab.namespace_count());
+}
+
+// Issue #84: editing a background `run` line and applying must stop the
+// old process and start the new one; removing the line stops it.
+#[tokio::test]
+async fn apply_restarts_edited_background_exec() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_restarts_edited_background_exec: requires root");
+        return;
+    }
+    let src = r#"lab "apply-exec-edit"
+node s { run ["sleep", "1000"] background }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let old = *lab
+        .exec_pids()
+        .get("s:0")
+        .expect("exec pid tracked after deploy");
+    let comm =
+        |pid: u32| std::fs::read_to_string(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+    assert!(comm(old).contains("1000"), "{}", comm(old));
+
+    let desired = nlink_lab::parser::parse(&src.replace("1000", "999")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let new = *lab
+        .exec_pids()
+        .get("s:0")
+        .expect("exec pid tracked after apply");
+    assert_ne!(new, old);
+    assert!(comm(new).contains("999"), "{}", comm(new));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::path::Path::new(&format!("/proc/{old}")).exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "old exec pid {old} still alive"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let alive: Vec<u32> = lab
+        .process_status_alive_only()
+        .iter()
+        .map(|p| p.pid)
+        .collect();
+    assert_eq!(alive, vec![new], "exactly the new process is tracked");
+    // persisted
+    let reloaded = RunningLab::load(lab.name()).unwrap();
+    assert_eq!(reloaded.exec_pids().get("s:0"), Some(&new));
+
+    // Removing the line stops it without touching anything else.
+    let desired = nlink_lab::parser::parse("lab \"apply-exec-edit\"\nnode s\n").unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::path::Path::new(&format!("/proc/{new}")).exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "removed exec pid {new} still alive"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(lab.exec_pids().is_empty(), "{:?}", lab.exec_pids());
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Issue #85: removing a `network` block deletes its bridge from the mgmt
+// namespace (member veths were already deleted).
+#[tokio::test]
+async fn apply_removed_network_deletes_bridge() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_removed_network_deletes_bridge: requires root");
+        return;
+    }
+    let src = r#"lab "apply-net-rm"
+node a
+node b
+node c
+network lan { subnet 10.1.0.0/24  members [a:eth0, b:eth0] }
+network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let mgmt_links = || {
+        std::process::Command::new("ip")
+            .args(["-n", "apply-net-rm-mgmt", "-br", "link"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    };
+    let before = mgmt_links();
+    let bridges_before = before.lines().filter(|l| l.starts_with("nb")).count();
+    assert_eq!(bridges_before, 2, "two bridges expected: {before}");
+
+    let desired = nlink_lab::parser::parse(&src.replace(
+        "network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }\n",
+        "",
+    ))
+    .unwrap();
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        plan.ops
+            .iter()
+            .any(|o| matches!(o, nlink_lab::Op::DeleteBridge { .. })),
+        "{:?}",
+        plan.ops
+    );
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let after = mgmt_links();
+    assert_eq!(
+        after.lines().filter(|l| l.starts_with("nb")).count(),
+        1,
+        "dmz bridge must be gone: {after}"
+    );
+    let b = lab.exec("b", "ip", &["-br", "link"]).unwrap().stdout;
+    assert!(!b.contains("eth1"), "b:eth1 must be gone: {b}");
+    assert!(b.contains("eth0"), "b:eth0 must survive: {b}");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Issue #86: `apply` runs the topology's `validate { … }` assertions.
+#[tokio::test]
+async fn apply_runs_validate_assertions() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_runs_validate_assertions: requires root");
+        return;
+    }
+    let src = r#"lab "apply-assert"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert!(lab.assertion_results().is_empty());
+
+    let desired = nlink_lab::parser::parse(&format!("{src}validate {{ reach a b }}\n")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert_eq!(
+        lab.assertion_results().len(),
+        1,
+        "{:?}",
+        lab.assertion_results()
+    );
+    assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
+
+    // A failing assertion is reported, never fatal at the library level.
+    let desired =
+        nlink_lab::parser::parse(&format!("{src}validate {{ tcp-connect a b 9 }}\n")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert!(lab.assertions_failed(), "{:?}", lab.assertion_results());
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Issue #83: a VRF-table route removed from the topology must be
+// deleted on apply. nlink's purge only converges the main table, so the
+// engine owns non-main-table routes as explicit ops.
+#[tokio::test]
+async fn apply_removes_vrf_route() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_removes_vrf_route: requires root");
+        return;
+    }
+    if !has_kernel_module("vrf") {
+        eprintln!("skipping apply_removes_vrf_route: vrf kernel module not available");
+        return;
+    }
+    let src = r#"lab "apply-vrf-rm"
+profile router { forward ipv4 }
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default via 10.10.0.10
+    route 192.168.5.0/24 via 10.10.0.10
+  }
+}
+node a { route default via 10.10.0.1 }
+link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let table = |lab: &RunningLab| {
+        lab.exec("pe", "ip", &["route", "show", "table", "10"])
+            .unwrap()
+            .stdout
+    };
+    let before = table(&lab);
+    assert!(
+        before.contains("192.168.5.0/24"),
+        "route missing after deploy: {before}"
+    );
+    assert!(before.contains("default via 10.10.0.10"), "{before}");
+
+    // Drop one route and apply.
+    let desired =
+        nlink_lab::parser::parse(&src.replace("    route 192.168.5.0/24 via 10.10.0.10\n", ""))
+            .unwrap();
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        plan.ops
+            .iter()
+            .any(|o| o.describe() == "pe: delete route 192.168.5.0/24 table 10 via 10.10.0.10"),
+        "{:?}",
+        plan.ops
+    );
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let after = table(&lab);
+    assert!(
+        !after.contains("192.168.5.0/24"),
+        "route survived apply: {after}"
+    );
+    assert!(
+        after.contains("default via 10.10.0.10"),
+        "unrelated route lost: {after}"
+    );
+
+    // Re-apply is a no-op on the route layer, and the diff is clean.
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        !plan.ops.iter().any(|o| matches!(
+            o,
+            nlink_lab::Op::Route { .. } | nlink_lab::Op::DelRoute { .. }
+        )),
+        "{:?}",
+        plan.ops
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .unwrap();
+    assert!(layered.is_empty(), "{layered}");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
 }
 
 // ─── VRF test (plan 050) ─────────────────────────────────

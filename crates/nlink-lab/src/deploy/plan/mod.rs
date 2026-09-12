@@ -105,6 +105,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
                 wireguard: wg,
             }),
         });
+        ops.extend(network::vrf_route_ops(node_name, node)?);
     }
 
     // ── traffic control ──
@@ -361,6 +362,333 @@ link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
             d.ops.iter().any(
                 |o| matches!(o, Op::ClearQdisc { node, iface } if node == "r" && iface == "eth0")
             ),
+            "{:?}",
+            d.ops
+        );
+    }
+
+    const VRF: &str = r#"lab "v"
+profile router { forward ipv4 }
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default via 10.10.0.10
+    route 192.168.5.0/24 via 10.10.0.10 metric 50
+  }
+}
+node a { route default via 10.10.0.1 }
+link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+"#;
+
+    #[test]
+    fn plan_emits_vrf_routes_as_ops_after_the_stack() {
+        let p = plan_of(VRF);
+        let routes: Vec<&Op> = p.stage(Stage::Routes).collect();
+        assert_eq!(routes.len(), 2, "{routes:?}");
+        assert!(routes.iter().all(|o| matches!(
+            o,
+            Op::Route { node, route } if node == "pe" && route.table == 10
+        )));
+        let d: Vec<String> = routes.iter().map(|o| o.describe()).collect();
+        assert!(
+            d.contains(&"pe: route 0.0.0.0/0 table 10 via 10.10.0.10".to_string()),
+            "{d:?}"
+        );
+        assert!(
+            d.contains(&"pe: route 192.168.5.0/24 table 10 via 10.10.0.10 metric 50".to_string()),
+            "{d:?}"
+        );
+        // the stack no longer declares them
+        let stack_pos = p
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Stack { node, .. } if node == "pe"))
+            .unwrap();
+        let route_pos = p
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Route { .. }))
+            .unwrap();
+        assert!(stack_pos < route_pos);
+        if let Op::Stack { cfg, .. } = &p.ops[stack_pos] {
+            assert!(
+                cfg.network
+                    .routes()
+                    .iter()
+                    .all(|r| r.table().is_none_or(|t| t == 254))
+            );
+        }
+    }
+
+    #[test]
+    fn diff_removed_vrf_route_emits_del_route() {
+        let cur = plan_of(VRF);
+        let des = plan_of(&VRF.replace(
+            "    route 192.168.5.0/24 via 10.10.0.10 metric 50
+",
+            "",
+        ));
+        let d = Plan::diff(&cur, &des);
+        let dels: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::DelRoute { .. }))
+            .collect();
+        assert_eq!(dels.len(), 1, "{:?}", d.ops);
+        assert_eq!(
+            dels[0].describe(),
+            "pe: delete route 192.168.5.0/24 table 10 via 10.10.0.10 metric 50"
+        );
+        assert!(
+            !d.ops.iter().any(|o| matches!(o, Op::Route { .. })),
+            "unchanged routes must not be re-added: {:?}",
+            d.ops
+        );
+    }
+
+    #[test]
+    fn diff_changed_vrf_route_metric_deletes_then_replaces() {
+        let cur = plan_of(VRF);
+        let des = plan_of(&VRF.replace("metric 50", "metric 60"));
+        let d = Plan::diff(&cur, &des);
+        let del = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DelRoute { route, .. } if route.metric == Some(50)));
+        let add = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Route { route, .. } if route.metric == Some(60)));
+        assert!(del.is_some() && add.is_some(), "{:?}", d.ops);
+        assert!(del < add, "delete must precede the replacement");
+    }
+
+    #[test]
+    fn diff_removed_vrf_node_skips_del_route() {
+        let cur = plan_of(VRF);
+        let des = plan_of(
+            &VRF.replace(
+                "node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default via 10.10.0.10
+    route 192.168.5.0/24 via 10.10.0.10 metric 50
+  }
+}
+",
+                "node pe : router
+",
+            )
+            .replace(
+                "link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+",
+                "",
+            ),
+        );
+        // pe still exists but the link and the VRF are gone: DelRoute ops
+        // are emitted (pe is not dying)
+        let d = Plan::diff(&cur, &des);
+        assert_eq!(
+            d.ops
+                .iter()
+                .filter(|o| matches!(o, Op::DelRoute { .. }))
+                .count(),
+            2,
+            "{:?}",
+            d.ops
+        );
+        // whereas a node that disappears entirely takes its routes with it
+        let des2 = plan_of("lab \"v\"\nnode a { route default via 10.10.0.1 }\n");
+        let d2 = Plan::diff(&cur, &des2);
+        assert!(
+            !d2.ops.iter().any(|o| matches!(o, Op::DelRoute { .. })),
+            "{:?}",
+            d2.ops
+        );
+        assert!(
+            d2.ops
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { ns, .. } if ns == "v-pe"))
+        );
+    }
+
+    #[test]
+    fn vrf_route_with_mismatched_family_is_a_plan_error() {
+        // `default via <v6>` is a valid v6 default route; a v4 destination
+        // with a v6 gateway is the mismatch.
+        let t = topo(&VRF.replace(
+            "route 192.168.5.0/24 via 10.10.0.10 metric 50",
+            "route 192.168.5.0/24 via fd00::1",
+        ));
+        let err = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap_err();
+        assert!(
+            err.to_string().contains("different address families"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn diff_edited_background_exec_kills_then_reexecs() {
+        let src = format!(
+            "{SIMPLE}\nnode s {{ run [\"sleep\", \"1000\"] background  healthcheck \"true\" }}\n"
+        );
+        let cur = plan_of(&src);
+        let des = plan_of(&src.replace("1000", "999"));
+        let d = Plan::diff(&cur, &des);
+        let kill = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::KillExec { node, index: 0 } if node == "s"));
+        let exec = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Exec { node, .. } if node == "s"));
+        assert!(kill.is_some() && exec.is_some(), "{:?}", d.ops);
+        assert!(kill < exec, "stop must precede the re-exec");
+        assert!(
+            d.ops
+                .iter()
+                .any(|o| matches!(o, Op::Healthcheck { node, .. } if node == "s")),
+            "healthcheck must re-run after a restart: {:?}",
+            d.ops
+        );
+        assert!(
+            !d.ops
+                .iter()
+                .any(|o| matches!(o, Op::KillNodeProcesses { .. })),
+            "a targeted kill, never the node-wide one: {:?}",
+            d.ops
+        );
+        // unchanged: nothing on the process layer
+        let same = Plan::diff(&cur, &plan_of(&src));
+        assert!(
+            !same.ops.iter().any(|o| o.stage() == Stage::Processes),
+            "{:?}",
+            same.ops
+        );
+    }
+
+    #[test]
+    fn diff_removed_exec_line_stops_only_that_process() {
+        let src = format!(
+            "{SIMPLE}\nnode s {{ run [\"sleep\", \"1000\"] background  run [\"sleep\", \"2000\"] background }}\n"
+        );
+        let cur = plan_of(&src);
+        let des = plan_of(&src.replace("  run [\"sleep\", \"2000\"] background", ""));
+        let d = Plan::diff(&cur, &des);
+        let kills: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::KillExec { .. }))
+            .collect();
+        assert_eq!(kills.len(), 1, "{:?}", d.ops);
+        assert!(matches!(kills[0], Op::KillExec { node, index: 1 } if node == "s"));
+        assert!(!d.ops.iter().any(|o| matches!(o, Op::Exec { .. })));
+    }
+
+    const NETS: &str = r#"lab "n"
+node a
+node b
+node c
+network lan { subnet 10.1.0.0/24  members [a:eth0, b:eth0] }
+network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
+"#;
+
+    #[test]
+    fn diff_removed_network_deletes_bridge_and_member_links() {
+        let cur = plan_of(NETS);
+        let des = plan_of(&NETS.replace(
+            "network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }\n",
+            "",
+        ));
+        let d = Plan::diff(&cur, &des);
+        let bridges: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::DeleteBridge { .. }))
+            .collect();
+        assert_eq!(bridges.len(), 1, "{:?}", d.ops);
+        assert!(matches!(bridges[0], Op::DeleteBridge { ns, .. } if ns == "n-mgmt"));
+        assert!(d.ops.iter().any(
+            |o| matches!(o, Op::DeleteLink { node, iface } if node == "b" && iface == "eth1")
+        ));
+        assert!(
+            !d.ops
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { .. })),
+            "{:?}",
+            d.ops
+        );
+        // member links (Links stage) are deleted before the bridge (Networks)
+        let link = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DeleteLink { node, .. } if node == "b"))
+            .unwrap();
+        let bridge = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DeleteBridge { .. }))
+            .unwrap();
+        assert!(link < bridge, "{:?}", d.ops);
+    }
+
+    #[test]
+    fn diff_removing_every_network_deletes_the_mgmt_namespace_not_bridges() {
+        let cur = plan_of(NETS);
+        let des = plan_of("lab \"n\"\nnode a\nnode b\nnode c\n");
+        let d = Plan::diff(&cur, &des);
+        assert!(
+            d.ops
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { ns, .. } if ns == "n-mgmt")),
+            "{:?}",
+            d.ops
+        );
+        assert!(
+            !d.ops.iter().any(|o| matches!(o, Op::DeleteBridge { .. })),
+            "bridges die with their namespace: {:?}",
+            d.ops
+        );
+    }
+
+    const WIFI: &str = r#"lab "w"
+node ap { wifi wlan0 mode ap { ssid "labnet" channel 6 wpa2 "testpassword" 10.0.0.1/24 } }
+node sta { wifi wlan0 mode station { ssid "labnet" wpa2 "testpassword" 10.0.0.2/24 } }
+"#;
+
+    #[test]
+    fn diff_changed_wifi_restarts_the_daemon_and_removed_wifi_stops_it() {
+        let cur = plan_of(WIFI);
+        let des = plan_of(&WIFI.replace("channel 6", "channel 11"));
+        let d = Plan::diff(&cur, &des);
+        let kill = d.ops.iter().position(
+            |o| matches!(o, Op::KillWifiDaemon { node, name, .. } if node == "ap" && name == "wlan0"),
+        );
+        let start = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::WifiDaemon { node, .. } if node == "ap"));
+        assert!(kill.is_some() && start.is_some(), "{:?}", d.ops);
+        assert!(kill < start);
+        assert!(
+            !d.ops
+                .iter()
+                .any(|o| matches!(o, Op::WifiDaemon { node, .. } if node == "sta")),
+            "unchanged station must not restart: {:?}",
+            d.ops
+        );
+
+        let des = plan_of(&WIFI.replace(
+            "node sta { wifi wlan0 mode station { ssid \"labnet\" wpa2 \"testpassword\" 10.0.0.2/24 } }\n",
+            "node sta\n",
+        ));
+        let d = Plan::diff(&cur, &des);
+        assert!(
+            d.ops.iter().any(|o| matches!(
+                o,
+                Op::KillWifiDaemon { node, mode: crate::types::WifiMode::Station, .. } if node == "sta"
+            )),
             "{:?}",
             d.ops
         );

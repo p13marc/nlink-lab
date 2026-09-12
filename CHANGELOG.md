@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — apply completeness (issues #83–#86, #30)
+
+- **VRF-table routes converge on apply (#83).** They are explicit
+  `Op::Route` / `Op::DelRoute` ops in a new `Stage::Routes` (right after
+  `Stack`) instead of entries in the node's `NetworkConfig`, because
+  nlink's purge only touches the main table. A route removed from a
+  `vrf { … }` block is now deleted; a changed gateway/metric is replaced;
+  a failed deploy rolls them back (`Undo::DelRoute`). `apply --dry-run`
+  and `apply --check` list the plan's removal ops under "Removals:";
+  the v3 JSON report gains an optional `removals` array, counted in
+  `change_count` and `no_op`. New library entry point
+  `nlink_lab::apply_plan(&running, &desired) -> Plan` (the pure half of
+  `apply`).
+- **An edited background `run … background` is restarted, a removed one
+  is stopped (#84).** Background exec pids are tracked per
+  `"<node>:<index>"` (`LabState.exec_pids`, additive); `Op::KillExec` is
+  the inverse of a background exec, and `Plan::diff` emits stop +
+  re-exec (plus the node's healthcheck) when the command changes. Labs
+  deployed before this release have no index record: apply warns and
+  leaves the old process running rather than signalling an unverified
+  pid.
+- **Removed `network` blocks delete their bridge; wifi daemons are
+  tracked and stoppable (#85).** `Op::DeleteBridge` (skipped when the
+  mgmt namespace dies with it); `CreateBridge` is journaled. hostapd /
+  wpa_supplicant run with `-P <pidfile>` and their pid + start time join
+  the tracked processes, so `destroy`, node removal and the new
+  `Op::KillWifiDaemon` stop them, and an edited ssid/channel/passphrase
+  restarts the daemon. Bridge *edits* (mtu / vlan filtering) are not
+  applied yet (warned).
+- **`apply` runs `validate { … }` assertions (#86)** exactly like
+  `deploy`; `nlink-lab apply --strict` exits 2 on failure,
+  `--skip-validate` skips them, `--json` carries `assertions` /
+  `assertions_failed`.
+- **Background spawns are detached — no zombies (#30, second half).**
+  `apply`'s exec ops, `RunningLab::spawn` and `spawn_with_logs*` go
+  through `ns_exec::spawn_detached`: double-forked and `setsid`'d, so
+  nlink-lab never owns a child it must reap, and the returned pid is the
+  real process. Spawned processes therefore survive the deploying
+  terminal's session (Ctrl-C on `deploy` no longer kills them; `destroy`
+  and `kill` do, through the tracked pid + start time).
+
+**Migration**: `deploy --dry-run` shows `route`/`delete route` ops for
+VRF routes; `apply --dry-run --json` may contain `removals`;
+`state.json` gains `exec_pids` (schema version unchanged, additive).
+
 ### Fixed — CI and containers
 
 - **`/etc/hosts` injection works inside containers again.** The wave-3

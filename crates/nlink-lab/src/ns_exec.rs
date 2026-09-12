@@ -15,6 +15,11 @@
 //! namespace. A one-time strict probe reports the degradation once.
 //! `dns hosts` labs stay functional either way because the lab's entries
 //! are also injected into the host `/etc/hosts`.
+//!
+//! Background processes go through [`spawn_detached`]: double-forked and
+//! session-detached, so nlink-lab never owns a child it would have to
+//! reap (zombies were issue #30's second half) and `destroy` stops them
+//! through the tracked pid + start time rather than a `Child` handle.
 
 use std::ffi::CString;
 use std::os::unix::process::CommandExt;
@@ -57,6 +62,94 @@ pub fn spawn_output(
     let output = cmd.output()?;
     drop(ns_fd);
     Ok(output)
+}
+
+/// Spawn `cmd` in the named namespace as a **detached** background
+/// process and return its pid.
+///
+/// The process is double-forked: an intermediate child calls `setsid`,
+/// forks the real process (which then runs the same entry sequence as
+/// [`spawn`] and execs) and exits at once, so the caller never has a
+/// child to reap — no zombies, whatever the caller's lifetime — and the
+/// process survives the caller's terminal session (`destroy`/`kill` stop
+/// it through its tracked pid + start time). Stdio redirections set on
+/// `cmd` apply to the real process.
+pub fn spawn_detached(ns_name: &str, cmd: std::process::Command) -> NlResult<u32> {
+    let ns_fd = namespace::open(ns_name)?;
+    note_overlay_support(ns_name, &ns_fd);
+    let enter = Enter::new(ns_name, ns_fd.as_raw_fd(), false)?;
+    let pid = spawn_detached_with(cmd, enter)?;
+    drop(ns_fd);
+    Ok(pid)
+}
+
+/// [`spawn_detached`] for a namespace given by path (`/proc/<pid>/ns/net`
+/// for containers, `/proc/self/ns/net` for the root namespace). No
+/// `/etc/netns` overlay: only named namespaces have one.
+pub fn spawn_detached_path(ns_path: &std::path::Path, cmd: std::process::Command) -> NlResult<u32> {
+    let ns_fd = namespace::open_path(ns_path)?;
+    let enter = Enter::bare(ns_fd.as_raw_fd());
+    let pid = spawn_detached_with(cmd, enter)?;
+    drop(ns_fd);
+    Ok(pid)
+}
+
+fn spawn_detached_with(mut cmd: std::process::Command, enter: Enter) -> NlResult<u32> {
+    use std::io::Read as _;
+    use std::os::fd::FromRawFd as _;
+
+    let mut fds = [0i32; 2];
+    // SAFETY: plain pipe2 on a stack array of two fds.
+    if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    // SAFETY: both fds were just returned by pipe2 and are owned here.
+    let (mut rd, wr) = unsafe { (std::fs::File::from_raw_fd(fds[0]), fds[1]) };
+    // SAFETY: the closure runs in the forked child; it only calls
+    // async-signal-safe syscalls (setsid, fork, write, _exit) plus
+    // `Enter::run`, which has the same property. `wr` is inherited by
+    // the fork; the parent closes its own copy right after spawn.
+    unsafe {
+        cmd.pre_exec(move || {
+            libc::setsid();
+            let pid = libc::fork();
+            if pid < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if pid == 0 {
+                // The real process: enter the namespace, then std execs.
+                return enter.run();
+            }
+            // Intermediate: hand the pid to the parent and vanish.
+            let bytes = (pid as u32).to_ne_bytes();
+            let mut off = 0usize;
+            while off < bytes.len() {
+                let n = libc::write(wr, bytes[off..].as_ptr().cast(), bytes.len() - off);
+                if n < 0 && *libc::__errno_location() == libc::EINTR {
+                    continue;
+                }
+                if n <= 0 {
+                    break;
+                }
+                off += n as usize;
+            }
+            libc::_exit(0);
+        });
+    }
+    let spawned = cmd.spawn();
+    // SAFETY: closing the parent's write end; the child has its own copy.
+    unsafe { libc::close(wr) };
+    let mut child = spawned?;
+    // The intermediate exits immediately; reap it so nothing lingers.
+    let _ = child.wait();
+    let mut buf = [0u8; 4];
+    rd.read_exact(&mut buf).map_err(|e| {
+        std::io::Error::new(
+            e.kind(),
+            format!("detached spawn: intermediate child reported no pid: {e}"),
+        )
+    })?;
+    Ok(u32::from_ne_bytes(buf))
 }
 
 /// Whether the full overlay (mount namespace + sysfs + binds) works on
@@ -108,6 +201,17 @@ struct Enter {
 }
 
 impl Enter {
+    /// Entry into a namespace with no `/etc/netns` overlay (container /
+    /// root namespaces).
+    fn bare(ns_fd: i32) -> Self {
+        Self {
+            ns_fd,
+            strict: false,
+            ns_name: c"none".to_owned(),
+            binds: Vec::new(),
+        }
+    }
+
     fn new(ns_name: &str, ns_fd: i32, strict: bool) -> NlResult<Self> {
         Ok(Self {
             ns_fd,

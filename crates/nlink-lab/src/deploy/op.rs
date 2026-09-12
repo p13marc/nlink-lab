@@ -110,6 +110,18 @@ impl NsRef {
         }
     }
 
+    /// Spawn a detached background process inside the namespace and
+    /// return its pid (see [`crate::ns_exec::spawn_detached`]).
+    pub fn spawn_detached(
+        &self,
+        cmd: std::process::Command,
+    ) -> std::result::Result<u32, nlink::netlink::Error> {
+        match self {
+            NsRef::Named { name } => crate::ns_exec::spawn_detached(name, cmd),
+            _ => crate::ns_exec::spawn_detached_path(&self.ns_path(), cmd),
+        }
+    }
+
     /// Run a process to completion inside the namespace.
     pub fn spawn_output(
         &self,
@@ -154,6 +166,9 @@ pub enum Stage {
     Sysctls,
     /// Declarative per-node stack (links/addresses/routes, nftables, WireGuard).
     Stack,
+    /// Routes in non-main tables (VRF), owned explicitly because nlink's
+    /// purge only converges the main table (#83).
+    Routes,
     /// Traffic control: netem, per-pair impairments, rate limits.
     Tc,
     /// /etc/hosts and per-namespace /etc overlays.
@@ -162,6 +177,35 @@ pub enum Stage {
     Processes,
     /// hostapd / wpa_supplicant / mesh join.
     Wifi,
+}
+
+/// One route in a non-main table, fully resolved so the delete can
+/// replay exactly what the add declared (kernel route identity is
+/// destination + table + metric; gateway/dev disambiguate multipath).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouteSpec {
+    pub dest: std::net::IpAddr,
+    pub prefix: u8,
+    pub table: u32,
+    pub via: Option<std::net::IpAddr>,
+    pub dev: Option<String>,
+    pub metric: Option<u32>,
+}
+
+impl std::fmt::Display for RouteSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{} table {}", self.dest, self.prefix, self.table)?;
+        if let Some(gw) = &self.via {
+            write!(f, " via {gw}")?;
+        }
+        if let Some(d) = &self.dev {
+            write!(f, " dev {d}")?;
+        }
+        if let Some(m) = self.metric {
+            write!(f, " metric {m}")?;
+        }
+        Ok(())
+    }
 }
 
 /// Bridge-port VLAN settings for one network member.
@@ -259,6 +303,11 @@ pub enum Op {
         node: String,
         cfg: Box<StackConfig>,
     },
+    /// A route in a non-main table (VRF); see [`Stage::Routes`].
+    Route {
+        node: String,
+        route: RouteSpec,
+    },
     Netem {
         node: String,
         iface: String,
@@ -314,6 +363,15 @@ pub enum Op {
     DeleteHostLink {
         name: String,
     },
+    /// A bridge network's bridge in the mgmt namespace (#85).
+    DeleteBridge {
+        ns: String,
+        name: String,
+    },
+    DelRoute {
+        node: String,
+        route: RouteSpec,
+    },
     ClearQdisc {
         node: String,
         iface: String,
@@ -324,6 +382,17 @@ pub enum Op {
     },
     KillNodeProcesses {
         node: String,
+    },
+    /// Stop the process a background `exec` block started (#84).
+    KillExec {
+        node: String,
+        index: usize,
+    },
+    /// Stop a node's hostapd / wpa_supplicant (or leave a mesh) (#85).
+    KillWifiDaemon {
+        node: String,
+        name: String,
+        mode: crate::types::WifiMode,
     },
     RemoveDns {
         lab: String,
@@ -343,24 +412,28 @@ impl Op {
             CreateMgmtBridge { .. } | CreateMgmtVeth { .. } | DeleteHostLink { .. } => {
                 Stage::MgmtBridge
             }
-            CreateMgmtNamespace { .. } | CreateBridge { .. } | CreateNetworkVeth { .. } => {
-                Stage::Networks
-            }
+            CreateMgmtNamespace { .. }
+            | CreateBridge { .. }
+            | DeleteBridge { .. }
+            | CreateNetworkVeth { .. } => Stage::Networks,
             CreateVeth { .. } | DeleteLink { .. } => Stage::Links,
             CreateMacvlan { .. } | CreateIpvlan { .. } => Stage::HostLinks,
             LinksUp { .. } => Stage::LinksUp,
             Sysctls { .. } => Stage::Sysctls,
             Stack { .. } => Stage::Stack,
+            Route { .. } | DelRoute { .. } => Stage::Routes,
             Netem { .. }
             | NetworkImpairments
             | RateLimit { .. }
             | ClearQdisc { .. }
             | RemoveRateLimit { .. } => Stage::Tc,
             DnsInject { .. } | DnsNetnsEtc { .. } | RemoveDns { .. } => Stage::Dns,
-            StartupDelay { .. } | Exec { .. } | Healthcheck { .. } | KillNodeProcesses { .. } => {
-                Stage::Processes
-            }
-            WifiDaemon { .. } => Stage::Wifi,
+            StartupDelay { .. }
+            | Exec { .. }
+            | Healthcheck { .. }
+            | KillNodeProcesses { .. }
+            | KillExec { .. } => Stage::Processes,
+            WifiDaemon { .. } | KillWifiDaemon { .. } => Stage::Wifi,
         }
     }
 
@@ -378,7 +451,9 @@ impl Op {
             CreateMgmtVeth { peer, .. } => format!("hostlink:{peer}"),
             DeleteHostLink { name } => format!("hostlink:{name}"),
             CreateMgmtNamespace { ns } => format!("ns:{ns}"),
-            CreateBridge { ns, name, .. } => format!("bridge:{ns}:{name}"),
+            CreateBridge { ns, name, .. } | DeleteBridge { ns, name } => {
+                format!("bridge:{ns}:{name}")
+            }
             CreateNetworkVeth { node, iface, .. } | DeleteLink { node, iface } => {
                 format!("link:{node}:{iface}")
             }
@@ -388,6 +463,10 @@ impl Op {
             LinksUp { node, .. } => format!("linksup:{node}"),
             Sysctls { node, .. } => format!("sysctls:{node}"),
             Stack { node, .. } => format!("stack:{node}"),
+            Route { node, route } | DelRoute { node, route } => format!(
+                "route:{node}:{}:{}/{}",
+                route.table, route.dest, route.prefix
+            ),
             Netem { node, iface, .. } | ClearQdisc { node, iface } => {
                 format!("qdisc:{node}:{iface}")
             }
@@ -398,9 +477,10 @@ impl Op {
             DnsInject { lab } | RemoveDns { lab } => format!("dns:{lab}"),
             DnsNetnsEtc { ns, .. } => format!("dns-etc:{ns}"),
             StartupDelay { node, .. } => format!("delay:{node}"),
-            Exec { node, index, .. } => format!("exec:{node}:{index}"),
+            Exec { node, index, .. } | KillExec { node, index } => format!("exec:{node}:{index}"),
             Healthcheck { node, .. } => format!("healthcheck:{node}"),
             WifiDaemon { node, wifi } => format!("wifi:{node}:{}", wifi.name),
+            KillWifiDaemon { node, name, .. } => format!("wifi:{node}:{name}"),
             KillNodeProcesses { node } => format!("procs:{node}"),
         }
     }
@@ -426,6 +506,15 @@ impl Op {
                 id: name.clone(),
             },
             CreateMgmtBridge { name, .. } => DeleteHostLink { name: name.clone() },
+            CreateBridge { ns, name, .. } => DeleteBridge {
+                ns: ns.clone(),
+                name: name.clone(),
+            },
+            WifiDaemon { node, wifi } => KillWifiDaemon {
+                node: node.clone(),
+                name: wifi.name.clone(),
+                mode: wifi.mode.clone(),
+            },
             CreateMgmtVeth { peer, .. } => DeleteHostLink { name: peer.clone() },
             CreateNetworkVeth { node, iface, .. } => DeleteLink {
                 node: node.clone(),
@@ -443,6 +532,10 @@ impl Op {
                 node: node.clone(),
                 iface: cfg.name.clone(),
             },
+            Route { node, route } => DelRoute {
+                node: node.clone(),
+                route: route.clone(),
+            },
             Netem { node, iface, .. } => ClearQdisc {
                 node: node.clone(),
                 iface: iface.clone(),
@@ -452,7 +545,12 @@ impl Op {
                 iface: iface.clone(),
             },
             DnsInject { lab } => RemoveDns { lab: lab.clone() },
-            Exec { node, exec, .. } if exec.background => KillNodeProcesses { node: node.clone() },
+            Exec {
+                node, index, exec, ..
+            } if exec.background => KillExec {
+                node: node.clone(),
+                index: *index,
+            },
             _ => return None,
         })
     }
@@ -466,9 +564,13 @@ impl Op {
                 | RemoveContainer { .. }
                 | DeleteLink { .. }
                 | DeleteHostLink { .. }
+                | DeleteBridge { .. }
+                | DelRoute { .. }
                 | ClearQdisc { .. }
                 | RemoveRateLimit { .. }
                 | KillNodeProcesses { .. }
+                | KillExec { .. }
+                | KillWifiDaemon { .. }
                 | RemoveDns { .. }
         )
     }
@@ -513,6 +615,7 @@ impl Op {
             Stack { node, .. } => {
                 format!("{node}: reconcile links/addresses/routes, nftables, wireguard")
             }
+            Route { node, route } => format!("{node}: route {route}"),
             Netem { node, iface, .. } => format!("netem on {node}:{iface}"),
             NetworkImpairments => "per-pair network impairments".into(),
             RateLimit { node, iface, .. } => format!("rate limit on {node}:{iface}"),
@@ -530,9 +633,13 @@ impl Op {
             RemoveContainer { node, .. } => format!("remove container of {node}"),
             DeleteLink { node, iface } => format!("delete link {node}:{iface}"),
             DeleteHostLink { name } => format!("delete host link {name}"),
+            DeleteBridge { ns, name } => format!("delete bridge {name} in {ns}"),
+            DelRoute { node, route } => format!("{node}: delete route {route}"),
             ClearQdisc { node, iface } => format!("clear qdisc on {node}:{iface}"),
             RemoveRateLimit { node, iface } => format!("remove rate limit on {node}:{iface}"),
             KillNodeProcesses { node } => format!("stop background processes of {node}"),
+            KillExec { node, index } => format!("{node}: stop exec[{index}]"),
+            KillWifiDaemon { node, name, mode } => format!("{node}: stop wifi {name} ({mode:?})"),
             RemoveDns { lab } => format!("remove /etc/hosts entries for {lab}"),
         }
     }
@@ -583,11 +690,23 @@ impl Plan {
                 _ => None,
             })
             .collect();
+        // …nor a bridge whose namespace is going away.
+        let dying_ns: std::collections::BTreeSet<String> = removals
+            .iter()
+            .filter_map(|o| match o {
+                Op::DeleteNamespace { ns, .. } => Some(ns.clone()),
+                _ => None,
+            })
+            .collect();
         removals.retain(|o| match o {
+            Op::DeleteBridge { ns, .. } => !dying_ns.contains(ns.as_str()),
             Op::DeleteLink { node, .. }
+            | Op::DelRoute { node, .. }
             | Op::ClearQdisc { node, .. }
             | Op::RemoveRateLimit { node, .. }
-            | Op::KillNodeProcesses { node } => !dying.contains(node.as_str()),
+            | Op::KillNodeProcesses { node }
+            | Op::KillExec { node, .. }
+            | Op::KillWifiDaemon { node, .. } => !dying.contains(node.as_str()),
             _ => true,
         });
         removals.sort_by_key(|o| std::cmp::Reverse(o.stage()));
@@ -596,6 +715,8 @@ impl Plan {
         removals.retain(|o| seen.insert(o.key() + &format!("{:?}", o.stage())));
 
         let mut changes: Vec<Op> = Vec::new();
+        // nodes whose background exec was restarted → healthcheck again
+        let mut restarted: std::collections::BTreeSet<String> = Default::default();
         for op in &desired.ops {
             match cur.get(&op.key()) {
                 None => changes.push(op.clone()),
@@ -606,11 +727,36 @@ impl Plan {
                     | Op::NetworkImpairments
                     | Op::DnsInject { .. }
                     | Op::DnsNetnsEtc { .. } => changes.push(op.clone()),
-                    // one-shot process ops only run for new nodes
-                    Op::Exec { .. }
-                    | Op::Healthcheck { .. }
-                    | Op::StartupDelay { .. }
-                    | Op::WifiDaemon { .. } => {}
+                    // an edited exec is stopped (background) and re-run;
+                    // an unchanged one is left alone (#84)
+                    Op::Exec { node, .. } => {
+                        if format!("{existing:?}") != format!("{op:?}") {
+                            if let Some(inv) = existing.inverse() {
+                                removals.push(inv);
+                            }
+                            changes.push(op.clone());
+                            restarted.insert(node.clone());
+                        }
+                    }
+                    Op::Healthcheck { node, .. } => {
+                        if restarted.contains(node) || format!("{existing:?}") != format!("{op:?}")
+                        {
+                            changes.push(op.clone());
+                        }
+                    }
+                    // one-shot: a pre-start delay only makes sense for a new node
+                    Op::StartupDelay { .. } => {}
+                    // TODO(#85): a changed bridge (mtu / vlan filtering) would
+                    // need its member veths re-attached after the re-create;
+                    // until then bridge edits are not applied.
+                    Op::CreateBridge { .. } => {
+                        if format!("{existing:?}") != format!("{op:?}") {
+                            tracing::warn!(
+                                "apply: bridge {} changed but bridge edits are not applied yet",
+                                op.key()
+                            );
+                        }
+                    }
                     // everything else: re-create when the payload changed
                     _ => {
                         if format!("{existing:?}") != format!("{op:?}") {
@@ -627,5 +773,45 @@ impl Plan {
         let mut ops = removals;
         ops.extend(changes);
         Plan { ops }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every inverse must address the same resource as the op it undoes,
+    /// otherwise `Plan::diff` cannot pair them.
+    #[test]
+    fn inverse_keeps_the_key() {
+        let t = crate::parser::parse(
+            r#"lab "k"
+profile router { forward ipv4 }
+node r : router {
+  vrf red table 10 { interfaces [eth0] route default via 10.0.0.2 }
+  run ["sleep", "1"] background
+}
+node h { route default via 10.0.0.1 }
+link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms  rate 1mbit }
+network lan { subnet 10.9.0.0/24  members [r:eth1, h:eth1] }
+"#,
+        )
+        .unwrap();
+        let p = crate::deploy::plan_for(&t).unwrap();
+        let mut checked = 0;
+        for op in &p.ops {
+            if let Some(inv) = op.inverse() {
+                assert!(inv.is_removal(), "{inv:?} must be a removal op");
+                if !matches!(op, Op::Exec { .. }) {
+                    assert_eq!(op.key(), inv.key(), "inverse of {op:?} changes the key");
+                }
+                checked += 1;
+            }
+        }
+        assert!(
+            checked >= 8,
+            "only {checked} inverses exercised: {:?}",
+            p.ops
+        );
     }
 }

@@ -120,6 +120,7 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     lab_state.namespaces = env.namespace_names.clone();
     lab_state.pids = env.pids.clone();
     lab_state.starttimes = env.starttimes.clone();
+    lab_state.exec_pids = env.exec_pids.clone();
     lab_state.mgmt_peers = env.mgmt_peers.clone();
     lab_state.wg_public_keys = wg_public_keys_b64;
     lab_state.containers = env.containers.clone();
@@ -139,6 +140,7 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
         env.wifi_loaded,
     );
     running.set_starttimes(env.starttimes);
+    running.set_exec_pids(env.exec_pids);
     running.set_mgmt_peers(env.mgmt_peers);
     running.set_process_logs(env.process_logs);
 
@@ -175,9 +177,16 @@ pub struct ApplyReport {
 /// plan(current))`, with the declarative layers purging undeclared
 /// addresses/routes. Journaled and rolled back on failure like a deploy;
 /// the state file is updated read-modify-write.
-pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<ApplyReport> {
+/// The pure half of [`apply`]: the plan `apply` would execute for
+/// `desired` on top of `running` (removals first, in reverse stage
+/// order). No kernel access; used by `apply --dry-run` / `--check` to
+/// show what the layered diff cannot (e.g. VRF-table route removals).
+pub fn apply_plan(running: &RunningLab, desired: &Topology) -> Result<Plan> {
     desired.validate().bail()?;
-    let _lock = state::lock(running.name())?;
+    Ok(plan_apply(running, desired)?.1)
+}
+
+fn plan_apply(running: &RunningLab, desired: &Topology) -> Result<(PlanInputs, Plan)> {
     let current = running.topology().clone();
 
     #[cfg(feature = "wireguard")]
@@ -205,7 +214,13 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
 
     let cur_plan = plan::plan(&current, &inputs)?;
     let des_plan = plan::plan(desired, &inputs)?;
-    let diff = Plan::diff(&cur_plan, &des_plan);
+    Ok((inputs, Plan::diff(&cur_plan, &des_plan)))
+}
+
+pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<ApplyReport> {
+    desired.validate().bail()?;
+    let _lock = state::lock(running.name())?;
+    let (inputs, diff) = plan_apply(running, desired)?;
     let report = ApplyReport {
         ops: diff.ops.len(),
         removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
@@ -236,6 +251,7 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
         env.containers,
         env.pids,
         env.starttimes,
+        env.exec_pids,
         env.process_logs,
         env.mgmt_peers,
         env.dns_injected,
@@ -250,6 +266,7 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     lab_state.namespaces = running.namespace_names().clone();
     lab_state.pids = running.pids().to_vec();
     lab_state.starttimes = running.starttimes().clone();
+    lab_state.exec_pids = running.exec_pids().clone();
     lab_state.mgmt_peers = running.mgmt_peers().clone();
     lab_state.containers = running.containers().clone();
     lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
@@ -258,6 +275,16 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     lab_state.process_logs = running.process_logs_map().clone();
     lab_state.saved_impairments = running.saved_impairments_map().clone();
     state::save(&lab_state, desired)?;
+
+    // ── validate { … } assertions, exactly as after deploy (#86) ──
+    // Never fails the apply; results ride on `running` for `--strict`.
+    if desired.assertions.is_empty() {
+        running.set_assertion_results(Vec::new());
+    } else {
+        tracing::info!("running validate assertions");
+        let results = run_assertions(running, desired);
+        running.set_assertion_results(results);
+    }
     Ok(report)
 }
 
@@ -788,6 +815,7 @@ pub async fn compute_layered_diff(
 
         // RTNETLINK side.
         let cfg = topology_to_network_config(node_name, node, desired, auto_routes.get(node_name))?;
+        let cfg = plan::network::with_vrf_routes(cfg, node_name, node)?;
         let cfg_is_empty = cfg.links().is_empty()
             && cfg.addresses().is_empty()
             && cfg.routes().is_empty()

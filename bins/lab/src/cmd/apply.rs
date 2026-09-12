@@ -23,6 +23,16 @@ pub struct Args {
     /// the NLL. Useful as a CI gate. Implies --dry-run.
     #[arg(long)]
     pub check: bool,
+
+    /// Fail (exit 2) when any `validate { … }` assertion fails after
+    /// the changes are applied. The lab stays as applied for inspection.
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Do not run the topology's `validate { … }` assertions after
+    /// applying.
+    #[arg(long)]
+    pub skip_validate: bool,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -31,11 +41,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         params,
         dry_run,
         check,
+        strict,
+        skip_validate,
     } = args;
     // --check implies --dry-run.
     let dry_run = dry_run || check;
 
-    let desired = parse_topology(&topology, &params)?;
+    let mut desired = parse_topology(&topology, &params)?;
+    if skip_validate {
+        desired.assertions.clear();
+    }
     let result = desired.validate();
     for w in result.warnings() {
         eprintln!("  {} {w}", yellow("WARN"));
@@ -72,6 +87,19 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     } else {
         None
     };
+    // Removal ops (deleted nodes/links/routes/…) come from the plan
+    // diff: the layered diff only sees what the declarative layers
+    // still declare, never what disappeared (#83).
+    let removals: Vec<String> = if check || dry_run {
+        nlink_lab::apply_plan(&running, &desired)?
+            .ops
+            .iter()
+            .filter(|o| o.is_removal())
+            .map(|o| o.describe())
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     // JSON dry-run output for CI consumption.
     if ctx.json && dry_run {
@@ -99,20 +127,27 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             /// `NftablesDiff`. Empty map elided.
             #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
             nftables: &'a std::collections::BTreeMap<String, nlink_lab::diff::NftablesDiff>,
+            /// Removal ops from the plan diff (deleted nodes, links,
+            /// VRF-table routes, …), one description per op. Empty
+            /// list elided. Additive since 0.9.
+            #[serde(skip_serializing_if = "<[String]>::is_empty")]
+            removals: &'a [String],
         }
+        let no_op = layered.is_empty() && removals.is_empty();
+        let change_count = layered.change_count() + removals.len();
         let report = DryRunReport {
             schema_version: 3,
             lab: lab_name,
-            no_op: layered.is_empty(),
-            change_count: layered.change_count(),
+            no_op,
+            change_count,
             network: &layered.network,
             nftables: &layered.nftables,
+            removals: &removals,
         };
         println!("{}", serde_json::to_string_pretty(&report)?);
-        if check && !layered.is_empty() {
+        if check && !no_op {
             return Err(nlink_lab::Error::Validation(format!(
-                "drift detected: {} change(s) needed to converge",
-                layered.change_count(),
+                "drift detected: {change_count} change(s) needed to converge"
             )));
         }
         return Ok(());
@@ -122,7 +157,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // layered diff (richer than the lab-graph-only
     // TopologyDiff). For ordinary apply, the existing
     // TopologyDiff render is what gets printed.
-    let layered_is_empty = layered_view.as_ref().map(|l| l.is_empty()).unwrap_or(true);
+    let layered_is_empty =
+        layered_view.as_ref().map(|l| l.is_empty()).unwrap_or(true) && removals.is_empty();
 
     if (check || dry_run) && layered_is_empty {
         if !ctx.quiet {
@@ -142,14 +178,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let layered = layered_view
             .as_ref()
             .expect("layered_view is Some when check");
+        let change_count = layered.change_count() + removals.len();
         if !ctx.quiet {
             println!("Drift detected for lab '{lab_name}':");
             print!("{layered}");
-            println!("{} change(s) needed to converge", layered.change_count());
+            print_removals(&removals);
+            println!("{change_count} change(s) needed to converge");
         }
         return Err(nlink_lab::Error::Validation(format!(
-            "drift detected: {} change(s) needed to converge",
-            layered.change_count(),
+            "drift detected: {change_count} change(s) needed to converge"
         )));
     }
 
@@ -157,7 +194,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         println!("Changes for lab '{lab_name}':");
         if let Some(layered) = &layered_view {
             print!("{layered}");
-            println!("{} change(s)", layered.change_count());
+            print_removals(&removals);
+            println!("{} change(s)", layered.change_count() + removals.len());
         } else {
             print!("{diff}");
             println!("{} change(s)", diff.change_count());
@@ -176,13 +214,67 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let report = nlink_lab::apply(&mut running, &desired).await?;
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     let elapsed = start.elapsed();
+    let assertions_failed = running.assertions_failed();
 
-    if !ctx.quiet {
+    if ctx.json {
+        let mut out = serde_json::json!({
+            "name": lab_name,
+            "ops": report.ops,
+            "removed": report.removed,
+            "applied": report.applied,
+            "apply_time_ms": elapsed.as_millis() as u64,
+        });
+        if !running.assertion_results().is_empty() {
+            out["assertions"] = serde_json::to_value(running.assertion_results())?;
+            out["assertions_failed"] = serde_json::Value::Bool(assertions_failed);
+        }
+        println!("{out}");
+    } else if !ctx.quiet {
         println!(
             "\nApplied {} change(s) in {:.0?}",
             diff.change_count(),
             elapsed
         );
+        for a in running.assertion_results() {
+            if a.passed {
+                println!("  PASS {}", a.description);
+            } else {
+                println!(
+                    "  FAIL {}: {}",
+                    a.description,
+                    a.detail.as_deref().unwrap_or_default()
+                );
+            }
+        }
+    }
+
+    if assertions_failed {
+        if strict {
+            return Err(nlink_lab::Error::Validation(format!(
+                "{} of {} assertion(s) failed (lab {:?} left as applied for inspection)",
+                running
+                    .assertion_results()
+                    .iter()
+                    .filter(|a| !a.passed)
+                    .count(),
+                running.assertion_results().len(),
+                lab_name
+            )));
+        }
+        eprintln!(
+            "  {} assertions failed; pass --strict to make this fatal",
+            yellow("WARN")
+        );
     }
     Ok(())
+}
+
+fn print_removals(removals: &[String]) {
+    if removals.is_empty() {
+        return;
+    }
+    println!("Removals:");
+    for r in removals {
+        println!("  - {r}");
+    }
 }

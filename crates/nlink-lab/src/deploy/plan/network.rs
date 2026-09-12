@@ -1,5 +1,6 @@
 //! Pure planner: a node's links/interfaces/addresses/routes → `NetworkConfig` (Plan 158e/159a).
 
+use crate::deploy::op::{Op, RouteSpec};
 use crate::error::{Error, Result};
 use crate::types::{EndpointRef, Topology};
 use std::collections::BTreeMap;
@@ -209,13 +210,10 @@ pub(crate) fn topology_to_network_config(
         }
     }
 
-    // Pass 4 — VRF routes, declared into the VRF's table (was the
-    // imperative step 12b / `add_route_with_table`).
-    for vrf_config in node.vrfs.values() {
-        for (dest, route_config) in &vrf_config.routes {
-            cfg = push_route(cfg, node_name, dest, route_config, Some(vrf_config.table))?;
-        }
-    }
+    // VRF-table routes are NOT declared here: nlink's purge converges
+    // the main table only, so they are explicit `Op::Route` ops
+    // (`vrf_route_ops`). `with_vrf_routes` adds them back for the
+    // diff-only view.
 
     // ── Addresses, in the same order step 9 used to apply them ──
     // 1. From per-link endpoint addresses.
@@ -356,26 +354,7 @@ pub(crate) fn push_route(
     route_config: &crate::types::RouteConfig,
     table: Option<u32>,
 ) -> Result<nlink::netlink::config::NetworkConfig> {
-    let is_v6 = route_config
-        .via
-        .as_deref()
-        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
-        .map(|ip| ip.is_ipv6())
-        .unwrap_or(false)
-        || (dest != "default" && dest.contains(':'));
-
-    let dst_cidr = if dest == "default" {
-        if is_v6 { "::/0" } else { "0.0.0.0/0" }.to_string()
-    } else if !dest.contains('/') {
-        // Bare IP without prefix — assume host route.
-        if is_v6 {
-            format!("{dest}/128")
-        } else {
-            format!("{dest}/32")
-        }
-    } else {
-        dest.to_string()
-    };
+    let dst_cidr = normalize_dest(dest, route_config);
 
     let via = route_config.via.clone();
     let dev = route_config.dev.clone();
@@ -405,7 +384,113 @@ pub(crate) fn push_route(
     Ok(cfg)
 }
 
-/// Add a single route in a namespace.
+/// `default` → `0.0.0.0/0` / `::/0`, bare IP → host route; family is
+/// taken from the destination, else from `via`.
+fn normalize_dest(dest: &str, route_config: &crate::types::RouteConfig) -> String {
+    let is_v6 = route_config
+        .via
+        .as_deref()
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+        .map(|ip| ip.is_ipv6())
+        .unwrap_or(false)
+        || (dest != "default" && dest.contains(':'));
+    if dest == "default" {
+        if is_v6 { "::/0" } else { "0.0.0.0/0" }.to_string()
+    } else if !dest.contains('/') {
+        // Bare IP without prefix — assume host route.
+        if is_v6 {
+            format!("{dest}/128")
+        } else {
+            format!("{dest}/32")
+        }
+    } else {
+        dest.to_string()
+    }
+}
+
+/// Every `vrf { route … }` of `node` as an explicit, fully resolved
+/// [`RouteSpec`] op (`Stage::Routes`).
+pub(crate) fn vrf_route_ops(node_name: &str, node: &crate::types::Node) -> Result<Vec<Op>> {
+    let mut ops = Vec::new();
+    for (vrf_name, vrf_config) in &node.vrfs {
+        for (dest, route_config) in &vrf_config.routes {
+            let route = route_spec(node_name, vrf_name, dest, route_config, vrf_config.table)?;
+            ops.push(Op::Route {
+                node: node_name.to_string(),
+                route,
+            });
+        }
+    }
+    Ok(ops)
+}
+
+fn route_spec(
+    node_name: &str,
+    vrf_name: &str,
+    dest: &str,
+    route_config: &crate::types::RouteConfig,
+    table: u32,
+) -> Result<RouteSpec> {
+    let cidr = normalize_dest(dest, route_config);
+    let bad = |why: String| {
+        Error::invalid_topology(format!(
+            "vrf '{vrf_name}' on node '{node_name}': route '{dest}': {why}"
+        ))
+    };
+    let (addr, prefix) = cidr
+        .split_once('/')
+        .ok_or_else(|| bad("expected CIDR".into()))?;
+    let dest_ip: std::net::IpAddr = addr
+        .parse()
+        .map_err(|e| bad(format!("invalid destination: {e}")))?;
+    let prefix: u8 = prefix
+        .parse()
+        .map_err(|e| bad(format!("invalid prefix: {e}")))?;
+    let max = if dest_ip.is_ipv6() { 128 } else { 32 };
+    if prefix > max {
+        return Err(bad(format!("prefix /{prefix} exceeds /{max}")));
+    }
+    let via = match &route_config.via {
+        Some(gw) => {
+            let gw: std::net::IpAddr = gw
+                .parse()
+                .map_err(|e| bad(format!("invalid gateway '{gw}': {e}")))?;
+            if gw.is_ipv6() != dest_ip.is_ipv6() {
+                return Err(bad(format!(
+                    "gateway {gw} and destination {dest_ip} are different address families"
+                )));
+            }
+            Some(gw)
+        }
+        None => None,
+    };
+    Ok(RouteSpec {
+        dest: dest_ip,
+        prefix,
+        table,
+        via,
+        dev: route_config.dev.clone(),
+        metric: route_config.metric,
+    })
+}
+
+/// Diff-only view: the node's `NetworkConfig` *with* its VRF-table
+/// routes declared, so `apply --check` / `compute_layered_diff` still
+/// report VRF route additions and changes (removals are reported by
+/// the plan diff's `DelRoute` ops instead).
+pub(crate) fn with_vrf_routes(
+    mut cfg: nlink::netlink::config::NetworkConfig,
+    node_name: &str,
+    node: &crate::types::Node,
+) -> Result<nlink::netlink::config::NetworkConfig> {
+    for vrf_config in node.vrfs.values() {
+        for (dest, route_config) in &vrf_config.routes {
+            cfg = push_route(cfg, node_name, dest, route_config, Some(vrf_config.table))?;
+        }
+    }
+    Ok(cfg)
+}
+
 /// Auto-generate static routes from the topology graph.
 ///
 /// For stub nodes (single neighbor): adds a default route.

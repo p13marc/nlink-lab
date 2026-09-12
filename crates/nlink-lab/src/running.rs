@@ -37,6 +37,9 @@ pub struct RunningLab {
     /// `/proc/<pid>/stat` start time per tracked PID (see
     /// `LabState::starttimes`). A PID without an entry is never signalled.
     starttimes: BTreeMap<u32, u64>,
+    /// Background `exec` block → pid (`"<node>:<index>"`, see
+    /// `LabState::exec_pids`).
+    exec_pids: BTreeMap<String, u32>,
     /// node → root-namespace mgmt veth peer name (see `LabState::mgmt_peers`).
     mgmt_peers: std::collections::BTreeMap<String, String>,
     /// Outcome of the `validate { … }` assertions run at deploy step 19.
@@ -171,6 +174,7 @@ impl RunningLab {
             dns_injected,
             wifi_loaded,
             starttimes: BTreeMap::new(),
+            exec_pids: BTreeMap::new(),
             mgmt_peers: std::collections::BTreeMap::new(),
             saved_impairments: BTreeMap::new(),
             process_logs: BTreeMap::new(),
@@ -343,6 +347,15 @@ impl RunningLab {
     }
 
     /// Record PID start times captured at deploy time.
+    /// Background `exec` block (`"<node>:<index>"`) → pid.
+    pub fn exec_pids(&self) -> &BTreeMap<String, u32> {
+        &self.exec_pids
+    }
+
+    pub(crate) fn set_exec_pids(&mut self, exec_pids: BTreeMap<String, u32>) {
+        self.exec_pids = exec_pids;
+    }
+
     pub(crate) fn set_starttimes(&mut self, starttimes: BTreeMap<u32, u64>) {
         self.starttimes = starttimes;
     }
@@ -383,6 +396,7 @@ impl RunningLab {
         containers: BTreeMap<String, ContainerState>,
         pids: Vec<(String, u32)>,
         starttimes: BTreeMap<u32, u64>,
+        exec_pids: BTreeMap<String, u32>,
         process_logs: BTreeMap<u32, (String, String)>,
         mgmt_peers: BTreeMap<String, String>,
         dns_injected: bool,
@@ -392,6 +406,7 @@ impl RunningLab {
         self.containers = containers;
         self.pids = pids;
         self.starttimes = starttimes;
+        self.exec_pids = exec_pids;
         self.process_logs = process_logs;
         self.mgmt_peers = mgmt_peers;
         self.dns_injected = dns_injected;
@@ -658,9 +673,8 @@ impl RunningLab {
         let mut command = std::process::Command::new(cmd[0]);
         command.args(&cmd[1..]);
 
-        let child = crate::ns_exec::spawn(ns_name, command)
+        let pid = crate::ns_exec::spawn_detached(ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
-        let pid = child.id();
         self.track_pid(node, pid);
         Ok(pid)
     }
@@ -678,6 +692,7 @@ impl RunningLab {
         lab_state.wifi_loaded = self.wifi_loaded;
         lab_state.pids = self.pids.clone();
         lab_state.starttimes = self.starttimes.clone();
+        lab_state.exec_pids = self.exec_pids.clone();
         lab_state.mgmt_peers = self.mgmt_peers.clone();
         lab_state.saved_impairments = self.saved_impairments.clone();
         lab_state.process_logs = self.process_logs.clone();
@@ -779,9 +794,8 @@ impl RunningLab {
             command.env(k, v);
         }
 
-        let child = crate::ns_exec::spawn(&ns_name, command)
+        let pid = crate::ns_exec::spawn_detached(&ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
-        let pid = child.id();
         self.track_pid(node, pid);
         self.process_logs.insert(
             pid,
@@ -1429,6 +1443,7 @@ impl RunningLab {
             saved_impairments: lab_state.saved_impairments,
             process_logs: lab_state.process_logs,
             starttimes: lab_state.starttimes,
+            exec_pids: lab_state.exec_pids,
             mgmt_peers: lab_state.mgmt_peers,
             assertion_results: Vec::new(),
         })
@@ -1442,13 +1457,12 @@ impl RunningLab {
     /// Check status of tracked background processes.
     ///
     /// `alive` is `true` only if the PID still exists **and** is not a
-    /// zombie. This matters because `spawn_with_logs` returns a
-    /// `std::process::Child` that the caller drops without
-    /// `wait()`-ing, so an exited child becomes a zombie that
-    /// `kill(pid, 0)` will continue to report as deliverable
-    /// (returning 0). Without the zombie check, "is this process
-    /// still running?" polling would never see a quick-exiting child
-    /// transition to dead.
+    /// zombie. Spawned processes are detached (double-forked and
+    /// reparented to init, see [`crate::ns_exec::spawn_detached`]), so
+    /// nlink-lab itself never leaves zombies; the check still matters
+    /// for processes a spawned program forks and abandons (hostapd's
+    /// `-B` parent, shell wrappers), which `kill(pid, 0)` keeps
+    /// reporting as deliverable.
     pub fn process_status(&self) -> Vec<ProcessInfo> {
         self.pids
             .iter()
@@ -1737,10 +1751,10 @@ pub(crate) fn kill_tracked(pid: u32, expected_starttime: Option<u64>) -> KillOut
 ///
 /// `kill(pid, 0)` alone is insufficient: a zombie (a process that has
 /// exited but hasn't been waited-on by its parent) still has an entry
-/// in the kernel process table and `kill(pid, 0)` returns 0. Since
-/// [`spawn_with_logs`](RunningLab::spawn_with_logs) drops its
-/// `std::process::Child` without `wait()`-ing, every quick-exiting
-/// child stays a zombie indefinitely from this process's POV.
+/// in the kernel process table and `kill(pid, 0)` returns 0. nlink-lab's
+/// own spawns are detached and reaped by init
+/// ([`crate::ns_exec::spawn_detached`]), but a tracked pid may still be
+/// a zombie of *its* parent (a daemon's `-B` wrapper, a shell).
 ///
 /// To match the user-facing meaning of "alive" (the process is
 /// actually running), we also read `/proc/<pid>/stat` and treat the

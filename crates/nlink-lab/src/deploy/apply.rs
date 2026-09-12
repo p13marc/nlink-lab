@@ -13,7 +13,7 @@ use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::{Connection, Route};
 
-use super::op::{Op, Plan, Stage};
+use super::op::{Op, Plan, RouteSpec, Stage};
 use super::rollback::{Journal, Undo};
 use super::{NsRef, apply_network_impairments, apply_stack_for_node, guard_namespace_absent};
 use crate::container::Runtime;
@@ -34,6 +34,8 @@ pub(super) struct ApplyEnv {
     pub containers: BTreeMap<String, ContainerState>,
     pub pids: Vec<(String, u32)>,
     pub starttimes: BTreeMap<u32, u64>,
+    /// `"<node>:<index>"` → pid of a background `exec` block (#84).
+    pub exec_pids: BTreeMap<String, u32>,
     pub process_logs: BTreeMap<u32, (String, String)>,
     pub mgmt_peers: BTreeMap<String, String>,
     pub dns_injected: bool,
@@ -60,6 +62,7 @@ impl ApplyEnv {
             containers: BTreeMap::new(),
             pids: Vec::new(),
             starttimes: BTreeMap::new(),
+            exec_pids: BTreeMap::new(),
             process_logs: BTreeMap::new(),
             mgmt_peers: BTreeMap::new(),
             dns_injected: false,
@@ -94,6 +97,8 @@ impl ApplyEnv {
         }
         env.pids = running.pids().to_vec();
         env.starttimes = running.starttimes().clone();
+        env.exec_pids = running.exec_pids().clone();
+        env.process_logs = running.process_logs_map().clone();
         env.mgmt_peers = running.mgmt_peers().clone();
         env.dns_injected = running.dns_injected();
         env.wifi_loaded = running.wifi_loaded();
@@ -315,6 +320,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     "failed to create bridge '{name}' for network '{network}': {e}"
                 ))
             })?;
+            journal.record(Undo::DeleteLink {
+                ns: NsRef::Named { name: ns.clone() },
+                iface: name.clone(),
+            });
             conn.set_link_up(name.as_str()).await.map_err(|e| {
                 Error::deploy_failed(format!("failed to bring up bridge '{name}': {e}"))
             })?;
@@ -620,11 +629,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     journal.record(Undo::CleanupWifiConfigs {
                         lab: env.lab.clone(),
                     });
+                    let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("hostapd");
-                    cmd.args(["-B", &conf]);
-                    handle.spawn(cmd).map_err(|e| {
-                        Error::deploy_failed(format!("failed to start hostapd on '{node}': {e}"))
-                    })?;
+                    cmd.args(["-B", "-P", &pidfile, &conf]);
+                    start_wifi_daemon(&handle, cmd, "hostapd", node, &pidfile, env, journal)?;
                 }
                 crate::types::WifiMode::Station => {
                     let conf = crate::wifi::write_config(
@@ -636,13 +644,18 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     journal.record(Undo::CleanupWifiConfigs {
                         lab: env.lab.clone(),
                     });
+                    let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("wpa_supplicant");
-                    cmd.args(["-B", "-i", &wifi.name, "-c", &conf]);
-                    handle.spawn(cmd).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to start wpa_supplicant on '{node}': {e}"
-                        ))
-                    })?;
+                    cmd.args(["-B", "-P", &pidfile, "-i", &wifi.name, "-c", &conf]);
+                    start_wifi_daemon(
+                        &handle,
+                        cmd,
+                        "wpa_supplicant",
+                        node,
+                        &pidfile,
+                        env,
+                        journal,
+                    )?;
                 }
                 crate::types::WifiMode::Mesh => {
                     if let Some(mesh_id) = &wifi.mesh_id {
@@ -673,6 +686,51 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
 
         // ── removals (apply diffs) ──
+        Op::DeleteBridge { ns, name } => match namespace::connection_for(ns) {
+            Ok(conn) => {
+                let conn: Connection<Route> = conn;
+                if let Err(e) = conn.del_link_if_exists(name.as_str()).await {
+                    tracing::warn!("failed to delete bridge '{name}' in '{ns}': {e}");
+                }
+            }
+            Err(e) => tracing::warn!("delete bridge '{name}': no connection to '{ns}': {e}"),
+        },
+        Op::KillWifiDaemon { node, name, mode } => {
+            let pidfile = wifi_pidfile(&env.lab, node, name);
+            match mode {
+                crate::types::WifiMode::Mesh => {
+                    if let Ok(handle) = env.handle(node) {
+                        let mut cmd = std::process::Command::new("iw");
+                        cmd.args(["dev", name, "mesh", "leave"]);
+                        if let Err(e) = handle.spawn_output(cmd) {
+                            tracing::warn!("mesh leave on '{node}:{name}': {e}");
+                        }
+                    }
+                }
+                _ => {
+                    let pid = std::fs::read_to_string(&pidfile)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u32>().ok());
+                    match pid {
+                        Some(pid) => {
+                            let outcome = crate::running::kill_tracked(
+                                pid,
+                                env.starttimes.get(&pid).copied(),
+                            );
+                            tracing::info!(
+                                "stop wifi daemon of '{node}:{name}' (pid {pid}): {outcome:?}"
+                            );
+                            env.starttimes.remove(&pid);
+                            env.pids.retain(|(_, p)| *p != pid);
+                        }
+                        None => tracing::warn!(
+                            "wifi daemon of '{node}:{name}': no pidfile at {pidfile}; left running"
+                        ),
+                    }
+                    let _ = std::fs::remove_file(&pidfile);
+                }
+            }
+        }
         Op::DeleteNamespace { node, ns } => {
             crate::dns::remove_netns_etc(ns);
             if namespace::exists(ns)
@@ -694,6 +752,23 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             }
             env.containers.remove(node);
             env.ns.remove(node);
+        }
+        Op::Route { node, route } => {
+            let conn = env.route(node)?;
+            replace_route_spec(&conn, route).await.map_err(|e| {
+                Error::deploy_failed(format!("failed to add route {route} on '{node}': {e}"))
+            })?;
+            journal.record(Undo::DelRoute {
+                ns: env.handle(node)?.clone(),
+                route: route.clone(),
+            });
+        }
+        Op::DelRoute { node, route } => {
+            if let Ok(conn) = env.route(node)
+                && let Err(e) = del_route_lenient(&conn, route).await
+            {
+                tracing::warn!("failed to delete route {route} on '{node}': {e}");
+            }
         }
         Op::DeleteLink { node, iface } => {
             if let Ok(conn) = env.route(node)
@@ -720,6 +795,23 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     })?;
             }
         }
+        Op::KillExec { node, index } => {
+            let key = format!("{node}:{index}");
+            match env.exec_pids.remove(&key) {
+                Some(pid) => {
+                    let outcome =
+                        crate::running::kill_tracked(pid, env.starttimes.get(&pid).copied());
+                    tracing::info!("stop exec[{index}] of '{node}' (pid {pid}): {outcome:?}");
+                    env.starttimes.remove(&pid);
+                    env.process_logs.remove(&pid);
+                    env.pids.retain(|(_, p)| *p != pid);
+                }
+                None => tracing::warn!(
+                    "exec[{index}] of '{node}': no tracked pid (started before 0.9, or a \
+                     container exec); its process is left running"
+                ),
+            }
+        }
         Op::KillNodeProcesses { node } => {
             let mine: Vec<u32> = env
                 .pids
@@ -733,6 +825,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 env.process_logs.remove(&pid);
             }
             env.pids.retain(|(n, _)| n != node);
+            env.exec_pids
+                .retain(|k, _| k.split_once(':').map(|(n, _)| n) != Some(node));
         }
         Op::RemoveDns { lab } => {
             if let Err(e) = crate::dns::remove_hosts(lab) {
@@ -842,12 +936,11 @@ fn exec_op(
     let stderr_path = log_dir.join(format!("{node}-{basename}-{index}.stderr"));
     cmd.stdout(std::fs::File::create(&stdout_path)?);
     cmd.stderr(std::fs::File::create(&stderr_path)?);
-    let child = handle.spawn(cmd).map_err(|e| {
+    let pid = handle.spawn_detached(cmd).map_err(|e| {
         Error::deploy_failed(format!(
             "failed to spawn background process on '{node}' exec[{index}]: {e}"
         ))
     })?;
-    let pid = child.id();
     let started = crate::running::host_starttime(pid);
     journal.record(Undo::KillProcess {
         pid,
@@ -857,6 +950,7 @@ fn exec_op(
     if let Some(st) = started {
         env.starttimes.insert(pid, st);
     }
+    env.exec_pids.insert(format!("{node}:{index}"), pid);
     let final_stdout = log_dir.join(format!("{node}-{basename}-{pid}.stdout"));
     let final_stderr = log_dir.join(format!("{node}-{basename}-{pid}.stderr"));
     let _ = std::fs::rename(&stdout_path, &final_stdout);
@@ -868,5 +962,122 @@ fn exec_op(
             final_stderr.to_string_lossy().to_string(),
         ),
     );
+    Ok(())
+}
+
+/// `ip route replace` for a [`RouteSpec`] (idempotent).
+async fn replace_route_spec(
+    conn: &Connection<Route>,
+    spec: &RouteSpec,
+) -> std::result::Result<(), nlink::netlink::Error> {
+    match spec.dest {
+        std::net::IpAddr::V4(dst) => conn.replace_route(route_v4(spec, dst)).await,
+        std::net::IpAddr::V6(dst) => conn.replace_route(route_v6(spec, dst)).await,
+    }
+}
+
+/// `ip route del` for a [`RouteSpec`]; an already-absent route is not
+/// an error (ESRCH / not found), like the `del_*_if_exists` family.
+pub(super) async fn del_route_lenient(
+    conn: &Connection<Route>,
+    spec: &RouteSpec,
+) -> std::result::Result<(), nlink::netlink::Error> {
+    let res = match spec.dest {
+        std::net::IpAddr::V4(dst) => conn.del_route(route_v4(spec, dst)).await,
+        std::net::IpAddr::V6(dst) => conn.del_route(route_v6(spec, dst)).await,
+    };
+    match res {
+        Ok(()) => Ok(()),
+        Err(e) if e.is_not_found() || e.errno() == Some(libc::ESRCH) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+fn route_v4(spec: &RouteSpec, dst: std::net::Ipv4Addr) -> nlink::netlink::route::Ipv4Route {
+    let mut r = nlink::netlink::route::Ipv4Route::from_addr(dst, spec.prefix).table(spec.table);
+    if let Some(std::net::IpAddr::V4(gw)) = spec.via {
+        r = r.gateway(gw);
+    }
+    if let Some(d) = &spec.dev {
+        r = r.dev(d.clone());
+    }
+    if let Some(m) = spec.metric {
+        r = r.metric(m);
+    }
+    r
+}
+
+fn route_v6(spec: &RouteSpec, dst: std::net::Ipv6Addr) -> nlink::netlink::route::Ipv6Route {
+    let mut r = nlink::netlink::route::Ipv6Route::from_addr(dst, spec.prefix).table(spec.table);
+    if let Some(std::net::IpAddr::V6(gw)) = spec.via {
+        r = r.gateway(gw);
+    }
+    if let Some(d) = &spec.dev {
+        r = r.dev(d.clone());
+    }
+    if let Some(m) = spec.metric {
+        r = r.metric(m);
+    }
+    r
+}
+
+fn wifi_pidfile(lab: &str, node: &str, iface: &str) -> String {
+    crate::wifi::config_dir(lab)
+        .join(format!("{node}-{iface}.pid"))
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Run a daemonising (`-B`) wifi daemon to completion of its foreground
+/// parent, then track the daemon through the pidfile it wrote (#85): the
+/// pid joins `env.pids` with its start time and an `Undo::KillProcess`,
+/// so `destroy`, node removal and `KillWifiDaemon` can all stop it.
+fn start_wifi_daemon(
+    handle: &NsRef,
+    cmd: std::process::Command,
+    what: &str,
+    node: &str,
+    pidfile: &str,
+    env: &mut ApplyEnv,
+    journal: &mut Journal,
+) -> Result<()> {
+    let _ = std::fs::remove_file(pidfile);
+    let output = handle
+        .spawn_output(cmd)
+        .map_err(|e| Error::deploy_failed(format!("failed to start {what} on '{node}': {e}")))?;
+    if !output.status.success() {
+        return Err(Error::deploy_failed(format!(
+            "{what} on '{node}' exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let pid = loop {
+        if let Some(pid) = std::fs::read_to_string(pidfile)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+        {
+            break Some(pid);
+        }
+        if std::time::Instant::now() >= deadline {
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    match pid {
+        Some(pid) => {
+            let started = crate::running::host_starttime(pid);
+            journal.record(Undo::KillProcess {
+                pid,
+                starttime: started,
+            });
+            env.pids.push((node.to_string(), pid));
+            if let Some(st) = started {
+                env.starttimes.insert(pid, st);
+            }
+        }
+        None => tracing::warn!("{what} on '{node}' wrote no pidfile at {pidfile}; not tracked"),
+    }
     Ok(())
 }

@@ -75,6 +75,13 @@ pub enum Commands {
     /// Validate a topology file without deploying.
     Validate(cmd::validate::Args),
 
+    /// Edit a running lab in place: add/remove nodes and links, set impairments.
+    ///
+    /// The edits are applied to the lab's stored topology and reconciled
+    /// with `apply`, so the state file stays the source of truth; use
+    /// `render`/`export` afterwards to get the updated NLL.
+    Edit(cmd::edit::Args),
+
     /// Format NLL files: canonical indentation and spacing, nothing else.
     ///
     /// A token-level formatter: comments, blank-line structure, quoting and

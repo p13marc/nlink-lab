@@ -12,6 +12,14 @@ All notable changes to this project will be documented in this file.
   Forgejo integration runner — so `dns hosts` labs could not deploy
   there. The writer now falls back to an in-place rewrite when the rename
   hits `EBUSY`/`EXDEV` (#81).
+- **`exec`/`spawn` work where the `/etc/netns` overlay cannot be mounted.**
+  Namespace exec mirrors `ip netns exec` by bind-mounting
+  `/etc/netns/<ns>/*` over `/etc` in a private mount namespace. Container
+  runtimes deny that `unshare`/`mount` even to root with `CAP_SYS_ADMIN`
+  (AppArmor/seccomp), so every exec in a `dns hosts` lab failed with
+  `Operation not permitted` on the CI runner. A one-time probe
+  (`ns_exec::etc_overlay_supported`) now detects this and falls back to a
+  plain namespace exec with the host `/etc`, warning once (#81).
 - **Integration lane finds its test binary under coloured cargo output.**
   The lane grepped cargo's human output for the executable path; with
   `CARGO_TERM_COLOR=always` the match failed silently and the lane ran

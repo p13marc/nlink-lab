@@ -73,6 +73,7 @@ pub mod impair_parse;
 pub mod ipfunc;
 pub mod ipmap;
 pub mod netns_tag;
+pub mod ns_exec;
 pub mod parser;
 pub mod portability;
 pub mod proc_stat;

@@ -383,7 +383,7 @@ pub(crate) fn check_netns_name(ns_name: &str) -> Result<()> {
 
 /// Create per-namespace `/etc/netns/<ns_name>/` directory with `hosts` and `resolv.conf`.
 ///
-/// When processes are spawned via `namespace::spawn_with_etc()`, these files are
+/// When processes are spawned via `crate::ns_exec::spawn()` (nlink's `spawn_with_etc` when the host allows the overlay), these files are
 /// bind-mounted over `/etc/hosts` and `/etc/resolv.conf` inside the namespace.
 ///
 /// The directory is shared with [`crate::netns_tag`], which keeps the

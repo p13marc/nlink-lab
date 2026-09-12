@@ -428,9 +428,7 @@ async fn nftables_reapply_is_zero_ops() {
 
     // Re-apply the same topology — diff should be empty and
     // apply_diff should be a no-op for the nftables layer.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("failed to re-apply unchanged topology");
 
@@ -532,9 +530,7 @@ async fn nftables_foreign_rule_survives_apply() {
 
     // Re-apply the same topology. The diff path must not touch
     // the foreign rule.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("failed to re-apply unchanged topology");
 
@@ -600,9 +596,7 @@ async fn nftables_rule_edit_replaces_in_place() {
         first.match_expr = Some("tcp dport 81".to_string());
     }
 
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &edited);
-    nlink_lab::apply_diff(&mut lab, &edited, &diff)
+    nlink_lab::apply(&mut lab, &edited)
         .await
         .expect("failed to apply edited topology");
 
@@ -669,9 +663,7 @@ async fn nftables_remove_firewall_clears_table() {
     if let Some(node) = edited.nodes.get_mut("server") {
         node.firewall = None;
     }
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &edited);
-    nlink_lab::apply_diff(&mut lab, &edited, &diff)
+    nlink_lab::apply(&mut lab, &edited)
         .await
         .expect("failed to apply edited topology");
 
@@ -740,9 +732,7 @@ async fn network_config_coexists_with_macvlan() {
     // Reapply must succeed — this is the key check: Slice 1's
     // NetworkConfig path sees the macvlan iface (created
     // imperatively in step 6a) and shouldn't try to re-create it.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply of macvlan topology failed");
 
@@ -776,9 +766,7 @@ async fn network_config_coexists_with_vrf() {
         name: lab.name().to_string(),
     };
 
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply of VRF topology failed");
 
@@ -880,9 +868,7 @@ async fn network_config_coexists_with_wireguard() {
     // Reapply must succeed (catches the case where Slice 1's
     // address handling clashes with the imperative WG
     // configuration in step 10d).
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply of WG topology failed");
 
@@ -928,9 +914,7 @@ async fn nat_masquerade_reapply_is_zero_ops() {
     );
 
     // Re-apply.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("failed to re-apply unchanged topology");
 
@@ -981,9 +965,7 @@ async fn slice2_dummy_iface_reapply_is_zero_ops() {
     );
 
     // Re-apply must be a no-op.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply failed");
 
@@ -1069,9 +1051,7 @@ async fn slice3_vlan_iface_reapply_is_zero_ops() {
         addr_before.stdout
     );
 
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply failed");
 
@@ -1297,9 +1277,7 @@ async fn wireguard_config_reapply_is_zero_ops() {
     // `LayeredDiff` yet — assert via `apply_diff` succeeding
     // without errors (any WG-layer mutation would be a churn
     // indicator in the trace).
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply failed");
 
@@ -1613,9 +1591,7 @@ async fn network_config_reapply_is_zero_ops() {
 
     // Re-apply the same topology — must be a no-op for the
     // NetworkConfig layer.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &topo);
-    nlink_lab::apply_diff(&mut lab, &topo, &diff)
+    nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("failed to re-apply unchanged topology");
 
@@ -1897,7 +1873,7 @@ async fn apply_add_node_and_link() {
     assert_eq!(diff.nodes_added, vec!["c"]);
     assert_eq!(diff.links_added.len(), 1);
 
-    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+    nlink_lab::apply(&mut lab, &desired)
         .await
         .expect("apply_diff failed");
 
@@ -2021,9 +1997,7 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
 
     // Step 3 — apply the diff and check the WG layer is live on
     // the newly-added node.
-    let current = lab.topology().clone();
-    let diff = nlink_lab::diff::diff_topologies(&current, &desired);
-    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+    nlink_lab::apply(&mut lab, &desired)
         .await
         .expect("apply_diff failed");
 
@@ -2085,7 +2059,7 @@ async fn apply_remove_node() {
     assert_eq!(diff.nodes_removed, vec!["c"]);
     assert_eq!(diff.links_removed.len(), 1);
 
-    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+    nlink_lab::apply(&mut lab, &desired)
         .await
         .expect("apply_diff failed");
 
@@ -2140,7 +2114,7 @@ async fn apply_impairment_change() {
     let diff = nlink_lab::diff_topologies(lab.topology(), &desired);
     assert_eq!(diff.impairments_changed.len(), 1);
 
-    nlink_lab::apply_diff(&mut lab, &desired, &diff)
+    nlink_lab::apply(&mut lab, &desired)
         .await
         .expect("apply_diff failed");
 

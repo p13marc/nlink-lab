@@ -1265,6 +1265,26 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             if dry_run {
                 println!("Topology {:?} is valid", topo.lab.name);
                 print_topology_summary(&topo);
+                // The plan is pure: this is exactly what `deploy` would do.
+                let plan = nlink_lab::plan_for(&topo)?;
+                if json {
+                    let ops: Vec<serde_json::Value> = plan
+                        .ops
+                        .iter()
+                        .map(|op| serde_json::json!({ "stage": format!("{:?}", op.stage()), "op": op.describe() }))
+                        .collect();
+                    println!("{}", serde_json::to_string_pretty(&ops)?);
+                } else if !quiet {
+                    println!("\nPlan ({} ops):", plan.ops.len());
+                    let mut last = None;
+                    for op in &plan.ops {
+                        if last != Some(op.stage()) {
+                            println!("  [{:?}]", op.stage());
+                            last = Some(op.stage());
+                        }
+                        println!("    {}", op.describe());
+                    }
+                }
                 return Ok(());
             }
 
@@ -1518,7 +1538,8 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
             require_root()?;
             let start = Instant::now();
-            nlink_lab::apply_diff(&mut running, &desired, &diff).await?;
+            let report = nlink_lab::apply(&mut running, &desired).await?;
+            tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
             let elapsed = start.elapsed();
 
             if !quiet {

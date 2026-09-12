@@ -5,1160 +5,103 @@
 
 #[cfg(feature = "wireguard")]
 use nlink::Wireguard;
-use nlink::netlink::bridge_vlan::BridgeVlanBuilder;
 use nlink::netlink::namespace;
-use nlink::netlink::ratelimit::RateLimiter;
 use nlink::{Connection, Route};
 use std::collections::BTreeMap;
 use std::net::IpAddr;
 
-use crate::container::Runtime;
 use crate::error::{Error, Result};
-use crate::helpers::{parse_cidr, parse_rate_bps};
+use crate::helpers::parse_rate_bps;
 use crate::running::RunningLab;
-use crate::state::{self, ContainerState, LabState};
-use crate::types::{DnsMode, EndpointRef, Topology};
+use crate::state::{self, LabState};
+use crate::types::{EndpointRef, Topology};
 
+mod apply;
 pub mod op;
 mod plan;
+pub mod rollback;
 
-pub use op::NsRef;
+use rollback::{Journal, Undo};
+
+pub use op::{NsRef, Op, Plan, Stage};
 pub(crate) use plan::network::*;
 pub(crate) use plan::nftables::*;
-pub(crate) use plan::process::*;
 pub(crate) use plan::qdisc::*;
+#[cfg(feature = "wireguard")]
+pub(crate) use plan::wireguard::WgKeys;
+#[cfg(test)]
 pub(crate) use plan::wireguard::*;
+pub use plan::{PlanInputs, plan};
 
-/// Deploy a topology, creating all namespaces, links, addresses, routes, etc.
-///
-/// Returns a [`RunningLab`] handle for interacting with the deployed lab.
+/// Deploy a topology: validate, lock, allocate pooled subnets, then
+/// `execute(plan(topology))`. Every mutation is journaled; on any error
+/// the journal is unwound before the error is returned. A journal left
+/// behind by an interrupted earlier run of the same lab is unwound
+/// first.
 pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
-    // Safety check: validate first
     topology.validate().bail()?;
-
-    // Acquire exclusive lock
     let _lock = state::lock(&topology.lab.name)?;
-
-    // Check if lab already exists
     if state::exists(&topology.lab.name) {
         return Err(Error::AlreadyExists {
             name: topology.lab.name.clone(),
         });
     }
-
-    // Resolve `auto/N` subnet placeholders against the host-wide pool
-    // before any kernel state is created. The pool acquires its own
-    // flock; allocations are recorded against the lab name so destroy
-    // can free them. (Round-5 §2.5.) Clone the topology since the
-    // `&Topology` we received is borrowed; substitution mutates.
-    let mut owned_topology = topology.clone();
-    let lab_name = owned_topology.lab.name.clone();
-    let allocated_subnets =
-        crate::subnet_pool::substitute_auto_subnets(&mut owned_topology, |prefix| {
-            crate::subnet_pool::allocate(&lab_name, prefix)
-        })?;
-    let topology = &owned_topology;
-    let mut cleanup = Cleanup::new(lab_name.clone());
-    if !allocated_subnets.is_empty() {
-        cleanup.set_subnet_pool_lab(lab_name.clone());
+    if let Some(mut pending) = Journal::load_pending(&topology.lab.name) {
+        tracing::warn!(
+            "lab '{}': unwinding {} journal entries left by an interrupted run",
+            topology.lab.name,
+            pending.entries().len()
+        );
+        pending.unwind().await;
     }
 
-    // Every kernel/host mutation happens in `deploy_inner`; on any error
-    // the journal of what was created so far is unwound (async, so
-    // root-namespace links can be deleted through netlink) before the
-    // error propagates. `Cleanup`'s `Drop` remains as a synchronous
-    // last resort for panics.
-    match deploy_inner(topology, &mut cleanup).await {
-        Ok(running) => Ok(running),
+    // Resolve `auto/N` subnet placeholders against the host-wide pool
+    // before any kernel state is created. Allocations are recorded
+    // against the lab name so destroy/rollback can free them.
+    let mut owned = topology.clone();
+    let lab_name = owned.lab.name.clone();
+    let allocated = crate::subnet_pool::substitute_auto_subnets(&mut owned, |prefix| {
+        crate::subnet_pool::allocate(&lab_name, prefix)
+    })?;
+    let topology = &owned;
+
+    let mut journal = Journal::new(&lab_name);
+    if !allocated.is_empty() {
+        journal.record(Undo::FreeSubnets {
+            lab: lab_name.clone(),
+        });
+    }
+
+    match deploy_inner(topology, &mut journal).await {
+        Ok(running) => {
+            journal.discard();
+            Ok(running)
+        }
         Err(e) => {
             tracing::warn!("deploy of '{lab_name}' failed: {e}; rolling back");
-            cleanup.rollback().await;
+            journal.unwind().await;
             Err(e)
         }
     }
 }
 
-async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<RunningLab> {
-    let mut node_handles: BTreeMap<String, NsRef> = BTreeMap::new();
-    let mut namespace_names: BTreeMap<String, String> = BTreeMap::new();
-    let mut container_states: BTreeMap<String, ContainerState> = BTreeMap::new();
-    let mut pids: Vec<(String, u32)> = Vec::new();
-    let mut starttimes: BTreeMap<u32, u64> = BTreeMap::new();
-    let mut mgmt_peers: std::collections::BTreeMap<String, String> = Default::default();
-    let mut process_logs: BTreeMap<u32, (String, String)> = BTreeMap::new();
+async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<RunningLab> {
+    let inputs = PlanInputs::for_deploy(topology)?;
+    let plan = plan::plan(topology, &inputs)?;
+    tracing::info!("plan: {} op(s)", plan.ops.len());
+    let mut env = apply::ApplyEnv::for_deploy(topology)?;
+    apply::execute(&plan, &mut env, journal).await?;
 
-    // Detect container runtime if any node uses an image
-    let has_container_nodes = topology.nodes.values().any(|n| n.image.is_some());
-    let container_runtime = if has_container_nodes {
-        let rt_config = topology.lab.runtime.as_ref().cloned().unwrap_or_default();
-        let rt = Runtime::new(&rt_config)?;
-        cleanup.set_runtime(rt.binary());
-        Some(rt)
-    } else {
-        None
-    };
-
-    // Pre-compute DNS hosts entries for container --add-host flags.
-    // IPs are known at parse time from link addresses, so this is safe before step 3.
-    let dns_extra_hosts: Vec<String> = if topology.lab.dns == DnsMode::Hosts {
-        crate::dns::generate_hosts_entries(topology)
-            .iter()
-            .flat_map(|entry| {
-                entry
-                    .names
-                    .iter()
-                    .map(|name| format!("{name}:{}", entry.ip))
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    // ── Step 3: Create namespaces / containers ─────────────────────
-    tracing::info!("step 3/18: creating namespaces");
-    for (node_name, node) in &topology.nodes {
-        if let Some(image) = &node.image {
-            // Container node
-            let rt = container_runtime.as_ref().unwrap();
-            // Pull policy: "always" forces pull, "never" skips, "missing" (default) pulls if needed
-            match node.pull.as_deref() {
-                Some("never") => {}
-                Some("always") => {
-                    rt.pull_image(image)?;
-                }
-                _ => {
-                    rt.ensure_image(image)?;
-                }
-            }
-            let container_name = format!("{}-{}", topology.lab.prefix(), node_name);
-            let opts = build_create_opts(node, &dns_extra_hosts);
-            let info = rt.create(&container_name, image, &opts)?;
-            cleanup.add_container(info.id.clone());
-            container_states.insert(
-                node_name.clone(),
-                ContainerState {
-                    id: info.id.clone(),
-                    name: info.name.clone(),
-                    image: image.clone(),
-                    pid: info.pid,
-                },
-            );
-            node_handles.insert(
-                node_name.clone(),
-                NsRef::Container {
-                    id: info.id,
-                    pid: info.pid,
-                },
-            );
-        } else {
-            // Bare namespace node
-            let ns_name = topology.namespace_name(node_name);
-            guard_namespace_absent(&ns_name)?;
-            namespace::create(&ns_name).map_err(|e| Error::Namespace {
-                op: "create",
-                ns: ns_name.clone(),
-                source: e,
-            })?;
-            cleanup.add_namespace(ns_name.clone());
-            // Ownership tag: the only thing `destroy --orphans` trusts.
-            crate::netns_tag::tag(&ns_name, &topology.lab.name)?;
-            namespace_names.insert(node_name.clone(), ns_name.clone());
-            node_handles.insert(node_name.clone(), NsRef::Named { name: ns_name });
-        }
-    }
-
-    // ── Step 3b: Load mac80211_hwsim and move PHYs ──────────────────
-    let wifi_radio_count = crate::wifi::count_wifi_nodes(topology);
-    let mut wifi_loaded = false;
-    if wifi_radio_count > 0 {
-        tracing::info!("step 3b: loading mac80211_hwsim with {wifi_radio_count} radios");
-        let _ = crate::wifi::load_hwsim_for(&topology.lab.name, wifi_radio_count)?;
-        wifi_loaded = true;
-        cleanup.wifi_loaded = true;
-
-        // Use nlink's nl80211 to enumerate PHYs and move them to namespaces
-        use nlink::netlink::Nl80211;
-        let nl_conn = nlink::Connection::<Nl80211>::new_async()
-            .await
-            .map_err(|e| Error::deploy_failed(format!("nl80211 connection: {e}")))?;
-
-        let phys = nl_conn
-            .get_phys()
-            .await
-            .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?;
-
-        // Collect WiFi nodes in deterministic order, map each to a PHY
-        let mut wifi_nodes: Vec<(&str, &crate::types::WifiConfig)> = Vec::new();
-        for (node_name, node) in &topology.nodes {
-            for wifi in &node.wifi {
-                wifi_nodes.push((node_name, wifi));
-            }
-        }
-
-        if phys.len() < wifi_nodes.len() {
-            return Err(Error::deploy_failed(format!(
-                "expected {} hwsim PHYs but found {}",
-                wifi_nodes.len(),
-                phys.len()
-            )));
-        }
-
-        tracing::info!("step 3c: moving PHYs to namespaces");
-        for (i, (node_name, _wifi)) in wifi_nodes.iter().enumerate() {
-            let phy = &phys[i];
-            let node_handle = &node_handles[*node_name];
-            let ns_fd = node_handle
-                .open_fd()
-                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
-
-            nl_conn
-                .set_wiphy_netns(phy.index, ns_fd.as_raw_fd())
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to move phy{} to namespace '{node_name}': {e}",
-                        phy.index
-                    ))
-                })?;
-        }
-    }
-
-    // ── Step 3d: Create host-reachable management bridge ──────────────
-    if topology.lab.mgmt_host_reachable
-        && let Some(ref mgmt_subnet) = topology.lab.mgmt_subnet
-    {
-        tracing::info!("step 3d: creating host-reachable management bridge");
-        let (base_ip, prefix) = parse_cidr(mgmt_subnet)?;
-        let std::net::IpAddr::V4(base_v4) = base_ip else {
-            return Err(Error::deploy_failed("mgmt subnet must be IPv4"));
-        };
-        let base_u32 = u32::from(base_v4);
-        // The bridge takes .1 and every node .2, .3, … — make sure the
-        // subnet actually holds them instead of silently spilling into
-        // the next subnet (issue #40).
-        let usable_hosts = (1u64 << (32 - prefix.min(32) as u32)).saturating_sub(2);
-        if node_handles.len() as u64 + 1 > usable_hosts {
-            return Err(Error::deploy_failed(format!(
-                "mgmt subnet {mgmt_subnet} has {usable_hosts} usable host address(es) but the bridge plus {} nodes need {}",
-                node_handles.len(),
-                node_handles.len() + 1
-            )));
-        }
-
-        let bridge_name = topology.lab.mgmt_bridge_name();
-
-        // Create bridge in root namespace
-        let root_conn: Connection<Route> = Connection::<Route>::new()
-            .map_err(|e| Error::deploy_failed(format!("root connection: {e}")))?;
-
-        let bridge = nlink::netlink::link::BridgeLink::new(&bridge_name);
-        root_conn.add_link(bridge).await.map_err(|e| {
-            Error::deploy_failed(format!("failed to create mgmt bridge '{bridge_name}': {e}"))
-        })?;
-        cleanup.add_host_link(bridge_name.clone());
-        root_conn.set_link_up(&bridge_name).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to bring up mgmt bridge '{bridge_name}': {e}"
-            ))
-        })?;
-
-        // Assign .1 to the bridge
-        let bridge_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::from(base_u32 + 1));
-        root_conn
-            .add_address_by_name(&bridge_name, bridge_ip, prefix)
-            .await
-            .map_err(|e| {
-                Error::deploy_failed(format!("failed to assign IP to mgmt bridge: {e}"))
-            })?;
-
-        // For each node (sorted by name for deterministic IP assignment), create veth pair
-        let mut sorted_nodes: Vec<&str> = node_handles.keys().map(|s| s.as_str()).collect();
-        sorted_nodes.sort();
-
-        for (idx, node_name) in sorted_nodes.iter().enumerate() {
-            let node_handle = &node_handles[*node_name];
-            let node_ns_fd = node_handle
-                .open_fd()
-                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
-
-            let mgmt_iface = "mgmt0";
-            let peer_name = topology.lab.mgmt_peer_name(idx);
-
-            // Create veth pair in root ns, peer goes to node ns
-            let veth = nlink::netlink::link::VethLink::new(&peer_name, mgmt_iface)
-                .peer_netns_fd(node_ns_fd.as_raw_fd());
-
-            root_conn.add_link(veth).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to create mgmt veth for node '{node_name}': {e}"
-                ))
-            })?;
-            cleanup.add_host_link(peer_name.clone());
-            mgmt_peers.insert(node_name.to_string(), peer_name.clone());
-
-            // Attach our end (peer_name) to the bridge
-            root_conn
-                .set_link_master(&peer_name, &bridge_name)
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to attach '{peer_name}' to mgmt bridge: {e}"
-                    ))
-                })?;
-            root_conn.set_link_up(&peer_name).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up '{peer_name}': {e}"))
-            })?;
-
-            // Assign IP to mgmt0 in node ns: .2, .3, .4, ...
-            let node_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::from(base_u32 + 2 + idx as u32));
-            let node_conn: Connection<Route> = node_handle
-                .connection()
-                .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-            node_conn
-                .add_address_by_name(mgmt_iface, node_ip, prefix)
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!("failed to assign mgmt IP to '{node_name}': {e}"))
-                })?;
-            node_conn.set_link_up(mgmt_iface).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up mgmt0 on '{node_name}': {e}"))
-            })?;
-        }
-    }
-
-    // ── Step 4: Create bridge networks ───────────────────────────────
-    // Bridges live in a management namespace. For each network, create the bridge
-    // in a dedicated namespace, then create veth pairs from member nodes.
-    let mut bridge_ns_names: BTreeMap<String, String> = BTreeMap::new();
-    if !topology.networks.is_empty() {
-        let mgmt_ns = format!("{}-mgmt", topology.lab.prefix());
-        namespace::create(&mgmt_ns).map_err(|e| Error::Namespace {
-            op: "create",
-            ns: mgmt_ns.clone(),
-            source: e,
-        })?;
-        cleanup.add_namespace(mgmt_ns.clone());
-        crate::netns_tag::tag(&mgmt_ns, &topology.lab.name)?;
-
-        let mgmt_conn: Connection<Route> = namespace::connection_for(&mgmt_ns)
-            .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
-
-        for (net_name, network) in &topology.networks {
-            // Hash-based bridge name: `nb{hash8}` (10 chars). Always
-            // fits the 15-char Linux IFNAMSIZ budget, never collides
-            // for distinct net_names (DJB2 hash collisions are
-            // statistically negligible at the few-networks-per-lab
-            // scale we care about). See network_bridge_name_for() for
-            // the full rationale and the regression-test reference.
-            let bridge_name = crate::types::network_bridge_name_for(net_name);
-
-            let mut bridge = nlink::netlink::link::BridgeLink::new(&bridge_name);
-            if let Some(true) = network.vlan_filtering {
-                bridge = bridge.vlan_filtering(true);
-            }
-            if let Some(mtu) = network.mtu {
-                bridge = bridge.mtu(mtu);
-            }
-
-            mgmt_conn.add_link(bridge).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to create bridge '{bridge_name}' for network '{net_name}': {e}"
-                ))
-            })?;
-            mgmt_conn.set_link_up(&bridge_name).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up bridge '{bridge_name}': {e}"))
-            })?;
-
-            bridge_ns_names.insert(net_name.clone(), mgmt_ns.clone());
-
-            // Create veth pairs for each member: one end in node ns, other in mgmt ns attached to bridge
-            let mgmt_ns_fd = namespace::open(&mgmt_ns)
-                .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
-
-            for (k, member) in network.members.iter().enumerate() {
-                let ep = EndpointRef::parse(member).ok_or_else(|| Error::InvalidEndpoint {
-                    endpoint: member.clone(),
-                })?;
-                let node_handle =
-                    node_handles
-                        .get(&ep.node)
-                        .ok_or_else(|| Error::NodeNotFound {
-                            name: ep.node.clone(),
-                        })?;
-
-                // The peer end in mgmt ns gets a generated name.
-                // Uses a hash of `net_name` so networks sharing a prefix
-                // (e.g. `lan_a`/`lan_b`) don't collide in the mgmt ns.
-                let peer_name = crate::types::network_peer_name_for(net_name, k);
-
-                let node_conn: Connection<Route> = node_handle.connection().map_err(|e| {
-                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-                })?;
-
-                let veth = nlink::netlink::link::VethLink::new(&ep.iface, &peer_name)
-                    .peer_netns_fd(mgmt_ns_fd.as_raw_fd());
-
-                node_conn.add_link(veth).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to create veth for network '{net_name}' member '{member}' \
-                         (node iface '{node_iface}' in ns '{node_ns}', mgmt peer '{peer_name}'): {e}",
-                        node_iface = ep.iface,
-                        node_ns = ep.node,
-                    ))
-                })?;
-
-                // Step 7: Attach the peer end to the bridge in mgmt ns
-                mgmt_conn
-                    .set_link_master(&peer_name, &bridge_name)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to attach '{peer_name}' to bridge '{bridge_name}': {e}"
-                        ))
-                    })?;
-                mgmt_conn.set_link_up(&peer_name).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to bring up bridge port '{peer_name}': {e}"
-                    ))
-                })?;
-
-                // Apply VLAN configuration for this port if defined. Port
-                // keys are `node:iface` since the port-key normalisation;
-                // fall back to the bare node for topologies persisted by
-                // older releases.
-                if let Some(port_config) = network
-                    .ports
-                    .get(&format!("{}:{}", ep.node, ep.iface))
-                    .or_else(|| network.ports.get(&ep.node))
-                {
-                    // Apply tagged VLANs
-                    for &vid in &port_config.vlans {
-                        let mut vlan = BridgeVlanBuilder::new(vid).dev(&peer_name);
-                        if port_config.untagged == Some(true) {
-                            vlan = vlan.untagged();
-                        }
-                        if Some(vid) == port_config.pvid {
-                            vlan = vlan.pvid().untagged();
-                        }
-                        mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to add VLAN {vid} to port '{peer_name}' on bridge '{bridge_name}': {e}"
-                            ))
-                        })?;
-                    }
-                    // Apply PVID if not already covered by vlans list
-                    if let Some(pvid) = port_config.pvid
-                        && !port_config.vlans.contains(&pvid)
-                    {
-                        let vlan = BridgeVlanBuilder::new(pvid)
-                            .dev(&peer_name)
-                            .pvid()
-                            .untagged();
-                        mgmt_conn.add_bridge_vlan(vlan).await.map_err(|e| {
-                                Error::deploy_failed(format!(
-                                    "failed to add PVID {pvid} to port '{peer_name}' on bridge '{bridge_name}': {e}"
-                                ))
-                            })?;
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Step 5: Create veth pairs ──────────────────────────────────
-    tracing::info!("step 5/18: creating veth pairs");
-    for (i, link) in topology.links.iter().enumerate() {
-        let ep_a =
-            EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
-                endpoint: link.endpoints[0].clone(),
-            })?;
-        let ep_b =
-            EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| Error::InvalidEndpoint {
-                endpoint: link.endpoints[1].clone(),
-            })?;
-
-        let handle_a = node_handles
-            .get(&ep_a.node)
-            .ok_or_else(|| Error::NodeNotFound {
-                name: ep_a.node.clone(),
-            })?;
-        let handle_b = node_handles
-            .get(&ep_b.node)
-            .ok_or_else(|| Error::NodeNotFound {
-                name: ep_b.node.clone(),
-            })?;
-
-        // Open namespace fd for the peer end
-        let ns_b_fd = handle_b.open_fd().map_err(|e| {
-            Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
-        })?;
-
-        // Get connection for namespace A
-        let conn_a: Connection<Route> = handle_a.connection().map_err(|e| {
-            Error::deploy_failed(format!("failed to connect to '{}': {e}", ep_a.node))
-        })?;
-
-        // Create veth pair
-        let mut veth = nlink::netlink::link::VethLink::new(&ep_a.iface, &ep_b.iface)
-            .peer_netns_fd(ns_b_fd.as_raw_fd());
-
-        if let Some(mtu) = link.mtu {
-            veth = veth.mtu(mtu);
-        }
-
-        conn_a.add_link(veth).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to create veth pair for link[{i}] ({} <-> {}): {e}",
-                link.endpoints[0], link.endpoints[1]
-            ))
-        })?;
-    }
-
-    // ── Step 6: Create additional interfaces (loopback addresses handled in step 9) ──
-    //
-    // After Plan 159a Slice 4, every `InterfaceKind` (Dummy,
-    // Bond, Vlan, Vxlan) creates declaratively in step 11c:
-    // - 158e Slice 2 — Dummy + Bond (+ member enslave that was 10b)
-    // - 158e Slice 3 — Vlan sub-interfaces
-    // - 159a Slice 4 — Vxlan (incl. `vxlan_local` / `_remote` / `_port`)
-    // Loopback exists already; addresses for every kind get
-    // handled by step 11c's address-application pass. This step
-    // is now an empty marker for the step-numbering audit trail.
-
-    // ── Step 6a: Create macvlan/ipvlan interfaces ───────────────────
-    // These are created on the host and moved into namespaces because the
-    // parent interface (e.g., enp3s0) lives on the host, not inside the NS.
-    {
-        let host_conn: Connection<Route> = Connection::<Route>::new()
-            .map_err(|e| Error::deploy_failed(format!("host connection: {e}")))?;
-
-        for (node_name, node) in &topology.nodes {
-            let node_handle = &node_handles[node_name];
-            let ns_fd = node_handle
-                .open_fd()
-                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
-
-            for mv in &node.macvlans {
-                use nlink::netlink::link::{MacvlanLink, MacvlanMode as NlinkMacvlanMode};
-                let mode = match mv.mode {
-                    crate::types::MacvlanMode::Bridge => NlinkMacvlanMode::Bridge,
-                    crate::types::MacvlanMode::Private => NlinkMacvlanMode::Private,
-                    crate::types::MacvlanMode::Vepa => NlinkMacvlanMode::Vepa,
-                    crate::types::MacvlanMode::Passthru => NlinkMacvlanMode::Passthru,
-                };
-                let macvlan = MacvlanLink::new(&mv.name, &mv.parent).mode(mode);
-                host_conn.add_link(macvlan).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to create macvlan '{}' on node '{node_name}': {e}",
-                        mv.name
-                    ))
-                })?;
-                // Still on the host until the move below succeeds; a
-                // rollback deletes it from the host if it is still there.
-                cleanup.add_host_link(mv.name.clone());
-                host_conn
-                    .set_link_netns_fd(&mv.name, ns_fd.as_raw_fd())
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to move macvlan '{}' to namespace '{node_name}': {e}",
-                            mv.name
-                        ))
-                    })?;
-            }
-
-            for iv in &node.ipvlans {
-                use nlink::netlink::link::{IpvlanLink, IpvlanMode as NlinkIpvlanMode};
-                let mode = match iv.mode {
-                    crate::types::IpvlanMode::L2 => NlinkIpvlanMode::L2,
-                    crate::types::IpvlanMode::L3 => NlinkIpvlanMode::L3,
-                    crate::types::IpvlanMode::L3S => NlinkIpvlanMode::L3S,
-                };
-                let ipvlan = IpvlanLink::new(&iv.name, &iv.parent).mode(mode);
-                host_conn.add_link(ipvlan).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to create ipvlan '{}' on node '{node_name}': {e}",
-                        iv.name
-                    ))
-                })?;
-                cleanup.add_host_link(iv.name.clone());
-                host_conn
-                    .set_link_netns_fd(&iv.name, ns_fd.as_raw_fd())
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to move ipvlan '{}' to namespace '{node_name}': {e}",
-                            iv.name
-                        ))
-                    })?;
-            }
-        }
-    }
-
-    // ── Step 6b: Create VRF interfaces ─────────────────────────────
-    //
-    // Plan 159a Slice 4 — VRF creation + bring-up absorbed into
-    // the declarative NetworkConfig path (step 11c). Uses
-    // `LinkBuilder::vrf(table)` from nlink 0.19 (upstream Plan
-    // 190 §2.3). Empty marker kept for the step-numbering audit
-    // trail.
-
-    // ── Step 6c: Create WireGuard interfaces ─────────────────────
-    //
-    // Plan 160 (nlink 0.25) — the imperative
-    // `add_link(WireguardLink::new(...))` loop is gone. The WG link
-    // is now bootstrapped idempotently inside the declarative WG
-    // apply (step 10d) via `WireguardConfig::ensure_devices`
-    // (nlink 0.24, #169) — no separate pre-create pass. Empty
-    // marker kept for the step-numbering audit trail.
-
-    // ── Step 9: Set interface addresses ────────────────────────────
-    //
-    // Plan 158e Slice 1 moves the per-link / per-interface / network
-    // port / WireGuard / macvlan / ipvlan / WiFi address application
-    // into a single per-namespace `NetworkConfig::diff().apply()`
-    // call (step 11c below). This step is now a no-op marker kept
-    // for the step-numbering audit trail.
-
-    // ── Step 10: Bring interfaces up ───────────────────────────────
-    // Only the interfaces nlink-lab created imperatively (veth ends,
-    // bridge-network members, mgmt0, macvlan/ipvlan, wifi) plus `lo`.
-    // Everything declared in step 11c carries its own `.up()`. Bringing
-    // up *every* link by ifindex used to fail on hosts whose kernel
-    // populates each namespace with gre0/gretap0/sit0/tunl0 —
-    // `gretap0` answers EADDRNOTAVAIL — and took the deploy down with it.
-    tracing::info!("step 10/18: bringing interfaces up");
-    for (node_name, node) in &topology.nodes {
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-        let mut ifaces: Vec<String> = vec!["lo".to_string()];
-        for link in &topology.links {
-            for ep_str in &link.endpoints {
-                if let Some(ep) = EndpointRef::parse(ep_str)
-                    && &ep.node == node_name
-                {
-                    ifaces.push(ep.iface);
-                }
-            }
-        }
-        for network in topology.networks.values() {
-            for member in &network.members {
-                if let Some(ep) = EndpointRef::parse(member)
-                    && &ep.node == node_name
-                {
-                    ifaces.push(ep.iface);
-                }
-            }
-        }
-        if topology.lab.mgmt_host_reachable && topology.lab.mgmt_subnet.is_some() {
-            ifaces.push("mgmt0".to_string());
-        }
-        ifaces.extend(node.macvlans.iter().map(|m| m.name.clone()));
-        ifaces.extend(node.ipvlans.iter().map(|i| i.name.clone()));
-        ifaces.extend(node.wifi.iter().map(|w| w.name.clone()));
-        ifaces.sort();
-        ifaces.dedup();
-        for iface in &ifaces {
-            conn.set_link_up(iface.as_str()).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to bring up interface '{iface}' in '{node_name}': {e}"
-                ))
-            })?;
-        }
-    }
-
-    // ── Step 10b: Enslave bond members ─────────────────────────────
-    //
-    // Plan 158e Slice 2 — absorbed into the declarative
-    // NetworkConfig path in step 11c (`.link(member, |b|
-    // b.master(bond))`). Empty marker kept for the step-numbering
-    // audit trail; the imperative body is gone.
-
-    // ── Step 10c: Enslave interfaces to VRFs ─────────────────────
-    //
-    // Plan 159a Slice 4 — VRF enslave absorbed into the declarative
-    // NetworkConfig path (step 11c, `LinkBuilder::master(vrf)`).
-    // Empty marker kept for the step-numbering audit trail.
-
-    // ── Step 10d: Configure WireGuard devices (declarative) ───────
-    //
-    // Plan 159a Phase 2 — replace the two-pass imperative
-    // `wg_conn.set_device(...)` loops with a per-node
-    // `WireguardConfig::apply_reconcile()` call (upstream Plan 196).
-    // Key generation (sync, no kernel touch) still happens in a
-    // pre-pass so peer cross-references resolve. Plan 160 (nlink
-    // 0.25) — the WG link itself is now bootstrapped here too, via
-    // `WireguardConfig::ensure_devices` (nlink 0.24, #169), which
-    // creates any missing declared WG interface idempotently
-    // through a same-namespace Route connection before the GENL
-    // apply. This retired the imperative step-6c pre-create loop.
-
-    #[cfg(not(feature = "wireguard"))]
-    {
-        let has_wg = topology.nodes.values().any(|n| !n.wireguard.is_empty());
-        if has_wg {
-            return Err(Error::deploy_failed(
-                "topology uses WireGuard but the 'wireguard' feature is not enabled. \
-                 Rebuild with: cargo build --features wireguard",
-            ));
-        }
-    }
-
+    // ── state file ──
     #[cfg(feature = "wireguard")]
-    let wg_public_keys = build_wg_public_key_map(topology)?;
-
-    // ── Step 11: Apply sysctls ─────────────────────────────────────
-    for (node_name, node) in &topology.nodes {
-        let sysctls = topology.effective_sysctls(node);
-        if !sysctls.is_empty() {
-            let node_handle = &node_handles[node_name];
-            let entries: Vec<(&str, &str)> = sysctls
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.as_str()))
-                .collect();
-            node_handle.set_sysctls(&entries).map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to apply sysctls for node '{node_name}': {e}"
-                ))
-            })?;
-        }
-    }
-
-    // ── Step 11b: Auto-generate routes from topology graph ──────────
-    let auto_routes = if topology.lab.routing == crate::types::RoutingMode::Auto {
-        tracing::info!("step 11b: auto-generating routes from topology");
-        auto_generate_routes(topology)
-    } else {
-        BTreeMap::new()
-    };
-
-    // ── Step 11c + 10d + 13: Per-node Stack-pattern apply ──────────
-    //
-    // Plan 159c — collapse the three previously-separate per-node
-    // loops (network/step 11c, WireGuard/step 10d, nftables/step 13)
-    // into one orchestrated pass via `apply_stack_for_node`. Each
-    // node sees: build configs → apply network → apply nftables →
-    // apply WireGuard, with one aggregated `tracing::info!` per
-    // node. Mirrors upstream `facade::Stack` shape but routes
-    // through `NsRef::connection<P>()` so container namespaces
-    // (`connection_for_pid`) work alongside bare namespaces
-    // (`connection_for(name)`) — upstream `Stack::apply_in_namespace`
-    // only accepts a name.
-    tracing::info!("step 11c+10d+13: applying network + nftables + WireGuard per node");
-    for (node_name, node) in &topology.nodes {
-        let node_handle = &node_handles[node_name];
-        let net =
-            topology_to_network_config(node_name, node, topology, auto_routes.get(node_name))?;
-        let fw = topology.effective_firewall(node);
-        let nat = node.nat.as_ref();
-        #[cfg(feature = "wireguard")]
-        let wg = if node.wireguard.is_empty() {
-            None
-        } else {
-            Some(topology_to_wireguard_config(
-                node_name,
-                node,
-                topology,
-                &wg_public_keys,
-            )?)
-        };
-        #[cfg(not(feature = "wireguard"))]
-        let wg: Option<()> = None;
-        apply_stack_for_node(node_handle, node_name, net, fw, nat, wg).await?;
-    }
-
-    // ── Step 12b: Add VRF routes ───────────────────────────────────
-    for (node_name, node) in &topology.nodes {
-        if node.vrfs.is_empty() {
-            continue;
-        }
-        let node_handle = &node_handles[node_name];
-        let conn: Connection<Route> = node_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node_name}': {e}")))?;
-
-        for (vrf_name, vrf_config) in &node.vrfs {
-            for (dest, route_config) in &vrf_config.routes {
-                add_route_with_table(
-                    &conn,
-                    node_name,
-                    dest,
-                    route_config,
-                    vrf_config.table,
-                    vrf_name,
-                )
-                .await?;
-            }
-        }
-    }
-
-    // ── Step 14: Apply netem impairments ───────────────────────────
-    tracing::info!("step 14/18: applying impairments");
-    for (endpoint_str, impairment) in &topology.impairments {
-        let ep = EndpointRef::parse(endpoint_str).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: endpoint_str.clone(),
-        })?;
-        let ep_handle = &node_handles[&ep.node];
-        let conn: Connection<Route> = ep_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
-
-        let netem = build_netem(impairment)?;
-        conn.add_qdisc(&ep.iface, netem).await.map_err(|e| {
-            Error::deploy_failed(format!("failed to apply netem on '{endpoint_str}': {e}"))
-        })?;
-    }
-
-    // ── Step 14b: Apply per-pair network impairments ───────────────
-    apply_network_impairments(topology, &node_handles).await?;
-
-    // ── Step 15: Apply rate limits ─────────────────────────────────
-    for (endpoint_str, rate_limit) in &topology.rate_limits {
-        // Skip if this endpoint also has an impairment (netem handles rate via .rate_bps)
-        if topology.impairments.contains_key(endpoint_str) {
-            tracing::warn!(
-                "rate limit on '{endpoint_str}' skipped: netem impairment already configured (use impairment.rate instead)"
-            );
-            continue;
-        }
-
-        let ep = EndpointRef::parse(endpoint_str).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: endpoint_str.clone(),
-        })?;
-        let ep_handle = &node_handles[&ep.node];
-        let conn: Connection<Route> = ep_handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
-
-        let mut limiter = RateLimiter::new(&ep.iface);
-        if let Some(egress) = &rate_limit.egress {
-            let bits = parse_rate_bps(egress).map_err(|e| {
-                Error::deploy_failed(format!("bad egress rate on '{endpoint_str}': {e}"))
-            })?;
-            limiter = limiter.egress(nlink::util::Rate::bits_per_sec(bits));
-        }
-        if let Some(ingress) = &rate_limit.ingress {
-            let bits = parse_rate_bps(ingress).map_err(|e| {
-                Error::deploy_failed(format!("bad ingress rate on '{endpoint_str}': {e}"))
-            })?;
-            limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
-        }
-        // Plan 160 (nlink 0.24) — `reconcile` converges idempotently
-        // instead of `apply`'s delete-root-qdisc-then-rebuild, so an
-        // unchanged rate limit makes zero kernel calls on re-deploy
-        // and there's no packet-drop window.
-        let report = limiter.reconcile(&conn).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to reconcile rate limit on '{endpoint_str}': {e}"
-            ))
-        })?;
-        tracing::debug!(
-            endpoint = %endpoint_str,
-            changes = report.changes_made,
-            "rate limit reconcile complete"
-        );
-    }
-
-    // ── Step 15b: Inject DNS hosts entries ──────────────────────────
-    let mut dns_injected = false;
-    if topology.lab.dns == DnsMode::Hosts {
-        tracing::info!("step 15b: injecting /etc/hosts entries");
-        let entries = crate::dns::generate_hosts_entries(topology);
-        if !entries.is_empty() {
-            crate::dns::inject_hosts(&topology.lab.name, &entries)?;
-            dns_injected = true;
-            cleanup.set_dns_lab(topology.lab.name.clone());
-
-            // ── Step 15c: Create per-namespace /etc/netns/ files ──────
-            tracing::info!("step 15c: creating per-namespace DNS files");
-            for (node_name, node) in &topology.nodes {
-                if node.image.is_some() {
-                    continue; // containers use --add-host
-                }
-                let ns_name = &namespace_names[node_name];
-                crate::dns::create_netns_etc(ns_name, &entries)?;
-            }
-        }
-    }
-
-    // ── Step 16: Spawn background processes (dependency-ordered) ───
-    tracing::info!("step 16/18: spawning background processes");
-
-    // Topologically sort nodes by depends_on for ordered startup
-    let spawn_order = topo_sort_nodes(&topology.nodes);
-
-    for node_name in &spawn_order {
-        let node = &topology.nodes[node_name.as_str()];
-        let node_handle = &node_handles[node_name];
-
-        // Apply startup_delay before spawning. A malformed value is an
-        // error, not a silently skipped delay (issue #40).
-        if let Some(ref delay_str) = node.startup_delay {
-            let delay = crate::helpers::parse_duration(delay_str).map_err(|e| {
-                Error::deploy_failed(format!(
-                    "node '{node_name}': invalid startup-delay '{delay_str}': {e}"
-                ))
-            })?;
-            tracing::debug!("startup-delay {delay_str} for node '{node_name}'");
-            tokio::time::sleep(delay).await;
-        }
-
-        for (i, exec_config) in node.exec.iter().enumerate() {
-            if exec_config.cmd.is_empty() {
-                continue;
-            }
-
-            // For container nodes, use docker/podman exec so commands see the container FS
-            if node.is_container() {
-                if let Some(rt) = &container_runtime {
-                    let container_id = node_handle.container_id().unwrap();
-                    let cmd_strs: Vec<&str> = exec_config.cmd.iter().map(|s| s.as_str()).collect();
-                    if exec_config.background {
-                        // Use -d flag for background exec in container
-                        let mut args = vec!["exec", "-d", container_id];
-                        args.extend(&cmd_strs);
-                        let output = std::process::Command::new(rt.binary())
-                            .args(&args)
-                            .output()
-                            .map_err(|e| {
-                                Error::deploy_failed(format!(
-                                    "failed to exec in container '{node_name}' exec[{i}]: {e}"
-                                ))
-                            })?;
-                        if !output.status.success() {
-                            return Err(Error::deploy_failed(format!(
-                                "exec[{i}] on container '{node_name}' failed: {}",
-                                String::from_utf8_lossy(&output.stderr)
-                            )));
-                        }
-                    } else {
-                        let output = rt.exec(container_id, &cmd_strs).map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to exec in container '{node_name}' exec[{i}]: {e}"
-                            ))
-                        })?;
-                        if !output.status.success() {
-                            return Err(Error::deploy_failed(format!(
-                                "exec[{i}] on container '{node_name}' failed (exit {}): {}",
-                                output.status.code().unwrap_or(-1),
-                                String::from_utf8_lossy(&output.stderr)
-                            )));
-                        }
-                    }
-                }
-            } else {
-                let mut cmd = std::process::Command::new(&exec_config.cmd[0]);
-                cmd.args(&exec_config.cmd[1..]);
-
-                if exec_config.background {
-                    // Capture stdout/stderr to log files
-                    let log_dir = state::logs_dir(&topology.lab.name);
-                    std::fs::create_dir_all(&log_dir)?;
-                    // For shell-wrapped commands (sh -c "actual cmd"), extract
-                    // the actual command name for readable log filenames.
-                    let cmd_basename = if exec_config.cmd.len() >= 3
-                        && (exec_config.cmd[0] == "sh" || exec_config.cmd[0] == "/bin/sh")
-                        && exec_config.cmd[1] == "-c"
-                    {
-                        exec_config.cmd[2]
-                            .split_whitespace()
-                            .next()
-                            .and_then(|s| std::path::Path::new(s).file_name()?.to_str())
-                            .unwrap_or("cmd")
-                    } else {
-                        std::path::Path::new(&exec_config.cmd[0])
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .unwrap_or("cmd")
-                    };
-                    let stdout_path =
-                        log_dir.join(format!("{node_name}-{cmd_basename}-{i}.stdout"));
-                    let stderr_path =
-                        log_dir.join(format!("{node_name}-{cmd_basename}-{i}.stderr"));
-                    let stdout_file = std::fs::File::create(&stdout_path)?;
-                    let stderr_file = std::fs::File::create(&stderr_path)?;
-                    cmd.stdout(stdout_file);
-                    cmd.stderr(stderr_file);
-
-                    let child = node_handle.spawn(cmd).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to spawn background process on '{node_name}' exec[{i}]: {e}"
-                        ))
-                    })?;
-                    let pid = child.id();
-                    pids.push((node_name.clone(), pid));
-                    let started = crate::running::host_starttime(pid);
-                    if let Some(st) = started {
-                        starttimes.insert(pid, st);
-                    }
-                    cleanup.add_pid(pid, started);
-                    cleanup.set_logs_dir(log_dir.clone());
-
-                    // Rename log files to include actual PID
-                    let final_stdout =
-                        log_dir.join(format!("{node_name}-{cmd_basename}-{pid}.stdout"));
-                    let final_stderr =
-                        log_dir.join(format!("{node_name}-{cmd_basename}-{pid}.stderr"));
-                    let _ = std::fs::rename(&stdout_path, &final_stdout);
-                    let _ = std::fs::rename(&stderr_path, &final_stderr);
-                    process_logs.insert(
-                        pid,
-                        (
-                            final_stdout.to_string_lossy().to_string(),
-                            final_stderr.to_string_lossy().to_string(),
-                        ),
-                    );
-                } else {
-                    let output = node_handle.spawn_output(cmd).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to run command on '{node_name}' exec[{i}]: {e}"
-                        ))
-                    })?;
-                    if !output.status.success() {
-                        return Err(Error::deploy_failed(format!(
-                            "exec[{i}] on node '{node_name}' failed (exit {}): {}",
-                            output.status.code().unwrap_or(-1),
-                            String::from_utf8_lossy(&output.stderr)
-                        )));
-                    }
-                }
-            }
-        }
-
-        // Poll healthcheck until healthy (or timeout)
-        if let Some(ref hc_cmd) = node.healthcheck {
-            let parse_dur =
-                |what: &str, v: Option<&str>, default: u64| -> Result<std::time::Duration> {
-                    match v {
-                        None => Ok(std::time::Duration::from_secs(default)),
-                        Some(s) => crate::helpers::parse_duration(s).map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "node '{node_name}': invalid {what} '{s}': {e}"
-                            ))
-                        }),
-                    }
-                };
-            let hc_interval = parse_dur(
-                "healthcheck-interval",
-                node.healthcheck_interval.as_deref(),
-                1,
-            )?;
-            let hc_timeout = parse_dur(
-                "healthcheck-timeout",
-                node.healthcheck_timeout.as_deref(),
-                30,
-            )?;
-
-            tracing::info!("waiting for healthcheck on '{node_name}': {hc_cmd}");
-            let deadline = std::time::Instant::now() + hc_timeout;
-            loop {
-                let mut probe = std::process::Command::new("sh");
-                probe.args(["-c", hc_cmd]);
-                let result = node_handle.spawn_output(probe);
-                if result.is_ok_and(|o| o.status.success()) {
-                    tracing::info!("healthcheck passed for '{node_name}'");
-                    break;
-                }
-                if std::time::Instant::now() >= deadline {
-                    return Err(Error::deploy_failed(format!(
-                        "healthcheck timeout for node '{node_name}': {hc_cmd}"
-                    )));
-                }
-                tokio::time::sleep(hc_interval).await;
-            }
-        }
-    }
-
-    // ── Step 16b: Start WiFi daemons ────────────────────────────────
-    if wifi_radio_count > 0 {
-        tracing::info!("step 16b: starting WiFi daemons");
-        for (node_name, node) in &topology.nodes {
-            let node_handle = &node_handles[node_name];
-            for wifi in &node.wifi {
-                match wifi.mode {
-                    crate::types::WifiMode::Ap => {
-                        let conf_content = crate::wifi::generate_hostapd_conf(wifi);
-                        let conf_path = crate::wifi::write_config(
-                            &topology.lab.name,
-                            node_name,
-                            "hostapd.conf",
-                            &conf_content,
-                        )?;
-                        let mut cmd = std::process::Command::new("hostapd");
-                        cmd.args(["-B", &conf_path]);
-                        node_handle.spawn(cmd).map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to start hostapd on '{node_name}': {e}"
-                            ))
-                        })?;
-                    }
-                    crate::types::WifiMode::Station => {
-                        let conf_content = crate::wifi::generate_wpa_conf(wifi);
-                        let conf_path = crate::wifi::write_config(
-                            &topology.lab.name,
-                            node_name,
-                            "wpa.conf",
-                            &conf_content,
-                        )?;
-                        let mut cmd = std::process::Command::new("wpa_supplicant");
-                        cmd.args(["-B", "-i", &wifi.name, "-c", &conf_path]);
-                        node_handle.spawn(cmd).map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to start wpa_supplicant on '{node_name}': {e}"
-                            ))
-                        })?;
-                    }
-                    crate::types::WifiMode::Mesh => {
-                        // 802.11s mesh: use iw to join mesh
-                        if let Some(mesh_id) = &wifi.mesh_id {
-                            let mut cmd = std::process::Command::new("iw");
-                            cmd.args([
-                                "dev",
-                                &wifi.name,
-                                "mesh",
-                                "join",
-                                mesh_id,
-                                "freq",
-                                &freq_from_channel(wifi.channel.unwrap_or(1)),
-                            ]);
-                            let output = node_handle.spawn_output(cmd).map_err(|e| {
-                                Error::deploy_failed(format!(
-                                    "failed to join mesh '{mesh_id}' on '{node_name}': {e}"
-                                ))
-                            })?;
-                            if !output.status.success() {
-                                tracing::warn!(
-                                    "mesh join failed on '{node_name}': {}",
-                                    String::from_utf8_lossy(&output.stderr)
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Brief pause for WiFi association
-        tracing::info!("waiting for WiFi association...");
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    }
-
-    // ── Step 18: Write state file ──────────────────────────────────
-    tracing::info!("step 18/18: writing state file");
-    // Encode WG public keys as base64 for state persistence.
-    // Plan 159a Phase 2 — `wg_public_keys` now stores
-    // `(private_key, public_key)` tuples per WG iface; the state
-    // file only persists the public half.
     let wg_public_keys_b64 = {
-        #[cfg(feature = "wireguard")]
-        {
-            use base64::Engine;
-            let mut map = BTreeMap::new();
-            for (node, keys) in &wg_public_keys {
+        use base64::Engine;
+        let mut map = BTreeMap::new();
+        if let Some(keys) = &inputs.wg_keys {
+            wireguard_secrets::save(&topology.lab.name, keys)?;
+            for (node, ifaces) in keys {
                 let mut node_map = BTreeMap::new();
-                for (iface, (_priv, pubkey)) in keys {
+                for (iface, (_priv, pubkey)) in ifaces {
                     node_map.insert(
                         iface.clone(),
                         base64::engine::general_purpose::STANDARD.encode(pubkey),
@@ -1166,52 +109,227 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
                 }
                 map.insert(node.clone(), node_map);
             }
-            map
         }
-        #[cfg(not(feature = "wireguard"))]
-        {
-            BTreeMap::new()
-        }
+        map
     };
+    #[cfg(not(feature = "wireguard"))]
+    let wg_public_keys_b64 = BTreeMap::new();
 
+    tracing::info!("writing state file");
     let mut lab_state = LabState::new(topology.lab.name.clone(), now_iso8601());
-    lab_state.namespaces = namespace_names.clone();
-    lab_state.pids = pids.clone();
-    lab_state.starttimes = starttimes.clone();
-    lab_state.mgmt_peers = mgmt_peers.clone();
+    lab_state.namespaces = env.namespace_names.clone();
+    lab_state.pids = env.pids.clone();
+    lab_state.starttimes = env.starttimes.clone();
+    lab_state.mgmt_peers = env.mgmt_peers.clone();
     lab_state.wg_public_keys = wg_public_keys_b64;
-    lab_state.containers = container_states.clone();
-    lab_state.runtime = container_runtime.as_ref().map(|rt| rt.binary().to_string());
-    lab_state.dns_injected = dns_injected;
-    lab_state.wifi_loaded = wifi_loaded;
-    lab_state.process_logs = process_logs.clone();
+    lab_state.containers = env.containers.clone();
+    lab_state.runtime = env.runtime.as_ref().map(|rt| rt.binary().to_string());
+    lab_state.dns_injected = env.dns_injected;
+    lab_state.wifi_loaded = env.wifi_loaded;
+    lab_state.process_logs = env.process_logs.clone();
     state::save(&lab_state, topology)?;
-
-    // Disarm cleanup — deployment succeeded
-    cleanup.disarm();
 
     let mut running = RunningLab::new(
         topology.clone(),
-        namespace_names,
-        container_states,
-        container_runtime.as_ref().map(|rt| rt.binary().to_string()),
-        pids,
-        dns_injected,
-        wifi_loaded,
+        env.namespace_names,
+        env.containers,
+        env.runtime.as_ref().map(|rt| rt.binary().to_string()),
+        env.pids,
+        env.dns_injected,
+        env.wifi_loaded,
     );
-    running.set_starttimes(starttimes);
-    running.set_mgmt_peers(mgmt_peers);
+    running.set_starttimes(env.starttimes);
+    running.set_mgmt_peers(env.mgmt_peers);
+    running.set_process_logs(env.process_logs);
 
-    // ── Step 19: Run validate assertions ─────────────────────────
+    // ── validate { … } assertions ──
     // Never fails the deploy; the structured results ride on the
     // returned lab so callers (`deploy --strict`) can decide.
     if !topology.assertions.is_empty() {
-        tracing::info!("step 19: running validate assertions");
+        tracing::info!("running validate assertions");
         let results = run_assertions(&running, topology);
         running.set_assertion_results(results);
     }
 
     Ok(running)
+}
+
+/// Print what a deploy would do, without touching anything.
+pub fn plan_for(topology: &Topology) -> Result<Plan> {
+    let inputs = PlanInputs::for_deploy(topology)?;
+    plan::plan(topology, &inputs)
+}
+
+/// Outcome of [`apply`].
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct ApplyReport {
+    /// Ops executed (removals + additions/changes).
+    pub ops: usize,
+    /// Of which removals.
+    pub removed: usize,
+    /// One-line descriptions, in execution order.
+    pub applied: Vec<String>,
+}
+
+/// Reconcile a running lab to `desired`: `execute(plan(desired) −
+/// plan(current))`, with the declarative layers purging undeclared
+/// addresses/routes. Journaled and rolled back on failure like a deploy;
+/// the state file is updated read-modify-write.
+pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<ApplyReport> {
+    desired.validate().bail()?;
+    let _lock = state::lock(running.name())?;
+    let current = running.topology().clone();
+
+    #[cfg(feature = "wireguard")]
+    let inputs = {
+        let mut inputs = PlanInputs::for_deploy(desired)?;
+        // keep the keys of interfaces that already exist so `apply` does
+        // not rotate every peer's key
+        if let Some(fresh) = inputs.wg_keys.as_mut()
+            && let Some(saved) = wireguard_secrets::load(running.name())
+        {
+            for (node, ifaces) in saved {
+                if let Some(target) = fresh.get_mut(&node) {
+                    for (iface, keys) in ifaces {
+                        if target.contains_key(&iface) {
+                            target.insert(iface, keys);
+                        }
+                    }
+                }
+            }
+        }
+        inputs
+    };
+    #[cfg(not(feature = "wireguard"))]
+    let inputs = PlanInputs::for_deploy(desired)?;
+
+    let cur_plan = plan::plan(&current, &inputs)?;
+    let des_plan = plan::plan(desired, &inputs)?;
+    let diff = Plan::diff(&cur_plan, &des_plan);
+    let report = ApplyReport {
+        ops: diff.ops.len(),
+        removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
+        applied: diff.ops.iter().map(|o| o.describe()).collect(),
+    };
+    tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
+
+    let mut env = apply::ApplyEnv::from_running(running, desired)?;
+    let mut journal = Journal::new(running.name());
+    if let Err(e) = apply::execute(&diff, &mut env, &mut journal).await {
+        tracing::warn!(
+            "apply to '{}' failed: {e}; rolling back this apply",
+            running.name()
+        );
+        journal.unwind().await;
+        return Err(e);
+    }
+    journal.discard();
+
+    #[cfg(feature = "wireguard")]
+    if let Some(keys) = &inputs.wg_keys {
+        wireguard_secrets::save(running.name(), keys)?;
+    }
+
+    running.set_topology(desired.clone());
+    running.absorb_apply(
+        env.namespace_names,
+        env.containers,
+        env.pids,
+        env.starttimes,
+        env.process_logs,
+        env.mgmt_peers,
+        env.dns_injected,
+        env.wifi_loaded,
+    );
+    // Read-modify-write: created_at / wg_public_keys survive (#28).
+    let mut lab_state = match state::load(running.name()) {
+        Ok((existing, _)) => existing,
+        Err(_) => LabState::new(running.name().to_string(), now_iso8601()),
+    };
+    lab_state.schema_version = state::SCHEMA_VERSION;
+    lab_state.namespaces = running.namespace_names().clone();
+    lab_state.pids = running.pids().to_vec();
+    lab_state.starttimes = running.starttimes().clone();
+    lab_state.mgmt_peers = running.mgmt_peers().clone();
+    lab_state.containers = running.containers().clone();
+    lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
+    lab_state.dns_injected = running.dns_injected();
+    lab_state.wifi_loaded = running.wifi_loaded();
+    lab_state.process_logs = running.process_logs_map().clone();
+    lab_state.saved_impairments = running.saved_impairments_map().clone();
+    state::save(&lab_state, desired)?;
+    Ok(report)
+}
+
+/// Superseded by [`apply`]; the `TopologyDiff` argument is ignored —
+/// the kernel-level diff is computed from the plans.
+#[deprecated(since = "0.9.0", note = "use `nlink_lab::apply(running, desired)`")]
+pub async fn apply_diff(
+    running: &mut RunningLab,
+    desired: &Topology,
+    _diff: &crate::diff::TopologyDiff,
+) -> Result<()> {
+    apply(running, desired).await.map(|_| ())
+}
+
+/// WireGuard private keys persisted (0600) so `apply` keeps them stable.
+#[cfg(feature = "wireguard")]
+mod wireguard_secrets {
+    use super::WgKeys;
+    use crate::error::Result;
+    use std::collections::BTreeMap;
+
+    fn path(lab: &str) -> std::path::PathBuf {
+        crate::state::state_dir(lab).join("secrets.json")
+    }
+
+    pub fn save(lab: &str, keys: &WgKeys) -> Result<()> {
+        use base64::Engine;
+        use std::os::unix::fs::OpenOptionsExt;
+        let enc = base64::engine::general_purpose::STANDARD;
+        let mut out: BTreeMap<String, BTreeMap<String, (String, String)>> = BTreeMap::new();
+        for (node, ifaces) in keys {
+            for (iface, (priv_k, pub_k)) in ifaces {
+                out.entry(node.clone())
+                    .or_default()
+                    .insert(iface.clone(), (enc.encode(priv_k), enc.encode(pub_k)));
+            }
+        }
+        let p = path(lab);
+        if let Some(dir) = p.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let _ = std::fs::remove_file(&p);
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&p)?;
+        use std::io::Write;
+        f.write_all(serde_json::to_string_pretty(&out)?.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn load(lab: &str) -> Option<WgKeys> {
+        use base64::Engine;
+        let dec = base64::engine::general_purpose::STANDARD;
+        let text = std::fs::read_to_string(path(lab)).ok()?;
+        let raw: BTreeMap<String, BTreeMap<String, (String, String)>> =
+            serde_json::from_str(&text).ok()?;
+        let mut out: WgKeys = BTreeMap::new();
+        for (node, ifaces) in raw {
+            for (iface, (p, q)) in ifaces {
+                let (Ok(p), Ok(q)) = (dec.decode(p), dec.decode(q)) else {
+                    continue;
+                };
+                let (Ok(p), Ok(q)) = (<[u8; 32]>::try_from(p), <[u8; 32]>::try_from(q)) else {
+                    continue;
+                };
+                out.entry(node.clone()).or_default().insert(iface, (p, q));
+            }
+        }
+        Some(out)
+    }
 }
 
 /// Apply the unified `nlink-lab` nftables table for a node.
@@ -1420,10 +538,13 @@ async fn apply_network_config_for_node(
     node_handle: &NsRef,
     node_name: &str,
     cfg: nlink::netlink::config::NetworkConfig,
+    purge: bool,
 ) -> Result<()> {
     // Skip the round-trip when the declared config is empty (no
-    // addresses, no routes, no links, no qdiscs).
-    if cfg.links().is_empty()
+    // addresses, no routes, no links, no qdiscs) — unless purging,
+    // where "nothing declared" means "remove what is there".
+    if !purge
+        && cfg.links().is_empty()
         && cfg.addresses().is_empty()
         && cfg.routes().is_empty()
         && cfg.qdiscs().is_empty()
@@ -1438,10 +559,16 @@ async fn apply_network_config_for_node(
     // `NetworkConfig::apply` computes the diff and applies it.
     // Idempotent — re-apply on an unchanged topology completes
     // with `changes_made == 0`.
-    let result = cfg
-        .apply(&conn)
-        .await
-        .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
+    let result = if purge {
+        // apply mode: undeclared global addresses and main-table static
+        // routes on managed interfaces are removed (nlink's
+        // conservative purge — links and qdiscs are never touched)
+        let opts = nlink::netlink::config::ApplyOptions::default().with_purge(true);
+        cfg.apply_with_options(&conn, opts).await
+    } else {
+        cfg.apply(&conn).await
+    }
+    .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
 
     tracing::info!(
         node = %node_name,
@@ -1460,175 +587,6 @@ async fn apply_network_config_for_node(
             first.error
         )));
     }
-    Ok(())
-}
-
-async fn add_route(
-    conn: &Connection<Route>,
-    node_name: &str,
-    dest: &str,
-    route_config: &crate::types::RouteConfig,
-) -> Result<()> {
-    // Determine if this is IPv4 or IPv6 based on the gateway or destination
-    let is_default = dest == "default";
-
-    // Parse gateway to determine IP version
-    let gw: Option<IpAddr> = if let Some(via) = &route_config.via {
-        Some(via.parse().map_err(|e| {
-            Error::invalid_topology(format!(
-                "invalid gateway '{via}' for route '{dest}' on node '{node_name}': {e}"
-            ))
-        })?)
-    } else {
-        None
-    };
-
-    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6()) || (!is_default && dest.contains(':'));
-
-    if is_v6 {
-        let mut route = if is_default {
-            nlink::netlink::route::Ipv6Route::default_route()
-        } else {
-            let (addr, prefix) = parse_cidr(dest)?;
-            match addr {
-                IpAddr::V6(v6) => nlink::netlink::route::Ipv6Route::from_addr(v6, prefix),
-                _ => {
-                    return Err(Error::invalid_topology(format!(
-                        "route '{dest}' on '{node_name}': expected IPv6 address"
-                    )));
-                }
-            }
-        };
-        if let Some(IpAddr::V6(gw)) = gw {
-            route = route.gateway(gw);
-        }
-        if let Some(dev) = &route_config.dev {
-            route = route.dev(dev);
-        }
-        if let Some(metric) = route_config.metric {
-            route = route.metric(metric);
-        }
-        conn.add_route(route).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to add route '{dest}' on node '{node_name}': {e}"
-            ))
-        })?;
-    } else {
-        let mut route = if is_default {
-            nlink::netlink::route::Ipv4Route::default_route()
-        } else {
-            let (addr, prefix) = parse_cidr(dest)?;
-            match addr {
-                IpAddr::V4(v4) => nlink::netlink::route::Ipv4Route::from_addr(v4, prefix),
-                _ => {
-                    return Err(Error::invalid_topology(format!(
-                        "route '{dest}' on '{node_name}': expected IPv4 address"
-                    )));
-                }
-            }
-        };
-        if let Some(IpAddr::V4(gw)) = gw {
-            route = route.gateway(gw);
-        }
-        if let Some(dev) = &route_config.dev {
-            route = route.dev(dev);
-        }
-        if let Some(metric) = route_config.metric {
-            route = route.metric(metric);
-        }
-        conn.add_route(route).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to add route '{dest}' on node '{node_name}': {e}"
-            ))
-        })?;
-    }
-
-    Ok(())
-}
-
-/// Add a single route in a VRF routing table.
-async fn add_route_with_table(
-    conn: &Connection<Route>,
-    node_name: &str,
-    dest: &str,
-    route_config: &crate::types::RouteConfig,
-    table: u32,
-    vrf_name: &str,
-) -> Result<()> {
-    let is_default = dest == "default";
-
-    let gw: Option<IpAddr> = if let Some(via) = &route_config.via {
-        Some(via.parse().map_err(|e| {
-            Error::invalid_topology(format!(
-                "invalid gateway '{via}' for VRF route '{dest}' on '{node_name}'.{vrf_name}: {e}"
-            ))
-        })?)
-    } else {
-        None
-    };
-
-    let is_v6 = gw.is_some_and(|ip| ip.is_ipv6()) || (!is_default && dest.contains(':'));
-
-    if is_v6 {
-        let mut route = if is_default {
-            nlink::netlink::route::Ipv6Route::default_route()
-        } else {
-            let (addr, prefix) = parse_cidr(dest)?;
-            match addr {
-                IpAddr::V6(v6) => nlink::netlink::route::Ipv6Route::from_addr(v6, prefix),
-                _ => {
-                    return Err(Error::invalid_topology(format!(
-                        "VRF route '{dest}' on '{node_name}': expected IPv6 address"
-                    )));
-                }
-            }
-        };
-        if let Some(IpAddr::V6(gw)) = gw {
-            route = route.gateway(gw);
-        }
-        if let Some(dev) = &route_config.dev {
-            route = route.dev(dev);
-        }
-        if let Some(metric) = route_config.metric {
-            route = route.metric(metric);
-        }
-        route = route.table(table);
-        conn.add_route(route).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to add VRF route '{dest}' in '{vrf_name}' on '{node_name}': {e}"
-            ))
-        })?;
-    } else {
-        let mut route = if is_default {
-            nlink::netlink::route::Ipv4Route::default_route()
-        } else {
-            let (addr, prefix) = parse_cidr(dest)?;
-            match addr {
-                IpAddr::V4(v4) => nlink::netlink::route::Ipv4Route::from_addr(v4, prefix),
-                _ => {
-                    return Err(Error::invalid_topology(format!(
-                        "VRF route '{dest}' on '{node_name}': expected IPv4 address"
-                    )));
-                }
-            }
-        };
-        if let Some(IpAddr::V4(gw)) = gw {
-            route = route.gateway(gw);
-        }
-        if let Some(dev) = &route_config.dev {
-            route = route.dev(dev);
-        }
-        if let Some(metric) = route_config.metric {
-            route = route.metric(metric);
-        }
-        route = route.table(table);
-        conn.add_route(route).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to add VRF route '{dest}' in '{vrf_name}' on '{node_name}': {e}"
-            ))
-        })?;
-    }
-
     Ok(())
 }
 
@@ -1656,6 +614,7 @@ async fn apply_stack_for_node(
     fw: Option<&crate::types::FirewallConfig>,
     nat: Option<&crate::types::NatConfig>,
     wireguard: Option<nlink::netlink::genl::wireguard::WireguardConfig>,
+    purge: bool,
 ) -> Result<()> {
     // Plan 160 — bootstrap WG links *before* the NetworkConfig apply
     // so their tunnel addresses (declared on the network layer) land
@@ -1664,10 +623,8 @@ async fn apply_stack_for_node(
     if let Some(cfg) = &wireguard {
         ensure_wireguard_devices_for_node(node_handle, node_name, cfg).await?;
     }
-    apply_network_config_for_node(node_handle, node_name, network).await?;
-    if fw.is_some() || nat.is_some() {
-        apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
-    }
+    apply_network_config_for_node(node_handle, node_name, network, purge).await?;
+    apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
     if let Some(cfg) = wireguard {
         apply_wireguard_for_node(node_handle, node_name, cfg).await?;
     }
@@ -1685,11 +642,10 @@ async fn apply_stack_for_node(
     fw: Option<&crate::types::FirewallConfig>,
     nat: Option<&crate::types::NatConfig>,
     _wireguard: Option<()>,
+    purge: bool,
 ) -> Result<()> {
-    apply_network_config_for_node(node_handle, node_name, network).await?;
-    if fw.is_some() || nat.is_some() {
-        apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
-    }
+    apply_network_config_for_node(node_handle, node_name, network, purge).await?;
+    apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
     tracing::info!(node = %node_name, "stack reconcile complete");
     Ok(())
 }
@@ -1868,717 +824,6 @@ pub async fn compute_layered_diff(
     })
 }
 
-/// Apply a topology diff to a running lab, performing incremental updates.
-///
-/// Executes changes in dependency order:
-/// 1. Remove impairments from endpoints on nodes being removed
-/// 2. Remove links connected to nodes being removed
-/// 3. Remove nodes (delete namespaces)
-/// 4. Add new nodes (create namespaces)
-/// 5. Add new links (create veth pairs, set addresses, bring up)
-/// 6. Configure new nodes (sysctls, routes, firewall)
-/// 7. Apply impairment changes (add, update, remove)
-/// 8. Update state file
-pub async fn apply_diff(
-    running: &mut RunningLab,
-    desired: &Topology,
-    diff: &crate::diff::TopologyDiff,
-) -> Result<()> {
-    // Acquire exclusive lock
-    let _lock = state::lock(&desired.lab.name)?;
-
-    // ── Phase 1: Remove impairments from endpoints being removed ──
-    for ep_str in &diff.impairments_removed {
-        running.clear_impairment(ep_str).await?;
-    }
-
-    // ── Phase 2: Remove links ──────────────────────────────────────
-    // Delete the veth interface from one side — kernel removes the pair.
-    for link in &diff.links_removed {
-        let ep = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: link.endpoints[0].clone(),
-        })?;
-
-        // Get a connection to the node's namespace (bare or container).
-        // `del_link_if_exists` (nlink 0.24) treats an already-removed
-        // veth (e.g. its pair was deleted first) as Ok(false).
-        if let Ok(handle) = node_handle_for(running, &ep.node)
-            && let Ok(conn) = handle.connection::<Route>()
-            && let Err(e) = conn.del_link_if_exists(ep.iface.as_str()).await
-        {
-            tracing::warn!("failed to delete link '{}' in '{}': {e}", ep.iface, ep.node);
-        }
-    }
-
-    // ── Phase 3: Remove nodes ──────────────────────────────────────
-    for node_name in &diff.nodes_removed {
-        // Kill any background processes on this node
-        for (pnode, pid) in running.pids() {
-            if pnode == node_name {
-                // identity-checked: never signal a reused PID (issue #30)
-                let _ = crate::running::kill_tracked(*pid, running.starttimes().get(pid).copied());
-            }
-        }
-
-        if let Some(ns_name) = running.namespace_names_mut().remove(node_name) {
-            if namespace::exists(&ns_name)
-                && let Err(e) = namespace::delete(&ns_name)
-            {
-                tracing::warn!("failed to delete namespace '{ns_name}': {e}");
-            }
-            crate::netns_tag::untag(&ns_name);
-        }
-        // Container removal
-        if let Some(container) = running.containers_mut().remove(node_name)
-            && let Some(binary) = running.runtime_binary()
-        {
-            let _ = std::process::Command::new(binary)
-                .args(["rm", "-f", &container.id])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-        }
-    }
-
-    // ── Phase 4: Add new nodes ─────────────────────────────────────
-    // Detect container runtime lazily if any new node needs one.
-    let new_container_nodes = diff
-        .nodes_added
-        .iter()
-        .any(|name| desired.nodes.get(name).is_some_and(|n| n.image.is_some()));
-    let container_runtime = if new_container_nodes {
-        let rt_config = desired.lab.runtime.as_ref().cloned().unwrap_or_default();
-        let rt = Runtime::new(&rt_config)?;
-        running.set_runtime_binary(rt.binary().to_string());
-        Some(rt)
-    } else {
-        // Reconstruct from existing state if we need it for removal (already handled)
-        None
-    };
-
-    for node_name in &diff.nodes_added {
-        let node = desired
-            .nodes
-            .get(node_name)
-            .ok_or_else(|| Error::NodeNotFound {
-                name: node_name.clone(),
-            })?;
-
-        if let Some(image) = &node.image {
-            // Container node
-            let rt = container_runtime.as_ref().unwrap();
-            match node.pull.as_deref() {
-                Some("never") => {}
-                Some("always") => {
-                    rt.pull_image(image)?;
-                }
-                _ => {
-                    rt.ensure_image(image)?;
-                }
-            }
-            let container_name = format!("{}-{}", desired.lab.prefix(), node_name);
-            let extra_hosts: Vec<String> = if desired.lab.dns == DnsMode::Hosts {
-                crate::dns::generate_hosts_entries(desired)
-                    .iter()
-                    .flat_map(|entry| {
-                        entry
-                            .names
-                            .iter()
-                            .map(|name| format!("{name}:{}", entry.ip))
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
-            let opts = build_create_opts(node, &extra_hosts);
-            let info = rt.create(&container_name, image, &opts)?;
-            running.containers_mut().insert(
-                node_name.clone(),
-                ContainerState {
-                    id: info.id,
-                    name: info.name,
-                    image: image.clone(),
-                    pid: info.pid,
-                },
-            );
-        } else {
-            // Bare namespace node
-            let ns_name = desired.namespace_name(node_name);
-            guard_namespace_absent(&ns_name)?;
-            namespace::create(&ns_name).map_err(|e| Error::Namespace {
-                op: "create",
-                ns: ns_name.clone(),
-                source: e,
-            })?;
-            running
-                .namespace_names_mut()
-                .insert(node_name.clone(), ns_name.clone());
-        }
-
-        // Apply sysctls
-        let handle = node_handle_for(running, node_name)?;
-        let sysctls = desired.effective_sysctls(node);
-        if !sysctls.is_empty() {
-            let entries: Vec<(&str, &str)> = sysctls
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.as_str()))
-                .collect();
-            handle.set_sysctls(&entries).map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to apply sysctls for node '{node_name}': {e}"
-                ))
-            })?;
-        }
-    }
-
-    // ── Phase 5: Add new links ─────────────────────────────────────
-    for link in &diff.links_added {
-        let ep_a =
-            EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
-                endpoint: link.endpoints[0].clone(),
-            })?;
-        let ep_b =
-            EndpointRef::parse(&link.endpoints[1]).ok_or_else(|| Error::InvalidEndpoint {
-                endpoint: link.endpoints[1].clone(),
-            })?;
-
-        let handle_a = node_handle_for(running, &ep_a.node)?;
-        let handle_b = node_handle_for(running, &ep_b.node)?;
-
-        let ns_b_fd = handle_b.open_fd().map_err(|e| {
-            Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
-        })?;
-
-        let conn_a: Connection<Route> = handle_a.connection().map_err(|e| {
-            Error::deploy_failed(format!("failed to connect to '{}': {e}", ep_a.node))
-        })?;
-
-        let mut veth = nlink::netlink::link::VethLink::new(&ep_a.iface, &ep_b.iface)
-            .peer_netns_fd(ns_b_fd.as_raw_fd());
-
-        if let Some(mtu) = link.mtu {
-            veth = veth.mtu(mtu);
-        }
-
-        conn_a.add_link(veth).await.map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to create veth pair ({} <-> {}): {e}",
-                link.endpoints[0], link.endpoints[1]
-            ))
-        })?;
-
-        // Set addresses
-        if let Some(addresses) = &link.addresses {
-            for (ep_str, addr_str) in link.endpoints.iter().zip(addresses.iter()) {
-                let ep = EndpointRef::parse(ep_str).ok_or_else(|| Error::InvalidEndpoint {
-                    endpoint: ep_str.clone(),
-                })?;
-                let ep_handle = node_handle_for(running, &ep.node)?;
-                let conn: Connection<Route> = ep_handle.connection().map_err(|e| {
-                    Error::deploy_failed(format!("connection for '{}': {e}", ep.node))
-                })?;
-                let (ip, prefix) = parse_cidr(addr_str)?;
-                conn.add_address_by_name(&ep.iface, ip, prefix)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add address '{ip}'/{prefix} to '{}' on '{}': {e}",
-                            ep.iface, ep.node
-                        ))
-                    })?;
-            }
-        }
-
-        // Bring up interfaces on both sides
-        for ep_str in &link.endpoints {
-            let ep = EndpointRef::parse(ep_str).ok_or_else(|| Error::InvalidEndpoint {
-                endpoint: ep_str.clone(),
-            })?;
-            let ep_handle = node_handle_for(running, &ep.node)?;
-            let conn: Connection<Route> = ep_handle
-                .connection()
-                .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
-            conn.set_link_up(&ep.iface).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to bring up '{}' on '{}': {e}",
-                    ep.iface, ep.node
-                ))
-            })?;
-        }
-    }
-
-    // ── Phase 6: Configure new nodes (NetworkConfig + nftables) ────
-    //
-    // Plan 158e Slice 1+2+3 + polish — apply the per-namespace
-    // declarative `NetworkConfig` so newly-added nodes get every
-    // address source (interfaces, network ports, WG, macvlan/ipvlan,
-    // WiFi), every route (manual + auto), and every declarative link
-    // kind (dummies, bonds + bond-member master, VLANs) handled in
-    // one atomic-ish per-namespace apply. Without this, dummy and
-    // VLAN interfaces with addresses declared on them would silently
-    // miss those addresses on apply (a pre-existing gap before
-    // Slice 1 — link-pair addresses were set imperatively in Phase 5,
-    // but non-link sources were not handled here).
-    let auto_routes_for_apply = if desired.lab.routing == crate::types::RoutingMode::Auto {
-        auto_generate_routes(desired)
-    } else {
-        BTreeMap::new()
-    };
-
-    // Plan 159a Phase 2 follow-up — `apply_diff` Phase 6 previously
-    // didn't configure WireGuard for newly-added nodes; the deploy
-    // path did but apply_diff missed it. Build the WG key map once
-    // (sync) and let `apply_stack_for_node` orchestrate all three
-    // layers per node, matching the deploy step 11c shape.
-    #[cfg(feature = "wireguard")]
-    let wg_public_keys = build_wg_public_key_map(desired)?;
-
-    for node_name in &diff.nodes_added {
-        let node = &desired.nodes[node_name];
-        let handle = node_handle_for(running, node_name)?;
-
-        // Plan 160 — the WG interface for a newly-added node is
-        // bootstrapped inside `apply_stack_for_node` (via
-        // `WireguardConfig::ensure_devices`, before the NetworkConfig
-        // apply), so the imperative pre-create loop that mirrored
-        // step 6c is gone here too.
-
-        let net = topology_to_network_config(
-            node_name,
-            node,
-            desired,
-            auto_routes_for_apply.get(node_name),
-        )?;
-        let fw = desired.effective_firewall(node);
-        let nat = node.nat.as_ref();
-        #[cfg(feature = "wireguard")]
-        let wg = if node.wireguard.is_empty() {
-            None
-        } else {
-            Some(topology_to_wireguard_config(
-                node_name,
-                node,
-                desired,
-                &wg_public_keys,
-            )?)
-        };
-        #[cfg(not(feature = "wireguard"))]
-        let wg: Option<()> = None;
-        apply_stack_for_node(&handle, node_name, net, fw, nat, wg).await?;
-    }
-
-    // ── Phase 7: Apply impairment changes ──────────────────────────
-    // Add new impairments
-    for (ep_str, impairment) in &diff.impairments_added {
-        running.set_impairment(ep_str, impairment).await?;
-    }
-
-    // Update changed impairments
-    for change in &diff.impairments_changed {
-        running
-            .set_impairment(&change.endpoint, &change.new)
-            .await?;
-    }
-
-    // ── Phase 7b: Reconcile network-level per-pair impair ──────────
-    // Each NetworkImpairerChange covers one (network, src_node) tree.
-    // We use PerPeerImpairer::reconcile() so an unchanged tree makes
-    // zero kernel calls; a single-rule edit becomes one
-    // change_qdisc/replace_qdisc on the affected leaf.
-    apply_network_impair_diff(running, desired, diff).await?;
-
-    // ── Phase 7c: Reconcile per-node static routes ─────────────────
-    // Add new routes, replace changed ones (del+add), remove gone
-    // ones. Only touches nodes that exist on both sides; routes for
-    // added/removed nodes are handled by the lifecycle phases above.
-    apply_routes_diff(running, diff).await?;
-
-    // ── Phase 7d: Reconcile per-node sysctls ───────────────────────
-    // Apply added + changed entries via set_sysctls. Removed
-    // entries get a warning (the kernel default isn't recoverable;
-    // overshooting is worse than leaving the previous value).
-    apply_sysctls_diff(running, diff)?;
-
-    // ── Phase 7e: Reconcile per-endpoint rate-limits ───────────────
-    // For added/changed: apply via RateLimiter (same as deploy
-    // step 15). For removed: delete the root qdisc on the iface.
-    apply_rate_limits_diff(running, diff).await?;
-
-    // ── Phase 7f: Reconcile per-node nftables (firewall + NAT) ─────
-    // Coarse: any change triggers a full atomic flush + rebuild of
-    // the node's `nlink-lab` table. nftables transactions ensure
-    // the kernel never sees a half-built ruleset.
-    apply_nftables_diff(running, diff).await?;
-
-    // ── Phase 8: Update state file ─────────────────────────────────
-    running.set_topology(desired.clone());
-
-    // Read-modify-write: keep created_at, wg_public_keys,
-    // saved_impairments and process_logs — apply used to rebuild the
-    // file from scratch and wipe them (issue #28).
-    let mut lab_state = match state::load(&desired.lab.name) {
-        Ok((existing, _)) => existing,
-        Err(_) => LabState::new(desired.lab.name.clone(), now_iso8601()),
-    };
-    lab_state.schema_version = state::SCHEMA_VERSION;
-    lab_state.namespaces = running.namespace_names().clone();
-    lab_state.pids = running.pids().to_vec();
-    lab_state.starttimes = running.starttimes().clone();
-    lab_state.mgmt_peers = running.mgmt_peers().clone();
-    lab_state.containers = running
-        .containers()
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
-    lab_state.dns_injected = running.dns_injected();
-    lab_state.wifi_loaded = running.wifi_loaded();
-    lab_state.pids.retain(|(n, _)| {
-        running.namespace_names().contains_key(n) || running.containers().contains_key(n)
-    });
-    state::save(&lab_state, desired)?;
-
-    Ok(())
-}
-
-/// Reconcile per-node static routes (Plan 152 Phase B).
-///
-/// For each [`crate::diff::RouteChange`]:
-/// - `desired = Some(new)`, `was_present = false`  → add the route
-/// - `desired = Some(new)`, `was_present = true`   → del + add (replace)
-/// - `desired = None`                              → del the route
-///
-/// Failures on `del` are downgraded to a warning — a route the
-/// kernel claims doesn't exist isn't a deploy-blocker.
-async fn apply_routes_diff(
-    running: &mut RunningLab,
-    diff: &crate::diff::TopologyDiff,
-) -> Result<()> {
-    if diff.routes_changed.is_empty() {
-        return Ok(());
-    }
-    for change in &diff.routes_changed {
-        let handle = node_handle_for(running, &change.node)?;
-        let conn: Connection<Route> = handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", change.node)))?;
-
-        if change.was_present
-            && let Err(e) = del_route_for_node(&conn, &change.node, &change.dest).await
-        {
-            tracing::warn!(
-                "del route '{}' on '{}' failed: {e} — continuing",
-                change.dest,
-                change.node,
-            );
-        }
-        if let Some(new) = &change.desired {
-            add_route(&conn, &change.node, &change.dest, new).await?;
-        }
-    }
-    Ok(())
-}
-
-/// Delete a single static route from a node. Mirrors `add_route` but
-/// uses nlink's `del_route_v4_if_exists` / `del_route_v6_if_exists`
-/// (nlink 0.24) based on the destination form — an already-absent
-/// route is Ok(false), which is the right idempotent semantics for a
-/// diff-driven removal.
-async fn del_route_for_node(conn: &Connection<Route>, node_name: &str, dest: &str) -> Result<()> {
-    let is_default = dest == "default";
-    let is_v6 = !is_default && dest.contains(':');
-
-    if is_default {
-        // Delete default route — one family won't exist; if_exists
-        // returns Ok(false) for it rather than an error.
-        conn.del_route_v4_if_exists("0.0.0.0", 0)
-            .await
-            .map_err(|e| {
-                Error::deploy_failed(format!("del default route on '{node_name}': {e}"))
-            })?;
-        conn.del_route_v6_if_exists("::", 0).await.map_err(|e| {
-            Error::deploy_failed(format!("del default route on '{node_name}': {e}"))
-        })?;
-        return Ok(());
-    }
-
-    let (addr, prefix) = parse_cidr(dest)?;
-    let result = if is_v6 {
-        conn.del_route_v6_if_exists(&addr.to_string(), prefix).await
-    } else {
-        match addr {
-            IpAddr::V4(_) => conn.del_route_v4_if_exists(&addr.to_string(), prefix).await,
-            IpAddr::V6(_) => conn.del_route_v6_if_exists(&addr.to_string(), prefix).await,
-        }
-    };
-    result
-        .map(|_| ())
-        .map_err(|e| Error::deploy_failed(format!("del route '{dest}' on '{node_name}': {e}")))
-}
-
-/// Reconcile per-node nftables ruleset (firewall + NAT).
-/// Plan 152 Phase B/4 + Plan 158a.
-///
-/// Per-rule reconcile via `NftablesConfig::apply_reconcile`:
-/// each per-rule USERDATA-keyed (`nlink-lab/fw/...` /
-/// `nlink-lab/nat/...`) so the diff identifies "our" rules by
-/// key. Foreign rules (no `nlink-lab/` USERDATA key) are left
-/// untouched, supporting hand-edits via
-/// `nlink-lab exec node -- nft -f ...` that survive an apply.
-///
-/// Editing a single rule in-place no longer rebuilds the
-/// table: the diff emits `rules_to_replace` for the changed
-/// rule, and `apply` commits the swap atomically in the
-/// kernel's nftables batch.
-async fn apply_nftables_diff(
-    running: &mut RunningLab,
-    diff: &crate::diff::TopologyDiff,
-) -> Result<()> {
-    if diff.nftables_changed.is_empty() {
-        return Ok(());
-    }
-
-    for change in &diff.nftables_changed {
-        let handle = node_handle_for(running, &change.node)?;
-        apply_nftables_for_node(
-            &handle,
-            &change.node,
-            change.desired_firewall.as_ref(),
-            change.desired_nat.as_ref(),
-        )
-        .await?;
-    }
-
-    Ok(())
-}
-
-/// Reconcile per-endpoint rate-limits (Plan 152 Phase B/3).
-///
-/// Plan 160 (nlink 0.24) — added / changed entries converge via
-/// `RateLimiter::reconcile`, which diffs the live HTB tree and
-/// mutates only what drifted (no root-qdisc teardown, no
-/// packet-drop window), closing the "coarse reconcile / Plan 158g"
-/// caveat that used to live here. Removed entries clear the root
-/// qdisc via `del_qdisc_if_exists`.
-async fn apply_rate_limits_diff(
-    running: &mut RunningLab,
-    diff: &crate::diff::TopologyDiff,
-) -> Result<()> {
-    if diff.rate_limits_changed.is_empty() {
-        return Ok(());
-    }
-    for change in &diff.rate_limits_changed {
-        let ep = EndpointRef::parse(&change.endpoint).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: change.endpoint.clone(),
-        })?;
-        let handle = node_handle_for(running, &ep.node)?;
-        let conn: Connection<Route> = handle
-            .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
-
-        match &change.desired {
-            Some(rl) => {
-                let mut limiter = RateLimiter::new(&ep.iface);
-                if let Some(egress) = &rl.egress {
-                    let bits = parse_rate_bps(egress).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "bad egress rate on '{}': {e}",
-                            change.endpoint,
-                        ))
-                    })?;
-                    limiter = limiter.egress(nlink::util::Rate::bits_per_sec(bits));
-                }
-                if let Some(ingress) = &rl.ingress {
-                    let bits = parse_rate_bps(ingress).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "bad ingress rate on '{}': {e}",
-                            change.endpoint,
-                        ))
-                    })?;
-                    limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
-                }
-                let report = limiter.reconcile(&conn).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to reconcile rate limit on '{}': {e}",
-                        change.endpoint,
-                    ))
-                })?;
-                tracing::debug!(
-                    endpoint = %change.endpoint,
-                    changes = report.changes_made,
-                    "rate limit reconcile complete"
-                );
-            }
-            None => {
-                use nlink::TcHandle;
-                // Plan 160 — idempotent removal; not-found is Ok(false).
-                if let Err(e) = conn
-                    .del_qdisc_if_exists(ep.iface.as_str(), TcHandle::ROOT)
-                    .await
-                {
-                    tracing::warn!("failed to clear rate-limit on '{}': {e}", change.endpoint,);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Reconcile per-node sysctls (Plan 152 Phase B).
-///
-/// Applies added + changed entries via `NsRef::set_sysctls`.
-/// Removed entries are reported via `tracing::warn!` only — the
-/// kernel default for an arbitrary sysctl isn't recoverable
-/// without snapshotting the original value before the original
-/// deploy, and overshooting would be worse than leaving the
-/// previous setting in place.
-fn apply_sysctls_diff(running: &mut RunningLab, diff: &crate::diff::TopologyDiff) -> Result<()> {
-    if diff.sysctls_changed.is_empty() {
-        return Ok(());
-    }
-    for change in &diff.sysctls_changed {
-        let handle = node_handle_for(running, &change.node)?;
-
-        // Build one set_sysctls call covering both adds and changes.
-        let mut entries: Vec<(&str, &str)> = Vec::new();
-        for (k, v) in &change.added {
-            entries.push((k.as_str(), v.as_str()));
-        }
-        for (k, _, new) in &change.changed {
-            entries.push((k.as_str(), new.as_str()));
-        }
-        if !entries.is_empty() {
-            handle.set_sysctls(&entries).map_err(|e| {
-                Error::deploy_failed(format!("set sysctls on '{}': {e}", change.node))
-            })?;
-        }
-
-        for k in &change.removed {
-            tracing::warn!(
-                "sysctl '{k}' on node '{}' is no longer in the desired topology — \
-                 kernel value left at its previous setting (set explicitly to override)",
-                change.node,
-            );
-        }
-    }
-    Ok(())
-}
-
-/// Reconcile network-level per-pair impair via
-/// `PerPeerImpairer::reconcile()`. Each `NetworkImpairerChange`
-/// covers one `(network, src_node)` tree; reconcile is
-/// non-destructive — unchanged sub-trees make zero kernel calls.
-async fn apply_network_impair_diff(
-    running: &mut RunningLab,
-    desired: &Topology,
-    diff: &crate::diff::TopologyDiff,
-) -> Result<()> {
-    use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
-    use nlink::util::Rate;
-
-    if diff.network_impairs_changed.is_empty() {
-        return Ok(());
-    }
-
-    for change in &diff.network_impairs_changed {
-        // Look up source-node interface and destination-node IPs from
-        // the desired topology's network definition. (For the `clear`
-        // path where `desired = None`, we still need the iface — read
-        // it from whichever topology has the network.)
-        let net_topo = desired
-            .networks
-            .get(&change.network)
-            .or_else(|| running.topology().networks.get(&change.network));
-
-        let Some(net) = net_topo else {
-            tracing::warn!(
-                "network '{}' not found in current or desired topology — skipping",
-                change.network,
-            );
-            continue;
-        };
-
-        // Map node name → its iface in this network, and IP if known.
-        let mut node_iface: Option<String> = None;
-        let mut node_ips: BTreeMap<String, IpAddr> = BTreeMap::new();
-        for member in &net.members {
-            let Some(ep) = EndpointRef::parse(member) else {
-                continue;
-            };
-            if ep.node == change.src_node && node_iface.is_none() {
-                node_iface = Some(ep.iface.clone());
-            }
-            if let Some(port) = net.ports.get(member)
-                && let Some(addr_with_prefix) = port.addresses.first()
-                && let Some((addr_str, _)) = addr_with_prefix.split_once('/')
-                && let Ok(ip) = addr_str.parse::<IpAddr>()
-            {
-                node_ips.entry(ep.node).or_insert(ip);
-            }
-        }
-
-        let Some(iface) = node_iface else {
-            tracing::warn!(
-                "network '{}': src node '{}' has no iface — skipping",
-                change.network,
-                change.src_node,
-            );
-            continue;
-        };
-
-        let handle = node_handle_for(running, &change.src_node)?;
-        let conn: Connection<Route> = handle.connection().map_err(|e| {
-            Error::deploy_failed(format!(
-                "network '{}': connection for '{}': {e}",
-                change.network, change.src_node,
-            ))
-        })?;
-
-        match &change.desired {
-            Some(rules) => {
-                let mut impairer = PerPeerImpairer::new(iface.as_str());
-                for rule in rules {
-                    let Some(dst_ip) = node_ips.get(&rule.dst) else {
-                        return Err(Error::deploy_failed(format!(
-                            "network '{}': cannot resolve IP for dst node '{}'",
-                            change.network, rule.dst,
-                        )));
-                    };
-                    let netem = build_netem(&rule.impairment)?;
-                    let mut peer = PeerImpairment::new(netem);
-                    if let Some(rc) = &rule.rate_cap {
-                        let bits = parse_rate_bps(rc).map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "network '{}': bad rate-cap '{rc}': {e}",
-                                change.network,
-                            ))
-                        })?;
-                        peer = peer.rate_cap(Rate::bits_per_sec(bits));
-                    }
-                    impairer = impairer.impair_dst_ip(*dst_ip, peer);
-                }
-                let _report = impairer.reconcile(&conn).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "network '{}': failed to reconcile impair on '{}:{}': {e}",
-                        change.network, change.src_node, iface,
-                    ))
-                })?;
-            }
-            None => {
-                let impairer = PerPeerImpairer::new(iface.as_str());
-                impairer.clear(&conn).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "network '{}': failed to clear impair on '{}:{}': {e}",
-                        change.network, change.src_node, iface,
-                    ))
-                })?;
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Run post-deploy `validate { … }` assertions (step 19).
 ///
 /// Thin wrapper over [`crate::test_runner::run_assertions`] — the one
@@ -2691,156 +936,6 @@ fn now_iso8601() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "unknown".to_string())
-}
-
-/// Cleanup guard that removes namespaces on drop if deployment fails.
-struct Cleanup {
-    /// Lab being deployed (wifi config cleanup, logs dir, tags).
-    lab_name: String,
-    namespaces: Vec<String>,
-    containers: Vec<String>,
-    runtime_binary: Option<String>,
-    dns_lab: Option<String>,
-    wifi_loaded: bool,
-    /// Lab name whose subnet-pool entries should be released on
-    /// rollback. Set when `auto/N` placeholders were resolved at the
-    /// top of `deploy()`.
-    subnet_pool_lab: Option<String>,
-    /// Root-namespace links created so far (mgmt bridge + veth peers,
-    /// host-side macvlan/ipvlan before their move), in creation order.
-    host_links: Vec<String>,
-    /// Background processes spawned so far, with the start time that
-    /// proves the PID is still theirs.
-    pids: Vec<(u32, Option<u64>)>,
-    /// Per-lab log directory created for spawned processes.
-    logs_dir: Option<std::path::PathBuf>,
-    armed: bool,
-}
-
-impl Cleanup {
-    fn new(lab_name: String) -> Self {
-        Self {
-            lab_name,
-            namespaces: Vec::new(),
-            containers: Vec::new(),
-            runtime_binary: None,
-            dns_lab: None,
-            wifi_loaded: false,
-            subnet_pool_lab: None,
-            host_links: Vec::new(),
-            pids: Vec::new(),
-            logs_dir: None,
-            armed: true,
-        }
-    }
-
-    fn add_host_link(&mut self, name: String) {
-        self.host_links.push(name);
-    }
-
-    fn add_pid(&mut self, pid: u32, starttime: Option<u64>) {
-        self.pids.push((pid, starttime));
-    }
-
-    fn set_logs_dir(&mut self, dir: std::path::PathBuf) {
-        self.logs_dir = Some(dir);
-    }
-
-    /// Unwind everything recorded so far, newest first where order
-    /// matters. Async so root-namespace links go through netlink.
-    async fn rollback(&mut self) {
-        if !self.armed {
-            return;
-        }
-        for (pid, st) in self.pids.iter().rev() {
-            let _ = crate::running::kill_tracked(*pid, *st);
-        }
-        if !self.host_links.is_empty()
-            && let Ok(conn) = Connection::<Route>::new()
-        {
-            for link in self.host_links.iter().rev() {
-                if let Err(e) = conn.del_link_if_exists(link.as_str()).await {
-                    tracing::warn!("rollback: failed to delete host link '{link}': {e}");
-                }
-            }
-        }
-        self.sync_cleanup();
-        self.armed = false;
-    }
-
-    /// The synchronous part of a rollback, shared with `Drop`.
-    fn sync_cleanup(&mut self) {
-        if let Some(lab_name) = &self.subnet_pool_lab {
-            let _ = crate::subnet_pool::free_for_lab(lab_name);
-        }
-        if let Some(lab_name) = &self.dns_lab {
-            let _ = crate::dns::remove_hosts(lab_name);
-        }
-        for ns in &self.namespaces {
-            // Clean up per-namespace DNS files
-            crate::dns::remove_netns_etc(ns);
-            if namespace::exists(ns) {
-                let _ = namespace::delete(ns);
-            }
-            crate::netns_tag::untag(ns);
-        }
-        if let Some(binary) = &self.runtime_binary {
-            for id in &self.containers {
-                let _ = std::process::Command::new(binary)
-                    .args(["rm", "-f", id])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
-            }
-        }
-        if self.wifi_loaded {
-            crate::wifi::release_hwsim(&self.lab_name);
-            crate::wifi::cleanup_configs(&self.lab_name);
-        }
-        if let Some(dir) = &self.logs_dir {
-            let _ = std::fs::remove_dir_all(dir);
-        }
-    }
-
-    fn add_namespace(&mut self, name: String) {
-        self.namespaces.push(name);
-    }
-
-    fn add_container(&mut self, id: String) {
-        self.containers.push(id);
-    }
-
-    fn set_runtime(&mut self, binary: &str) {
-        self.runtime_binary = Some(binary.to_string());
-    }
-
-    fn set_dns_lab(&mut self, name: String) {
-        self.dns_lab = Some(name);
-    }
-
-    fn set_subnet_pool_lab(&mut self, name: String) {
-        self.subnet_pool_lab = Some(name);
-    }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-impl Drop for Cleanup {
-    /// Last resort for panics: `rollback()` is the normal path and
-    /// disarms this. Host links cannot be deleted here (no async), so a
-    /// panic mid-deploy may still leave `nl*`/`nm*` links for
-    /// `destroy --orphans`.
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        for (pid, st) in self.pids.iter().rev() {
-            let _ = crate::running::kill_tracked(*pid, *st);
-        }
-        self.sync_cleanup();
-    }
 }
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ pub(crate) use plan::nftables::*;
 pub(crate) use plan::qdisc::*;
 #[cfg(feature = "wireguard")]
 pub(crate) use plan::wireguard::WgKeys;
-#[cfg(test)]
+#[cfg(all(test, feature = "wireguard"))]
 pub(crate) use plan::wireguard::*;
 pub use plan::{PlanInputs, plan};
 

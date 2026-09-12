@@ -8,6 +8,7 @@ pub(crate) mod nftables;
 pub(crate) mod process;
 pub(crate) mod qdisc;
 pub(crate) mod topology;
+#[cfg(feature = "wireguard")]
 pub(crate) mod wireguard;
 
 use crate::deploy::op::{Op, Plan, StackConfig};
@@ -245,6 +246,11 @@ link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "nll") {
                 let t = crate::parser::parse_file(&path).unwrap();
+                // WireGuard topologies need the feature to plan at all
+                if !cfg!(feature = "wireguard") && t.nodes.values().any(|n| !n.wireguard.is_empty())
+                {
+                    continue;
+                }
                 let inputs = PlanInputs::for_deploy(&t).unwrap();
                 let p = plan(&t, &inputs).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
                 assert!(!p.ops.is_empty(), "{}", path.display());

@@ -17,9 +17,10 @@ All notable changes to this project will be documented in this file.
   `/etc/netns/<ns>/*` over `/etc` in a private mount namespace. Container
   runtimes deny that `unshare`/`mount` even to root with `CAP_SYS_ADMIN`
   (AppArmor/seccomp), so every exec in a `dns hosts` lab failed with
-  `Operation not permitted` on the CI runner. A one-time probe
-  (`ns_exec::etc_overlay_supported`) now detects this and falls back to a
-  plain namespace exec with the host `/etc`, warning once (#81).
+  `Operation not permitted` on the CI runner. nlink-lab now enters
+  namespaces through its own `ns_exec` sequence where every step after
+  `setns` (mount namespace, `/sys` remount, each bind) is best effort, and
+  a one-time strict probe warns when the overlay is degraded (#81).
 - **Integration lane finds its test binary under coloured cargo output.**
   The lane grepped cargo's human output for the executable path; with
   `CARGO_TERM_COLOR=always` the match failed silently and the lane ran

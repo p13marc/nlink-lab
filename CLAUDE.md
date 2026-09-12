@@ -103,7 +103,7 @@ crates/nlink-lab/src/
       parser.rs     # Recursive-descent parser → AST
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (20 rules)
+  validator.rs      # Topology validation (40 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output

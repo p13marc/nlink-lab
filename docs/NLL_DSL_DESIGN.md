@@ -1073,7 +1073,8 @@ lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
 
 statement      = profile | node | link | network
                | impair | rate | defaults | pool | pattern
-               | validate | param | let_decl | for_loop
+               | validate | scenario | benchmark | site | if_block
+               | param | let_decl | for_loop
 
 profile        = "profile" IDENT block
 node           = "node" name (":" profile_list)?
@@ -1091,6 +1092,9 @@ validate       = "validate" "{" assertion* "}"
 param          = "param" IDENT ("default" value)?
 let_decl       = "let" IDENT "=" value
 for_loop       = "for" IDENT "in" (range | list) block
+                 (* range bounds may be INTERP: for i in 1..${count};
+                    a range is capped at 100 000 iterations; the body
+                    sees loop.index, loop.first and loop.last *)
 
 name           = (IDENT | INTERP) (IDENT | INTERP | INT | ".")*
 endpoint       = name ":" name
@@ -1108,7 +1112,9 @@ property       = "forward" ("ipv4" | "ipv6")
                | "wireguard" IDENT block
                | "vxlan" IDENT block
                | "dummy" IDENT block
-               | "run" "background"? string_list
+               | nat_block | wifi_prop | macvlan_prop | ipvlan_prop
+               | "image" STRING | "cmd" (STRING | string_list)
+               | run_config
 
 # ── Container properties ────────────────────────
 container_props = "cpu" value | "memory" value
@@ -1134,12 +1140,17 @@ link_item      = addr_pair | CIDR | "subnet" CIDR | "pool" IDENT
 # Members support glob patterns: *-router:wan matches site1-router:wan, site2-router:wan
 network_item   = "members" endpoint_list | "vlan-filtering"
                | "mtu" INT | "subnet" CIDR | "vlan" INT STRING?
-               | "port" endpoint port_block
+               | "port" (endpoint | name) port_block?
+                 (* a bare node name resolves to its member interface *)
+               | network_impair
+               | "for" IDENT "in" (range | list) "{" (network_impair | for)* "}"
+network_impair = "impair" name "--" name "{" impair_props ("rate-cap" RATE)? "}"
 port_block     = "{" (CIDR | "pvid" INT | "vlans" int_list
                | "tagged" | "untagged")* "}"
 
 # ── NAT block ───────────────────────────────────
-nat_block      = "nat" "{" nat_rule* "}"
+nat_block      = "nat" "{" (nat_rule | "for" IDENT "in" (range | list) nat_block)* "}"
+                 (* rules keep source order; loops expand in place *)
 # ── Site grouping ────────────────────────────────
 site           = "site" IDENT STRING? "{" statement* "}"
                # All node/link/network names inside are prefixed with "site-"
@@ -1167,7 +1178,8 @@ assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
 
 # ── Scenario ────────────────────────────────────
 scenario       = "scenario" STRING "{" step* "}"
-step           = "at" DURATION "{" action* "}"
+step           = "at" "+"? DURATION "{" action* "}"
+                 (* "+" is relative to the previous step *)
 action         = "down" endpoint | "up" endpoint | "clear" endpoint
                | "validate" "{" assertion* "}"
                | "exec" IDENT STRING+ | "log" STRING
@@ -1207,7 +1219,7 @@ macvlan_block  = "{" CIDR* "}"
 ipvlan_prop    = "ipvlan" IDENT "parent" STRING ("mode" IDENT)?
 
 # ── Process execution ───────────────────────────
-run_config     = "run" ("background")? (STRING | "[" STRING ("," STRING)* "]")
+run_config     = "run" ("background")? (STRING | "[" STRING ("," STRING)* "]") ("background")?
 
 # ── Firewall ─────────────────────────────────────
 route_target   = "default" | CIDR
@@ -1229,9 +1241,12 @@ impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
 rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" RATE)?
 
 # ── Collections ──────────────────────────────────
-range          = INT ".." INT
-list           = "[" (for_expr | value ("," value)*) "]"
-for_expr       = "for" IDENT "in" INT ".." INT ":" name
+range          = (INT | INTERP) ".." (INT | INTERP)
+list           = "[" (for_expr | value ("," value)* ","?) "]"
+for_expr       = "for" IDENT "in" (INT ".." INT | list) ":" name
+                 (* expanded where it appears with the same engine as
+                    for_loop: arithmetic, loop.* and the iteration cap;
+                    bounds must be literal *)
 ident_list     = "[" (for_expr | IDENT ("," IDENT)*) "]"
 endpoint_list  = "[" (for_expr | endpoint ("," endpoint)*) "]"
 string_list    = "[" STRING ("," STRING)* "]"

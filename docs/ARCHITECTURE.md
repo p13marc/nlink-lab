@@ -69,7 +69,7 @@ parser/nll/parser.rs       ──→  ast::Document  (Statements, NodeDefs, Netw
    ↓
 types::Topology            ──→  The fully-resolved, flat, immutable form
    │
-   │  validator.rs         ──→  20 rules: CIDRs valid, endpoints exist, no cycles, ...
+   │  validator.rs         ──→  40 rules (stable ids): CIDRs valid, endpoints exist, no cycles, ...
    ↓
 ValidationResult            ──→  Errors block deploy; warnings reported but allowed
    │

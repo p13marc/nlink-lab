@@ -106,6 +106,17 @@ impl Runtime {
         }
     }
 
+    /// Wrap an already-selected runtime binary without probing it.
+    ///
+    /// Used by CLI commands that operate on an existing lab, where the
+    /// binary name is read back from `state.json` (`LabState::runtime`)
+    /// rather than auto-detected.
+    pub fn with_binary(binary: impl Into<String>) -> Self {
+        Self {
+            binary: binary.into(),
+        }
+    }
+
     /// Get the runtime binary name.
     pub fn binary(&self) -> &str {
         &self.binary
@@ -253,7 +264,17 @@ impl Runtime {
         }
 
         let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let pid = self.inspect_pid(&id)?;
+        // `run -d` returns as soon as the container is created; if its
+        // entrypoint exited already, `.State.Pid` reads back as 0 and
+        // every later `/proc/<pid>/ns/net` reference would point at a
+        // dead or recycled PID (#31). `inspect_pid` rejects that.
+        let pid = self.inspect_pid(&id).map_err(|e| {
+            Error::deploy_failed(format!(
+                "container '{name}' ({}): {e}; inspect with `{} logs {name}`",
+                &id[..id.len().min(12)],
+                self.binary
+            ))
+        })?;
 
         Ok(ContainerInfo {
             id,
@@ -278,10 +299,7 @@ impl Runtime {
             )));
         }
 
-        let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        pid_str.parse::<u32>().map_err(|e| {
-            Error::deploy_failed(format!("invalid PID '{pid_str}' for container '{id}': {e}"))
-        })
+        parse_pid(&String::from_utf8_lossy(&output.stdout), id)
     }
 
     /// Execute a command inside a running container.
@@ -312,5 +330,60 @@ impl Runtime {
             .stderr(std::process::Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
+    }
+}
+
+/// Parse the output of `inspect --format '{{.State.Pid}}'`.
+///
+/// Both docker and podman report `0` for a container that is not
+/// running (created-but-exited, stopped, or restarting). Treating that
+/// as a valid PID is exactly the failure mode of issue #31, so it is
+/// rejected here rather than at every caller.
+fn parse_pid(raw: &str, id: &str) -> Result<u32> {
+    let pid_str = raw.trim();
+    let pid = pid_str.parse::<u32>().map_err(|e| {
+        Error::deploy_failed(format!("invalid PID '{pid_str}' for container '{id}': {e}"))
+    })?;
+    if pid == 0 {
+        return Err(Error::deploy_failed(format!(
+            "container '{id}' is not running (.State.Pid == 0): \
+             container exited immediately; check its logs"
+        )));
+    }
+    Ok(pid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_pid_accepts_running_container() {
+        assert_eq!(parse_pid("4242\n", "abc").unwrap(), 4242);
+        assert_eq!(parse_pid("  7 ", "abc").unwrap(), 7);
+    }
+
+    #[test]
+    fn parse_pid_rejects_zero_as_exited() {
+        // docker/podman report 0 for a container whose entrypoint
+        // already exited — never a usable /proc/<pid>/ns/net (#31).
+        let err = parse_pid("0\n", "deadbeef").unwrap_err().to_string();
+        assert!(err.contains("exited immediately"), "{err}");
+        assert!(err.contains("check its logs"), "{err}");
+        assert!(err.contains("deadbeef"), "{err}");
+    }
+
+    #[test]
+    fn parse_pid_rejects_garbage() {
+        let err = parse_pid("<no value>", "x").unwrap_err().to_string();
+        assert!(err.contains("invalid PID"), "{err}");
+        assert!(parse_pid("", "x").is_err());
+        assert!(parse_pid("-1", "x").is_err());
+    }
+
+    #[test]
+    fn with_binary_does_not_probe() {
+        let rt = Runtime::with_binary("definitely-not-a-runtime");
+        assert_eq!(rt.binary(), "definitely-not-a-runtime");
     }
 }

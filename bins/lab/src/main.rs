@@ -1123,7 +1123,7 @@ fn parse_topology(
 async fn run(cli: Cli) -> nlink_lab::Result<()> {
     let json = cli.json;
     let quiet = cli.quiet;
-    let _verbose = cli.verbose;
+    let verbose = cli.verbose;
     match cli.command {
         Commands::Deploy {
             topology,
@@ -1472,7 +1472,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             None => {
                 let labs = nlink_lab::RunningLab::list()?;
                 let orphans = if scan {
-                    find_orphans(&labs)
+                    find_orphans(&labs).await
                 } else {
                     Orphans::default()
                 };
@@ -1533,6 +1533,13 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
                             "Run `nlink-lab destroy <lab>` to clean up each stale state file."
                         );
                     }
+                }
+                if scan && !json && verbose && orphans.untagged_ignored > 0 {
+                    println!();
+                    println!(
+                        "{} untagged namespace(s) ignored (not created by nlink-lab).",
+                        orphans.untagged_ignored
+                    );
                 }
                 Ok(())
             }
@@ -3212,26 +3219,65 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
 
         Commands::Restart { lab, node } => {
             check_root();
+            // Same per-lab flock deploy/destroy take: the PID refresh
+            // below rewrites state.json and must not race an `apply`.
+            let _lock = nlink_lab::state::lock(&lab)?;
             let running = nlink_lab::RunningLab::load(&lab)?;
-            let container = running.container_for(&node).ok_or_else(|| {
-                nlink_lab::Error::deploy_failed(format!(
-                    "node '{node}' is not a container. Restart is only available for container nodes."
-                ))
-            })?;
-            let rt = running.runtime_binary().unwrap_or("docker");
+            let container = running
+                .container_for(&node)
+                .cloned()
+                .ok_or_else(|| {
+                    nlink_lab::Error::deploy_failed(format!(
+                        "node '{node}' is not a container. Restart is only available for container nodes."
+                    ))
+                })?;
+            // Issue #31: `docker restart` recreates the container's
+            // network namespace, so every veth the deployer moved into
+            // it is gone afterwards and nothing here can put it back.
+            // Refuse up front instead of leaving a half-broken node.
+            let links = node_link_count(running.topology(), &node);
+            if links > 0 {
+                return Err(nlink_lab::Error::deploy_failed(format!(
+                    "node '{node}' has {links} link(s); restarting would drop its veths \
+                     — destroy and redeploy, or use apply (issue #31)"
+                )));
+            }
+            let rt = nlink_lab::container::Runtime::with_binary(
+                running.runtime_binary().unwrap_or("docker"),
+            );
             eprint!("Restarting '{node}'...");
-            let status = std::process::Command::new(rt)
+            let status = std::process::Command::new(rt.binary())
                 .args(["restart", &container.id])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
                 .map_err(|e| nlink_lab::Error::deploy_failed(format!("restart failed: {e}")))?;
-            if status.success() {
-                eprintln!(" done");
-            } else {
+            if !status.success() {
                 eprintln!(" failed");
                 std::process::exit(1);
             }
+            // The persisted init PID died with the old container process;
+            // re-read it (a `.State.Pid` of 0 is rejected by `inspect_pid`)
+            // so later `/proc/<pid>/ns/net` references stay valid.
+            let pid = rt.inspect_pid(&container.id).map_err(|e| {
+                eprintln!(" failed");
+                nlink_lab::Error::deploy_failed(format!(
+                    "'{node}' was restarted but is not running: {e}"
+                ))
+            })?;
+            // `RunningLab::save_state` persists only pids / impairments /
+            // process logs and the container map has no public mutator,
+            // so the new PID goes through the state module directly.
+            let (mut lab_state, topo) = nlink_lab::state::load(&lab)?;
+            let entry = lab_state.containers.get_mut(&node).ok_or_else(|| {
+                nlink_lab::Error::deploy_failed(format!(
+                    "state.json for lab '{lab}' no longer lists container '{node}'"
+                ))
+            })?;
+            let old_pid = entry.pid;
+            entry.pid = pid;
+            nlink_lab::state::save(&lab_state, &topo)?;
+            eprintln!(" done (pid {old_pid} -> {pid})");
             Ok(())
         }
 
@@ -3637,63 +3683,55 @@ fn check_root() {
     }
 }
 
-/// Best-effort cleanup when state is missing: delete namespaces matching the lab prefix.
+/// Best-effort cleanup when state is missing: delete this lab's namespaces
+/// and its root-namespace mgmt bridge/veth peers.
+///
+/// Namespaces are matched by the `{name}-` prefix *and* must not carry a
+/// `netns_tag` for a different lab — `destroy simple --force` must not take
+/// "simple-2-router" down with it. Untagged prefix matches are still reaped
+/// here (unlike `--orphans`) because the caller named the lab explicitly and
+/// deploys that predate tagging left nothing else to go on.
 async fn force_cleanup(name: &str) {
-    // Try to list and delete namespaces matching the lab prefix.
-    // Use ip netns since we don't have direct nlink dependency in the CLI.
     let prefix = format!("{name}-");
-    if let Ok(output) = std::process::Command::new("ip")
-        .args(["netns", "list"])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            let ns_name = line.split_whitespace().next().unwrap_or("");
-            if ns_name.starts_with(&prefix) {
-                let result = std::process::Command::new("ip")
-                    .args(["netns", "delete", ns_name])
-                    .status();
-                match result {
-                    Ok(s) if s.success() => eprintln!("  deleted namespace '{ns_name}'"),
-                    _ => eprintln!("  warning: failed to delete namespace '{ns_name}'"),
+    match nlink::netlink::namespace::list() {
+        Ok(all) => {
+            for ns in all.iter().filter(|ns| ns.starts_with(&prefix)) {
+                if let Some(owner) = nlink_lab::netns_tag::lab_of(ns)
+                    && owner != name
+                {
+                    eprintln!("  skipped namespace '{ns}' (owned by lab '{owner}')");
+                    continue;
+                }
+                match nlink::netlink::namespace::delete(ns) {
+                    Ok(()) => {
+                        nlink_lab::netns_tag::untag(ns);
+                        eprintln!("  deleted namespace '{ns}'");
+                    }
+                    Err(e) => eprintln!("  warning: failed to delete namespace '{ns}': {e}"),
                 }
             }
         }
+        Err(e) => eprintln!("  warning: failed to list namespaces: {e}"),
     }
 
     // Clean up root-namespace mgmt veth peers first (may be orphaned if bridge
     // was already deleted or namespaces were deleted before the bridge).
-    // Veth peers are named nm{hash6}{idx} where hash is from mgmt_bridge_name.
+    // Veth peers are named nm{hash8}{idx} — same hash as the bridge
+    // (`nl{hash8}`), so strip the "nl" prefix.
     let bridge_name = nlink_lab::mgmt_bridge_name_for(name);
-    // Veth peers are named nm{hash8}{idx} — same hash as bridge (strip "nl" prefix)
     let veth_prefix = format!("nm{}", &bridge_name[2..]);
-    if let Ok(output) = std::process::Command::new("ip")
-        .args(["-o", "link", "show"])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if let Some(ifname) = line.split(':').nth(1).map(|s| s.trim()) {
-                let ifname = ifname.split('@').next().unwrap_or(ifname);
+    match nlink::Connection::<nlink::Route>::new() {
+        Ok(conn) => {
+            for ifname in list_ip_links_with(&conn).await {
                 if ifname.starts_with(veth_prefix.as_str()) {
-                    let _ = std::process::Command::new("ip")
-                        .args(["link", "delete", ifname])
-                        .stderr(std::process::Stdio::null())
-                        .status();
+                    let _ = conn.del_link_if_exists(ifname.as_str()).await;
                 }
             }
+            if let Ok(true) = conn.del_link_if_exists(bridge_name.as_str()).await {
+                eprintln!("  deleted mgmt bridge '{bridge_name}'");
+            }
         }
-    }
-
-    // Clean up root-namespace management bridge.
-    let result = std::process::Command::new("ip")
-        .args(["link", "delete", &bridge_name])
-        .stderr(std::process::Stdio::null())
-        .status();
-    if let Ok(s) = result
-        && s.success()
-    {
-        eprintln!("  deleted mgmt bridge '{bridge_name}'");
+        Err(e) => eprintln!("  warning: cannot open netlink socket: {e}"),
     }
 
     // Also clean up state directory
@@ -3708,8 +3746,15 @@ struct Orphans {
     bridges: Vec<String>,
     /// Root-namespace mgmt veth peers (`nm{hash8}{idx}`).
     veths: Vec<String>,
-    /// Named network namespaces whose prefix doesn't match any known lab.
+    /// Named network namespaces tagged by nlink-lab (`netns_tag`) whose
+    /// owning lab is not registered, or is registered but no longer
+    /// claims them in `state.json`.
     netns: Vec<String>,
+    /// Namespaces on the host without an nlink-lab ownership tag. Never
+    /// listed and never touched (#29 — they belong to libvirt, podman,
+    /// CNI, ...); surfaced only as a count for `status --scan -v`.
+    #[serde(skip_serializing_if = "is_zero")]
+    untagged_ignored: usize,
     /// Labs whose state file claims namespaces that no longer exist on the
     /// host — the mirror case of the above (state with no resources). Most
     /// commonly caused by a reboot.
@@ -3726,7 +3771,13 @@ struct StaleLab {
     missing_namespaces: Vec<String>,
 }
 
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 impl Orphans {
+    /// True when nothing is reportable. `untagged_ignored` is
+    /// informational only and does not count.
     fn is_empty(&self) -> bool {
         self.bridges.is_empty()
             && self.veths.is_empty()
@@ -3743,16 +3794,20 @@ impl Orphans {
 ///   hash doesn't match any known lab's `mgmt_bridge_name_for`.
 /// - Interfaces starting with `nm` + 8 hex + digits are mgmt veth peers;
 ///   orphan if the hash portion doesn't match any known lab.
-/// - Named netns whose prefix matches a known lab are skipped; remaining
-///   lab-shaped names (containing a hyphen) are reported.
+/// - Named netns are orphans only when they carry an nlink-lab ownership
+///   tag (`netns_tag`) *and* the tagged lab is not registered, or is
+///   registered but its `state.json` no longer lists that namespace.
+///   Untagged namespaces are never reported (#29) — name heuristics
+///   cannot tell a crashed lab from libvirt/podman/CNI.
 ///
 /// Detection rule for *stale* (state with no resources): for each known lab,
 /// compare the namespaces it claims in `state.json` against the host's
-/// current `ip netns list`. Any missing namespace marks the lab stale.
-fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
-    let ifnames: Vec<String> = list_ip_links();
+/// current namespace list. Any missing namespace marks the lab stale.
+async fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
+    let ifnames: Vec<String> = list_ip_links().await;
     let netns: Vec<String> = list_netns();
-    let mut orphans = classify_orphans(&ifnames, &netns, known);
+    let tagged: Vec<(String, Option<String>)> =
+        netns.iter().map(|ns| (ns.clone(), tag_of(ns))).collect();
 
     let lab_namespaces: Vec<(String, Vec<String>)> = known
         .iter()
@@ -3762,8 +3817,18 @@ fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
                 .map(|ns| (info.name.clone(), ns))
         })
         .collect();
+    let mut orphans = classify_orphans(&ifnames, &tagged, known, &lab_namespaces);
     orphans.stale = classify_stale(&lab_namespaces, &netns);
     orphans
+}
+
+/// Ownership tag of a namespace as the classifier sees it: `None` for an
+/// untagged namespace, `Some(lab)` otherwise. A tag file that exists but
+/// is empty (crash mid-write) still counts as tagged — by a lab nobody
+/// knows — so it stays reapable.
+fn tag_of(ns: &str) -> Option<String> {
+    nlink_lab::netns_tag::is_tagged(ns)
+        .then(|| nlink_lab::netns_tag::lab_of(ns).unwrap_or_default())
 }
 
 /// Pure stale-lab classifier.
@@ -3795,59 +3860,68 @@ fn classify_stale(labs: &[(String, Vec<String>)], netns_present: &[String]) -> V
     out
 }
 
-fn list_ip_links() -> Vec<String> {
-    let output = match std::process::Command::new("ip")
-        .args(["-o", "link", "show"])
-        .output()
-    {
-        Ok(o) => o,
-        Err(_) => return Vec::new(),
-    };
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .filter_map(|line| {
-            line.split(':')
-                .nth(1)
-                .map(|s| s.trim().split('@').next().unwrap_or("").to_string())
-        })
-        .filter(|s| !s.is_empty())
-        .collect()
+/// Interface names in the root namespace (RTM_GETLINK dump).
+async fn list_ip_links() -> Vec<String> {
+    match nlink::Connection::<nlink::Route>::new() {
+        Ok(conn) => list_ip_links_with(&conn).await,
+        Err(e) => {
+            tracing::warn!("cannot open netlink socket: {e}");
+            Vec::new()
+        }
+    }
 }
 
+async fn list_ip_links_with(conn: &nlink::Connection<nlink::Route>) -> Vec<String> {
+    match conn.get_links().await {
+        Ok(links) => links
+            .iter()
+            .filter_map(|l| l.name().map(str::to_string))
+            .collect(),
+        Err(e) => {
+            tracing::warn!("failed to list links: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Named network namespaces on the host (`/var/run/netns`).
 fn list_netns() -> Vec<String> {
-    let output = match std::process::Command::new("ip")
-        .args(["netns", "list"])
-        .output()
-    {
-        Ok(o) => o,
-        Err(_) => return Vec::new(),
-    };
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .filter_map(|line| line.split_whitespace().next().map(|s| s.to_string()))
-        .filter(|s| !s.is_empty())
-        .collect()
+    nlink::netlink::namespace::list().unwrap_or_else(|e| {
+        tracing::warn!("failed to list namespaces: {e}");
+        Vec::new()
+    })
 }
 
 /// Pure classification — given host state and known labs, emit orphans.
+///
+/// `netns` pairs every namespace name with its `netns_tag` owner (`None`
+/// = untagged). `claimed` lists, per registered lab, the namespaces its
+/// `state.json` currently records; a registered lab missing from
+/// `claimed` (state unreadable) is treated as still owning everything it
+/// tagged, so nothing is reaped on a corrupt state file.
 fn classify_orphans(
     ifnames: &[String],
-    netns: &[String],
+    netns: &[(String, Option<String>)],
     known: &[nlink_lab::state::LabInfo],
+    claimed: &[(String, Vec<String>)],
 ) -> Orphans {
-    let mut known_bridges: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut known_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut known_prefixes: Vec<String> = Vec::new();
+    use std::collections::{HashMap, HashSet};
+
+    let mut known_bridges: HashSet<String> = HashSet::new();
+    let mut known_hashes: HashSet<String> = HashSet::new();
+    let mut known_names: HashSet<&str> = HashSet::new();
     for info in known {
         let bridge = nlink_lab::mgmt_bridge_name_for(&info.name);
         if bridge.len() > 2 {
             known_hashes.insert(bridge[2..].to_string());
         }
         known_bridges.insert(bridge);
-        known_prefixes.push(format!("{}-", info.name));
+        known_names.insert(info.name.as_str());
     }
+    let claimed_by: HashMap<&str, HashSet<&str>> = claimed
+        .iter()
+        .map(|(lab, nss)| (lab.as_str(), nss.iter().map(String::as_str).collect()))
+        .collect();
 
     let mut orphans = Orphans::default();
     for ifname in ifnames {
@@ -3871,11 +3945,21 @@ fn classify_orphans(
         }
     }
 
-    for ns in netns {
-        if known_prefixes.iter().any(|p| ns.starts_with(p.as_str())) {
+    for (ns, tag) in netns {
+        let Some(owner) = tag else {
+            orphans.untagged_ignored += 1;
             continue;
-        }
-        if ns.contains('-') {
+        };
+        let orphaned = match claimed_by.get(owner.as_str()) {
+            // Registered lab with readable state: orphan iff it no
+            // longer claims this namespace.
+            Some(claims) => !claims.contains(ns.as_str()),
+            // Registered but state unreadable: leave it alone.
+            None if known_names.contains(owner.as_str()) => false,
+            // Tagged by a lab that is not registered at all.
+            None => true,
+        };
+        if orphaned {
             orphans.netns.push(ns.clone());
         }
     }
@@ -3884,40 +3968,71 @@ fn classify_orphans(
 }
 
 /// Best-effort cleanup of orphan resources found by [`find_orphans`].
+/// Only tagged namespaces ever reach here (see [`classify_orphans`]).
 async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
-    let orphans = find_orphans(known);
+    let orphans = find_orphans(known).await;
     if orphans.is_empty() {
         println!("No orphans detected.");
         return;
     }
     // Netns first: deleting a namespace reaps the veths inside it.
     for ns in &orphans.netns {
-        let r = std::process::Command::new("ip")
-            .args(["netns", "delete", ns])
-            .status();
-        match r {
-            Ok(s) if s.success() => println!("  deleted namespace '{ns}'"),
-            _ => eprintln!("  warning: failed to delete namespace '{ns}'"),
+        match nlink::netlink::namespace::delete(ns) {
+            Ok(()) => {
+                nlink_lab::netns_tag::untag(ns);
+                println!("  deleted namespace '{ns}'");
+            }
+            Err(e) => eprintln!("  warning: failed to delete namespace '{ns}': {e}"),
         }
     }
+    if orphans.veths.is_empty() && orphans.bridges.is_empty() {
+        return;
+    }
+    let conn = match nlink::Connection::<nlink::Route>::new() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  warning: cannot open netlink socket: {e}");
+            return;
+        }
+    };
     for v in &orphans.veths {
-        let _ = std::process::Command::new("ip")
-            .args(["link", "delete", v])
-            .stderr(std::process::Stdio::null())
-            .status();
-        println!("  deleted veth '{v}'");
+        match conn.del_link_if_exists(v.as_str()).await {
+            Ok(true) => println!("  deleted veth '{v}'"),
+            // Already gone — its peer went with a namespace above.
+            Ok(false) => {}
+            Err(e) => eprintln!("  warning: failed to delete veth '{v}': {e}"),
+        }
     }
     for b in &orphans.bridges {
-        let r = std::process::Command::new("ip")
-            .args(["link", "delete", b])
-            .stderr(std::process::Stdio::null())
-            .status();
-        if let Ok(s) = r
-            && s.success()
-        {
-            println!("  deleted mgmt bridge '{b}'");
+        match conn.del_link_if_exists(b.as_str()).await {
+            Ok(true) => println!("  deleted mgmt bridge '{b}'"),
+            Ok(false) => {}
+            Err(e) => eprintln!("  warning: failed to delete mgmt bridge '{b}': {e}"),
         }
     }
+}
+
+/// Number of veth attachments a node has in the topology: point-to-point
+/// links, bridge network memberships, and the mgmt veth when the lab has a
+/// management network. All are moved into the node's namespace at deploy
+/// time and vanish when a container is restarted (#31).
+fn node_link_count(topo: &nlink_lab::Topology, node: &str) -> usize {
+    let is_node = |endpoint: &str| {
+        endpoint == node || nlink_lab::EndpointRef::parse(endpoint).is_some_and(|r| r.node == node)
+    };
+    let links = topo
+        .links
+        .iter()
+        .filter(|l| l.endpoints.iter().any(|e| is_node(e)))
+        .count();
+    let members = topo
+        .networks
+        .values()
+        .flat_map(|n| n.members.iter())
+        .filter(|m| is_node(m))
+        .count();
+    let mgmt = usize::from(topo.lab.mgmt_subnet.is_some());
+    links + members + mgmt
 }
 
 /// Follow `path` from `start_offset`, writing each new chunk to `out`
@@ -4337,7 +4452,7 @@ network lan_b {
         let keep_bridge = nlink_lab::mgmt_bridge_name_for("keep");
         let orphan_bridge = nlink_lab::mgmt_bridge_name_for("gone");
         let ifnames = vec![keep_bridge.clone(), orphan_bridge.clone(), "eth0".into()];
-        let orphans = classify_orphans(&ifnames, &[], &known);
+        let orphans = classify_orphans(&ifnames, &[], &known, &[]);
         assert_eq!(orphans.bridges, vec![orphan_bridge]);
         assert!(orphans.veths.is_empty());
     }
@@ -4354,31 +4469,153 @@ network lan_b {
             "lo".into(),
             "eth0".into(),
         ];
-        let orphans = classify_orphans(&ifnames, &[], &known);
+        let orphans = classify_orphans(&ifnames, &[], &known, &[]);
         assert_eq!(orphans.veths.len(), 2);
         assert!(orphans.veths.iter().all(|v| v.contains(gone_hash)));
     }
 
-    #[test]
-    fn classify_orphans_ignores_system_netns() {
-        // Bare system netns names (no hyphen) are never flagged.
-        let orphans = classify_orphans(&[], &["default".into(), "init".into()], &[]);
-        assert!(orphans.netns.is_empty());
+    fn untagged(ns: &str) -> (String, Option<String>) {
+        (ns.to_string(), None)
+    }
+
+    fn tagged(ns: &str, lab: &str) -> (String, Option<String>) {
+        (ns.to_string(), Some(lab.to_string()))
     }
 
     #[test]
-    fn classify_orphans_reports_unknown_netns() {
+    fn classify_orphans_ignores_system_netns() {
+        // Untagged system netns are never flagged, only counted.
+        let netns = vec![untagged("default"), untagged("init")];
+        let orphans = classify_orphans(&[], &netns, &[], &[]);
+        assert!(orphans.netns.is_empty());
+        assert_eq!(orphans.untagged_ignored, 2);
+        assert!(
+            orphans.is_empty(),
+            "untagged count must not make it non-empty"
+        );
+    }
+
+    #[test]
+    fn classify_orphans_reports_tagged_unregistered_netns() {
+        // Tagged by a lab with no state file at all → orphan (#29).
         let known = vec![info("keep")];
+        let claimed = vec![(
+            "keep".to_string(),
+            vec!["keep-router".to_string(), "keep-mgmt".to_string()],
+        )];
         let netns = vec![
-            "keep-router".into(),
-            "keep-mgmt".into(),
-            "stale-mgmt".into(),
-            "stale-node1".into(),
+            tagged("keep-router", "keep"),
+            tagged("keep-mgmt", "keep"),
+            tagged("stale-mgmt", "stale"),
+            tagged("stale-node1", "stale"),
         ];
-        let orphans = classify_orphans(&[], &netns, &known);
+        let orphans = classify_orphans(&[], &netns, &known, &claimed);
         assert_eq!(orphans.netns.len(), 2);
         assert!(orphans.netns.contains(&"stale-mgmt".to_string()));
         assert!(orphans.netns.contains(&"stale-node1".to_string()));
+        assert_eq!(orphans.untagged_ignored, 0);
+    }
+
+    #[test]
+    fn classify_orphans_keeps_tagged_registered_netns() {
+        // Tagged and claimed by a registered lab → not an orphan, even
+        // though the name would have matched nothing by prefix.
+        let known = vec![info("keep")];
+        let claimed = vec![("keep".to_string(), vec!["r1".to_string()])];
+        let netns = vec![tagged("r1", "keep")];
+        let orphans = classify_orphans(&[], &netns, &known, &claimed);
+        assert!(orphans.netns.is_empty(), "{orphans:?}");
+    }
+
+    #[test]
+    fn classify_orphans_reports_tagged_but_unclaimed_netns() {
+        // Registered lab whose state.json no longer lists the namespace
+        // (e.g. an `apply` removed the node but the delete failed).
+        let known = vec![info("keep")];
+        let claimed = vec![("keep".to_string(), vec!["keep-a".to_string()])];
+        let netns = vec![tagged("keep-a", "keep"), tagged("keep-b", "keep")];
+        let orphans = classify_orphans(&[], &netns, &known, &claimed);
+        assert_eq!(orphans.netns, vec!["keep-b".to_string()]);
+    }
+
+    #[test]
+    fn classify_orphans_keeps_tagged_netns_when_state_unreadable() {
+        // Registered lab absent from `claimed` (state.json unreadable):
+        // be conservative and leave its namespaces alone.
+        let known = vec![info("keep")];
+        let netns = vec![tagged("keep-a", "keep")];
+        let orphans = classify_orphans(&[], &netns, &known, &[]);
+        assert!(orphans.netns.is_empty(), "{orphans:?}");
+    }
+
+    #[test]
+    fn classify_orphans_never_touches_untagged_dashed_names() {
+        // The exact #29 failure: lab-shaped names with hyphens that
+        // nlink-lab did not create. No registered labs at all.
+        let netns = vec![
+            untagged("my-lab-router"),
+            untagged("stale-mgmt"),
+            untagged("ns-with-dashes"),
+        ];
+        let orphans = classify_orphans(&[], &netns, &[], &[]);
+        assert!(orphans.netns.is_empty(), "{orphans:?}");
+        assert_eq!(orphans.untagged_ignored, 3);
+    }
+
+    #[test]
+    fn classify_orphans_ignores_libvirt_and_cni_style_netns() {
+        // Names other tools create on a shared host; none are tagged.
+        let netns = vec![
+            untagged("qemu-1-vm1"),
+            untagged("cni-2f3a1b7c-9d4e-4a1b-8c2d-0e1f2a3b4c5d"),
+            untagged("netns-podman-abcdef"),
+            untagged("mininet-h1"),
+            untagged("vrf-blue"),
+        ];
+        let orphans = classify_orphans(&[], &netns, &[], &[]);
+        assert!(orphans.netns.is_empty(), "{orphans:?}");
+        assert_eq!(orphans.untagged_ignored, 5);
+    }
+
+    #[test]
+    fn classify_orphans_empty_tag_counts_as_tagged_by_nobody() {
+        // A tag file that exists but is empty (crash mid-write) maps to
+        // `Some("")`, which no registered lab matches → reapable.
+        let netns = vec![tagged("half-written", "")];
+        let orphans = classify_orphans(&[], &netns, &[info("keep")], &[]);
+        assert_eq!(orphans.netns, vec!["half-written".to_string()]);
+    }
+
+    #[test]
+    fn node_link_count_counts_links_members_and_mgmt() {
+        use nlink_lab::{Link, Network, Topology};
+        let mut topo = Topology::default();
+        topo.links.push(Link {
+            endpoints: ["r1:eth0".into(), "h1:eth0".into()],
+            addresses: None,
+            mtu: None,
+        });
+        topo.links.push(Link {
+            endpoints: ["r1:eth1".into(), "h2:eth0".into()],
+            addresses: None,
+            mtu: None,
+        });
+        topo.networks.insert(
+            "lan".into(),
+            Network {
+                members: vec!["h1:eth1".into(), "h3:eth0".into()],
+                ..Default::default()
+            },
+        );
+        assert_eq!(node_link_count(&topo, "r1"), 2);
+        assert_eq!(node_link_count(&topo, "h1"), 2);
+        assert_eq!(node_link_count(&topo, "h3"), 1);
+        assert_eq!(node_link_count(&topo, "lonely"), 0);
+
+        // A management network adds one veth to every node.
+        topo.lab.mgmt_subnet = Some("10.99.0.0/24".into());
+        assert_eq!(node_link_count(&topo, "lonely"), 1);
+        assert_eq!(node_link_count(&topo, "r1"), 3);
     }
 
     #[test]
@@ -4535,7 +4772,7 @@ network lan_b {
             // nm-prefixed but no trailing digits.
             "nmabcdef01".into(),
         ];
-        let orphans = classify_orphans(&ifnames, &[], &[]);
+        let orphans = classify_orphans(&ifnames, &[], &[], &[]);
         assert!(
             orphans.bridges.is_empty() && orphans.veths.is_empty(),
             "false positives: {orphans:?}"

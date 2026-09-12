@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — CLI (issues #55, #57, #58, #60, #61, #62, #68)
+
+- **`nlink-lab verify <lab> [--topology FILE]`** (#58): drift check of a
+  running lab against its topology — every node's live links, addresses,
+  routes and nftables plus the removal ops `apply` would run — exit 2 on
+  drift, `--json` is the schema-v3 report. The layered diff now runs with
+  purge semantics, so an undeclared address or main-table route on a
+  managed interface counts as drift (it used to be invisible to
+  `apply --check` too).
+- **`nlink-lab doctor`** (#55): host preflight — privileges, netlink,
+  required/optional binaries, container runtime, kernel modules, sysctl
+  writability, state dir, pending crash journals, orphaned lab resources;
+  `--json`; exit 1 when a required check fails.
+- **`nlink-lab lint`** (#57): advice that never blocks a deploy —
+  `no-assertions`, `background-exec-without-healthcheck`,
+  `asymmetric-impairment`, `disconnected-topology`, `no-description`;
+  `--strict` exits 2, `--allow RULE`, `--list-rules`, `--json`.
+- **`validate --strict / --deny RULE / --allow RULE / --list-rules`**
+  (#68): every rule has a stable id and a default severity
+  (`nlink_lab::rule_severity`, `RuleOptions`, `Topology::validate_with`);
+  warnings can be promoted or silenced per rule, errors never silenced.
+- **`render --mermaid`** (#61), same renderer as `graph --mermaid`
+  (networks and per-pair impairments included).
+- **Dynamic shell completions** (#62): `source <(COMPLETE=bash
+  nlink-lab)` (zsh/fish likewise) completes deployed lab names, node
+  names and rule ids on every `<LAB>`/`<NODE>` argument and on
+  `validate --deny/--allow`, `lint --allow`. `completions <shell>` still
+  emits the static files.
+- **JSON schemas generated from the types** (#60): `docs-gen --schemas
+  docs/json-schemas` writes ten schemas with `schemars` (validate,
+  validate-rules, verify/apply dry-run v3, status list/scan, ps,
+  proc-stat, doctor, lint, metrics snapshot); CI diffs them and the cli
+  test checks they are current. The whole topology model derives
+  `JsonSchema`. deploy/spawn/impair-show/status-lab remain hand-written.
+
+### Changed — runtime
+
+- **Namespace ownership tags moved to `/run/nlink-lab/netns/<ns>`.**
+  They lived in `/etc/netns/<ns>/.nlink-lab`, which `ip netns exec`
+  bind-mounts over `/etc` and therefore warned about on every exec.
+  Legacy tags are still read and removed. tmpfs, so tags vanish with the
+  namespaces on reboot.
+
 ### Fixed — audit leftovers (issues #26, #27, #53)
 
 - **One loop engine (#26).** `for` inside `nat { }` and `network { }`

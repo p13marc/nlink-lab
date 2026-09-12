@@ -31,7 +31,7 @@
 //! println!("imported lab '{}'", report.manifest.lab_name);
 //! ```
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -89,7 +89,7 @@ pub struct Manifest {
     pub deploy_state: DeployState,
     pub platform: Platform,
     pub files: ManifestFiles,
-    pub checksums: HashMap<String, String>,
+    pub checksums: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -200,7 +200,7 @@ pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOption
     let params_json = if opts.params.is_empty() {
         None
     } else {
-        let map: HashMap<&str, &str> = opts
+        let map: BTreeMap<&str, &str> = opts
             .params
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -209,7 +209,7 @@ pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOption
     };
 
     // Build manifest with checksums.
-    let mut checksums: HashMap<String, String> = HashMap::new();
+    let mut checksums: BTreeMap<String, String> = BTreeMap::new();
     checksums.insert("topology.nll".into(), sha256_hex(nll_source.as_bytes()));
     if let Some(rendered) = &rendered_toml {
         checksums.insert("rendered.toml".into(), sha256_hex(rendered.as_bytes()));
@@ -343,7 +343,7 @@ pub fn import_archive(
         let nll = std::str::from_utf8(nll_bytes)
             .map_err(|e| Error::invalid_topology(format!("topology.nll not utf-8: {e}")))?;
         let topo = if let Some(params_bytes) = entries.get("params.json") {
-            let map: HashMap<String, String> = serde_json::from_slice(params_bytes)
+            let map: BTreeMap<String, String> = serde_json::from_slice(params_bytes)
                 .map_err(|e| Error::invalid_topology(format!("params.json: {e}")))?;
             let pairs: Vec<(String, String)> = map.into_iter().collect();
             crate::parser::parse_with_params(nll, &pairs)?
@@ -415,12 +415,12 @@ fn write_tar_entry<W: Write>(tarball: &mut tar::Builder<W>, name: &str, data: &[
     Ok(())
 }
 
-fn read_archive_entries(archive: &Path) -> Result<HashMap<String, Vec<u8>>> {
+fn read_archive_entries(archive: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
     let f = File::open(archive)
         .map_err(|e| Error::invalid_topology(format!("open {}: {e}", archive.display())))?;
     let gz = GzDecoder::new(f);
     let mut tarball = tar::Archive::new(gz);
-    let mut entries: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut entries: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     for entry in tarball
         .entries()
         .map_err(|e| Error::invalid_topology(format!("read archive: {e}")))?
@@ -441,7 +441,7 @@ fn read_archive_entries(archive: &Path) -> Result<HashMap<String, Vec<u8>>> {
     Ok(entries)
 }
 
-fn parse_manifest(entries: &HashMap<String, Vec<u8>>) -> Result<Manifest> {
+fn parse_manifest(entries: &BTreeMap<String, Vec<u8>>) -> Result<Manifest> {
     let bytes = entries
         .get("manifest.json")
         .ok_or_else(|| Error::invalid_topology("archive has no manifest.json"))?;
@@ -580,7 +580,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         // Hand-craft an archive with format_version = 999.
         let nll_bytes = SIMPLE_NLL.as_bytes();
         let nll_sum = sha256_hex(nll_bytes);
-        let mut checksums = HashMap::new();
+        let mut checksums = BTreeMap::new();
         checksums.insert("topology.nll".into(), nll_sum);
         let manifest = Manifest {
             format_version: 999,
@@ -636,7 +636,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
                 topology: "topology.nll".into(),
                 ..Default::default()
             },
-            checksums: HashMap::new(),
+            checksums: BTreeMap::new(),
         };
         let s = serde_json::to_string(&m).unwrap();
         let m2: Manifest = serde_json::from_str(&s).unwrap();

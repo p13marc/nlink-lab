@@ -15,7 +15,7 @@
 //!
 //! Output is deterministic — every map is emitted in sorted key order.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::net::IpAddr;
 
@@ -321,7 +321,7 @@ fn string_list(items: &[String]) -> Result<String> {
     Ok(format!("[{}]", parts.join(", ")))
 }
 
-fn sorted_keys<V>(map: &HashMap<String, V>) -> Vec<&String> {
+fn sorted_keys<V>(map: &BTreeMap<String, V>) -> Vec<&String> {
     let mut keys: Vec<_> = map.keys().collect();
     keys.sort();
     keys
@@ -393,7 +393,11 @@ const IPV6_FORWARD: &str = "net.ipv6.conf.all.forwarding";
 
 /// Emit `forward ipv4` / `forward ipv6` sugar where the sysctl matches the
 /// lowering of that sugar exactly (`=1`), and `sysctl "k" "v"` otherwise.
-fn render_sysctls(out: &mut String, indent: &str, sysctls: &HashMap<String, String>) -> Result<()> {
+fn render_sysctls(
+    out: &mut String,
+    indent: &str,
+    sysctls: &BTreeMap<String, String>,
+) -> Result<()> {
     let is_sugar = |k: &str| sysctls.get(k).map(String::as_str) == Some("1");
     if is_sugar(IPV4_FORWARD) {
         writeln!(out, "{indent}forward ipv4").unwrap();
@@ -561,7 +565,7 @@ fn render_route(out: &mut String, indent: &str, dest: &str, route: &RouteConfig)
 fn render_routes(
     out: &mut String,
     indent: &str,
-    routes: &HashMap<String, RouteConfig>,
+    routes: &BTreeMap<String, RouteConfig>,
 ) -> Result<()> {
     for dest in sorted_keys(routes) {
         render_route(out, indent, dest, &routes[dest])?;
@@ -1125,8 +1129,8 @@ fn render_network(out: &mut String, name: &str, net: &Network) -> Result<()> {
 
 /// Reproduce the parser's `subnet` auto-assignment: member `i` gets
 /// `base + i + 1` with the subnet's prefix length.
-fn auto_assigned_ports(net: &Network) -> HashMap<String, String> {
-    let mut map = HashMap::new();
+fn auto_assigned_ports(net: &Network) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
     let Some(subnet) = &net.subnet else {
         return map;
     };

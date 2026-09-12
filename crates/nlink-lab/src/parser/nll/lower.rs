@@ -3,7 +3,7 @@
 //! Expands `for` loops, substitutes `let` variables, resolves profiles,
 //! and maps AST nodes to the [`crate::types::Topology`] struct.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use super::ast;
@@ -600,8 +600,8 @@ fn prefix_endpoint(alias: &str, endpoint: &str) -> String {
 // ─── Cross-Reference Resolution ─────────────────────────
 
 /// Build a map of node:interface → IP address from all link definitions.
-fn build_address_map(topology: &types::Topology) -> HashMap<String, String> {
-    let mut map = HashMap::new();
+fn build_address_map(topology: &types::Topology) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
     for link in &topology.links {
         if let Some(addrs) = &link.addresses {
             for (ep_str, addr) in link.endpoints.iter().zip(addrs.iter()) {
@@ -753,7 +753,7 @@ fn map_translate_address(
 }
 
 /// Replace `${node.iface}` references with resolved IP addresses.
-fn resolve_ref(s: &str, addr_map: &HashMap<String, String>) -> Result<String> {
+fn resolve_ref(s: &str, addr_map: &BTreeMap<String, String>) -> Result<String> {
     let mut result = s.to_string();
     // Find all ${...} patterns that contain a dot (cross-references)
     let mut search_from = 0;
@@ -868,25 +868,25 @@ impl PoolState {
 }
 
 struct LowerCtx {
-    profiles: HashMap<String, ast::ProfileDef>,
-    variables: HashMap<String, String>,
+    profiles: BTreeMap<String, ast::ProfileDef>,
+    variables: BTreeMap<String, String>,
     default_link_mtu: Option<u32>,
     default_impair: Option<ast::ImpairProps>,
     default_rate: Option<ast::RateProps>,
-    pools: HashMap<String, PoolState>,
-    link_profiles: HashMap<String, ast::DefaultsDef>,
+    pools: BTreeMap<String, PoolState>,
+    link_profiles: BTreeMap<String, ast::DefaultsDef>,
 }
 
 impl LowerCtx {
     fn new() -> Self {
         Self {
-            profiles: HashMap::new(),
-            variables: HashMap::new(),
+            profiles: BTreeMap::new(),
+            variables: BTreeMap::new(),
             default_link_mtu: None,
-            link_profiles: HashMap::new(),
+            link_profiles: BTreeMap::new(),
             default_impair: None,
             default_rate: None,
-            pools: HashMap::new(),
+            pools: BTreeMap::new(),
         }
     }
 
@@ -924,7 +924,7 @@ impl LowerCtx {
     fn expand_into(
         &self,
         stmts: &[ast::Statement],
-        vars: &mut HashMap<String, String>,
+        vars: &mut BTreeMap<String, String>,
     ) -> Result<Vec<ast::Statement>> {
         let mut result = Vec::new();
 
@@ -965,7 +965,7 @@ impl LowerCtx {
     fn expand_for(
         &self,
         for_loop: &ast::ForLoop,
-        vars: &mut HashMap<String, String>,
+        vars: &mut BTreeMap<String, String>,
     ) -> Result<Vec<ast::Statement>> {
         let values = range_values(&for_loop.range, &for_loop.var, vars)?;
         let len = values.len();
@@ -998,7 +998,7 @@ pub const MAX_LOOP_ITERATIONS: i64 = 100_000;
 fn range_values(
     range: &ast::ForRange,
     var: &str,
-    vars: &HashMap<String, String>,
+    vars: &BTreeMap<String, String>,
 ) -> Result<Vec<String>> {
     match range {
         ast::ForRange::DynRange { start, end } => {
@@ -1216,7 +1216,7 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
 /// Supports arithmetic (`${i + 1}`, `${(i - 1) * 2}`, `${i % 3}`),
 /// ternary conditionals (`${env == "prod" ? "5ms" : "50ms"}`),
 /// and simple variable lookup (`${var}`).
-pub(crate) fn interpolate(template: &str, vars: &HashMap<String, String>) -> String {
+pub(crate) fn interpolate(template: &str, vars: &BTreeMap<String, String>) -> String {
     // Run interpolation repeatedly until stable (handles nested ${leaf${i}})
     let mut current = template.to_string();
     for _ in 0..10 {
@@ -1318,7 +1318,7 @@ fn split_function_args(s: &str) -> Vec<String> {
     args
 }
 
-fn interpolate_once(template: &str, vars: &HashMap<String, String>) -> String {
+fn interpolate_once(template: &str, vars: &BTreeMap<String, String>) -> String {
     let mut result = String::with_capacity(template.len());
     let mut chars = template.chars().peekable();
 
@@ -1362,7 +1362,7 @@ fn interpolate_once(template: &str, vars: &HashMap<String, String>) -> String {
 /// - Compound expressions: `(i - 1) * 2 + 1`
 /// - Ternary conditionals: `var == "value" ? true_val : false_val`
 /// - Variable lookup: `var`
-fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
+fn eval_expr(expr: &str, vars: &BTreeMap<String, String>) -> String {
     let expr = expr.trim();
 
     // Ternary conditional: `cond ? true_val : false_val`
@@ -1385,7 +1385,7 @@ fn eval_expr(expr: &str, vars: &HashMap<String, String>) -> String {
 }
 
 /// Evaluate a ternary expression: `var == "lit" ? true_val : false_val`
-fn eval_ternary(expr: &str, vars: &HashMap<String, String>) -> Option<String> {
+fn eval_ternary(expr: &str, vars: &BTreeMap<String, String>) -> Option<String> {
     let q = expr.find('?')?;
     let condition = expr[..q].trim();
     let rest = expr[q + 1..].trim();
@@ -1410,7 +1410,7 @@ fn eval_ternary(expr: &str, vars: &HashMap<String, String>) -> Option<String> {
 /// - `<`, `>`, `<=`, `>=` numeric comparison
 /// - `&&`, `||` boolean operators
 /// - Numeric literals and variable references
-pub fn eval_condition(expr: &str, vars: &HashMap<String, String>) -> bool {
+pub fn eval_condition(expr: &str, vars: &BTreeMap<String, String>) -> bool {
     let expr = expr.trim();
 
     // Handle || (lowest precedence)
@@ -1493,7 +1493,7 @@ fn find_operator(expr: &str, op: &str) -> Option<usize> {
 }
 
 /// Resolve a value: strip quotes from string literals, look up variables.
-fn resolve_var(s: &str, vars: &HashMap<String, String>) -> String {
+fn resolve_var(s: &str, vars: &BTreeMap<String, String>) -> String {
     let s = s.trim();
     if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
         return s[1..s.len() - 1].to_string();
@@ -1516,7 +1516,7 @@ enum ArithTok {
 }
 
 /// Tokenize an arithmetic expression, resolving variables to numbers.
-fn tokenize_arith(expr: &str, vars: &HashMap<String, String>) -> Vec<ArithTok> {
+fn tokenize_arith(expr: &str, vars: &BTreeMap<String, String>) -> Vec<ArithTok> {
     let mut tokens = Vec::new();
     let mut chars = expr.chars().peekable();
 
@@ -1621,7 +1621,7 @@ fn tokenize_arith(expr: &str, vars: &HashMap<String, String>) -> Vec<ArithTok> {
 /// Read a numeric operand (number or variable) from the char stream.
 fn read_operand(
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    vars: &HashMap<String, String>,
+    vars: &BTreeMap<String, String>,
 ) -> Option<i64> {
     while let Some(&' ') = chars.peek() {
         chars.next();
@@ -1730,7 +1730,7 @@ fn parse_arith_factor(tokens: &[ArithTok], pos: &mut usize) -> std::result::Resu
 }
 
 /// Interpolate all string fields in a statement.
-fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) -> ast::Statement {
+fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>) -> ast::Statement {
     match stmt {
         ast::Statement::Node(n) => ast::Statement::Node(interpolate_node(n, vars)),
         ast::Statement::Link(l) => ast::Statement::Link(interpolate_link(l, vars)),
@@ -1844,13 +1844,13 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &HashMap<String, String>) 
     }
 }
 
-fn i(s: &str, vars: &HashMap<String, String>) -> String {
+fn i(s: &str, vars: &BTreeMap<String, String>) -> String {
     interpolate(s, vars)
 }
 
 fn interpolate_assertion(
     a: &ast::AssertionDef,
-    vars: &HashMap<String, String>,
+    vars: &BTreeMap<String, String>,
 ) -> ast::AssertionDef {
     use ast::AssertionDef as A;
     match a {
@@ -1911,11 +1911,11 @@ fn interpolate_assertion(
     }
 }
 
-fn io(s: &Option<String>, vars: &HashMap<String, String>) -> Option<String> {
+fn io(s: &Option<String>, vars: &BTreeMap<String, String>) -> Option<String> {
     s.as_ref().map(|s| interpolate(s, vars))
 }
 
-fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::NodeDef {
+fn interpolate_node(n: &ast::NodeDef, vars: &BTreeMap<String, String>) -> ast::NodeDef {
     ast::NodeDef {
         name: i(&n.name, vars),
         profiles: n.profiles.iter().map(|s| i(s, vars)).collect(),
@@ -1953,7 +1953,7 @@ fn interpolate_node(n: &ast::NodeDef, vars: &HashMap<String, String>) -> ast::No
     }
 }
 
-fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::NodeProp {
+fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::NodeProp {
     match p {
         ast::NodeProp::Forward(v) => ast::NodeProp::Forward(*v),
         ast::NodeProp::Sysctl(k, v) => ast::NodeProp::Sysctl(i(k, vars), i(v, vars)),
@@ -2035,7 +2035,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
     }
 }
 
-fn interpolate_route(r: &ast::RouteDef, vars: &HashMap<String, String>) -> ast::RouteDef {
+fn interpolate_route(r: &ast::RouteDef, vars: &BTreeMap<String, String>) -> ast::RouteDef {
     ast::RouteDef {
         destination: i(&r.destination, vars),
         via: io(&r.via, vars),
@@ -2044,7 +2044,7 @@ fn interpolate_route(r: &ast::RouteDef, vars: &HashMap<String, String>) -> ast::
     }
 }
 
-fn interpolate_vrf(v: &ast::VrfDef, vars: &HashMap<String, String>) -> ast::VrfDef {
+fn interpolate_vrf(v: &ast::VrfDef, vars: &BTreeMap<String, String>) -> ast::VrfDef {
     ast::VrfDef {
         name: i(&v.name, vars),
         table: v.table,
@@ -2057,7 +2057,7 @@ fn interpolate_vrf(v: &ast::VrfDef, vars: &HashMap<String, String>) -> ast::VrfD
     }
 }
 
-fn interpolate_wg(wg: &ast::WireguardDef, vars: &HashMap<String, String>) -> ast::WireguardDef {
+fn interpolate_wg(wg: &ast::WireguardDef, vars: &BTreeMap<String, String>) -> ast::WireguardDef {
     ast::WireguardDef {
         name: i(&wg.name, vars),
         key: wg.key.clone(),
@@ -2068,7 +2068,7 @@ fn interpolate_wg(wg: &ast::WireguardDef, vars: &HashMap<String, String>) -> ast
     }
 }
 
-fn interpolate_vxlan(vx: &ast::VxlanDef, vars: &HashMap<String, String>) -> ast::VxlanDef {
+fn interpolate_vxlan(vx: &ast::VxlanDef, vars: &BTreeMap<String, String>) -> ast::VxlanDef {
     ast::VxlanDef {
         name: i(&vx.name, vars),
         vni: vx.vni,
@@ -2080,7 +2080,7 @@ fn interpolate_vxlan(vx: &ast::VxlanDef, vars: &HashMap<String, String>) -> ast:
     }
 }
 
-fn interpolate_link(l: &ast::LinkDef, vars: &HashMap<String, String>) -> ast::LinkDef {
+fn interpolate_link(l: &ast::LinkDef, vars: &BTreeMap<String, String>) -> ast::LinkDef {
     ast::LinkDef {
         left_node: i(&l.left_node, vars),
         left_iface: i(&l.left_iface, vars),
@@ -2110,7 +2110,7 @@ fn interpolate_link(l: &ast::LinkDef, vars: &HashMap<String, String>) -> ast::Li
 
 fn interpolate_impair_props(
     p: &ast::ImpairProps,
-    vars: &HashMap<String, String>,
+    vars: &BTreeMap<String, String>,
 ) -> ast::ImpairProps {
     ast::ImpairProps {
         delay: io(&p.delay, vars),
@@ -2122,7 +2122,7 @@ fn interpolate_impair_props(
     }
 }
 
-fn interpolate_rate_props(p: &ast::RateProps, vars: &HashMap<String, String>) -> ast::RateProps {
+fn interpolate_rate_props(p: &ast::RateProps, vars: &BTreeMap<String, String>) -> ast::RateProps {
     ast::RateProps {
         egress: io(&p.egress, vars),
         ingress: io(&p.ingress, vars),
@@ -2130,7 +2130,7 @@ fn interpolate_rate_props(p: &ast::RateProps, vars: &HashMap<String, String>) ->
     }
 }
 
-fn interpolate_network(n: &ast::NetworkDef, vars: &HashMap<String, String>) -> ast::NetworkDef {
+fn interpolate_network(n: &ast::NetworkDef, vars: &BTreeMap<String, String>) -> ast::NetworkDef {
     ast::NetworkDef {
         name: i(&n.name, vars),
         members: n.members.iter().map(|s| i(s, vars)).collect(),
@@ -2152,7 +2152,7 @@ fn interpolate_network(n: &ast::NetworkDef, vars: &HashMap<String, String>) -> a
     }
 }
 
-fn interpolate_impair_def(imp: &ast::ImpairDef, vars: &HashMap<String, String>) -> ast::ImpairDef {
+fn interpolate_impair_def(imp: &ast::ImpairDef, vars: &BTreeMap<String, String>) -> ast::ImpairDef {
     ast::ImpairDef {
         node: i(&imp.node, vars),
         iface: i(&imp.iface, vars),
@@ -2160,7 +2160,7 @@ fn interpolate_impair_def(imp: &ast::ImpairDef, vars: &HashMap<String, String>) 
     }
 }
 
-fn interpolate_rate_def(r: &ast::RateDef, vars: &HashMap<String, String>) -> ast::RateDef {
+fn interpolate_rate_def(r: &ast::RateDef, vars: &BTreeMap<String, String>) -> ast::RateDef {
     ast::RateDef {
         node: i(&r.node, vars),
         iface: i(&r.iface, vars),
@@ -2330,7 +2330,7 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
 
     // Container env/volumes
     if !node.env.is_empty() {
-        let map: HashMap<String, String> = node
+        let map: BTreeMap<String, String> = node
             .env
             .iter()
             .filter_map(|s| {
@@ -2375,7 +2375,7 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
 /// `route` and `nat` survived a loop (issue #18).
 fn expand_node_props(
     props: &[ast::NodeProp],
-    vars: &HashMap<String, String>,
+    vars: &BTreeMap<String, String>,
 ) -> Result<Vec<ast::NodeProp>> {
     let mut out = Vec::with_capacity(props.len());
     for prop in props {
@@ -2925,7 +2925,7 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
 /// E.g., `*-black:fo` expands to `alpha-black:fo`, `bravo-black:fo`, etc.
 fn resolve_glob_members(
     members: &[String],
-    all_nodes: &HashMap<String, types::Node>,
+    all_nodes: &BTreeMap<String, types::Node>,
 ) -> Vec<String> {
     let mut resolved = Vec::new();
     for member in members {
@@ -3315,7 +3315,7 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     use super::eval_condition;
     use crate::parser::nll;
@@ -4252,7 +4252,7 @@ for i in 1..3 {
 
     #[test]
     fn test_ternary_conditional() {
-        let mut vars = HashMap::new();
+        let mut vars = BTreeMap::new();
         vars.insert("env".into(), "prod".into());
         assert_eq!(
             super::eval_expr(r#"env == "prod" ? 5ms : 50ms"#, &vars),
@@ -4272,7 +4272,7 @@ for i in 1..3 {
 
     #[test]
     fn test_ternary_with_variables() {
-        let mut vars = HashMap::new();
+        let mut vars = BTreeMap::new();
         vars.insert("mode".into(), "fast".into());
         vars.insert("fast_delay".into(), "1ms".into());
         vars.insert("slow_delay".into(), "100ms".into());
@@ -4284,7 +4284,7 @@ for i in 1..3 {
 
     #[test]
     fn test_division_by_zero() {
-        let vars = HashMap::new();
+        let vars = BTreeMap::new();
         // Division by zero returns the original expression
         assert_eq!(super::eval_expr("4 / 0", &vars), "${4 / 0}");
         assert_eq!(super::eval_expr("4 % 0", &vars), "${4 % 0}");
@@ -4292,7 +4292,7 @@ for i in 1..3 {
 
     #[test]
     fn test_backward_compat_simple() {
-        let mut vars = HashMap::new();
+        let mut vars = BTreeMap::new();
         vars.insert("i".into(), "3".into());
         // All existing expression forms still work
         assert_eq!(super::eval_expr("i", &vars), "3");
@@ -4328,7 +4328,7 @@ for i in 1..3 {
 
     #[test]
     fn test_auto_variables_loop_first_last() {
-        let mut vars = HashMap::new();
+        let mut vars = BTreeMap::new();
         // Simulate first iteration of for i in 1..3
         vars.insert("i".into(), "1".into());
         vars.insert("loop.first".into(), "true".into());
@@ -4673,7 +4673,7 @@ node router image "frr" {
 
     #[test]
     fn test_nested_interpolation() {
-        let mut vars = HashMap::new();
+        let mut vars = BTreeMap::new();
         vars.insert("i".into(), "2".into());
         vars.insert("leaf2".into(), "resolved".into());
         // ${leaf${i}} → first pass resolves ${i} → ${leaf2} → second pass → "resolved"
@@ -4931,7 +4931,7 @@ if ${count} < 3 {
 
     #[test]
     fn test_eval_condition_basic() {
-        let vars: HashMap<String, String> = [("x".into(), "5".into())].into_iter().collect();
+        let vars: BTreeMap<String, String> = [("x".into(), "5".into())].into_iter().collect();
         assert!(eval_condition("5 == 5", &vars));
         assert!(!eval_condition("5 == 6", &vars));
         assert!(eval_condition("5 != 6", &vars));
@@ -4942,7 +4942,7 @@ if ${count} < 3 {
 
     #[test]
     fn test_eval_condition_boolean() {
-        let vars: HashMap<String, String> = HashMap::new();
+        let vars: BTreeMap<String, String> = BTreeMap::new();
         assert!(eval_condition("1 == 1 && 2 == 2", &vars));
         assert!(!eval_condition("1 == 1 && 2 == 3", &vars));
         assert!(eval_condition("1 == 2 || 2 == 2", &vars));

@@ -122,7 +122,7 @@ pub fn run_assertions(
 pub fn eval_assertion_pub(
     lab: &crate::running::RunningLab,
     assertion: &Assertion,
-    ip_map: &std::collections::HashMap<String, String>,
+    ip_map: &std::collections::BTreeMap<String, String>,
 ) -> (String, bool, Option<String>) {
     eval_assertion(lab, assertion, ip_map)
 }
@@ -130,7 +130,7 @@ pub fn eval_assertion_pub(
 fn eval_assertion(
     lab: &crate::running::RunningLab,
     assertion: &Assertion,
-    ip_map: &std::collections::HashMap<String, String>,
+    ip_map: &std::collections::BTreeMap<String, String>,
 ) -> (String, bool, Option<String>) {
     match assertion {
         Assertion::Reach { from, to } => {

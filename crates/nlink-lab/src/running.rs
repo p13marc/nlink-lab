@@ -3,7 +3,7 @@
 //! [`RunningLab`] provides methods to interact with a deployed lab:
 //! executing commands, spawning processes, modifying impairments, and destroying.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use nlink::netlink::diagnostics::{Diagnostics, InterfaceDiag, Issue};
 use nlink::netlink::namespace;
@@ -19,9 +19,9 @@ pub struct RunningLab {
     /// The topology used to deploy.
     topology: Topology,
     /// Map of node_name -> namespace_name (bare namespace nodes only).
-    namespace_names: HashMap<String, String>,
+    namespace_names: BTreeMap<String, String>,
     /// Map of node_name -> container state (container nodes only).
-    containers: HashMap<String, ContainerState>,
+    containers: BTreeMap<String, ContainerState>,
     /// Container runtime binary ("docker" or "podman"), if any containers.
     runtime_binary: Option<String>,
     /// Background process PIDs: (node_name, pid).
@@ -31,12 +31,12 @@ pub struct RunningLab {
     /// Whether mac80211_hwsim was loaded.
     wifi_loaded: bool,
     /// Saved impairments before partition (endpoint → Impairment).
-    saved_impairments: HashMap<String, crate::types::Impairment>,
+    saved_impairments: BTreeMap<String, crate::types::Impairment>,
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
-    process_logs: HashMap<u32, (String, String)>,
+    process_logs: BTreeMap<u32, (String, String)>,
     /// `/proc/<pid>/stat` start time per tracked PID (see
     /// `LabState::starttimes`). A PID without an entry is never signalled.
-    starttimes: HashMap<u32, u64>,
+    starttimes: BTreeMap<u32, u64>,
     /// node → root-namespace mgmt veth peer name (see `LabState::mgmt_peers`).
     mgmt_peers: std::collections::BTreeMap<String, String>,
     /// Outcome of the `validate { … }` assertions run at deploy step 19.
@@ -155,8 +155,8 @@ impl RunningLab {
     /// Create a new RunningLab (called by the deployer).
     pub(crate) fn new(
         topology: Topology,
-        namespace_names: HashMap<String, String>,
-        containers: HashMap<String, ContainerState>,
+        namespace_names: BTreeMap<String, String>,
+        containers: BTreeMap<String, ContainerState>,
         runtime_binary: Option<String>,
         pids: Vec<(String, u32)>,
         dns_injected: bool,
@@ -170,10 +170,10 @@ impl RunningLab {
             pids,
             dns_injected,
             wifi_loaded,
-            starttimes: HashMap::new(),
+            starttimes: BTreeMap::new(),
             mgmt_peers: std::collections::BTreeMap::new(),
-            saved_impairments: HashMap::new(),
-            process_logs: HashMap::new(),
+            saved_impairments: BTreeMap::new(),
+            process_logs: BTreeMap::new(),
             assertion_results: Vec::new(),
         }
     }
@@ -226,12 +226,15 @@ impl RunningLab {
     /// (`/var/run/netns/<name>`); container namespaces use the
     /// init PID's `/proc/<pid>/ns/net`. Returns `None` if the
     /// node isn't running.
-    pub fn ns_resolver_of(&self, node: &str) -> Option<crate::watch::NsResolver> {
+    pub fn ns_resolver_of(&self, node: &str) -> Option<crate::deploy::NsRef> {
         if let Some(name) = self.namespace_names.get(node) {
-            return Some(crate::watch::NsResolver::Name(name.clone()));
+            return Some(crate::deploy::NsRef::Named { name: name.clone() });
         }
         if let Some(state) = self.containers.get(node) {
-            return Some(crate::watch::NsResolver::Pid(state.pid));
+            return Some(crate::deploy::NsRef::Container {
+                id: state.id.clone(),
+                pid: state.pid,
+            });
         }
         None
     }
@@ -271,7 +274,7 @@ impl RunningLab {
     }
 
     /// Access namespace names map (crate-internal, used by apply_diff).
-    pub(crate) fn namespace_names(&self) -> &HashMap<String, String> {
+    pub(crate) fn namespace_names(&self) -> &BTreeMap<String, String> {
         &self.namespace_names
     }
 
@@ -319,24 +322,14 @@ impl RunningLab {
         out
     }
 
-    /// Mutable access to namespace names map (crate-internal, used by apply_diff).
-    pub(crate) fn namespace_names_mut(&mut self) -> &mut HashMap<String, String> {
-        &mut self.namespace_names
-    }
-
     /// Get the container state for a container node, if it is one.
     pub fn container_for(&self, node: &str) -> Option<&ContainerState> {
         self.containers.get(node)
     }
 
     /// Access container states map.
-    pub fn containers(&self) -> &HashMap<String, ContainerState> {
+    pub fn containers(&self) -> &BTreeMap<String, ContainerState> {
         &self.containers
-    }
-
-    /// Mutable access to container states map (crate-internal, used by apply_diff).
-    pub(crate) fn containers_mut(&mut self) -> &mut HashMap<String, ContainerState> {
-        &mut self.containers
     }
 
     /// Access background PIDs (crate-internal).
@@ -345,12 +338,12 @@ impl RunningLab {
     }
 
     /// Recorded start times of tracked PIDs (see [`LabState::starttimes`]).
-    pub(crate) fn starttimes(&self) -> &HashMap<u32, u64> {
+    pub(crate) fn starttimes(&self) -> &BTreeMap<u32, u64> {
         &self.starttimes
     }
 
     /// Record PID start times captured at deploy time.
-    pub(crate) fn set_starttimes(&mut self, starttimes: HashMap<u32, u64>) {
+    pub(crate) fn set_starttimes(&mut self, starttimes: BTreeMap<u32, u64>) {
         self.starttimes = starttimes;
     }
 
@@ -382,6 +375,41 @@ impl RunningLab {
             .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))
     }
 
+    /// Replace the process/log/mgmt bookkeeping after an `apply`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn absorb_apply(
+        &mut self,
+        namespace_names: BTreeMap<String, String>,
+        containers: BTreeMap<String, ContainerState>,
+        pids: Vec<(String, u32)>,
+        starttimes: BTreeMap<u32, u64>,
+        process_logs: BTreeMap<u32, (String, String)>,
+        mgmt_peers: BTreeMap<String, String>,
+        dns_injected: bool,
+        wifi_loaded: bool,
+    ) {
+        self.namespace_names = namespace_names;
+        self.containers = containers;
+        self.pids = pids;
+        self.starttimes = starttimes;
+        self.process_logs = process_logs;
+        self.mgmt_peers = mgmt_peers;
+        self.dns_injected = dns_injected;
+        self.wifi_loaded = wifi_loaded;
+    }
+
+    pub(crate) fn set_process_logs(&mut self, logs: BTreeMap<u32, (String, String)>) {
+        self.process_logs = logs;
+    }
+
+    pub(crate) fn process_logs_map(&self) -> &BTreeMap<u32, (String, String)> {
+        &self.process_logs
+    }
+
+    pub(crate) fn saved_impairments_map(&self) -> &BTreeMap<String, crate::types::Impairment> {
+        &self.saved_impairments
+    }
+
     /// Track a freshly spawned background process: its PID and the start
     /// time that proves the PID still belongs to it later.
     fn track_pid(&mut self, node: &str, pid: u32) {
@@ -394,11 +422,6 @@ impl RunningLab {
     /// Runtime binary (docker or podman).
     pub fn runtime_binary(&self) -> Option<&str> {
         self.runtime_binary.as_deref()
-    }
-
-    /// Set the runtime binary (crate-internal, used by apply_diff).
-    pub(crate) fn set_runtime_binary(&mut self, binary: String) {
-        self.runtime_binary = Some(binary);
     }
 
     /// Replace the topology (crate-internal, used after apply).

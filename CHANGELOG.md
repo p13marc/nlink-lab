@@ -27,6 +27,59 @@ All notable changes to this project will be documented in this file.
   `sudo env ""`. It now reads `--message-format=json` and fails loudly on
   an empty path; same for `just test-integration` (#81).
 
+### Changed — deploy engine is plan/apply (wave 5, Plan 161, epic #73)
+
+- **`deploy(t)` is `execute(plan(t))` and `apply` is
+  `execute(plan(desired) − plan(current))`.** Planning is pure
+  (`nlink_lab::plan_for`, `deploy/plan/*`, unit-tested without root);
+  `deploy/apply.rs` is the only module that touches the kernel; every
+  mutation records its inverse in a persisted undo journal
+  (`<state>/<lab>/journal.json`). A failed deploy or apply unwinds
+  exactly what it created, and a run killed mid-way leaves a journal the
+  next `deploy` unwinds first. `deploy --dry-run` prints the plan (`--json`
+  for a machine-readable list of `{stage, op}`).
+- **`apply` now applies what `apply --check` shows (#35).** Every node's
+  network / nftables / WireGuard stack is reconciled (not only added
+  nodes), the network layer runs with nlink's conservative *purge*
+  (undeclared global addresses and main-table static routes on managed
+  interfaces are removed; links and qdiscs are never touched), removed
+  links/impairments/rate limits/nodes/DNS are undone through typed
+  inverse ops, and WireGuard private keys persist in `secrets.json`
+  (0600) so an apply does not rotate peers' keys. The eight bespoke
+  `apply_*_diff` appliers, `add_route`/`add_route_with_table` (VRF routes
+  are declared with `.table()` through the stack) and `Cleanup` are gone.
+- **Deterministic deploys (#36).** Every topology and state map is a
+  `BTreeMap`; hwsim PHY assignment, glob member expansion, mgmt IP
+  allocation and stage ordering no longer vary run to run.
+- `NsRef` (Root / Named / Container) over nlink's `NamespaceSpec` replaces
+  the deployer's `NodeHandle` and `watch::NsResolver` (now a re-export
+  alias with new variant names); container nodes get nlink's
+  `/etc/netns` overlay path.
+- Deploy step 10 brings up only the interfaces nlink-lab created; the
+  "18 steps" are now 14 stages (`Stage`), documented in CLAUDE.md.
+
+### Changed — CLI split into modules (wave 6, epic #74)
+
+- `bins/lab/src/main.rs` (4.9k lines) is now `main.rs` (116 lines) +
+  `cli.rs` (the `Commands` enum) + `ctx.rs` (`Ctx`, `parse_topology`,
+  `require_root`) + `output.rs` (exit-code policy) + `cmd/<subcommand>.rs`
+  (35 handlers) + `render/{dot,ascii,mermaid}.rs` + `host_scan.rs` +
+  `util.rs`. Help text, flags, output and exit codes are byte-identical
+  (verified against 93 captured outputs); `docs/cli` regenerates cleanly.
+- `destroy --orphans` also unwinds journals left by interrupted deploys.
+
+### Migration (library API)
+
+- `nlink_lab::apply(&mut RunningLab, &Topology) -> ApplyReport` replaces
+  `apply_diff` (deprecated; its `TopologyDiff` argument is ignored).
+- `nlink_lab::plan_for(&Topology) -> Plan`, `Op`, `Stage`, `NsRef`,
+  `ApplyReport` are new public types.
+- Topology maps are `BTreeMap` (programmatic `HashMap` literals need
+  updating); `watch::NsResolver` variants are `Named { name }` /
+  `Container { id, pid }`.
+- `apply` purges: undeclared addresses / main-table static routes on
+  lab-managed interfaces inside nodes are removed on apply.
+
 ### Fixed — CLI, backend, test macro (wave 4 of the deep-analysis series)
 
 - **One exit-code policy (#42, #46).** 0 success · 1 error · 2 validation /

@@ -282,10 +282,11 @@ impl std::fmt::Display for TopologyDiff {
 #[derive(Debug, Default, Serialize)]
 pub struct LayeredDiff {
     pub topology: TopologyDiff,
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub network: std::collections::HashMap<String, nlink::netlink::config::ConfigDiff>,
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub nftables: std::collections::HashMap<String, nlink::netlink::nftables::config::NftablesDiff>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub network: std::collections::BTreeMap<String, nlink::netlink::config::ConfigDiff>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub nftables:
+        std::collections::BTreeMap<String, nlink::netlink::nftables::config::NftablesDiff>,
 }
 
 impl LayeredDiff {
@@ -554,7 +555,7 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     }
 
     // ── Rate limits (per-endpoint) ──
-    // topology.rate_limits is a HashMap<endpoint, RateLimit>.
+    // topology.rate_limits is a BTreeMap<endpoint, RateLimit>.
     // Add/change/remove the same way as per-endpoint impairments.
     for (ep, new_rl) in &desired.rate_limits {
         match current.rate_limits.get(ep) {

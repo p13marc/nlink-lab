@@ -28,7 +28,7 @@ pub struct LabState {
     /// ISO 8601 creation timestamp.
     pub created_at: String,
     /// Map of node_name -> namespace_name.
-    pub namespaces: std::collections::HashMap<String, String>,
+    pub namespaces: std::collections::BTreeMap<String, String>,
     /// Background process PIDs: (node_name, pid).
     pub pids: Vec<(String, u32)>,
     /// `/proc/<pid>/stat` start time (clock ticks since boot) of every
@@ -37,8 +37,8 @@ pub struct LabState {
     /// spawning CLI exits the child is reparented and reaped, and the
     /// number can be reused by an unrelated process (issue #30). PIDs
     /// recorded by schema-1 files have no entry and are never signalled.
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub starttimes: std::collections::HashMap<u32, u64>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub starttimes: std::collections::BTreeMap<u32, u64>,
     /// Root-namespace veth peer created for each node's `mgmt0` when the
     /// lab has a host-reachable management bridge: node name → peer
     /// interface name. Persisted so `destroy` deletes exactly what
@@ -47,12 +47,12 @@ pub struct LabState {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub mgmt_peers: std::collections::BTreeMap<String, String>,
     /// WireGuard public keys: node_name -> (wg_iface -> base64-encoded public key).
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub wg_public_keys:
-        std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+        std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
     /// Container state: node_name -> container info.
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub containers: std::collections::HashMap<String, ContainerState>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub containers: std::collections::BTreeMap<String, ContainerState>,
     /// Container runtime binary used ("docker" or "podman").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
@@ -66,12 +66,12 @@ pub struct LabState {
     pub wifi_loaded: bool,
 
     /// Saved impairments before partition (endpoint → Impairment).
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub saved_impairments: std::collections::HashMap<String, crate::types::Impairment>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub saved_impairments: std::collections::BTreeMap<String, crate::types::Impairment>,
 
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub process_logs: std::collections::HashMap<u32, (String, String)>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub process_logs: std::collections::BTreeMap<u32, (String, String)>,
 }
 
 fn schema_v1() -> u32 {
@@ -348,6 +348,24 @@ pub fn list() -> Result<Vec<LabInfo>> {
     Ok(labs)
 }
 
+/// Labs whose state directory holds a `journal.json` — an undo journal
+/// left by a deploy/apply that was interrupted before it could finish
+/// or roll back. `deploy` unwinds its own lab's journal; `destroy
+/// --orphans` unwinds all of them.
+pub fn labs_with_pending_journal() -> Vec<String> {
+    let base = base_dir();
+    let Ok(entries) = std::fs::read_dir(&base) else {
+        return Vec::new();
+    };
+    let mut labs: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().join("journal.json").is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    labs.sort();
+    labs
+}
+
 /// Remove a lab's state directory.
 pub fn remove(name: &str) -> Result<()> {
     let dir = state_dir(name);
@@ -381,7 +399,7 @@ pub fn load_namespace_names(name: &str) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     /// Process-wide lock serializing the tests that mutate
     /// `XDG_STATE_HOME`. Without this, `cargo test`'s default
@@ -435,7 +453,7 @@ mod tests {
     fn test_save_load_roundtrip() {
         let _dir = temp_state_env();
 
-        let mut namespaces = HashMap::new();
+        let mut namespaces = BTreeMap::new();
         namespaces.insert("r1".to_string(), "lab-r1".to_string());
         namespaces.insert("h1".to_string(), "lab-h1".to_string());
 

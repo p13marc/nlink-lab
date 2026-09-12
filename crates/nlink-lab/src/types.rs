@@ -9,15 +9,15 @@
 //! ```text
 //! Topology
 //! ├── lab: LabConfig
-//! ├── profiles: HashMap<String, Profile>
-//! ├── nodes: HashMap<String, Node>
+//! ├── profiles: BTreeMap<String, Profile>
+//! ├── nodes: BTreeMap<String, Node>
 //! ├── links: Vec<Link>
-//! ├── networks: HashMap<String, Network>
-//! ├── impairments: HashMap<String, Impairment>
-//! └── rate_limits: HashMap<String, RateLimit>
+//! ├── networks: BTreeMap<String, Network>
+//! ├── impairments: BTreeMap<String, Impairment>
+//! └── rate_limits: BTreeMap<String, RateLimit>
 //! ```
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -29,11 +29,11 @@ pub struct Topology {
 
     /// Reusable node profiles.
     #[serde(default)]
-    pub profiles: HashMap<String, Profile>,
+    pub profiles: BTreeMap<String, Profile>,
 
     /// Node definitions (each becomes a network namespace).
     #[serde(default)]
-    pub nodes: HashMap<String, Node>,
+    pub nodes: BTreeMap<String, Node>,
 
     /// Point-to-point links between nodes (veth pairs).
     #[serde(default)]
@@ -41,15 +41,15 @@ pub struct Topology {
 
     /// Shared L2 segments (bridges).
     #[serde(default)]
-    pub networks: HashMap<String, Network>,
+    pub networks: BTreeMap<String, Network>,
 
     /// Per-interface network impairment (netem).
     #[serde(default)]
-    pub impairments: HashMap<String, Impairment>,
+    pub impairments: BTreeMap<String, Impairment>,
 
     /// Per-interface rate limiting.
     #[serde(default)]
-    pub rate_limits: HashMap<String, RateLimit>,
+    pub rate_limits: BTreeMap<String, RateLimit>,
 
     /// Post-deploy reachability assertions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -347,7 +347,7 @@ pub fn network_bridge_name_for(net_name: &str) -> String {
 pub struct Profile {
     /// Sysctl values to apply.
     #[serde(default)]
-    pub sysctls: HashMap<String, String>,
+    pub sysctls: BTreeMap<String, String>,
 
     /// Firewall configuration.
     pub firewall: Option<FirewallConfig>,
@@ -395,7 +395,7 @@ pub struct Node {
 
     /// Container environment variables (requires `image`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub env: Option<HashMap<String, String>>,
+    pub env: Option<BTreeMap<String, String>>,
 
     /// Container bind mounts in "host:container" format (requires `image`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -479,15 +479,15 @@ pub struct Node {
 
     /// Sysctl values (merged with profile).
     #[serde(default)]
-    pub sysctls: HashMap<String, String>,
+    pub sysctls: BTreeMap<String, String>,
 
     /// Explicitly declared interfaces (beyond those created by links).
     #[serde(default)]
-    pub interfaces: HashMap<String, InterfaceConfig>,
+    pub interfaces: BTreeMap<String, InterfaceConfig>,
 
     /// Routing table entries.
     #[serde(default)]
-    pub routes: HashMap<String, RouteConfig>,
+    pub routes: BTreeMap<String, RouteConfig>,
 
     /// Firewall rules (overrides profile firewall).
     pub firewall: Option<FirewallConfig>,
@@ -501,11 +501,11 @@ pub struct Node {
 
     /// VRF definitions.
     #[serde(default)]
-    pub vrfs: HashMap<String, VrfConfig>,
+    pub vrfs: BTreeMap<String, VrfConfig>,
 
     /// WireGuard interfaces.
     #[serde(default)]
-    pub wireguard: HashMap<String, WireguardConfig>,
+    pub wireguard: BTreeMap<String, WireguardConfig>,
 
     /// macvlan interfaces (attach to host physical NIC).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -625,11 +625,11 @@ pub struct Network {
 
     /// VLAN definitions.
     #[serde(default, deserialize_with = "deserialize_u16_keys")]
-    pub vlans: HashMap<u16, VlanConfig>,
+    pub vlans: BTreeMap<u16, VlanConfig>,
 
     /// Port configurations.
     #[serde(default)]
-    pub ports: HashMap<String, PortConfig>,
+    pub ports: BTreeMap<String, PortConfig>,
 
     /// Per-pair impairment rules. Each rule installs a per-destination
     /// netem leaf on the source node's bridge-side interface.
@@ -804,7 +804,7 @@ pub struct VrfConfig {
 
     /// Routes within this VRF.
     #[serde(default)]
-    pub routes: HashMap<String, RouteConfig>,
+    pub routes: BTreeMap<String, RouteConfig>,
 }
 
 /// WireGuard interface configuration.
@@ -918,15 +918,15 @@ pub enum WifiMode {
 // Serde helpers
 // ─────────────────────────────────────────────────
 
-/// Deserialize a `HashMap<u16, V>` from TOML tables where keys are strings.
+/// Deserialize a `BTreeMap<u16, V>` from TOML tables where keys are strings.
 fn deserialize_u16_keys<'de, V, D>(
     deserializer: D,
-) -> std::result::Result<HashMap<u16, V>, D::Error>
+) -> std::result::Result<BTreeMap<u16, V>, D::Error>
 where
     D: serde::Deserializer<'de>,
     V: Deserialize<'de>,
 {
-    let string_map: HashMap<String, V> = HashMap::deserialize(deserializer)?;
+    let string_map: BTreeMap<String, V> = BTreeMap::deserialize(deserializer)?;
     string_map
         .into_iter()
         .map(|(k, v)| {
@@ -984,8 +984,8 @@ impl Topology {
     }
 
     /// Get the effective sysctls for a node (profile + node-level merged).
-    pub fn effective_sysctls(&self, node: &Node) -> HashMap<String, String> {
-        let mut sysctls = HashMap::new();
+    pub fn effective_sysctls(&self, node: &Node) -> BTreeMap<String, String> {
+        let mut sysctls = BTreeMap::new();
 
         // Start with profile sysctls, in declaration order (later
         // profiles override earlier ones)

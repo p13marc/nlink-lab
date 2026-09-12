@@ -4,7 +4,7 @@
 //! with `--network=none` and manages all networking via netlink, just like
 //! bare namespace nodes.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::process::Command;
 
 use crate::error::{Error, Result};
@@ -29,11 +29,12 @@ pub struct ContainerInfo {
 }
 
 /// Options for container creation.
+#[derive(Debug, Clone, Default)]
 pub struct CreateOpts {
     /// Command to run (overrides image CMD).
     pub cmd: Option<Vec<String>>,
     /// Environment variables.
-    pub env: HashMap<String, String>,
+    pub env: BTreeMap<String, String>,
     /// Bind mounts in "host:container" format.
     pub volumes: Vec<String>,
     /// CPU limit (e.g., "1.5").

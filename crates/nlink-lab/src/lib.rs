@@ -91,7 +91,9 @@ pub mod watch;
 pub mod wifi;
 
 pub use builder::Lab;
-pub use deploy::{apply_diff, compute_layered_diff};
+#[allow(deprecated)]
+pub use deploy::apply_diff;
+pub use deploy::{ApplyReport, NsRef, Op, Plan, Stage, apply, compute_layered_diff, plan_for};
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
 pub use proc_stat::ProcStat;

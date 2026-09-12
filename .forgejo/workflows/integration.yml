@@ -44,14 +44,19 @@ jobs:
       # /usr/sbin is on PATH under sudo (tc/nft live there). The earlier
       # "6/62" was those packages missing from the job container (#52).
       # Build as the runner user, run only the test binary as root, so
-      # target/ stays user-owned.
+      # target/ stays user-owned. The binary path comes from cargo's JSON
+      # messages: the human output is coloured under CARGO_TERM_COLOR=always
+      # (set by the toolchain action), which made a text grep miss and left
+      # `$bin` empty — the cause of the red lane between runs 79 and 81 (#81).
       - name: Integration tests
         run: |
-          bin=$(cargo test -p nlink-lab --test integration --no-run 2>&1 | grep -oP 'Executable .*\(\K[^)]+' | head -1)
+          bin=$(cargo test -p nlink-lab --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
+          test -n "$bin" || { echo "::error::integration test binary not found"; exit 1; }
           sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
       - name: Integration tests (all features)
         run: |
-          bin=$(cargo test -p nlink-lab --all-features --test integration --no-run 2>&1 | grep -oP 'Executable .*\(\K[^)]+' | head -1)
+          bin=$(cargo test -p nlink-lab --all-features --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
+          test -n "$bin" || { echo "::error::integration test binary (all features) not found"; exit 1; }
           sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
       - name: No lab debris left behind
         if: always()

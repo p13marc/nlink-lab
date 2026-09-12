@@ -14,7 +14,8 @@ test:
 
 # Run integration tests (requires root; builds as you, runs the binary as root)
 test-integration:
-    bin=$(cargo test -p nlink-lab --test integration --no-run 2>&1 | grep -oP 'Executable .*\(\K[^)]+' | head -1); \
+    bin=$(cargo test -p nlink-lab --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1); \
+    test -n "$bin" || { echo "integration test binary not found" >&2; exit 1; }; \
     sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --test-threads=1
 
 # Run all tests

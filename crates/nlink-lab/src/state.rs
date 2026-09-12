@@ -10,9 +10,19 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::types::Topology;
 
+/// Current on-disk schema of [`LabState`]. Bumped when a field's
+/// meaning changes; additive fields are `#[serde(default)]` and do not
+/// bump it. Files without the field are schema 1.
+pub const SCHEMA_VERSION: u32 = 2;
+
 /// Persisted state for a deployed lab.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LabState {
+    /// On-disk schema version ([`SCHEMA_VERSION`]); absent in files
+    /// written before 0.9 (schema 1).
+    #[serde(default = "schema_v1")]
+    pub schema_version: u32,
     /// Lab name.
     pub name: String,
     /// ISO 8601 creation timestamp.
@@ -21,6 +31,21 @@ pub struct LabState {
     pub namespaces: std::collections::HashMap<String, String>,
     /// Background process PIDs: (node_name, pid).
     pub pids: Vec<(String, u32)>,
+    /// `/proc/<pid>/stat` start time (clock ticks since boot) of every
+    /// PID in `pids`, captured when it was spawned. A PID is only ever
+    /// signalled when its current start time still matches — after the
+    /// spawning CLI exits the child is reparented and reaped, and the
+    /// number can be reused by an unrelated process (issue #30). PIDs
+    /// recorded by schema-1 files have no entry and are never signalled.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub starttimes: std::collections::HashMap<u32, u64>,
+    /// Root-namespace veth peer created for each node's `mgmt0` when the
+    /// lab has a host-reachable management bridge: node name → peer
+    /// interface name. Persisted so `destroy` deletes exactly what
+    /// deploy created instead of recomputing names from a node index
+    /// that shifts when nodes are added or removed (issue #32).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub mgmt_peers: std::collections::BTreeMap<String, String>,
     /// WireGuard public keys: node_name -> (wg_iface -> base64-encoded public key).
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub wg_public_keys:
@@ -47,6 +72,33 @@ pub struct LabState {
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub process_logs: std::collections::HashMap<u32, (String, String)>,
+}
+
+fn schema_v1() -> u32 {
+    1
+}
+
+impl LabState {
+    /// Fresh state at the current schema version. Every field other than
+    /// `name` starts empty/false; the deployer fills them in.
+    pub fn new(name: impl Into<String>, created_at: impl Into<String>) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            name: name.into(),
+            created_at: created_at.into(),
+            namespaces: Default::default(),
+            pids: Vec::new(),
+            starttimes: Default::default(),
+            mgmt_peers: Default::default(),
+            wg_public_keys: Default::default(),
+            containers: Default::default(),
+            runtime: None,
+            dns_injected: false,
+            wifi_loaded: false,
+            saved_impairments: Default::default(),
+            process_logs: Default::default(),
+        }
+    }
 }
 
 /// Get the logs directory for a specific lab.
@@ -79,6 +131,12 @@ pub struct LabInfo {
 }
 
 /// Get the base state directory.
+///
+/// `$XDG_STATE_HOME/nlink-lab/labs`, else `$HOME/.local/state/nlink-lab/labs`,
+/// else — no `HOME` at all, e.g. a systemd unit — `/var/lib/nlink-lab/labs`
+/// for root and a per-uid directory under the system temp dir otherwise.
+/// It is never the world-writable, predictable `/tmp/nlink-lab` a root
+/// process used to fall back to (issue #38).
 fn base_dir() -> PathBuf {
     if let Ok(state_home) = std::env::var("XDG_STATE_HOME") {
         PathBuf::from(state_home).join("nlink-lab").join("labs")
@@ -88,9 +146,21 @@ fn base_dir() -> PathBuf {
             .join("state")
             .join("nlink-lab")
             .join("labs")
+    } else if unsafe { libc::geteuid() } == 0 {
+        PathBuf::from("/var/lib/nlink-lab/labs")
     } else {
-        PathBuf::from("/tmp/nlink-lab/labs")
+        std::env::temp_dir()
+            .join(format!("nlink-lab-{}", unsafe { libc::getuid() }))
+            .join("labs")
     }
+}
+
+/// Directory holding per-lab lock files. Kept *outside* the lab's own
+/// state directory so `remove()` can never unlink a lock another process
+/// is holding (which used to let a concurrent `lock()` succeed against a
+/// fresh inode mid-destroy).
+fn locks_dir() -> PathBuf {
+    base_dir().join(".locks")
 }
 
 /// Get the state directory for a specific lab.
@@ -108,10 +178,7 @@ pub fn exists(name: &str) -> bool {
 /// Returns a [`LabLock`] guard that holds the lock until dropped.
 /// Fails immediately if another process holds the lock.
 pub fn lock(name: &str) -> Result<LabLock> {
-    let dir = state_dir(name);
-    std::fs::create_dir_all(&dir)?;
-    let lock_path = dir.join(".lock");
-    let file = std::fs::File::create(&lock_path)?;
+    let file = open_lock_file(name)?;
     let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
     if ret != 0 {
         return Err(Error::deploy_failed(format!(
@@ -119,6 +186,31 @@ pub fn lock(name: &str) -> Result<LabLock> {
         )));
     }
     Ok(LabLock { _file: file })
+}
+
+/// Like [`lock`] but waits for the lock instead of failing. Used by
+/// short read-modify-write updates of the state file (`save_state`)
+/// that merely need to take turns with a concurrent deploy/apply/destroy.
+pub fn lock_blocking(name: &str) -> Result<LabLock> {
+    let file = open_lock_file(name)?;
+    let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+    if ret != 0 {
+        return Err(Error::deploy_failed(format!(
+            "failed to lock lab '{name}': {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(LabLock { _file: file })
+}
+
+fn open_lock_file(name: &str) -> Result<std::fs::File> {
+    let dir = locks_dir();
+    std::fs::create_dir_all(&dir)?;
+    Ok(std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(format!("{name}.lock")))?)
 }
 
 /// Guard that holds a file lock on a lab's state directory.
@@ -176,11 +268,24 @@ pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
     Ok(())
 }
 
-/// Write content to a file atomically using temp-file + rename.
+/// Write content to a file atomically: temp file, fsync, rename, then
+/// directory fsync. A crash leaves either the old or the new file, never
+/// a torn one, and the rename is durable rather than merely visible.
 fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
+    use std::io::Write;
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, content)?;
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(content.as_bytes())?;
+        f.sync_all()?;
+    }
     std::fs::rename(&tmp, path)?;
+    if let Some(dir) = path.parent() {
+        // Best effort: some filesystems refuse fsync on directories.
+        if let Ok(d) = std::fs::File::open(dir) {
+            let _ = d.sync_all();
+        }
+    }
     Ok(())
 }
 
@@ -334,19 +439,9 @@ mod tests {
         namespaces.insert("r1".to_string(), "lab-r1".to_string());
         namespaces.insert("h1".to_string(), "lab-h1".to_string());
 
-        let state = LabState {
-            name: "test-lab".to_string(),
-            created_at: "2026-03-22T14:00:00Z".to_string(),
-            namespaces,
-            pids: vec![("r1".to_string(), 1234)],
-            wg_public_keys: HashMap::new(),
-            containers: HashMap::new(),
-            runtime: None,
-            dns_injected: false,
-            wifi_loaded: false,
-            saved_impairments: HashMap::new(),
-            process_logs: HashMap::new(),
-        };
+        let mut state = LabState::new("test-lab", "2026-03-22T14:00:00Z");
+        state.namespaces = namespaces;
+        state.pids = vec![("r1".to_string(), 1234)];
 
         let topology = crate::parser::parse(
             r#"lab "test-lab"
@@ -382,5 +477,45 @@ link r1:eth0 -- h1:eth0
         let _dir = temp_state_env();
         let labs = list().unwrap();
         assert!(labs.is_empty());
+    }
+
+    #[test]
+    fn lock_lives_outside_the_lab_dir_and_survives_remove() {
+        let _guard = xdg_state_lock();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+
+        let held = lock("locked-lab").expect("first lock");
+        assert!(
+            lock("locked-lab").is_err(),
+            "second lock must fail while held"
+        );
+        // `remove` must not free the lock by deleting its file.
+        remove("locked-lab").unwrap();
+        assert!(
+            lock("locked-lab").is_err(),
+            "lock still held after remove()"
+        );
+        assert!(!state_dir("locked-lab").join(".lock").exists());
+        drop(held);
+        assert!(lock("locked-lab").is_ok());
+        // A blocking lock acquires once the other is released.
+        assert!(lock_blocking("locked-lab").is_ok());
+    }
+
+    #[test]
+    fn schema_v1_files_load_with_defaults() {
+        let json = r#"{
+            "name": "old", "created_at": "2026-01-01T00:00:00Z",
+            "namespaces": {"r1": "old-r1"}, "pids": [["r1", 42]]
+        }"#;
+        let st: LabState = serde_json::from_str(json).unwrap();
+        assert_eq!(st.schema_version, 1);
+        assert!(st.starttimes.is_empty());
+        assert!(st.mgmt_peers.is_empty());
+        let fresh = LabState::new("n", "t");
+        assert_eq!(fresh.schema_version, SCHEMA_VERSION);
+        let back: LabState = serde_json::from_str(&serde_json::to_string(&fresh).unwrap()).unwrap();
+        assert_eq!(back.schema_version, SCHEMA_VERSION);
     }
 }

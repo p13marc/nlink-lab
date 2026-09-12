@@ -16,7 +16,6 @@
 use std::sync::Arc;
 
 use nlink::netlink::events::NetworkEvent;
-use nlink::netlink::namespace;
 use nlink::netlink::nftables::events::NftablesEvent;
 use nlink::netlink::resync::ResyncedEvent;
 use nlink::{Connection, Nftables, Route};
@@ -26,34 +25,9 @@ use tokio_stream::StreamExt;
 use crate::error::{Error, Result};
 use crate::running::RunningLab;
 
-/// Plan 159b Phase 4 — shape needed to open a netlink connection
-/// inside a node's namespace. Bare namespaces resolve by name
-/// (`/var/run/netns/<name>`); container namespaces resolve by
-/// init PID (`/proc/<pid>/ns/net`). The watch loop branches on
-/// this when constructing the per-task connection factory.
-#[derive(Debug, Clone)]
-pub enum NsResolver {
-    /// Bare namespace — `/var/run/netns/<name>`.
-    Name(String),
-    /// Container init PID — `/proc/<pid>/ns/net`.
-    Pid(u32),
-}
-
-impl NsResolver {
-    fn open_route(&self) -> std::result::Result<Connection<Route>, nlink::Error> {
-        match self {
-            NsResolver::Name(n) => namespace::connection_for(n),
-            NsResolver::Pid(p) => namespace::connection_for_pid(*p),
-        }
-    }
-
-    fn open_nftables(&self) -> std::result::Result<Connection<Nftables>, nlink::Error> {
-        match self {
-            NsResolver::Name(n) => namespace::connection_for(n),
-            NsResolver::Pid(p) => namespace::connection_for_pid(*p),
-        }
-    }
-}
+/// Where a node's namespace lives — re-exported from the deployer so
+/// `watch` and `RunningLab` share one type.
+pub use crate::deploy::NsRef as NsResolver;
 
 /// Which event families to subscribe to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -882,13 +856,13 @@ async fn run_route_subscription(
     include_snapshot: bool,
 ) -> Result<()> {
     let conn: Connection<Route> = resolver
-        .open_route()
+        .connection::<Route>()
         .map_err(|e| Error::deploy_failed(format!("watch: route connection for '{node}': {e}")))?;
 
     let resolver_for_factory = resolver.clone();
     let factory: nlink::ConnectionFactory<Route> = Arc::new(move || {
         let r = resolver_for_factory.clone();
-        Box::pin(async move { r.open_route() })
+        Box::pin(async move { r.connection::<Route>() })
     });
 
     let mut stream = conn
@@ -932,14 +906,14 @@ async fn run_nftables_subscription(
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
 ) -> Result<()> {
-    let conn: Connection<Nftables> = resolver.open_nftables().map_err(|e| {
+    let conn: Connection<Nftables> = resolver.connection::<Nftables>().map_err(|e| {
         Error::deploy_failed(format!("watch: nftables connection for '{node}': {e}"))
     })?;
 
     let resolver_for_factory = resolver.clone();
     let factory: nlink::ConnectionFactory<Nftables> = Arc::new(move || {
         let r = resolver_for_factory.clone();
-        Box::pin(async move { r.open_nftables() })
+        Box::pin(async move { r.connection::<Nftables>() })
     });
 
     let mut stream = conn.into_events_with_resync(factory).await.map_err(|e| {
@@ -1086,10 +1060,15 @@ mod tests {
     /// build the right `Connection<P>`.
     #[test]
     fn ns_resolver_variants_are_distinguishable() {
-        let by_name = NsResolver::Name("router".into());
-        let by_pid = NsResolver::Pid(42);
-        assert!(matches!(by_name, NsResolver::Name(ref n) if n == "router"));
-        assert!(matches!(by_pid, NsResolver::Pid(42)));
+        let by_name = NsResolver::Named {
+            name: "router".into(),
+        };
+        let by_pid = NsResolver::Container {
+            id: "c1".into(),
+            pid: 42,
+        };
+        assert!(matches!(by_name, NsResolver::Named { ref name } if name == "router"));
+        assert!(matches!(by_pid, NsResolver::Container { pid: 42, .. }));
         // Clone — required by the watch loop which spawns one
         // tokio task per (node, family) and gives each task its
         // own owned copy.

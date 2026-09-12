@@ -90,7 +90,7 @@ pub mod watch;
 pub mod wifi;
 
 pub use builder::Lab;
-pub use deploy::{apply_diff, compute_layered_diff};
+pub use deploy::{NsRef, apply_diff, compute_layered_diff};
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
 pub use proc_stat::ProcStat;

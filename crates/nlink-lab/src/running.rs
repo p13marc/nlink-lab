@@ -226,12 +226,15 @@ impl RunningLab {
     /// (`/var/run/netns/<name>`); container namespaces use the
     /// init PID's `/proc/<pid>/ns/net`. Returns `None` if the
     /// node isn't running.
-    pub fn ns_resolver_of(&self, node: &str) -> Option<crate::watch::NsResolver> {
+    pub fn ns_resolver_of(&self, node: &str) -> Option<crate::deploy::NsRef> {
         if let Some(name) = self.namespace_names.get(node) {
-            return Some(crate::watch::NsResolver::Name(name.clone()));
+            return Some(crate::deploy::NsRef::Named { name: name.clone() });
         }
         if let Some(state) = self.containers.get(node) {
-            return Some(crate::watch::NsResolver::Pid(state.pid));
+            return Some(crate::deploy::NsRef::Container {
+                id: state.id.clone(),
+                pid: state.pid,
+            });
         }
         None
     }

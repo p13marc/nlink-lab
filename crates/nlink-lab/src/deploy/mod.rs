@@ -12,8 +12,6 @@ use nlink::{Connection, Route};
 use std::collections::BTreeMap;
 use std::net::IpAddr;
 
-use nlink::netlink::namespace::NamespaceFd;
-
 use crate::container::Runtime;
 use crate::error::{Error, Result};
 use crate::helpers::{parse_cidr, parse_rate_bps};
@@ -21,91 +19,15 @@ use crate::running::RunningLab;
 use crate::state::{self, ContainerState, LabState};
 use crate::types::{DnsMode, EndpointRef, Topology};
 
+pub mod op;
 mod plan;
+
+pub use op::NsRef;
 pub(crate) use plan::network::*;
 pub(crate) use plan::nftables::*;
 pub(crate) use plan::process::*;
 pub(crate) use plan::qdisc::*;
 pub(crate) use plan::wireguard::*;
-
-/// Abstraction over bare namespace vs container node.
-enum NodeHandle {
-    Namespace {
-        ns_name: String,
-    },
-    Container {
-        id: String,
-        pid: u32,
-        ns_path: String,
-    },
-}
-
-impl NodeHandle {
-    fn connection<
-        P: nlink::netlink::ProtocolState + Default + nlink::netlink::construction::SyncConstructible,
-    >(
-        &self,
-    ) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::connection_for(ns_name),
-            NodeHandle::Container { pid, .. } => namespace::connection_for_pid(*pid),
-        }
-    }
-
-    #[cfg(feature = "wireguard")]
-    async fn wireguard_connection(
-        &self,
-    ) -> std::result::Result<Connection<Wireguard>, nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::connection_for_async(ns_name).await,
-            NodeHandle::Container { pid, .. } => namespace::connection_for_pid_async(*pid).await,
-        }
-    }
-
-    fn open_ns_fd(&self) -> std::result::Result<NamespaceFd, nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::open(ns_name),
-            NodeHandle::Container { ns_path, .. } => namespace::open_path(ns_path),
-        }
-    }
-
-    fn set_sysctls(
-        &self,
-        entries: &[(&str, &str)],
-    ) -> std::result::Result<(), nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::set_sysctls(ns_name, entries),
-            NodeHandle::Container { ns_path, .. } => namespace::set_sysctls_path(ns_path, entries),
-        }
-    }
-
-    fn spawn_output(
-        &self,
-        cmd: std::process::Command,
-    ) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::spawn_output_with_etc(ns_name, cmd),
-            NodeHandle::Container { ns_path, .. } => namespace::spawn_output_path(ns_path, cmd),
-        }
-    }
-
-    fn spawn(
-        &self,
-        cmd: std::process::Command,
-    ) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
-        match self {
-            NodeHandle::Namespace { ns_name } => namespace::spawn_with_etc(ns_name, cmd),
-            NodeHandle::Container { ns_path, .. } => namespace::spawn_path(ns_path, cmd),
-        }
-    }
-
-    fn container_id(&self) -> Option<&str> {
-        match self {
-            NodeHandle::Container { id, .. } => Some(id),
-            NodeHandle::Namespace { .. } => None,
-        }
-    }
-}
 
 /// Deploy a topology, creating all namespaces, links, addresses, routes, etc.
 ///
@@ -157,7 +79,7 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 }
 
 async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<RunningLab> {
-    let mut node_handles: BTreeMap<String, NodeHandle> = BTreeMap::new();
+    let mut node_handles: BTreeMap<String, NsRef> = BTreeMap::new();
     let mut namespace_names: BTreeMap<String, String> = BTreeMap::new();
     let mut container_states: BTreeMap<String, ContainerState> = BTreeMap::new();
     let mut pids: Vec<(String, u32)> = Vec::new();
@@ -223,10 +145,9 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
             );
             node_handles.insert(
                 node_name.clone(),
-                NodeHandle::Container {
+                NsRef::Container {
                     id: info.id,
                     pid: info.pid,
-                    ns_path: format!("/proc/{}/ns/net", info.pid),
                 },
             );
         } else {
@@ -242,7 +163,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
             // Ownership tag: the only thing `destroy --orphans` trusts.
             crate::netns_tag::tag(&ns_name, &topology.lab.name)?;
             namespace_names.insert(node_name.clone(), ns_name.clone());
-            node_handles.insert(node_name.clone(), NodeHandle::Namespace { ns_name });
+            node_handles.insert(node_name.clone(), NsRef::Named { name: ns_name });
         }
     }
 
@@ -287,7 +208,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
             let phy = &phys[i];
             let node_handle = &node_handles[*node_name];
             let ns_fd = node_handle
-                .open_ns_fd()
+                .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             nl_conn
@@ -357,7 +278,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
         for (idx, node_name) in sorted_nodes.iter().enumerate() {
             let node_handle = &node_handles[*node_name];
             let node_ns_fd = node_handle
-                .open_ns_fd()
+                .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             let mgmt_iface = "mgmt0";
@@ -568,7 +489,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
             })?;
 
         // Open namespace fd for the peer end
-        let ns_b_fd = handle_b.open_ns_fd().map_err(|e| {
+        let ns_b_fd = handle_b.open_fd().map_err(|e| {
             Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
         })?;
 
@@ -614,7 +535,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
         for (node_name, node) in &topology.nodes {
             let node_handle = &node_handles[node_name];
             let ns_fd = node_handle
-                .open_ns_fd()
+                .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node_name}': {e}")))?;
 
             for mv in &node.macvlans {
@@ -821,7 +742,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
     // node sees: build configs → apply network → apply nftables →
     // apply WireGuard, with one aggregated `tracing::info!` per
     // node. Mirrors upstream `facade::Stack` shape but routes
-    // through `NodeHandle::connection<P>()` so container namespaces
+    // through `NsRef::connection<P>()` so container namespaces
     // (`connection_for_pid`) work alongside bare namespaces
     // (`connection_for(name)`) — upstream `Stack::apply_in_namespace`
     // only accepts a name.
@@ -1302,7 +1223,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
 /// zero kernel calls; in-place edits replace rule bodies
 /// atomically without rebuilding the chain.
 async fn apply_nftables_for_node(
-    node_handle: &NodeHandle,
+    node_handle: &NsRef,
     node_name: &str,
     fw: Option<&crate::types::FirewallConfig>,
     nat: Option<&crate::types::NatConfig>,
@@ -1376,7 +1297,7 @@ async fn apply_nftables_for_node(
 /// kernel calls.
 async fn apply_network_impairments(
     topology: &Topology,
-    node_handles: &BTreeMap<String, NodeHandle>,
+    node_handles: &BTreeMap<String, NsRef>,
 ) -> Result<()> {
     use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
     use nlink::util::Rate;
@@ -1496,7 +1417,7 @@ async fn apply_network_impairments(
 /// Idempotent re-apply makes zero kernel calls for the
 /// address + route layer.
 async fn apply_network_config_for_node(
-    node_handle: &NodeHandle,
+    node_handle: &NsRef,
     node_name: &str,
     cfg: nlink::netlink::config::NetworkConfig,
 ) -> Result<()> {
@@ -1722,14 +1643,14 @@ async fn add_route_with_table(
 /// `ApplyOptions` (we need `ensure_devices` before addresses land and
 /// purge on apply — see the nlink 0.26 adoption epic). No pre-flight
 /// validation across layers — we don't double-dump;
-/// but routes through `NodeHandle::connection<P>()` so the
+/// but routes through `NsRef::connection<P>()` so the
 /// container case (`connection_for_pid`) keeps working
 /// alongside the bare-namespace case. Upstream's
 /// `Stack::apply_in_namespace(&str)` only accepts a name, so
 /// adopting it directly would break containers.
 #[cfg(feature = "wireguard")]
 async fn apply_stack_for_node(
-    node_handle: &NodeHandle,
+    node_handle: &NsRef,
     node_name: &str,
     network: nlink::netlink::config::NetworkConfig,
     fw: Option<&crate::types::FirewallConfig>,
@@ -1758,7 +1679,7 @@ async fn apply_stack_for_node(
 /// `--features wireguard`.
 #[cfg(not(feature = "wireguard"))]
 async fn apply_stack_for_node(
-    node_handle: &NodeHandle,
+    node_handle: &NsRef,
     node_name: &str,
     network: nlink::netlink::config::NetworkConfig,
     fw: Option<&crate::types::FirewallConfig>,
@@ -1778,14 +1699,14 @@ async fn apply_stack_for_node(
 /// declared-but-absent WG interface idempotently (swallowing
 /// already-exists) through a same-namespace Route connection —
 /// covering both the bare-namespace and container
-/// (`connection_for_pid`) cases via `NodeHandle`, which the
+/// (`connection_for_pid`) cases via `NsRef`, which the
 /// name-only `facade::apply::wireguard*` helpers would not. Runs
 /// before the `NetworkConfig` apply so the WG interfaces exist when
 /// their tunnel addresses are assigned; this retired the imperative
 /// step-6c pre-create loop.
 #[cfg(feature = "wireguard")]
 async fn ensure_wireguard_devices_for_node(
-    node_handle: &NodeHandle,
+    node_handle: &NsRef,
     node_name: &str,
     cfg: &nlink::netlink::genl::wireguard::WireguardConfig,
 ) -> Result<()> {
@@ -1825,17 +1746,20 @@ async fn ensure_wireguard_devices_for_node(
 /// assign its addresses; this fn only configures the GENL device.
 #[cfg(feature = "wireguard")]
 async fn apply_wireguard_for_node(
-    node_handle: &NodeHandle,
+    node_handle: &NsRef,
     node_name: &str,
     cfg: nlink::netlink::genl::wireguard::WireguardConfig,
 ) -> Result<()> {
     use nlink::netlink::nftables::config::ReconcileOptions;
 
-    let wg_conn = node_handle.wireguard_connection().await.map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to create WireGuard connection for '{node_name}': {e}"
-        ))
-    })?;
+    let wg_conn = node_handle
+        .connection_async::<Wireguard>()
+        .await
+        .map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to create WireGuard connection for '{node_name}': {e}"
+            ))
+        })?;
 
     let report = cfg
         .apply_reconcile(&wg_conn, ReconcileOptions::default())
@@ -2121,7 +2045,7 @@ pub async fn apply_diff(
         let handle_a = node_handle_for(running, &ep_a.node)?;
         let handle_b = node_handle_for(running, &ep_b.node)?;
 
-        let ns_b_fd = handle_b.open_ns_fd().map_err(|e| {
+        let ns_b_fd = handle_b.open_fd().map_err(|e| {
             Error::deploy_failed(format!("failed to open namespace for '{}': {e}", ep_b.node))
         })?;
 
@@ -2502,7 +2426,7 @@ async fn apply_rate_limits_diff(
 
 /// Reconcile per-node sysctls (Plan 152 Phase B).
 ///
-/// Applies added + changed entries via `NodeHandle::set_sysctls`.
+/// Applies added + changed entries via `NsRef::set_sysctls`.
 /// Removed entries are reported via `tracing::warn!` only — the
 /// kernel default for an arbitrary sysctl isn't recoverable
 /// without snapshotting the original value before the original
@@ -2689,17 +2613,16 @@ fn run_assertions(
     results
 }
 
-fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NodeHandle> {
+fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NsRef> {
     if let Some(ns_name) = running.namespace_names().get(node_name) {
-        return Ok(NodeHandle::Namespace {
-            ns_name: ns_name.clone(),
+        return Ok(NsRef::Named {
+            name: ns_name.clone(),
         });
     }
     if let Some(container) = running.containers().get(node_name) {
-        return Ok(NodeHandle::Container {
+        return Ok(NsRef::Container {
             id: container.id.clone(),
             pid: container.pid,
-            ns_path: format!("/proc/{}/ns/net", container.pid),
         });
     }
     Err(Error::NodeNotFound {

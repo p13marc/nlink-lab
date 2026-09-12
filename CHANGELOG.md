@@ -4,6 +4,84 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — CLI (issues #55, #57, #58, #60, #61, #62, #68)
+
+- **`nlink-lab verify <lab> [--topology FILE]`** (#58): drift check of a
+  running lab against its topology — every node's live links, addresses,
+  routes and nftables plus the removal ops `apply` would run — exit 2 on
+  drift, `--json` is the schema-v3 report. The layered diff now runs with
+  purge semantics, so an undeclared address or main-table route on a
+  managed interface counts as drift (it used to be invisible to
+  `apply --check` too).
+- **`nlink-lab doctor`** (#55): host preflight — privileges, netlink,
+  required/optional binaries, container runtime, kernel modules, sysctl
+  writability, state dir, pending crash journals, orphaned lab resources;
+  `--json`; exit 1 when a required check fails.
+- **`nlink-lab lint`** (#57): advice that never blocks a deploy —
+  `no-assertions`, `background-exec-without-healthcheck`,
+  `asymmetric-impairment`, `disconnected-topology`, `no-description`;
+  `--strict` exits 2, `--allow RULE`, `--list-rules`, `--json`.
+- **`validate --strict / --deny RULE / --allow RULE / --list-rules`**
+  (#68): every rule has a stable id and a default severity
+  (`nlink_lab::rule_severity`, `RuleOptions`, `Topology::validate_with`);
+  warnings can be promoted or silenced per rule, errors never silenced.
+- **`render --mermaid`** (#61), same renderer as `graph --mermaid`
+  (networks and per-pair impairments included).
+- **Dynamic shell completions** (#62): `source <(COMPLETE=bash
+  nlink-lab)` (zsh/fish likewise) completes deployed lab names, node
+  names and rule ids on every `<LAB>`/`<NODE>` argument and on
+  `validate --deny/--allow`, `lint --allow`. `completions <shell>` still
+  emits the static files.
+- **JSON schemas generated from the types** (#60): `docs-gen --schemas
+  docs/json-schemas` writes ten schemas with `schemars` (validate,
+  validate-rules, verify/apply dry-run v3, status list/scan, ps,
+  proc-stat, doctor, lint, metrics snapshot); CI diffs them and the cli
+  test checks they are current. The whole topology model derives
+  `JsonSchema`. deploy/spawn/impair-show/status-lab remain hand-written.
+
+### Changed — runtime
+
+- **Namespace ownership tags moved to `/run/nlink-lab/netns/<ns>`.**
+  They lived in `/etc/netns/<ns>/.nlink-lab`, which `ip netns exec`
+  bind-mounts over `/etc` and therefore warned about on every exec.
+  Legacy tags are still read and removed. tmpfs, so tags vanish with the
+  namespaces on reboot.
+
+### Fixed — audit leftovers (issues #26, #27, #53)
+
+- **One loop engine (#26).** `for` inside `nat { }` and `network { }`
+  blocks and `[for i in a..b : t]` list expressions used three different
+  substitution rules and skipped the iteration cap. nat/network loops are
+  now AST nodes expanded during lowering — `${count}` bounds, arithmetic,
+  `loop.index/first/last` and the enclosing `let`/`param` scope all work,
+  NAT rule order is preserved — and list expressions go through the same
+  engine (literal bounds only; a `${…}` bound is a clear error).
+- **Parse errors carry their offset as data (#26).** `Error::NllParseAt {
+  message, offset }` replaces the `[at byte N]` text that was scraped back
+  out in three places; end-of-input errors now point at the end of the
+  last token. `parser::nll::{ast, parser, lower}` are crate-private
+  (`lexer::lex` stays public for the fuzz target). Template node/link
+  counts are verified by a test (spine-leaf and wireguard were wrong);
+  `lab "my lab"` renders; the tc duration parser accepts `ns`/`m`/`h`.
+- **Editor grammar is conformance-tested (#27).** The tree-sitter grammar
+  now parses every file under `examples/` (18 of 43 failed before:
+  floats, inline `parent`/`mode`, `host-reachable`, `ct established,related`,
+  interpolated names and addresses, `host(…)/24`, per-pair `impair` and
+  `for` inside `network`, `${…}` loop bounds, list for-expressions, globs,
+  trailing commas, bare `port x`, late `cmd`, trailing `background`, `at
+  +5s`, tcp-connect `retries`/`interval`, `burst`, `healthcheck-*`), uses
+  keyword extraction, and no longer spells keywords the language lacks
+  (`interface`, `type`, `state`); the `TREE_SITTER_GAPS` list is empty and
+  a reverse gate keeps it honest. New CI job `tree-sitter` (generate +
+  diff, corpus, parse every example) and `just tree-sitter`. The design
+  doc's grammar section is synced (statement list, network `impair`/`for`,
+  `port name`, relative `at +`, interpolated bounds, list for-expressions).
+- **Release lane (#53).** Refuses to release unless `ci.yml` is green for
+  the tagged commit; the internal API base is defined once; the flatpak
+  export push authenticates through a credential helper instead of a
+  token in the URL; the AppStream metainfo gets a `<release>` entry per
+  tag.
+
 ### Changed — apply completeness (issues #83–#86, #30)
 
 - **VRF-table routes converge on apply (#83).** They are explicit

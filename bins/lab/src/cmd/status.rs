@@ -30,10 +30,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 if scan {
                     println!(
                         "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "labs": labs,
-                            "orphans": orphans,
-                        }))?
+                        serde_json::to_string_pretty(&crate::output::StatusScanReport {
+                            labs: &labs,
+                            orphans: &orphans,
+                        })?
                     );
                 } else {
                     println!("{}", serde_json::to_string_pretty(&labs)?);

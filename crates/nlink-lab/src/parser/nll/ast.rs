@@ -75,6 +75,8 @@ pub struct IfDef {
 #[derive(Debug, Clone)]
 pub struct SiteDef {
     pub name: String,
+    /// Parsed and kept for tooling (fmt / LSP); lowering ignores it.
+    #[allow(dead_code)]
     pub description: Option<String>,
     pub body: Vec<Statement>,
 }
@@ -332,10 +334,27 @@ pub struct FirewallRuleDef {
     pub match_expr: String,
 }
 
-/// NAT definition.
-#[derive(Debug, Clone)]
+/// NAT definition: rules and `for` loops in source order (rule order is
+/// significant for NAT, so loops stay in place until lowering expands
+/// them with the full interpolation engine).
+#[derive(Debug, Clone, Default)]
 pub struct NatDef {
-    pub rules: Vec<NatRuleDef>,
+    pub items: Vec<NatItem>,
+}
+
+/// One entry of a `nat { … }` block.
+#[derive(Debug, Clone)]
+pub enum NatItem {
+    Rule(NatRuleDef),
+    For(NatForLoop),
+}
+
+/// `for VAR in RANGE { … }` inside a `nat` block.
+#[derive(Debug, Clone)]
+pub struct NatForLoop {
+    pub var: String,
+    pub range: ForRange,
+    pub body: NatDef,
 }
 
 /// A single NAT rule.
@@ -413,16 +432,6 @@ pub struct ImpairProps {
 }
 
 impl ImpairProps {
-    /// True when no property is set.
-    pub fn is_empty(&self) -> bool {
-        self.delay.is_none()
-            && self.jitter.is_none()
-            && self.loss.is_none()
-            && self.rate.is_none()
-            && self.corrupt.is_none()
-            && self.reorder.is_none()
-    }
-
     /// Overlay `other` onto `self`: every property set in `other` wins,
     /// properties absent from `other` are kept. Used so that properties
     /// spread over several lines of a block accumulate instead of the
@@ -522,6 +531,17 @@ pub struct NetworkDef {
     pub vlans: Vec<VlanDef>,
     pub ports: Vec<PortDef>,
     pub impairments: Vec<NetworkImpairDef>,
+    /// `for` loops over `impair` statements, expanded during lowering.
+    pub loops: Vec<NetworkForLoop>,
+}
+
+/// `for VAR in RANGE { impair … [for …] }` inside a `network` block.
+#[derive(Debug, Clone)]
+pub struct NetworkForLoop {
+    pub var: String,
+    pub range: ForRange,
+    pub impairments: Vec<NetworkImpairDef>,
+    pub loops: Vec<NetworkForLoop>,
 }
 
 /// Per-pair impairment inside a network block.

@@ -115,10 +115,10 @@ parse the JSON output and check `issues[?].severity`.
 ```text
 Validate a topology file without deploying
 
-Usage: nlink-lab validate [OPTIONS] <TOPOLOGY>
+Usage: nlink-lab validate [OPTIONS] [TOPOLOGY]
 
 Arguments:
-  <TOPOLOGY>
+  [TOPOLOGY]
           Path to the topology file (.nll)
 
 Options:
@@ -127,6 +127,18 @@ Options:
 
       --show-ips
           Show resolved IP addresses for all interfaces
+
+      --strict
+          Treat every warning as an error (exit 2)
+
+      --deny <RULE>
+          Promote one warning rule to an error (repeatable)
+
+      --allow <RULE>
+          Silence one warning rule (repeatable). Errors cannot be silenced
+
+      --list-rules
+          Print every validation rule with its default severity and exit
 
   -h, --help
           Print help

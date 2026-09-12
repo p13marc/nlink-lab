@@ -386,9 +386,8 @@ pub(crate) fn check_netns_name(ns_name: &str) -> Result<()> {
 /// When processes are spawned via `crate::ns_exec::spawn()` (nlink's `spawn_with_etc` when the host allows the overlay), these files are
 /// bind-mounted over `/etc/hosts` and `/etc/resolv.conf` inside the namespace.
 ///
-/// The directory is shared with [`crate::netns_tag`], which keeps the
-/// lab-ownership tag `/etc/netns/<ns_name>/.nlink-lab` in it; finding the
-/// directory already created and tagged is fine.
+/// The directory may already exist (a legacy ownership tag from
+/// [`crate::netns_tag`] lived here before 0.9); that is fine.
 pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
     check_netns_name(ns_name)?;
     let dir = format!("{}/{ns_name}", crate::netns_tag::NETNS_ETC_DIR);
@@ -421,11 +420,9 @@ pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
 
 /// Remove per-namespace `/etc/netns/<ns_name>/` directory.
 ///
-/// Removes the whole directory: it is the lab's own overlay, so this also
-/// takes the `.nlink-lab` ownership tag with it. That is intentional and
-/// does not conflict with [`crate::netns_tag::untag`] — `untag` tolerates
-/// a missing tag and directory, so callers may run either or both in any
-/// order. An unsafe name (see `check_netns_name`) is logged and skipped
+/// Removes the whole directory: it is the lab's own overlay (a legacy
+/// `.nlink-lab` tag, if present, goes with it; `untag` tolerates that, so
+/// callers may run either or both in any order). An unsafe name (see `check_netns_name`) is logged and skipped
 /// rather than acted on.
 pub fn remove_netns_etc(ns_name: &str) {
     if let Err(e) = check_netns_name(ns_name) {

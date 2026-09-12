@@ -724,6 +724,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3be2ad0423bdbbb0e25bc89add796f3559706d4a95e1bc98e4d9662a957b6a19"
 dependencies = [
  "clap",
+ "clap_lex",
+ "is_executable",
+ "shlex",
 ]
 
 [[package]]
@@ -2470,6 +2473,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7655c9839580ee829dfacba1d1278c2b7883e50a277ff7541299489d6bdfdc45"
 
 [[package]]
+name = "is_executable"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82cb6a9f675da968c63b6208c641b9dca58fc0133ae53375736b1767b0cab8bd"
+dependencies = [
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3210,6 +3222,7 @@ dependencies = [
  "nlink",
  "nlink-lab-macros",
  "regex",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "sha2",
@@ -3258,6 +3271,7 @@ dependencies = [
  "nlink-lab-backend",
  "nlink-lab-shared",
  "regex",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "tempfile",
@@ -3281,6 +3295,7 @@ dependencies = [
 name = "nlink-lab-shared"
 version = "0.8.0"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
 ]

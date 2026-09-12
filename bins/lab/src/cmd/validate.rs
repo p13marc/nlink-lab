@@ -9,7 +9,8 @@ use crate::render::print_topology_summary;
 #[derive(clap::Args)]
 pub struct Args {
     /// Path to the topology file (.nll).
-    pub topology: PathBuf,
+    #[arg(required_unless_present = "list_rules")]
+    pub topology: Option<PathBuf>,
 
     /// Set NLL parameters (can be repeated: --set key=value).
     #[arg(long = "set", value_name = "KEY=VALUE")]
@@ -18,6 +19,22 @@ pub struct Args {
     /// Show resolved IP addresses for all interfaces.
     #[arg(long)]
     pub show_ips: bool,
+
+    /// Treat every warning as an error (exit 2).
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Promote one warning rule to an error (repeatable).
+    #[arg(long, value_name = "RULE", add = crate::ctx::rule_completer())]
+    pub deny: Vec<String>,
+
+    /// Silence one warning rule (repeatable). Errors cannot be silenced.
+    #[arg(long, value_name = "RULE", add = crate::ctx::rule_completer())]
+    pub allow: Vec<String>,
+
+    /// Print every validation rule with its default severity and exit.
+    #[arg(long, exclusive = true)]
+    pub list_rules: bool,
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -25,26 +42,38 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         topology,
         params,
         show_ips,
+        strict,
+        deny,
+        allow,
+        list_rules,
     } = args;
+    if list_rules {
+        return print_rules(ctx);
+    }
+    let opts = nlink_lab::RuleOptions {
+        strict,
+        deny,
+        allow,
+    };
+    opts.check_known()
+        .map_err(nlink_lab::Error::invalid_topology)?;
+    let topology = topology.expect("clap: topology is required unless --list-rules");
     let topo = parse_topology(&topology, &params)?;
-    let result = topo.validate();
+    let result = topo.validate_with(&opts);
 
     if ctx.json {
         // One envelope for both outcomes; exit 2 on errors (#46).
-        let issues: Vec<&nlink_lab::ValidationIssue> = result.issues().iter().collect();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "lab": topo.lab.name,
-                "valid": !result.has_errors(),
-                "nodes": topo.nodes.len(),
-                "links": topo.links.len(),
-                "networks": topo.networks.len(),
-                "errors": result.errors().count(),
-                "warnings": result.warnings().count(),
-                "issues": issues,
-            }))?
-        );
+        let report = crate::output::ValidateReport {
+            lab: &topo.lab.name,
+            valid: !result.has_errors(),
+            nodes: topo.nodes.len(),
+            links: topo.links.len(),
+            networks: topo.networks.len(),
+            errors: result.errors().count(),
+            warnings: result.warnings().count(),
+            issues: result.issues(),
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
         if result.has_errors() {
             set_exit_code(EXIT_VALIDATION);
         }
@@ -98,5 +127,32 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+/// `--list-rules`: id + default severity, as a table or a JSON array.
+fn print_rules(ctx: &Ctx) -> nlink_lab::Result<()> {
+    let rules: Vec<crate::output::RuleInfo> = nlink_lab::rule_ids()
+        .iter()
+        .map(|id| crate::output::RuleInfo {
+            rule: id,
+            severity: nlink_lab::rule_severity(id).unwrap_or(nlink_lab::Severity::Error),
+        })
+        .collect();
+    if ctx.json {
+        println!("{}", serde_json::to_string_pretty(&rules)?);
+        return Ok(());
+    }
+    println!("{:<36} SEVERITY", "RULE");
+    for r in &rules {
+        let sev = match r.severity {
+            nlink_lab::Severity::Warning => "warning",
+            nlink_lab::Severity::Error => "error",
+        };
+        println!("{:<36} {sev}", r.rule);
+    }
+    println!(
+        "\n--deny RULE promotes a warning to an error, --allow RULE silences it, --strict promotes all."
+    );
     Ok(())
 }

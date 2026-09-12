@@ -72,6 +72,7 @@ pub mod helpers;
 pub mod impair_parse;
 pub mod ipfunc;
 pub mod ipmap;
+pub mod lint;
 pub mod netns_tag;
 pub mod ns_exec;
 pub mod parser;
@@ -98,6 +99,7 @@ pub use deploy::{
 };
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
+pub use lint::{LINT_RULE_IDS, LintFinding, lint};
 pub use proc_stat::ProcStat;
 pub use running::{
     ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
@@ -108,7 +110,9 @@ pub use types::{
     RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig, mgmt_bridge_name_for,
     network_peer_name_for,
 };
-pub use validator::{Severity, ValidationIssue, ValidationResult};
+pub use validator::{
+    RuleOptions, Severity, ValidationIssue, ValidationResult, rule_ids, rule_severity,
+};
 pub use watch::{NsResolver, WatchEvent, WatchEventKind, WatchFamily, WatchOpts, watch_loop};
 
 /// Proc macro for integration testing. See [`lab_test`] for details.

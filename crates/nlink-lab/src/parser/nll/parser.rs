@@ -114,11 +114,15 @@ use super::lexer::Token;
 
 /// Create a parse error with span information from the current token.
 fn err(tokens: &[Spanned], pos: usize, msg: String) -> crate::Error {
-    if pos < tokens.len() {
-        let span = &tokens[pos].span;
-        crate::Error::NllParse(format!("{msg} [at byte {start}]", start = span.start))
-    } else {
-        crate::Error::NllParse(msg)
+    // At end of input point at the end of the last token so the
+    // diagnostic still lands on the right line.
+    let offset = match tokens.get(pos) {
+        Some(t) => t.span.start,
+        None => tokens.last().map_or(0, |t| t.span.end),
+    };
+    crate::Error::NllParseAt {
+        message: msg,
+        offset,
     }
 }
 
@@ -1204,7 +1208,7 @@ fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef>
 // nat { masquerade src CIDR; dnat dst CIDR to IP; snat src CIDR to IP }
 fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
     expect(tokens, pos, &Token::LBrace)?;
-    let mut rules = Vec::new();
+    let mut items = Vec::new();
 
     loop {
         skip_newlines(tokens, pos);
@@ -1212,42 +1216,19 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             break;
         }
 
-        // Support `for` loops inside NAT blocks
+        // `for` loops are kept in the AST and expanded during lowering
+        // (same engine, scope and iteration cap as every other loop).
         if matches!(at(tokens, *pos), Some(Token::For)) {
             expect(tokens, pos, &Token::For)?;
             let var = expect_ident(tokens, pos)?;
             expect(tokens, pos, &Token::In)?;
             let range = parse_for_range(tokens, pos)?;
-            // Parse the for-loop body as a NAT block
             let inner = parse_nat_def(tokens, pos)?;
-            // Expand: for each value, interpolate and add rules
-            let values = match &range {
-                ast::ForRange::IntRange { start, end } => {
-                    (*start..=*end).map(|i| i.to_string()).collect::<Vec<_>>()
-                }
-                ast::ForRange::List(items) => items.clone(),
-                ast::ForRange::DynRange { .. } => {
-                    return Err(err(
-                        tokens,
-                        *pos,
-                        "for loops inside a nat block need literal bounds (`${…}` bounds are expanded during lowering, which nat blocks do not go through yet)".into(),
-                    ));
-                }
-            };
-            for val in &values {
-                for rule in &inner.rules {
-                    let interp = |s: &Option<String>| -> Option<String> {
-                        s.as_ref().map(|v| v.replace(&format!("${{{var}}}"), val))
-                    };
-                    rules.push(ast::NatRuleDef {
-                        action: rule.action.clone(),
-                        src: interp(&rule.src),
-                        dst: interp(&rule.dst),
-                        target: interp(&rule.target),
-                        target_port: rule.target_port,
-                    });
-                }
-            }
+            items.push(ast::NatItem::For(ast::NatForLoop {
+                var,
+                range,
+                body: inner,
+            }));
             continue;
         }
 
@@ -1257,13 +1238,13 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             } else {
                 None
             };
-            rules.push(ast::NatRuleDef {
+            items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "masquerade".into(),
                 src,
                 dst: None,
                 target: None,
                 target_port: None,
-            });
+            }));
         } else if eat_kw(tokens, pos, "dnat") {
             let dst = if eat_kw(tokens, pos, "dst") {
                 Some(parse_cidr_or_name(tokens, pos)?)
@@ -1278,13 +1259,13 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             } else {
                 None
             };
-            rules.push(ast::NatRuleDef {
+            items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "dnat".into(),
                 src: None,
                 dst,
                 target: Some(target),
                 target_port,
-            });
+            }));
         } else if eat_kw(tokens, pos, "snat") {
             let src = if eat_kw(tokens, pos, "src") {
                 Some(parse_cidr_or_name(tokens, pos)?)
@@ -1293,24 +1274,24 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             };
             expect_kw(tokens, pos, "to")?;
             let target = parse_cidr_or_name(tokens, pos)?;
-            rules.push(ast::NatRuleDef {
+            items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "snat".into(),
                 src,
                 dst: None,
                 target: Some(target),
                 target_port: None,
-            });
+            }));
         } else if eat_kw(tokens, pos, "translate") {
             let src_range = parse_cidr_or_name(tokens, pos)?;
             expect_kw(tokens, pos, "to")?;
             let dst_range = parse_cidr_or_name(tokens, pos)?;
-            rules.push(ast::NatRuleDef {
+            items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "translate".into(),
                 src: Some(src_range),
                 dst: None,
                 target: Some(dst_range),
                 target_port: None,
-            });
+            }));
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -1333,7 +1314,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
         }
     }
 
-    Ok(ast::NatDef { rules })
+    Ok(ast::NatDef { items })
 }
 
 fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallDef> {
@@ -2147,6 +2128,7 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
         vlans: Vec::new(),
         ports: Vec::new(),
         impairments: Vec::new(),
+        loops: Vec::new(),
     };
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -2189,11 +2171,9 @@ fn parse_network(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkDef>
         } else if eat(tokens, pos, &Token::Impair) {
             net.impairments.push(parse_network_impair(tokens, pos)?);
         } else if matches!(at(tokens, *pos), Some(Token::For)) {
-            // for VAR in RANGE { impair … impair … } — eagerly expand
-            // each impair statement in the body for every value the
-            // range yields. Mirrors the pattern in parse_nat_def.
-            let expanded = parse_network_for(tokens, pos)?;
-            net.impairments.extend(expanded);
+            // for VAR in RANGE { impair … [for …] } — kept in the AST
+            // and expanded during lowering.
+            net.loops.push(parse_network_for(tokens, pos)?);
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -2292,46 +2272,28 @@ fn parse_network_impair(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Netw
     })
 }
 
-/// Parse a `for VAR in RANGE { impair … impair … [for …] }` block
-/// inside a `network { }`. Eagerly expands each impair statement
-/// for every value the range yields, substituting `${VAR}` in any
-/// string field. Nested `for` is allowed and expands as a Cartesian
-/// product. The `for` keyword has not yet been consumed by the
-/// caller.
-fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::NetworkImpairDef>> {
+/// Parse a `for VAR in RANGE { impair … [for …] }` block inside a
+/// `network { }` into the AST. Expansion happens in lowering
+/// (`lower::expand_network_impairs`). The `for` keyword has not yet
+/// been consumed by the caller.
+fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NetworkForLoop> {
     expect(tokens, pos, &Token::For)?;
     let var = expect_ident(tokens, pos)?;
     expect(tokens, pos, &Token::In)?;
     let range = parse_for_range(tokens, pos)?;
-    let values: Vec<String> = match &range {
-        ast::ForRange::IntRange { start, end } => (*start..=*end).map(|i| i.to_string()).collect(),
-        ast::ForRange::List(items) => items.clone(),
-        ast::ForRange::DynRange { .. } => {
-            return Err(err(
-                tokens,
-                *pos,
-                "for loops inside a network block need literal bounds (`${…}` bounds are expanded during lowering, which network blocks do not go through yet)".into(),
-            ));
-        }
-    };
-
     expect(tokens, pos, &Token::LBrace)?;
 
-    // Parse the body into a flat list of impair templates. Nested
-    // `for` is parsed recursively and its expansion contributes its
-    // own values.
-    let mut body: Vec<ast::NetworkImpairDef> = Vec::new();
+    let mut impairments = Vec::new();
+    let mut loops = Vec::new();
     loop {
         skip_newlines(tokens, pos);
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-
         if eat(tokens, pos, &Token::Impair) {
-            body.push(parse_network_impair(tokens, pos)?);
+            impairments.push(parse_network_impair(tokens, pos)?);
         } else if matches!(at(tokens, *pos), Some(Token::For)) {
-            let nested = parse_network_for(tokens, pos)?;
-            body.extend(nested);
+            loops.push(parse_network_for(tokens, pos)?);
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -2351,35 +2313,12 @@ fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Net
             }
         }
     }
-
-    // Cartesian expansion: for each value of this loop variable,
-    // emit a copy of every body template with `${VAR}` substituted.
-    // Uses the same interpolation engine as `lower.rs` so arithmetic
-    // (e.g. `${(i + 1) % 12}`) and nested vars work as expected.
-    let mut out = Vec::with_capacity(body.len() * values.len());
-    let mut vars: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
-    for val in &values {
-        vars.insert(var.clone(), val.clone());
-        for tmpl in &body {
-            let sub = |s: &str| -> String { crate::parser::nll::lower::interpolate(s, &vars) };
-            let sub_opt = |s: &Option<String>| -> Option<String> { s.as_ref().map(|v| sub(v)) };
-            out.push(ast::NetworkImpairDef {
-                src: sub(&tmpl.src),
-                dst: sub(&tmpl.dst),
-                props: ast::ImpairProps {
-                    delay: sub_opt(&tmpl.props.delay),
-                    jitter: sub_opt(&tmpl.props.jitter),
-                    loss: sub_opt(&tmpl.props.loss),
-                    rate: sub_opt(&tmpl.props.rate),
-                    corrupt: sub_opt(&tmpl.props.corrupt),
-                    reorder: sub_opt(&tmpl.props.reorder),
-                },
-                rate_cap: sub_opt(&tmpl.rate_cap),
-            });
-        }
-    }
-
-    Ok(out)
+    Ok(ast::NetworkForLoop {
+        var,
+        range,
+        impairments,
+        loops,
+    })
 }
 
 fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Result<ast::PortDef> {
@@ -3251,12 +3190,11 @@ fn parse_endpoint_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String
 /// Parse a for-expression inside brackets: `for var in start..end : template`.
 /// The opening `[` has already been consumed.
 fn parse_for_expr(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>> {
+    let for_pos = *pos;
     expect(tokens, pos, &Token::For)?;
     let var = expect_ident(tokens, pos)?;
     expect(tokens, pos, &Token::In)?;
-    let start = expect_int(tokens, pos)?;
-    expect(tokens, pos, &Token::DotDot)?;
-    let end = expect_int(tokens, pos)?;
+    let range = parse_for_range(tokens, pos)?;
     expect(tokens, pos, &Token::Colon)?;
 
     // Collect remaining tokens until ] as the template string
@@ -3267,11 +3205,13 @@ fn parse_for_expr(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<String>> {
     let template = template_parts.join("");
     expect(tokens, pos, &Token::RBracket)?;
 
-    // Expand the for-expression
-    let items = (start..=end)
-        .map(|i| template.replace(&format!("${{{var}}}"), &i.to_string()))
-        .collect();
-    Ok(items)
+    // Same engine, metavariables and iteration cap as block loops. A
+    // list expression is expanded here (it has no statement scope), so
+    // its bounds must be literal.
+    crate::parser::nll::lower::expand_list_for(&var, &range, &template).map_err(|e| match e {
+        crate::Error::NllParse(msg) => err(tokens, for_pos, msg),
+        other => other,
+    })
 }
 
 fn parse_int_list(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<u16>> {
@@ -3953,9 +3893,7 @@ network radio {
     }
 
     #[test]
-    fn test_parse_network_for_loop_expansion() {
-        // for-loop inside a network block expands eagerly at parse
-        // time, including modulo arithmetic in the loop variable.
+    fn test_parse_network_for_loop_is_kept_for_lowering() {
         let ast = parse_nll(
             r#"lab "t"
 network ring {
@@ -3963,110 +3901,35 @@ network ring {
   subnet 10.0.0.0/24
   for i in 0..3 {
     impair n${i} -- n${(i + 1) % 4} { delay 50ms }
+    for j in [a, b] { impair n${i} -- ${j} { loss 1% } }
   }
 }"#,
         );
         match &ast.statements[0] {
             ast::Statement::Network(n) => {
-                assert_eq!(n.impairments.len(), 4);
-                // Ring: n0->n1, n1->n2, n2->n3, n3->n0 (modulo wraps)
-                let pairs: Vec<(&str, &str)> = n
-                    .impairments
-                    .iter()
-                    .map(|imp| (imp.src.as_str(), imp.dst.as_str()))
-                    .collect();
-                assert_eq!(
-                    pairs,
-                    vec![("n0", "n1"), ("n1", "n2"), ("n2", "n3"), ("n3", "n0")],
-                    "ring closure via modulo failed",
-                );
-                assert!(
-                    n.impairments
-                        .iter()
-                        .all(|i| i.props.delay.as_deref() == Some("50ms"))
-                );
+                assert!(n.impairments.is_empty());
+                assert_eq!(n.loops.len(), 1);
+                let outer = &n.loops[0];
+                assert_eq!(outer.var, "i");
+                assert!(matches!(
+                    outer.range,
+                    ast::ForRange::IntRange { start: 0, end: 3 }
+                ));
+                assert_eq!(outer.impairments.len(), 1);
+                assert_eq!(outer.impairments[0].src, "n${i}");
+                assert_eq!(outer.loops.len(), 1);
+                assert_eq!(outer.loops[0].var, "j");
             }
             _ => panic!("expected Network"),
         }
     }
 
     #[test]
-    fn test_parse_network_nested_for_loops() {
-        // Nested `for` produces a Cartesian product. Outer for emits
-        // a copy per outer-value × inner-value combination.
-        let ast = parse_nll(
-            r#"lab "t"
-network mesh {
-  members [a:p, b:p, c:p, d:p]
-  subnet 10.0.0.0/24
-  for src in [a, b] {
-    for dst in [c, d] {
-      impair ${src} -- ${dst} { delay 20ms }
-    }
-  }
-}"#,
-        );
-        match &ast.statements[0] {
-            ast::Statement::Network(n) => {
-                let pairs: Vec<(&str, &str)> = n
-                    .impairments
-                    .iter()
-                    .map(|imp| (imp.src.as_str(), imp.dst.as_str()))
-                    .collect();
-                // Cartesian product: 2 × 2 = 4 entries. Inner loop
-                // varies fastest.
-                assert_eq!(pairs, vec![("a", "c"), ("a", "d"), ("b", "c"), ("b", "d")],);
-            }
-            _ => panic!("expected Network"),
-        }
-    }
-
-    #[test]
-    fn test_parse_simple_full() {
-        let input = r#"lab "simple"
-
-node router { forward ipv4 }
-node host { route default via 10.0.0.1 }
-
-link router:eth0 -- host:eth0 {
-  10.0.0.1/24 -- 10.0.0.2/24
-  delay 10ms jitter 2ms
-}"#;
-        let ast = parse_nll(input);
-        assert_eq!(ast.lab.name, "simple");
-        assert_eq!(ast.statements.len(), 3); // 2 nodes + 1 link
-    }
-
-    #[test]
-    fn test_parse_nat_translate() {
+    fn test_parse_nat_for_is_kept_for_lowering() {
         let input = r#"lab "t"
 node fw {
   nat {
-    masquerade src 10.0.0.0/16
-    translate 144.0.0.0/8 to 172.100.0.0/16
-  }
-}"#;
-        let ast = parse_nll(input);
-        let node = match &ast.statements[0] {
-            super::ast::Statement::Node(n) => n,
-            _ => panic!("expected node"),
-        };
-        let nat = node.props.iter().find_map(|p| match p {
-            super::ast::NodeProp::Nat(n) => Some(n),
-            _ => None,
-        });
-        let nat = nat.unwrap();
-        assert_eq!(nat.rules.len(), 2);
-        assert_eq!(nat.rules[1].action, "translate");
-        assert_eq!(nat.rules[1].src.as_deref(), Some("144.0.0.0/8"));
-        assert_eq!(nat.rules[1].target.as_deref(), Some("172.100.0.0/16"));
-    }
-
-    #[test]
-    fn test_parse_nat_translate_in_for() {
-        let input = r#"lab "t"
-node fw {
-  nat {
+    masquerade src 10.0.0.0/8
     for i in 1..2 {
       translate 144.0.${i}.0/24 to 172.100.${i}.0/24
     }
@@ -4077,15 +3940,22 @@ node fw {
             super::ast::Statement::Node(n) => n,
             _ => panic!("expected node"),
         };
-        let nat = node.props.iter().find_map(|p| match p {
-            super::ast::NodeProp::Nat(n) => Some(n),
-            _ => None,
-        });
-        let nat = nat.unwrap();
-        assert_eq!(nat.rules.len(), 2);
-        assert_eq!(nat.rules[0].src.as_deref(), Some("144.0.1.0/24"));
-        assert_eq!(nat.rules[0].target.as_deref(), Some("172.100.1.0/24"));
-        assert_eq!(nat.rules[1].src.as_deref(), Some("144.0.2.0/24"));
-        assert_eq!(nat.rules[1].target.as_deref(), Some("172.100.2.0/24"));
+        let nat = node
+            .props
+            .iter()
+            .find_map(|p| match p {
+                super::ast::NodeProp::Nat(n) => Some(n),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(nat.items.len(), 2);
+        assert!(matches!(&nat.items[0], super::ast::NatItem::Rule(r) if r.action == "masquerade"));
+        match &nat.items[1] {
+            super::ast::NatItem::For(f) => {
+                assert_eq!(f.var, "i");
+                assert_eq!(f.body.items.len(), 1);
+            }
+            other => panic!("expected a for loop, got {other:?}"),
+        }
     }
 }

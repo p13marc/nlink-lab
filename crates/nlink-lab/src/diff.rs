@@ -16,7 +16,7 @@ pub use nlink::netlink::config::ConfigDiff;
 pub use nlink::netlink::nftables::config::NftablesDiff;
 
 /// A structured diff between two topologies.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
 pub struct TopologyDiff {
     pub nodes_added: Vec<String>,
     pub nodes_removed: Vec<String>,
@@ -52,7 +52,7 @@ pub struct TopologyDiff {
 /// `desired_*` carries the rules that should be live after
 /// reconcile; `None` means "remove the ruleset entirely on this
 /// node" (translates to `del_table`).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct NftablesChange {
     pub node: String,
     pub desired_firewall: Option<crate::types::FirewallConfig>,
@@ -65,7 +65,7 @@ pub struct NftablesChange {
 /// `desired = None` means "remove the rate-limit entirely on this
 /// endpoint" — translates to deleting the root qdisc on the
 /// interface.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct RateLimitChange {
     pub endpoint: String,
     pub desired: Option<RateLimit>,
@@ -73,7 +73,7 @@ pub struct RateLimitChange {
 }
 
 /// A change to a single static route on a single node.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct RouteChange {
     pub node: String,
     pub dest: String,
@@ -91,7 +91,7 @@ pub struct RouteChange {
 /// leaving the previous value in place. Removed entries are
 /// reported so the operator can act on them, but no kernel call
 /// is made on the remove path.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct SysctlChange {
     pub node: String,
     pub added: Vec<(String, String)>,
@@ -106,7 +106,7 @@ impl SysctlChange {
 }
 
 /// A change to an impairment on a specific endpoint.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct ImpairmentChange {
     pub endpoint: String,
     pub old: Impairment,
@@ -118,7 +118,7 @@ pub struct ImpairmentChange {
 /// `desired` carries the rules that should be live after reconcile;
 /// `None` means "remove the impairer entirely on this source's
 /// interface" (which translates to `PerPeerImpairer::clear`).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct NetworkImpairerChange {
     pub network: String,
     pub src_node: String,
@@ -279,12 +279,16 @@ impl std::fmt::Display for TopologyDiff {
 /// `serde` feature (transitive via `full`). Empty layer maps are
 /// elided from the JSON output via `skip_serializing_if`, so the
 /// "no changes" case still emits a tight envelope.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
 pub struct LayeredDiff {
     pub topology: TopologyDiff,
+    /// Upstream `nlink::ConfigDiff` per namespace (schema: free-form).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub network: std::collections::BTreeMap<String, nlink::netlink::config::ConfigDiff>,
+    /// Upstream `nlink::NftablesDiff` per namespace (schema: free-form).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub nftables:
         std::collections::BTreeMap<String, nlink::netlink::nftables::config::NftablesDiff>,
 }

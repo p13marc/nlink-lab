@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 /// Complete topology definition for a network lab.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Topology {
     /// Lab metadata.
     pub lab: LabConfig,
@@ -65,7 +65,7 @@ pub struct Topology {
 }
 
 /// A performance benchmark definition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Benchmark {
     /// Benchmark name.
     pub name: String,
@@ -74,7 +74,7 @@ pub struct Benchmark {
 }
 
 /// A single benchmark test.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum BenchmarkTest {
     /// iperf3 throughput/jitter test.
     Iperf3 {
@@ -95,7 +95,7 @@ pub enum BenchmarkTest {
 }
 
 /// A benchmark assertion (metric comparison).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct BenchmarkAssertion {
     /// Metric name (bandwidth, jitter, avg, p99, loss).
     pub metric: String,
@@ -106,7 +106,7 @@ pub struct BenchmarkAssertion {
 }
 
 /// Comparison operator for benchmark assertions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum CompareOp {
     Gt,
     Lt,
@@ -115,7 +115,7 @@ pub enum CompareOp {
 }
 
 /// A timed test scenario with fault injection and validation steps.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Scenario {
     /// Scenario name.
     pub name: String,
@@ -124,7 +124,7 @@ pub struct Scenario {
 }
 
 /// A single step in a scenario, executed at a specific time offset.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ScenarioStep {
     /// Time offset from scenario start (milliseconds).
     pub time_ms: u64,
@@ -133,7 +133,7 @@ pub struct ScenarioStep {
 }
 
 /// An action within a scenario step.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum ScenarioAction {
     /// Bring interface down.
     Down(String),
@@ -150,7 +150,7 @@ pub enum ScenarioAction {
 }
 
 /// Post-deploy reachability assertion.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum Assertion {
     /// Assert that `from` can reach `to` (ping succeeds).
     Reach { from: String, to: String },
@@ -188,7 +188,7 @@ pub enum Assertion {
 }
 
 /// DNS resolution mode for lab nodes.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum DnsMode {
     /// No DNS configuration (default).
@@ -199,7 +199,7 @@ pub enum DnsMode {
 }
 
 /// Routing mode for automatic static route generation.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum RoutingMode {
     /// No auto-routing (default).
@@ -210,7 +210,7 @@ pub enum RoutingMode {
 }
 
 /// Container runtime selection.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ContainerRuntime {
     /// Auto-detect: prefer podman, fall back to docker.
@@ -223,7 +223,7 @@ pub enum ContainerRuntime {
 }
 
 /// Lab metadata.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct LabConfig {
     /// Lab name (used for namespace prefix and state tracking).
     pub name: String,
@@ -343,7 +343,7 @@ pub fn network_bridge_name_for(net_name: &str) -> String {
 }
 
 /// Reusable node template.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Profile {
     /// Sysctl values to apply.
     #[serde(default)]
@@ -373,7 +373,7 @@ where
 }
 
 /// Node definition — becomes a network namespace or container.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Node {
     /// Profiles to inherit from, in order (later ones override earlier
     /// ones — `node r : base, override`). Serialised as `profiles`;
@@ -528,7 +528,7 @@ impl Node {
 }
 
 /// Interface type for explicit interfaces.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum InterfaceKind {
     Dummy,
@@ -539,7 +539,7 @@ pub enum InterfaceKind {
 }
 
 /// Explicit interface configuration (for interfaces not created by links).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct InterfaceConfig {
     /// Interface type.
     pub kind: Option<InterfaceKind>,
@@ -579,7 +579,7 @@ pub struct InterfaceConfig {
 }
 
 /// Route configuration.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct RouteConfig {
     /// Next-hop gateway address.
     pub via: Option<String>,
@@ -592,7 +592,7 @@ pub struct RouteConfig {
 }
 
 /// Point-to-point link between two nodes (creates a veth pair).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Link {
     /// Endpoints in `"node:interface"` format.
     pub endpoints: [String; 2],
@@ -605,7 +605,7 @@ pub struct Link {
 }
 
 /// Shared L2 segment (bridge network).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Network {
     /// Network type (currently only "bridge").
     pub kind: Option<String>,
@@ -642,7 +642,7 @@ pub struct Network {
 /// `src` and `dst` are node names (not endpoints) — the bridge
 /// determines the interface. The configured `impairment` is applied
 /// to traffic leaving `src`'s network interface destined for `dst`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NetworkImpairment {
     /// Source node name.
     pub src: String,
@@ -661,14 +661,14 @@ pub struct NetworkImpairment {
 }
 
 /// VLAN definition within a network.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct VlanConfig {
     /// Human-readable VLAN name.
     pub name: Option<String>,
 }
 
 /// Port configuration within a bridge network.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct PortConfig {
     /// Interface name on the node.
     pub interface: Option<String>,
@@ -692,7 +692,7 @@ pub struct PortConfig {
 }
 
 /// Network impairment configuration (netem).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Impairment {
     /// Delay (e.g., "10ms", "100us").
     pub delay: Option<String>,
@@ -714,7 +714,7 @@ pub struct Impairment {
 }
 
 /// Per-interface rate limiting.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct RateLimit {
     /// Egress rate (e.g., "1gbit").
     pub egress: Option<String>,
@@ -727,7 +727,7 @@ pub struct RateLimit {
 }
 
 /// Firewall configuration (nftables).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FirewallConfig {
     /// Default chain policy ("accept" or "drop").
     pub policy: Option<String>,
@@ -738,7 +738,7 @@ pub struct FirewallConfig {
 }
 
 /// A single firewall rule.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FirewallRule {
     /// Match expression (e.g., "tcp dport 80", "ct state established,related").
     #[serde(rename = "match")]
@@ -749,7 +749,7 @@ pub struct FirewallRule {
 }
 
 /// NAT configuration.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NatConfig {
     /// NAT rules.
     #[serde(default)]
@@ -757,7 +757,7 @@ pub struct NatConfig {
 }
 
 /// A single NAT rule.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NatRule {
     /// NAT action.
     pub action: NatAction,
@@ -772,7 +772,7 @@ pub struct NatRule {
 }
 
 /// NAT action type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum NatAction {
     Masquerade,
@@ -782,7 +782,7 @@ pub enum NatAction {
 }
 
 /// Process to execute in a node.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ExecConfig {
     /// Command and arguments.
     pub cmd: Vec<String>,
@@ -793,7 +793,7 @@ pub struct ExecConfig {
 }
 
 /// VRF (Virtual Routing and Forwarding) configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct VrfConfig {
     /// Routing table ID.
     pub table: u32,
@@ -808,7 +808,7 @@ pub struct VrfConfig {
 }
 
 /// WireGuard interface configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WireguardConfig {
     /// Private key ("auto" to auto-generate).
     pub private_key: Option<String>,
@@ -832,7 +832,7 @@ pub struct WireguardConfig {
 }
 
 /// macvlan interface configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MacvlanConfig {
     /// Interface name inside the namespace.
     pub name: String,
@@ -847,7 +847,7 @@ pub struct MacvlanConfig {
 }
 
 /// macvlan mode.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MacvlanMode {
     #[default]
@@ -858,7 +858,7 @@ pub enum MacvlanMode {
 }
 
 /// ipvlan interface configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct IpvlanConfig {
     /// Interface name inside the namespace.
     pub name: String,
@@ -873,7 +873,7 @@ pub struct IpvlanConfig {
 }
 
 /// ipvlan mode.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum IpvlanMode {
     L2,
@@ -883,7 +883,7 @@ pub enum IpvlanMode {
 }
 
 /// Wi-Fi interface configuration (mac80211_hwsim).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WifiConfig {
     /// Interface name inside the namespace (e.g., "wlan0").
     pub name: String,
@@ -903,7 +903,7 @@ pub struct WifiConfig {
 }
 
 /// Wi-Fi interface mode.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum WifiMode {
     /// Access point (runs hostapd).

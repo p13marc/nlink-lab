@@ -103,7 +103,7 @@ crates/nlink-lab/src/
       parser.rs     # Recursive-descent parser → AST
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (20 rules)
+  validator.rs      # Topology validation (40 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -282,7 +282,7 @@ netlink resource still commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile paths
 (zero kernel calls when unchanged); in apply mode the network layer uses
 `ApplyOptions::with_purge(true)`. Namespaces created by nlink-lab carry
-an ownership tag (`/etc/netns/<ns>/.nlink-lab`, `netns_tag.rs`) and
+an ownership tag (`/run/nlink-lab/netns/<ns>`, `netns_tag.rs`) and
 `destroy --orphans` only ever reaps tagged ones. `deploy --dry-run`
 prints the plan; `validate { … }` assertions run after the state file is
 written and ride on `RunningLab::assertion_results()`.

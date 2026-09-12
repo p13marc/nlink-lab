@@ -1,62 +1,116 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://nlink-lab.example/schemas/status-scan.schema.json",
-  "title": "nlink-lab status --scan --json output",
-  "description": "Emitted by `nlink-lab status --scan --json`. Wraps the lab list with an `orphans` block reporting host resources without state files (bridges/veths/netns) and stale labs whose state file claims namespaces no longer present on the host.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nlink-lab status --scan --json",
+  "description": "`status --scan --json` envelope.",
   "type": "object",
-  "required": ["labs", "orphans"],
-  "additionalProperties": false,
   "properties": {
     "labs": {
-      "$ref": "status-list.schema.json"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LabInfo"
+      }
     },
     "orphans": {
+      "$ref": "#/$defs/Orphans"
+    }
+  },
+  "required": [
+    "labs",
+    "orphans"
+  ],
+  "$defs": {
+    "LabInfo": {
+      "description": "Summary info about a running lab (for status listing).",
       "type": "object",
-      "required": ["bridges", "veths", "netns"],
-      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "description": "ISO 8601 creation timestamp.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Lab name.",
+          "type": "string"
+        },
+        "node_count": {
+          "description": "Number of nodes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "node_count",
+        "created_at"
+      ]
+    },
+    "Orphans": {
+      "description": "Resources on the host that look like lab-owned state but have no matching\n`state.json` — usually left behind by a crashed deploy.",
+      "type": "object",
       "properties": {
         "bridges": {
+          "description": "Root-namespace mgmt bridges (`nl{hash8}`).",
           "type": "array",
           "items": {
-            "type": "string",
-            "description": "Mgmt bridge interface name (`nl{hash8}`)."
-          }
-        },
-        "veths": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "description": "Mgmt veth peer name (`nm{hash8}{idx}`)."
+            "type": "string"
           }
         },
         "netns": {
+          "description": "Named network namespaces tagged by nlink-lab (`netns_tag`) whose\nowning lab is not registered, or is registered but no longer\nclaims them in `state.json`.",
           "type": "array",
           "items": {
-            "type": "string",
-            "description": "Named namespace whose prefix doesn't match any known lab."
+            "type": "string"
           }
         },
         "stale": {
+          "description": "Labs whose state file claims namespaces that no longer exist on the\nhost — the mirror case of the above (state with no resources). Most\ncommonly caused by a reboot.",
           "type": "array",
-          "description": "State files claiming namespaces that no longer exist on the host. Omitted from output when empty.",
           "items": {
-            "type": "object",
-            "required": ["name", "missing_namespaces"],
-            "additionalProperties": false,
-            "properties": {
-              "name": {
-                "type": "string",
-                "description": "Lab name."
-              },
-              "missing_namespaces": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "Namespaces listed in `state.json` but absent from `ip netns list`. Sorted."
-              }
-            }
+            "$ref": "#/$defs/StaleLab"
+          }
+        },
+        "untagged_ignored": {
+          "description": "Namespaces on the host without an nlink-lab ownership tag. Never\nlisted and never touched (#29 — they belong to libvirt, podman,\nCNI, ...); surfaced only as a count for `status --scan -v`.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "veths": {
+          "description": "Root-namespace mgmt veth peers (`nm{hash8}{idx}`).",
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
-      }
+      },
+      "required": [
+        "bridges",
+        "veths",
+        "netns",
+        "untagged_ignored",
+        "stale"
+      ]
+    },
+    "StaleLab": {
+      "description": "A state-backed lab with one or more namespaces missing from the host.",
+      "type": "object",
+      "properties": {
+        "missing_namespaces": {
+          "description": "Namespaces claimed by `state.json` that are absent from `ip netns list`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "description": "Lab name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "missing_namespaces"
+      ]
     }
   }
 }

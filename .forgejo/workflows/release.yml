@@ -11,6 +11,12 @@ on:
         description: existing bare-semver tag to re-release
         required: true
 
+env:
+  # The runner sits in the isolated zone and reaches Forgejo through its
+  # internal address, not the public ROOT_URL (issue #53: this used to be
+  # repeated in four places).
+  FORGEJO_API: http://10.10.0.30:3000/api/v1
+
 jobs:
   release:
     runs-on: ubuntu-24.04
@@ -31,6 +37,25 @@ jobs:
         run: |
           v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           test "$v" = "$RELEASE_TAG" || { echo "::error::Cargo.toml version $v != tag $RELEASE_TAG"; exit 1; }
+      - name: Require a green CI run for the tagged commit
+        # A tag used to release with red fmt/clippy/test/deny (issue #53).
+        # ci.yml runs on the push that carried the commit; wait for its
+        # jobs (fuzz is skipped by design) and refuse on any failure.
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
+          for attempt in $(seq 1 60); do
+            tasks=$(curl -sf -H "Authorization: token $TOKEN" "$api/actions/tasks?limit=200" \
+              | jq -c --arg sha "$RELEASE_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .workflow_id=="ci.yml")]')
+            n=$(echo "$tasks" | jq 'length')
+            bad=$(echo "$tasks" | jq '[.[] | select(.status=="failure" or .status=="cancelled")] | length')
+            pending=$(echo "$tasks" | jq '[.[] | select(.status=="running" or .status=="waiting")] | length')
+            if [ "$bad" != 0 ]; then echo "::error::CI is red for $RELEASE_SHA"; echo "$tasks" | jq -r '.[] | "\(.status) \(.name)"'; exit 1; fi
+            if [ "$n" -ge 12 ] && [ "$pending" = 0 ]; then echo "CI green for $RELEASE_SHA ($n jobs)"; exit 0; fi
+            echo "waiting for CI on $RELEASE_SHA ($n jobs seen, $pending pending)…"; sleep 30
+          done
+          echo "::error::no complete green ci.yml run for $RELEASE_SHA after 30 minutes"; exit 1
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2.9.2
         with:
@@ -58,7 +83,7 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          api="http://10.10.0.30:3000/api/v1/repos/${GITHUB_REPOSITORY}"
+          api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
           if ! curl -sf -H "Authorization: token $TOKEN" "$api/releases/tags/${RELEASE_TAG}" >/dev/null; then
             curl -sf -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
               -d "{\"tag_name\":\"${RELEASE_TAG}\",\"name\":\"${RELEASE_TAG}\",\"target_commitish\":\"${RELEASE_SHA}\"}" \
@@ -70,7 +95,7 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          api="http://10.10.0.30:3000/api/v1/repos/${GITHUB_REPOSITORY}"
+          api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
           rid=$(curl -sf -H "Authorization: token $TOKEN" "$api/releases/tags/${RELEASE_TAG}" | jq -r .id)
           for f in dist/release/*; do
             name=$(basename "$f")
@@ -99,6 +124,14 @@ jobs:
           git fetch --force origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null || true
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
           echo "RELEASE_SHA=$(git rev-parse "$tag^{commit}")" >> "$GITHUB_ENV"
+      - name: Record this release in the AppStream metainfo
+        # The metainfo used to be pinned at 0.1.0 forever (issue #53).
+        run: |
+          f=$(ls flatpak/*.metainfo.xml | head -1)
+          if ! grep -q "release version=\"${RELEASE_TAG}\"" "$f"; then
+            sed -i "s|<releases>|<releases>\n    <release version=\"${RELEASE_TAG}\" date=\"$(date -u +%F)\"/>|" "$f"
+          fi
+          grep -n '<release ' "$f" | head -3
       - name: Build flatpak (unsigned; vm-edge signs on publish)
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -117,12 +150,16 @@ jobs:
           flatpak build-bundle export-repo \
             "$GITHUB_WORKSPACE/dist/release/nlink-lab-topoviewer-${RELEASE_TAG}.flatpak" com.github.p13marc.NlinkLab
       - name: Publish export branch for vm-edge
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd /srv/cache/flatpak/nlink-lab/work/src/export-repo
           git init -q -b flatpak-export
           git add -A
           git -c user.name=ci -c user.email=ci@marcpardo.eu commit -q -m "flatpak export ${RELEASE_TAG}"
-          git push --force "http://forgejo:${{ secrets.GITHUB_TOKEN }}@10.10.0.30:3000/${GITHUB_REPOSITORY}.git" HEAD:flatpak-export
+          # token via a credential helper, never in the URL (issue #53)
+          git -c credential.helper='!f() { echo "username=forgejo"; echo "password=${TOKEN}"; }; f' \
+            push --force "${FORGEJO_API%/api/v1}/${GITHUB_REPOSITORY}.git" HEAD:flatpak-export
       - name: Attach bundle to the release
         # forgejo-release@v2 tries to create the release and 409s when it
         # already exists (the release job created it) -> attach via the API.
@@ -131,7 +168,7 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          api="http://10.10.0.30:3000/api/v1/repos/${GITHUB_REPOSITORY}"
+          api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
           rid=$(curl -sf -H "Authorization: token $TOKEN" "$api/releases/tags/${RELEASE_TAG}" | jq -r .id)
           for f in "$GITHUB_WORKSPACE"/dist/release/*; do
             name=$(basename "$f")
@@ -155,7 +192,7 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          api="http://10.10.0.30:3000/api/v1/repos/${GITHUB_REPOSITORY}"
+          api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
           rid=$(curl -sf -H "Authorization: token $TOKEN" "$api/releases/tags/${RELEASE_TAG}" | jq -r .id)
           mkdir -p sums && cd sums
           curl -sf -H "Authorization: token $TOKEN" "$api/releases/$rid/assets" \

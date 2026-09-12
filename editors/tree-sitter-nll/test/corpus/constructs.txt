@@ -1,0 +1,179 @@
+================
+Network impair matrix and for loop
+================
+network sat {
+  members [sat0:rf, sat1:rf, sat2:rf,]
+  for i in 0..1 {
+    impair sat${i} -- sat${(i + 1) % 3} { delay 12ms jitter 2ms loss 0.1% rate-cap 10mbit }
+  }
+  impair sat0 -- sat2 { delay 5ms }
+}
+---
+
+(source_file
+  (network_definition
+    (identifier)
+    (list
+      (endpoint
+        (identifier)
+        (identifier))
+      (endpoint
+        (identifier)
+        (identifier))
+      (endpoint
+        (identifier)
+        (identifier)))
+    (for_loop
+      (identifier)
+      (for_range
+        (integer)
+        (integer))
+      (network_impair
+        (interpolation)
+        (interpolation)
+        (impairment_properties
+          (duration))
+        (impairment_properties
+          (duration))
+        (impairment_properties
+          (percent))
+        (rate)))
+    (network_impair
+      (identifier)
+      (identifier)
+      (impairment_properties
+        (duration)))))
+
+================
+Lab mgmt host-reachable
+================
+lab "t" { mgmt 172.20.0.0/24 host-reachable }
+---
+
+(source_file
+  (lab_declaration
+    (string)
+    (lab_property
+      (cidr))))
+
+================
+macvlan with inline props, wifi mode
+================
+node edge {
+  macvlan eth0 parent "enp3s0" mode bridge { 192.168.1.50/24 }
+  wifi wlan0 mode ap { ssid "labnet" channel 6 wpa2 "pw" 10.0.0.1/24 }
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (macvlan_block
+        (identifier)
+        (inline_property
+          (string))
+        (inline_property
+          (identifier))
+        (generic_block
+          (cidr)))
+      (wifi_block
+        (identifier)
+        (inline_property
+          (identifier))
+        (generic_block
+          (known_property
+            (string))
+          (known_property
+            (integer))
+          (known_property
+            (string))
+          (cidr))))))
+
+================
+For with interpolated bound, computed addresses, glob members
+================
+for i in 1..${count} {
+  link r${i}:right -- r${i % count + 1}:left { host(${lan}, 1)/24 -- host(${lan}, 2)/24 }
+}
+network black { members [hq-fw:fo, *-black:fo] }
+---
+
+(source_file
+  (for_loop
+    (identifier)
+    (for_range
+      (integer)
+      (interpolation))
+    (link_definition
+      (endpoint
+        (interpolation)
+        (identifier))
+      (endpoint
+        (interpolation)
+        (identifier))
+      (link_body
+        (address_pair
+          (function_cidr
+            (function_call
+              (identifier)
+              (interpolation)
+              (integer))
+            (integer))
+          (function_cidr
+            (function_call
+              (identifier)
+              (interpolation)
+              (integer))
+            (integer))))))
+  (network_definition
+    (identifier)
+    (list
+      (endpoint
+        (identifier)
+        (identifier))
+      (endpoint
+        (glob)
+        (identifier)))))
+
+================
+Firewall ct states, reject, trailing background, list for-expression
+================
+node fw {
+  firewall policy drop {
+    accept ct established,related
+    reject icmp 8
+  }
+  run "python3 -m http.server" background
+  wireguard wg0 { listen 51820 peers [for i in 1..3 : spoke${i}] }
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_rule
+          (match_expression
+            (ct_states
+              (identifier)
+              (identifier))))
+        (firewall_rule
+          (match_expression
+            (integer))))
+      (run_property
+        (string))
+      (wireguard_block
+        (identifier)
+        (generic_block
+          (known_property
+            (integer))
+          (known_property
+            (list
+              (list_for
+                (identifier)
+                (for_range
+                  (integer)
+                  (integer))
+                (interpolation)))))))))

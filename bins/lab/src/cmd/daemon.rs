@@ -5,6 +5,7 @@ use crate::ctx::{Ctx, require_root};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name (must be deployed).
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Metrics collection interval in seconds.

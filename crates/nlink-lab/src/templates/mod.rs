@@ -55,7 +55,7 @@ const TEMPLATES: &[Template] = &[
         name: "spine-leaf",
         description: "Datacenter fabric: 2 spines, 2 leaves, 2 servers",
         node_count: 6,
-        link_count: 8,
+        link_count: 6,
         features: &["profiles", "loopback", "multi-hop", "netem"],
         nll: include_str!("../../../../examples/spine-leaf.nll"),
     },
@@ -94,8 +94,8 @@ const TEMPLATES: &[Template] = &[
     Template {
         name: "wireguard",
         description: "Site-to-site WireGuard VPN tunnel",
-        node_count: 2,
-        link_count: 1,
+        node_count: 4,
+        link_count: 3,
         features: &["wireguard", "encryption", "tunnel"],
         nll: include_str!("../../../../examples/wireguard-vpn.nll"),
     },
@@ -161,8 +161,13 @@ fn extract_lab_name(nll: &str) -> String {
     for line in nll.lines() {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("lab ") {
-            let rest = rest.trim().trim_matches('"');
-            // Stop at first whitespace or brace (handles `lab "name" {`)
+            let rest = rest.trim();
+            // Quoted names may contain spaces: `lab "my lab" {`.
+            if let Some(q) = rest.strip_prefix('"')
+                && let Some(end) = q.find('"')
+            {
+                return q[..end].to_string();
+            }
             return rest.split_whitespace().next().unwrap_or(rest).to_string();
         }
     }
@@ -186,6 +191,35 @@ mod tests {
                 result.errors().collect::<Vec<_>>()
             );
         }
+    }
+
+    /// The advertised node/link counts must match what the template
+    /// actually parses to (issue #26: `spine-leaf` claimed 8 links).
+    #[test]
+    fn template_counts_match_the_topology() {
+        let mut wrong = Vec::new();
+        for t in list() {
+            let topo = crate::parser::nll::parse(t.nll)
+                .unwrap_or_else(|e| panic!("template {}: {e}", t.name));
+            if (t.node_count, t.link_count) != (topo.nodes.len(), topo.links.len()) {
+                wrong.push(format!(
+                    "'{}' advertises (nodes, links) = ({}, {}) but parses to ({}, {})",
+                    t.name,
+                    t.node_count,
+                    t.link_count,
+                    topo.nodes.len(),
+                    topo.links.len()
+                ));
+            }
+        }
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
+    #[test]
+    fn extract_lab_name_handles_spaces_and_braces() {
+        assert_eq!(extract_lab_name("lab \"my lab\" {\n"), "my lab");
+        assert_eq!(extract_lab_name("lab \"x\"\nnode a\n"), "x");
+        assert_eq!(extract_lab_name("# lab \"nope\"\nlab \"y\""), "y");
     }
 
     #[test]

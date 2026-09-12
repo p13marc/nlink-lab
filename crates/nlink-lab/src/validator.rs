@@ -87,6 +87,73 @@ pub fn rule_ids() -> &'static [&'static str] {
     RULE_IDS
 }
 
+/// The rules that emit at [`Severity::Warning`]; every other id in
+/// [`RULE_IDS`] is an error. Kept as a list (not derived from position)
+/// so `rule_severity` is explicit; `warning_rules_are_listed` checks it.
+const WARNING_RULE_IDS: &[&str] = &[
+    "mgmt-subnet-not-network-address",
+    "unique-ips",
+    "mtu-consistency",
+    "route-reachability",
+    "unreferenced-node",
+    "empty-exec-cmd",
+];
+
+/// Default severity of a rule, `None` for an unknown id.
+pub fn rule_severity(id: &str) -> Option<Severity> {
+    if WARNING_RULE_IDS.contains(&id) {
+        Some(Severity::Warning)
+    } else if RULE_IDS.contains(&id) {
+        Some(Severity::Error)
+    } else {
+        None
+    }
+}
+
+/// Per-rule severity overrides for [`Topology::validate_with`]:
+/// `deny` promotes a warning to an error, `allow` silences a warning
+/// (errors cannot be silenced — they describe topologies that cannot
+/// deploy). `strict` promotes every warning.
+#[derive(Debug, Clone, Default)]
+pub struct RuleOptions {
+    pub strict: bool,
+    pub deny: Vec<String>,
+    pub allow: Vec<String>,
+}
+
+impl RuleOptions {
+    /// Reject unknown rule ids up front so a typo in `--deny` is loud.
+    pub fn check_known(&self) -> std::result::Result<(), String> {
+        let unknown: Vec<&str> = self
+            .deny
+            .iter()
+            .chain(self.allow.iter())
+            .map(String::as_str)
+            .filter(|id| rule_severity(id).is_none())
+            .collect();
+        if unknown.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "unknown validation rule(s): {} (see `validate --list-rules`)",
+                unknown.join(", ")
+            ))
+        }
+    }
+
+    fn apply(&self, mut issue: ValidationIssue) -> Option<ValidationIssue> {
+        if issue.severity == Severity::Warning {
+            if self.allow.iter().any(|a| a == issue.rule) {
+                return None;
+            }
+            if self.strict || self.deny.iter().any(|d| d == issue.rule) {
+                issue.severity = Severity::Error;
+            }
+        }
+        Some(issue)
+    }
+}
+
 /// Result of topology validation.
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
@@ -133,7 +200,7 @@ impl ValidationResult {
 }
 
 /// A single validation issue.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
 pub struct ValidationIssue {
     /// Severity level.
     pub severity: Severity,
@@ -156,7 +223,7 @@ impl fmt::Display for ValidationIssue {
 }
 
 /// Issue severity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
 pub enum Severity {
     /// Blocks deployment.
     Error,
@@ -267,6 +334,18 @@ fn collect_interfaces(topology: &Topology) -> BTreeMap<String, BTreeMap<String, 
 
 impl Topology {
     /// Validate this topology. Returns a [`ValidationResult`] containing any issues found.
+    /// [`validate`](Self::validate) with per-rule severity overrides.
+    pub fn validate_with(&self, opts: &RuleOptions) -> ValidationResult {
+        let base = self.validate();
+        ValidationResult {
+            issues: base
+                .issues
+                .into_iter()
+                .filter_map(|i| opts.apply(i))
+                .collect(),
+        }
+    }
+
     pub fn validate(&self) -> ValidationResult {
         let mut issues = Vec::new();
         let interfaces = collect_interfaces(self);
@@ -2469,6 +2548,70 @@ link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
     }
 
     // ─── Rule registry ────────────────────────────────
+
+    /// Every rule that is ever emitted at `Severity::Warning` must be in
+    /// `WARNING_RULE_IDS`, and nothing else may be.
+    #[test]
+    fn warning_rules_are_listed() {
+        let src = include_str!("validator.rs");
+        // A warning emission is a struct literal whose severity field
+        // names the Warning variant, with the rule id field nearby.
+        let mut warned = std::collections::BTreeSet::new();
+        for (i, _) in src.match_indices("severity: Severity::Warning") {
+            let tail = &src[i..src.len().min(i + 400)];
+            if let Some(j) = tail.find("rule: \"") {
+                let rest = &tail[j + 7..];
+                let id: String = rest.chars().take_while(|c| *c != '"').collect();
+                warned.insert(id);
+            }
+        }
+        let listed: std::collections::BTreeSet<String> =
+            WARNING_RULE_IDS.iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            warned, listed,
+            "WARNING_RULE_IDS drifted from the emitted warnings"
+        );
+        for id in RULE_IDS {
+            assert!(rule_severity(id).is_some());
+        }
+        assert_eq!(rule_severity("no-such-rule"), None);
+    }
+
+    #[test]
+    fn rule_options_promote_and_silence_warnings() {
+        let t = crate::parser::parse("lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\nnode lonely\n").unwrap();
+        let base = t.validate();
+        assert!(base.warnings().any(|w| w.rule == "unreferenced-node"));
+        assert!(!base.has_errors());
+        let strict = t.validate_with(&RuleOptions {
+            strict: true,
+            ..Default::default()
+        });
+        assert!(strict.has_errors());
+        let denied = t.validate_with(&RuleOptions {
+            deny: vec!["unreferenced-node".into()],
+            ..Default::default()
+        });
+        assert!(denied.errors().any(|e| e.rule == "unreferenced-node"));
+        let allowed = t.validate_with(&RuleOptions {
+            allow: vec!["unreferenced-node".into()],
+            ..Default::default()
+        });
+        assert!(
+            !allowed
+                .issues()
+                .iter()
+                .any(|i| i.rule == "unreferenced-node")
+        );
+        assert!(
+            RuleOptions {
+                deny: vec!["bogus".into()],
+                ..Default::default()
+            }
+            .check_known()
+            .is_err()
+        );
+    }
 
     #[test]
     fn rule_ids_are_stable() {

@@ -5,9 +5,11 @@ use crate::ctx::{Ctx, require_root};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Node name.
+    #[arg(add = crate::ctx::node_completer())]
     pub node: String,
 
     /// Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost).

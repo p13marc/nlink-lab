@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Array_of_RuleInfo",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/RuleInfo"
+  },
+  "$defs": {
+    "RuleInfo": {
+      "title": "nlink-lab validate --list-rules --json (array element)",
+      "description": "One entry of `validate --list-rules --json`.",
+      "type": "object",
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        }
+      },
+      "required": [
+        "rule",
+        "severity"
+      ]
+    },
+    "Severity": {
+      "description": "Issue severity level.",
+      "oneOf": [
+        {
+          "description": "Blocks deployment.",
+          "type": "string",
+          "const": "Error"
+        },
+        {
+          "description": "Non-blocking, informational.",
+          "type": "string",
+          "const": "Warning"
+        }
+      ]
+    }
+  }
+}

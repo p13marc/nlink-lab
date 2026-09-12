@@ -6,6 +6,7 @@ use crate::util::collect_impair_show;
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Endpoint (e.g., "router:eth0"). Not required with --show.

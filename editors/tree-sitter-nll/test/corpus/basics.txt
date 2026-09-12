@@ -3,6 +3,7 @@ Lab declaration
 ================
 lab "simple"
 ---
+
 (source_file
   (lab_declaration
     (string)))
@@ -16,10 +17,12 @@ lab "test" {
   routing auto
 }
 ---
+
 (source_file
   (lab_declaration
     (string)
-    (lab_property (string))
+    (lab_property
+      (string))
     (lab_property)
     (lab_property)))
 
@@ -28,6 +31,7 @@ Profile
 ================
 profile router { forward ipv4 }
 ---
+
 (source_file
   (profile_definition
     (identifier)
@@ -38,6 +42,7 @@ Simple node
 ================
 node router
 ---
+
 (source_file
   (node_definition
     (identifier)))
@@ -47,6 +52,7 @@ Node with profile
 ================
 node router : router
 ---
+
 (source_file
   (node_definition
     (identifier)
@@ -60,6 +66,7 @@ node host {
   route default via 10.0.0.1
 }
 ---
+
 (source_file
   (node_definition
     (identifier)
@@ -76,12 +83,19 @@ link a:eth0 -- b:eth0 {
   10.0.0.1/24 -- 10.0.0.2/24
 }
 ---
+
 (source_file
   (link_definition
-    (endpoint (identifier) (identifier))
-    (endpoint (identifier) (identifier))
+    (endpoint
+      (identifier)
+      (identifier))
+    (endpoint
+      (identifier)
+      (identifier))
     (link_body
-      (address_pair (cidr) (cidr)))))
+      (address_pair
+        (cidr)
+        (cidr)))))
 
 ================
 Link with impairment
@@ -91,12 +105,19 @@ link a:eth0 -- b:eth0 {
   delay 10ms jitter 2ms
 }
 ---
+
 (source_file
   (link_definition
-    (endpoint (identifier) (identifier))
-    (endpoint (identifier) (identifier))
+    (endpoint
+      (identifier)
+      (identifier))
+    (endpoint
+      (identifier)
+      (identifier))
     (link_body
-      (address_pair (cidr) (cidr))
+      (address_pair
+        (cidr)
+        (cidr))
       (impairment_properties
         (duration))
       (impairment_properties
@@ -108,9 +129,11 @@ Line comment
 # this is a comment
 lab "t"
 ---
+
 (source_file
   (line_comment)
-  (lab_declaration (string)))
+  (lab_declaration
+    (string)))
 
 ================
 Block comment
@@ -118,6 +141,8 @@ Block comment
 /* block comment */
 lab "t"
 ---
+
 (source_file
   (block_comment)
-  (lab_declaration (string)))
+  (lab_declaration
+    (string)))

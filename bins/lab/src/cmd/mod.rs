@@ -12,6 +12,7 @@ pub mod destroy;
 pub mod diagnose;
 pub mod diff;
 pub mod docs_gen;
+pub mod doctor;
 pub mod exec;
 pub mod export;
 pub mod graph;
@@ -21,6 +22,7 @@ pub mod init;
 pub mod inspect;
 pub mod ip;
 pub mod kill;
+pub mod lint;
 pub mod logs;
 pub mod metrics;
 pub mod proc_stat;
@@ -35,6 +37,7 @@ pub mod stats;
 pub mod status;
 pub mod test;
 pub mod validate;
+pub mod verify;
 pub mod wait;
 pub mod wait_for;
 pub mod watch;
@@ -52,6 +55,9 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Exec(args) => exec::run(ctx, args),
         Commands::Spawn(args) => spawn::run(ctx, args).await,
         Commands::Validate(args) => validate::run(ctx, args),
+        Commands::Verify(args) => verify::run(ctx, args).await,
+        Commands::Lint(args) => lint::run(ctx, args),
+        Commands::Doctor(args) => doctor::run(ctx, args).await,
         Commands::Test(args) => test::run(ctx, args).await,
         Commands::Impair(args) => impair::run(ctx, args).await,
         Commands::Scenario(args) => scenario::run(ctx, args).await,

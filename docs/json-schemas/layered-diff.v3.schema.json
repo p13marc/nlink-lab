@@ -1,182 +1,51 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://nlink-lab.example/schemas/layered-diff.v3.schema.json",
-  "title": "nlink-lab apply --check / --dry-run --json output (v3)",
-  "description": "Typed v3 envelope emitted by `nlink-lab apply --check --json` and `apply --dry-run --json` since nlink-lab 0.7.0 (Plan 160). The v1 `diff` / `layered_summary` / `layered_summary_deprecated` fields and the v2 `topology` field are gone; the typed per-namespace diffs live at `.network.<node>` (upstream `nlink::ConfigDiff`) and `.nftables.<node>` (upstream `nlink::NftablesDiff`). Branch on `schema_version == 3`.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nlink-lab apply --dry-run / --check / verify --json (v3)",
+  "description": "The `apply --dry-run --json` / `apply --check --json` / `verify --json`\nenvelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).",
   "type": "object",
+  "properties": {
+    "change_count": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "lab": {
+      "type": "string"
+    },
+    "network": {
+      "description": "Typed per-namespace `NetworkConfig` diff. Empty map elided.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "nftables": {
+      "description": "Typed per-namespace `NftablesDiff`. Empty map elided.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "no_op": {
+      "type": "boolean"
+    },
+    "removals": {
+      "description": "Removal ops from the plan diff (deleted nodes, links, VRF-table\nroutes, …), one description per op. Elided when empty.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema_version": {
+      "description": "Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`\nfields (Plan 160 / 0.7.0) — use `network` / `nftables` / `removals`.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
   "required": [
     "schema_version",
     "lab",
     "no_op",
-    "change_count"
-  ],
-  "additionalProperties": false,
-  "properties": {
-    "schema_version": {
-      "const": 3,
-      "description": "Schema version marker."
-    },
-    "lab": {
-      "type": "string",
-      "description": "Lab name (matches `desired.lab.name` in the parsed topology)."
-    },
-    "no_op": {
-      "type": "boolean",
-      "description": "True when `LayeredDiff::is_empty()` is true \u2014 every subdiff reports zero changes across topology + per-namespace network + per-namespace nftables. `apply --check` exits 0 iff `no_op == true`."
-    },
-    "change_count": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Aggregate `LayeredDiff::change_count()` across all subdiff layers."
-    },
-    "network": {
-      "type": "object",
-      "description": "Per-namespace upstream `ConfigDiff` (links + addresses + routes + qdiscs) keyed by node name. Empty map elided. Sub-shape owned by upstream nlink; consumers should use defensive defaults like `.links_to_add // []` to survive future field additions.",
-      "additionalProperties": {
-        "$ref": "#/definitions/ConfigDiff"
-      }
-    },
-    "removals": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Removal ops the plan diff would execute (deleted nodes, links, VRF-table routes, impairments, …), one human-readable description per op. Elided when empty. Counted in `change_count` and in `no_op`. Additive since 0.9."
-    },
-    "nftables": {
-      "type": "object",
-      "description": "Per-namespace upstream `NftablesDiff` (tables + chains + rules + sets + elements) keyed by node name. Empty map elided. Same forward-compat caveat as `network`.",
-      "additionalProperties": {
-        "$ref": "#/definitions/NftablesDiff"
-      }
-    }
-  },
-  "definitions": {
-    "ConfigDiff": {
-      "type": "object",
-      "description": "Upstream `nlink::netlink::config::ConfigDiff` serialized via the `nlink/serde` feature. Sub-fields use kebab-case per upstream serde rename. See https://docs.rs/nlink/0.19/nlink/netlink/config/struct.ConfigDiff.html for the authoritative shape.",
-      "additionalProperties": true,
-      "properties": {
-        "links-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "links-to-modify": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "links-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "addresses-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "addresses-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "routes-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "routes-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "qdiscs-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "qdiscs-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    "NftablesDiff": {
-      "type": "object",
-      "description": "Upstream `nlink::netlink::nftables::config::NftablesDiff` serialized via the `nlink/serde` feature. Same forward-compat caveat as `ConfigDiff` above.",
-      "additionalProperties": true,
-      "properties": {
-        "tables-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "tables-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "chains-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "chains-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "rules-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "rules-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "sets-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "sets-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "elements-to-add": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "elements-to-remove": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    }
-  }
+    "change_count",
+    "network",
+    "nftables",
+    "removals"
+  ]
 }

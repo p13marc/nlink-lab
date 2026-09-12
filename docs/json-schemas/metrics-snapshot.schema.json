@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MetricsSnapshot",
+  "description": "A point-in-time snapshot of all node metrics.",
+  "type": "object",
+  "properties": {
+    "lab_name": {
+      "type": "string",
+      "default": ""
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/NodeMetrics"
+      },
+      "default": {}
+    },
+    "timestamp": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 0,
+      "minimum": 0
+    },
+    "wire_version": {
+      "description": "Wire-format version of the sender (`0` = pre-versioning backend).",
+      "type": "integer",
+      "format": "uint32",
+      "default": 0,
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "InterfaceMetrics": {
+      "description": "Metrics for a single interface.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "rx_bps": {
+          "description": "Receive rate in **bits** per second — the unit [`format_rate`]\nexpects. nlink's `LinkRates` counts bytes, so these are populated\nfrom its `rx_bps()`/`tx_bps()` accessors, which convert.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_dropped": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_errors": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_pps": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "state": {
+          "type": "string",
+          "default": ""
+        },
+        "tc_drops": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tc_qlen": {
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_bps": {
+          "description": "Transmit rate in **bits** per second. See [`Self::rx_bps`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_dropped": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_errors": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_pps": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        }
+      }
+    },
+    "NodeMetrics": {
+      "description": "Metrics for a single node.",
+      "type": "object",
+      "properties": {
+        "interfaces": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InterfaceMetrics"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sockets": {
+          "description": "Top TCP flows by goodput in this node's namespace, attributed to\nthe owning process where resolvable (Plan 160 / nlink 0.24\nsockdiag). Empty for container nodes and when no flow moved data\nbetween the last two collector ticks. `#[serde(default)]` keeps\nthe snapshot wire-compatible with backends that predate the field.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SocketRateMetric"
+          }
+        }
+      }
+    },
+    "SocketRateMetric": {
+      "description": "One TCP flow's goodput over the last collector interval, attributed\nto a process. Plain data (no nlink dependency) — the backend\ncollector fills it from nlink's `SocketRateTracker` +\n`SocketOwnerMap`.",
+      "type": "object",
+      "properties": {
+        "comm": {
+          "description": "Owning process command name, or `\"-\"` when unresolved (a\nshort-lived or other-user process the `/proc` walk couldn't see).",
+          "type": "string",
+          "default": ""
+        },
+        "local": {
+          "description": "Local `ip:port`.",
+          "type": "string",
+          "default": ""
+        },
+        "pid": {
+          "description": "Owning PID, when resolved.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "remote": {
+          "description": "Remote `ip:port`.",
+          "type": "string",
+          "default": ""
+        },
+        "retrans_ratio": {
+          "description": "Retransmission overhead: Δbytes_retrans / Δbytes_sent.",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "rx_bytes_per_sec": {
+          "description": "Receive goodput (application bytes/second).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_bytes_per_sec": {
+          "description": "Transmit goodput (application bytes/second the peer acked).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

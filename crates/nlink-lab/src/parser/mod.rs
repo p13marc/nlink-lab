@@ -38,22 +38,8 @@ pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<Topology> {
     let filename = path.display().to_string();
 
     // Use import-aware parsing when loading from a file
-    match nll::parse_file_with_imports(&contents, path) {
-        Ok(topo) => Ok(topo),
-        Err(crate::Error::NllParse(msg)) => {
-            let span = nll::extract_span(&msg, &contents);
-            Err(crate::Error::NllDiagnostic(Box::new(
-                crate::error::NllDiagnostic {
-                    message: msg.split(" [at byte ").next().unwrap_or(&msg).to_string(),
-                    src: miette::NamedSource::new(&filename, contents),
-                    span: span.into(),
-                    label: "here".to_string(),
-                    help: None,
-                },
-            )))
-        }
-        Err(e) => Err(e),
-    }
+    nll::parse_file_with_imports(&contents, path)
+        .map_err(|e| nll::attach_source(e, &contents, &filename))
 }
 
 /// Parse a topology file with import resolution and CLI parameters.
@@ -68,20 +54,6 @@ pub fn parse_file_with_params<P: AsRef<Path>>(
     let contents = std::fs::read_to_string(path)?;
     let filename = path.display().to_string();
 
-    match nll::parse_file_with_params(&contents, path, params) {
-        Ok(topo) => Ok(topo),
-        Err(crate::Error::NllParse(msg)) => {
-            let span = nll::extract_span(&msg, &contents);
-            Err(crate::Error::NllDiagnostic(Box::new(
-                crate::error::NllDiagnostic {
-                    message: msg.split(" [at byte ").next().unwrap_or(&msg).to_string(),
-                    src: miette::NamedSource::new(&filename, contents),
-                    span: span.into(),
-                    label: "here".to_string(),
-                    help: None,
-                },
-            )))
-        }
-        Err(e) => Err(e),
-    }
+    nll::parse_file_with_params(&contents, path, params)
+        .map_err(|e| nll::attach_source(e, &contents, &filename))
 }

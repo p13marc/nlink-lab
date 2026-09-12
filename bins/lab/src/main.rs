@@ -49,6 +49,10 @@ pub(crate) struct Cli {
 }
 
 fn main() -> ExitCode {
+    // Dynamic completion callback (`COMPLETE=bash nlink-lab`): answers the
+    // shell and exits before normal argument parsing.
+    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
+
     let cli = Cli::parse();
 
     // Set tracing level based on --verbose flag (default: warn, verbose: info)

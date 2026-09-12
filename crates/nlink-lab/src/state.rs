@@ -127,7 +127,7 @@ pub struct ContainerState {
 }
 
 /// Summary info about a running lab (for status listing).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
 pub struct LabInfo {
     /// Lab name.
     pub name: String,

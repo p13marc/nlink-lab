@@ -49,6 +49,12 @@ pub enum Error {
     #[error("NLL parse error: {0}")]
     NllParse(String),
 
+    /// NLL parse error with the byte offset it was raised at. Turned into
+    /// an [`NllDiagnostic`] (with the source attached) by the parse entry
+    /// points; the offset is data, not text to re-parse.
+    #[error("NLL parse error: {message}")]
+    NllParseAt { message: String, offset: usize },
+
     /// NLL parse error with source context for rich diagnostics.
     #[error("{}", .0)]
     NllDiagnostic(Box<NllDiagnostic>),

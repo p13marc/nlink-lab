@@ -275,6 +275,16 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     lab_state.process_logs = running.process_logs_map().clone();
     lab_state.saved_impairments = running.saved_impairments_map().clone();
     state::save(&lab_state, desired)?;
+
+    // ── validate { … } assertions, exactly as after deploy (#86) ──
+    // Never fails the apply; results ride on `running` for `--strict`.
+    if desired.assertions.is_empty() {
+        running.set_assertion_results(Vec::new());
+    } else {
+        tracing::info!("running validate assertions");
+        let results = run_assertions(running, desired);
+        running.set_assertion_results(results);
+    }
     Ok(report)
 }
 

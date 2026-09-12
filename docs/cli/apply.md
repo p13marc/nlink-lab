@@ -173,6 +173,12 @@ Options:
       --check
           Drift check — exit non-zero if the live lab differs from the NLL. Useful as a CI gate. Implies --dry-run
 
+      --strict
+          Fail (exit 2) when any `validate { … }` assertion fails after the changes are applied. The lab stays as applied for inspection
+
+      --skip-validate
+          Do not run the topology's `validate { … }` assertions after applying
+
   -h, --help
           Print help (see a summary with '-h')
 ```

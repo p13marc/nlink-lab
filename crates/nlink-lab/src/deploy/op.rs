@@ -363,6 +363,11 @@ pub enum Op {
     DeleteHostLink {
         name: String,
     },
+    /// A bridge network's bridge in the mgmt namespace (#85).
+    DeleteBridge {
+        ns: String,
+        name: String,
+    },
     DelRoute {
         node: String,
         route: RouteSpec,
@@ -383,6 +388,12 @@ pub enum Op {
         node: String,
         index: usize,
     },
+    /// Stop a node's hostapd / wpa_supplicant (or leave a mesh) (#85).
+    KillWifiDaemon {
+        node: String,
+        name: String,
+        mode: crate::types::WifiMode,
+    },
     RemoveDns {
         lab: String,
     },
@@ -401,9 +412,10 @@ impl Op {
             CreateMgmtBridge { .. } | CreateMgmtVeth { .. } | DeleteHostLink { .. } => {
                 Stage::MgmtBridge
             }
-            CreateMgmtNamespace { .. } | CreateBridge { .. } | CreateNetworkVeth { .. } => {
-                Stage::Networks
-            }
+            CreateMgmtNamespace { .. }
+            | CreateBridge { .. }
+            | DeleteBridge { .. }
+            | CreateNetworkVeth { .. } => Stage::Networks,
             CreateVeth { .. } | DeleteLink { .. } => Stage::Links,
             CreateMacvlan { .. } | CreateIpvlan { .. } => Stage::HostLinks,
             LinksUp { .. } => Stage::LinksUp,
@@ -421,7 +433,7 @@ impl Op {
             | Healthcheck { .. }
             | KillNodeProcesses { .. }
             | KillExec { .. } => Stage::Processes,
-            WifiDaemon { .. } => Stage::Wifi,
+            WifiDaemon { .. } | KillWifiDaemon { .. } => Stage::Wifi,
         }
     }
 
@@ -439,7 +451,9 @@ impl Op {
             CreateMgmtVeth { peer, .. } => format!("hostlink:{peer}"),
             DeleteHostLink { name } => format!("hostlink:{name}"),
             CreateMgmtNamespace { ns } => format!("ns:{ns}"),
-            CreateBridge { ns, name, .. } => format!("bridge:{ns}:{name}"),
+            CreateBridge { ns, name, .. } | DeleteBridge { ns, name } => {
+                format!("bridge:{ns}:{name}")
+            }
             CreateNetworkVeth { node, iface, .. } | DeleteLink { node, iface } => {
                 format!("link:{node}:{iface}")
             }
@@ -466,6 +480,7 @@ impl Op {
             Exec { node, index, .. } | KillExec { node, index } => format!("exec:{node}:{index}"),
             Healthcheck { node, .. } => format!("healthcheck:{node}"),
             WifiDaemon { node, wifi } => format!("wifi:{node}:{}", wifi.name),
+            KillWifiDaemon { node, name, .. } => format!("wifi:{node}:{name}"),
             KillNodeProcesses { node } => format!("procs:{node}"),
         }
     }
@@ -491,6 +506,15 @@ impl Op {
                 id: name.clone(),
             },
             CreateMgmtBridge { name, .. } => DeleteHostLink { name: name.clone() },
+            CreateBridge { ns, name, .. } => DeleteBridge {
+                ns: ns.clone(),
+                name: name.clone(),
+            },
+            WifiDaemon { node, wifi } => KillWifiDaemon {
+                node: node.clone(),
+                name: wifi.name.clone(),
+                mode: wifi.mode.clone(),
+            },
             CreateMgmtVeth { peer, .. } => DeleteHostLink { name: peer.clone() },
             CreateNetworkVeth { node, iface, .. } => DeleteLink {
                 node: node.clone(),
@@ -540,11 +564,13 @@ impl Op {
                 | RemoveContainer { .. }
                 | DeleteLink { .. }
                 | DeleteHostLink { .. }
+                | DeleteBridge { .. }
                 | DelRoute { .. }
                 | ClearQdisc { .. }
                 | RemoveRateLimit { .. }
                 | KillNodeProcesses { .. }
                 | KillExec { .. }
+                | KillWifiDaemon { .. }
                 | RemoveDns { .. }
         )
     }
@@ -607,11 +633,13 @@ impl Op {
             RemoveContainer { node, .. } => format!("remove container of {node}"),
             DeleteLink { node, iface } => format!("delete link {node}:{iface}"),
             DeleteHostLink { name } => format!("delete host link {name}"),
+            DeleteBridge { ns, name } => format!("delete bridge {name} in {ns}"),
             DelRoute { node, route } => format!("{node}: delete route {route}"),
             ClearQdisc { node, iface } => format!("clear qdisc on {node}:{iface}"),
             RemoveRateLimit { node, iface } => format!("remove rate limit on {node}:{iface}"),
             KillNodeProcesses { node } => format!("stop background processes of {node}"),
             KillExec { node, index } => format!("{node}: stop exec[{index}]"),
+            KillWifiDaemon { node, name, mode } => format!("{node}: stop wifi {name} ({mode:?})"),
             RemoveDns { lab } => format!("remove /etc/hosts entries for {lab}"),
         }
     }
@@ -662,13 +690,23 @@ impl Plan {
                 _ => None,
             })
             .collect();
+        // …nor a bridge whose namespace is going away.
+        let dying_ns: std::collections::BTreeSet<String> = removals
+            .iter()
+            .filter_map(|o| match o {
+                Op::DeleteNamespace { ns, .. } => Some(ns.clone()),
+                _ => None,
+            })
+            .collect();
         removals.retain(|o| match o {
+            Op::DeleteBridge { ns, .. } => !dying_ns.contains(ns.as_str()),
             Op::DeleteLink { node, .. }
             | Op::DelRoute { node, .. }
             | Op::ClearQdisc { node, .. }
             | Op::RemoveRateLimit { node, .. }
             | Op::KillNodeProcesses { node }
-            | Op::KillExec { node, .. } => !dying.contains(node.as_str()),
+            | Op::KillExec { node, .. }
+            | Op::KillWifiDaemon { node, .. } => !dying.contains(node.as_str()),
             _ => true,
         });
         removals.sort_by_key(|o| std::cmp::Reverse(o.stage()));
@@ -706,8 +744,19 @@ impl Plan {
                             changes.push(op.clone());
                         }
                     }
-                    // one-shot process ops only run for new nodes
-                    Op::StartupDelay { .. } | Op::WifiDaemon { .. } => {}
+                    // one-shot: a pre-start delay only makes sense for a new node
+                    Op::StartupDelay { .. } => {}
+                    // TODO(#85): a changed bridge (mtu / vlan filtering) would
+                    // need its member veths re-attached after the re-create;
+                    // until then bridge edits are not applied.
+                    Op::CreateBridge { .. } => {
+                        if format!("{existing:?}") != format!("{op:?}") {
+                            tracing::warn!(
+                                "apply: bridge {} changed but bridge edits are not applied yet",
+                                op.key()
+                            );
+                        }
+                    }
                     // everything else: re-create when the payload changed
                     _ => {
                         if format!("{existing:?}") != format!("{op:?}") {

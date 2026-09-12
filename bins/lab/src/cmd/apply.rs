@@ -23,6 +23,16 @@ pub struct Args {
     /// the NLL. Useful as a CI gate. Implies --dry-run.
     #[arg(long)]
     pub check: bool,
+
+    /// Fail (exit 2) when any `validate { … }` assertion fails after
+    /// the changes are applied. The lab stays as applied for inspection.
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Do not run the topology's `validate { … }` assertions after
+    /// applying.
+    #[arg(long)]
+    pub skip_validate: bool,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -31,11 +41,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         params,
         dry_run,
         check,
+        strict,
+        skip_validate,
     } = args;
     // --check implies --dry-run.
     let dry_run = dry_run || check;
 
-    let desired = parse_topology(&topology, &params)?;
+    let mut desired = parse_topology(&topology, &params)?;
+    if skip_validate {
+        desired.assertions.clear();
+    }
     let result = desired.validate();
     for w in result.warnings() {
         eprintln!("  {} {w}", yellow("WARN"));
@@ -199,12 +214,56 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let report = nlink_lab::apply(&mut running, &desired).await?;
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     let elapsed = start.elapsed();
+    let assertions_failed = running.assertions_failed();
 
-    if !ctx.quiet {
+    if ctx.json {
+        let mut out = serde_json::json!({
+            "name": lab_name,
+            "ops": report.ops,
+            "removed": report.removed,
+            "applied": report.applied,
+            "apply_time_ms": elapsed.as_millis() as u64,
+        });
+        if !running.assertion_results().is_empty() {
+            out["assertions"] = serde_json::to_value(running.assertion_results())?;
+            out["assertions_failed"] = serde_json::Value::Bool(assertions_failed);
+        }
+        println!("{out}");
+    } else if !ctx.quiet {
         println!(
             "\nApplied {} change(s) in {:.0?}",
             diff.change_count(),
             elapsed
+        );
+        for a in running.assertion_results() {
+            if a.passed {
+                println!("  PASS {}", a.description);
+            } else {
+                println!(
+                    "  FAIL {}: {}",
+                    a.description,
+                    a.detail.as_deref().unwrap_or_default()
+                );
+            }
+        }
+    }
+
+    if assertions_failed {
+        if strict {
+            return Err(nlink_lab::Error::Validation(format!(
+                "{} of {} assertion(s) failed (lab {:?} left as applied for inspection)",
+                running
+                    .assertion_results()
+                    .iter()
+                    .filter(|a| !a.passed)
+                    .count(),
+                running.assertion_results().len(),
+                lab_name
+            )));
+        }
+        eprintln!(
+            "  {} assertions failed; pass --strict to make this fatal",
+            yellow("WARN")
         );
     }
     Ok(())

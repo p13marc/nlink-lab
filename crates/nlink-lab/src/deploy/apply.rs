@@ -320,6 +320,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     "failed to create bridge '{name}' for network '{network}': {e}"
                 ))
             })?;
+            journal.record(Undo::DeleteLink {
+                ns: NsRef::Named { name: ns.clone() },
+                iface: name.clone(),
+            });
             conn.set_link_up(name.as_str()).await.map_err(|e| {
                 Error::deploy_failed(format!("failed to bring up bridge '{name}': {e}"))
             })?;
@@ -625,11 +629,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     journal.record(Undo::CleanupWifiConfigs {
                         lab: env.lab.clone(),
                     });
+                    let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("hostapd");
-                    cmd.args(["-B", &conf]);
-                    handle.spawn(cmd).map_err(|e| {
-                        Error::deploy_failed(format!("failed to start hostapd on '{node}': {e}"))
-                    })?;
+                    cmd.args(["-B", "-P", &pidfile, &conf]);
+                    start_wifi_daemon(&handle, cmd, "hostapd", node, &pidfile, env, journal)?;
                 }
                 crate::types::WifiMode::Station => {
                     let conf = crate::wifi::write_config(
@@ -641,13 +644,18 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     journal.record(Undo::CleanupWifiConfigs {
                         lab: env.lab.clone(),
                     });
+                    let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("wpa_supplicant");
-                    cmd.args(["-B", "-i", &wifi.name, "-c", &conf]);
-                    handle.spawn(cmd).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to start wpa_supplicant on '{node}': {e}"
-                        ))
-                    })?;
+                    cmd.args(["-B", "-P", &pidfile, "-i", &wifi.name, "-c", &conf]);
+                    start_wifi_daemon(
+                        &handle,
+                        cmd,
+                        "wpa_supplicant",
+                        node,
+                        &pidfile,
+                        env,
+                        journal,
+                    )?;
                 }
                 crate::types::WifiMode::Mesh => {
                     if let Some(mesh_id) = &wifi.mesh_id {
@@ -678,6 +686,51 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
 
         // ── removals (apply diffs) ──
+        Op::DeleteBridge { ns, name } => match namespace::connection_for(ns) {
+            Ok(conn) => {
+                let conn: Connection<Route> = conn;
+                if let Err(e) = conn.del_link_if_exists(name.as_str()).await {
+                    tracing::warn!("failed to delete bridge '{name}' in '{ns}': {e}");
+                }
+            }
+            Err(e) => tracing::warn!("delete bridge '{name}': no connection to '{ns}': {e}"),
+        },
+        Op::KillWifiDaemon { node, name, mode } => {
+            let pidfile = wifi_pidfile(&env.lab, node, name);
+            match mode {
+                crate::types::WifiMode::Mesh => {
+                    if let Ok(handle) = env.handle(node) {
+                        let mut cmd = std::process::Command::new("iw");
+                        cmd.args(["dev", name, "mesh", "leave"]);
+                        if let Err(e) = handle.spawn_output(cmd) {
+                            tracing::warn!("mesh leave on '{node}:{name}': {e}");
+                        }
+                    }
+                }
+                _ => {
+                    let pid = std::fs::read_to_string(&pidfile)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u32>().ok());
+                    match pid {
+                        Some(pid) => {
+                            let outcome = crate::running::kill_tracked(
+                                pid,
+                                env.starttimes.get(&pid).copied(),
+                            );
+                            tracing::info!(
+                                "stop wifi daemon of '{node}:{name}' (pid {pid}): {outcome:?}"
+                            );
+                            env.starttimes.remove(&pid);
+                            env.pids.retain(|(_, p)| *p != pid);
+                        }
+                        None => tracing::warn!(
+                            "wifi daemon of '{node}:{name}': no pidfile at {pidfile}; left running"
+                        ),
+                    }
+                    let _ = std::fs::remove_file(&pidfile);
+                }
+            }
+        }
         Op::DeleteNamespace { node, ns } => {
             crate::dns::remove_netns_etc(ns);
             if namespace::exists(ns)
@@ -966,4 +1019,65 @@ fn route_v6(spec: &RouteSpec, dst: std::net::Ipv6Addr) -> nlink::netlink::route:
         r = r.metric(m);
     }
     r
+}
+
+fn wifi_pidfile(lab: &str, node: &str, iface: &str) -> String {
+    crate::wifi::config_dir(lab)
+        .join(format!("{node}-{iface}.pid"))
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Run a daemonising (`-B`) wifi daemon to completion of its foreground
+/// parent, then track the daemon through the pidfile it wrote (#85): the
+/// pid joins `env.pids` with its start time and an `Undo::KillProcess`,
+/// so `destroy`, node removal and `KillWifiDaemon` can all stop it.
+fn start_wifi_daemon(
+    handle: &NsRef,
+    cmd: std::process::Command,
+    what: &str,
+    node: &str,
+    pidfile: &str,
+    env: &mut ApplyEnv,
+    journal: &mut Journal,
+) -> Result<()> {
+    let _ = std::fs::remove_file(pidfile);
+    let output = handle
+        .spawn_output(cmd)
+        .map_err(|e| Error::deploy_failed(format!("failed to start {what} on '{node}': {e}")))?;
+    if !output.status.success() {
+        return Err(Error::deploy_failed(format!(
+            "{what} on '{node}' exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let pid = loop {
+        if let Some(pid) = std::fs::read_to_string(pidfile)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+        {
+            break Some(pid);
+        }
+        if std::time::Instant::now() >= deadline {
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    match pid {
+        Some(pid) => {
+            let started = crate::running::host_starttime(pid);
+            journal.record(Undo::KillProcess {
+                pid,
+                starttime: started,
+            });
+            env.pids.push((node.to_string(), pid));
+            if let Some(st) = started {
+                env.starttimes.insert(pid, st);
+            }
+        }
+        None => tracing::warn!("{what} on '{node}' wrote no pidfile at {pidfile}; not tracked"),
+    }
+    Ok(())
 }

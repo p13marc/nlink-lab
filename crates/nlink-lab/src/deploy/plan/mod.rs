@@ -586,6 +586,114 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
         assert!(!d.ops.iter().any(|o| matches!(o, Op::Exec { .. })));
     }
 
+    const NETS: &str = r#"lab "n"
+node a
+node b
+node c
+network lan { subnet 10.1.0.0/24  members [a:eth0, b:eth0] }
+network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
+"#;
+
+    #[test]
+    fn diff_removed_network_deletes_bridge_and_member_links() {
+        let cur = plan_of(NETS);
+        let des = plan_of(&NETS.replace(
+            "network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }\n",
+            "",
+        ));
+        let d = Plan::diff(&cur, &des);
+        let bridges: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::DeleteBridge { .. }))
+            .collect();
+        assert_eq!(bridges.len(), 1, "{:?}", d.ops);
+        assert!(matches!(bridges[0], Op::DeleteBridge { ns, .. } if ns == "n-mgmt"));
+        assert!(d.ops.iter().any(
+            |o| matches!(o, Op::DeleteLink { node, iface } if node == "b" && iface == "eth1")
+        ));
+        assert!(
+            !d.ops
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { .. })),
+            "{:?}",
+            d.ops
+        );
+        // member links (Links stage) are deleted before the bridge (Networks)
+        let link = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DeleteLink { node, .. } if node == "b"))
+            .unwrap();
+        let bridge = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DeleteBridge { .. }))
+            .unwrap();
+        assert!(link < bridge, "{:?}", d.ops);
+    }
+
+    #[test]
+    fn diff_removing_every_network_deletes_the_mgmt_namespace_not_bridges() {
+        let cur = plan_of(NETS);
+        let des = plan_of("lab \"n\"\nnode a\nnode b\nnode c\n");
+        let d = Plan::diff(&cur, &des);
+        assert!(
+            d.ops
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { ns, .. } if ns == "n-mgmt")),
+            "{:?}",
+            d.ops
+        );
+        assert!(
+            !d.ops.iter().any(|o| matches!(o, Op::DeleteBridge { .. })),
+            "bridges die with their namespace: {:?}",
+            d.ops
+        );
+    }
+
+    const WIFI: &str = r#"lab "w"
+node ap { wifi wlan0 mode ap { ssid "labnet" channel 6 wpa2 "testpassword" 10.0.0.1/24 } }
+node sta { wifi wlan0 mode station { ssid "labnet" wpa2 "testpassword" 10.0.0.2/24 } }
+"#;
+
+    #[test]
+    fn diff_changed_wifi_restarts_the_daemon_and_removed_wifi_stops_it() {
+        let cur = plan_of(WIFI);
+        let des = plan_of(&WIFI.replace("channel 6", "channel 11"));
+        let d = Plan::diff(&cur, &des);
+        let kill = d.ops.iter().position(
+            |o| matches!(o, Op::KillWifiDaemon { node, name, .. } if node == "ap" && name == "wlan0"),
+        );
+        let start = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::WifiDaemon { node, .. } if node == "ap"));
+        assert!(kill.is_some() && start.is_some(), "{:?}", d.ops);
+        assert!(kill < start);
+        assert!(
+            !d.ops
+                .iter()
+                .any(|o| matches!(o, Op::WifiDaemon { node, .. } if node == "sta")),
+            "unchanged station must not restart: {:?}",
+            d.ops
+        );
+
+        let des = plan_of(&WIFI.replace(
+            "node sta { wifi wlan0 mode station { ssid \"labnet\" wpa2 \"testpassword\" 10.0.0.2/24 } }\n",
+            "node sta\n",
+        ));
+        let d = Plan::diff(&cur, &des);
+        assert!(
+            d.ops.iter().any(|o| matches!(
+                o,
+                Op::KillWifiDaemon { node, mode: crate::types::WifiMode::Station, .. } if node == "sta"
+            )),
+            "{:?}",
+            d.ops
+        );
+    }
+
     #[test]
     fn diff_one_shot_process_ops_only_run_for_new_nodes() {
         let src = format!("{SIMPLE}\nnode s {{ run [\"sleep\", \"1\"] background }}\n");

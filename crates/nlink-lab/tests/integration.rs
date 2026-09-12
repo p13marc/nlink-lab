@@ -1758,6 +1758,110 @@ node s { run ["sleep", "1000"] background }
     lab.destroy().await.expect("destroy failed");
 }
 
+// Issue #85: removing a `network` block deletes its bridge from the mgmt
+// namespace (member veths were already deleted).
+#[tokio::test]
+async fn apply_removed_network_deletes_bridge() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_removed_network_deletes_bridge: requires root");
+        return;
+    }
+    let src = r#"lab "apply-net-rm"
+node a
+node b
+node c
+network lan { subnet 10.1.0.0/24  members [a:eth0, b:eth0] }
+network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let mgmt_links = || {
+        std::process::Command::new("ip")
+            .args(["-n", "apply-net-rm-mgmt", "-br", "link"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    };
+    let before = mgmt_links();
+    let bridges_before = before.lines().filter(|l| l.starts_with("nb")).count();
+    assert_eq!(bridges_before, 2, "two bridges expected: {before}");
+
+    let desired = nlink_lab::parser::parse(&src.replace(
+        "network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }\n",
+        "",
+    ))
+    .unwrap();
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        plan.ops
+            .iter()
+            .any(|o| matches!(o, nlink_lab::Op::DeleteBridge { .. })),
+        "{:?}",
+        plan.ops
+    );
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let after = mgmt_links();
+    assert_eq!(
+        after.lines().filter(|l| l.starts_with("nb")).count(),
+        1,
+        "dmz bridge must be gone: {after}"
+    );
+    let b = lab.exec("b", "ip", &["-br", "link"]).unwrap().stdout;
+    assert!(!b.contains("eth1"), "b:eth1 must be gone: {b}");
+    assert!(b.contains("eth0"), "b:eth0 must survive: {b}");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+// Issue #86: `apply` runs the topology's `validate { … }` assertions.
+#[tokio::test]
+async fn apply_runs_validate_assertions() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_runs_validate_assertions: requires root");
+        return;
+    }
+    let src = r#"lab "apply-assert"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert!(lab.assertion_results().is_empty());
+
+    let desired = nlink_lab::parser::parse(&format!("{src}validate {{ reach a b }}\n")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert_eq!(
+        lab.assertion_results().len(),
+        1,
+        "{:?}",
+        lab.assertion_results()
+    );
+    assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
+
+    // A failing assertion is reported, never fatal at the library level.
+    let desired =
+        nlink_lab::parser::parse(&format!("{src}validate {{ tcp-connect a b 9 }}\n")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert!(lab.assertions_failed(), "{:?}", lab.assertion_results());
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Issue #83: a VRF-table route removed from the topology must be
 // deleted on apply. nlink's purge only converges the main table, so the
 // engine owns non-main-table routes as explicit ops.

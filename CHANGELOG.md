@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added — formatter, live edits, metrics endpoint, cgroup limits (issues #54, #64, #66, #69)
+### Added — formatter, live edits, metrics endpoint, netem extras, cgroup limits (issues #54, #64, #66, #67, #69)
 
 - **`nlink-lab fmt`** (#54): a token-level formatter — the real lexer
   fixes token boundaries, comments come from the gaps between tokens, and
@@ -22,6 +22,11 @@ All notable changes to this project will be documented in this file.
   throughput, packet rates, errors, drops, qdisc stats, top flows, node
   issues, health gauges) plus `/api/v1/snapshot`, `/api/v1/health`,
   `/api/v1/topology` as JSON; no new dependencies, zenoh unchanged.
+- **netem extras** (#67): `duplicate PERCENT`, `delay-correlation
+  PERCENT`, `loss-correlation PERCENT` and `limit PACKETS` on links,
+  `impair` statements and network matrices; validated, rendered,
+  editable with `edit --set-impair`, highlighted in every editor grammar.
+  (`tbf`/`fq_codel`/`sfq` classful extras stay open with nlink #332.)
 - **cgroup v2 limits for namespace nodes** (#66): `node x { cpu 0.5
   memory 256m }` now applies to namespace nodes too — background
   processes from `run … background` and `spawn` are moved into

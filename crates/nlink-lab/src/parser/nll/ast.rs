@@ -334,10 +334,27 @@ pub struct FirewallRuleDef {
     pub match_expr: String,
 }
 
-/// NAT definition.
-#[derive(Debug, Clone)]
+/// NAT definition: rules and `for` loops in source order (rule order is
+/// significant for NAT, so loops stay in place until lowering expands
+/// them with the full interpolation engine).
+#[derive(Debug, Clone, Default)]
 pub struct NatDef {
-    pub rules: Vec<NatRuleDef>,
+    pub items: Vec<NatItem>,
+}
+
+/// One entry of a `nat { … }` block.
+#[derive(Debug, Clone)]
+pub enum NatItem {
+    Rule(NatRuleDef),
+    For(NatForLoop),
+}
+
+/// `for VAR in RANGE { … }` inside a `nat` block.
+#[derive(Debug, Clone)]
+pub struct NatForLoop {
+    pub var: String,
+    pub range: ForRange,
+    pub body: NatDef,
 }
 
 /// A single NAT rule.
@@ -514,6 +531,17 @@ pub struct NetworkDef {
     pub vlans: Vec<VlanDef>,
     pub ports: Vec<PortDef>,
     pub impairments: Vec<NetworkImpairDef>,
+    /// `for` loops over `impair` statements, expanded during lowering.
+    pub loops: Vec<NetworkForLoop>,
+}
+
+/// `for VAR in RANGE { impair … [for …] }` inside a `network` block.
+#[derive(Debug, Clone)]
+pub struct NetworkForLoop {
+    pub var: String,
+    pub range: ForRange,
+    pub impairments: Vec<NetworkImpairDef>,
+    pub loops: Vec<NetworkForLoop>,
 }
 
 /// Per-pair impairment inside a network block.

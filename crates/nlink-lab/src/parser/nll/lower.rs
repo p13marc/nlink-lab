@@ -217,7 +217,7 @@ fn lower_with_base_dir_and_params(
         match stmt {
             ast::Statement::Node(n) => lower_node(&mut topology, n, &mut ctx)?,
             ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx)?,
-            ast::Statement::Network(n) => lower_network(&mut topology, n)?,
+            ast::Statement::Network(n) => lower_network(&mut topology, n, &ctx.variables)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i),
             ast::Statement::Rate(r) => lower_rate(&mut topology, r),
             ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx)?,
@@ -1141,6 +1141,9 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
                 imp.src = prefix_ep(prefix, &imp.src);
                 imp.dst = prefix_ep(prefix, &imp.dst);
             }
+            for l in &mut n.loops {
+                prefix_network_loop(prefix, l);
+            }
             S::Network(n)
         }
         S::Impair(mut i) => {
@@ -1970,19 +1973,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
                 })
                 .collect(),
         }),
-        ast::NodeProp::Nat(nat) => ast::NodeProp::Nat(ast::NatDef {
-            rules: nat
-                .rules
-                .iter()
-                .map(|r| ast::NatRuleDef {
-                    action: r.action.clone(),
-                    src: r.src.as_ref().map(|s| i(s, vars)),
-                    dst: r.dst.as_ref().map(|s| i(s, vars)),
-                    target: r.target.as_ref().map(|s| i(s, vars)),
-                    target_port: r.target_port,
-                })
-                .collect(),
-        }),
+        ast::NodeProp::Nat(nat) => ast::NodeProp::Nat(interpolate_nat(nat, vars)),
         ast::NodeProp::Vrf(v) => ast::NodeProp::Vrf(interpolate_vrf(v, vars)),
         ast::NodeProp::Wireguard(wg) => ast::NodeProp::Wireguard(interpolate_wg(wg, vars)),
         ast::NodeProp::Vxlan(vx) => ast::NodeProp::Vxlan(interpolate_vxlan(vx, vars)),
@@ -2142,14 +2133,165 @@ fn interpolate_network(n: &ast::NetworkDef, vars: &BTreeMap<String, String>) -> 
         impairments: n
             .impairments
             .iter()
-            .map(|imp| ast::NetworkImpairDef {
-                src: i(&imp.src, vars),
-                dst: i(&imp.dst, vars),
-                props: imp.props.clone(),
-                rate_cap: imp.rate_cap.as_ref().map(|s| i(s, vars)),
+            .map(|imp| interpolate_network_impair(imp, vars))
+            .collect(),
+        loops: n
+            .loops
+            .iter()
+            .map(|l| interpolate_network_loop(l, vars))
+            .collect(),
+    }
+}
+
+fn interpolate_network_impair(
+    imp: &ast::NetworkImpairDef,
+    vars: &BTreeMap<String, String>,
+) -> ast::NetworkImpairDef {
+    ast::NetworkImpairDef {
+        src: i(&imp.src, vars),
+        dst: i(&imp.dst, vars),
+        props: interpolate_impair_props(&imp.props, vars),
+        rate_cap: imp.rate_cap.as_ref().map(|s| i(s, vars)),
+    }
+}
+
+/// Interpolate the outer scope into a network loop body; the loop's own
+/// variable stays literal until `expand_network_impairs` binds it.
+fn interpolate_network_loop(
+    l: &ast::NetworkForLoop,
+    vars: &BTreeMap<String, String>,
+) -> ast::NetworkForLoop {
+    ast::NetworkForLoop {
+        var: l.var.clone(),
+        range: l.range.clone(),
+        impairments: l
+            .impairments
+            .iter()
+            .map(|imp| interpolate_network_impair(imp, vars))
+            .collect(),
+        loops: l
+            .loops
+            .iter()
+            .map(|inner| interpolate_network_loop(inner, vars))
+            .collect(),
+    }
+}
+
+fn prefix_network_loop(prefix: &str, l: &mut ast::NetworkForLoop) {
+    for imp in &mut l.impairments {
+        imp.src = prefix_ep(prefix, &imp.src);
+        imp.dst = prefix_ep(prefix, &imp.dst);
+    }
+    for inner in &mut l.loops {
+        prefix_network_loop(prefix, inner);
+    }
+}
+
+/// Bind `var` for every value of the loop and interpolate the body
+/// (recursing into nested loops). Shared by every loop kind that is not
+/// a statement list.
+fn for_each_value<T>(
+    var: &str,
+    range: &ast::ForRange,
+    vars: &BTreeMap<String, String>,
+    mut body: impl FnMut(&BTreeMap<String, String>) -> Result<Vec<T>>,
+) -> Result<Vec<T>> {
+    let values = range_values(range, var, vars)?;
+    let len = values.len();
+    let mut out = Vec::new();
+    for (idx, value) in values.iter().enumerate() {
+        let mut inner = vars.clone();
+        inner.insert(var.to_string(), value.clone());
+        inner.insert("loop.index".into(), idx.to_string());
+        inner.insert("loop.first".into(), (idx == 0).to_string());
+        inner.insert("loop.last".into(), (idx + 1 == len).to_string());
+        out.extend(body(&inner)?);
+    }
+    Ok(out)
+}
+
+/// Flatten a network block's `impair` statements and `for` loops into
+/// the final per-pair list.
+fn expand_network_impairs(
+    impairments: &[ast::NetworkImpairDef],
+    loops: &[ast::NetworkForLoop],
+    vars: &BTreeMap<String, String>,
+) -> Result<Vec<ast::NetworkImpairDef>> {
+    let mut out: Vec<ast::NetworkImpairDef> = impairments
+        .iter()
+        .map(|imp| interpolate_network_impair(imp, vars))
+        .collect();
+    for l in loops {
+        out.extend(for_each_value(&l.var, &l.range, vars, |inner| {
+            expand_network_impairs(&l.impairments, &l.loops, inner)
+        })?);
+    }
+    Ok(out)
+}
+
+fn interpolate_nat(nat: &ast::NatDef, vars: &BTreeMap<String, String>) -> ast::NatDef {
+    ast::NatDef {
+        items: nat
+            .items
+            .iter()
+            .map(|item| match item {
+                ast::NatItem::Rule(r) => ast::NatItem::Rule(interpolate_nat_rule(r, vars)),
+                ast::NatItem::For(f) => ast::NatItem::For(ast::NatForLoop {
+                    var: f.var.clone(),
+                    range: f.range.clone(),
+                    body: interpolate_nat(&f.body, vars),
+                }),
             })
             .collect(),
     }
+}
+
+fn interpolate_nat_rule(r: &ast::NatRuleDef, vars: &BTreeMap<String, String>) -> ast::NatRuleDef {
+    ast::NatRuleDef {
+        action: r.action.clone(),
+        src: r.src.as_ref().map(|s| i(s, vars)),
+        dst: r.dst.as_ref().map(|s| i(s, vars)),
+        target: r.target.as_ref().map(|s| i(s, vars)),
+        target_port: r.target_port,
+    }
+}
+
+/// Flatten a `nat` block into rules, in source order, expanding `for`
+/// loops with the full engine (arithmetic, `loop.*`, iteration cap).
+fn expand_nat_rules(
+    nat: &ast::NatDef,
+    vars: &BTreeMap<String, String>,
+) -> Result<Vec<ast::NatRuleDef>> {
+    let mut out = Vec::new();
+    for item in &nat.items {
+        match item {
+            ast::NatItem::Rule(r) => out.push(interpolate_nat_rule(r, vars)),
+            ast::NatItem::For(f) => out.extend(for_each_value(&f.var, &f.range, vars, |inner| {
+                expand_nat_rules(&f.body, inner)
+            })?),
+        }
+    }
+    Ok(out)
+}
+
+/// `[for VAR in RANGE : template]` — a list expression expanded where it
+/// is parsed. Same engine, metavariables and iteration cap as block
+/// loops; bounds must be literal because a list has no enclosing scope
+/// to resolve `${…}` against.
+pub(crate) fn expand_list_for(
+    var: &str,
+    range: &ast::ForRange,
+    template: &str,
+) -> Result<Vec<String>> {
+    if let ast::ForRange::DynRange { .. } = range {
+        return Err(crate::Error::NllParse(format!(
+            "for expression '{var}': bounds must be literal integers (`${{…}}` bounds are only \
+             supported in block loops)"
+        )));
+    }
+    for_each_value(var, range, &BTreeMap::new(), |inner| {
+        Ok(vec![interpolate(template, inner)])
+    })
 }
 
 fn interpolate_impair_def(imp: &ast::ImpairDef, vars: &BTreeMap<String, String>) -> ast::ImpairDef {
@@ -2470,16 +2612,14 @@ fn apply_node_props(
                 });
             }
             ast::NodeProp::Nat(nat) => {
-                let vars = &ctx.variables;
-                let rules = nat
-                    .rules
+                let rules = expand_nat_rules(nat, &ctx.variables)?
                     .iter()
                     .map(|r| {
                         Ok(types::NatRule {
                             action: lower_nat_action(&r.action)?,
-                            src: r.src.as_ref().map(|s| interpolate(s, vars)),
-                            dst: r.dst.as_ref().map(|s| interpolate(s, vars)),
-                            target: r.target.as_ref().map(|s| interpolate(s, vars)),
+                            src: r.src.clone(),
+                            dst: r.dst.clone(),
+                            target: r.target.clone(),
                             target_port: r.target_port,
                         })
                     })
@@ -2968,7 +3108,11 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
     name.starts_with(parts[0]) && name.ends_with(parts[1])
 }
 
-fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()> {
+fn lower_network(
+    topo: &mut types::Topology,
+    net: &ast::NetworkDef,
+    vars: &BTreeMap<String, String>,
+) -> Result<()> {
     // Resolve glob patterns in member lists (e.g., "*-black:fo" → "alpha-black:fo")
     let resolved_members = resolve_glob_members(&net.members, &topo.nodes);
 
@@ -3042,7 +3186,7 @@ fn lower_network(topo: &mut types::Topology, net: &ast::NetworkDef) -> Result<()
         );
     }
 
-    for imp in &net.impairments {
+    for imp in expand_network_impairs(&net.impairments, &net.loops, vars)? {
         network.impairments.push(types::NetworkImpairment {
             src: imp.src.clone(),
             dst: imp.dst.clone(),
@@ -4985,6 +5129,104 @@ node dcs {
         assert!(routes.contains_key("144.0.1.18/32"), "routes: {:?}", keys);
         assert!(routes.contains_key("144.0.1.19/32"));
         assert_eq!(routes["144.0.1.18/32"].via.as_deref(), Some("10.2.2.2"));
+    }
+
+    #[test]
+    fn test_network_for_expands_with_arithmetic_and_outer_scope() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let n = 4
+for i in 0..3 { node n${i} }
+network ring {
+  members [n0:rf, n1:rf, n2:rf, n3:rf]
+  for i in 0..${n - 1} {
+    impair n${i} -- n${(i + 1) % n} { delay 50ms }
+    for j in [x] { impair n${i} -- ${j}${loop.first} { loss 1% } }
+  }
+}
+"#,
+        );
+        let net = &topo.networks["ring"];
+        let pairs: Vec<(String, String, Option<String>)> = net
+            .impairments
+            .iter()
+            .map(|i| (i.src.clone(), i.dst.clone(), i.impairment.delay.clone()))
+            .collect();
+        assert!(
+            pairs.contains(&("n0".into(), "n1".into(), Some("50ms".into()))),
+            "{pairs:?}"
+        );
+        assert!(
+            pairs.contains(&("n3".into(), "n0".into(), Some("50ms".into()))),
+            "{pairs:?}"
+        );
+        // nested loop: loop.first refers to the inner loop
+        assert!(
+            net.impairments
+                .iter()
+                .any(|i| i.src == "n2" && i.dst == "xtrue"),
+            "{pairs:?}"
+        );
+        assert_eq!(net.impairments.len(), 8);
+    }
+
+    #[test]
+    fn test_network_for_respects_iteration_cap() {
+        let err = crate::parser::parse(
+            r#"lab "t"
+node a
+network big { members [a:eth0]  for i in 1..1000000 { impair a -- a { delay 1ms } } }
+"#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("limit is"), "{err}");
+    }
+
+    #[test]
+    fn test_nat_for_with_dyn_bounds_and_metavars() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+let count = 2
+node fw {
+  nat {
+    for i in 1..${count} {
+      snat src 144.0.${i}.0/24 to 172.100.${i * 10}.1
+    }
+    masquerade src 10.0.0.0/8
+  }
+}
+"#,
+        );
+        let nat = topo.nodes["fw"].nat.as_ref().unwrap();
+        assert_eq!(nat.rules.len(), 3, "{:?}", nat.rules);
+        assert_eq!(nat.rules[0].src.as_deref(), Some("144.0.1.0/24"));
+        assert_eq!(nat.rules[0].target.as_deref(), Some("172.100.10.1"));
+        assert_eq!(nat.rules[1].target.as_deref(), Some("172.100.20.1"));
+        assert_eq!(
+            nat.rules[2].action,
+            types::NatAction::Masquerade,
+            "source order kept"
+        );
+    }
+
+    #[test]
+    fn test_list_for_expression_uses_the_shared_engine() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node hub { vrf red table 10 { interfaces [for i in 1..2 : eth${i * 10}] } }
+"#,
+        );
+        assert_eq!(
+            topo.nodes["hub"].vrfs["red"].interfaces,
+            vec!["eth10".to_string(), "eth20".to_string()]
+        );
+        let err = crate::parser::parse(
+            r#"lab "t"
+node hub { vrf red table 10 { interfaces [for i in 1..${n} : eth${i}] } }
+"#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("must be literal"), "{err}");
     }
 
     #[test]

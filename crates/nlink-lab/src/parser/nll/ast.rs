@@ -75,6 +75,8 @@ pub struct IfDef {
 #[derive(Debug, Clone)]
 pub struct SiteDef {
     pub name: String,
+    /// Parsed and kept for tooling (fmt / LSP); lowering ignores it.
+    #[allow(dead_code)]
     pub description: Option<String>,
     pub body: Vec<Statement>,
 }
@@ -413,16 +415,6 @@ pub struct ImpairProps {
 }
 
 impl ImpairProps {
-    /// True when no property is set.
-    pub fn is_empty(&self) -> bool {
-        self.delay.is_none()
-            && self.jitter.is_none()
-            && self.loss.is_none()
-            && self.rate.is_none()
-            && self.corrupt.is_none()
-            && self.reorder.is_none()
-    }
-
     /// Overlay `other` onto `self`: every property set in `other` wins,
     /// properties absent from `other` are kept. Used so that properties
     /// spread over several lines of a block accumulate instead of the

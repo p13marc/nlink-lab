@@ -114,11 +114,15 @@ use super::lexer::Token;
 
 /// Create a parse error with span information from the current token.
 fn err(tokens: &[Spanned], pos: usize, msg: String) -> crate::Error {
-    if pos < tokens.len() {
-        let span = &tokens[pos].span;
-        crate::Error::NllParse(format!("{msg} [at byte {start}]", start = span.start))
-    } else {
-        crate::Error::NllParse(msg)
+    // At end of input point at the end of the last token so the
+    // diagnostic still lands on the right line.
+    let offset = match tokens.get(pos) {
+        Some(t) => t.span.start,
+        None => tokens.last().map_or(0, |t| t.span.end),
+    };
+    crate::Error::NllParseAt {
+        message: msg,
+        offset,
     }
 }
 

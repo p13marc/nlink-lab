@@ -358,7 +358,10 @@ pub fn lex(input: &str) -> Result<Vec<Spanned>> {
                         format!("unterminated block comment at line {line}, column {col}")
                     }
                 };
-                return Err(crate::Error::NllParse(msg));
+                return Err(crate::Error::NllParseAt {
+                    message: msg,
+                    offset: span.start,
+                });
             }
         }
     }
@@ -1146,9 +1149,11 @@ link router:eth0 -- host:eth0 {
         assert!(msg.contains("unterminated block comment"), "{msg}");
         // Points at the opening `/*`: line 3, column 3.
         assert!(msg.contains("line 3, column 3"), "{msg}");
-        // `extract_span` must be able to map it back to a byte offset.
+        // The error carries the byte offset of the opening `/*`.
         let src = "lab \"t\"\nnode a\n  /* never closed\nnode b";
-        let (offset, _) = super::super::extract_span(&msg, src);
+        let crate::Error::NllParseAt { offset, .. } = err else {
+            panic!("expected NllParseAt, got {err:?}");
+        };
         assert_eq!(&src[offset..offset + 2], "/*");
     }
 

@@ -138,13 +138,11 @@ fn tree_sitter_grammar_has_no_foreign_keywords() {
             let Some(j) = after.find('"') else { break };
             let word = &after[..j];
             rest = &after[j + 1..];
-            let looks_like_keyword = word
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_lowercase())
-                && word.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c == '_');
-            if looks_like_keyword && !kws.contains(word) && !GRAMMAR_VALUE_WORDS.contains(&word)
-            {
+            let looks_like_keyword = word.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                && word
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '-' || c == '_');
+            if looks_like_keyword && !kws.contains(word) && !GRAMMAR_VALUE_WORDS.contains(&word) {
                 foreign.insert(word.to_string());
             }
         }

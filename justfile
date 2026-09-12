@@ -44,7 +44,7 @@ smoke:
 
 # Regenerate the reference blocks in docs/cli/*.md from the clap definitions
 docs-cli:
-    cargo build -p nlink-lab-cli && target/debug/nlink-lab docs-gen --out docs/cli
+    cargo build -p nlink-lab-cli && target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas
 
 # Format check
 fmt-check:

@@ -173,7 +173,7 @@ jobs:
       - run: cargo build -p nlink-lab-cli
       - run: ./scripts/cli-smoke.sh target/debug/nlink-lab
       # docs/cli reference blocks are generated from clap; a stale page fails here
-      - run: target/debug/nlink-lab docs-gen --out docs/cli && git diff --exit-code -- docs/cli
+      - run: target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas && git diff --exit-code -- docs/cli docs/json-schemas
 
   # Editor grammar conformance (issue #27): the committed parser must be
   # what grammar.js generates, the corpus must pass, and every example

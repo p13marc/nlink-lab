@@ -260,25 +260,38 @@ pub enum Commands {
 
 #[cfg(test)]
 mod tests {
-    /// Each JSON Schema under `docs/json-schemas/` must be valid JSON.
-    /// Catches accidental hand-edit corruption (trailing comma, etc.) at
-    /// CI time — we don't validate the schema language itself, just
-    /// parseability. Keep the file list in sync when adding schemas.
+    /// Every JSON Schema under `docs/json-schemas/` must be valid JSON,
+    /// and every generated one must match what `docs-gen --schemas`
+    /// produces from the types (CI runs the same check via git diff).
     #[test]
-    fn json_schemas_parse() {
-        let schemas = [
-            include_str!("../../../docs/json-schemas/deploy.schema.json"),
-            include_str!("../../../docs/json-schemas/status-list.schema.json"),
-            include_str!("../../../docs/json-schemas/status-scan.schema.json"),
-            include_str!("../../../docs/json-schemas/spawn.schema.json"),
-            include_str!("../../../docs/json-schemas/ps.schema.json"),
-            include_str!("../../../docs/json-schemas/impair-show.schema.json"),
-            include_str!("../../../docs/json-schemas/proc-stat.schema.json"),
-            include_str!("../../../docs/json-schemas/status-lab.schema.json"),
-        ];
-        for s in schemas {
-            let _: serde_json::Value = serde_json::from_str(s)
-                .expect("JSON Schema file failed to parse — see file list above");
+    fn json_schemas_parse_and_generated_ones_are_current() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/json-schemas");
+        let mut files = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "json") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                let _: serde_json::Value = serde_json::from_str(&text)
+                    .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                files += 1;
+            }
+        }
+        assert!(files >= 10, "{files} schema files found");
+        for (stem, schema) in crate::output::all_schemas() {
+            let path = dir.join(format!("{stem}.schema.json"));
+            let on_disk = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+                panic!(
+                    "{}: {e} (run `nlink-lab docs-gen --schemas docs/json-schemas`)",
+                    path.display()
+                )
+            });
+            let generated = format!("{}\n", serde_json::to_string_pretty(&schema).unwrap());
+            assert_eq!(
+                on_disk,
+                generated,
+                "{} is stale: run `nlink-lab docs-gen --schemas docs/json-schemas`",
+                path.display()
+            );
         }
     }
 }

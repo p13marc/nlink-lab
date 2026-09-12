@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::WIRE_VERSION;
 
 /// A point-in-time snapshot of all node metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MetricsSnapshot {
     /// Wire-format version of the sender (`0` = pre-versioning backend).
     #[serde(default)]
@@ -35,7 +35,7 @@ impl Default for MetricsSnapshot {
 }
 
 /// Metrics for a single node.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NodeMetrics {
     #[serde(default)]
     pub interfaces: Vec<InterfaceMetrics>,
@@ -54,7 +54,7 @@ pub struct NodeMetrics {
 /// to a process. Plain data (no nlink dependency) — the backend
 /// collector fills it from nlink's `SocketRateTracker` +
 /// `SocketOwnerMap`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SocketRateMetric {
     /// Owning process command name, or `"-"` when unresolved (a
     /// short-lived or other-user process the `/proc` walk couldn't see).
@@ -81,7 +81,7 @@ pub struct SocketRateMetric {
 }
 
 /// Metrics for a single interface.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct InterfaceMetrics {
     #[serde(default)]
     pub name: String,

@@ -84,7 +84,8 @@ mod tests {
 
 /// The `apply --dry-run --json` / `apply --check --json` / `verify --json`
 /// envelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, schemars::JsonSchema)]
+#[schemars(title = "nlink-lab apply --dry-run / --check / verify --json (v3)")]
 pub struct DryRunReport<'a> {
     /// Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`
     /// fields (Plan 160 / 0.7.0) — use `network` / `nftables` / `removals`.
@@ -94,9 +95,11 @@ pub struct DryRunReport<'a> {
     pub change_count: usize,
     /// Typed per-namespace `NetworkConfig` diff. Empty map elided.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub network: &'a std::collections::BTreeMap<String, nlink_lab::diff::ConfigDiff>,
     /// Typed per-namespace `NftablesDiff`. Empty map elided.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub nftables: &'a std::collections::BTreeMap<String, nlink_lab::diff::NftablesDiff>,
     /// Removal ops from the plan diff (deleted nodes, links, VRF-table
     /// routes, …), one description per op. Elided when empty.
@@ -135,4 +138,68 @@ pub fn print_layered(layered: &nlink_lab::diff::LayeredDiff, removals: &[String]
             println!("  - {r}");
         }
     }
+}
+
+/// `validate --json` envelope.
+#[derive(serde::Serialize, schemars::JsonSchema)]
+#[schemars(title = "nlink-lab validate --json")]
+pub struct ValidateReport<'a> {
+    pub lab: &'a str,
+    /// `false` when any error-level issue was found (exit 2).
+    pub valid: bool,
+    pub nodes: usize,
+    pub links: usize,
+    pub networks: usize,
+    pub errors: usize,
+    pub warnings: usize,
+    pub issues: &'a [nlink_lab::ValidationIssue],
+}
+
+/// One entry of `validate --list-rules --json`.
+#[derive(serde::Serialize, schemars::JsonSchema)]
+#[schemars(title = "nlink-lab validate --list-rules --json (array element)")]
+pub struct RuleInfo {
+    pub rule: &'static str,
+    pub severity: nlink_lab::Severity,
+}
+
+/// `status --scan --json` envelope.
+#[derive(serde::Serialize, schemars::JsonSchema)]
+#[schemars(title = "nlink-lab status --scan --json")]
+pub struct StatusScanReport<'a> {
+    pub labs: &'a [nlink_lab::state::LabInfo],
+    pub orphans: &'a crate::host_scan::Orphans,
+}
+
+/// Every JSON schema `docs-gen --schemas` writes: file stem → schema.
+pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
+    vec![
+        (
+            "layered-diff.v3",
+            schemars::schema_for!(DryRunReport<'static>),
+        ),
+        ("validate", schemars::schema_for!(ValidateReport<'static>)),
+        ("validate-rules", schemars::schema_for!(Vec<RuleInfo>)),
+        (
+            "status-list",
+            schemars::schema_for!(Vec<nlink_lab::state::LabInfo>),
+        ),
+        (
+            "status-scan",
+            schemars::schema_for!(StatusScanReport<'static>),
+        ),
+        ("ps", schemars::schema_for!(Vec<nlink_lab::ProcessInfo>)),
+        (
+            "proc-stat",
+            schemars::schema_for!(nlink_lab::proc_stat::ProcStat),
+        ),
+        (
+            "doctor",
+            schemars::schema_for!(crate::cmd::doctor::DoctorReport),
+        ),
+        (
+            "metrics-snapshot",
+            schemars::schema_for!(nlink_lab_shared::metrics::MetricsSnapshot),
+        ),
+    ]
 }

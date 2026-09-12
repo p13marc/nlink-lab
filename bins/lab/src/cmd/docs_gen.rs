@@ -11,10 +11,25 @@ pub struct Args {
     /// Output directory.
     #[arg(long, default_value = "docs/cli")]
     pub out: PathBuf,
+
+    /// Also write the JSON Schemas of every typed `--json` payload
+    /// (generated with `schemars`) into this directory.
+    #[arg(long, value_name = "DIR")]
+    pub schemas: Option<PathBuf>,
 }
 
 pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { out } = args;
+    let Args { out, schemas } = args;
+    if let Some(dir) = schemas {
+        std::fs::create_dir_all(&dir)?;
+        let mut n = 0;
+        for (stem, schema) in crate::output::all_schemas() {
+            let text = serde_json::to_string_pretty(&schema)?;
+            std::fs::write(dir.join(format!("{stem}.schema.json")), format!("{text}\n"))?;
+            n += 1;
+        }
+        eprintln!("wrote {n} schemas to {}", dir.display());
+    }
     let cmd = Cli::command();
     std::fs::create_dir_all(&out)?;
     let mut written = Vec::new();

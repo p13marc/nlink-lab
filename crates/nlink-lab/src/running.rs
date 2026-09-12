@@ -115,7 +115,7 @@ pub struct SpawnOpts<'a> {
 /// is destroyed (or the state file is cleaned manually). Consumers
 /// polling for "is X still running?" must check [`alive`](Self::alive),
 /// not just look up the PID.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
 pub struct ProcessInfo {
     /// Node the process runs in.
     pub node: String,

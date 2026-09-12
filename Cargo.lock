@@ -3222,6 +3222,7 @@ dependencies = [
  "nlink",
  "nlink-lab-macros",
  "regex",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "sha2",
@@ -3270,6 +3271,7 @@ dependencies = [
  "nlink-lab-backend",
  "nlink-lab-shared",
  "regex",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "tempfile",
@@ -3293,6 +3295,7 @@ dependencies = [
 name = "nlink-lab-shared"
 version = "0.8.0"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
 ]

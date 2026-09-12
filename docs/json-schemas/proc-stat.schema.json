@@ -1,9 +1,72 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://nlink-lab.example/schemas/proc-stat.schema.json",
-  "title": "nlink-lab proc-stat --json output",
-  "description": "Single-sample resource snapshot for a process inside a lab node, emitted by `nlink-lab proc-stat <LAB> <NODE> <PID> --json`. With `--watch`, one such object is emitted per line (NDJSON) at the requested interval. Built from /proc/<pid>/stat, /proc/<pid>/status, and /proc/<pid>/fd/ — read from inside the target namespace via nlink-lab exec.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProcStat",
+  "description": "Resource snapshot for a single process. Built from\n`/proc/<pid>/stat` (fields), `/proc/<pid>/status` (memory + UID),\nand a count of entries in `/proc/<pid>/fd/`.",
   "type": "object",
+  "properties": {
+    "command": {
+      "description": "Short process name (`/proc/<pid>/comm`-equivalent — first 16 bytes\nof the binary's basename or whatever `prctl(PR_SET_NAME)` set).",
+      "type": "string"
+    },
+    "cpu_kernel_ticks": {
+      "description": "Kernel-mode CPU time in clock ticks (`stime` — field 15).",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "cpu_user_ticks": {
+      "description": "User-mode CPU time in clock ticks since process start\n(`utime` — field 14 of `/proc/<pid>/stat`). Convert to seconds\nby dividing by `sysconf(_SC_CLK_TCK)` — typically 100 on Linux.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "fd_count": {
+      "description": "Number of file descriptors open by the process. Counted by\nlisting `/proc/<pid>/fd/`.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "host_pid": {
+      "description": "Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`); see\n`docs/ARCHITECTURE.md` \"Process & namespace model\".",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "rss_kb": {
+      "description": "Resident set size in kilobytes (`VmRSS` from status). `None`\nwhen the process is a kernel thread or has no MM.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "started_at_unix_micros": {
+      "description": "Process start time as Unix microseconds. Computed from\n`starttime` (stat field 22) + `btime` (from `/proc/stat`) +\nthe system clock tick rate.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "state": {
+      "description": "Process state — single character per `man 5 proc`:\n`R` running, `S` sleeping, `D` uninterruptible disk sleep,\n`Z` zombie, `T` stopped, `t` tracing-stopped, `X` dead, `I`\nidle.",
+      "type": "string"
+    },
+    "uid": {
+      "description": "Effective UID of the process (column 1 of `Uid:`).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "vsz_kb": {
+      "description": "Virtual address space size in kilobytes (`VmSize`). `None` for\nkernel threads.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
   "required": [
     "host_pid",
     "command",
@@ -13,58 +76,5 @@
     "cpu_kernel_ticks",
     "started_at_unix_micros",
     "state"
-  ],
-  "additionalProperties": false,
-  "properties": {
-    "host_pid": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Host-side PID. Equal to ns PID today (no CLONE_NEWPID)."
-    },
-    "command": {
-      "type": "string",
-      "description": "Short process name from /proc/<pid>/stat's comm field — first 16 bytes of the binary's basename, or whatever prctl(PR_SET_NAME) set. Never truncated to less."
-    },
-    "uid": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Effective UID of the process (column 2 of /proc/<pid>/status's Uid: line)."
-    },
-    "rss_kb": {
-      "type": ["integer", "null"],
-      "minimum": 0,
-      "description": "Resident set size in kB (VmRSS). Null for kernel threads / processes with no MM."
-    },
-    "vsz_kb": {
-      "type": ["integer", "null"],
-      "minimum": 0,
-      "description": "Virtual address-space size in kB (VmSize). Null for kernel threads."
-    },
-    "fd_count": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Number of file descriptors open by the process."
-    },
-    "cpu_user_ticks": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "User-mode CPU time in clock ticks since process start (utime). Convert to seconds by dividing by sysconf(_SC_CLK_TCK), typically 100."
-    },
-    "cpu_kernel_ticks": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Kernel-mode CPU time in clock ticks (stime)."
-    },
-    "started_at_unix_micros": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Process start time as Unix epoch microseconds. Computed from starttime (jiffies since boot) + btime (from /proc/stat) + the system tick rate."
-    },
-    "state": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 1,
-      "description": "Single-character process state per `man 5 proc`: R running, S sleeping, D uninterruptible disk sleep, Z zombie, T stopped, t tracing-stopped, X dead, I idle."
-    }
-  }
+  ]
 }

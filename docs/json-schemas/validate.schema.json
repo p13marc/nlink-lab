@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nlink-lab validate --json",
+  "description": "`validate --json` envelope.",
+  "type": "object",
+  "properties": {
+    "errors": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ValidationIssue"
+      }
+    },
+    "lab": {
+      "type": "string"
+    },
+    "links": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "networks": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "nodes": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "valid": {
+      "description": "`false` when any error-level issue was found (exit 2).",
+      "type": "boolean"
+    },
+    "warnings": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "lab",
+    "valid",
+    "nodes",
+    "links",
+    "networks",
+    "errors",
+    "warnings",
+    "issues"
+  ],
+  "$defs": {
+    "Severity": {
+      "description": "Issue severity level.",
+      "oneOf": [
+        {
+          "description": "Blocks deployment.",
+          "type": "string",
+          "const": "Error"
+        },
+        {
+          "description": "Non-blocking, informational.",
+          "type": "string",
+          "const": "Warning"
+        }
+      ]
+    },
+    "ValidationIssue": {
+      "description": "A single validation issue.",
+      "type": "object",
+      "properties": {
+        "location": {
+          "description": "Location in the topology (e.g., `links.endpoints`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "Human-readable description.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "Rule identifier (e.g., \"valid-cidr\", \"dangling-node-ref\").",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Severity level.",
+          "$ref": "#/$defs/Severity"
+        }
+      },
+      "required": [
+        "severity",
+        "rule",
+        "message"
+      ]
+    }
+  }
+}

@@ -59,7 +59,7 @@ pub async fn force_cleanup(name: &str) {
 
 /// Resources on the host that look like lab-owned state but have no matching
 /// `state.json` — usually left behind by a crashed deploy.
-#[derive(Debug, Default, serde::Serialize)]
+#[derive(Debug, Default, serde::Serialize, schemars::JsonSchema)]
 pub struct Orphans {
     /// Root-namespace mgmt bridges (`nl{hash8}`).
     pub bridges: Vec<String>,
@@ -82,7 +82,7 @@ pub struct Orphans {
 }
 
 /// A state-backed lab with one or more namespaces missing from the host.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
 pub struct StaleLab {
     /// Lab name.
     pub name: String,

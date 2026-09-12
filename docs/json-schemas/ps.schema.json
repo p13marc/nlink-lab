@@ -1,40 +1,56 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://nlink-lab.example/schemas/ps.schema.json",
-  "title": "nlink-lab ps --json output",
-  "description": "Emitted by `nlink-lab ps --json`. Array of tracked background processes, both alive and exited. Exited entries are kept (`alive: false`) until the lab is destroyed; consumers polling for liveness must check the `alive` field, not just the PID.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Array_of_ProcessInfo",
   "type": "array",
   "items": {
-    "type": "object",
-    "required": ["node", "pid", "host_pid", "alive"],
-    "additionalProperties": false,
-    "properties": {
-      "node": {
-        "type": "string",
-        "description": "Node the process was spawned in."
+    "$ref": "#/$defs/ProcessInfo"
+  },
+  "$defs": {
+    "ProcessInfo": {
+      "description": "Status of a tracked background process.\n\n**Retention**: tracked processes are *not* removed from the lab's PID\nlist when they exit. They remain with `alive == false` until the lab\nis destroyed (or the state file is cleaned manually). Consumers\npolling for \"is X still running?\" must check [`alive`](Self::alive),\nnot just look up the PID.",
+      "type": "object",
+      "properties": {
+        "alive": {
+          "description": "Whether the process is still alive (`kill(pid, 0)` returns 0).\n\nStays `false` after the process exits — the entry is kept for\npost-mortem inspection (log paths, exit ordering). See the\ntype-level retention note above.",
+          "type": "boolean"
+        },
+        "host_pid": {
+          "description": "Explicit alias for `pid`. Equal today because nlink-lab does not\nuse `CLONE_NEWPID` (host_pid == ns_pid for every spawned\nprocess). The field exists so consumers that explicitly want\n\"the host PID\" can name it; if a future nlink-lab adds\n`CLONE_NEWPID`, an `ns_pid` field will join `host_pid` and\n`pid` will follow `host_pid`. See `docs/ARCHITECTURE.md`\n\"Process & namespace model\".",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "node": {
+          "description": "Node the process runs in.",
+          "type": "string"
+        },
+        "pid": {
+          "description": "Process ID.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "stderr_log": {
+          "description": "Path to stderr log file (if captured).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stdout_log": {
+          "description": "Path to stdout log file (if captured).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
-      "pid": {
-        "type": "integer",
-        "minimum": 1,
-        "description": "Linux PID of the spawned process. Equal to host_pid today."
-      },
-      "host_pid": {
-        "type": "integer",
-        "minimum": 1,
-        "description": "Explicit alias for pid: host-side PID. Equal to pid today because nlink-lab does not use CLONE_NEWPID. See ARCHITECTURE.md 'Process & namespace model' and the spawn schema for the same field."
-      },
-      "alive": {
-        "type": "boolean",
-        "description": "True if `kill(pid, 0)` returns 0. Stays false after the process exits — the entry is kept for post-mortem inspection."
-      },
-      "stdout_log": {
-        "type": "string",
-        "description": "Absolute path to the captured stdout log. Omitted when not captured."
-      },
-      "stderr_log": {
-        "type": "string",
-        "description": "Absolute path to the captured stderr log. Omitted when not captured."
-      }
+      "required": [
+        "node",
+        "pid",
+        "host_pid",
+        "alive"
+      ]
     }
   }
 }

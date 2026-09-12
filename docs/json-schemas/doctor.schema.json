@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nlink-lab doctor --json",
+  "description": "`doctor --json` envelope.",
+  "type": "object",
+  "properties": {
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Check"
+      }
+    },
+    "failed": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "ok": {
+      "description": "`false` when a required check failed (exit 1).",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok",
+    "failed",
+    "checks"
+  ],
+  "$defs": {
+    "Check": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "detail"
+      ]
+    },
+    "Status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "warn",
+        "fail",
+        "info"
+      ]
+    }
+  }
+}

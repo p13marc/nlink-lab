@@ -6,20 +6,30 @@ use crate::output::set_exit_code;
 #[derive(clap::Args)]
 pub struct Args {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
-enum Status {
+pub enum Status {
     Ok,
     Warn,
     Fail,
     Info,
 }
 
-#[derive(Debug, serde::Serialize)]
-struct Check {
-    name: &'static str,
-    status: Status,
-    detail: String,
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct Check {
+    pub name: &'static str,
+    pub status: Status,
+    pub detail: String,
+}
+
+/// `doctor --json` envelope.
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+#[schemars(title = "nlink-lab doctor --json")]
+pub struct DoctorReport {
+    /// `false` when a required check failed (exit 1).
+    pub ok: bool,
+    pub failed: usize,
+    pub checks: Vec<Check>,
 }
 
 fn check(name: &'static str, ok: bool, required: bool, detail: impl Into<String>) -> Check {
@@ -235,11 +245,11 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
     if ctx.json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "ok": failed == 0,
-                "failed": failed,
-                "checks": checks,
-            }))?
+            serde_json::to_string_pretty(&DoctorReport {
+                ok: failed == 0,
+                failed,
+                checks,
+            })?
         );
     } else {
         for c in &checks {

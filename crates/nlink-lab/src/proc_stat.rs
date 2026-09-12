@@ -13,7 +13,7 @@ use serde::Serialize;
 /// Resource snapshot for a single process. Built from
 /// `/proc/<pid>/stat` (fields), `/proc/<pid>/status` (memory + UID),
 /// and a count of entries in `/proc/<pid>/fd/`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct ProcStat {
     /// Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`); see
     /// `docs/ARCHITECTURE.md` "Process & namespace model".

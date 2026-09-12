@@ -63,20 +63,17 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     if ctx.json {
         // One envelope for both outcomes; exit 2 on errors (#46).
-        let issues: Vec<&nlink_lab::ValidationIssue> = result.issues().iter().collect();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "lab": topo.lab.name,
-                "valid": !result.has_errors(),
-                "nodes": topo.nodes.len(),
-                "links": topo.links.len(),
-                "networks": topo.networks.len(),
-                "errors": result.errors().count(),
-                "warnings": result.warnings().count(),
-                "issues": issues,
-            }))?
-        );
+        let report = crate::output::ValidateReport {
+            lab: &topo.lab.name,
+            valid: !result.has_errors(),
+            nodes: topo.nodes.len(),
+            links: topo.links.len(),
+            networks: topo.networks.len(),
+            errors: result.errors().count(),
+            warnings: result.warnings().count(),
+            issues: result.issues(),
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
         if result.has_errors() {
             set_exit_code(EXIT_VALIDATION);
         }
@@ -135,14 +132,11 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
 /// `--list-rules`: id + default severity, as a table or a JSON array.
 fn print_rules(ctx: &Ctx) -> nlink_lab::Result<()> {
-    let rules: Vec<serde_json::Value> = nlink_lab::rule_ids()
+    let rules: Vec<crate::output::RuleInfo> = nlink_lab::rule_ids()
         .iter()
-        .map(|id| {
-            let sev = match nlink_lab::rule_severity(id) {
-                Some(nlink_lab::Severity::Warning) => "warning",
-                _ => "error",
-            };
-            serde_json::json!({ "rule": id, "severity": sev })
+        .map(|id| crate::output::RuleInfo {
+            rule: id,
+            severity: nlink_lab::rule_severity(id).unwrap_or(nlink_lab::Severity::Error),
         })
         .collect();
     if ctx.json {
@@ -151,11 +145,11 @@ fn print_rules(ctx: &Ctx) -> nlink_lab::Result<()> {
     }
     println!("{:<36} SEVERITY", "RULE");
     for r in &rules {
-        println!(
-            "{:<36} {}",
-            r["rule"].as_str().unwrap_or(""),
-            r["severity"].as_str().unwrap_or("")
-        );
+        let sev = match r.severity {
+            nlink_lab::Severity::Warning => "warning",
+            nlink_lab::Severity::Error => "error",
+        };
+        println!("{:<36} {sev}", r.rule);
     }
     println!(
         "\n--deny RULE promotes a warning to an error, --allow RULE silences it, --strict promotes all."

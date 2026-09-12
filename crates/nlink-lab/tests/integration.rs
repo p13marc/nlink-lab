@@ -1990,7 +1990,7 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
         "c".to_string(),
         nlink_lab::types::Node {
             wireguard: {
-                let mut m = std::collections::HashMap::new();
+                let mut m = std::collections::BTreeMap::new();
                 m.insert(
                     "wg0".to_string(),
                     nlink_lab::types::WireguardConfig {

@@ -18,7 +18,7 @@
 //! result.bail()?;
 //! ```
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::net::IpAddr;
 
@@ -191,15 +191,15 @@ impl fmt::Display for InterfaceSource {
 }
 
 /// Iterate a string-keyed map in name order so issue output is deterministic.
-fn sorted<V>(map: &HashMap<String, V>) -> Vec<(&String, &V)> {
+fn sorted<V>(map: &BTreeMap<String, V>) -> Vec<(&String, &V)> {
     let mut entries: Vec<_> = map.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
     entries
 }
 
 /// Collect all interfaces per node from all sources.
-fn collect_interfaces(topology: &Topology) -> HashMap<String, HashMap<String, InterfaceSource>> {
-    let mut result: HashMap<String, HashMap<String, InterfaceSource>> = HashMap::new();
+fn collect_interfaces(topology: &Topology) -> BTreeMap<String, BTreeMap<String, InterfaceSource>> {
+    let mut result: BTreeMap<String, BTreeMap<String, InterfaceSource>> = BTreeMap::new();
 
     // Ensure all nodes have an entry
     for node_name in topology.nodes.keys() {
@@ -548,7 +548,7 @@ fn validate_dangling_profile_refs(topology: &Topology, issues: &mut Vec<Validati
 /// No duplicate interface names within a node.
 fn validate_interface_uniqueness(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     // We need to find duplicates — track all sources for each (node, iface) pair.
-    let mut node_ifaces: HashMap<String, HashMap<String, Vec<InterfaceSource>>> = HashMap::new();
+    let mut node_ifaces: BTreeMap<String, BTreeMap<String, Vec<InterfaceSource>>> = BTreeMap::new();
 
     // Explicit interfaces
     for (node_name, node) in &topology.nodes {
@@ -653,7 +653,7 @@ fn validate_vlan_range(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
 /// Impairment keys must reference interfaces that exist on the node.
 fn validate_impairment_refs(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     for key in topology.impairments.keys() {
@@ -734,7 +734,7 @@ fn validate_impairment_refs(
 /// Rate limit keys must reference interfaces that exist on the node.
 fn validate_rate_limit_refs(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     for key in topology.rate_limits.keys() {
@@ -771,7 +771,7 @@ fn validate_route_config(topology: &Topology, issues: &mut Vec<ValidationIssue>)
 /// Interface names must not exceed 15 characters (Linux IFNAMSIZ - 1).
 fn validate_interface_name_length(
     _topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     for (node_name, ifaces) in interfaces {
@@ -823,7 +823,7 @@ fn validate_wireguard_peers(topology: &Topology, issues: &mut Vec<ValidationIssu
 /// VRF table IDs must be unique within a node.
 fn validate_vrf_table_unique(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
-        let mut seen: HashMap<u32, &str> = HashMap::new();
+        let mut seen: BTreeMap<u32, &str> = BTreeMap::new();
         for (vrf_name, vrf_config) in &node.vrfs {
             if let Some(existing) = seen.get(&vrf_config.table) {
                 issues.push(ValidationIssue {
@@ -843,7 +843,7 @@ fn validate_vrf_table_unique(topology: &Topology, issues: &mut Vec<ValidationIss
 
 /// The same endpoint should not appear in multiple links.
 fn validate_duplicate_link_endpoints(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
-    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     for (i, link) in topology.links.iter().enumerate() {
         for ep in &link.endpoints {
             if let Some(prev) = seen.insert(ep.clone(), i) {
@@ -888,7 +888,7 @@ fn is_valid_name(name: &str) -> bool {
 /// path- and kernel-safe.
 fn validate_names(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     let mut check = |kind: &str, name: &str, location: String| {
@@ -1499,7 +1499,7 @@ fn validate_macvlan_parents(topology: &Topology, issues: &mut Vec<ValidationIssu
 /// Every interface enslaved to a VRF must exist on that node.
 fn validate_vrf_interfaces(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     for (node_name, node) in sorted(&topology.nodes) {
@@ -1547,7 +1547,7 @@ fn check_node_ref(
 
 fn check_endpoint_ref(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     endpoint: &str,
     location: String,
     issues: &mut Vec<ValidationIssue>,
@@ -1602,7 +1602,7 @@ fn assertion_node_refs(assertion: &Assertion) -> Vec<(&'static str, &str)> {
 /// Nodes and endpoints named by assertions, scenarios and benchmarks must exist.
 fn validate_test_refs(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     for_each_assertion(topology, |assertion, location| {
@@ -1648,7 +1648,7 @@ fn validate_test_refs(
 /// No duplicate IP addresses across the topology.
 fn validate_unique_ips(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     // Collect all (ip, location) pairs
-    let mut seen: HashMap<String, String> = HashMap::new(); // ip_str -> location
+    let mut seen: BTreeMap<String, String> = BTreeMap::new(); // ip_str -> location
 
     for (i, link) in topology.links.iter().enumerate() {
         if let Some(addresses) = &link.addresses {
@@ -1724,7 +1724,7 @@ fn validate_mtu_consistency(topology: &Topology, issues: &mut Vec<ValidationIssu
 /// Route gateways should be reachable from a connected subnet.
 fn validate_route_reachability(
     topology: &Topology,
-    _interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    _interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     // For each node, collect all subnets from link addresses and explicit interfaces
@@ -1781,7 +1781,7 @@ fn validate_route_reachability(
 /// Nodes with no links or network connections are likely a mistake.
 fn validate_unreferenced_nodes(
     topology: &Topology,
-    interfaces: &HashMap<String, HashMap<String, InterfaceSource>>,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
     issues: &mut Vec<ValidationIssue>,
 ) {
     for node_name in topology.nodes.keys() {
@@ -1907,8 +1907,8 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
 
 /// Detect cycles in depends_on using Kahn's algorithm (BFS-based topological sort).
 fn validate_depends_on_cycle(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
-    let mut in_degree: HashMap<&str, usize> = HashMap::new();
-    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut in_degree: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut adj: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
 
     for (name, node) in &topology.nodes {
         in_degree.entry(name.as_str()).or_insert(0);

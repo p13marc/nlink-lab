@@ -3,7 +3,7 @@
 //! [`RunningLab`] provides methods to interact with a deployed lab:
 //! executing commands, spawning processes, modifying impairments, and destroying.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use nlink::netlink::diagnostics::{Diagnostics, InterfaceDiag, Issue};
 use nlink::netlink::namespace;
@@ -19,9 +19,9 @@ pub struct RunningLab {
     /// The topology used to deploy.
     topology: Topology,
     /// Map of node_name -> namespace_name (bare namespace nodes only).
-    namespace_names: HashMap<String, String>,
+    namespace_names: BTreeMap<String, String>,
     /// Map of node_name -> container state (container nodes only).
-    containers: HashMap<String, ContainerState>,
+    containers: BTreeMap<String, ContainerState>,
     /// Container runtime binary ("docker" or "podman"), if any containers.
     runtime_binary: Option<String>,
     /// Background process PIDs: (node_name, pid).
@@ -31,12 +31,12 @@ pub struct RunningLab {
     /// Whether mac80211_hwsim was loaded.
     wifi_loaded: bool,
     /// Saved impairments before partition (endpoint → Impairment).
-    saved_impairments: HashMap<String, crate::types::Impairment>,
+    saved_impairments: BTreeMap<String, crate::types::Impairment>,
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
-    process_logs: HashMap<u32, (String, String)>,
+    process_logs: BTreeMap<u32, (String, String)>,
     /// `/proc/<pid>/stat` start time per tracked PID (see
     /// `LabState::starttimes`). A PID without an entry is never signalled.
-    starttimes: HashMap<u32, u64>,
+    starttimes: BTreeMap<u32, u64>,
     /// node → root-namespace mgmt veth peer name (see `LabState::mgmt_peers`).
     mgmt_peers: std::collections::BTreeMap<String, String>,
     /// Outcome of the `validate { … }` assertions run at deploy step 19.
@@ -155,8 +155,8 @@ impl RunningLab {
     /// Create a new RunningLab (called by the deployer).
     pub(crate) fn new(
         topology: Topology,
-        namespace_names: HashMap<String, String>,
-        containers: HashMap<String, ContainerState>,
+        namespace_names: BTreeMap<String, String>,
+        containers: BTreeMap<String, ContainerState>,
         runtime_binary: Option<String>,
         pids: Vec<(String, u32)>,
         dns_injected: bool,
@@ -170,10 +170,10 @@ impl RunningLab {
             pids,
             dns_injected,
             wifi_loaded,
-            starttimes: HashMap::new(),
+            starttimes: BTreeMap::new(),
             mgmt_peers: std::collections::BTreeMap::new(),
-            saved_impairments: HashMap::new(),
-            process_logs: HashMap::new(),
+            saved_impairments: BTreeMap::new(),
+            process_logs: BTreeMap::new(),
             assertion_results: Vec::new(),
         }
     }
@@ -271,7 +271,7 @@ impl RunningLab {
     }
 
     /// Access namespace names map (crate-internal, used by apply_diff).
-    pub(crate) fn namespace_names(&self) -> &HashMap<String, String> {
+    pub(crate) fn namespace_names(&self) -> &BTreeMap<String, String> {
         &self.namespace_names
     }
 
@@ -320,7 +320,7 @@ impl RunningLab {
     }
 
     /// Mutable access to namespace names map (crate-internal, used by apply_diff).
-    pub(crate) fn namespace_names_mut(&mut self) -> &mut HashMap<String, String> {
+    pub(crate) fn namespace_names_mut(&mut self) -> &mut BTreeMap<String, String> {
         &mut self.namespace_names
     }
 
@@ -330,12 +330,12 @@ impl RunningLab {
     }
 
     /// Access container states map.
-    pub fn containers(&self) -> &HashMap<String, ContainerState> {
+    pub fn containers(&self) -> &BTreeMap<String, ContainerState> {
         &self.containers
     }
 
     /// Mutable access to container states map (crate-internal, used by apply_diff).
-    pub(crate) fn containers_mut(&mut self) -> &mut HashMap<String, ContainerState> {
+    pub(crate) fn containers_mut(&mut self) -> &mut BTreeMap<String, ContainerState> {
         &mut self.containers
     }
 
@@ -345,12 +345,12 @@ impl RunningLab {
     }
 
     /// Recorded start times of tracked PIDs (see [`LabState::starttimes`]).
-    pub(crate) fn starttimes(&self) -> &HashMap<u32, u64> {
+    pub(crate) fn starttimes(&self) -> &BTreeMap<u32, u64> {
         &self.starttimes
     }
 
     /// Record PID start times captured at deploy time.
-    pub(crate) fn set_starttimes(&mut self, starttimes: HashMap<u32, u64>) {
+    pub(crate) fn set_starttimes(&mut self, starttimes: BTreeMap<u32, u64>) {
         self.starttimes = starttimes;
     }
 

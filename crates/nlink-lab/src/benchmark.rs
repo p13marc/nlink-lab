@@ -19,7 +19,7 @@ pub struct BenchmarkResult {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct BenchmarkTestResult {
     pub description: String,
-    pub metrics: std::collections::HashMap<String, f64>,
+    pub metrics: std::collections::BTreeMap<String, f64>,
     pub assertions: Vec<AssertionEval>,
     pub passed: bool,
 }
@@ -86,7 +86,7 @@ fn run_ping_benchmark(
     to: &str,
     count: Option<u32>,
     assertions: &[BenchmarkAssertion],
-    ip_map: &std::collections::HashMap<String, String>,
+    ip_map: &std::collections::BTreeMap<String, String>,
 ) -> BenchmarkTestResult {
     let desc = format!("ping {from} -> {to}");
     let count = count.unwrap_or(10);
@@ -113,7 +113,7 @@ fn run_ping_benchmark(
         }
     };
 
-    let mut metrics = std::collections::HashMap::new();
+    let mut metrics = std::collections::BTreeMap::new();
 
     // Parse ping output: "rtt min/avg/max/mdev = 0.1/0.2/0.3/0.1 ms"
     for line in output.stdout.lines() {
@@ -166,7 +166,7 @@ fn run_iperf3_benchmark(
     streams: Option<u32>,
     udp: bool,
     assertions: &[BenchmarkAssertion],
-    ip_map: &std::collections::HashMap<String, String>,
+    ip_map: &std::collections::BTreeMap<String, String>,
 ) -> BenchmarkTestResult {
     let desc = format!("iperf3 {from} -> {to}");
 
@@ -224,7 +224,7 @@ fn run_iperf3_benchmark(
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = lab.exec(from, "iperf3", &arg_refs);
 
-    let mut metrics = std::collections::HashMap::new();
+    let mut metrics = std::collections::BTreeMap::new();
 
     if let Ok(out) = &output {
         parse_iperf3_json(&out.stdout, &mut metrics);
@@ -271,7 +271,7 @@ fn iperf3_client_args(
 /// TCP runs report the sender side under `end.sum_sent`; UDP runs
 /// (and multi-stream summaries) put everything under `end.sum`, which
 /// also carries `jitter_ms` and `lost_percent`.
-fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::HashMap<String, f64>) {
+fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::BTreeMap<String, f64>) {
     let Ok(json) = serde_json::from_str::<serde_json::Value>(stdout) else {
         return;
     };
@@ -298,7 +298,7 @@ fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::HashMap<Strin
 
 fn evaluate_assertions(
     assertions: &[BenchmarkAssertion],
-    metrics: &std::collections::HashMap<String, f64>,
+    metrics: &std::collections::BTreeMap<String, f64>,
 ) -> Vec<AssertionEval> {
     assertions
         .iter()
@@ -383,7 +383,7 @@ mod tests {
                 value: "5%".into(),
             },
         ];
-        let mut metrics = std::collections::HashMap::new();
+        let mut metrics = std::collections::BTreeMap::new();
         metrics.insert("avg".into(), 10.0);
         metrics.insert("loss".into(), 0.0);
 
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn test_parse_iperf3_json_tcp() {
         let json = r#"{"end":{"sum_sent":{"bits_per_second":941000000.0},"sum_received":{"bits_per_second":939000000.0}}}"#;
-        let mut m = std::collections::HashMap::new();
+        let mut m = std::collections::BTreeMap::new();
         parse_iperf3_json(json, &mut m);
         assert_eq!(m.get("bandwidth"), Some(&941000000.0));
         assert!(!m.contains_key("jitter"));
@@ -423,7 +423,7 @@ mod tests {
     fn test_parse_iperf3_json_udp() {
         let json =
             r#"{"end":{"sum":{"bits_per_second":1048576.0,"jitter_ms":0.031,"lost_percent":0.5}}}"#;
-        let mut m = std::collections::HashMap::new();
+        let mut m = std::collections::BTreeMap::new();
         parse_iperf3_json(json, &mut m);
         assert_eq!(m.get("bandwidth"), Some(&1048576.0));
         assert_eq!(m.get("jitter"), Some(&0.031));
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_parse_iperf3_json_garbage() {
-        let mut m = std::collections::HashMap::new();
+        let mut m = std::collections::BTreeMap::new();
         parse_iperf3_json("iperf3: error - unable to connect", &mut m);
         assert!(m.is_empty());
     }
@@ -444,7 +444,7 @@ mod tests {
             op: CompareOp::Lt,
             value: "5ms".into(),
         }];
-        let mut metrics = std::collections::HashMap::new();
+        let mut metrics = std::collections::BTreeMap::new();
         metrics.insert("avg".into(), 10.0);
 
         let evals = evaluate_assertions(&assertions, &metrics);

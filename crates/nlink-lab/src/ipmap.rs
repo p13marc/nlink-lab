@@ -13,7 +13,7 @@
 //!
 //! 1. `link` endpoint addresses (in declaration order),
 //! 2. `network.ports[node:iface].addresses` (networks and ports sorted
-//!    by name — both are `HashMap`s),
+//!    by name — both are `BTreeMap`s),
 //! 3. `node.interfaces[*].addresses` — dummies, VXLANs, VLANs, bonds,
 //!    `lo` (sorted by interface name),
 //! 4. `node.wireguard[*].addresses` (sorted by interface name),
@@ -29,7 +29,7 @@
 //! `dns.rs` collects the same link + network sources for `/etc/hosts`
 //! generation; keep the two in step if you add a source here.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use crate::types::{EndpointRef, Topology};
 
@@ -146,7 +146,7 @@ pub fn collect_node_addrs(topology: &Topology) -> BTreeMap<String, Vec<NodeAddr>
 /// Values are bare addresses without a prefix length. Source priority
 /// is documented on the module; see [`collect_node_addrs`] for the
 /// full per-interface list.
-pub fn build_ip_map(topology: &Topology) -> HashMap<String, String> {
+pub fn build_ip_map(topology: &Topology) -> BTreeMap<String, String> {
     collect_node_addrs(topology)
         .into_iter()
         .filter_map(|(node, addrs)| addrs.into_iter().next().map(|a| (node, a.ip)))

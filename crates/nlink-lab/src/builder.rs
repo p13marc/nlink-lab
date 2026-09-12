@@ -25,7 +25,7 @@
 //! assert_eq!(topology.nodes.len(), 2);
 //! ```
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::types::{
     ExecConfig, FirewallConfig, FirewallRule, Impairment, InterfaceConfig, LabConfig, Link,
@@ -230,7 +230,7 @@ impl NodeBuilder {
     pub fn env(mut self, key: &str, value: &str) -> Self {
         self.node
             .env
-            .get_or_insert_with(HashMap::new)
+            .get_or_insert_with(BTreeMap::new)
             .insert(key.to_string(), value.to_string());
         self
     }

@@ -10,7 +10,7 @@ use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::netlink::tc::NetemConfig;
 use nlink::{Connection, Route};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::net::IpAddr;
 
 use nlink::netlink::namespace::NamespaceFd;
@@ -151,13 +151,13 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
 }
 
 async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<RunningLab> {
-    let mut node_handles: HashMap<String, NodeHandle> = HashMap::new();
-    let mut namespace_names: HashMap<String, String> = HashMap::new();
-    let mut container_states: HashMap<String, ContainerState> = HashMap::new();
+    let mut node_handles: BTreeMap<String, NodeHandle> = BTreeMap::new();
+    let mut namespace_names: BTreeMap<String, String> = BTreeMap::new();
+    let mut container_states: BTreeMap<String, ContainerState> = BTreeMap::new();
     let mut pids: Vec<(String, u32)> = Vec::new();
-    let mut starttimes: HashMap<u32, u64> = HashMap::new();
+    let mut starttimes: BTreeMap<u32, u64> = BTreeMap::new();
     let mut mgmt_peers: std::collections::BTreeMap<String, String> = Default::default();
-    let mut process_logs: HashMap<u32, (String, String)> = HashMap::new();
+    let mut process_logs: BTreeMap<u32, (String, String)> = BTreeMap::new();
 
     // Detect container runtime if any node uses an image
     let has_container_nodes = topology.nodes.values().any(|n| n.image.is_some());
@@ -402,7 +402,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
     // ── Step 4: Create bridge networks ───────────────────────────────
     // Bridges live in a management namespace. For each network, create the bridge
     // in a dedicated namespace, then create veth pairs from member nodes.
-    let mut bridge_ns_names: HashMap<String, String> = HashMap::new();
+    let mut bridge_ns_names: BTreeMap<String, String> = BTreeMap::new();
     if !topology.networks.is_empty() {
         let mgmt_ns = format!("{}-mgmt", topology.lab.prefix());
         namespace::create(&mgmt_ns).map_err(|e| Error::Namespace {
@@ -804,7 +804,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
         tracing::info!("step 11b: auto-generating routes from topology");
         auto_generate_routes(topology)
     } else {
-        HashMap::new()
+        BTreeMap::new()
     };
 
     // ── Step 11c + 10d + 13: Per-node Stack-pattern apply ──────────
@@ -1228,9 +1228,9 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
         #[cfg(feature = "wireguard")]
         {
             use base64::Engine;
-            let mut map = HashMap::new();
+            let mut map = BTreeMap::new();
             for (node, keys) in &wg_public_keys {
-                let mut node_map = HashMap::new();
+                let mut node_map = BTreeMap::new();
                 for (iface, (_priv, pubkey)) in keys {
                     node_map.insert(
                         iface.clone(),
@@ -1243,7 +1243,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
         }
         #[cfg(not(feature = "wireguard"))]
         {
-            HashMap::new()
+            BTreeMap::new()
         }
     };
 
@@ -1574,7 +1574,7 @@ async fn apply_nftables_for_node(
 /// kernel calls.
 async fn apply_network_impairments(
     topology: &Topology,
-    node_handles: &HashMap<String, NodeHandle>,
+    node_handles: &BTreeMap<String, NodeHandle>,
 ) -> Result<()> {
     use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
     use nlink::util::Rate;
@@ -1597,10 +1597,10 @@ async fn apply_network_impairments(
     for (net_name, network) in networks_with_impair {
         // Map node name → its interface in this network (taken from
         // the first member entry that names the node).
-        let mut node_ifaces: HashMap<String, String> = HashMap::new();
+        let mut node_ifaces: BTreeMap<String, String> = BTreeMap::new();
         // Map node name → its IP on this network (first address from
         // the auto-assigned subnet).
-        let mut node_ips: HashMap<String, IpAddr> = HashMap::new();
+        let mut node_ips: BTreeMap<String, IpAddr> = BTreeMap::new();
 
         for member in &network.members {
             let Some(ep) = EndpointRef::parse(member) else {
@@ -1620,7 +1620,7 @@ async fn apply_network_impairments(
         }
 
         // Group impairments by source node.
-        let mut by_source: HashMap<&str, Vec<&crate::types::NetworkImpairment>> = HashMap::new();
+        let mut by_source: BTreeMap<&str, Vec<&crate::types::NetworkImpairment>> = BTreeMap::new();
         for imp in &network.impairments {
             by_source.entry(&imp.src[..]).or_default().push(imp);
         }
@@ -1711,7 +1711,7 @@ fn topology_to_network_config(
     node_name: &str,
     node: &crate::types::Node,
     topology: &Topology,
-    auto_routes: Option<&HashMap<String, crate::types::RouteConfig>>,
+    auto_routes: Option<&BTreeMap<String, crate::types::RouteConfig>>,
 ) -> Result<nlink::netlink::config::NetworkConfig> {
     use nlink::netlink::config::NetworkConfig;
 
@@ -1727,7 +1727,7 @@ fn topology_to_network_config(
     // idempotent here too.
     //
     // **Order matters for VLAN parents.** `node.interfaces` is a
-    // `HashMap`, so iteration order is non-deterministic. nlink's
+    // `BTreeMap`, so iteration order is non-deterministic. nlink's
     // `NetworkConfig::apply` iterates `links_to_add` in declaration
     // order; a VLAN whose parent is also a declarative link (e.g. a
     // Dummy declared on the same node) must be declared *after* its
@@ -2295,7 +2295,7 @@ fn parse_v4_cidr(s: &str) -> Result<(std::net::Ipv4Addr, u8)> {
 /// Manual routes are preserved — auto routes only fill gaps.
 fn auto_generate_routes(
     topology: &Topology,
-) -> HashMap<String, HashMap<String, crate::types::RouteConfig>> {
+) -> BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>> {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
     // 1. Build adjacency: node_name → Vec<(neighbor_name, gateway_ip)>
@@ -2473,7 +2473,7 @@ fn auto_generate_routes(
         }
     }
 
-    // 3. Convert to HashMap and return
+    // 3. Convert to BTreeMap and return
     auto_routes
         .into_iter()
         .map(|(k, v)| (k, v.into_iter().collect()))
@@ -2722,16 +2722,16 @@ fn find_peer_endpoint(topology: &crate::types::Topology, peer_name: &str) -> Opt
 /// split key resolution from device application so peer cross-
 /// references resolve before any kernel mutation happens.
 #[cfg(feature = "wireguard")]
-type WgKeys = HashMap<String, HashMap<String, ([u8; 32], [u8; 32])>>;
+type WgKeys = BTreeMap<String, BTreeMap<String, ([u8; 32], [u8; 32])>>;
 
 #[cfg(feature = "wireguard")]
 fn build_wg_public_key_map(topology: &crate::types::Topology) -> Result<WgKeys> {
-    let mut out: WgKeys = HashMap::new();
+    let mut out: WgKeys = BTreeMap::new();
     for (node_name, node) in &topology.nodes {
         if node.wireguard.is_empty() {
             continue;
         }
-        let mut per_node = HashMap::new();
+        let mut per_node = BTreeMap::new();
         for (wg_name, wg_config) in &node.wireguard {
             let private_key = match wg_config.private_key.as_deref() {
                 Some("auto") | None => generate_wg_private_key()?,
@@ -3035,11 +3035,11 @@ pub async fn compute_layered_diff(
     let auto_routes = if desired.lab.routing == crate::types::RoutingMode::Auto {
         auto_generate_routes(desired)
     } else {
-        HashMap::new()
+        BTreeMap::new()
     };
 
-    let mut network = HashMap::new();
-    let mut nftables = HashMap::new();
+    let mut network = BTreeMap::new();
+    let mut nftables = BTreeMap::new();
 
     for (node_name, node) in &desired.nodes {
         // The handle lookup uses the running-lab state. A node
@@ -3344,7 +3344,7 @@ pub async fn apply_diff(
     let auto_routes_for_apply = if desired.lab.routing == crate::types::RoutingMode::Auto {
         auto_generate_routes(desired)
     } else {
-        HashMap::new()
+        BTreeMap::new()
     };
 
     // Plan 159a Phase 2 follow-up — `apply_diff` Phase 6 previously
@@ -3722,7 +3722,7 @@ async fn apply_network_impair_diff(
 
         // Map node name → its iface in this network, and IP if known.
         let mut node_iface: Option<String> = None;
-        let mut node_ips: HashMap<String, IpAddr> = HashMap::new();
+        let mut node_ips: BTreeMap<String, IpAddr> = BTreeMap::new();
         for member in &net.members {
             let Some(ep) = EndpointRef::parse(member) else {
                 continue;
@@ -4117,9 +4117,9 @@ impl Drop for Cleanup {
 /// Returns node names in dependency order: nodes with no dependencies first,
 /// then nodes whose dependencies have all been visited, etc.
 /// Nodes within the same level are sorted by name for determinism.
-fn topo_sort_nodes(nodes: &HashMap<String, crate::types::Node>) -> Vec<String> {
-    let mut in_degree: HashMap<&str, usize> = HashMap::new();
-    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+fn topo_sort_nodes(nodes: &BTreeMap<String, crate::types::Node>) -> Vec<String> {
+    let mut in_degree: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut adj: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
 
     for (name, node) in nodes {
         in_degree.entry(name.as_str()).or_insert(0);
@@ -4636,7 +4636,7 @@ node a
                 metric: None,
             },
         );
-        let mut autos = HashMap::new();
+        let mut autos = BTreeMap::new();
         autos.insert(
             "default".to_string(),
             crate::types::RouteConfig {
@@ -4744,7 +4744,7 @@ node host
 
     #[test]
     fn network_config_vlan_parent_dummy_declared_first_regardless_of_hashmap_order() {
-        // Plan 158e polish — `node.interfaces` is a HashMap, so the
+        // Plan 158e polish — `node.interfaces` is a BTreeMap, so the
         // raw iteration order can put the VLAN child before the
         // parent Dummy. nlink's apply iterates links_to_add in
         // declaration order, so a VLAN declared before its parent
@@ -4882,7 +4882,7 @@ node host
             crate::types::VrfConfig {
                 table: 100,
                 interfaces: vec![],
-                routes: HashMap::new(),
+                routes: BTreeMap::new(),
             },
         );
         let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
@@ -4895,7 +4895,7 @@ node host
 
     /// Plan 159a Slice 4 — VRF enslave runs in pass 3, so the
     /// declared `links_to_add` lists the VRF strictly before any
-    /// enslave entries referencing it. Defeats HashMap iteration
+    /// enslave entries referencing it. Defeats BTreeMap iteration
     /// order over `node.vrfs.interfaces`.
     #[test]
     fn network_config_vrf_master_enslave_after_vrf_link() {
@@ -4911,7 +4911,7 @@ node host
             crate::types::VrfConfig {
                 table: 100,
                 interfaces: vec!["eth0".into(), "eth1".into()],
-                routes: HashMap::new(),
+                routes: BTreeMap::new(),
             },
         );
         let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();

@@ -2357,7 +2357,7 @@ fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Net
     // Uses the same interpolation engine as `lower.rs` so arithmetic
     // (e.g. `${(i + 1) % 12}`) and nested vars work as expected.
     let mut out = Vec::with_capacity(body.len() * values.len());
-    let mut vars: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut vars: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for val in &values {
         vars.insert(var.clone(), val.clone());
         for tmpl in &body {

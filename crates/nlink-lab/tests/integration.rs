@@ -261,6 +261,43 @@ async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
     );
 }
 
+/// `/proc/<pid>/stat` state letter, `None` when the pid is gone.
+fn proc_state(pid: u32) -> Option<char> {
+    let st = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    st[st.rfind(')')? + 2..].chars().next()
+}
+
+/// Dead for our purposes: gone, or a zombie waiting for *its* parent.
+/// CI job containers often run without a reaping PID 1, so an orphaned
+/// process that exited stays `Z` forever there; that is the container's
+/// problem, not a live process.
+fn pid_dead(pid: u32) -> bool {
+    !matches!(proc_state(pid), Some(c) if c != 'Z')
+}
+
+/// Pids of zombie children of *this* process — what issue #30's second
+/// half is about: nlink-lab must never own a child it does not reap.
+fn our_zombie_children() -> Vec<u32> {
+    let me = std::process::id();
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let Ok(st) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            continue;
+        };
+        let Some(close) = st.rfind(')') else { continue };
+        let mut fields = st[close + 2..].split_whitespace();
+        let state = fields.next().unwrap_or("");
+        let ppid: u32 = fields.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+        if ppid == me && state == "Z" {
+            out.push(pid);
+        }
+    }
+    out
+}
+
 // Issue #30 (second half): background spawns are double-forked and
 // session-detached. The pid we hand back must be the real process (not
 // an intermediate), it must not be our child (so it can never become our
@@ -287,25 +324,23 @@ async fn spawn_leaves_no_zombie_and_returns_real_pid(mut lab: RunningLab) {
     assert_ne!(ppid, me, "detached process must not be our child");
     let _ = lab.kill_process(pid);
 
+    // A quick-exiting spawn must never become *our* zombie. Whether it
+    // vanishes entirely depends on the host's PID 1 reaping orphans
+    // (not the case in every CI container), so only "dead" is asserted.
     let quick = lab.spawn_with_logs("host", &["true"], None).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    loop {
-        match std::fs::read_to_string(format!("/proc/{quick}/stat")) {
-            Err(_) => break, // reaped by init: gone entirely
-            Ok(st) => {
-                let state = st[st.rfind(')').unwrap() + 2..].chars().next().unwrap();
-                assert_ne!(
-                    state, 'Z',
-                    "quick-exiting spawn must not linger as a zombie"
-                );
-            }
-        }
+    while !pid_dead(quick) {
         assert!(
             std::time::Instant::now() < deadline,
-            "pid {quick} still present after 5s"
+            "pid {quick} still running after 5s"
         );
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
+    assert!(
+        our_zombie_children().is_empty(),
+        "nlink-lab must not own zombie children: {:?}",
+        our_zombie_children()
+    );
 }
 
 // `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
@@ -1722,7 +1757,7 @@ node s { run ["sleep", "1000"] background }
     assert_ne!(new, old);
     assert!(comm(new).contains("999"), "{}", comm(new));
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::path::Path::new(&format!("/proc/{old}")).exists() {
+    while !pid_dead(old) {
         assert!(
             std::time::Instant::now() < deadline,
             "old exec pid {old} still alive"
@@ -1745,7 +1780,7 @@ node s { run ["sleep", "1000"] background }
         .await
         .expect("apply failed");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::path::Path::new(&format!("/proc/{new}")).exists() {
+    while !pid_dead(new) {
         assert!(
             std::time::Instant::now() < deadline,
             "removed exec pid {new} still alive"
@@ -1778,16 +1813,21 @@ network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
     let _guard = LabCleanup {
         name: lab.name().to_string(),
     };
-    let mgmt_links = || {
-        std::process::Command::new("ip")
-            .args(["-n", "apply-net-rm-mgmt", "-br", "link"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-            .unwrap_or_default()
-    };
-    let before = mgmt_links();
-    let bridges_before = before.lines().filter(|l| l.starts_with("nb")).count();
-    assert_eq!(bridges_before, 2, "two bridges expected: {before}");
+    // Bridges live in the lab's mgmt namespace; list them through
+    // netlink (an `ip -n` child is not reliable in every CI container).
+    async fn mgmt_bridges() -> Vec<String> {
+        let conn: nlink::Connection<nlink::Route> =
+            nlink::netlink::namespace::connection_for("apply-net-rm-mgmt").unwrap();
+        conn.get_links()
+            .await
+            .unwrap()
+            .iter()
+            .filter_map(|l| l.name().map(str::to_string))
+            .filter(|n| n.starts_with("nb"))
+            .collect()
+    }
+    let before = mgmt_bridges().await;
+    assert_eq!(before.len(), 2, "two bridges expected: {before:?}");
 
     let desired = nlink_lab::parser::parse(&src.replace(
         "network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }\n",
@@ -1805,12 +1845,8 @@ network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
     nlink_lab::apply(&mut lab, &desired)
         .await
         .expect("apply failed");
-    let after = mgmt_links();
-    assert_eq!(
-        after.lines().filter(|l| l.starts_with("nb")).count(),
-        1,
-        "dmz bridge must be gone: {after}"
-    );
+    let after = mgmt_bridges().await;
+    assert_eq!(after.len(), 1, "dmz bridge must be gone: {after:?}");
     let b = lab.exec("b", "ip", &["-br", "link"]).unwrap().stdout;
     assert!(!b.contains("eth1"), "b:eth1 must be gone: {b}");
     assert!(b.contains("eth0"), "b:eth0 must survive: {b}");

@@ -34,7 +34,13 @@ All notable changes to this project will be documented in this file.
   `stats` shows CPU seconds, memory, limit and pid count for them
   (`--json` rows with `kind: "namespace"`); `destroy` removes the
   subtree; `doctor` reports cgroup v2 availability. The validator no
-  longer rejects `cpu`/`memory` on nodes without an `image`.
+  longer rejects `cpu`/`memory` on nodes without an `image`. Where the
+  hierarchy is mounted but `cpu`/`memory` are not delegated below it
+  (a container's namespaced cgroup root cannot enable controllers —
+  the "no internal processes" rule), the limits are ignored with a
+  warning instead of leaving a controller-less cgroup behind; `doctor`
+  names that case, and `destroy` asks each node cgroup to kill its
+  members (`cgroup.kill`) and waits for it to drain before removing it.
 
 ### Added — CLI (issues #55, #57, #58, #60, #61, #62, #68)
 

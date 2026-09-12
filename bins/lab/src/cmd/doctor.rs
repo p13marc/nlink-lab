@@ -162,21 +162,33 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
         });
     }
 
-    checks.push(Check {
-        name: "cgroup v2",
-        status: if nlink_lab::cgroup::available() {
-            Status::Ok
-        } else {
-            Status::Info
-        },
-        detail: if nlink_lab::cgroup::available() {
+    let (cg_status, cg_detail) = if !nlink_lab::cgroup::available() {
+        (
+            Status::Info,
+            "no cgroup v2 hierarchy; `cpu`/`memory` on namespace nodes are ignored".to_string(),
+        )
+    } else if !nlink_lab::cgroup::controllers_delegated() {
+        (
+            Status::Info,
+            format!(
+                "{} mounted but cpu/memory not delegated below it (container?); \
+                 `cpu`/`memory` on namespace nodes are ignored",
+                nlink_lab::cgroup::ROOT
+            ),
+        )
+    } else {
+        (
+            Status::Ok,
             format!(
                 "{} (cpu/memory limits for namespace nodes)",
                 nlink_lab::cgroup::ROOT
-            )
-        } else {
-            "no cgroup v2 hierarchy; `cpu`/`memory` on namespace nodes are ignored".into()
-        },
+            ),
+        )
+    };
+    checks.push(Check {
+        name: "cgroup v2",
+        status: cg_status,
+        detail: cg_detail,
     });
 
     let sysnet = std::path::Path::new("/proc/sys/net/ipv4/ip_forward");

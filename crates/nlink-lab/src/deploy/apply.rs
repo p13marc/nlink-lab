@@ -13,7 +13,7 @@ use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::{Connection, Route};
 
-use super::op::{Op, Plan, Stage};
+use super::op::{Op, Plan, RouteSpec, Stage};
 use super::rollback::{Journal, Undo};
 use super::{NsRef, apply_network_impairments, apply_stack_for_node, guard_namespace_absent};
 use crate::container::Runtime;
@@ -695,6 +695,23 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             env.containers.remove(node);
             env.ns.remove(node);
         }
+        Op::Route { node, route } => {
+            let conn = env.route(node)?;
+            replace_route_spec(&conn, route).await.map_err(|e| {
+                Error::deploy_failed(format!("failed to add route {route} on '{node}': {e}"))
+            })?;
+            journal.record(Undo::DelRoute {
+                ns: env.handle(node)?.clone(),
+                route: route.clone(),
+            });
+        }
+        Op::DelRoute { node, route } => {
+            if let Ok(conn) = env.route(node)
+                && let Err(e) = del_route_lenient(&conn, route).await
+            {
+                tracing::warn!("failed to delete route {route} on '{node}': {e}");
+            }
+        }
         Op::DeleteLink { node, iface } => {
             if let Ok(conn) = env.route(node)
                 && let Err(e) = conn.del_link_if_exists(iface.as_str()).await
@@ -868,4 +885,60 @@ fn exec_op(
         ),
     );
     Ok(())
+}
+
+/// `ip route replace` for a [`RouteSpec`] (idempotent).
+async fn replace_route_spec(
+    conn: &Connection<Route>,
+    spec: &RouteSpec,
+) -> std::result::Result<(), nlink::netlink::Error> {
+    match spec.dest {
+        std::net::IpAddr::V4(dst) => conn.replace_route(route_v4(spec, dst)).await,
+        std::net::IpAddr::V6(dst) => conn.replace_route(route_v6(spec, dst)).await,
+    }
+}
+
+/// `ip route del` for a [`RouteSpec`]; an already-absent route is not
+/// an error (ESRCH / not found), like the `del_*_if_exists` family.
+pub(super) async fn del_route_lenient(
+    conn: &Connection<Route>,
+    spec: &RouteSpec,
+) -> std::result::Result<(), nlink::netlink::Error> {
+    let res = match spec.dest {
+        std::net::IpAddr::V4(dst) => conn.del_route(route_v4(spec, dst)).await,
+        std::net::IpAddr::V6(dst) => conn.del_route(route_v6(spec, dst)).await,
+    };
+    match res {
+        Ok(()) => Ok(()),
+        Err(e) if e.is_not_found() || e.errno() == Some(libc::ESRCH) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+fn route_v4(spec: &RouteSpec, dst: std::net::Ipv4Addr) -> nlink::netlink::route::Ipv4Route {
+    let mut r = nlink::netlink::route::Ipv4Route::from_addr(dst, spec.prefix).table(spec.table);
+    if let Some(std::net::IpAddr::V4(gw)) = spec.via {
+        r = r.gateway(gw);
+    }
+    if let Some(d) = &spec.dev {
+        r = r.dev(d.clone());
+    }
+    if let Some(m) = spec.metric {
+        r = r.metric(m);
+    }
+    r
+}
+
+fn route_v6(spec: &RouteSpec, dst: std::net::Ipv6Addr) -> nlink::netlink::route::Ipv6Route {
+    let mut r = nlink::netlink::route::Ipv6Route::from_addr(dst, spec.prefix).table(spec.table);
+    if let Some(std::net::IpAddr::V6(gw)) = spec.via {
+        r = r.gateway(gw);
+    }
+    if let Some(d) = &spec.dev {
+        r = r.dev(d.clone());
+    }
+    if let Some(m) = spec.metric {
+        r = r.metric(m);
+    }
+    r
 }

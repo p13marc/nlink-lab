@@ -36,6 +36,11 @@
         "$ref": "#/definitions/ConfigDiff"
       }
     },
+    "removals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Removal ops the plan diff would execute (deleted nodes, links, VRF-table routes, impairments, …), one human-readable description per op. Elided when empty. Counted in `change_count` and in `no_op`. Additive since 0.9."
+    },
     "nftables": {
       "type": "object",
       "description": "Per-namespace upstream `NftablesDiff` (tables + chains + rules + sets + elements) keyed by node name. Empty map elided. Same forward-compat caveat as `network`.",

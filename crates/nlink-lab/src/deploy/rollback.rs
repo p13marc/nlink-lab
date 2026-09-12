@@ -46,6 +46,11 @@ pub enum Undo {
         ns: NsRef,
         iface: String,
     },
+    /// A non-main-table route (`Op::Route`).
+    DelRoute {
+        ns: NsRef,
+        route: super::op::RouteSpec,
+    },
     RemoveHosts {
         lab: String,
     },
@@ -200,6 +205,13 @@ impl Journal {
                         tracing::warn!("rollback: delete link '{iface}' in {ns:?}: {e}");
                     }
                 }
+                Undo::DelRoute { ns, route } => {
+                    if let Ok(conn) = ns.connection::<Route>()
+                        && let Err(e) = super::apply::del_route_lenient(&conn, route).await
+                    {
+                        tracing::warn!("rollback: delete route {route} in {ns:?}: {e}");
+                    }
+                }
                 Undo::ClearQdisc { ns, iface } => {
                     if let Ok(conn) = ns.connection::<Route>() {
                         let _ = conn
@@ -270,8 +282,10 @@ impl Drop for Journal {
                     let _ = std::fs::remove_dir_all(path);
                 }
                 Undo::CleanupWifiConfigs { lab } => crate::wifi::cleanup_configs(lab),
-                Undo::DeleteHostLink { .. } | Undo::DeleteLink { .. } | Undo::ClearQdisc { .. } => {
-                }
+                Undo::DeleteHostLink { .. }
+                | Undo::DeleteLink { .. }
+                | Undo::DelRoute { .. }
+                | Undo::ClearQdisc { .. } => {}
             }
         }
         // The file stays so `destroy --orphans` can finish the netlink half.
@@ -296,6 +310,19 @@ mod tests {
             Undo::KillProcess {
                 pid: 7,
                 starttime: Some(99),
+            },
+            Undo::DelRoute {
+                ns: NsRef::Named {
+                    name: "l-pe".into(),
+                },
+                route: super::super::op::RouteSpec {
+                    dest: "10.0.0.0".parse().unwrap(),
+                    prefix: 8,
+                    table: 10,
+                    via: Some("10.10.0.10".parse().unwrap()),
+                    dev: None,
+                    metric: Some(50),
+                },
             },
         ];
         let json = serde_json::to_string(&entries).unwrap();

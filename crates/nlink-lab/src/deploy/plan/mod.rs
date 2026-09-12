@@ -105,6 +105,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
                 wireguard: wg,
             }),
         });
+        ops.extend(network::vrf_route_ops(node_name, node)?);
     }
 
     // ── traffic control ──
@@ -363,6 +364,166 @@ link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
             ),
             "{:?}",
             d.ops
+        );
+    }
+
+    const VRF: &str = r#"lab "v"
+profile router { forward ipv4 }
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default via 10.10.0.10
+    route 192.168.5.0/24 via 10.10.0.10 metric 50
+  }
+}
+node a { route default via 10.10.0.1 }
+link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+"#;
+
+    #[test]
+    fn plan_emits_vrf_routes_as_ops_after_the_stack() {
+        let p = plan_of(VRF);
+        let routes: Vec<&Op> = p.stage(Stage::Routes).collect();
+        assert_eq!(routes.len(), 2, "{routes:?}");
+        assert!(routes.iter().all(|o| matches!(
+            o,
+            Op::Route { node, route } if node == "pe" && route.table == 10
+        )));
+        let d: Vec<String> = routes.iter().map(|o| o.describe()).collect();
+        assert!(
+            d.contains(&"pe: route 0.0.0.0/0 table 10 via 10.10.0.10".to_string()),
+            "{d:?}"
+        );
+        assert!(
+            d.contains(&"pe: route 192.168.5.0/24 table 10 via 10.10.0.10 metric 50".to_string()),
+            "{d:?}"
+        );
+        // the stack no longer declares them
+        let stack_pos = p
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Stack { node, .. } if node == "pe"))
+            .unwrap();
+        let route_pos = p
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Route { .. }))
+            .unwrap();
+        assert!(stack_pos < route_pos);
+        if let Op::Stack { cfg, .. } = &p.ops[stack_pos] {
+            assert!(
+                cfg.network
+                    .routes()
+                    .iter()
+                    .all(|r| r.table().is_none_or(|t| t == 254))
+            );
+        }
+    }
+
+    #[test]
+    fn diff_removed_vrf_route_emits_del_route() {
+        let cur = plan_of(VRF);
+        let des = plan_of(&VRF.replace(
+            "    route 192.168.5.0/24 via 10.10.0.10 metric 50
+",
+            "",
+        ));
+        let d = Plan::diff(&cur, &des);
+        let dels: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::DelRoute { .. }))
+            .collect();
+        assert_eq!(dels.len(), 1, "{:?}", d.ops);
+        assert_eq!(
+            dels[0].describe(),
+            "pe: delete route 192.168.5.0/24 table 10 via 10.10.0.10 metric 50"
+        );
+        assert!(
+            !d.ops.iter().any(|o| matches!(o, Op::Route { .. })),
+            "unchanged routes must not be re-added: {:?}",
+            d.ops
+        );
+    }
+
+    #[test]
+    fn diff_changed_vrf_route_metric_deletes_then_replaces() {
+        let cur = plan_of(VRF);
+        let des = plan_of(&VRF.replace("metric 50", "metric 60"));
+        let d = Plan::diff(&cur, &des);
+        let del = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DelRoute { route, .. } if route.metric == Some(50)));
+        let add = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::Route { route, .. } if route.metric == Some(60)));
+        assert!(del.is_some() && add.is_some(), "{:?}", d.ops);
+        assert!(del < add, "delete must precede the replacement");
+    }
+
+    #[test]
+    fn diff_removed_vrf_node_skips_del_route() {
+        let cur = plan_of(VRF);
+        let des = plan_of(
+            &VRF.replace(
+                "node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default via 10.10.0.10
+    route 192.168.5.0/24 via 10.10.0.10 metric 50
+  }
+}
+",
+                "node pe : router
+",
+            )
+            .replace(
+                "link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+",
+                "",
+            ),
+        );
+        // pe still exists but the link and the VRF are gone: DelRoute ops
+        // are emitted (pe is not dying)
+        let d = Plan::diff(&cur, &des);
+        assert_eq!(
+            d.ops
+                .iter()
+                .filter(|o| matches!(o, Op::DelRoute { .. }))
+                .count(),
+            2,
+            "{:?}",
+            d.ops
+        );
+        // whereas a node that disappears entirely takes its routes with it
+        let des2 = plan_of("lab \"v\"\nnode a { route default via 10.10.0.1 }\n");
+        let d2 = Plan::diff(&cur, &des2);
+        assert!(
+            !d2.ops.iter().any(|o| matches!(o, Op::DelRoute { .. })),
+            "{:?}",
+            d2.ops
+        );
+        assert!(
+            d2.ops
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { ns, .. } if ns == "v-pe"))
+        );
+    }
+
+    #[test]
+    fn vrf_route_with_mismatched_family_is_a_plan_error() {
+        // `default via <v6>` is a valid v6 default route; a v4 destination
+        // with a v6 gateway is the mismatch.
+        let t = topo(&VRF.replace(
+            "route 192.168.5.0/24 via 10.10.0.10 metric 50",
+            "route 192.168.5.0/24 via fd00::1",
+        ));
+        let err = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap_err();
+        assert!(
+            err.to_string().contains("different address families"),
+            "{err}"
         );
     }
 

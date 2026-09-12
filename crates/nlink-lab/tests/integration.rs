@@ -1687,6 +1687,92 @@ async fn state_persistence(lab: RunningLab) {
     assert_eq!(loaded.namespace_count(), lab.namespace_count());
 }
 
+// Issue #83: a VRF-table route removed from the topology must be
+// deleted on apply. nlink's purge only converges the main table, so the
+// engine owns non-main-table routes as explicit ops.
+#[tokio::test]
+async fn apply_removes_vrf_route() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_removes_vrf_route: requires root");
+        return;
+    }
+    if !has_kernel_module("vrf") {
+        eprintln!("skipping apply_removes_vrf_route: vrf kernel module not available");
+        return;
+    }
+    let src = r#"lab "apply-vrf-rm"
+profile router { forward ipv4 }
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default via 10.10.0.10
+    route 192.168.5.0/24 via 10.10.0.10
+  }
+}
+node a { route default via 10.10.0.1 }
+link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+"#;
+    let topo = nlink_lab::parser::parse(src).unwrap();
+    let mut lab = topo.clone().deploy().await.expect("failed to deploy lab");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let table = |lab: &RunningLab| {
+        lab.exec("pe", "ip", &["route", "show", "table", "10"])
+            .unwrap()
+            .stdout
+    };
+    let before = table(&lab);
+    assert!(
+        before.contains("192.168.5.0/24"),
+        "route missing after deploy: {before}"
+    );
+    assert!(before.contains("default via 10.10.0.10"), "{before}");
+
+    // Drop one route and apply.
+    let desired =
+        nlink_lab::parser::parse(&src.replace("    route 192.168.5.0/24 via 10.10.0.10\n", ""))
+            .unwrap();
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        plan.ops
+            .iter()
+            .any(|o| o.describe() == "pe: delete route 192.168.5.0/24 table 10 via 10.10.0.10"),
+        "{:?}",
+        plan.ops
+    );
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let after = table(&lab);
+    assert!(
+        !after.contains("192.168.5.0/24"),
+        "route survived apply: {after}"
+    );
+    assert!(
+        after.contains("default via 10.10.0.10"),
+        "unrelated route lost: {after}"
+    );
+
+    // Re-apply is a no-op on the route layer, and the diff is clean.
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        !plan.ops.iter().any(|o| matches!(
+            o,
+            nlink_lab::Op::Route { .. } | nlink_lab::Op::DelRoute { .. }
+        )),
+        "{:?}",
+        plan.ops
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .unwrap();
+    assert!(layered.is_empty(), "{layered}");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── VRF test (plan 050) ─────────────────────────────────
 
 #[tokio::test]

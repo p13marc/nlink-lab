@@ -166,6 +166,9 @@ pub enum Stage {
     Sysctls,
     /// Declarative per-node stack (links/addresses/routes, nftables, WireGuard).
     Stack,
+    /// Routes in non-main tables (VRF), owned explicitly because nlink's
+    /// purge only converges the main table (#83).
+    Routes,
     /// Traffic control: netem, per-pair impairments, rate limits.
     Tc,
     /// /etc/hosts and per-namespace /etc overlays.
@@ -174,6 +177,35 @@ pub enum Stage {
     Processes,
     /// hostapd / wpa_supplicant / mesh join.
     Wifi,
+}
+
+/// One route in a non-main table, fully resolved so the delete can
+/// replay exactly what the add declared (kernel route identity is
+/// destination + table + metric; gateway/dev disambiguate multipath).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouteSpec {
+    pub dest: std::net::IpAddr,
+    pub prefix: u8,
+    pub table: u32,
+    pub via: Option<std::net::IpAddr>,
+    pub dev: Option<String>,
+    pub metric: Option<u32>,
+}
+
+impl std::fmt::Display for RouteSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{} table {}", self.dest, self.prefix, self.table)?;
+        if let Some(gw) = &self.via {
+            write!(f, " via {gw}")?;
+        }
+        if let Some(d) = &self.dev {
+            write!(f, " dev {d}")?;
+        }
+        if let Some(m) = self.metric {
+            write!(f, " metric {m}")?;
+        }
+        Ok(())
+    }
 }
 
 /// Bridge-port VLAN settings for one network member.
@@ -271,6 +303,11 @@ pub enum Op {
         node: String,
         cfg: Box<StackConfig>,
     },
+    /// A route in a non-main table (VRF); see [`Stage::Routes`].
+    Route {
+        node: String,
+        route: RouteSpec,
+    },
     Netem {
         node: String,
         iface: String,
@@ -326,6 +363,10 @@ pub enum Op {
     DeleteHostLink {
         name: String,
     },
+    DelRoute {
+        node: String,
+        route: RouteSpec,
+    },
     ClearQdisc {
         node: String,
         iface: String,
@@ -363,6 +404,7 @@ impl Op {
             LinksUp { .. } => Stage::LinksUp,
             Sysctls { .. } => Stage::Sysctls,
             Stack { .. } => Stage::Stack,
+            Route { .. } | DelRoute { .. } => Stage::Routes,
             Netem { .. }
             | NetworkImpairments
             | RateLimit { .. }
@@ -400,6 +442,10 @@ impl Op {
             LinksUp { node, .. } => format!("linksup:{node}"),
             Sysctls { node, .. } => format!("sysctls:{node}"),
             Stack { node, .. } => format!("stack:{node}"),
+            Route { node, route } | DelRoute { node, route } => format!(
+                "route:{node}:{}:{}/{}",
+                route.table, route.dest, route.prefix
+            ),
             Netem { node, iface, .. } | ClearQdisc { node, iface } => {
                 format!("qdisc:{node}:{iface}")
             }
@@ -455,6 +501,10 @@ impl Op {
                 node: node.clone(),
                 iface: cfg.name.clone(),
             },
+            Route { node, route } => DelRoute {
+                node: node.clone(),
+                route: route.clone(),
+            },
             Netem { node, iface, .. } => ClearQdisc {
                 node: node.clone(),
                 iface: iface.clone(),
@@ -478,6 +528,7 @@ impl Op {
                 | RemoveContainer { .. }
                 | DeleteLink { .. }
                 | DeleteHostLink { .. }
+                | DelRoute { .. }
                 | ClearQdisc { .. }
                 | RemoveRateLimit { .. }
                 | KillNodeProcesses { .. }
@@ -525,6 +576,7 @@ impl Op {
             Stack { node, .. } => {
                 format!("{node}: reconcile links/addresses/routes, nftables, wireguard")
             }
+            Route { node, route } => format!("{node}: route {route}"),
             Netem { node, iface, .. } => format!("netem on {node}:{iface}"),
             NetworkImpairments => "per-pair network impairments".into(),
             RateLimit { node, iface, .. } => format!("rate limit on {node}:{iface}"),
@@ -542,6 +594,7 @@ impl Op {
             RemoveContainer { node, .. } => format!("remove container of {node}"),
             DeleteLink { node, iface } => format!("delete link {node}:{iface}"),
             DeleteHostLink { name } => format!("delete host link {name}"),
+            DelRoute { node, route } => format!("{node}: delete route {route}"),
             ClearQdisc { node, iface } => format!("clear qdisc on {node}:{iface}"),
             RemoveRateLimit { node, iface } => format!("remove rate limit on {node}:{iface}"),
             KillNodeProcesses { node } => format!("stop background processes of {node}"),
@@ -597,6 +650,7 @@ impl Plan {
             .collect();
         removals.retain(|o| match o {
             Op::DeleteLink { node, .. }
+            | Op::DelRoute { node, .. }
             | Op::ClearQdisc { node, .. }
             | Op::RemoveRateLimit { node, .. }
             | Op::KillNodeProcesses { node } => !dying.contains(node.as_str()),
@@ -639,5 +693,45 @@ impl Plan {
         let mut ops = removals;
         ops.extend(changes);
         Plan { ops }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every inverse must address the same resource as the op it undoes,
+    /// otherwise `Plan::diff` cannot pair them.
+    #[test]
+    fn inverse_keeps_the_key() {
+        let t = crate::parser::parse(
+            r#"lab "k"
+profile router { forward ipv4 }
+node r : router {
+  vrf red table 10 { interfaces [eth0] route default via 10.0.0.2 }
+  run ["sleep", "1"] background
+}
+node h { route default via 10.0.0.1 }
+link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms  rate 1mbit }
+network lan { subnet 10.9.0.0/24  members [r:eth1, h:eth1] }
+"#,
+        )
+        .unwrap();
+        let p = crate::deploy::plan_for(&t).unwrap();
+        let mut checked = 0;
+        for op in &p.ops {
+            if let Some(inv) = op.inverse() {
+                assert!(inv.is_removal(), "{inv:?} must be a removal op");
+                if !matches!(op, Op::Exec { .. }) {
+                    assert_eq!(op.key(), inv.key(), "inverse of {op:?} changes the key");
+                }
+                checked += 1;
+            }
+        }
+        assert!(
+            checked >= 8,
+            "only {checked} inverses exercised: {:?}",
+            p.ops
+        );
     }
 }

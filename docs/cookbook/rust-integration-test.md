@@ -42,11 +42,30 @@ async fn ping_works(lab: RunningLab) {
 That's the whole test. `cargo test` deploys the topology, calls
 your function with a `RunningLab` handle, then tears down.
 
-The macro skips silently if you're not running as root — `cargo
-test` reports green even though the test didn't actually run.
-That's surprising; it's there because most CI runners aren't
-privileged by default. To ensure the test runs, use a privileged
-runner or `sudo cargo test`.
+The only dev-dependency the expansion needs is `nlink-lab` itself
+(it reaches tokio through `nlink_lab::test_helpers::__macro_support`,
+so you don't have to add `tokio` or `libc` just to make the generated
+code compile). Add `tokio` only if your test bodies call it directly:
+
+```toml
+[dev-dependencies]
+nlink-lab = { git = "https://github.com/p13marc/nlink-lab", version = "0.8" }
+# Optional — only if your test bodies use tokio APIs (sleep, timeout, …).
+tokio = { version = "1", features = ["time"] }
+```
+
+Deploying needs root (or `CAP_NET_ADMIN`). If you're not root, the
+test **fails** with
+
+```text
+#[lab_test] 'ping_works' needs root/CAP_NET_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
+```
+
+rather than quietly passing — a green run with zero coverage is
+worse than a red one. For a job that intentionally runs
+unprivileged, set `NLINK_LAB_SKIP_ROOT_TESTS=1`: the tests then
+print a `*** SKIPPING #[lab_test] … ***` line to stderr and return.
+To actually run them, use a privileged runner or `sudo cargo test`.
 
 ## Forms
 
@@ -104,7 +123,8 @@ maintaining one NLL per scenario.
 The `timeout = N` form wraps the test body in `tokio::time::timeout`
 and panics with a clear message after N seconds. Default: no
 timeout (the test runs as long as `cargo test`'s own timeout
-allows).
+allows). The body borrows `lab` inside the timeout future, so it
+must not move `lab` out — the macro still needs it for `destroy()`.
 
 The `capture = true` form is the killer feature for flake
 investigation. When the test panics — assert failure, deadline
@@ -131,14 +151,29 @@ overhead (~5%) for the test duration.
 
 ## What gets cleaned up
 
-The macro wraps the test body in a guard so a panic doesn't leak
+The macro arms a guard *before* deploying, so neither a panic in
+the body, a half-finished deploy, nor a failing `destroy()` leaks
 the lab:
 
 ```text
-deploy → run test body → destroy
-              │
-              └─ on panic: Drop runs, deletes namespaces, removes state
+arm guard → deploy → run test body → destroy ─ok→ disarm guard
+    │           │           │            │
+    └───────────┴───────────┴────────────┴─ on panic / error: Drop runs
+                                            test_helpers::cleanup_lab_blocking
 ```
+
+`cleanup_lab_blocking` first tries the real thing —
+`RunningLab::load(name)?.destroy()` — which kills spawned processes
+and removes containers, the mgmt bridge and its veth peers, hwsim,
+and `/etc/hosts` entries. It then always runs a state-less sweep
+from the topology: namespaces named `<prefix>-*` (through nlink,
+no `ip(8)` on the box required), root-namespace mgmt links,
+containers named `<prefix>-<node>`, hwsim configs, the
+`/etc/hosts` section, subnet-pool allocations, and the state
+directory. Anything it couldn't do is printed as
+`lab_test '<name>': cleanup warning: …`. The async form,
+`nlink_lab::test_helpers::cleanup_lab(&topology)`, is public for
+tests that deploy without the macro.
 
 The lab name is suffixed with the test function name and the
 process PID — multiple test processes don't collide.
@@ -230,8 +265,12 @@ is multi-second per cycle.
 
 ## Troubleshooting
 
-- **The test silently passed without running.** You're not root.
-  Run with `sudo` or add capabilities.
+- **`needs root/CAP_NET_ADMIN` panic.** You're not root. Run with
+  `sudo` or add capabilities; set `NLINK_LAB_SKIP_ROOT_TESTS=1` if
+  the job is meant to run unprivileged and should skip instead.
+- **The test passed in 0.00s.** `NLINK_LAB_SKIP_ROOT_TESTS` is set
+  in your environment and the test skipped — check stderr for the
+  `*** SKIPPING` line.
 - **"address already in use" on second run.** A previous test left
   state behind. Run `sudo nlink-lab destroy --orphans` once.
 - **Tests interfere with each other.** Each test gets a unique lab

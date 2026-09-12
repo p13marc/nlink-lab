@@ -3,13 +3,24 @@
 //! Provides `#[lab_test]` for writing integration tests that automatically
 //! deploy a topology before the test and destroy it after.
 //!
+//! The expansion only refers to items by absolute path through
+//! `::nlink_lab` (tokio is reached via
+//! `::nlink_lab::test_helpers::__macro_support::tokio`), so a consumer
+//! crate needs nothing beyond `nlink-lab` in its `[dev-dependencies]`.
+//!
+//! # Privileges
+//!
+//! Deploying a lab needs root (or `CAP_NET_ADMIN`). A test that runs
+//! without it **fails** with a clear message; set
+//! `NLINK_LAB_SKIP_ROOT_TESTS=1` to turn that into a loud skip instead.
+//!
 //! # Usage
 //!
 //! ```ignore
 //! use nlink_lab::lab_test;
 //!
 //! // Deploy from a topology file
-//! #[lab_test("examples/simple.toml")]
+//! #[lab_test("examples/simple.nll")]
 //! async fn test_ping(lab: RunningLab) {
 //!     let out = lab.exec("host", "ping", &["-c1", "10.0.0.1"]).unwrap();
 //!     assert_eq!(out.exit_code, 0);
@@ -113,7 +124,7 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 .to_string();
             if args.set.is_empty() {
                 quote! {
-                    let __topo = nlink_lab::parser::parse_file(#abs_path)
+                    let __topo = ::nlink_lab::parser::parse_file(#abs_path)
                         .expect("failed to parse topology file");
                 }
             } else {
@@ -122,8 +133,9 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                     .iter()
                     .map(|(k, v)| quote! { (#k.into(), #v.into()) });
                 quote! {
-                    let __params: Vec<(String, String)> = vec![ #(#pairs),* ];
-                    let __topo = nlink_lab::parser::parse_file_with_params(
+                    let __params: ::std::vec::Vec<(::std::string::String, ::std::string::String)> =
+                        ::std::vec![ #(#pairs),* ];
+                    let __topo = ::nlink_lab::parser::parse_file_with_params(
                         #abs_path,
                         &__params,
                     ).expect("failed to parse topology file with params");
@@ -157,7 +169,7 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
             // path; otherwise they're wiped with the temp dir.
             let __cap_targets = lab.capture_targets();
             let __lab_capture = ::nlink_lab::test_helpers::LabCapture::start(&__cap_targets)
-                .map_err(|e| eprintln!("lab_capture: failed to start: {e}"))
+                .map_err(|e| ::std::eprintln!("lab_capture: failed to start: {e}"))
                 .ok();
 
             struct __CaptureGuard {
@@ -169,18 +181,21 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                     if let Some(cap) = self.cap.take() {
                         let failed = ::std::thread::panicking();
                         match cap.persist_on_failure_in(failed, &self.dest) {
-                            Ok(Some(paths)) => {
-                                eprintln!(
+                            ::std::result::Result::Ok(::std::option::Option::Some(paths)) => {
+                                ::std::eprintln!(
                                     "lab_capture: persisted {} pcap(s) to {}",
                                     paths.len(),
                                     self.dest.display(),
                                 );
                                 for p in paths {
-                                    eprintln!("  - {}", p.display());
+                                    ::std::eprintln!("  - {}", p.display());
                                 }
                             }
-                            Ok(None) => {} // success path — discarded
-                            Err(e) => eprintln!("lab_capture: persist failed: {e}"),
+                            // success path — discarded
+                            ::std::result::Result::Ok(::std::option::Option::None) => {}
+                            ::std::result::Result::Err(e) => {
+                                ::std::eprintln!("lab_capture: persist failed: {e}")
+                            }
                         }
                     }
                 }
@@ -190,7 +205,7 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()),
             )
             .join("lab_test_captures")
-            .join(format!("{}-{}", #lab_name_suffix, ::std::process::id()));
+            .join(::std::format!("{}-{}", #lab_name_suffix, ::std::process::id()));
 
             let __cap_guard = __CaptureGuard {
                 cap: __lab_capture,
@@ -205,13 +220,15 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     let timeout_secs = args.timeout_secs;
     let body_with_timeout = if let Some(secs) = timeout_secs {
         quote! {
-            if let Err(_) = tokio::time::timeout(
-                std::time::Duration::from_secs(#secs),
-                async move { #fn_block }
-            ).await {
-                panic!(
+            // Non-`move` block: `lab` is borrowed by the body and is
+            // still available for the `destroy()` that follows.
+            if ::nlink_lab::test_helpers::__macro_support::tokio::time::timeout(
+                ::std::time::Duration::from_secs(#secs),
+                async { #fn_block }
+            ).await.is_err() {
+                ::std::panic!(
                     "lab_test '{}' exceeded {}s timeout",
-                    stringify!(#fn_name),
+                    ::std::stringify!(#fn_name),
                     #secs,
                 );
             }
@@ -220,78 +237,98 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! { #fn_block }
     };
 
+    // The generated test is a plain `#[test]` that builds its own
+    // current-thread tokio runtime (what `#[tokio::test]` would do)
+    // through nlink-lab's re-export, so consumers don't need `tokio`
+    // as a dev-dependency just for the expansion to compile.
     let expanded = quote! {
         #(#fn_attrs)*
-        #[tokio::test]
-        #fn_vis async fn #fn_name() {
-            // Skip if not root. The skip is loud so it doesn't look
-            // like a passing test in CI logs — non-root runs of
-            // privileged tests are a common foot-gun.
-            if unsafe { libc::geteuid() } != 0 {
-                eprintln!(
-                    "\n*** SKIPPING #[lab_test] '{}' — requires root or CAP_NET_ADMIN ***\n\
-                     ***   Run with `sudo cargo test` or grant CAP_NET_ADMIN to cargo. ***",
-                    stringify!(#fn_name),
+        #[::core::prelude::v1::test]
+        #fn_vis fn #fn_name() {
+            // Privilege check. Default: FAIL when not root, so a
+            // non-root `cargo test` can't report privileged tests as
+            // green with zero coverage. NLINK_LAB_SKIP_ROOT_TESTS=1
+            // turns this into a loud skip.
+            match ::nlink_lab::test_helpers::root_gate(::std::stringify!(#fn_name)) {
+                ::nlink_lab::test_helpers::RootGate::Proceed => {}
+                ::nlink_lab::test_helpers::RootGate::Skip => return,
+                ::nlink_lab::test_helpers::RootGate::Fail(msg) => ::std::panic!("{}", msg),
+            }
+
+            let __rt = ::nlink_lab::test_helpers::__macro_support::tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build tokio runtime for #[lab_test]");
+
+            __rt.block_on(async {
+                #deploy_expr
+
+                // Override lab name with unique suffix to avoid parallel test collisions
+                let mut __topo = __topo;
+                let __original_name = __topo.lab.name.clone();
+                __topo.lab.name = ::std::format!(
+                    "{}-test-{}-{}",
+                    __original_name,
+                    #lab_name_suffix,
+                    ::std::process::id(),
                 );
-                return;
-            }
 
-            #deploy_expr
-
-            // Override lab name with unique suffix to avoid parallel test collisions
-            let mut __topo = __topo;
-            let __original_name = __topo.lab.name.clone();
-            __topo.lab.name = format!("{}-test-{}-{}", __original_name, #lab_name_suffix, std::process::id());
-
-            let __result = __topo.validate();
-            if __result.has_errors() {
-                for e in __result.errors() {
-                    eprintln!("  ERROR {e}");
+                let __result = __topo.validate();
+                if __result.has_errors() {
+                    for e in __result.errors() {
+                        ::std::eprintln!("  ERROR {e}");
+                    }
+                    ::std::panic!("topology validation failed");
                 }
-                panic!("topology validation failed");
-            }
 
-            // `mut` so test bodies can call `&mut self` methods like
-            // `spawn_with_logs` without having to shadow the binding.
-            let mut lab = __topo.deploy().await.expect("failed to deploy lab");
-
-            // Use a guard for panic-safe cleanup
-            struct __LabGuard {
-                name: String,
-            }
-            impl Drop for __LabGuard {
-                fn drop(&mut self) {
-                    // Best-effort cleanup: delete namespaces matching prefix
-                    let prefix = format!("{}-", self.name);
-                    if let Ok(output) = std::process::Command::new("ip")
-                        .args(["netns", "list"])
-                        .output()
-                    {
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        for line in stdout.lines() {
-                            let ns = line.split_whitespace().next().unwrap_or("");
-                            if ns.starts_with(&prefix) {
-                                let _ = std::process::Command::new("ip")
-                                    .args(["netns", "delete", ns])
-                                    .status();
+                // Panic-safe cleanup guard. Armed *before* deploy so a
+                // deploy that fails half-way is swept too. On drop
+                // (panic anywhere below, or a failed destroy) it runs
+                // `test_helpers::cleanup_lab_blocking`, which prefers
+                // `RunningLab::load(..).destroy()` and falls back to
+                // a state-less sweep (namespaces via nlink, mgmt
+                // links, containers, hwsim, /etc/hosts, subnet pool,
+                // state dir). Disarmed only after a successful destroy.
+                struct __LabGuard {
+                    topo: ::std::option::Option<::nlink_lab::Topology>,
+                }
+                impl __LabGuard {
+                    fn disarm(&mut self) {
+                        self.topo = ::std::option::Option::None;
+                    }
+                }
+                impl ::std::ops::Drop for __LabGuard {
+                    fn drop(&mut self) {
+                        if let ::std::option::Option::Some(topo) = self.topo.take() {
+                            let report = ::nlink_lab::test_helpers::cleanup_lab_blocking(&topo);
+                            for w in &report.warnings {
+                                ::std::eprintln!(
+                                    "lab_test '{}': cleanup warning: {w}",
+                                    ::std::stringify!(#fn_name),
+                                );
                             }
                         }
                     }
-                    let _ = nlink_lab::state::remove(&self.name);
                 }
-            }
+                let mut __guard = __LabGuard {
+                    topo: ::std::option::Option::Some(__topo.clone()),
+                };
 
-            let __guard = __LabGuard { name: lab.name().to_string() };
+                // `mut` so test bodies can call `&mut self` methods like
+                // `spawn_with_logs` without having to shadow the binding.
+                let mut lab = __topo.deploy().await.expect("failed to deploy lab");
 
-            // Optional capture-on-failure setup (no-op when not enabled).
-            #capture_setup
+                // Optional capture-on-failure setup (no-op when not enabled).
+                #capture_setup
 
-            // Run the test body (optionally wrapped in a timeout).
-            #body_with_timeout
+                // Run the test body (optionally wrapped in a timeout).
+                #body_with_timeout
 
-            // Clean destroy (guard handles panics)
-            std::mem::forget(__guard);
-            lab.destroy().await.expect("failed to destroy lab");
+                // Clean destroy. If it fails, the panic unwinds through
+                // the still-armed guard, which sweeps whatever is left.
+                lab.destroy().await.expect("failed to destroy lab");
+                __guard.disarm();
+            });
         }
     };
 
@@ -385,5 +422,60 @@ impl syn::parse::Parse for LabTestArgs {
             timeout_secs,
             capture_on_failure,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LabTestArgs, LabTestSource};
+
+    fn parse(src: &str) -> syn::Result<LabTestArgs> {
+        syn::parse_str::<LabTestArgs>(src)
+    }
+
+    #[test]
+    fn path_form() {
+        let args = parse(r#""examples/simple.nll""#).unwrap();
+        assert!(
+            matches!(args.source, LabTestSource::Path(ref p) if p.value() == "examples/simple.nll")
+        );
+        assert!(args.set.is_empty());
+        assert_eq!(args.timeout_secs, None);
+        assert!(!args.capture_on_failure);
+    }
+
+    #[test]
+    fn topology_fn_form() {
+        let args = parse("topology = my_topology").unwrap();
+        assert!(matches!(args.source, LabTestSource::Function(ref f) if f == "my_topology"));
+    }
+
+    #[test]
+    fn all_modifiers() {
+        let args = parse(
+            r#""wan.nll", set { delay = "20ms", loss = "0.5%" }, timeout = 30, capture = true,"#,
+        )
+        .unwrap();
+        assert_eq!(
+            args.set,
+            vec![
+                ("delay".to_string(), "20ms".to_string()),
+                ("loss".to_string(), "0.5%".to_string()),
+            ]
+        );
+        assert_eq!(args.timeout_secs, Some(30));
+        assert!(args.capture_on_failure);
+    }
+
+    #[test]
+    fn rejects_unknown_modifier() {
+        let err = parse(r#""a.nll", retries = 3"#).err().expect("should fail");
+        assert!(err.to_string().contains("unknown lab_test arg"), "{err}");
+    }
+
+    #[test]
+    fn rejects_bad_source() {
+        let err = parse("topo = f").err().expect("should fail");
+        assert!(err.to_string().contains("expected a path literal"), "{err}");
     }
 }

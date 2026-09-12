@@ -292,6 +292,7 @@ impl TopoViewer {
                             exit_code: -1,
                             stdout: String::new(),
                             stderr: err,
+                            ..Default::default()
                         });
                     }
                 }

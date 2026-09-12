@@ -2,18 +2,85 @@
 
 This guide covers writing integration tests for Rust projects that use nlink-lab
 to create isolated network topologies. Tests deploy real Linux network namespaces,
-so they require root privileges -- but they automatically skip when run without them.
+so they require root privileges. By default a `#[lab_test]` run without root
+**fails** rather than silently passing; set `NLINK_LAB_SKIP_ROOT_TESTS=1` to
+turn that into a skip (see [Privileges](#privileges)).
+
+## Setup
+
+Add nlink-lab to your `[dev-dependencies]`. That is the only crate the
+`#[lab_test]` expansion needs -- it reaches tokio through a re-export inside
+nlink-lab, so you do not need `tokio` or `libc` for the generated code to
+compile. Add `tokio` only if your test bodies use it directly (for example
+`tokio::time::sleep`):
+
+```toml
+[dev-dependencies]
+nlink-lab = { git = "https://github.com/p13marc/nlink-lab", version = "0.8" }
+# Optional -- only if your test bodies call tokio APIs themselves.
+tokio = { version = "1", features = ["time"] }
+```
+
+Put the tests in `tests/integration.rs` (or any file under `tests/`) so they
+can be run separately from your unit tests.
 
 ## The `#[lab_test]` Macro
 
 The `#[lab_test]` attribute macro handles the full lifecycle of a test topology:
 
-1. Checks for root privileges (skips the test if not root).
+1. Checks for root privileges (fails the test if not root, or skips when
+   `NLINK_LAB_SKIP_ROOT_TESTS=1` is set).
 2. Parses and validates the topology.
 3. Assigns a unique lab name (appends test function name + PID) to avoid collisions.
 4. Deploys the topology (creates namespaces, veths, addresses, routes, etc.).
 5. Passes a `RunningLab` handle to your test body.
-6. Destroys the lab after the test, even if the test panics.
+6. Destroys the lab after the test, even if the test panics or the deploy
+   fails half-way.
+
+The generated function is a plain `#[test]` that runs your `async` body on a
+current-thread tokio runtime (the same thing `#[tokio::test]` does). Other
+attributes on the function, such as `#[ignore]`, are preserved.
+
+### Privileges
+
+Deploying namespaces needs root (or `CAP_NET_ADMIN`). When the test process
+is not root the macro panics with:
+
+```text
+#[lab_test] 'test_connectivity' needs root/CAP_NET_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
+```
+
+This is deliberate: a privileged test that quietly returns green on a
+developer laptop reports coverage that does not exist. To opt into the
+skip-and-pass behaviour (for a job that intentionally runs unprivileged),
+set the environment variable:
+
+```bash
+NLINK_LAB_SKIP_ROOT_TESTS=1 cargo test --test integration
+```
+
+The skip is printed to stderr (`*** SKIPPING #[lab_test] '...' ***`) so it
+remains visible in CI logs. `""`, `"0"` and `"false"` count as unset.
+
+### Cleanup on failure
+
+The macro arms a guard *before* deploying. On the happy path it calls
+`RunningLab::destroy()` and disarms the guard only if that succeeds. If the
+body panics, the deploy fails, or `destroy()` itself returns an error, the
+guard runs `nlink_lab::test_helpers::cleanup_lab_blocking`, which:
+
+1. Prefers `RunningLab::load(name)?.destroy()` when a state file exists
+   (kills spawned processes, removes containers, mgmt bridge/veth peers,
+   hwsim, `/etc/hosts` entries).
+2. Always follows with a state-less sweep driven by the topology alone:
+   namespaces named `<prefix>-*` (via nlink, no `ip(8)` needed), the
+   host-reachable mgmt bridge and peers, containers named `<prefix>-<node>`,
+   hwsim configs, `/etc/hosts` section, subnet-pool allocations, and the
+   state directory.
+
+Cleanup warnings are printed as `lab_test '<name>': cleanup warning: ...`.
+The same helper is available as `nlink_lab::test_helpers::cleanup_lab`
+(async) for tests that deploy without the macro.
 
 ### File-based form
 
@@ -161,9 +228,9 @@ fn lossy_link() -> Topology {
 
 ### GitHub Actions
 
-Tests that require root are skipped automatically when run without privileges,
-so `cargo test` in a normal CI job simply skips them. To actually run the
-integration tests, use `sudo`:
+Run the privileged tests under `sudo` in their own step. Keep the unprivileged
+step scoped to `--lib` (or set `NLINK_LAB_SKIP_ROOT_TESTS=1` there) so it does
+not trip over the root check:
 
 ```yaml
 name: Integration Tests
@@ -183,13 +250,15 @@ jobs:
         run: cargo test -p my-crate --lib
 
       - name: Integration tests (root)
-        run: sudo cargo test -p my-crate --test integration
+        run: sudo -E env "PATH=$PATH" cargo test -p my-crate --test integration
 ```
 
 The key point: unit tests and integration tests live in the same CI pipeline.
 Unit tests run without root and always pass. Integration tests run with `sudo`
-in a separate step. If you cannot use `sudo` in your CI environment, the
-integration tests will skip gracefully rather than fail.
+in a separate step. If you cannot use `sudo` in your CI environment, run the
+integration step with `NLINK_LAB_SKIP_ROOT_TESTS=1` -- the tests then skip
+loudly instead of failing, and the skip lines in the log make the missing
+coverage visible.
 
 ## Best Practices
 

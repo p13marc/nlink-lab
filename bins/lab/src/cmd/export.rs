@@ -7,6 +7,7 @@ use crate::ctx::{Ctx, parse_set_params};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name (or path to an .nll file with --archive).
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Output file (default: stdout for plain export, `./<lab>.nlz` with `--archive`).

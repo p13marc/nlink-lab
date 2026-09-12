@@ -12,10 +12,11 @@ pub enum MetricsFormat {
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Filter to specific node.
-    #[arg(short, long)]
+    #[arg(add = crate::ctx::node_completer(), short, long)]
     pub node: Option<String>,
 
     /// Output format (`--json` selects json too).

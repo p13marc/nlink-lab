@@ -25,11 +25,11 @@ pub struct Args {
     pub strict: bool,
 
     /// Promote one warning rule to an error (repeatable).
-    #[arg(long, value_name = "RULE")]
+    #[arg(long, value_name = "RULE", add = crate::ctx::rule_completer())]
     pub deny: Vec<String>,
 
     /// Silence one warning rule (repeatable). Errors cannot be silenced.
-    #[arg(long, value_name = "RULE")]
+    #[arg(long, value_name = "RULE", add = crate::ctx::rule_completer())]
     pub allow: Vec<String>,
 
     /// Print every validation rule with its default severity and exit.

@@ -62,4 +62,5 @@ jobs:
         if: always()
         run: |
           sudo ip netns list | tee /dev/stderr | grep -q . && { echo "::error::leftover network namespaces"; exit 1; } || true
-          test -z "$(sudo ls /etc/netns 2>/dev/null)" || { echo "::error::leftover /etc/netns tags"; sudo ls /etc/netns; exit 1; }
+          test -z "$(sudo ls /etc/netns 2>/dev/null)" || { echo "::error::leftover /etc/netns overlays"; sudo ls /etc/netns; exit 1; }
+          test -z "$(sudo ls /run/nlink-lab/netns 2>/dev/null)" || { echo "::error::leftover namespace tags"; sudo ls /run/nlink-lab/netns; exit 1; }

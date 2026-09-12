@@ -56,6 +56,13 @@ set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 "$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep -q WARN && { say "FAIL: --allow did not silence the warning"; fail=1; }
 "$bin" graph examples/cookbook/satellite-mesh.nll | grep -q 'net:' || { say "FAIL: graph ignores network blocks"; fail=1; }
 
+say "== doctor / verify (rootless)"
+set +e; "$bin" --json doctor > "$tmp/doctor.json" 2>/dev/null; rc=$?; set -e
+[ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || { say "FAIL: doctor exited $rc"; fail=1; }
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "checks" in d and isinstance(d["ok"], bool), d' "$tmp/doctor.json" || { say "FAIL doctor --json"; fail=1; }
+set +e; XDG_STATE_HOME="$tmp/state" "$bin" verify no-such-lab >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 1 ] || { say "FAIL: verify on a missing lab exited $rc (expected 1)"; fail=1; }
+
 say "== completions"
 for sh in bash zsh fish; do "$bin" completions "$sh" >/dev/null || { say "FAIL completions $sh"; fail=1; }; done
 

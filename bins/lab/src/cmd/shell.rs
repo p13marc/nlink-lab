@@ -6,9 +6,11 @@ use crate::util::nsenter_shell_args;
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Node name.
+    #[arg(add = crate::ctx::node_completer())]
     pub node: String,
 
     /// Shell to use (default: /bin/sh).

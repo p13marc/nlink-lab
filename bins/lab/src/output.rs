@@ -81,3 +81,58 @@ mod tests {
         );
     }
 }
+
+/// The `apply --dry-run --json` / `apply --check --json` / `verify --json`
+/// envelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).
+#[derive(serde::Serialize)]
+pub struct DryRunReport<'a> {
+    /// Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`
+    /// fields (Plan 160 / 0.7.0) — use `network` / `nftables` / `removals`.
+    pub schema_version: u32,
+    pub lab: &'a str,
+    pub no_op: bool,
+    pub change_count: usize,
+    /// Typed per-namespace `NetworkConfig` diff. Empty map elided.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub network: &'a std::collections::BTreeMap<String, nlink_lab::diff::ConfigDiff>,
+    /// Typed per-namespace `NftablesDiff`. Empty map elided.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub nftables: &'a std::collections::BTreeMap<String, nlink_lab::diff::NftablesDiff>,
+    /// Removal ops from the plan diff (deleted nodes, links, VRF-table
+    /// routes, …), one description per op. Elided when empty.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    pub removals: &'a [String],
+}
+
+impl<'a> DryRunReport<'a> {
+    pub fn new(
+        lab: &'a str,
+        layered: &'a nlink_lab::diff::LayeredDiff,
+        removals: &'a [String],
+    ) -> Self {
+        Self {
+            schema_version: 3,
+            lab,
+            no_op: layered.is_empty() && removals.is_empty(),
+            change_count: layered.change_count() + removals.len(),
+            network: &layered.network,
+            nftables: &layered.nftables,
+            removals,
+        }
+    }
+}
+
+/// Human rendering of a layered diff plus removal ops.
+pub fn print_layered(layered: &nlink_lab::diff::LayeredDiff, removals: &[String]) {
+    let text = layered.to_string();
+    print!("{text}");
+    if !text.is_empty() && !text.ends_with('\n') {
+        println!();
+    }
+    if !removals.is_empty() {
+        println!("Removals:");
+        for r in removals {
+            println!("  - {r}");
+        }
+    }
+}

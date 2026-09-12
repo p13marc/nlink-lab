@@ -5,9 +5,11 @@ use crate::ctx::{Ctx, require_root};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Node name (omit to diagnose all).
+    #[arg(add = crate::ctx::node_completer())]
     pub node: Option<String>,
 }
 

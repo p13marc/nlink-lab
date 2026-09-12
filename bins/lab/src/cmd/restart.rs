@@ -6,8 +6,10 @@ use crate::host_scan::node_link_count;
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
     /// Node name (must be a container node).
+    #[arg(add = crate::ctx::node_completer())]
     pub node: String,
 }
 

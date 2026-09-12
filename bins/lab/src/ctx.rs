@@ -92,6 +92,72 @@ pub fn parse_topology(
     }
 }
 
+/// Root, or CAP_NET_ADMIN + CAP_SYS_ADMIN in the effective set.
+pub fn has_privileges() -> bool {
+    if unsafe { libc::geteuid() } == 0 {
+        return true;
+    }
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines().find(|l| l.starts_with("CapEff:")).and_then(|l| {
+                l.split_whitespace()
+                    .nth(1)
+                    .map(cap_eff_has_net_and_sys_admin)
+            })
+        })
+        .unwrap_or(false)
+}
+
+// ── dynamic shell completion (issue #62) ──────────────────────────
+// `COMPLETE=bash nlink-lab` (see `completions --help`) makes the shell
+// call back into the binary; these completers answer with live data.
+
+fn candidates(
+    current: &std::ffi::OsStr,
+    items: impl IntoIterator<Item = String>,
+) -> Vec<clap_complete::CompletionCandidate> {
+    let prefix = current.to_string_lossy();
+    let mut v: Vec<String> = items
+        .into_iter()
+        .filter(|s| s.starts_with(&*prefix))
+        .collect();
+    v.sort();
+    v.dedup();
+    v.into_iter()
+        .map(clap_complete::CompletionCandidate::new)
+        .collect()
+}
+
+/// Deployed lab names.
+pub fn lab_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        let labs = nlink_lab::state::list().unwrap_or_default();
+        candidates(current, labs.into_iter().map(|l| l.name))
+    })
+}
+
+/// Node names of every deployed lab (the shell cannot tell us which lab
+/// the previous argument named, so the union is offered).
+pub fn node_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        let labs = nlink_lab::state::list().unwrap_or_default();
+        let nodes = labs.into_iter().flat_map(|l| {
+            nlink_lab::state::load(&l.name)
+                .map(|(st, _)| st.namespaces.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        });
+        candidates(current, nodes)
+    })
+}
+
+/// Validation rule ids (for `validate --deny/--allow`).
+pub fn rule_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        candidates(current, nlink_lab::rule_ids().iter().map(|s| s.to_string()))
+    })
+}
+
 const CAP_NET_ADMIN: u64 = 12;
 const CAP_SYS_ADMIN: u64 = 21;
 
@@ -107,20 +173,7 @@ fn cap_eff_has_net_and_sys_admin(hex: &str) -> bool {
 /// root or holds CAP_NET_ADMIN *and* CAP_SYS_ADMIN. The old check only
 /// warned and accepted any capability bit at all (#44).
 pub fn require_root() -> nlink_lab::Result<()> {
-    if unsafe { libc::geteuid() } == 0 {
-        return Ok(());
-    }
-    let ok = std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|s| {
-            s.lines().find(|l| l.starts_with("CapEff:")).and_then(|l| {
-                l.split_whitespace()
-                    .nth(1)
-                    .map(cap_eff_has_net_and_sys_admin)
-            })
-        })
-        .unwrap_or(false);
-    if ok {
+    if has_privileges() {
         Ok(())
     } else {
         Err(nlink_lab::Error::deploy_failed(

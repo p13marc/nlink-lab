@@ -8,6 +8,7 @@ use crate::util::{compile_legacy_bpf_filter, parse_byte_size, parse_filter_cidr}
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Endpoint (e.g., "router:eth0").

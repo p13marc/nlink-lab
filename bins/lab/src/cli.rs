@@ -75,6 +75,21 @@ pub enum Commands {
     /// Validate a topology file without deploying.
     Validate(cmd::validate::Args),
 
+    /// Check a running lab for drift against its topology (exit 2 on drift).
+    ///
+    /// Compares every node's live links/addresses/routes/nftables with
+    /// what the topology declares — the same view `apply --check` shows —
+    /// and prints the differences. Meant for CI and monitoring: exit 0
+    /// means the lab is exactly what its file says.
+    Verify(cmd::verify::Args),
+
+    /// Check this host for everything nlink-lab needs.
+    ///
+    /// Privileges, netlink, the binaries exec'd inside namespaces, kernel
+    /// modules, a writable state dir, pending crash journals and orphaned
+    /// lab resources. Exit 1 when a required check fails.
+    Doctor(cmd::doctor::Args),
+
     /// Run topology tests: deploy, validate, destroy.
     Test(cmd::test::Args),
 
@@ -221,6 +236,12 @@ pub enum Commands {
     Restart(cmd::restart::Args),
 
     /// Generate shell completions.
+    ///
+    /// Static completions for the given shell. For completions that know
+    /// deployed lab, node and rule names, source the dynamic form instead:
+    /// bash `source <(COMPLETE=bash nlink-lab)`, zsh
+    /// `source <(COMPLETE=zsh nlink-lab)`, fish
+    /// `COMPLETE=fish nlink-lab | source`.
     Completions {
         /// Shell to generate completions for.
         #[arg(value_enum)]

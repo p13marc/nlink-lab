@@ -106,44 +106,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let layered = layered_view
             .as_ref()
             .expect("layered_view is Some when dry_run");
-        #[derive(serde::Serialize)]
-        struct DryRunReport<'a> {
-            /// Plan 159d — typed-shape schema marker.
-            /// `3` = v3 (this format). Downstream `jq`
-            /// consumers should branch on this. v3 dropped
-            /// the v1 `diff` / `layered_summary` /
-            /// `layered_summary_deprecated` fields (Plan
-            /// 160 / 0.7.0) — use `network`/`nftables`.
-            schema_version: u32,
-            lab: &'a str,
-            no_op: bool,
-            change_count: usize,
-            /// Plan 159d — typed per-namespace
-            /// `NetworkConfig` diff under
-            /// `nlink/serde`. Empty map elided.
-            #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-            network: &'a std::collections::BTreeMap<String, nlink_lab::diff::ConfigDiff>,
-            /// Plan 159d — typed per-namespace
-            /// `NftablesDiff`. Empty map elided.
-            #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-            nftables: &'a std::collections::BTreeMap<String, nlink_lab::diff::NftablesDiff>,
-            /// Removal ops from the plan diff (deleted nodes, links,
-            /// VRF-table routes, …), one description per op. Empty
-            /// list elided. Additive since 0.9.
-            #[serde(skip_serializing_if = "<[String]>::is_empty")]
-            removals: &'a [String],
-        }
-        let no_op = layered.is_empty() && removals.is_empty();
-        let change_count = layered.change_count() + removals.len();
-        let report = DryRunReport {
-            schema_version: 3,
-            lab: lab_name,
-            no_op,
-            change_count,
-            network: &layered.network,
-            nftables: &layered.nftables,
-            removals: &removals,
-        };
+        let report = crate::output::DryRunReport::new(lab_name, layered, &removals);
+        let no_op = report.no_op;
+        let change_count = report.change_count;
         println!("{}", serde_json::to_string_pretty(&report)?);
         if check && !no_op {
             return Err(nlink_lab::Error::Validation(format!(
@@ -181,8 +146,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let change_count = layered.change_count() + removals.len();
         if !ctx.quiet {
             println!("Drift detected for lab '{lab_name}':");
-            print!("{layered}");
-            print_removals(&removals);
+            crate::output::print_layered(layered, &removals);
             println!("{change_count} change(s) needed to converge");
         }
         return Err(nlink_lab::Error::Validation(format!(
@@ -193,8 +157,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if !ctx.quiet {
         println!("Changes for lab '{lab_name}':");
         if let Some(layered) = &layered_view {
-            print!("{layered}");
-            print_removals(&removals);
+            crate::output::print_layered(layered, &removals);
             println!("{} change(s)", layered.change_count() + removals.len());
         } else {
             print!("{diff}");
@@ -267,14 +230,4 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         );
     }
     Ok(())
-}
-
-fn print_removals(removals: &[String]) {
-    if removals.is_empty() {
-        return;
-    }
-    println!("Removals:");
-    for r in removals {
-        println!("  - {r}");
-    }
 }

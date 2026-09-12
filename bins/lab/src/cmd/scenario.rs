@@ -6,6 +6,7 @@ use crate::output::{EXIT_VALIDATION, set_exit_code};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name (must be deployed).
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Scenario name as declared in the topology (`scenario "name" { … }`).

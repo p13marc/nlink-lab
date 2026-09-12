@@ -282,7 +282,7 @@ netlink resource still commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile paths
 (zero kernel calls when unchanged); in apply mode the network layer uses
 `ApplyOptions::with_purge(true)`. Namespaces created by nlink-lab carry
-an ownership tag (`/etc/netns/<ns>/.nlink-lab`, `netns_tag.rs`) and
+an ownership tag (`/run/nlink-lab/netns/<ns>`, `netns_tag.rs`) and
 `destroy --orphans` only ever reaps tagged ones. `deploy --dry-run`
 prints the plan; `validate { … }` assertions run after the state file is
 written and ride on `RunningLab::assertion_results()`.

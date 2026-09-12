@@ -5,6 +5,7 @@ use crate::ctx::{Ctx, bold};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name, or path to a `.nlz` archive.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 }
 

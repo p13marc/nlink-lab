@@ -26,9 +26,11 @@ impl From<WaitLogStream> for nlink_lab::LogStream {
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Node name.
+    #[arg(add = crate::ctx::node_completer())]
     pub node: String,
 
     /// Directory for stdout/stderr log files (default: lab state dir).

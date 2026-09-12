@@ -824,7 +824,12 @@ pub async fn compute_layered_diff(
             let conn: Connection<Route> = handle.connection().map_err(|e| {
                 Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
             })?;
-            let diff = cfg.diff(&conn).await.map_err(|e| {
+            // Purge-aware: undeclared addresses / main-table static
+            // routes on managed interfaces are drift too — `apply`
+            // removes them, so `apply --check` / `verify` must report
+            // them (found by `verify` missing a hand-added address).
+            let opts = nlink::netlink::config::DiffOptions::default().purge(true);
+            let diff = cfg.diff_with_options(&conn, opts).await.map_err(|e| {
                 Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
             })?;
             network.insert(node_name.clone(), diff);

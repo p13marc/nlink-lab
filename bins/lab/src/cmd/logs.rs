@@ -6,8 +6,10 @@ use crate::util::{tail_follow, tail_lines};
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
     /// Node name (for container logs).
+    #[arg(add = crate::ctx::node_completer())]
     pub node: Option<String>,
     /// Process ID (for background process logs).
     #[arg(long)]

@@ -5,6 +5,7 @@ use crate::ctx::Ctx;
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 }
 

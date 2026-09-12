@@ -24,6 +24,7 @@ impl From<WatchFamilyArg> for nlink_lab::WatchFamily {
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
+    #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
     /// Event family: route, nftables, or both.
@@ -34,7 +35,7 @@ pub struct Args {
     /// flag, every node in the lab is subscribed. Filter is
     /// pre-subscription — we don't open connections we don't
     /// need.
-    #[arg(long)]
+    #[arg(add = crate::ctx::node_completer(), long)]
     pub node: Option<String>,
 
     /// Show resync replay frames after ENOBUFS recoveries.

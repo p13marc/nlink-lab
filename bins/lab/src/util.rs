@@ -54,8 +54,6 @@ fn tail_follow_to<W: std::io::Write>(
     Ok(())
 }
 
-/// Wrapper used by the CLI: runs forever (until Ctrl-C) and writes to
-/// stdout.
 /// Last `n` lines of a file, read backwards in 64 KiB chunks so a
 /// multi-gigabyte log is never loaded into memory (#46).
 pub fn tail_lines(path: &std::path::Path, n: usize) -> std::io::Result<String> {
@@ -92,14 +90,13 @@ pub fn tail_lines(path: &std::path::Path, n: usize) -> std::io::Result<String> {
     Ok(lines[start..].join("\n"))
 }
 
+/// Wrapper used by the CLI: runs forever (until Ctrl-C) and writes to
+/// stdout.
 pub fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<()> {
     let mut stdout = std::io::stdout();
     tail_follow_to(path, start_offset, &mut stdout, || true)
 }
 
-/// Parse a byte-size CLI argument with optional K/M/G suffix.
-/// Decimal-SI units (1K = 1000, 1M = 1_000_000) — same convention as
-/// `tcpdump -C`. Round-5 §2.3.
 /// Parse a CIDR string (`10.0.0.0/24`, `2001:db8::/32`) into the
 /// netring `IpNet` type used by the typed BPF filter builder.
 /// Surfaces the originating flag name in the error so the user can
@@ -128,6 +125,9 @@ pub fn compile_legacy_bpf_filter(_expr: &str) -> nlink_lab::Result<netring::BpfF
     ))
 }
 
+/// Parse a byte-size CLI argument with optional K/M/G suffix.
+/// Decimal-SI units (1K = 1000, 1M = 1_000_000) — same convention as
+/// `tcpdump -C`. Round-5 §2.3.
 pub fn parse_byte_size(s: &str) -> std::result::Result<u64, String> {
     let s = s.trim();
     let (num_str, mul) = if let Some(rest) = s.strip_suffix(['G', 'g']) {

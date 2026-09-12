@@ -2,7 +2,7 @@
 
 /// Process exit status chosen by a subcommand that completed its work
 /// but wants a non-zero status (a child's exit code, an assertion
-/// failure, …). `run()` keeps returning `Result<()>`; arms call
+/// failure, …). `cmd::dispatch` keeps returning `Result<()>`; arms call
 /// [`set_exit_code`] instead of `std::process::exit` so buffered
 /// output and destructors still run.
 pub static EXIT_CODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);

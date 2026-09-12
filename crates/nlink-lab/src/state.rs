@@ -348,6 +348,24 @@ pub fn list() -> Result<Vec<LabInfo>> {
     Ok(labs)
 }
 
+/// Labs whose state directory holds a `journal.json` — an undo journal
+/// left by a deploy/apply that was interrupted before it could finish
+/// or roll back. `deploy` unwinds its own lab's journal; `destroy
+/// --orphans` unwinds all of them.
+pub fn labs_with_pending_journal() -> Vec<String> {
+    let base = base_dir();
+    let Ok(entries) = std::fs::read_dir(&base) else {
+        return Vec::new();
+    };
+    let mut labs: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().join("journal.json").is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    labs.sort();
+    labs
+}
+
 /// Remove a lab's state directory.
 pub fn remove(name: &str) -> Result<()> {
     let dir = state_dir(name);

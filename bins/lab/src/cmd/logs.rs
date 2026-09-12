@@ -95,7 +95,9 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .status()
         .map_err(|e| nlink_lab::Error::deploy_failed(format!("logs failed: {e}")))?;
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        crate::output::set_exit_code(
+            u8::try_from(status.code().unwrap_or(1).clamp(0, 255)).unwrap_or(1),
+        );
     }
     Ok(())
 }

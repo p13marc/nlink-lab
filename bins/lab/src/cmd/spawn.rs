@@ -119,9 +119,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // Validate node exists
     let node_names: Vec<&str> = running.node_names().collect();
     if !node_names.contains(&node.as_str()) {
-        eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
         eprintln!("Available nodes: {}", node_names.join(", "));
-        std::process::exit(1);
+        return Err(nlink_lab::Error::NodeNotFound { name: node });
     }
     let args: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
     let opts = nlink_lab::SpawnOpts {

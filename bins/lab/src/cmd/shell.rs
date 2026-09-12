@@ -23,9 +23,8 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // Validate node exists
     let node_names: Vec<&str> = running.node_names().collect();
     if !node_names.contains(&node.as_str()) {
-        eprintln!("Error: node '{}' not found in lab '{}'", node, lab);
         eprintln!("Available nodes: {}", node_names.join(", "));
-        std::process::exit(1);
+        return Err(nlink_lab::Error::NodeNotFound { name: node });
     }
     if let Some(container) = running.container_for(&node) {
         let rt = running.runtime_binary().unwrap_or("docker");
@@ -36,7 +35,8 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .stderr(std::process::Stdio::inherit())
             .status()
             .map_err(|e| nlink_lab::Error::deploy_failed(format!("exec failed: {e}")))?;
-        std::process::exit(status.code().unwrap_or(1));
+        pass_through_status(status);
+        Ok(())
     } else {
         let ns = running.namespace_for(&node)?;
         let args = nsenter_shell_args(ns, &shell);
@@ -47,6 +47,19 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .stderr(std::process::Stdio::inherit())
             .status()
             .map_err(|e| nlink_lab::Error::deploy_failed(format!("nsenter failed: {e}")))?;
-        std::process::exit(status.code().unwrap_or(1));
+        pass_through_status(status);
+        Ok(())
+    }
+}
+
+/// The shell's exit status becomes ours (signal death → 128+signo).
+fn pass_through_status(status: std::process::ExitStatus) {
+    use std::os::unix::process::ExitStatusExt;
+    let code = status
+        .code()
+        .or_else(|| status.signal().map(|s| 128 + s))
+        .unwrap_or(1);
+    if code != 0 {
+        crate::output::set_exit_code(u8::try_from(code.clamp(0, 255)).unwrap_or(1));
     }
 }

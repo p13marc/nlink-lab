@@ -81,10 +81,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 eprintln!("ready");
             }
         }
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
+        Err(e) => return Err(e),
     }
     Ok(())
 }

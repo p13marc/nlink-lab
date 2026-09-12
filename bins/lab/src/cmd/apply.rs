@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::ctx::{Ctx, parse_topology, red, require_root, validation_failed, yellow};
+use crate::ctx::{Ctx, parse_topology, require_root, validation_failed, yellow};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -42,11 +42,6 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     if result.has_errors() {
         return Err(validation_failed(&desired.lab.name, &result));
-        #[allow(unreachable_code)]
-        for e in result.errors() {
-            eprintln!("  {} {e}", red("ERROR"));
-        }
-        return Err(nlink_lab::Error::Validation("see errors above".into()));
     }
 
     // Load current topology from running lab state

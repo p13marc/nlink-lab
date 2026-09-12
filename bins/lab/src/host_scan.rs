@@ -289,9 +289,25 @@ fn classify_orphans(
 /// Best-effort cleanup of orphan resources found by [`find_orphans`].
 /// Only tagged namespaces ever reach here (see [`classify_orphans`]).
 pub async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
+    // Journals left by interrupted deploys/applies know exactly what
+    // was created; unwind them first, then fall back to the tag scan.
+    let pending: Vec<String> = nlink_lab::state::labs_with_pending_journal()
+        .into_iter()
+        .filter(|lab| !nlink_lab::state::exists(lab))
+        .collect();
+    for lab in &pending {
+        if let Some(mut journal) = nlink_lab::deploy::rollback::Journal::load_pending(lab) {
+            let n = journal.entries().len();
+            journal.unwind().await;
+            println!("  unwound {n} journal entries of interrupted lab '{lab}'");
+            let _ = nlink_lab::state::remove(lab);
+        }
+    }
     let orphans = find_orphans(known).await;
     if orphans.is_empty() {
-        println!("No orphans detected.");
+        if pending.is_empty() {
+            println!("No orphans detected.");
+        }
         return;
     }
     // Netns first: deleting a namespace reaps the veths inside it.

@@ -119,7 +119,14 @@ crates/nlink-lab/src/
   templates/        # Built-in topology templates for `nlink-lab init`
 
 bins/lab/src/
-  main.rs           # CLI binary (clap)
+  main.rs           # entry: Cli, tracing, runtime, exit-code mapping (~120 lines)
+  cli.rs            # Commands enum (help text lives here — docs/cli is generated from it)
+  ctx.rs            # Ctx {json, quiet, verbose}, parse_topology(--set), require_root
+  output.rs         # exit-code policy (0/1/2/124/child)
+  cmd/<name>.rs     # one handler per subcommand (Args + run)
+  render/           # dot / ascii / mermaid topology renderers
+  host_scan.rs      # orphan/stale detection + reaper (tag-gated, nlink-based)
+  util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
   *.nll             # NLL topology examples (34 top-level; 43 incl. cookbook/ and imports/)
@@ -237,97 +244,48 @@ See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 
 ## Deployment Sequence
 
-The deployer executes these steps in order. After Plan 158 (a/e
-Slices 1–3 / f), **Plan 159 (a Slice 4 / a Phase 2 / c)**, and
-**Plan 160 (nlink 0.25 adoption)**, every netlink resource — links /
-addresses / routes / firewall / NAT / VRF / VXLAN / WireGuard (incl.
-device bootstrap) / rate-limits — commits through the upstream
-`nlink::NetworkConfig`, `nlink::NftablesConfig`,
-`nlink::WireguardConfig`, and `RateLimiter::reconcile` declarative /
-reconcile paths. Idempotent re-deploys make zero kernel calls on those
-layers.
+Since Plan 161 (the deep-analysis series, wave 5) deploy is **plan +
+execute**:
 
 ```
- 1.  Parse topology file → Topology
- 2.  Validate (bail on errors)
- 3.  Create namespaces
- 3d. Create host-reachable mgmt bridge (if `mgmt ... host-reachable`)
- 4.  Create bridge networks (if any)
- 5.  Create veth pairs spanning namespaces
- 6.  Create additional interfaces — *no-op marker after Plan 159a
-     Slice 4. Dummy/Bond/VLAN/VXLAN/VRF all declare in step 11c.
-     Loopback exists already; WiFi stays imperative.*
- 6a. Create macvlan/ipvlan interfaces (host-side, moved to ns)
- 6b. Create VRF interfaces — *no-op marker after Plan 159a Slice 4;
-     VRF link declared in step 11c via `LinkBuilder::vrf(table)`*
- 6c. Create WireGuard interfaces — *no-op marker after Plan 160
-     (nlink 0.25). The WG iface is now bootstrapped declaratively
-     in step 11c via `WireguardConfig::ensure_devices` (nlink 0.24
-     #169), which creates any missing declared WG link idempotently
-     before the NetworkConfig apply. This closed feedback item #3
-     against 0.19.*
- 7.  Assign interfaces to bridges (legacy — bond enslave moved
-     to step 11c via `LinkBuilder::master`)
- 8.  Configure VLANs on bridge ports
- 9.  Set interface addresses — *no-op marker after Plan 158e Slice 1;
-     addresses now declared in step 11c*
- 10. Bring interfaces up
- 10b. Enslave bond members — *no-op marker after Plan 158e Slice 2;
-      bond `.master()` now declared in step 11c*
- 10c. Enslave to VRFs — *no-op marker after Plan 159a Slice 4;
-      VRF master ref declared in step 11c via
-      `LinkBuilder::master(vrf_name)`*
- 10d. WireGuard key generation (sync, no kernel touch) —
-      `build_wg_public_key_map` collects `(private, public)` per
-      WG iface from NLL declarations so peer cross-references
-      resolve before any kernel mutation
- 11. Apply sysctls per namespace
- 11b. Auto-generate routes from topology graph (if `routing auto`)
- 11c. `apply_stack_for_node` per node — bundles three layers
-      via the Stack pattern (Plan 159c):
-        a0) `WireguardConfig::ensure_devices` — bootstraps any
-            declared WG link (Plan 160 / nlink 0.24 #169) before
-            (a) so their tunnel addresses can be assigned
-        a) `NetworkConfig::apply` — links (dummies + bonds +
-           VLANs + VRFs + VXLANs), addresses, routes, qdiscs
-        b) `NftablesConfig::apply_reconcile` — firewall + NAT
-        c) `WireguardConfig::apply_reconcile` — WG devices +
-           peers (Plan 159a Phase 2 — replaces step 10d's
-           imperative `wg_conn.set_device(...)` loops)
-      One aggregated `tracing::info!` per node.
- 12. Add routes — *no-op marker after Plan 158e Slice 1; routes
-     now in step 11c*
- 12b. Add VRF routes (still imperative — table knobs not on
-      `RouteBuilder`)
- 13. Apply nftables firewall + NAT — *no-op marker after Plan 159c;
-     nftables now applied inside `apply_stack_for_node` in
-     step 11c*
- 14. Apply TC qdiscs/impairments per interface (`PerPeerImpairer`)
- 14b. Apply per-pair network impairments
- 15. Apply rate limits (`RateLimiter::reconcile` — idempotent
-     since Plan 160 / nlink 0.24; diffs the live HTB tree and
-     mutates only drift, no root-qdisc teardown. Closes Plan 158g)
- 15b. Inject /etc/hosts entries (if `dns hosts`)
- 16. Spawn background processes (topo-sorted by depends_on,
-     with healthcheck polling, stdout/stderr captured to logs;
-     each PID's /proc start time is recorded so it can be
-     signalled safely later)
- 18. Write state file (schema 2: namespaces, pids + starttimes,
-     mgmt_peers, containers, wg public keys, process logs)
- 19. Run `validate { … }` assertions (results are kept on the
-     returned `RunningLab`; the deploy is already persisted so a
-     failing lab can be inspected)
+ deploy(t)          = execute(plan(t))
+ apply(cur, des)    = execute(Plan::diff(plan(cur), plan(des)))   # with purge
 ```
 
-`deploy()` is a thin wrapper around `deploy_inner()`: every kernel/host
-mutation records its inverse in a `Cleanup` journal (namespaces + their
-ownership tag, containers, root-namespace links such as the mgmt bridge
-and veth peers or host-side macvlan/ipvlan, spawned PIDs, the log dir,
-/etc/hosts entries, hwsim, wifi configs, subnet-pool entries). On any
-error the wrapper awaits `Cleanup::rollback()` before returning it;
-`Drop` is the synchronous last resort for panics. Namespaces created by
-nlink-lab carry a tag (`/etc/netns/<ns>/.nlink-lab`, see
-`netns_tag.rs`) and `destroy --orphans` only ever reaps tagged ones.
+`crates/nlink-lab/src/deploy/`:
+
+```
+ mod.rs        deploy(), apply(), compute_layered_diff(), plan_for(); the
+               per-node stack appliers (network / nftables / WireGuard)
+ op.rs         NsRef (Root | Named | Container), Stage, Op, Plan::diff
+ plan/         PURE planners — nothing here touches the kernel:
+   topology.rs   namespaces, containers, hwsim, mgmt bridge, bridge
+                 networks + member veths + VLANs, p2p veths, host-side
+                 macvlan/ipvlan, links-up, sysctls, DNS overlays
+   network.rs    topology_to_network_config (links/addresses/routes incl.
+                 VRF-table routes via RouteBuilder::table)
+   nftables.rs   topology_to_nftables_config (firewall + NAT, one table)
+   wireguard.rs  key material + WireguardConfig per node
+   qdisc.rs      build_netem
+   process.rs    depends_on order, container create options
+ apply.rs      the ONLY kernel/host-touching module: execute(plan) runs
+               ops in stage order and journals every inverse
+ rollback.rs   Undo + Journal (persisted as journal.json; unwound on
+               error, on the next deploy after a crash, and by
+               destroy --orphans)
+```
+
+Stages, in order (`Stage`): Namespaces → Hwsim → MgmtBridge → Networks →
+Links → HostLinks → LinksUp → Sysctls → Stack → Tc → Dns → Processes →
+Wifi. Removals in an apply run first, in reverse stage order. Every
+netlink resource still commits through nlink's declarative
+`NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile paths
+(zero kernel calls when unchanged); in apply mode the network layer uses
+`ApplyOptions::with_purge(true)`. Namespaces created by nlink-lab carry
+an ownership tag (`/etc/netns/<ns>/.nlink-lab`, `netns_tag.rs`) and
+`destroy --orphans` only ever reaps tagged ones. `deploy --dry-run`
+prints the plan; `validate { … }` assertions run after the state file is
+written and ride on `RunningLab::assertion_results()`.
 
 `apply_diff` (live reconcile) shares the declarative builders
 with the initial-deploy path. `compute_layered_diff(running,

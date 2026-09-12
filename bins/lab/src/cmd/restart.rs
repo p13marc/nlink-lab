@@ -45,7 +45,10 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .map_err(|e| nlink_lab::Error::deploy_failed(format!("restart failed: {e}")))?;
     if !status.success() {
         eprintln!(" failed");
-        std::process::exit(1);
+        return Err(nlink_lab::Error::deploy_failed(format!(
+            "container restart exited with {}",
+            status.code().unwrap_or(-1)
+        )));
     }
     // The persisted init PID died with the old container process;
     // re-read it (a `.State.Pid` of 0 is rejected by `inspect_pid`)

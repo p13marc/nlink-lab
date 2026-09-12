@@ -12,7 +12,8 @@ concurrency:
 
 env:
   # shared compiler cache: sccache (mounted from the runner VM) -> garage S3
-  # on vm-runner-01; S3 endpoint+credentials come from the runner's env_file
+  # on vm-runner-01; S3 endpoint+credentials come from the runner's env_file.
+  # Guarded by the first step so a missing mount does not fail the build.
   RUSTC_WRAPPER: /srv/cache/bin/sccache
   CARGO_INCREMENTAL: "0"
 
@@ -21,7 +22,12 @@ jobs:
     runs-on: integration
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v7.0.1
-      - run: sudo apt-get update && sudo apt-get install -y wireguard-tools iperf3
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      # The tests exec `ip`/`nft`/`ping`/`tc`/`wg`/`getent` INSIDE the lab
+      # namespaces, which share this job's rootfs (only the net namespace
+      # changes) — so every one of those binaries must be installed here.
+      - run: sudo apt-get update && sudo apt-get install -y iproute2 nftables iputils-ping procps libc-bin wireguard-tools iperf3
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2.9.2
         with:
@@ -33,10 +39,10 @@ jobs:
             test -d "/sys/module/$m" || echo "::warning::module $m not loaded; dependent tests will skip"
           done
       - run: cargo build --bin nlink-lab
-      # INFORMATIONAL for now: only 6/62 pass in the rootless-podman lane —
-      # the lab deploy execs tooling that is absent/different in the job
-      # container ("exec in '<node>' failed: No such file or directory").
-      # Review the lab runtime expectations here, then drop continue-on-error.
+      # INFORMATIONAL until one green run is observed after the package fix
+      # above (the 6/62 failures were `exec in '<node>' failed: No such file
+      # or directory` — iproute2/nftables/iputils were not installed). Drop
+      # continue-on-error once the lane is green (issue #52).
       - name: Integration tests
         continue-on-error: true
         run: |

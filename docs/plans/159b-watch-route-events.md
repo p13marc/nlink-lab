@@ -671,7 +671,7 @@ EXIT CODES:
 - Plan 158d (superseded by 159b; the plan file was removed when
   this superseded it. The original nftables-only design lives on
   in git history if you ever want to compare shapes)
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md)
   — item #15 closure cited
 - nlink 0.19 sources at `/home/mpardo/git/rip`:
   - `crates/nlink/src/netlink/route_resync.rs` — `subscribe_all_with_resync`

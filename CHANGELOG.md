@@ -4,7 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- **`containers` cargo feature.** It was in `default` and gated nothing
+  (`grep 'feature = "containers"'` → 0 hits). Container support is
+  unconditional, as it always was in practice. Builds that passed
+  `--features containers` must drop the flag.
+- **`winnow` dependency** — declared, never used (the NLL parser is
+  hand-written recursive descent; the "Parser (winnow)" note in
+  `docs/NLL_DSL_DESIGN.md` was wrong).
+
 ### Changed
+
+- **Lockfile refresh** — ~225 transitive minor/patch bumps (`cargo update`).
+- **CI**: docs changes now run CI (`paths-ignore` no longer excludes
+  `docs/**`/`**.md`, so the `docs_examples` gate — which was never run
+  by any job — fires when it matters); new `msrv`, `stable-latest` and
+  rootless `cli-smoke` (`scripts/cli-smoke.sh`) jobs; the sccache
+  wrapper is guarded so a missing cache mount does not read as a compile
+  error; the integration lane installs `iproute2 nftables iputils-ping
+  procps` (the tests exec those inside the lab namespaces, which share
+  the job container's rootfs — this was the "6/62 pass" root cause).
+- **Release lane**: asserts `Cargo.toml` version == tag, ships a
+  `nlink-lab-<ver>-x86_64-linux-gnu.tar.gz` (CLI + backend + completions)
+  next to the source tarball, and computes `SHA256SUMS` in a final job so
+  it covers the flatpak bundle too.
+- `just ci` mirrors the workflow; `just test` includes `docs_examples`;
+  `just lint` runs both feature edges like CI.
+- The four resolved upstream-feedback reports moved from the repo root to
+  `docs/upstream/` with an index. `docs/plans/README.md` now records the
+  159 arc and 158g as shipped.
 
 - **nlink 0.25 → 0.26.** Upstream renamed `diagnostics::LinkRates`'
   `rx_bps`/`tx_bps` **fields** to `rx_bytes_per_sec`/`tx_bytes_per_sec`

@@ -8,9 +8,9 @@ build:
 release:
     cargo build --release --all-targets
 
-# Run unit tests
+# Run unit tests (+ stress + the docs gate)
 test:
-    cargo test -p nlink-lab --lib --test stress
+    cargo test -p nlink-lab --lib --test stress --test docs_examples
 
 # Run integration tests (requires root)
 test-integration:
@@ -19,13 +19,30 @@ test-integration:
 # Run all tests
 test-all: test test-integration
 
-# Clippy lint
+# Clippy lint (both feature edges, like CI)
 lint:
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# Everything the CI workflow runs, rootless (integration tests excluded)
+ci: fmt-check lint
+    cargo build --workspace --all-targets
+    cargo build --workspace --all-targets --no-default-features
+    cargo build --workspace --all-targets --all-features
+    cargo test --workspace --exclude nlink-lab
+    cargo test -p nlink-lab --lib --doc
+    cargo test -p nlink-lab --test stress --test docs_examples
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+    cargo deny check
+    cargo build -p nlink-lab-cli && ./scripts/cli-smoke.sh target/debug/nlink-lab
+
+# Rootless smoke test of the built CLI (what the cli-smoke CI job runs)
+smoke:
+    cargo build -p nlink-lab-cli && ./scripts/cli-smoke.sh target/debug/nlink-lab
 
 # Format check
 fmt-check:
-    cargo +nightly fmt --check
+    cargo +nightly fmt --all -- --check
 
 # Format
 fmt:

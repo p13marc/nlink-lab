@@ -356,9 +356,9 @@ Total time: ~2 hours.
 
 - [Plan 159 umbrella](159-nlink-0.19-adoption.md)
 - Plan 158b (shipped, see `CHANGELOG.md`) — original accessor design
-- [`nlink-feedback.md`](../../nlink-feedback.md) item #4 +
+- [`nlink-feedback.md`](../upstream/nlink-feedback.md) item #4 +
   D2 — the Box<Error> trap motivation
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md)
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md)
   — item #4 closure cited
 - nlink 0.19 sources at `/home/mpardo/git/rip`:
   - `crates/nlink/src/netlink/error.rs` — `chain_walk`, `root_cause`, `contexts`

@@ -701,7 +701,7 @@ flag that bypasses the validation. Defer until asked.
 - [Plan 159a](159a-declarative-vrf-wg-vxlan.md) — prerequisite (provides `WireguardConfig`)
 - Plan 158e (shipped, see `CHANGELOG.md`) — original per-layer per-node design
 - Plan 158f (shipped, see `CHANGELOG.md`) — `LayeredDiff` foundation
-- [`nlink-0.19-realignment.md`](../../nlink-0.19-realignment.md) — facade adoption note
+- [`nlink-0.19-realignment.md`](../upstream/nlink-0.19-realignment.md) — facade adoption note
 - nlink 0.19 sources at `/home/mpardo/git/rip`:
   - `crates/nlink/src/facade/stack.rs` — `Stack` struct
   - `crates/nlink/src/facade/apply.rs` — `*_in_namespace` helpers

@@ -37,6 +37,11 @@ struct Cli {
     /// Zenoh connect endpoint (repeatable), e.g. tcp/127.0.0.1:7447.
     #[arg(long)]
     zenoh_connect: Vec<String>,
+
+    /// Serve /metrics (OpenMetrics) and /api/v1/{snapshot,health,topology}
+    /// on this address, e.g. 127.0.0.1:9464.
+    #[arg(long, value_name = "ADDR")]
+    http: Option<std::net::SocketAddr>,
 }
 
 impl From<Cli> for BackendOpts {
@@ -46,6 +51,7 @@ impl From<Cli> for BackendOpts {
             zenoh_mode: cli.zenoh_mode,
             zenoh_listen: cli.zenoh_listen,
             zenoh_connect: cli.zenoh_connect,
+            http: cli.http,
         }
     }
 }

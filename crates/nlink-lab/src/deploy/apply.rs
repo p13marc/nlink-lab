@@ -951,6 +951,22 @@ fn exec_op(
         env.starttimes.insert(pid, st);
     }
     env.exec_pids.insert(format!("{node}:{index}"), pid);
+    // cgroup v2 limits for namespace nodes (#66); containers get theirs
+    // from the runtime.
+    if let Some(n) = env.topology.nodes.get(node)
+        && let Some(dir) =
+            crate::cgroup::ensure_node(&env.lab, node, n.cpu.as_deref(), n.memory.as_deref())?
+    {
+        journal.record(Undo::RemoveCgroups {
+            lab: env.lab.clone(),
+        });
+        if let Err(e) = crate::cgroup::attach(&dir, pid) {
+            tracing::warn!(
+                "node '{node}': cannot move pid {pid} into {}: {e}",
+                dir.display()
+            );
+        }
+    }
     let final_stdout = log_dir.join(format!("{node}-{basename}-{pid}.stdout"));
     let final_stderr = log_dir.join(format!("{node}-{basename}-{pid}.stderr"));
     let _ = std::fs::rename(&stdout_path, &final_stdout);

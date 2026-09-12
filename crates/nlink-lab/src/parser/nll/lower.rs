@@ -2110,6 +2110,10 @@ fn interpolate_impair_props(
         rate: io(&p.rate, vars),
         corrupt: io(&p.corrupt, vars),
         reorder: io(&p.reorder, vars),
+        duplicate: io(&p.duplicate, vars),
+        delay_correlation: io(&p.delay_correlation, vars),
+        loss_correlation: io(&p.loss_correlation, vars),
+        limit: io(&p.limit, vars),
     }
 }
 
@@ -3058,6 +3062,10 @@ fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
         rate: props.rate.clone(),
         corrupt: props.corrupt.clone(),
         reorder: props.reorder.clone(),
+        duplicate: props.duplicate.clone(),
+        delay_correlation: props.delay_correlation.clone(),
+        loss_correlation: props.loss_correlation.clone(),
+        limit: props.limit.clone(),
     }
 }
 
@@ -5227,6 +5235,45 @@ node hub { vrf red table 10 { interfaces [for i in 1..${n} : eth${i}] } }
         )
         .unwrap_err();
         assert!(err.to_string().contains("must be literal"), "{err}");
+    }
+
+    #[test]
+    fn test_netem_extras_lower_and_render() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  delay 10ms delay-correlation 25%
+  loss 1% loss-correlation 10%
+  duplicate 0.5% limit 500
+}
+"#,
+        );
+        let imp = &topo.impairments["a:eth0"];
+        assert_eq!(imp.delay_correlation.as_deref(), Some("25%"));
+        assert_eq!(imp.loss_correlation.as_deref(), Some("10%"));
+        assert_eq!(imp.duplicate.as_deref(), Some("0.5%"));
+        assert_eq!(imp.limit.as_deref(), Some("500"));
+        let rendered = crate::render::try_render(&topo).unwrap();
+        assert!(
+            rendered
+                .contains("duplicate 0.5% delay-correlation 25% loss-correlation 10% limit 500"),
+            "{rendered}"
+        );
+        let back = crate::parser::parse(&rendered).unwrap();
+        assert_eq!(back.impairments["a:eth0"], *imp);
+        assert!(crate::deploy::plan::qdisc::build_netem(imp).is_ok());
+        assert!(!topo.validate().has_errors());
+        let bad = parse_and_lower(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  limit 0 }\n",
+        );
+        assert!(
+            bad.validate()
+                .errors()
+                .any(|e| e.rule == "invalid-impairment-value")
+        );
     }
 
     #[test]

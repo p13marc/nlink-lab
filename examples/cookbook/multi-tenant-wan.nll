@@ -10,7 +10,7 @@ profile router { forward ipv4 }
 # tunnel toward site B. Customer hosts live in two separate L3
 # domains on the same physical box.
 node hub-a : router {
-  vrf red  table 10 {
+  vrf red table 10 {
     interfaces [eth1, wg-red]
     route 10.20.0.0/16 dev wg-red
   }
@@ -39,15 +39,15 @@ node hub-a : router {
     accept ct established,related
     accept udp dport 51820
     accept udp dport 51821
-    accept tcp dport 22 src 10.10.0.0/16   # mgmt ssh from customer red
-    accept tcp dport 22 src 10.20.0.0/16   # mgmt ssh from customer blue
+    accept tcp dport 22 src 10.10.0.0/16  # mgmt ssh from customer red
+    accept tcp dport 22 src 10.20.0.0/16  # mgmt ssh from customer blue
   }
 }
 
 # Site B — mirror of site A. The two hubs share a WAN underlay
 # (link below) carrying both WireGuard tunnels.
 node hub-b : router {
-  vrf red  table 10 {
+  vrf red table 10 {
     interfaces [eth1, wg-red]
     route 10.10.0.0/16 dev wg-red
   }
@@ -79,14 +79,14 @@ node hub-b : router {
 }
 
 # Customer hosts — one per VRF per site.
-node red-a   { route default via 10.10.0.1 }
-node blue-a  { route default via 10.11.0.1 }
-node red-b   { route default via 10.20.0.1 }
-node blue-b  { route default via 10.21.0.1 }
+node red-a { route default via 10.10.0.1 }
+node blue-a { route default via 10.11.0.1 }
+node red-b { route default via 10.20.0.1 }
+node blue-b { route default via 10.21.0.1 }
 
 # Customer red attaches to hub:eth1.
-link hub-a:eth1 -- red-a:eth0  { 10.10.0.1/16 -- 10.10.0.10/16 }
-link hub-b:eth1 -- red-b:eth0  { 10.20.0.1/16 -- 10.20.0.10/16 }
+link hub-a:eth1 -- red-a:eth0 { 10.10.0.1/16 -- 10.10.0.10/16 }
+link hub-b:eth1 -- red-b:eth0 { 10.20.0.1/16 -- 10.20.0.10/16 }
 
 # Customer blue attaches to hub:eth2.
 link hub-a:eth2 -- blue-a:eth0 { 10.11.0.1/16 -- 10.11.0.10/16 }
@@ -100,8 +100,8 @@ impair hub-a:wan0 delay 30ms jitter 8ms loss 0.3%
 # Smoke tests: each customer host should reach its peer at the
 # other site, BUT not the other customer's host.
 validate {
-  reach red-a   red-b      # customer red end-to-end
-  reach blue-a  blue-b     # customer blue end-to-end
-  no-reach red-a blue-a    # cross-VRF same-site isolated
-  no-reach red-a blue-b    # cross-VRF cross-site isolated
+  reach red-a red-b  # customer red end-to-end
+  reach blue-a blue-b  # customer blue end-to-end
+  no-reach red-a blue-a  # cross-VRF same-site isolated
+  no-reach red-a blue-b  # cross-VRF cross-site isolated
 }

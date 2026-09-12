@@ -2029,7 +2029,15 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 Some(Token::Ident(s))
                     if matches!(
                         s.as_str(),
-                        "delay" | "jitter" | "loss" | "corrupt" | "reorder"
+                        "delay"
+                            | "jitter"
+                            | "loss"
+                            | "corrupt"
+                            | "reorder"
+                            | "duplicate"
+                            | "delay-correlation"
+                            | "loss-correlation"
+                            | "limit"
                     ) =>
                 {
                     let parsed = parse_impair_props(tokens, pos)?;
@@ -2082,6 +2090,18 @@ fn parse_impair_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Impair
         } else if check_kw(tokens, *pos, "reorder") {
             *pos += 1;
             props.reorder = Some(expect_percent_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "duplicate") {
+            *pos += 1;
+            props.duplicate = Some(expect_percent_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "delay-correlation") {
+            *pos += 1;
+            props.delay_correlation = Some(expect_percent_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "loss-correlation") {
+            *pos += 1;
+            props.loss_correlation = Some(expect_percent_or_value(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "limit") {
+            *pos += 1;
+            props.limit = Some(parse_value(tokens, pos)?);
         } else {
             break;
         }

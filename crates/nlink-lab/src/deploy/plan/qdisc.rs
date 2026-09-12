@@ -27,6 +27,21 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
     if let Some(reorder) = &impairment.reorder {
         netem = netem.reorder(Percent::new(parse_percent(reorder)?));
     }
+    if let Some(dup) = &impairment.duplicate {
+        netem = netem.duplicate(Percent::new(parse_percent(dup)?));
+    }
+    if let Some(c) = &impairment.delay_correlation {
+        netem = netem.delay_correlation(Percent::new(parse_percent(c)?));
+    }
+    if let Some(c) = &impairment.loss_correlation {
+        netem = netem.loss_correlation(Percent::new(parse_percent(c)?));
+    }
+    if let Some(limit) = &impairment.limit {
+        let packets: u32 = limit.trim().parse().map_err(|_| {
+            crate::Error::invalid_topology(format!("limit {limit:?}: expected a packet count"))
+        })?;
+        netem = netem.limit(packets);
+    }
 
     Ok(netem)
 }

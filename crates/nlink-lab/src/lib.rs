@@ -63,11 +63,13 @@
 pub mod benchmark;
 pub mod builder;
 pub mod capture;
+pub mod cgroup;
 pub mod container;
 pub mod deploy;
 pub mod diff;
 pub mod dns;
 pub mod error;
+pub mod fmt;
 pub mod helpers;
 pub mod impair_parse;
 pub mod ipfunc;

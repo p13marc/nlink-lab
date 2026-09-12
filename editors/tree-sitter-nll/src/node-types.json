@@ -3540,6 +3540,10 @@
     "named": false
   },
   {
+    "type": "delay-correlation",
+    "named": false
+  },
+  {
     "type": "depends-on",
     "named": false
   },
@@ -3581,6 +3585,10 @@
   },
   {
     "type": "dummy",
+    "named": false
+  },
+  {
+    "type": "duplicate",
     "named": false
   },
   {
@@ -3772,6 +3780,10 @@
     "named": false
   },
   {
+    "type": "limit",
+    "named": false
+  },
+  {
     "type": "line_comment",
     "named": true,
     "extra": true
@@ -3798,6 +3810,10 @@
   },
   {
     "type": "loss",
+    "named": false
+  },
+  {
+    "type": "loss-correlation",
     "named": false
   },
   {

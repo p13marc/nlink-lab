@@ -8,6 +8,6 @@ lab "pattern-mesh"
 pool links 10.0.0.0/24 /30
 
 mesh cluster {
-    node [n1, n2, n3, n4]
-    pool links
+  node [n1, n2, n3, n4]
+  pool links
 }

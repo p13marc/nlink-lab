@@ -4,8 +4,8 @@
 # management bridge connecting all nodes with sequential IPs.
 
 lab "mgmt-demo" {
-    description "Lab with management network"
-    mgmt 172.20.0.0/24
+  description "Lab with management network"
+  mgmt 172.20.0.0/24
 }
 
 profile router { forward ipv4 }

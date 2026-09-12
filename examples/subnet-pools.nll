@@ -4,7 +4,7 @@
 # and post-deploy connectivity validation.
 
 lab "pools-demo" {
-    description "Subnet pools with auto-allocation"
+  description "Subnet pools with auto-allocation"
 }
 
 profile router { forward ipv4 }
@@ -30,5 +30,5 @@ link leaf1:eth3 -- server1:eth0 { pool access }
 link leaf2:eth3 -- server2:eth0 { pool access }
 
 validate {
-    reach server1 server2
+  reach server1 server2
 }

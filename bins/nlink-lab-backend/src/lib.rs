@@ -43,6 +43,7 @@ use zenoh::config::EndPoint;
 
 pub mod collector;
 pub mod handlers;
+pub mod http;
 
 /// How often [`HealthStatus`] is published, independent of the metrics
 /// interval.
@@ -54,6 +55,12 @@ pub const HEALTH_INTERVAL: Duration = Duration::from_secs(10);
 /// lab error itself) so callers on the library's error path can `?` it.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The HTTP endpoint could not bind.
+    #[error("http endpoint {addr}: {reason}")]
+    Http {
+        addr: std::net::SocketAddr,
+        reason: String,
+    },
     /// `zenoh_mode` was neither `peer` nor `client`.
     #[error("unknown zenoh mode '{0}' (expected 'peer' or 'client')")]
     InvalidMode(String),
@@ -160,6 +167,9 @@ pub struct BackendOpts {
     pub zenoh_listen: Vec<String>,
     /// Zenoh connect endpoints, e.g. `tcp/127.0.0.1:7447` (default: none).
     pub zenoh_connect: Vec<String>,
+    /// Also serve `/metrics` (OpenMetrics) and `/api/v1/*` (JSON) on this
+    /// address (default: off). See [`http`].
+    pub http: Option<std::net::SocketAddr>,
 }
 
 impl Default for BackendOpts {
@@ -168,6 +178,7 @@ impl Default for BackendOpts {
             interval: Duration::from_secs(2),
             zenoh_mode: ZenohMode::Peer,
             zenoh_listen: Vec::new(),
+            http: None,
             zenoh_connect: Vec::new(),
         }
     }
@@ -347,6 +358,23 @@ pub async fn serve(
             reason: e.to_string(),
         })?;
 
+    // ── HTTP endpoint (optional) ───────────────────────────
+    let http_state: http::Shared = Default::default();
+    http_state.write().await.topology = serde_json::to_value(lab.topology()).unwrap_or_default();
+    let http_task = match opts.http {
+        Some(addr) => {
+            Some(
+                http::spawn(addr, http_state.clone())
+                    .await
+                    .map_err(|e| Error::Http {
+                        addr,
+                        reason: e.to_string(),
+                    })?,
+            )
+        }
+        None => None,
+    };
+
     // ── Main event loop ────────────────────────────────────
     let mut collector = collector::MetricsCollector::new(&lab);
     let mut health_interval = tokio::time::interval(HEALTH_INTERVAL);
@@ -388,6 +416,9 @@ pub async fn serve(
                         {
                             warn!("publish metrics snapshot: {e}");
                         }
+                        if http_task.is_some() {
+                            http_state.write().await.snapshot = Some(snapshot);
+                        }
                     }
                     Err(e) => warn!("metrics collection: {e}"),
                 }
@@ -408,6 +439,9 @@ pub async fn serve(
                     && let Err(e) = health_publisher.put(bytes).await
                 {
                     warn!("publish health: {e}");
+                }
+                if http_task.is_some() {
+                    http_state.write().await.health = Some(status);
                 }
             }
 
@@ -430,6 +464,9 @@ pub async fn serve(
         }
     }
 
+    if let Some(task) = http_task {
+        task.abort();
+    }
     Ok(())
 }
 

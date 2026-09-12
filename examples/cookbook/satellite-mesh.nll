@@ -14,9 +14,9 @@ for i in 0..11 {
 # per-destination netem on each node's egress via HTB+netem+flower.
 network mesh {
   members [
-    sat0:rf,  sat1:rf,  sat2:rf,  sat3:rf,
-    sat4:rf,  sat5:rf,  sat6:rf,  sat7:rf,
-    sat8:rf,  sat9:rf,  sat10:rf, sat11:rf,
+    sat0:rf, sat1:rf, sat2:rf, sat3:rf,
+    sat4:rf, sat5:rf, sat6:rf, sat7:rf,
+    sat8:rf, sat9:rf, sat10:rf, sat11:rf,
   ]
   subnet 172.100.0.0/24
 

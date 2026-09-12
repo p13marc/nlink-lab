@@ -62,6 +62,9 @@ Options:
       --zenoh-connect <ZENOH_CONNECT>
           Zenoh connect endpoint
 
+      --http <ADDR>
+          Also serve /metrics (OpenMetrics) and /api/v1/{snapshot,health,topology} over HTTP on this address, e.g. 127.0.0.1:9464 (#64)
+
   -h, --help
           Print help
 ```

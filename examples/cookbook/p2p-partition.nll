@@ -11,13 +11,13 @@ profile router { forward ipv4 }
 # isolates that peer from the others without any iptables magic.
 node hub : router
 
-node alice  { route default via ${hub.eth0} }
-node bob    { route default via ${hub.eth1} }
-node carol  { route default via ${hub.eth2} }
+node alice { route default via ${hub.eth0} }
+node bob { route default via ${hub.eth1} }
+node carol { route default via ${hub.eth2} }
 
-link hub:eth0 -- alice:eth0  { subnet 10.0.1.0/24 }
-link hub:eth1 -- bob:eth0    { subnet 10.0.2.0/24 }
-link hub:eth2 -- carol:eth0  { subnet 10.0.3.0/24 }
+link hub:eth0 -- alice:eth0 { subnet 10.0.1.0/24 }
+link hub:eth1 -- bob:eth0 { subnet 10.0.2.0/24 }
+link hub:eth2 -- carol:eth0 { subnet 10.0.3.0/24 }
 
 # WAN-style impairment on the alice-side path so the lab feels real.
 impair hub:eth0 delay 30ms jitter 5ms loss 0.5%

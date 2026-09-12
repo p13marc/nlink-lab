@@ -1226,6 +1226,8 @@ enum ValueKind {
     Duration,
     Percent,
     Rate,
+    /// A positive packet count (`limit`).
+    Packets,
 }
 
 fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<ValidationIssue>) {
@@ -1242,6 +1244,12 @@ fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<
             Err(e) => Some(e),
         },
         ValueKind::Rate => parse_rate_bps(value).err(),
+        ValueKind::Packets => match value.parse::<u32>() {
+            Ok(0) | Err(_) => Some(crate::Error::invalid_topology(
+                "expected a positive packet count".to_string(),
+            )),
+            Ok(_) => None,
+        },
     };
     if let Some(e) = err {
         issues.push(ValidationIssue {
@@ -1261,6 +1269,18 @@ fn check_impairment(imp: &Impairment, prefix: &str, issues: &mut Vec<ValidationI
         ("corrupt", &imp.corrupt, ValueKind::Percent),
         ("reorder", &imp.reorder, ValueKind::Percent),
         ("rate", &imp.rate, ValueKind::Rate),
+        ("duplicate", &imp.duplicate, ValueKind::Percent),
+        (
+            "delay-correlation",
+            &imp.delay_correlation,
+            ValueKind::Percent,
+        ),
+        (
+            "loss-correlation",
+            &imp.loss_correlation,
+            ValueKind::Percent,
+        ),
+        ("limit", &imp.limit, ValueKind::Packets),
     ];
     for (name, value, kind) in fields {
         if let Some(v) = value {
@@ -1929,8 +1949,6 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
             // Note: healthcheck, startup-delay, and depends-on work on
             // namespace nodes too (for integration testing orchestration).
             let container_checks: &[(&str, bool)] = &[
-                ("cpu", node.cpu.is_some()),
-                ("memory", node.memory.is_some()),
                 ("entrypoint", node.entrypoint.is_some()),
                 ("hostname", node.hostname.is_some()),
                 ("workdir", node.workdir.is_some()),

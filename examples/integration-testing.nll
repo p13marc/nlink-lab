@@ -19,9 +19,9 @@ param wan_delay default 10ms
 param wan_loss default 0%
 
 lab "inttest" {
-    description "Integration testing lab with host-reachable management"
-    mgmt 172.20.0.0/24 host-reachable
-    dns hosts
+  description "Integration testing lab with host-reachable management"
+  mgmt 172.20.0.0/24 host-reachable
+  dns hosts
 }
 
 profile router { forward ipv4 }
@@ -29,30 +29,30 @@ profile router { forward ipv4 }
 node router : router
 
 node server {
-    depends-on [router]
-    run "python3 -m http.server 8080" background
-    healthcheck "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"
-    healthcheck-interval 500ms
-    healthcheck-timeout 10s
-    route default via ${router.eth0}
+  depends-on [router]
+  run "python3 -m http.server 8080" background
+  healthcheck "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"
+  healthcheck-interval 500ms
+  healthcheck-timeout 10s
+  route default via ${router.eth0}
 }
 
 node client {
-    depends-on [router]
-    startup-delay 1s
-    route default via ${router.eth1}
+  depends-on [router]
+  startup-delay 1s
+  route default via ${router.eth1}
 }
 
 link router:eth0 -- server:eth0 {
-    10.0.1.1/24 -- 10.0.1.2/24
+  10.0.1.1/24 -- 10.0.1.2/24
 }
 
 link router:eth1 -- client:eth0 {
-    10.0.2.1/24 -- 10.0.2.2/24
-    delay ${wan_delay} loss ${wan_loss}
+  10.0.2.1/24 -- 10.0.2.2/24
+  delay ${wan_delay} loss ${wan_loss}
 }
 
 validate {
-    reach client server
-    tcp-connect client server 8080 timeout 3s retries 10 interval 1s
+  reach client server
+  tcp-connect client server 8080 timeout 3s retries 10 interval 1s
 }

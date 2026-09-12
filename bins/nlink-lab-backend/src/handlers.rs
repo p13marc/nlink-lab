@@ -122,6 +122,7 @@ pub async fn apply_impairment_request(
             rate: request.rate.clone(),
             corrupt: request.corrupt.clone(),
             reorder: request.reorder.clone(),
+            ..Default::default()
         };
         lab.set_impairment(&endpoint, &impairment)
             .await

@@ -144,7 +144,7 @@ examples/
 | `Node` | Network namespace or container definition |
 | `Link` | Point-to-point veth connection |
 | `Network` | Shared L2 bridge segment (with optional per-pair impairments) |
-| `Impairment` | Netem config (delay, jitter, loss, rate) |
+| `Impairment` | Netem config (delay, jitter, loss, rate, corrupt, reorder, duplicate, correlations, limit) |
 | `NetworkImpairment` | Per-pair impairment on a shared network (src/dst nodes + netem + optional rate-cap) |
 | `RateLimit` | Per-interface traffic shaping |
 | `FirewallConfig` | nftables rules (with src/dst matching) |

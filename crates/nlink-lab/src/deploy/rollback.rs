@@ -65,6 +65,10 @@ pub enum Undo {
     RemoveDir {
         path: PathBuf,
     },
+    /// The lab's cgroup subtree (`/sys/fs/cgroup/nlink-lab/<lab>`).
+    RemoveCgroups {
+        lab: String,
+    },
     CleanupWifiConfigs {
         lab: String,
     },
@@ -229,6 +233,7 @@ impl Journal {
                 Undo::RemoveDir { path } => {
                     let _ = std::fs::remove_dir_all(path);
                 }
+                Undo::RemoveCgroups { lab } => crate::cgroup::remove_lab(lab),
                 Undo::CleanupWifiConfigs { lab } => crate::wifi::cleanup_configs(lab),
             }
         }
@@ -281,6 +286,7 @@ impl Drop for Journal {
                 Undo::RemoveDir { path } => {
                     let _ = std::fs::remove_dir_all(path);
                 }
+                Undo::RemoveCgroups { lab } => crate::cgroup::remove_lab(lab),
                 Undo::CleanupWifiConfigs { lab } => crate::wifi::cleanup_configs(lab),
                 Undo::DeleteHostLink { .. }
                 | Undo::DeleteLink { .. }

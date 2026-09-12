@@ -1182,6 +1182,18 @@ fn impairment_props(imp: &Impairment) -> Result<String> {
     if let Some(r) = &imp.reorder {
         parts.push(format!("reorder {}", lit_percent(r)?));
     }
+    if let Some(d) = &imp.duplicate {
+        parts.push(format!("duplicate {}", lit_percent(d)?));
+    }
+    if let Some(c) = &imp.delay_correlation {
+        parts.push(format!("delay-correlation {}", lit_percent(c)?));
+    }
+    if let Some(c) = &imp.loss_correlation {
+        parts.push(format!("loss-correlation {}", lit_percent(c)?));
+    }
+    if let Some(l) = &imp.limit {
+        parts.push(format!("limit {}", lit_value(l)?));
+    }
     Ok(parts.join(" "))
 }
 

@@ -56,6 +56,10 @@ set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 "$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep -q WARN && { say "FAIL: --allow did not silence the warning"; fail=1; }
 "$bin" graph examples/cookbook/satellite-mesh.nll | grep -q 'net:' || { say "FAIL: graph ignores network blocks"; fail=1; }
 
+say "== fmt"
+printf 'lab "f"\nnode   a{forward ipv4}\n' | "$bin" fmt - | grep -q '^node a { forward ipv4 }$' || { say "FAIL fmt -"; fail=1; }
+"$bin" fmt --check examples >/dev/null || { say "FAIL: examples are not fmt-clean"; fail=1; }
+
 say "== lint"
 "$bin" lint --list-rules | grep -q 'no-assertions' || { say "FAIL lint --list-rules"; fail=1; }
 "$bin" lint examples/simple.nll >/dev/null || { say "FAIL lint"; fail=1; }

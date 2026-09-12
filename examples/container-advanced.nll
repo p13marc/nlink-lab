@@ -5,7 +5,7 @@
 # env-file, cap-add, and post-deploy exec commands.
 
 lab "container-advanced" {
-    description "Container nodes with advanced configuration"
+  description "Container nodes with advanced configuration"
 }
 
 let app_memory = 512m
@@ -14,34 +14,34 @@ profile router { forward ipv4 }
 
 /* Web server: fine-grained capabilities, env from file */
 node web image "nginx:alpine" {
-    cpu 0.5
-    memory 256m
-    cap-add [NET_ADMIN, NET_RAW]
-    hostname "web-server"
-    labels ["nlink.role=web", "nlink.tier=frontend"]
-    env-file "configs/web.env"
-    exec "nginx -t"
-    route default via ${router.eth0}
+  cpu 0.5
+  memory 256m
+  cap-add [NET_ADMIN, NET_RAW]
+  hostname "web-server"
+  labels ["nlink.role=web", "nlink.tier=frontend"]
+  env-file "configs/web.env"
+  exec "nginx -t"
+  route default via ${router.eth0}
 }
 
 /* App server: custom entrypoint and workdir */
 node app image "python:3-slim" {
-    entrypoint "/bin/sh"
-    cmd ["-c", "python -m http.server 8080"]
-    workdir "/app"
-    cpu 1
-    memory ${app_memory}
-    cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]
-    labels ["nlink.role=app", "nlink.tier=backend"]
-    route default via ${router.eth1}
+  entrypoint "/bin/sh"
+  cmd ["-c", "python -m http.server 8080"]
+  workdir "/app"
+  cpu 1
+  memory ${app_memory}
+  cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]
+  labels ["nlink.role=app", "nlink.tier=backend"]
+  route default via ${router.eth1}
 }
 
 /* Router: full privileges for advanced networking */
 node router : router {
-    image "alpine:latest"
-    cmd ["sleep", "infinity"]
-    privileged
-    pull missing
+  image "alpine:latest"
+  cmd ["sleep", "infinity"]
+  privileged
+  pull missing
 }
 
 link router:eth0 -- web:eth0 { subnet 10.0.1.0/24 }

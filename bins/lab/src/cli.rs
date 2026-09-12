@@ -75,6 +75,14 @@ pub enum Commands {
     /// Validate a topology file without deploying.
     Validate(cmd::validate::Args),
 
+    /// Format NLL files: canonical indentation and spacing, nothing else.
+    ///
+    /// A token-level formatter: comments, blank-line structure, quoting and
+    /// statement order are kept; only whitespace changes, so the topology
+    /// is guaranteed identical. `--check` for CI, `-w` to rewrite in place,
+    /// `-` to format stdin.
+    Fmt(cmd::fmt::Args),
+
     /// Style and portability advice for a topology file (never blocks deploy).
     ///
     /// Missing `validate` blocks, background processes without a

@@ -373,7 +373,7 @@ pub fn lex(input: &str) -> Result<Vec<Spanned>> {
 }
 
 /// 1-based (line, column) of a byte offset; the column counts chars.
-fn line_col(input: &str, offset: usize) -> (usize, usize) {
+pub(crate) fn line_col(input: &str, offset: usize) -> (usize, usize) {
     let line = input[..offset].matches('\n').count() + 1;
     let line_start = input[..offset].rfind('\n').map_or(0, |p| p + 1);
     let col = input[line_start..offset].chars().count() + 1;

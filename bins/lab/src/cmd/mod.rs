@@ -15,6 +15,7 @@ pub mod docs_gen;
 pub mod doctor;
 pub mod exec;
 pub mod export;
+pub mod fmt;
 pub mod graph;
 pub mod impair;
 pub mod import;
@@ -57,6 +58,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Validate(args) => validate::run(ctx, args),
         Commands::Verify(args) => verify::run(ctx, args).await,
         Commands::Lint(args) => lint::run(ctx, args),
+        Commands::Fmt(args) => fmt::run(ctx, args),
         Commands::Doctor(args) => doctor::run(ctx, args).await,
         Commands::Test(args) => test::run(ctx, args).await,
         Commands::Impair(args) => impair::run(ctx, args).await,

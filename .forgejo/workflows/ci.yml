@@ -172,6 +172,8 @@ jobs:
           cache-targets: false
       - run: cargo build -p nlink-lab-cli
       - run: ./scripts/cli-smoke.sh target/debug/nlink-lab
+      # NLL sources are kept fmt-clean (token-level formatter, issue #54)
+      - run: target/debug/nlink-lab fmt --check examples
       # docs/cli reference blocks are generated from clap; a stale page fails here
       - run: target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas && git diff --exit-code -- docs/cli docs/json-schemas
 

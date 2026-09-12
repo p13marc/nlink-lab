@@ -9,5 +9,5 @@ node r1 : router
 node r2 : router
 
 link r1:eth0 -- r2:eth0 {
-    10.0.0.1/24 -- 10.0.0.2/24
+  10.0.0.1/24 -- 10.0.0.2/24
 }

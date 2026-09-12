@@ -68,6 +68,7 @@ pub mod deploy;
 pub mod diff;
 pub mod dns;
 pub mod error;
+pub mod fmt;
 pub mod helpers;
 pub mod impair_parse;
 pub mod ipfunc;

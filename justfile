@@ -109,3 +109,10 @@ tree-sitter:
     status=0; for f in ../../examples/*.nll ../../examples/*/*.nll; do \
       if ./node_modules/.bin/tree-sitter parse "$f" | grep -qE 'ERROR|MISSING'; then echo "FAIL $f"; status=1; fi; \
     done; exit $status
+
+# Format every NLL source (examples, templates); `just fmt-nll-check` for CI
+fmt-nll:
+    cargo build -p nlink-lab-cli && target/debug/nlink-lab fmt -w examples
+
+fmt-nll-check:
+    cargo build -p nlink-lab-cli && target/debug/nlink-lab fmt --check examples

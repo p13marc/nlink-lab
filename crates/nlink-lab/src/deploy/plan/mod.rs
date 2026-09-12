@@ -182,3 +182,198 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
 
     Ok(Plan { ops }.sorted())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::deploy::op::Stage;
+
+    fn topo(src: &str) -> Topology {
+        crate::parser::parse(src).unwrap()
+    }
+
+    fn plan_of(src: &str) -> Plan {
+        let t = topo(src);
+        plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap()
+    }
+
+    const SIMPLE: &str = r#"lab "t"
+profile router { forward ipv4 }
+node r : router
+node h { route default via 10.0.0.1 }
+link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
+"#;
+
+    #[test]
+    fn plan_is_deterministic_and_stage_ordered() {
+        let a = plan_of(SIMPLE);
+        let b = plan_of(SIMPLE);
+        assert_eq!(format!("{:?}", a.ops), format!("{:?}", b.ops));
+        let stages: Vec<Stage> = a.ops.iter().map(|o| o.stage()).collect();
+        let mut sorted = stages.clone();
+        sorted.sort();
+        assert_eq!(stages, sorted, "ops must be in stage order");
+        let keys: std::collections::BTreeSet<String> = a.ops.iter().map(|o| o.key()).collect();
+        assert_eq!(
+            keys.len(),
+            a.ops.len(),
+            "op keys must be unique: {:?}",
+            a.ops
+        );
+    }
+
+    #[test]
+    fn plan_covers_every_layer_of_a_simple_lab() {
+        let p = plan_of(SIMPLE);
+        let d: Vec<String> = p.ops.iter().map(|o| o.describe()).collect();
+        assert!(
+            d.iter().any(|s| s.contains("create namespace t-r")),
+            "{d:?}"
+        );
+        assert!(d.iter().any(|s| s.contains("veth r:eth0 ↔ h:eth0")));
+        assert!(d.iter().any(|s| s.starts_with("r: 1 sysctl")));
+        assert_eq!(p.stage(Stage::Stack).count(), 2);
+        assert!(d.iter().any(|s| s == "netem on r:eth0"));
+        assert!(d.iter().any(|s| s == "netem on h:eth0"));
+    }
+
+    #[test]
+    fn every_example_plans() {
+        for entry in
+            std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples")).unwrap()
+        {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "nll") {
+                let t = crate::parser::parse_file(&path).unwrap();
+                let inputs = PlanInputs::for_deploy(&t).unwrap();
+                let p = plan(&t, &inputs).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                assert!(!p.ops.is_empty(), "{}", path.display());
+            }
+        }
+    }
+
+    #[test]
+    fn diff_identical_plans_is_reconcile_only() {
+        let a = plan_of(SIMPLE);
+        let d = Plan::diff(&a, &a);
+        assert!(d.ops.iter().all(|o| !o.is_removal()), "{:?}", d.ops);
+        assert!(
+            d.ops
+                .iter()
+                .all(|o| matches!(o, Op::Stack { .. } | Op::LinksUp { .. })),
+            "only idempotent reconcile ops expected: {:?}",
+            d.ops
+        );
+    }
+
+    #[test]
+    fn diff_added_node_creates_only_the_new_pieces() {
+        let cur = plan_of(SIMPLE);
+        let des = plan_of(&format!(
+            "{SIMPLE}\nnode x\nlink r:eth1 -- x:eth0 {{ 10.1.0.1/30 -- 10.1.0.2/30 }}\n"
+        ));
+        let d = Plan::diff(&cur, &des);
+        let desc: Vec<String> = d.ops.iter().map(|o| o.describe()).collect();
+        assert!(
+            desc.iter().any(|s| s.contains("create namespace t-x")),
+            "{desc:?}"
+        );
+        assert!(desc.iter().any(|s| s.contains("veth r:eth1 ↔ x:eth0")));
+        assert!(
+            !desc.iter().any(|s| s.contains("veth r:eth0 ↔ h:eth0")),
+            "unchanged link recreated: {desc:?}"
+        );
+        assert!(!d.ops.iter().any(|o| o.is_removal()));
+        // removals (none) come first, then stage order
+        let stages: Vec<Stage> = d.ops.iter().map(|o| o.stage()).collect();
+        let mut sorted = stages.clone();
+        sorted.sort();
+        assert_eq!(stages, sorted);
+    }
+
+    #[test]
+    fn diff_removed_node_deletes_it_and_skips_its_links() {
+        let cur = plan_of(&format!(
+            "{SIMPLE}\nnode x\nlink r:eth1 -- x:eth0 {{ 10.1.0.1/30 -- 10.1.0.2/30 }}\nimpair x:eth0 delay 1ms\n"
+        ));
+        let des = plan_of(SIMPLE);
+        let d = Plan::diff(&cur, &des);
+        let removals: Vec<&Op> = d.ops.iter().filter(|o| o.is_removal()).collect();
+        assert!(
+            removals
+                .iter()
+                .any(|o| matches!(o, Op::DeleteNamespace { ns, .. } if ns == "t-x")),
+            "{removals:?}"
+        );
+        // the veth's r-side end is deleted (x's namespace goes away with its end)
+        assert!(removals.iter().any(
+            |o| matches!(o, Op::DeleteLink { node, iface } if node == "r" && iface == "eth1")
+        ));
+        // but nothing *inside* the dying namespace is touched individually
+        assert!(
+            !removals
+                .iter()
+                .any(|o| matches!(o, Op::ClearQdisc { node, .. } if node == "x")),
+            "{removals:?}"
+        );
+        // removals precede additions
+        let first_non_removal = d
+            .ops
+            .iter()
+            .position(|o| !o.is_removal())
+            .unwrap_or(d.ops.len());
+        assert!(d.ops[..first_non_removal].iter().all(|o| o.is_removal()));
+    }
+
+    #[test]
+    fn diff_changed_link_mtu_recreates_the_veth() {
+        let cur = plan_of(SIMPLE);
+        let des = plan_of(&SIMPLE.replace("delay 5ms", "delay 5ms  mtu 1400"));
+        let d = Plan::diff(&cur, &des);
+        assert!(
+            d.ops.iter().any(
+                |o| matches!(o, Op::DeleteLink { node, iface } if node == "r" && iface == "eth0")
+            ),
+            "{:?}",
+            d.ops
+        );
+        assert!(d.ops.iter().any(|o| matches!(
+            o,
+            Op::CreateVeth {
+                mtu: Some(1400),
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn diff_removed_impairment_clears_the_qdisc() {
+        let cur = plan_of(SIMPLE);
+        let des = plan_of(&SIMPLE.replace("  delay 5ms", ""));
+        let d = Plan::diff(&cur, &des);
+        assert!(
+            d.ops.iter().any(
+                |o| matches!(o, Op::ClearQdisc { node, iface } if node == "r" && iface == "eth0")
+            ),
+            "{:?}",
+            d.ops
+        );
+    }
+
+    #[test]
+    fn diff_one_shot_process_ops_only_run_for_new_nodes() {
+        let src = format!("{SIMPLE}\nnode s {{ run [\"sleep\", \"1\"] background }}\n");
+        let cur = plan_of(&src);
+        let des = plan_of(&format!(
+            "{src}\nnode s2 {{ run [\"sleep\", \"2\"] background }}\n"
+        ));
+        let d = Plan::diff(&cur, &des);
+        let execs: Vec<&Op> = d
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::Exec { .. }))
+            .collect();
+        assert_eq!(execs.len(), 1, "{execs:?}");
+        assert!(matches!(execs[0], Op::Exec { node, .. } if node == "s2"));
+    }
+}

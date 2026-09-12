@@ -209,6 +209,14 @@ pub(crate) fn topology_to_network_config(
         }
     }
 
+    // Pass 4 — VRF routes, declared into the VRF's table (was the
+    // imperative step 12b / `add_route_with_table`).
+    for vrf_config in node.vrfs.values() {
+        for (dest, route_config) in &vrf_config.routes {
+            cfg = push_route(cfg, node_name, dest, route_config, Some(vrf_config.table))?;
+        }
+    }
+
     // ── Addresses, in the same order step 9 used to apply them ──
     // 1. From per-link endpoint addresses.
     for link in &topology.links {
@@ -322,7 +330,7 @@ pub(crate) fn topology_to_network_config(
     // Manual routes win on conflict; auto-routes only fill gaps.
     let mut route_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
     for (dest, route_config) in &node.routes {
-        cfg = push_route(cfg, node_name, dest, route_config)?;
+        cfg = push_route(cfg, node_name, dest, route_config, None)?;
         route_keys.insert(dest.clone());
     }
     if let Some(autos) = auto_routes {
@@ -330,7 +338,7 @@ pub(crate) fn topology_to_network_config(
             if route_keys.contains(dest) {
                 continue;
             }
-            cfg = push_route(cfg, node_name, dest, route_config)?;
+            cfg = push_route(cfg, node_name, dest, route_config, None)?;
         }
     }
 
@@ -346,6 +354,7 @@ pub(crate) fn push_route(
     node_name: &str,
     dest: &str,
     route_config: &crate::types::RouteConfig,
+    table: Option<u32>,
 ) -> Result<nlink::netlink::config::NetworkConfig> {
     let is_v6 = route_config
         .via
@@ -382,6 +391,11 @@ pub(crate) fn push_route(
             }
             if let Some(m) = metric {
                 r = r.metric(m);
+            }
+            if let Some(t) = table {
+                // VRF routes (what used to be the imperative step 12b):
+                // nlink 0.26's DeclaredRouteBuilder::table
+                r = r.table(t);
             }
             r
         })

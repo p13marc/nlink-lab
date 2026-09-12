@@ -98,12 +98,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             /// Plan 159d — typed per-namespace
             /// `NetworkConfig` diff under
             /// `nlink/serde`. Empty map elided.
-            #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
-            network: &'a std::collections::HashMap<String, nlink_lab::diff::ConfigDiff>,
+            #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+            network: &'a std::collections::BTreeMap<String, nlink_lab::diff::ConfigDiff>,
             /// Plan 159d — typed per-namespace
             /// `NftablesDiff`. Empty map elided.
-            #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
-            nftables: &'a std::collections::HashMap<String, nlink_lab::diff::NftablesDiff>,
+            #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+            nftables: &'a std::collections::BTreeMap<String, nlink_lab::diff::NftablesDiff>,
         }
         let report = DryRunReport {
             schema_version: 3,
@@ -178,7 +178,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     require_root()?;
     let start = Instant::now();
-    nlink_lab::apply_diff(&mut running, &desired, &diff).await?;
+    let report = nlink_lab::apply(&mut running, &desired).await?;
+    tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     let elapsed = start.elapsed();
 
     if !ctx.quiet {

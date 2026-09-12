@@ -12,19 +12,22 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 
-use crate::capture::{CaptureConfig, CaptureOutput, run_capture};
+use crate::capture::{CaptureConfig, CaptureHandle, CaptureOutput, spawn_capture};
 use crate::error::{Error, Result};
 use netring::RingProfile;
 
 /// A live packet-capture session covering one or more lab interfaces.
 ///
-/// Captures run in dedicated threads (entering each namespace
-/// once, then sticking there). Captures are stopped via a shared
-/// `AtomicBool`. On `persist_on_failure`, the pcaps are moved
-/// from the temp dir to a discoverable location only if the
-/// caller flagged failure; otherwise the temp dir is wiped on
+/// Each capture runs on its own dedicated thread via
+/// [`spawn_capture`] — the same implementation the CLI's
+/// `run_capture` uses — so the namespace `setns` never touches the
+/// test's tokio workers. All captures share one `AtomicBool` stop
+/// flag, which the loop polls every [`crate::capture::POLL_QUANTUM`]
+/// (~200 ms), so [`LabCapture::stop`] returns within a bounded time
+/// even on a completely idle link. On `persist_on_failure`, the
+/// pcaps are moved from the temp dir to a discoverable location only
+/// if the caller flagged failure; otherwise the temp dir is wiped on
 /// `drop`.
 ///
 /// Designed for use inside the `#[lab_test]` macro's `capture =
@@ -34,8 +37,8 @@ pub struct LabCapture {
     pcaps: HashMap<String, PathBuf>,
     /// Signal threads to stop.
     shutdown: Arc<AtomicBool>,
-    /// Capture-thread join handles. Emptied on `stop`.
-    handles: Vec<thread::JoinHandle<()>>,
+    /// `(ns_name, handle)` per running capture. Emptied on `stop`.
+    handles: Vec<(String, CaptureHandle)>,
     /// Temp dir owning the pcap files. Dropped on success.
     temp_dir: Option<tempfile::TempDir>,
     /// True if `stop` has been called. Prevents double-stop.
@@ -52,7 +55,7 @@ impl LabCapture {
             .map_err(|e| Error::invalid_topology(format!("create temp dir for captures: {e}")))?;
         let shutdown = Arc::new(AtomicBool::new(false));
         let mut pcaps: HashMap<String, PathBuf> = HashMap::new();
-        let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
+        let mut handles: Vec<(String, CaptureHandle)> = Vec::new();
 
         for (ns_name, iface) in targets {
             let pcap_path = temp.path().join(format!("{ns_name}.pcap"));
@@ -67,23 +70,17 @@ impl LabCapture {
                 duration: None,
                 ignore_outgoing: false,
             };
-            let shutdown_thread = Arc::clone(&shutdown);
-            let ns_name_thread = ns_name.clone();
-            let handle = thread::spawn(move || {
-                let output = match CaptureOutput::pcap(&pcap_path) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        tracing::warn!(
-                            "lab_capture: failed to open pcap for '{ns_name_thread}': {e}"
-                        );
-                        return;
-                    }
-                };
-                if let Err(e) = run_capture(&ns_name_thread, &cfg, output, &shutdown_thread) {
-                    tracing::warn!("lab_capture: '{ns_name_thread}' aborted: {e}");
+            let output = match CaptureOutput::pcap(&pcap_path) {
+                Ok(o) => o,
+                Err(e) => {
+                    tracing::warn!("lab_capture: failed to open pcap for '{ns_name}': {e}");
+                    continue;
                 }
-            });
-            handles.push(handle);
+            };
+            match spawn_capture(ns_name.clone(), cfg, output, Arc::clone(&shutdown)) {
+                Ok(h) => handles.push((ns_name.clone(), h)),
+                Err(e) => tracing::warn!("lab_capture: failed to start '{ns_name}': {e}"),
+            }
         }
 
         Ok(Self {
@@ -96,14 +93,20 @@ impl LabCapture {
     }
 
     /// Stop all running captures. Idempotent.
+    ///
+    /// Raises the shared flag first so every thread starts winding
+    /// down concurrently, then joins each one; total wait is bounded
+    /// by ~one [`crate::capture::POLL_QUANTUM`] on an idle link.
     fn stop(&mut self) {
         if self.stopped {
             return;
         }
         self.stopped = true;
         self.shutdown.store(true, Ordering::Relaxed);
-        for handle in self.handles.drain(..) {
-            let _ = handle.join();
+        for (ns_name, handle) in self.handles.drain(..) {
+            if let Err(e) = handle.stop() {
+                tracing::warn!("lab_capture: '{ns_name}' aborted: {e}");
+            }
         }
     }
 

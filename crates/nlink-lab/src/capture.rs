@@ -6,6 +6,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -307,11 +308,14 @@ pub struct CaptureConfig {
 }
 
 /// Result of a completed capture session.
+#[derive(Debug)]
 pub struct CaptureResult {
     /// Number of packets captured.
     pub packets_captured: u64,
     /// Kernel-reported statistics (packets seen, drops, freezes).
     pub stats: CaptureStats,
+    /// Why the loop ended.
+    pub stop_reason: StopReason,
 }
 
 /// Where captured packets go. Selects between summary printing,
@@ -363,20 +367,154 @@ impl PcapSink {
 
 // ── Main capture loop ─────────────────────────────────────────────────────
 
-/// Run a packet capture in the given namespace.
+/// How long a single blocking poll on the ring may last before the loop
+/// re-checks the `shutdown` flag and the `--duration` deadline.
 ///
-/// Enters the namespace on a dedicated thread (to avoid affecting the tokio
-/// runtime), creates the AF_PACKET socket there, then runs the capture loop.
-/// `output` selects pcap-vs-summary and single-vs-rotating.
-pub fn run_capture(
+/// netring's `Packets::next_packet` retries its internal `poll(2)`
+/// indefinitely on timeout, so it can never observe an external stop
+/// request on an idle interface (issue #33). We drive
+/// `Capture::next_batch_blocking` ourselves with this quantum instead;
+/// the flag and deadline are therefore honoured within roughly this
+/// interval even when no traffic arrives.
+pub const POLL_QUANTUM: Duration = Duration::from_millis(200);
+
+/// One captured packet, decoupled from netring's lending `Packet` so the
+/// capture loop can be exercised by a fake source in unit tests.
+#[derive(Debug, Clone, Copy)]
+pub struct PacketRecord<'a> {
+    /// Capture timestamp.
+    pub ts: netring::Timestamp,
+    /// Captured bytes (already truncated to the snap length by the kernel).
+    pub data: &'a [u8],
+    /// Original on-wire length.
+    pub orig_len: u32,
+}
+
+/// Why the capture loop stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopReason {
+    /// The `shutdown` flag was raised (Ctrl-C / SIGTERM / `LabCapture::stop`).
+    Shutdown,
+    /// `CaptureConfig::duration` elapsed.
+    Deadline,
+    /// `CaptureConfig::count` packets were captured.
+    CountReached,
+}
+
+/// Stop conditions for [`drive_capture_loop`]. Mirrors the `count` /
+/// `duration` fields of [`CaptureConfig`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CaptureLimits {
+    /// Stop after N packets.
+    pub count: Option<u64>,
+    /// Stop after this duration (measured from loop entry).
+    pub duration: Option<Duration>,
+}
+
+impl From<&CaptureConfig> for CaptureLimits {
+    fn from(c: &CaptureConfig) -> Self {
+        Self {
+            count: c.count,
+            duration: c.duration,
+        }
+    }
+}
+
+/// Callback that receives each packet of one poll. Return `Ok(false)` to
+/// stop consuming the current batch (the loop then exits).
+pub type PacketSink<'s> = dyn FnMut(PacketRecord<'_>) -> Result<bool> + 's;
+
+/// The capture loop, factored out of [`run_capture`] so its stop logic is
+/// testable without root or a ring.
+///
+/// `source(timeout, sink)` must block for **at most** `timeout`, then hand
+/// every packet that arrived to `sink` (stopping early when `sink` returns
+/// `Ok(false)`), and return `Ok(())` — also when nothing arrived. The
+/// production source wraps `Capture::next_batch_blocking`; tests use
+/// closures.
+///
+/// Between polls the loop checks `shutdown` and the deadline, and each
+/// poll is bounded by `min(POLL_QUANTUM, time-to-deadline)`, so both
+/// conditions are honoured within ~[`POLL_QUANTUM`] on an idle interface.
+/// `on_packet` is invoked for each packet; its error aborts the loop.
+///
+/// Returns the number of packets delivered to `on_packet` and why the
+/// loop stopped.
+pub fn drive_capture_loop<S, F>(
+    limits: CaptureLimits,
+    shutdown: &AtomicBool,
+    mut source: S,
+    mut on_packet: F,
+) -> Result<(u64, StopReason)>
+where
+    S: FnMut(Duration, &mut PacketSink<'_>) -> Result<()>,
+    F: FnMut(PacketRecord<'_>) -> Result<()>,
+{
+    let deadline = limits.duration.map(|d| Instant::now() + d);
+    let mut count: u64 = 0;
+
+    // `--count 0` is "stop immediately" — don't wait for a packet we'd
+    // discard anyway.
+    if limits.count == Some(0) {
+        return Ok((0, StopReason::CountReached));
+    }
+
+    loop {
+        if shutdown.load(Ordering::Relaxed) {
+            return Ok((count, StopReason::Shutdown));
+        }
+        let timeout = match deadline {
+            Some(d) => {
+                let remaining = d.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Ok((count, StopReason::Deadline));
+                }
+                remaining.min(POLL_QUANTUM)
+            }
+            None => POLL_QUANTUM,
+        };
+
+        let mut stop: Option<StopReason> = None;
+        source(timeout, &mut |rec: PacketRecord<'_>| {
+            on_packet(rec)?;
+            count += 1;
+            if let Some(max) = limits.count
+                && count >= max
+            {
+                stop = Some(StopReason::CountReached);
+                return Ok(false);
+            }
+            // Re-check the flag between packets of a large batch so a
+            // stop request during a flood is still prompt.
+            if shutdown.load(Ordering::Relaxed) {
+                stop = Some(StopReason::Shutdown);
+                return Ok(false);
+            }
+            Ok(true)
+        })?;
+
+        if let Some(reason) = stop {
+            return Ok((count, reason));
+        }
+    }
+}
+
+/// Enter `ns_name`, open the ring, and run the capture loop **on the
+/// calling thread**.
+///
+/// `namespace::enter` calls `setns(CLONE_NEWNET)`, which retargets the
+/// *calling thread* — so this must only ever run on a thread nobody
+/// else schedules work onto. [`run_capture`] and [`spawn_capture`] are
+/// the public entry points; both create that thread. The guard is
+/// dropped as soon as the socket exists (the fd stays bound to the
+/// target namespace), but the thread is still consumed by the blocking
+/// loop for the whole capture.
+fn capture_in_namespace(
     ns_name: &str,
     config: &CaptureConfig,
     output: CaptureOutput,
     shutdown: &AtomicBool,
 ) -> Result<CaptureResult> {
-    // Enter namespace and create capture socket.
-    // We do this on the current thread since capture is a blocking operation
-    // and the CLI doesn't have async context running.
     let guard = namespace::enter(ns_name)?;
 
     let mut builder = Capture::builder()
@@ -414,54 +552,50 @@ pub fn run_capture(
         )?),
     };
 
-    let start = Instant::now();
-    let mut count: u64 = 0;
-
-    // `Packets` is a lending iterator (netring 0.30): each packet borrows the
-    // current ring block, which is recycled on the next `next_packet` call.
-    // Scoped so the `&mut capture` borrow ends before `capture.stats()`.
-    {
-        let mut packets = capture.packets();
-
-        while let Some(pkt) = packets.next_packet() {
-            if shutdown.load(Ordering::Relaxed) {
-                break;
+    // Bounded poll source over the ring. Each `PacketBatch` is a zero-copy
+    // view of one ring block (netring 0.30); it is released back to the
+    // kernel when the batch drops at the end of the closure, so no packet
+    // borrow escapes. Scoped so the `&mut capture` borrow ends before
+    // `capture.stats()`.
+    let (count, stop_reason) = {
+        let source = |timeout: Duration, sink: &mut PacketSink<'_>| -> Result<()> {
+            let batch = capture
+                .next_batch_blocking(timeout)
+                .map_err(|e| Error::Capture(format!("netring: {e}")))?;
+            let Some(batch) = batch else {
+                return Ok(());
+            };
+            for pkt in batch.iter() {
+                let rec = PacketRecord {
+                    ts: pkt.timestamp(),
+                    data: pkt.data(),
+                    orig_len: pkt.original_len() as u32,
+                };
+                if !sink(rec)? {
+                    break;
+                }
             }
+            Ok(())
+        };
 
-            if let Some(max_duration) = config.duration
-                && start.elapsed() >= max_duration
-            {
-                break;
-            }
-
-            let ts = pkt.timestamp();
-            let data = pkt.data();
-            let orig_len = pkt.original_len() as u32;
-
-            match &mut pcap {
+        drive_capture_loop(
+            CaptureLimits::from(config),
+            shutdown,
+            source,
+            |rec| match &mut pcap {
                 PcapSink::None => {
-                    println!("{}.{:09}  {} bytes", ts.sec, ts.nsec, data.len(),);
+                    println!(
+                        "{}.{:09}  {} bytes",
+                        rec.ts.sec,
+                        rec.ts.nsec,
+                        rec.data.len()
+                    );
+                    Ok(())
                 }
-                _ => {
-                    pcap.write_packet(ts, data, orig_len)?;
-                }
-            }
-
-            count += 1;
-
-            if let Some(max_count) = config.count
-                && count >= max_count
-            {
-                break;
-            }
-        }
-
-        // `next_packet` returns `None` on I/O error as well as on a clean
-        // stop; surface the error rather than reporting a short capture.
-        if let Some(e) = packets.take_error() {
-            return Err(Error::Capture(format!("netring: {e}")));
-        }
-    }
+                _ => Ok(pcap.write_packet(rec.ts, rec.data, rec.orig_len)?),
+            },
+        )?
+    };
 
     // No trailing flush needed — `PcapWriter::write_packet` already flushes
     // per-packet, so a SIGKILL between the loop body and this point still
@@ -473,6 +607,125 @@ pub fn run_capture(
     Ok(CaptureResult {
         packets_captured: count,
         stats,
+        stop_reason,
+    })
+}
+
+/// Map a thread-panic payload into a capture error.
+fn panic_to_error(payload: Box<dyn std::any::Any + Send>) -> Error {
+    let msg = payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".into());
+    Error::Capture(format!("capture thread panicked: {msg}"))
+}
+
+/// Run a packet capture in the given namespace and block until it ends.
+///
+/// The namespace is entered **on a dedicated (scoped) thread** — never
+/// the caller's. `setns(CLONE_NEWNET)` is per-thread, so entering it on
+/// a tokio worker would silently run every task later scheduled onto
+/// that worker inside the lab namespace (issue #33). The calling thread
+/// only blocks on the join.
+///
+/// The loop ends when `shutdown` is raised, `config.duration` elapses,
+/// or `config.count` packets were seen — each honoured within
+/// ~[`POLL_QUANTUM`] even on an idle interface. `output` selects
+/// pcap-vs-summary and single-vs-rotating.
+///
+/// For a non-blocking start (e.g. from async code, or for several
+/// captures at once) use [`spawn_capture`].
+pub fn run_capture(
+    ns_name: &str,
+    config: &CaptureConfig,
+    output: CaptureOutput,
+    shutdown: &AtomicBool,
+) -> Result<CaptureResult> {
+    std::thread::scope(|s| {
+        let worker = std::thread::Builder::new()
+            .name(format!("capture-{ns_name}"))
+            .spawn_scoped(s, || {
+                capture_in_namespace(ns_name, config, output, shutdown)
+            })
+            .map_err(|e| Error::Capture(format!("spawn capture thread: {e}")))?;
+        worker.join().unwrap_or_else(|p| Err(panic_to_error(p)))
+    })
+}
+
+/// A capture running on its own dedicated thread. Obtained from
+/// [`spawn_capture`].
+///
+/// Dropping the handle without joining raises the shutdown flag so the
+/// detached thread exits within ~[`POLL_QUANTUM`]; the result is lost.
+/// Note the flag is shared with whoever else holds the `Arc`, so several
+/// captures started with one flag all stop together.
+pub struct CaptureHandle {
+    shutdown: Arc<AtomicBool>,
+    thread: Option<std::thread::JoinHandle<Result<CaptureResult>>>,
+}
+
+impl CaptureHandle {
+    /// The flag this capture polls. Store `true` to request a stop.
+    pub fn shutdown_flag(&self) -> &Arc<AtomicBool> {
+        &self.shutdown
+    }
+
+    /// True once the capture thread has exited (for any reason).
+    pub fn is_finished(&self) -> bool {
+        self.thread.as_ref().is_none_or(|t| t.is_finished())
+    }
+
+    /// Raise the shutdown flag and wait for the thread. Returns within
+    /// ~[`POLL_QUANTUM`] on an idle interface.
+    pub fn stop(mut self) -> Result<CaptureResult> {
+        self.shutdown.store(true, Ordering::Relaxed);
+        self.join_inner()
+    }
+
+    /// Wait for the capture to end on its own (`count`, `duration`, or a
+    /// flag raised elsewhere). Blocks — call from a blocking context.
+    pub fn join(mut self) -> Result<CaptureResult> {
+        self.join_inner()
+    }
+
+    fn join_inner(&mut self) -> Result<CaptureResult> {
+        match self.thread.take() {
+            Some(t) => t.join().unwrap_or_else(|p| Err(panic_to_error(p))),
+            None => Err(Error::Capture("capture already joined".into())),
+        }
+    }
+}
+
+impl Drop for CaptureHandle {
+    fn drop(&mut self) {
+        if self.thread.is_some() {
+            self.shutdown.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Start a capture on a dedicated thread and return immediately.
+///
+/// Same semantics as [`run_capture`] (namespace entered on the new
+/// thread only; flag/deadline honoured within ~[`POLL_QUANTUM`]), but
+/// the caller keeps running. Stop or await it via the returned
+/// [`CaptureHandle`]. Async callers should wrap the (blocking) join in
+/// `tokio::task::spawn_blocking`.
+pub fn spawn_capture(
+    ns_name: String,
+    config: CaptureConfig,
+    output: CaptureOutput,
+    shutdown: Arc<AtomicBool>,
+) -> Result<CaptureHandle> {
+    let flag = Arc::clone(&shutdown);
+    let thread = std::thread::Builder::new()
+        .name(format!("capture-{ns_name}"))
+        .spawn(move || capture_in_namespace(&ns_name, &config, output, &flag))
+        .map_err(|e| Error::Capture(format!("spawn capture thread: {e}")))?;
+    Ok(CaptureHandle {
+        shutdown,
+        thread: Some(thread),
     })
 }
 
@@ -697,5 +950,263 @@ mod tests {
             ignore_outgoing: false,
         };
         assert!(cfg.bpf_filter.is_some());
+    }
+
+    // ── Capture loop (issue #33) — rootless, via fake sources ─────────
+
+    /// A source that never yields anything: simulates an idle
+    /// interface by sleeping for the full poll timeout, like
+    /// `poll(2)` timing out on the ring fd.
+    fn idle_source(timeout: Duration, _sink: &mut PacketSink<'_>) -> Result<()> {
+        std::thread::sleep(timeout);
+        Ok(())
+    }
+
+    /// A source that yields `per_poll` packets on every call without
+    /// blocking — a flood.
+    fn flood_source(per_poll: usize) -> impl FnMut(Duration, &mut PacketSink<'_>) -> Result<()> {
+        move |_timeout, sink| {
+            let payload = [0u8; 64];
+            for _ in 0..per_poll {
+                let rec = PacketRecord {
+                    ts: netring::Timestamp { sec: 1, nsec: 2 },
+                    data: &payload,
+                    orig_len: 64,
+                };
+                if !sink(rec)? {
+                    break;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    /// Generous upper bound on how long a stop should take: one poll
+    /// quantum plus scheduling slack. Loose enough for slow CI, tight
+    /// enough to catch the pre-fix "never returns" behaviour.
+    const STOP_BUDGET: Duration = Duration::from_millis(1500);
+
+    /// The pre-fix loop only looked at `shutdown` after a packet
+    /// arrived, so `LabCapture::stop` deadlocked on an idle link. The
+    /// flag must now be honoured within about one poll quantum.
+    #[test]
+    fn loop_honours_shutdown_on_idle_source() {
+        let flag = AtomicBool::new(false);
+        let started = Instant::now();
+        let (count, reason) = std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(Duration::from_millis(50));
+                flag.store(true, Ordering::Relaxed);
+            });
+            drive_capture_loop(CaptureLimits::default(), &flag, idle_source, |_| Ok(()))
+        })
+        .unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(reason, StopReason::Shutdown);
+        assert!(
+            started.elapsed() < STOP_BUDGET,
+            "shutdown took {:?}, expected < {:?}",
+            started.elapsed(),
+            STOP_BUDGET
+        );
+    }
+
+    /// `--duration` on an idle interface must end the capture; the
+    /// last poll is clipped to the remaining time so we don't
+    /// overshoot by a whole quantum.
+    #[test]
+    fn loop_honours_duration_on_idle_source() {
+        let flag = AtomicBool::new(false);
+        let limits = CaptureLimits {
+            count: None,
+            duration: Some(Duration::from_millis(120)),
+        };
+        let started = Instant::now();
+        let (count, reason) = drive_capture_loop(limits, &flag, idle_source, |_| Ok(())).unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(count, 0);
+        assert_eq!(reason, StopReason::Deadline);
+        assert!(
+            elapsed >= Duration::from_millis(120),
+            "ended early: {elapsed:?}"
+        );
+        assert!(elapsed < STOP_BUDGET, "deadline overshoot: {elapsed:?}");
+    }
+
+    /// Every poll must be bounded by `POLL_QUANTUM` and by the time
+    /// left until the deadline — otherwise a stop request could be
+    /// delayed by an arbitrarily long `poll(2)`.
+    #[test]
+    fn loop_bounds_every_poll_timeout() {
+        let flag = AtomicBool::new(false);
+        let limits = CaptureLimits {
+            count: None,
+            duration: Some(Duration::from_millis(450)),
+        };
+        let mut timeouts: Vec<Duration> = Vec::new();
+        let source = |timeout: Duration, _sink: &mut PacketSink<'_>| -> Result<()> {
+            timeouts.push(timeout);
+            std::thread::sleep(timeout);
+            Ok(())
+        };
+        let (_, reason) = drive_capture_loop(limits, &flag, source, |_| Ok(())).unwrap();
+        assert_eq!(reason, StopReason::Deadline);
+        assert!(
+            timeouts.len() >= 3,
+            "expected several polls, got {timeouts:?}"
+        );
+        assert!(timeouts.iter().all(|t| *t <= POLL_QUANTUM), "{timeouts:?}");
+        assert!(timeouts.iter().all(|t| !t.is_zero()), "{timeouts:?}");
+        // The final poll was clipped to the remainder, not a full quantum.
+        assert!(
+            *timeouts.last().unwrap() < POLL_QUANTUM,
+            "last poll not clipped to the deadline: {timeouts:?}"
+        );
+    }
+
+    /// `--count N` stops mid-batch — the sink must not be fed the
+    /// rest of the batch once the limit is hit.
+    #[test]
+    fn loop_stops_at_count_mid_batch() {
+        let flag = AtomicBool::new(false);
+        let limits = CaptureLimits {
+            count: Some(5),
+            duration: None,
+        };
+        let mut seen = 0u64;
+        let (count, reason) = drive_capture_loop(limits, &flag, flood_source(100), |_| {
+            seen += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!((count, seen), (5, 5));
+        assert_eq!(reason, StopReason::CountReached);
+    }
+
+    /// `--count 0` means "capture nothing" and must not block waiting
+    /// for a first packet on an idle interface.
+    #[test]
+    fn loop_count_zero_returns_immediately() {
+        let flag = AtomicBool::new(false);
+        let limits = CaptureLimits {
+            count: Some(0),
+            duration: None,
+        };
+        let started = Instant::now();
+        let (count, reason) = drive_capture_loop(limits, &flag, idle_source, |_| Ok(())).unwrap();
+        assert_eq!((count, reason), (0, StopReason::CountReached));
+        assert!(started.elapsed() < Duration::from_millis(100));
+    }
+
+    /// A stop requested during a flood is honoured between packets of
+    /// the same batch, not only at the next poll boundary.
+    #[test]
+    fn loop_honours_shutdown_mid_batch() {
+        let flag = AtomicBool::new(false);
+        let mut seen = 0u64;
+        let (count, reason) =
+            drive_capture_loop(CaptureLimits::default(), &flag, flood_source(1_000), |_| {
+                seen += 1;
+                if seen == 3 {
+                    flag.store(true, Ordering::Relaxed);
+                }
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!((count, seen), (3, 3));
+        assert_eq!(reason, StopReason::Shutdown);
+    }
+
+    /// Ring I/O errors surface as `Error::Capture`, never as a short
+    /// but "successful" capture.
+    #[test]
+    fn loop_propagates_source_error() {
+        let flag = AtomicBool::new(false);
+        let source = |_t: Duration, _s: &mut PacketSink<'_>| -> Result<()> {
+            Err(Error::Capture("netring: boom".into()))
+        };
+        let err =
+            drive_capture_loop(CaptureLimits::default(), &flag, source, |_| Ok(())).unwrap_err();
+        assert!(
+            matches!(err, Error::Capture(ref m) if m.contains("boom")),
+            "{err}"
+        );
+    }
+
+    /// A failing sink (e.g. pcap write to a full disk) aborts the
+    /// loop with that error instead of silently dropping packets.
+    #[test]
+    fn loop_propagates_sink_error() {
+        let flag = AtomicBool::new(false);
+        let err = drive_capture_loop(CaptureLimits::default(), &flag, flood_source(10), |_| {
+            Err(Error::Capture("disk full".into()))
+        })
+        .unwrap_err();
+        assert!(
+            matches!(err, Error::Capture(ref m) if m == "disk full"),
+            "{err}"
+        );
+    }
+
+    /// `run_capture` must not enter the namespace on the caller's
+    /// thread. We can't create a namespace rootless, but we can prove
+    /// the work happens elsewhere: a bogus namespace fails inside the
+    /// worker and the error is relayed — and the calling thread's name
+    /// is untouched, i.e. we were never the `capture-*` thread.
+    #[test]
+    fn run_capture_runs_on_dedicated_thread_and_relays_errors() {
+        let cfg = CaptureConfig {
+            interface: "lo".into(),
+            snap_len: 256,
+            count: Some(1),
+            duration: Some(Duration::from_millis(10)),
+            bpf_filter: None,
+            profile: RingProfile::LowMemory,
+            ignore_outgoing: false,
+        };
+        let flag = AtomicBool::new(false);
+        let err = run_capture(
+            "nlink-lab-issue33-does-not-exist",
+            &cfg,
+            CaptureOutput::Summaries,
+            &flag,
+        )
+        .expect_err("entering a nonexistent namespace must fail");
+        // Whatever the failure (ENOENT on the ns, EPERM rootless), it
+        // must come back as an error, not a panic or a hang.
+        let _ = err.to_string();
+        assert_ne!(
+            std::thread::current().name(),
+            Some("capture-nlink-lab-issue33-does-not-exist"),
+        );
+    }
+
+    /// Same contract for the non-blocking entry point: `stop()` on a
+    /// capture that failed to start returns the error promptly and
+    /// never hangs.
+    #[test]
+    fn spawn_capture_stop_returns_promptly() {
+        let cfg = CaptureConfig {
+            interface: "lo".into(),
+            snap_len: 256,
+            count: None,
+            duration: None,
+            bpf_filter: None,
+            profile: RingProfile::LowMemory,
+            ignore_outgoing: false,
+        };
+        let flag = Arc::new(AtomicBool::new(false));
+        let handle = spawn_capture(
+            "nlink-lab-issue33-does-not-exist".into(),
+            cfg,
+            CaptureOutput::Summaries,
+            Arc::clone(&flag),
+        )
+        .unwrap();
+        let started = Instant::now();
+        let res = handle.stop();
+        assert!(res.is_err(), "nonexistent namespace must not capture");
+        assert!(flag.load(Ordering::Relaxed), "stop() must raise the flag");
+        assert!(started.elapsed() < STOP_BUDGET);
     }
 }

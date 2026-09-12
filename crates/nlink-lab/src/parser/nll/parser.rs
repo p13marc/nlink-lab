@@ -1226,6 +1226,13 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                     (*start..=*end).map(|i| i.to_string()).collect::<Vec<_>>()
                 }
                 ast::ForRange::List(items) => items.clone(),
+                ast::ForRange::DynRange { .. } => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "for loops inside a nat block need literal bounds (`${…}` bounds are expanded during lowering, which nat blocks do not go through yet)".into(),
+                    ));
+                }
             };
             for val in &values {
                 for rule in &inner.rules {
@@ -1985,10 +1992,17 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                 | Some(Token::Interp(_))
                 | Some(Token::Int(_)) => {
                     let first_addr = parse_cidr_or_name(tokens, pos)?;
-                    expect(tokens, pos, &Token::DashDash)?;
-                    let right_addr = parse_cidr_or_name(tokens, pos)?;
-                    link.left_addr = Some(first_addr);
-                    link.right_addr = Some(right_addr);
+                    if eat(tokens, pos, &Token::DashDash) {
+                        let right_addr = parse_cidr_or_name(tokens, pos)?;
+                        link.left_addr = Some(first_addr);
+                        link.right_addr = Some(right_addr);
+                    } else if matches!(at(tokens, *pos), Some(Token::Newline) | Some(Token::RBrace)) {
+                        // A lone CIDR is shorthand for `subnet <cidr>`:
+                        // `{ 10.0.0.0/30 }` → .1 and .2.
+                        link.subnet = Some(first_addr);
+                    } else {
+                        expect(tokens, pos, &Token::DashDash)?;
+                    }
                 }
                 // Subnet auto-assignment: subnet 10.0.0.0/30
                 Some(Token::Ident(s)) if s == "subnet" => {
@@ -2291,6 +2305,13 @@ fn parse_network_for(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Net
     let values: Vec<String> = match &range {
         ast::ForRange::IntRange { start, end } => (*start..=*end).map(|i| i.to_string()).collect(),
         ast::ForRange::List(items) => items.clone(),
+        ast::ForRange::DynRange { .. } => {
+            return Err(err(
+                tokens,
+                *pos,
+                "for loops inside a network block need literal bounds (`${…}` bounds are expanded during lowering, which network blocks do not go through yet)".into(),
+            ));
+        }
     };
 
     expect(tokens, pos, &Token::LBrace)?;
@@ -3078,11 +3099,30 @@ fn parse_for_range(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ForRange>
         }
         Ok(ast::ForRange::List(items))
     } else {
-        // Integer range: for i in 1..4
-        let start = expect_int(tokens, pos)?;
+        // Integer range: for i in 1..4 — either bound may be an
+        // interpolation (`1..${count}`), resolved when the loop expands.
+        // Ok(n) = literal bound, Err(text) = interpolated bound
+        type Bound = std::result::Result<i64, String>;
+        let bound = |tokens: &[Spanned], pos: &mut usize| -> Result<Bound> {
+            match at(tokens, *pos) {
+                Some(Token::Interp(v)) => {
+                    let v = v.clone();
+                    *pos += 1;
+                    Ok(Err(v))
+                }
+                _ => expect_int(tokens, pos).map(Ok),
+            }
+        };
+        let start = bound(tokens, pos)?;
         expect(tokens, pos, &Token::DotDot)?;
-        let end = expect_int(tokens, pos)?;
-        Ok(ast::ForRange::IntRange { start, end })
+        let end = bound(tokens, pos)?;
+        Ok(match (start, end) {
+            (Ok(start), Ok(end)) => ast::ForRange::IntRange { start, end },
+            (start, end) => ast::ForRange::DynRange {
+                start: start.map_or_else(|s| s, |n| n.to_string()),
+                end: end.map_or_else(|s| s, |n| n.to_string()),
+            },
+        })
     }
 }
 

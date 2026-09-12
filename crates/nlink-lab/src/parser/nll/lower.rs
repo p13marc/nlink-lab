@@ -950,7 +950,7 @@ impl LowerCtx {
         for_loop: &ast::ForLoop,
         vars: &mut HashMap<String, String>,
     ) -> Result<Vec<ast::Statement>> {
-        let values = range_values(&for_loop.range, &for_loop.var)?;
+        let values = range_values(&for_loop.range, &for_loop.var, vars)?;
         let len = values.len();
         let saved = vars.clone();
         let mut result = Vec::new();
@@ -977,8 +977,28 @@ impl LowerCtx {
 pub const MAX_LOOP_ITERATIONS: i64 = 100_000;
 
 /// Materialise a `for` range, rejecting empty and oversized ranges.
-fn range_values(range: &ast::ForRange, var: &str) -> Result<Vec<String>> {
+/// `DynRange` bounds (`1..${count}`) are interpolated with `vars` first.
+fn range_values(
+    range: &ast::ForRange,
+    var: &str,
+    vars: &HashMap<String, String>,
+) -> Result<Vec<String>> {
     match range {
+        ast::ForRange::DynRange { start, end } => {
+            let bound = |raw: &str, which: &str| -> Result<i64> {
+                let v = interpolate(raw, vars);
+                v.trim().parse::<i64>().map_err(|_| {
+                    crate::Error::NllParse(format!(
+                        "for loop '{var}': {which} bound '{raw}' resolved to '{v}', which is not an integer"
+                    ))
+                })
+            };
+            let resolved = ast::ForRange::IntRange {
+                start: bound(start, "start")?,
+                end: bound(end, "end")?,
+            };
+            range_values(&resolved, var, vars)
+        }
         ast::ForRange::IntRange { start, end } => {
             if end < start {
                 return Err(crate::Error::NllParse(format!(
@@ -1987,6 +2007,10 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &HashMap<String, String>) -> ast::N
                 ast::ForRange::List(items) => {
                     ast::ForRange::List(items.iter().map(|s| i(s, vars)).collect())
                 }
+                ast::ForRange::DynRange { start, end } => ast::ForRange::DynRange {
+                    start: i(start, vars),
+                    end: i(end, vars),
+                },
                 other => other.clone(),
             },
             body: f.body.iter().map(|p| interpolate_prop(p, vars)).collect(),
@@ -2340,7 +2364,7 @@ fn expand_node_props(
     for prop in props {
         match prop {
             ast::NodeProp::ForLoop(f) => {
-                let values = range_values(&f.range, &f.var)?;
+                let values = range_values(&f.range, &f.var, vars)?;
                 let len = values.len();
                 for (idx, value) in values.iter().enumerate() {
                     let mut inner = vars.clone();

@@ -606,6 +606,9 @@ pub struct LetDef {
 pub enum ForRange {
     /// Inclusive integer range: `for i in 1..4`
     IntRange { start: i64, end: i64 },
+    /// Inclusive range whose bounds hold interpolation and are resolved
+    /// at expansion time: `for i in 1..${count}` (parametric modules).
+    DynRange { start: String, end: String },
     /// List of string values: `for role in [web, api, db]`
     List(Vec<String>),
 }

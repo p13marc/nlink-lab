@@ -1333,7 +1333,7 @@ impl RunningLab {
 
         // 5c. Unload mac80211_hwsim and clean up WiFi configs
         if self.wifi_loaded {
-            crate::wifi::unload_hwsim();
+            crate::wifi::release_hwsim(&self.topology.lab.name);
             crate::wifi::cleanup_configs(&self.topology.lab.name);
         }
 

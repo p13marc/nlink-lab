@@ -245,7 +245,7 @@ async fn deploy_inner(topology: &Topology, cleanup: &mut Cleanup) -> Result<Runn
     let mut wifi_loaded = false;
     if wifi_radio_count > 0 {
         tracing::info!("step 3b: loading mac80211_hwsim with {wifi_radio_count} radios");
-        crate::wifi::load_hwsim(wifi_radio_count)?;
+        let _ = crate::wifi::load_hwsim_for(&topology.lab.name, wifi_radio_count)?;
         wifi_loaded = true;
         cleanup.wifi_loaded = true;
 
@@ -4233,7 +4233,7 @@ impl Cleanup {
             }
         }
         if self.wifi_loaded {
-            crate::wifi::unload_hwsim();
+            crate::wifi::release_hwsim(&self.lab_name);
             crate::wifi::cleanup_configs(&self.lab_name);
         }
         if let Some(dir) = &self.logs_dir {

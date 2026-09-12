@@ -2463,11 +2463,19 @@ async fn dns_example_deploys(lab: RunningLab) {
 #[lab_test("examples/simple.nll")]
 async fn proc_stat_returns_live_data(mut lab: RunningLab) {
     let pid = lab.spawn_with_logs("host", &["sleep", "30"], None).unwrap();
-    // Give /proc/<pid>/stat a moment to settle (rare on fast hosts
-    // for the comm to not yet be set, but the deterministic write
-    // happens at exec(2) time so it should be there by the time
-    // spawn_with_logs returns).
-    let stat = lab.proc_stat("host", pid).unwrap();
+    // Right after spawn the child may still be between fork and exec
+    // (comm not yet "sleep") or running its startup (state R) — on a
+    // loaded CI runner that window is visible. Poll until it has settled
+    // into nanosleep (S/I), then assert on the sampled record.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let stat = loop {
+        let stat = lab.proc_stat("host", pid).unwrap();
+        let settled = stat.command == "sleep" && (stat.state == "S" || stat.state == "I");
+        if settled || std::time::Instant::now() >= deadline {
+            break stat;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
     assert_eq!(stat.host_pid, pid);
     assert_eq!(stat.command, "sleep", "expected comm=sleep, got {stat:?}");
     // Spawned by check_root context — uid 0.

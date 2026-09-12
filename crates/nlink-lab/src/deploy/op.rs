@@ -99,12 +99,15 @@ impl NsRef {
     }
 
     /// Spawn a process inside the namespace, with the `/etc/netns/<ns>`
-    /// overlay when one exists.
+    /// overlay when one exists (best effort — see [`crate::ns_exec`]).
     pub fn spawn(
         &self,
         cmd: std::process::Command,
     ) -> std::result::Result<std::process::Child, nlink::netlink::Error> {
-        self.spec().spawn_with_etc(cmd)
+        match self {
+            NsRef::Named { name } => crate::ns_exec::spawn(name, cmd),
+            _ => self.spec().spawn(cmd),
+        }
     }
 
     /// Run a process to completion inside the namespace.
@@ -112,7 +115,10 @@ impl NsRef {
         &self,
         cmd: std::process::Command,
     ) -> std::result::Result<std::process::Output, nlink::netlink::Error> {
-        self.spec().spawn_output_with_etc(cmd)
+        match self {
+            NsRef::Named { name } => crate::ns_exec::spawn_output(name, cmd),
+            _ => self.spec().spawn_output(cmd),
+        }
     }
 }
 

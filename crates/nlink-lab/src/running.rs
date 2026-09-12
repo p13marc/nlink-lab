@@ -527,7 +527,7 @@ impl RunningLab {
             if let Some(timeout) = opts.timeout {
                 command.stdout(std::process::Stdio::piped());
                 command.stderr(std::process::Stdio::piped());
-                let mut child = namespace::spawn_with_etc(ns_name, command)
+                let mut child = crate::ns_exec::spawn(ns_name, command)
                     .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
                 wait_with_timeout(&mut child, timeout)?;
                 let output = child.wait_with_output().map_err(Error::Io)?;
@@ -537,7 +537,7 @@ impl RunningLab {
                     exit_code: output.status.code().unwrap_or(-1),
                 })
             } else {
-                let output = namespace::spawn_output_with_etc(ns_name, command)
+                let output = crate::ns_exec::spawn_output(ns_name, command)
                     .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
                 Ok(ExecOutput {
                     stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -658,7 +658,7 @@ impl RunningLab {
         let mut command = std::process::Command::new(cmd[0]);
         command.args(&cmd[1..]);
 
-        let child = namespace::spawn_with_etc(ns_name, command)
+        let child = crate::ns_exec::spawn(ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         let pid = child.id();
         self.track_pid(node, pid);
@@ -779,7 +779,7 @@ impl RunningLab {
             command.env(k, v);
         }
 
-        let child = nlink::netlink::namespace::spawn_with_etc(&ns_name, command)
+        let child = crate::ns_exec::spawn(&ns_name, command)
             .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         let pid = child.id();
         self.track_pid(node, pid);

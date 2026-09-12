@@ -122,7 +122,7 @@ bins/lab/src/
   main.rs           # CLI binary (clap)
 
 examples/
-  *.nll             # NLL topology examples (28 files)
+  *.nll             # NLL topology examples (34 top-level; 43 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -214,7 +214,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (33 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (34 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply`,
 `status` (with `--scan`, reports orphans + stale labs),
 `exec` (`--json`, `--env`, `--workdir`),
@@ -223,11 +223,11 @@ CLI commands (33 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json
 (`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),
 `impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
-`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`,
+`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`, `import`,
 `watch` (`--family route|nftables|both`, `--json` for NDJSON),
 `wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
 `ip` (`--iface`, `--cidr`),
-`ps`, `kill`, `init`, `completions`, `daemon`, `metrics`,
+`ps`, `kill`, `proc-stat`, `init`, `completions`, `daemon`, `metrics`,
 `containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `stats`, `restart`.
 

@@ -75,7 +75,9 @@ async fn test_connectivity(lab: RunningLab) {
   [containerlab](https://containerlab.dev). nlink-lab targets
   pure-Linux topologies.
 - A multi-host orchestrator. Single-host only.
-- A GUI. CLI + library only.
+- A GUI-first tool. The CLI and the Rust library are the supported
+  surface; the `topoviewer` desktop app (flatpak) is an experimental
+  visualiser fed by the zenoh backend.
 
 ## How it compares to containerlab
 
@@ -92,7 +94,7 @@ a CI environment without a Docker daemon.
 | TC depth (HTB / flower / u32) | ⚠️ raw `exec:` | ✅ first-class |
 | VRF + WireGuard composition | ⚠️ raw `exec:` | ✅ first-class |
 | Multi-host | ✅ | ❌ |
-| Web UI | ✅ | ❌ |
+| Web UI | ✅ | ⚠️ experimental desktop viewer |
 | Deploy speed | seconds | sub-second |
 | CI footprint | Docker daemon | namespace + caps |
 | Library API | Go (undocumented) | Rust (first-class) |
@@ -109,7 +111,7 @@ side-by-side examples, and migration notes — lives at
 - [NLL language spec](docs/NLL_DSL_DESIGN.md) — every keyword, with examples.
 - [Testing guide](docs/TESTING_GUIDE.md) — `#[lab_test]` macro and integration test patterns.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — permission errors, MTU mismatches, namespace cleanup.
-- [Examples](examples/) — 40 NLL files covering loops, imports, VRF, WireGuard, VXLAN, containers, scenarios, benchmarks, Wi-Fi.
+- [Examples](examples/) — 43 NLL files (34 top-level, 3 cookbook, 6 import modules) covering loops, imports, VRF, WireGuard, VXLAN, containers, scenarios, benchmarks, Wi-Fi.
 - [Architecture / design](docs/NLINK_LAB.md) — the why and how.
 - [Architecture for contributors](docs/ARCHITECTURE.md) — code map, the 18-step deploy sequence, how to add an NLL feature end-to-end.
 - [Comparison vs containerlab](docs/COMPARISON.md) — capability matrix + side-by-side examples.
@@ -120,8 +122,9 @@ side-by-side examples, and migration notes — lives at
 
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
-on [`nlink`](https://github.com/p13marc/nlink) 0.25 as of
-nlink-lab 0.7.0.
+on [`nlink`](https://github.com/p13marc/nlink) 0.26 as of
+nlink-lab 0.8.0 (the unreleased 0.9 series carries the
+deep-analysis fix waves — see CHANGELOG `[Unreleased]`).
 
 Current release: **0.7.0** (2026-07-15) — the "Plan 160 / nlink
 0.25" arc. WireGuard is fully declarative (device bootstrap via
@@ -144,14 +147,14 @@ removed; read the typed `network` / `nftables` maps. See
   capabilities. Some features need extra caps:
   `CAP_DAC_OVERRIDE` for DNS injection, `CAP_SYS_MODULE` for
   Wi-Fi (mac80211_hwsim auto-load).
-- Rust 1.85+ (edition 2024)
+- Rust 1.98+ (edition 2024)
 
 ## Editor support
 
-NLL files (`.nll`) have grammars for VS Code, Neovim
-(tree-sitter), Helix, and Zed under [`editors/`](editors/).
-Each editor's directory has its own README with install
-instructions.
+NLL files (`.nll`) have grammars for VS Code (`editors/vscode-nll`),
+tree-sitter (`editors/tree-sitter-nll`, usable from Neovim and Helix)
+and Zed (`editors/zed-nll`) under [`editors/`](editors/). The
+tree-sitter grammar mirrors the Rust lexer's token rules.
 
 ## License
 

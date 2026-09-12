@@ -1,9 +1,10 @@
 # nlink-lab JSON output schemas
 
-`--json` output for the four high-traffic CLI commands — schemas
-in JSON Schema draft-07. Hand-written; the source of truth is the
-code. If a field name disagrees, **the code is correct and the schema
-is stale** — please file a fix.
+`--json` output for the CLI commands with a contractual envelope —
+schemas in JSON Schema draft-07. Hand-written; the source of truth is
+the code. If a field name disagrees, **the code is correct and the
+schema is stale** — please file a fix (generation from the Rust types
+via `schemars` is tracked as issue #60).
 
 | Command | Schema | Documents |
 |---------|--------|-----------|
@@ -15,10 +16,13 @@ is stale** — please file a fix.
 | `nlink-lab ps --json` | `ps.schema.json` | array of tracked processes |
 | `nlink-lab impair --show --json` | `impair-show.schema.json` | per-endpoint qdisc state |
 | `nlink-lab proc-stat --json` | `proc-stat.schema.json` | per-process resource snapshot |
+| `nlink-lab apply --check --json` / `--dry-run --json` | `layered-diff.v3.schema.json` | schema v3 envelope: `network` + `nftables` typed per-namespace diffs |
 
-The `inspect`, `exec`, `diagnose`, `render`, `diff` and `apply` JSON
-shapes are documented inline in each subcommand's `--help`. Open a PR
-adding a schema here if you need a contractual interface.
+The `inspect`, `exec`, `diagnose`, `render` and `diff` JSON shapes are
+documented inline in each subcommand's `--help`. Open a PR adding a
+schema here if you need a contractual interface. The v1 and v2
+`layered-diff` schemas were removed with the 0.7.0 envelope change
+(their fields no longer exist in the output).
 
 ## Validating output
 

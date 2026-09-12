@@ -648,12 +648,31 @@ impl RunningLab {
         // read-modify-write of state.json (issue #38).
         let _lock = crate::state::lock_blocking(&self.topology.lab.name)?;
         let (mut lab_state, _) = state::load(&self.topology.lab.name)?;
+        lab_state.namespaces = self.namespace_names.clone();
+        lab_state.containers = self.containers.clone();
+        lab_state.runtime = self.runtime_binary.clone();
+        lab_state.dns_injected = self.dns_injected;
+        lab_state.wifi_loaded = self.wifi_loaded;
         lab_state.pids = self.pids.clone();
         lab_state.starttimes = self.starttimes.clone();
         lab_state.mgmt_peers = self.mgmt_peers.clone();
         lab_state.saved_impairments = self.saved_impairments.clone();
         lab_state.process_logs = self.process_logs.clone();
         state::save(&lab_state, &self.topology)
+    }
+
+    /// Record a container node's new init PID (after `restart`) so every
+    /// later `/proc/<pid>/ns/net` reference targets the live container.
+    pub fn set_container_pid(&mut self, node: &str, pid: u32) -> Result<()> {
+        match self.containers.get_mut(node) {
+            Some(c) => {
+                c.pid = pid;
+                Ok(())
+            }
+            None => Err(Error::NodeNotFound {
+                name: node.to_string(),
+            }),
+        }
     }
 
     /// Spawn a background process with stdout/stderr captured to log files.

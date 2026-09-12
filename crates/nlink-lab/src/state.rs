@@ -115,7 +115,7 @@ pub struct ContainerState {
     pub name: String,
     /// Container image.
     pub image: String,
-    /// Init PID at deploy time.
+    /// Current init PID (captured at deploy, refreshed by `restart`).
     pub pid: u32,
 }
 

@@ -43,6 +43,64 @@ All notable changes to this project will be documented in this file.
   waits are async (they used to block a tokio worker) (#33, #40).
 - The mgmt subnet must hold the bridge plus every node; the first level
   of the `depends_on` order runs alphabetically as documented (#40).
+- **`destroy --orphans` only reaps namespaces nlink-lab tagged (#29).** It
+  used to delete any host namespace whose name contained a `-` and did
+  not prefix-match a registered lab — libvirt, CNI, a colleague's
+  `ip netns add test-1`. Untagged namespaces are never listed or touched
+  (`status --scan -v` reports how many were ignored). The scan and the
+  reaper use nlink instead of shelling out to `ip`.
+- **`restart` no longer corrupts container nodes (#31).** It takes the lab
+  lock, refuses up front when the node has links (restarting would drop
+  its veths), re-reads the container's init PID afterwards and persists
+  it, so later netlink operations no longer target a dead or recycled
+  PID. A container that exits immediately (`.State.Pid == 0`) is an error
+  at create and at restart.
+- **Deploy no longer fails on hosts with kernel tunnel devices.** Step 10
+  set *every* link in every namespace up by ifindex; kernels that
+  populate namespaces with `gre0`/`gretap0`/`sit0`/`tunl0` answered
+  EADDRNOTAVAIL for `gretap0` and the deploy aborted (50/62 integration
+  tests failed on such a host). Only interfaces nlink-lab created are
+  brought up.
+- WireGuard interfaces are set up before the routes that use them as
+  nexthop ("Device for nexthop is not up").
+- `apply` after removing a node's last firewall/NAT block now deletes the
+  `nlink-lab` table (an empty declared config had nothing to reconcile
+  against, so the old rules survived) (#35).
+- **Packet capture (#33)** runs the ring on a dedicated thread instead of
+  calling `setns` on a tokio worker, and honours `--duration`/stop within
+  ~200 ms on an idle link (`LabCapture::stop` used to deadlock the test
+  runner). New `capture::spawn_capture`/`CaptureHandle`.
+- **Wi-Fi labs share `mac80211_hwsim` (#37).** Deploying or destroying one
+  Wi-Fi lab no longer reloads or unloads the module out from under
+  another: it is unloaded only when no deployed lab still uses it and
+  reloaded only when the loaded instance has fewer radios than all
+  Wi-Fi labs together need. *Residual limitation:* that reload is still
+  disruptive (the radio count is fixed at load time and a reload
+  destroys every PHY, including those inside running labs); nlink-lab
+  warns and names the affected labs. Deploy the largest Wi-Fi lab first,
+  or pre-load the module with enough radios. hostapd/wpa_supplicant
+  configs (which contain the PSK) now live under the lab's state dir
+  with mode 0600 instead of a predictable `/tmp` path.
+- **`/etc/hosts` rewrites** preserve the file's mode, owner and (symlinked)
+  identity and fsync (#38). `/etc/netns/<ns>` paths are validated before
+  any filesystem operation.
+- **One IP map, one assertion engine (#34).** The four copies of the
+  node→IP map (deploy, test runner, benchmark, scenario) are replaced by
+  `nlink_lab::ipmap`, which also covers bridge-network ports, node
+  interfaces, WireGuard, macvlan/ipvlan and Wi-Fi — `validate { reach … }`
+  on a `network` topology used to log `SKIP: no IP found` for every
+  assertion. Deploy-time assertions go through the test runner's
+  evaluator and their results ride on `RunningLab::assertion_results()` /
+  `assertions_failed()` (the CLI's `deploy --strict` builds on this).
+- Benchmarks: the `iperf3` presence check actually fires; `streams` and
+  `udp` are passed to iperf3 instead of being parsed and discarded.
+- The root integration suite is **gating** again and passes 62/62 locally
+  (it was informational at 6/62); the lane installs the tools the tests
+  exec inside namespaces and fails on leftover namespaces or tags.
+- New `tests/editor_keywords.rs` derives the NLL keyword set from the
+  lexer/parser and gates the VS Code grammar (29 keywords added, bogus
+  `with` removed) and the tree-sitter grammar (its 25 gaps are an explicit,
+  non-growing list) (#27).
 
 ### Changed — runtime (breaking)
 

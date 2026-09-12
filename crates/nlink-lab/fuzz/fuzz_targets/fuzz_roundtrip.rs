@@ -12,7 +12,7 @@ fuzz_target!(|data: &[u8]| {
     let Ok(topo) = nlink_lab::parser::parse(input) else {
         return;
     };
-    let Ok(rendered) = nlink_lab::render::render(&topo) else {
+    let Ok(rendered) = nlink_lab::render::try_render(&topo) else {
         return;
     };
     match nlink_lab::parser::parse(&rendered) {

@@ -35,7 +35,7 @@ type Result<T> = std::result::Result<T, Error>;
 /// `"[^"]*"`, so it cannot be escaped), a node name the name grammar
 /// cannot express, a firewall match expression outside the `match_expr`
 /// grammar, or an interface kind (bond/vlan) the language has no block
-/// for. Prefer this over [`render`], which panics on the same input.
+/// for (a `"` in a name, an interface kind NLL cannot spell, …).
 pub fn try_render(topology: &Topology) -> Result<String> {
     let mut out = String::new();
 
@@ -51,20 +51,6 @@ pub fn try_render(topology: &Topology) -> Result<String> {
     render_benchmarks(&mut out, topology)?;
 
     Ok(out)
-}
-
-/// Render a topology as valid NLL syntax.
-///
-/// Infallible wrapper around [`try_render`] kept for existing callers.
-///
-/// # Panics
-///
-/// Panics if the topology cannot be represented in NLL (see
-/// [`try_render`] for the cases). Topologies produced by the NLL parser
-/// never hit this; only programmatically built ones can. New code should
-/// call [`try_render`] and handle the error.
-pub fn render(topology: &Topology) -> String {
-    try_render(topology).unwrap_or_else(|e| panic!("topology cannot be rendered as NLL: {e}"))
 }
 
 // ─────────────────────────────────────────────────
@@ -246,24 +232,17 @@ fn is_ipv4(s: &str) -> bool {
     octets.len() == 4 && octets.iter().all(|o| is_digits(o)) && prefix.is_none_or(is_digits)
 }
 
-/// IPv6 address as the lexer sees it: must contain `::`, the part before
-/// it must be hex and contain a digit (or be empty), the rest hex/`:`/`.`,
-/// optionally `/prefix`.
+/// IPv6 address (optionally `/prefix`) as the lexer accepts it: any
+/// form `std::net::Ipv6Addr` parses that contains `::` or is fully
+/// expanded (seven single colons) — the same rule the lexer uses to
+/// keep `node:iface` endpoints from being mistaken for addresses.
 fn is_ipv6(s: &str) -> bool {
     let (ip, prefix) = match s.split_once('/') {
         Some((ip, p)) => (ip, Some(p)),
         None => (s, None),
     };
-    let Some((head, tail)) = ip.split_once("::") else {
-        return false;
-    };
-    let head_ok = head.is_empty()
-        || (head.chars().all(|c| c.is_ascii_hexdigit())
-            && head.chars().any(|c| c.is_ascii_digit()));
-    let tail_ok = tail
-        .chars()
-        .all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.');
-    head_ok && tail_ok && prefix.is_none_or(is_digits)
+    let shape_ok = ip.contains("::") || ip.matches(':').count() == 7;
+    shape_ok && ip.parse::<std::net::Ipv6Addr>().is_ok() && prefix.is_none_or(is_digits)
 }
 
 /// Something `parse_cidr_or_name` accepts: an IP/CIDR literal or the
@@ -630,8 +609,13 @@ fn render_nodes(out: &mut String, topo: &Topology) -> Result<()> {
 
 fn render_node(out: &mut String, name: &str, node: &Node) -> Result<()> {
     write!(out, "node {}", nll_name(name)?).unwrap();
-    if let Some(profile) = &node.profile {
-        write!(out, " : {}", nll_name(profile)?).unwrap();
+    if !node.profiles.is_empty() {
+        let names = node
+            .profiles
+            .iter()
+            .map(|p| nll_name(p))
+            .collect::<Result<Vec<_>>>()?;
+        write!(out, " : {}", names.join(", ")).unwrap();
     }
     if let Some(image) = &node.image {
         write!(out, " image {}", nll_string(image)?).unwrap();
@@ -1063,26 +1047,22 @@ fn render_network(out: &mut String, name: &str, net: &Network) -> Result<()> {
     let auto = auto_assigned_ports(net);
     for key in sorted_keys(&net.ports) {
         let port = &net.ports[key];
-        if key.contains(':') {
-            let expected = auto.get(key);
-            let matches = expected.is_some_and(|addr| {
-                port.addresses.len() == 1
-                    && &port.addresses[0] == addr
-                    && port.vlans.is_empty()
-                    && port.tagged.is_none()
-                    && port.pvid.is_none()
-                    && port.untagged.is_none()
-                    && port.interface.is_none()
-            });
-            if matches {
-                continue;
-            }
-            return Err(unrepresentable(
-                "network port",
-                key,
-                "`port` takes a node name; endpoint-keyed ports are only produced by \
-                 `subnet` auto-assignment and this one does not match it",
-            ));
+        // Port keys are the member endpoint `node:iface`. An entry that
+        // holds nothing but the address `subnet` auto-assignment would
+        // produce is implied by `subnet` + member order and is not
+        // emitted; everything else is written as `port node:iface { … }`.
+        let expected = auto.get(key);
+        let implied = expected.is_some_and(|addr| {
+            port.addresses.len() == 1
+                && &port.addresses[0] == addr
+                && port.vlans.is_empty()
+                && port.tagged.is_none()
+                && port.pvid.is_none()
+                && port.untagged.is_none()
+                && port.interface.is_none()
+        });
+        if implied {
+            continue;
         }
         if port.interface.is_some() {
             return Err(unrepresentable(
@@ -1091,7 +1071,11 @@ fn render_network(out: &mut String, name: &str, net: &Network) -> Result<()> {
                 "`interface` has no NLL syntax",
             ));
         }
-        write!(out, "  port {} {{", nll_name(key)?).unwrap();
+        let rendered_key = match key.split_once(':') {
+            Some((node, iface)) => format!("{}:{}", nll_name(node)?, nll_name(iface)?),
+            None => nll_name(key)?.to_string(),
+        };
+        write!(out, "  port {rendered_key} {{").unwrap();
         for addr in &port.addresses {
             if !is_ipv4(addr) || !addr.contains('/') {
                 return Err(unrepresentable(
@@ -1870,8 +1854,9 @@ network radio {
         assert!(rendered.contains("mtu 9000"), "{rendered}");
         assert!(rendered.contains("vlan 100 \"sales\""), "{rendered}");
         assert!(rendered.contains("vlan 200\n"), "{rendered}");
+        // port keys are canonical `node:iface` endpoints
         assert!(
-            rendered.contains("port host2 { vlans [100, 200] tagged }"),
+            rendered.contains("port host2:eth0 { vlans [100, 200] tagged }"),
             "{rendered}"
         );
         assert!(rendered.contains("subnet 172.100.3.0/24"), "{rendered}");
@@ -1880,7 +1865,7 @@ network radio {
         let fabric = &topo2.networks["fabric"];
         assert_eq!(fabric.vlan_filtering, Some(true));
         assert_eq!(fabric.vlans[&100].name.as_deref(), Some("sales"));
-        assert_eq!(fabric.ports["host2"].vlans, vec![100, 200]);
+        assert_eq!(fabric.ports["host2:eth0"].vlans, vec![100, 200]);
         let radio = &topo2.networks["radio"];
         assert_eq!(
             radio.ports["host2:rf"].addresses,
@@ -1890,7 +1875,7 @@ network radio {
     }
 
     #[test]
-    fn test_render_network_endpoint_port_not_from_subnet_is_error() {
+    fn test_render_network_endpoint_port_not_from_subnet_is_emitted() {
         let mut topo = Topology::default();
         topo.lab.name = "t".into();
         topo.nodes.insert("a".into(), Node::default());
@@ -1906,8 +1891,11 @@ network radio {
             },
         );
         topo.networks.insert("lan".into(), net);
-        let err = try_render(&topo).unwrap_err();
-        assert!(err.to_string().contains("network port"), "{err}");
+        let rendered = try_render(&topo).unwrap();
+        assert!(
+            rendered.contains("port a:eth0 { 10.0.0.1/24 }"),
+            "{rendered}"
+        );
     }
 
     #[test]
@@ -2100,7 +2088,7 @@ node fw {
             }],
         });
         topo.nodes.insert("fw".into(), fw);
-        let rendered = render(&topo);
+        let rendered = try_render(&topo).unwrap();
         assert!(
             rendered.contains("translate 144.0.0.0/8 to 172.100.0.0/16"),
             "translate should render: {rendered}"
@@ -2205,7 +2193,11 @@ node mid
         assert!(!is_ipv4("10.0.0"));
         assert!(is_ipv6("fd00::1/64"));
         assert!(is_ipv6("::1"));
-        assert!(!is_ipv6("2001:db8:0:0:0:0:0:1"));
+        // fully expanded and `:`-before-`::` forms lex as IPv6 since #14
+        assert!(is_ipv6("2001:db8:0:0:0:0:0:1"));
+        assert!(is_ipv6("2001:db8::1/64"));
+        assert!(!is_ipv6("a:eth0"));
+        assert!(!is_ipv6("dead:beef"));
         assert_eq!(lit_value("hello world").unwrap(), "\"hello world\"");
         assert_eq!(lit_value("0.5").unwrap(), "0.5");
         assert_eq!(lit_value("rate").unwrap(), "\"rate\"");

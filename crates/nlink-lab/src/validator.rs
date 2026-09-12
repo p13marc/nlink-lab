@@ -1,12 +1,14 @@
 //! Topology validation.
 //!
 //! Validates a parsed [`Topology`] before deployment, catching semantic errors
-//! that the TOML parser cannot detect.
+//! that the NLL parser cannot detect (cross-references, subnet overlaps,
+//! value ranges, …). Every rule has a stable kebab-case id; see
+//! [`rule_ids`].
 //!
 //! # Example
 //!
 //! ```ignore
-//! let topology = nlink_lab::parser::parse_file("lab.toml")?;
+//! let topology = nlink_lab::parser::parse_file("lab.nll")?;
 //! let result = topology.validate();
 //! if result.has_errors() {
 //!     for issue in result.errors() {
@@ -527,16 +529,17 @@ fn validate_dangling_node_refs(topology: &Topology, issues: &mut Vec<ValidationI
 /// Profile references must exist.
 fn validate_dangling_profile_refs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
-        if let Some(profile_name) = &node.profile
-            && !topology.profiles.contains_key(profile_name)
-        {
+        for (idx, profile_name) in node.profiles.iter().enumerate() {
+            if topology.profiles.contains_key(profile_name) {
+                continue;
+            }
             issues.push(ValidationIssue {
                 severity: Severity::Error,
                 rule: "dangling-profile-ref",
                 message: format!(
                     "profile '{profile_name}' referenced by node '{node_name}' does not exist"
                 ),
-                location: Some(format!("nodes.{node_name}.profile")),
+                location: Some(format!("nodes.{node_name}.profiles[{idx}]")),
             });
         }
     }
@@ -2059,7 +2062,7 @@ link a:eth0 -- nonexistent:eth0
         let mut topo = crate::types::Topology::default();
         topo.lab.name = "dangling-profile".into();
         let mut node = crate::types::Node::default();
-        node.profile = Some("nonexistent".into());
+        node.profiles = vec!["nonexistent".into()];
         topo.nodes.insert("a".into(), node);
         let result = validate_topo(topo);
         assert!(result.has_errors());

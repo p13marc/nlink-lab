@@ -2096,7 +2096,7 @@ async fn run(cli: Cli) -> nlink_lab::Result<()> {
             } else if ascii {
                 print!("{}", topology_to_ascii(&topo));
             } else {
-                print!("{}", nlink_lab::render::render(&topo));
+                print!("{}", nlink_lab::render::try_render(&topo)?);
             }
             Ok(())
         }

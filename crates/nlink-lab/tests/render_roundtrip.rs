@@ -23,17 +23,7 @@ use nlink_lab::parser;
 use nlink_lab::render::try_render;
 
 /// `(path relative to the workspace root, reason)`.
-const KNOWN_FAILURES: &[(&str, &str)] = &[
-    (
-        "examples/pattern-ring.nll",
-        "lower.rs pattern lowering sets node.profile without merging the profile's props \
-         (sysctls) into the node, unlike `node x : p`; re-parse merges them",
-    ),
-    (
-        "examples/pattern-star.nll",
-        "same as pattern-ring: `profile` inside a mesh/ring/star block is not merged into nodes",
-    ),
-];
+const KNOWN_FAILURES: &[(&str, &str)] = &[];
 
 /// Find the workspace root (directory containing the workspace
 /// `Cargo.toml`).

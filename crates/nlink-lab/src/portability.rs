@@ -154,7 +154,7 @@ pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOption
             // dir is the post-render snapshot. The original NLL isn't
             // tracked today (state stores rendered TOML) — emit the
             // rendered NLL via the renderer as the topology source.
-            let rendered_nll = crate::render::render(&_topo);
+            let rendered_nll = crate::render::try_render(&_topo)?;
             (
                 rendered_nll,
                 state.name.clone(),

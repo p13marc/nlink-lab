@@ -1996,7 +1996,8 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                         let right_addr = parse_cidr_or_name(tokens, pos)?;
                         link.left_addr = Some(first_addr);
                         link.right_addr = Some(right_addr);
-                    } else if matches!(at(tokens, *pos), Some(Token::Newline) | Some(Token::RBrace)) {
+                    } else if matches!(at(tokens, *pos), Some(Token::Newline) | Some(Token::RBrace))
+                    {
                         // A lone CIDR is shorthand for `subnet <cidr>`:
                         // `{ 10.0.0.0/30 }` → .1 and .2.
                         link.subnet = Some(first_addr);
@@ -2990,7 +2991,27 @@ fn parse_benchmark_assertion(
     pos: &mut usize,
 ) -> Result<ast::BenchmarkAssertionDef> {
     let metric = expect_ident(tokens, pos)?;
-    let op = expect_ident(tokens, pos)?;
+    // `above`/`below` words or the comparison operators, which lex as
+    // dedicated tokens (so `render` can emit `>=`/`<=` for Gte/Lte).
+    let op = match at(tokens, *pos) {
+        Some(Token::GtEq) => {
+            *pos += 1;
+            ">=".to_string()
+        }
+        Some(Token::LtEq) => {
+            *pos += 1;
+            "<=".to_string()
+        }
+        Some(Token::Gt) => {
+            *pos += 1;
+            ">".to_string()
+        }
+        Some(Token::Lt) => {
+            *pos += 1;
+            "<".to_string()
+        }
+        _ => expect_ident(tokens, pos)?,
+    };
     let value = parse_value(tokens, pos)?;
     Ok(ast::BenchmarkAssertionDef { metric, op, value })
 }

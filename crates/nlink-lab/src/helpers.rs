@@ -182,7 +182,7 @@ const RATE_UNITS: &[(&str, u64)] = &[
 /// Parse a rate string like "100mbit", "1gbit", "10kbit", "1mbyte", "100m"
 /// into bits per second.
 ///
-/// See [`RATE_UNITS`] for the accepted suffixes and the bit/byte
+/// See `RATE_UNITS` (private table) for the accepted suffixes and the bit/byte
 /// convention. A bare number with no unit is rejected. The value must be
 /// finite and non-negative, and the product must fit in a `u64`.
 pub fn parse_rate_bps(s: &str) -> Result<u64> {

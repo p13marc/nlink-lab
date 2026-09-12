@@ -4,6 +4,107 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — NLL language core (wave 2 of the deep-analysis series)
+
+- **Parser no longer hangs** on an unknown item or EOF inside `defaults
+  impair|rate|<name> { … }` or `mesh`/`ring`/`star { … }` blocks (#13);
+  unknown items are errors with a span.
+- **IPv6 lexing**: `2001:db8::1`, `fd00:0:0:1::1`, `::ffff:10.0.0.1` and
+  fully-expanded addresses now lex (only `fd00::`-style worked); the
+  tree-sitter grammar mirrors the rule (#14).
+- **Multi-line link properties merge** (`delay 10ms` on one line, `loss 1%`
+  on the next used to keep only `loss`) (#16).
+- **No more panics on hostile input**: `subnet()`/`host()` prefix and index
+  arithmetic, `/0` and `/33` pools, i64 overflow in `${a + b}`, negative or
+  non-finite durations, `increment_ip` overflow; every narrowed integer
+  (ports, VLAN ids, VNIs, MTUs, prefixes, metrics, channels) is
+  range-checked at parse time instead of wrapping (#15).
+- **Interpolation coverage**: `${…}` is applied inside `validate`,
+  `scenario`, `benchmark`, `mesh/ring/star` and `site`/`if` statements and
+  in the node fields that were skipped (`cmd`, `cap-add/drop`, `pull`,
+  healthcheck timings, `run`, wifi passphrase); assertion node references
+  and dummy/macvlan/ipvlan/wifi/vxlan/wireguard/vrf names accept `${…}` (#17).
+- **`site`/`if` bodies keep every statement** (loops, impairments,
+  assertions, scenarios, …); node-level `for` loops flatten every property
+  kind including nested loops; several `nat` blocks accumulate rules;
+  `translate` is no longer downgraded to `masquerade` (#18).
+- **Pools**: `mesh`, `ring` and `star` share one checked allocator —
+  exhaustion, address-space overflow, undefined pools and allocation
+  prefixes outside `(pool prefix, 32]` are errors. `examples/pattern-star.nll`
+  was silently handing out subnets outside its `/24` pool (#19).
+- **Loop scoping**: an outer `let i` survives an inner `for i`; a `let`
+  inside a loop body does not leak past it; each iteration starts from the
+  enclosing scope (#20).
+- **`for` ranges are capped** at 100 000 iterations with a clear error
+  instead of allocating the whole range first (#21).
+- **Block comments are lexed**, so `/*` inside a string or after `#` no
+  longer opens a comment; spans after a block comment point at the right
+  byte (#22).
+- **`render` round-trips**: node sysctls, network `subnet`/`mtu`/`vlans`/
+  `ports`, lab `runtime`/`routing`, node `env`/`volumes`/`cmd`/`run`/
+  `vrf`/`wireguard`/non-`lo` interfaces, rate `burst`, every assertion
+  kind and `>=`/`<=` benchmark operators are emitted; strings that cannot
+  be represented are an error rather than garbage (new `render::try_render`).
+  A parse→render→parse fixed-point test over every example and a
+  `fuzz_roundtrip` target guard it (#24).
+- **Imports**: assertions, scenarios and benchmarks travel with a module;
+  imported nodes keep their (prefixed) profile references
+  (`examples/imports/composed.nll` failed `dangling-profile-ref`); errors
+  inside a module are attributed to the module's file, not the importer.
+- **Examples** `imports/use-ring.nll` and `imports/parametric-ring.nll`
+  never parsed (they used `for i in 1..${count}` and the single-CIDR link
+  shorthand, neither of which existed) — both are now language features.
+- `docs_examples`, `render_roundtrip`, the moved fuzz corpus and the smoke
+  script all exercise these; the `cli-smoke` job replays the two hang
+  reproducers with a 10 s timeout.
+
+### Added — NLL
+
+- `for i in 1..${count}`: loop bounds may be interpolated (parametric
+  modules). nat/network-block loops still need literal bounds.
+- `link a:e -- b:e { 10.0.0.0/30 }` is shorthand for `subnet 10.0.0.0/30`.
+- `port node:iface { … }` inside `network` blocks disambiguates a node
+  with several interfaces on the same bridge.
+- Benchmark assertions accept `>`, `<`, `>=`, `<=` as well as `above`/`below`.
+- Durations accept `m`/`h`/`µs`; rates accept the documented `byte`/`kbyte`/
+  `mbyte`/`gbyte`/`tbit` and bare `k`/`m`/`g`/`t` units.
+- **Validator**: 41 stable rule ids (`validator::rule_ids()`), new rules
+  `assertion-node-exists`, `assertion-endpoint-exists`,
+  `unresolved-interpolation`, `overlapping-subnets`,
+  `link-endpoints-same-subnet`, `invalid-impairment-value`,
+  `invalid-nat-cidr`, `invalid-route-dest`, `invalid-name` (lab/node/
+  network/profile/interface/VRF names must match
+  `^[A-Za-z0-9_][A-Za-z0-9_.-]*$` — they flow into root filesystem paths),
+  `mgmt-subnet-capacity`, `mgmt-ipv6-unsupported`,
+  `mgmt-subnet-not-network-address`, `vxlan-vni-range`,
+  `wifi-channel-range`, `macvlan-parent-set`, `vrf-interface-exists`;
+  `depends-on-cycle` no longer fires for a missing dependency; a test
+  pins the rule-id set (#25).
+
+### Changed — NLL (breaking)
+
+- **Stricter language.** Unknown `dns`/`runtime`/`routing` modes, NAT
+  actions, macvlan/ipvlan/wifi modes and benchmark operators are errors
+  instead of silent defaults (`dns bogus` used to disable DNS quietly);
+  a `param` without a default is an error whether or not `--set` is
+  passed; `${…}` left unresolved anywhere is a validation error.
+- **Network port keys are `node:iface`.** `Network.ports` is keyed by the
+  member endpoint for both explicit `port` blocks and `subnet`
+  auto-assignment (they used to disagree, so explicit addresses never
+  suppressed auto-assignment). `render --json` consumers keyed on bare
+  node names must adapt; deploy accepts both shapes for labs persisted
+  before this change.
+- **`Node.profile: Option<String>` → `Node.profiles: Vec<String>`.**
+  Multi-profile inheritance (`node r : base, override`) is preserved
+  through lowering, validation, render and `effective_*` lookups instead
+  of keeping only the first. JSON/TOML: the field is `profiles` (a list);
+  the old singular string form is still accepted on read.
+- Pattern (`mesh`/`ring`/`star`) nodes carry their profile's properties,
+  like `node x : p` always did.
+- `render::render` (panicking) is replaced by `render::try_render`.
+- `host()`/`subnet()` mask the base to its network address first
+  (`host("10.0.18.5/24", 1)` is `10.0.18.1`).
+
 ### Removed
 
 - **`containers` cargo feature.** It was in `default` and gated nothing

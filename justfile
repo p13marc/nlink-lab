@@ -12,9 +12,10 @@ release:
 test:
     cargo test -p nlink-lab --lib --test stress --test docs_examples
 
-# Run integration tests (requires root)
+# Run integration tests (requires root; builds as you, runs the binary as root)
 test-integration:
-    sudo -E cargo test -p nlink-lab --test integration
+    bin=$(cargo test -p nlink-lab --test integration --no-run 2>&1 | grep -oP 'Executable .*\(\K[^)]+' | head -1); \
+    sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --test-threads=1
 
 # Run all tests
 test-all: test test-integration

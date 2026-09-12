@@ -7,6 +7,9 @@ on:
     paths-ignore: ['LICENSE*']
   # manual re-run path (flaky job, runner was offline, cache experiments)
   workflow_dispatch:
+  # weekly fuzz job (see the `fuzz` job's `if:`)
+  schedule:
+    - cron: '17 4 * * 1'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -169,3 +172,29 @@ jobs:
           cache-targets: false
       - run: cargo build -p nlink-lab-cli
       - run: ./scripts/cli-smoke.sh target/debug/nlink-lab
+
+  # Short libFuzzer run of the three parser targets. Informational: it
+  # runs weekly and on demand, never blocks a PR, and uploads any crash
+  # or timeout artifact. `just fuzz` runs the same locally.
+  fuzz:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    continue-on-error: true
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      - uses: https://github.com/dtolnay/rust-toolchain@nightly
+      - uses: https://github.com/taiki-e/install-action@v2.87.7
+        with:
+          tool: cargo-fuzz
+      - run: |
+          cd crates/nlink-lab
+          for t in fuzz_lex fuzz_parse fuzz_roundtrip; do
+            cargo +nightly fuzz run "$t" -- -max_total_time=90 -timeout=10
+          done
+      - uses: https://data.forgejo.org/actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-artifacts
+          path: crates/nlink-lab/fuzz/artifacts

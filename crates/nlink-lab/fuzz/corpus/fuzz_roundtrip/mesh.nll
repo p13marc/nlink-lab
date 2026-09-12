@@ -1,0 +1,25 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.3.1/30 -- 10.2.3.2/30 }
+link n2:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4.2/30 }
+link n3:eth2 -- n4:eth2 { 10.3.4.1/30 -- 10.3.4.2/30 }

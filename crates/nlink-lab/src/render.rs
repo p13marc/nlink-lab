@@ -1932,11 +1932,11 @@ link a:eth0 -- b:eth0 {
   mtu 1400
   -> delay 5ms
   <- delay 100ms jitter 20ms loss 0.5% rate 10mbit corrupt 0.01% reorder 1%
-  rate egress 100mbit ingress 50mbit burst 10mbit
+  rate egress 100mbit ingress 50mbit burst 32kbyte
 }
 "#,
         );
-        assert!(rendered.contains("burst 10mbit"), "{rendered}");
+        assert!(rendered.contains("burst 32kbyte"), "{rendered}");
         assert!(rendered.contains("mtu 1400"), "{rendered}");
         assert!(
             rendered.contains(
@@ -1949,7 +1949,7 @@ link a:eth0 -- b:eth0 {
             RateLimit {
                 egress: Some("100mbit".into()),
                 ingress: Some("50mbit".into()),
-                burst: Some("10mbit".into()),
+                burst: Some("32kbyte".into()),
             }
         );
     }

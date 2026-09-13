@@ -44,13 +44,7 @@ pub fn node_dir(lab: &str, node: &str) -> PathBuf {
 
 /// `cpu.max` line for a CPU share: `0.5` → `50000 100000`, `2` → `200000 100000`.
 pub fn cpu_max(cpu: &str) -> Result<String> {
-    let cores: f64 = cpu
-        .trim()
-        .parse()
-        .map_err(|_| Error::invalid_topology(format!("cpu {cpu:?}: expected a number of cores")))?;
-    if cores <= 0.0 || !cores.is_finite() {
-        return Err(Error::invalid_topology(format!("cpu {cpu:?}: must be > 0")));
-    }
+    let cores = crate::helpers::parse_cpu(cpu)?;
     const PERIOD: f64 = 100_000.0;
     Ok(format!(
         "{} {}",
@@ -61,28 +55,8 @@ pub fn cpu_max(cpu: &str) -> Result<String> {
 
 /// `memory.max` in bytes: `256m`, `1g`, `512k`, `1048576`, `1gb`, `256MiB`.
 pub fn memory_max(memory: &str) -> Result<u64> {
-    let s = memory.trim().to_ascii_lowercase();
-    let digits: String = s
-        .chars()
-        .take_while(|c| c.is_ascii_digit() || *c == '.')
-        .collect();
-    let unit = s[digits.len()..].trim();
-    let n: f64 = digits
-        .parse()
-        .map_err(|_| Error::invalid_topology(format!("memory {memory:?}: expected a size")))?;
-    let mul: f64 = match unit {
-        "" | "b" => 1.0,
-        "k" | "kb" | "kib" => 1024.0,
-        "m" | "mb" | "mib" => 1024.0 * 1024.0,
-        "g" | "gb" | "gib" => 1024.0 * 1024.0 * 1024.0,
-        "t" | "tb" | "tib" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
-        other => {
-            return Err(Error::invalid_topology(format!(
-                "memory {memory:?}: unknown unit {other:?} (use k, m, g, t)"
-            )));
-        }
-    };
-    Ok((n * mul).round() as u64)
+    crate::helpers::parse_size(memory)
+        .map_err(|e| Error::invalid_topology(format!("memory {memory:?}: {e}")))
 }
 
 fn enable_controllers(dir: &Path) {

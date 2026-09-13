@@ -1233,6 +1233,8 @@ enum ValueKind {
     Rate,
     /// A positive packet count (`limit`).
     Packets,
+    /// A byte size (`burst`).
+    Size,
 }
 
 fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<ValidationIssue>) {
@@ -1249,6 +1251,7 @@ fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<
             Err(e) => Some(e),
         },
         ValueKind::Rate => parse_rate_bps(value).err(),
+        ValueKind::Size => crate::helpers::parse_size(value).err(),
         ValueKind::Packets => match value.parse::<u32>() {
             Ok(0) | Err(_) => Some(crate::Error::invalid_topology(
                 "expected a positive packet count".to_string(),
@@ -1311,18 +1314,13 @@ fn validate_impairment_values(topology: &Topology, issues: &mut Vec<ValidationIs
     }
 
     for (key, rl) in sorted(&topology.rate_limits) {
-        for (name, value) in [
-            ("egress", &rl.egress),
-            ("ingress", &rl.ingress),
-            ("burst", &rl.burst),
+        for (name, value, kind) in [
+            ("egress", &rl.egress, ValueKind::Rate),
+            ("ingress", &rl.ingress, ValueKind::Rate),
+            ("burst", &rl.burst, ValueKind::Size),
         ] {
             if let Some(v) = value {
-                check_value(
-                    ValueKind::Rate,
-                    v,
-                    format!("rate_limits.\"{key}\".{name}"),
-                    issues,
-                );
+                check_value(kind, v, format!("rate_limits.\"{key}\".{name}"), issues);
             }
         }
     }

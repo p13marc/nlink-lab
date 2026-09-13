@@ -1296,7 +1296,7 @@ impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
                  ("duplicate" PERCENT)? ("delay-correlation" PERCENT)?
                  ("loss-correlation" PERCENT)? ("limit" INT)?
-rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" RATE)?
+rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" SIZE)?
 
 # ── Collections ──────────────────────────────────
 range          = (INT | INTERP) ".." (INT | INTERP)
@@ -1320,6 +1320,8 @@ PERCENT        = (INT | FLOAT) "%"
 RATE           = INT ("bit" | "kbit" | "mbit" | "gbit"
                     | "byte" | "kbyte" | "mbyte" | "gbyte"
                     | "m" | "g" | "t" | "p")
+SIZE           = (INT | FLOAT) ("" | "b" | "k" | "kb" | "kbyte" | "m" | "mb" | "mbyte"
+                 | "g" | "gb" | "gbyte" | "t" | "tb" | "tbyte")   # bytes, 1024-based
 INTERP         = "${" expr "}"
 expr           = ternary | arith
 ternary        = comparison "?" value ":" value

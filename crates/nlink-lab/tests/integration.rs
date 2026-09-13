@@ -3227,3 +3227,42 @@ link a:eth0 -- b:eth0 {{ fd00:1::1/64 -- fd00:1::2/64 }}
         "mgmt bridge {bridge} should be gone after destroy"
     );
 }
+
+// ─── Rate limit `burst` reaches tc (#71) ────────────────
+
+#[tokio::test]
+async fn rate_limit_burst_applied() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping rate_limit_burst_applied: requires root");
+        return;
+    }
+    let lab_name = format!("burst-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+rate a:eth0 egress 10mbit burst 64kbyte
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    // nlink's RateLimiter builds an HTB root with a shaping class; the
+    // burst is a class attribute: `class htb 1:a root rate 10Mbit ceil
+    // 10Mbit burst 64Kb cburst …`.
+    let out = lab
+        .exec("a", "tc", &["class", "show", "dev", "eth0"])
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    let lower = out.stdout.to_ascii_lowercase();
+    assert!(
+        lower.contains("burst 64kb") || lower.contains("burst 65536b"),
+        "expected the configured burst in `tc class show`: {}",
+        out.stdout
+    );
+    lab.destroy().await.expect("destroy failed");
+}

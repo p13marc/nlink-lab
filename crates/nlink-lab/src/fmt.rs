@@ -111,10 +111,10 @@ fn items(src: &str) -> Result<Vec<Item<'_>>> {
             }
             Err(_) => {
                 let (line, col) = crate::parser::nll::lexer::line_col(src, span.start);
-                return Err(Error::NllParseAt {
-                    message: format!("unexpected character at line {line}, column {col}: {text:?}"),
-                    offset: span.start,
-                });
+                return Err(Error::at(
+                    span.clone(),
+                    format!("unexpected character at line {line}, column {col}: {text:?}"),
+                ));
             }
         }
         prev_end = span.end;

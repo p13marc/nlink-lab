@@ -116,13 +116,24 @@ use super::lexer::Token;
 fn err(tokens: &[Spanned], pos: usize, msg: String) -> crate::Error {
     // At end of input point at the end of the last token so the
     // diagnostic still lands on the right line.
-    let offset = match tokens.get(pos) {
-        Some(t) => t.span.start,
-        None => tokens.last().map_or(0, |t| t.span.end),
+    let span = match tokens.get(pos) {
+        Some(t) => t.span.clone(),
+        None => {
+            let end = tokens.last().map_or(0, |t| t.span.end);
+            end..end
+        }
     };
-    crate::Error::NllParseAt {
-        message: msg,
-        offset,
+    crate::Error::at(span, msg)
+}
+
+/// Span of the token at `pos` (empty at end of input).
+fn span_at(tokens: &[Spanned], pos: usize) -> std::ops::Range<usize> {
+    match tokens.get(pos) {
+        Some(t) => t.span.clone(),
+        None => {
+            let end = tokens.last().map_or(0, |t| t.span.end);
+            end..end
+        }
     }
 }
 
@@ -482,119 +493,134 @@ fn parse_function_call(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     Ok(format!("@fn:{}({})", name, args.join(", ")))
 }
 
-/// Parse a value that must be a duration (e.g., 10ms, 5s) or interpolation.
-fn expect_duration_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
-    if *pos >= tokens.len() {
-        return Err(err(
-            tokens,
-            *pos,
-            "expected duration (e.g., 10ms, 5s)".into(),
-        ));
+/// Parse a typed value position (issue #71).
+///
+/// `lit` picks the literal token this kind accepts and hands back its
+/// text; a literal is parsed right here (`loss 150%` is a parse error
+/// pointing at `150%`). `${…}`, a bare identifier and a quoted string
+/// are deferred (`Val::Raw`) and validated during lowering, once
+/// variables are known.
+fn expect_val<T: ast::NllValue>(
+    tokens: &[Spanned],
+    pos: &mut usize,
+    lit: impl Fn(&Token) -> Option<&str>,
+) -> Result<ast::Val<T>> {
+    let span = span_at(tokens, *pos);
+    let Some(tok) = at(tokens, *pos) else {
+        return Err(err(tokens, *pos, format!("expected {}", T::WHAT)));
+    };
+    if let Some(text) = lit(tok) {
+        let value = T::parse_nll(text).map_err(|e| {
+            err(
+                tokens,
+                *pos,
+                format!(
+                    "invalid {} '{text}': {}",
+                    T::WHAT,
+                    super::value::error_tail(&e)
+                ),
+            )
+        })?;
+        let text = text.to_string();
+        *pos += 1;
+        return Ok(ast::Val::lit(value, text, span));
     }
-    match &tokens[*pos].token {
-        Token::Duration(s) => {
+    match tok {
+        Token::Interp(s) | Token::Ident(s) | Token::String(s) => {
             let s = s.clone();
             *pos += 1;
-            Ok(s)
-        }
-        Token::Interp(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        // Allow plain values for backward compat (let variables etc.)
-        Token::Ident(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::String(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
+            Ok(ast::Val::raw(s, span))
         }
         other => Err(err(
             tokens,
             *pos,
-            format!("expected duration (e.g., 10ms, 5s), found {other}"),
+            format!("expected {}, found {other}", T::WHAT),
         )),
     }
 }
 
-/// Parse a value that must be a rate literal (e.g., 100mbit) or interpolation.
-fn expect_rate_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
-    if *pos >= tokens.len() {
-        return Err(err(
-            tokens,
-            *pos,
-            "expected rate (e.g., 100mbit, 1gbit)".into(),
-        ));
-    }
-    match &tokens[*pos].token {
-        Token::RateLit(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::Interp(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::Ident(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::String(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        other => Err(err(
-            tokens,
-            *pos,
-            format!("expected rate (e.g., 100mbit, 1gbit), found {other}"),
-        )),
-    }
+/// A duration literal (`10ms`, `5s`) or a deferred value.
+fn expect_duration(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<std::time::Duration>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::Duration(s) => Some(s.as_str()),
+        _ => None,
+    })
 }
 
-/// Parse a value that must be a percentage (e.g., 0.1%) or interpolation.
-fn expect_percent_or_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
-    if *pos >= tokens.len() {
-        return Err(err(
-            tokens,
-            *pos,
-            "expected percentage (e.g., 0.1%, 5%)".into(),
-        ));
+/// A rate literal (`100mbit`, `1gbit`) or a deferred value.
+fn expect_rate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Rate>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::RateLit(s) => Some(s.as_str()),
+        _ => None,
+    })
+}
+
+/// A percentage literal (`0.1%`, `5%`) or a deferred value.
+fn expect_percent(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Percent>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::Percent(s) => Some(s.as_str()),
+        _ => None,
+    })
+}
+
+/// A byte size (`32kbyte`, `256m`, `65536`) or a deferred value. `256m`
+/// lexes as a rate literal and a bare number as an integer.
+fn expect_size(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Size>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::RateLit(s) | Token::Int(s) => Some(s.as_str()),
+        _ => None,
+    })
+}
+
+/// A positive packet count or a deferred value.
+fn expect_packets(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Packets>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::Int(s) => Some(s.as_str()),
+        _ => None,
+    })
+}
+
+/// A CPU share (`0.5`, `2`) or a deferred value.
+fn expect_cpu(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Cpu>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::Int(s) => Some(s.as_str()),
+        _ => None,
+    })
+}
+
+/// An address position (`route … via`, NAT `src`/`dst`/`target`, route
+/// destinations): a single address token becomes a validated literal;
+/// compound forms (`10.0.${i}.0/24`, `host(…)`, `${node.eth0}`,
+/// `auto/24`) are deferred.
+fn parse_addr_val<T: ast::NllValue>(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<T>> {
+    let start_pos = *pos;
+    let start = span_at(tokens, *pos).start;
+    let text = parse_cidr_or_name(tokens, pos)?;
+    let end = if *pos > start_pos {
+        tokens[*pos - 1].span.end
+    } else {
+        start
+    };
+    let span = start..end;
+    let single_address_token = *pos == start_pos + 1
+        && matches!(
+            at(tokens, start_pos),
+            Some(Token::Cidr(_) | Token::Ipv4Addr(_) | Token::Ipv6Cidr(_) | Token::Ipv6Addr(_))
+        );
+    if single_address_token {
+        let value = T::parse_nll(&text).map_err(|e| {
+            crate::Error::at(
+                span.clone(),
+                format!(
+                    "invalid {} '{text}': {}",
+                    T::WHAT,
+                    super::value::error_tail(&e)
+                ),
+            )
+        })?;
+        return Ok(ast::Val::lit(value, text, span));
     }
-    match &tokens[*pos].token {
-        Token::Percent(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::Interp(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::Ident(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        Token::String(s) => {
-            let s = s.clone();
-            *pos += 1;
-            Ok(s)
-        }
-        other => Err(err(
-            tokens,
-            *pos,
-            format!("expected percentage (e.g., 0.1%, 5%), found {other}"),
-        )),
-    }
+    Ok(ast::Val::raw(text, span))
 }
 
 // ─── Lab Declaration ──────────────────────────────────────
@@ -806,9 +832,9 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
             } else if eat_kw(tokens, pos, "volumes") {
                 volumes = parse_string_list(tokens, pos)?;
             } else if eat_kw(tokens, pos, "cpu") {
-                cpu = Some(parse_value(tokens, pos)?);
+                cpu = Some(expect_cpu(tokens, pos)?);
             } else if eat_kw(tokens, pos, "memory") {
-                memory = Some(parse_value(tokens, pos)?);
+                memory = Some(expect_size(tokens, pos)?);
             } else if eat_kw(tokens, pos, "privileged") {
                 privileged = true;
             } else if eat_kw(tokens, pos, "cap-add") {
@@ -837,9 +863,9 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                             break;
                         }
                         if eat_kw(tokens, pos, "interval") {
-                            healthcheck_interval = Some(parse_value(tokens, pos)?);
+                            healthcheck_interval = Some(expect_duration(tokens, pos)?);
                         } else if eat_kw(tokens, pos, "timeout") {
-                            healthcheck_timeout = Some(parse_value(tokens, pos)?);
+                            healthcheck_timeout = Some(expect_duration(tokens, pos)?);
                         } else if eat_kw(tokens, pos, "retries") {
                             // retries stored in timeout field for now
                             // (can be split later)
@@ -851,11 +877,11 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                     }
                 }
             } else if eat_kw(tokens, pos, "healthcheck-interval") {
-                healthcheck_interval = Some(parse_value(tokens, pos)?);
+                healthcheck_interval = Some(expect_duration(tokens, pos)?);
             } else if eat_kw(tokens, pos, "healthcheck-timeout") {
-                healthcheck_timeout = Some(parse_value(tokens, pos)?);
+                healthcheck_timeout = Some(expect_duration(tokens, pos)?);
             } else if eat_kw(tokens, pos, "startup-delay") {
-                startup_delay = Some(parse_value(tokens, pos)?);
+                startup_delay = Some(expect_duration(tokens, pos)?);
             } else if eat_kw(tokens, pos, "env-file") {
                 env_file = Some(expect_string(tokens, pos)?);
             } else if eat_kw(tokens, pos, "config") {
@@ -1124,7 +1150,7 @@ fn parse_route_defs(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Rout
     if eat(tokens, pos, &Token::LBracket) {
         let mut destinations = Vec::new();
         loop {
-            destinations.push(parse_cidr_or_name(tokens, pos)?);
+            destinations.push(parse_addr_val::<ast::RouteDest>(tokens, pos)?);
             if !eat(tokens, pos, &Token::Comma) {
                 break;
             }
@@ -1138,7 +1164,7 @@ fn parse_route_defs(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Rout
         loop {
             if check_kw(tokens, *pos, "via") {
                 *pos += 1;
-                via = Some(parse_cidr_or_name(tokens, pos)?);
+                via = Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?);
             } else if check_kw(tokens, *pos, "dev") {
                 *pos += 1;
                 dev = Some(parse_name(tokens, pos)?);
@@ -1167,10 +1193,11 @@ fn parse_route_defs(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast::Rout
 
 fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef> {
     // destination: "default" or CIDR
+    let default_span = span_at(tokens, *pos);
     let destination = if eat_kw(tokens, pos, "default") {
-        "default".to_string()
+        ast::Val::lit(ast::RouteDest::Default, "default", default_span)
     } else {
-        parse_cidr_or_name(tokens, pos)?
+        parse_addr_val::<ast::RouteDest>(tokens, pos)?
     };
 
     let mut via = None;
@@ -1181,7 +1208,7 @@ fn parse_route_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RouteDef>
     loop {
         if check_kw(tokens, *pos, "via") {
             *pos += 1;
-            via = Some(parse_cidr_or_name(tokens, pos)?);
+            via = Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?);
         } else if check_kw(tokens, *pos, "dev") {
             *pos += 1;
             dev = Some(parse_name(tokens, pos)?);
@@ -1234,7 +1261,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
 
         if eat_kw(tokens, pos, "masquerade") {
             let src = if eat_kw(tokens, pos, "src") {
-                Some(parse_cidr_or_name(tokens, pos)?)
+                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
             } else {
                 None
             };
@@ -1247,7 +1274,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             }));
         } else if eat_kw(tokens, pos, "dnat") {
             let dst = if eat_kw(tokens, pos, "dst") {
-                Some(parse_cidr_or_name(tokens, pos)?)
+                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
             } else {
                 None
             };
@@ -1255,7 +1282,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             // `to [fd00::2]:8080` — brackets disambiguate an IPv6 target
             // from its port (`fd00::2:8080` lexes as one address).
             let bracketed = eat(tokens, pos, &Token::LBracket);
-            let target = parse_cidr_or_name(tokens, pos)?;
+            let target = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
             if bracketed {
                 expect(tokens, pos, &Token::RBracket)?;
             }
@@ -1274,12 +1301,12 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             }));
         } else if eat_kw(tokens, pos, "snat") {
             let src = if eat_kw(tokens, pos, "src") {
-                Some(parse_cidr_or_name(tokens, pos)?)
+                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
             } else {
                 None
             };
             expect_kw(tokens, pos, "to")?;
-            let target = parse_cidr_or_name(tokens, pos)?;
+            let target = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
             items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "snat".into(),
                 src,
@@ -1288,9 +1315,9 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 target_port: None,
             }));
         } else if eat_kw(tokens, pos, "translate") {
-            let src_range = parse_cidr_or_name(tokens, pos)?;
+            let src_range = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
             expect_kw(tokens, pos, "to")?;
-            let dst_range = parse_cidr_or_name(tokens, pos)?;
+            let dst_range = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
             items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "translate".into(),
                 src: Some(src_range),
@@ -2080,34 +2107,34 @@ fn parse_impair_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Impair
     loop {
         if check_kw(tokens, *pos, "delay") {
             *pos += 1;
-            props.delay = Some(expect_duration_or_value(tokens, pos)?);
+            props.delay = Some(expect_duration(tokens, pos)?);
         } else if check_kw(tokens, *pos, "jitter") {
             *pos += 1;
-            props.jitter = Some(expect_duration_or_value(tokens, pos)?);
+            props.jitter = Some(expect_duration(tokens, pos)?);
         } else if check_kw(tokens, *pos, "loss") {
             *pos += 1;
-            props.loss = Some(expect_percent_or_value(tokens, pos)?);
+            props.loss = Some(expect_percent(tokens, pos)?);
         } else if check(tokens, *pos, &Token::Rate) {
             *pos += 1;
-            props.rate = Some(expect_rate_or_value(tokens, pos)?);
+            props.rate = Some(expect_rate(tokens, pos)?);
         } else if check_kw(tokens, *pos, "corrupt") {
             *pos += 1;
-            props.corrupt = Some(expect_percent_or_value(tokens, pos)?);
+            props.corrupt = Some(expect_percent(tokens, pos)?);
         } else if check_kw(tokens, *pos, "reorder") {
             *pos += 1;
-            props.reorder = Some(expect_percent_or_value(tokens, pos)?);
+            props.reorder = Some(expect_percent(tokens, pos)?);
         } else if check_kw(tokens, *pos, "duplicate") {
             *pos += 1;
-            props.duplicate = Some(expect_percent_or_value(tokens, pos)?);
+            props.duplicate = Some(expect_percent(tokens, pos)?);
         } else if check_kw(tokens, *pos, "delay-correlation") {
             *pos += 1;
-            props.delay_correlation = Some(expect_percent_or_value(tokens, pos)?);
+            props.delay_correlation = Some(expect_percent(tokens, pos)?);
         } else if check_kw(tokens, *pos, "loss-correlation") {
             *pos += 1;
-            props.loss_correlation = Some(expect_percent_or_value(tokens, pos)?);
+            props.loss_correlation = Some(expect_percent(tokens, pos)?);
         } else if check_kw(tokens, *pos, "limit") {
             *pos += 1;
-            props.limit = Some(parse_value(tokens, pos)?);
+            props.limit = Some(expect_packets(tokens, pos)?);
         } else {
             break;
         }
@@ -2124,13 +2151,13 @@ fn parse_rate_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RateProp
     loop {
         if check_kw(tokens, *pos, "egress") {
             *pos += 1;
-            props.egress = Some(parse_value(tokens, pos)?);
+            props.egress = Some(expect_rate(tokens, pos)?);
         } else if check_kw(tokens, *pos, "ingress") {
             *pos += 1;
-            props.ingress = Some(parse_value(tokens, pos)?);
+            props.ingress = Some(expect_rate(tokens, pos)?);
         } else if check_kw(tokens, *pos, "burst") {
             *pos += 1;
-            props.burst = Some(parse_value(tokens, pos)?);
+            props.burst = Some(expect_size(tokens, pos)?);
         } else {
             break;
         }
@@ -2233,7 +2260,7 @@ fn parse_network_impair(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Netw
     expect(tokens, pos, &Token::LBrace)?;
 
     let mut props = ast::ImpairProps::default();
-    let mut rate_cap: Option<String> = None;
+    let mut rate_cap: Option<ast::Val<ast::Rate>> = None;
 
     loop {
         skip_newlines(tokens, pos);
@@ -2245,30 +2272,14 @@ fn parse_network_impair(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Netw
         let before = *pos;
         let parsed = parse_impair_props(tokens, pos)?;
         if *pos != before {
-            // parse_impair_props consumed at least one property; merge.
-            if parsed.delay.is_some() {
-                props.delay = parsed.delay;
-            }
-            if parsed.jitter.is_some() {
-                props.jitter = parsed.jitter;
-            }
-            if parsed.loss.is_some() {
-                props.loss = parsed.loss;
-            }
-            if parsed.rate.is_some() {
-                props.rate = parsed.rate;
-            }
-            if parsed.corrupt.is_some() {
-                props.corrupt = parsed.corrupt;
-            }
-            if parsed.reorder.is_some() {
-                props.reorder = parsed.reorder;
-            }
+            // parse_impair_props consumed at least one property; merge
+            // every field (properties may be spread over several lines).
+            props.merge(parsed);
             continue;
         }
 
         if eat_kw(tokens, pos, "rate-cap") {
-            rate_cap = Some(expect_rate_or_value(tokens, pos)?);
+            rate_cap = Some(expect_rate(tokens, pos)?);
             continue;
         }
 
@@ -2651,7 +2662,7 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
             let to = parse_name(tokens, pos)?;
             let port = expect_port(tokens, pos, "port")?;
             let timeout = if eat_kw(tokens, pos, "timeout") {
-                Some(expect_duration_or_value(tokens, pos)?)
+                Some(expect_duration(tokens, pos)?)
             } else {
                 None
             };
@@ -2661,7 +2672,7 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
                 None
             };
             let interval = if eat_kw(tokens, pos, "interval") {
-                Some(expect_duration_or_value(tokens, pos)?)
+                Some(expect_duration(tokens, pos)?)
             } else {
                 None
             };
@@ -2676,7 +2687,7 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
         } else if eat_kw(tokens, pos, "latency-under") {
             let from = parse_name(tokens, pos)?;
             let to = parse_name(tokens, pos)?;
-            let max = expect_duration_or_value(tokens, pos)?;
+            let max = expect_duration(tokens, pos)?;
             let samples = if eat_kw(tokens, pos, "samples") {
                 Some(expect_u32(tokens, pos, "samples", 1)?)
             } else {
@@ -2755,7 +2766,7 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
             break;
         }
         expect_kw(tokens, pos, "at")?;
-        let time = expect_duration_or_value(tokens, pos)?;
+        let time = expect_duration(tokens, pos)?;
         expect(tokens, pos, &Token::LBrace)?;
 
         let mut actions = Vec::new();
@@ -2844,7 +2855,7 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                         break;
                     }
                     if eat_kw(tokens, pos, "duration") {
-                        duration = Some(expect_duration_or_value(tokens, pos)?);
+                        duration = Some(expect_duration(tokens, pos)?);
                     } else if eat_kw(tokens, pos, "streams") {
                         streams = Some(expect_u32(tokens, pos, "streams", 1)?);
                     } else if eat_kw(tokens, pos, "udp") {
@@ -3444,7 +3455,7 @@ node h1 { route default via 10.0.0.1 }"#,
         match &ast.statements[0] {
             ast::Statement::Node(n) => match &n.props[0] {
                 ast::NodeProp::Route(r) => {
-                    assert_eq!(r.destination, "default");
+                    assert_eq!(&*r.destination, "default");
                     assert_eq!(r.via.as_deref(), Some("10.0.0.1"));
                 }
                 _ => panic!("expected Route"),

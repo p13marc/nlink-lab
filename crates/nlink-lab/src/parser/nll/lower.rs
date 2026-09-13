@@ -209,8 +209,8 @@ fn lower_with_base_dir_and_params(
             ast::Statement::Node(n) => lower_node(&mut topology, n, &mut ctx)?,
             ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx)?,
             ast::Statement::Network(n) => lower_network(&mut topology, n, &ctx.variables)?,
-            ast::Statement::Impair(i) => lower_impair(&mut topology, i),
-            ast::Statement::Rate(r) => lower_rate(&mut topology, r),
+            ast::Statement::Impair(i) => lower_impair(&mut topology, i)?,
+            ast::Statement::Rate(r) => lower_rate(&mut topology, r)?,
             ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx)?,
             ast::Statement::Validate(v) => {
                 for a in &v.assertions {
@@ -239,9 +239,9 @@ fn lower_with_base_dir_and_params(
                                 from: from.clone(),
                                 to: to.clone(),
                                 port: *port,
-                                timeout: timeout.clone(),
+                                timeout: timeout.as_ref().map(ast::Val::to_text).transpose()?,
                                 retries: *retries,
-                                interval: interval.clone(),
+                                interval: interval.as_ref().map(ast::Val::to_text).transpose()?,
                             });
                         }
                         ast::AssertionDef::LatencyUnder {
@@ -253,7 +253,7 @@ fn lower_with_base_dir_and_params(
                             topology.assertions.push(types::Assertion::LatencyUnder {
                                 from: from.clone(),
                                 to: to.clone(),
-                                max: max.clone(),
+                                max: max.to_text()?,
                                 samples: *samples,
                             });
                         }
@@ -1801,7 +1801,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
                 .steps
                 .iter()
                 .map(|step| ast::ScenarioStepDef {
-                    time: i(&step.time, vars),
+                    time: step.time.interp(vars),
                     actions: step
                         .actions
                         .iter()
@@ -1852,7 +1852,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
                     } => ast::BenchmarkTestDef::Iperf3 {
                         from: i(from, vars),
                         to: i(to, vars),
-                        duration: io(duration, vars),
+                        duration: iv(duration, vars),
                         streams: *streams,
                         udp: *udp,
                         assertions: assertions.clone(),
@@ -1910,9 +1910,9 @@ fn interpolate_assertion(
             from: i(from, vars),
             to: i(to, vars),
             port: *port,
-            timeout: io(timeout, vars),
+            timeout: iv(timeout, vars),
             retries: *retries,
-            interval: io(interval, vars),
+            interval: iv(interval, vars),
         },
         A::LatencyUnder {
             from,
@@ -1922,7 +1922,7 @@ fn interpolate_assertion(
         } => A::LatencyUnder {
             from: i(from, vars),
             to: i(to, vars),
-            max: i(max, vars),
+            max: max.interp(vars),
             samples: *samples,
         },
         A::RouteHas {
@@ -1952,6 +1952,14 @@ fn io(s: &Option<String>, vars: &BTreeMap<String, String>) -> Option<String> {
     s.as_ref().map(|s| interpolate(s, vars))
 }
 
+/// Interpolate a typed value (`Val::Raw` only; literals pass through).
+fn iv<T: ast::NllValue>(
+    v: &Option<ast::Val<T>>,
+    vars: &BTreeMap<String, String>,
+) -> Option<ast::Val<T>> {
+    v.as_ref().map(|v| v.interp(vars))
+}
+
 fn interpolate_node(n: &ast::NodeDef, vars: &BTreeMap<String, String>) -> ast::NodeDef {
     ast::NodeDef {
         name: i(&n.name, vars),
@@ -1963,8 +1971,8 @@ fn interpolate_node(n: &ast::NodeDef, vars: &BTreeMap<String, String>) -> ast::N
             .map(|c| c.iter().map(|s| i(s, vars)).collect()),
         env: n.env.iter().map(|s| i(s, vars)).collect(),
         volumes: n.volumes.iter().map(|s| i(s, vars)).collect(),
-        cpu: io(&n.cpu, vars),
-        memory: io(&n.memory, vars),
+        cpu: iv(&n.cpu, vars),
+        memory: iv(&n.memory, vars),
         privileged: n.privileged,
         cap_add: n.cap_add.iter().map(|s| i(s, vars)).collect(),
         cap_drop: n.cap_drop.iter().map(|s| i(s, vars)).collect(),
@@ -1975,9 +1983,9 @@ fn interpolate_node(n: &ast::NodeDef, vars: &BTreeMap<String, String>) -> ast::N
         pull: io(&n.pull, vars),
         container_exec: n.container_exec.iter().map(|s| i(s, vars)).collect(),
         healthcheck: io(&n.healthcheck, vars),
-        healthcheck_interval: io(&n.healthcheck_interval, vars),
-        healthcheck_timeout: io(&n.healthcheck_timeout, vars),
-        startup_delay: io(&n.startup_delay, vars),
+        healthcheck_interval: iv(&n.healthcheck_interval, vars),
+        healthcheck_timeout: iv(&n.healthcheck_timeout, vars),
+        startup_delay: iv(&n.startup_delay, vars),
         env_file: io(&n.env_file, vars),
         configs: n
             .configs
@@ -2062,8 +2070,8 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
 
 fn interpolate_route(r: &ast::RouteDef, vars: &BTreeMap<String, String>) -> ast::RouteDef {
     ast::RouteDef {
-        destination: i(&r.destination, vars),
-        via: io(&r.via, vars),
+        destination: r.destination.interp(vars),
+        via: iv(&r.via, vars),
         dev: io(&r.dev, vars),
         metric: r.metric,
     }
@@ -2138,24 +2146,24 @@ fn interpolate_impair_props(
     vars: &BTreeMap<String, String>,
 ) -> ast::ImpairProps {
     ast::ImpairProps {
-        delay: io(&p.delay, vars),
-        jitter: io(&p.jitter, vars),
-        loss: io(&p.loss, vars),
-        rate: io(&p.rate, vars),
-        corrupt: io(&p.corrupt, vars),
-        reorder: io(&p.reorder, vars),
-        duplicate: io(&p.duplicate, vars),
-        delay_correlation: io(&p.delay_correlation, vars),
-        loss_correlation: io(&p.loss_correlation, vars),
-        limit: io(&p.limit, vars),
+        delay: iv(&p.delay, vars),
+        jitter: iv(&p.jitter, vars),
+        loss: iv(&p.loss, vars),
+        rate: iv(&p.rate, vars),
+        corrupt: iv(&p.corrupt, vars),
+        reorder: iv(&p.reorder, vars),
+        duplicate: iv(&p.duplicate, vars),
+        delay_correlation: iv(&p.delay_correlation, vars),
+        loss_correlation: iv(&p.loss_correlation, vars),
+        limit: iv(&p.limit, vars),
     }
 }
 
 fn interpolate_rate_props(p: &ast::RateProps, vars: &BTreeMap<String, String>) -> ast::RateProps {
     ast::RateProps {
-        egress: io(&p.egress, vars),
-        ingress: io(&p.ingress, vars),
-        burst: io(&p.burst, vars),
+        egress: iv(&p.egress, vars),
+        ingress: iv(&p.ingress, vars),
+        burst: iv(&p.burst, vars),
     }
 }
 
@@ -2189,7 +2197,7 @@ fn interpolate_network_impair(
         src: i(&imp.src, vars),
         dst: i(&imp.dst, vars),
         props: interpolate_impair_props(&imp.props, vars),
-        rate_cap: imp.rate_cap.as_ref().map(|s| i(s, vars)),
+        rate_cap: iv(&imp.rate_cap, vars),
     }
 }
 
@@ -2287,9 +2295,9 @@ fn interpolate_nat(nat: &ast::NatDef, vars: &BTreeMap<String, String>) -> ast::N
 fn interpolate_nat_rule(r: &ast::NatRuleDef, vars: &BTreeMap<String, String>) -> ast::NatRuleDef {
     ast::NatRuleDef {
         action: r.action.clone(),
-        src: r.src.as_ref().map(|s| i(s, vars)),
-        dst: r.dst.as_ref().map(|s| i(s, vars)),
-        target: r.target.as_ref().map(|s| i(s, vars)),
+        src: iv(&r.src, vars),
+        dst: iv(&r.dst, vars),
+        target: iv(&r.target, vars),
         target_port: r.target_port,
     }
 }
@@ -2486,8 +2494,8 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
         profiles: node.profiles.clone(),
         image: node.image.clone(),
         cmd: node.cmd.clone(),
-        cpu: node.cpu.clone(),
-        memory: node.memory.clone(),
+        cpu: node.cpu.as_ref().map(ast::Val::to_text).transpose()?,
+        memory: node.memory.as_ref().map(ast::Val::to_text).transpose()?,
         privileged: node.privileged,
         cap_add: node.cap_add.clone(),
         cap_drop: node.cap_drop.clone(),
@@ -2498,9 +2506,21 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
         pull: node.pull.clone(),
         container_exec: node.container_exec.clone(),
         healthcheck: node.healthcheck.clone(),
-        healthcheck_interval: node.healthcheck_interval.clone(),
-        healthcheck_timeout: node.healthcheck_timeout.clone(),
-        startup_delay: node.startup_delay.clone(),
+        healthcheck_interval: node
+            .healthcheck_interval
+            .as_ref()
+            .map(ast::Val::to_text)
+            .transpose()?,
+        healthcheck_timeout: node
+            .healthcheck_timeout
+            .as_ref()
+            .map(ast::Val::to_text)
+            .transpose()?,
+        startup_delay: node
+            .startup_delay
+            .as_ref()
+            .map(ast::Val::to_text)
+            .transpose()?,
         env_file: node.env_file.clone(),
         configs: node.configs.clone(),
         overlay: node.overlay.clone(),
@@ -2627,9 +2647,9 @@ fn apply_node_props(
             }
             ast::NodeProp::Route(r) => {
                 node.routes.insert(
-                    r.destination.clone(),
+                    r.destination.to_text()?,
                     types::RouteConfig {
-                        via: r.via.clone(),
+                        via: r.via.as_ref().map(ast::Val::to_text).transpose()?,
                         dev: r.dev.clone(),
                         metric: r.metric,
                     },
@@ -2655,9 +2675,9 @@ fn apply_node_props(
                     .map(|r| {
                         Ok(types::NatRule {
                             action: lower_nat_action(&r.action)?,
-                            src: r.src.clone(),
-                            dst: r.dst.clone(),
-                            target: r.target.clone(),
+                            src: r.src.as_ref().map(ast::Val::to_text).transpose()?,
+                            dst: r.dst.as_ref().map(ast::Val::to_text).transpose()?,
+                            target: r.target.as_ref().map(ast::Val::to_text).transpose()?,
                             target_port: r.target_port,
                         })
                     })
@@ -2679,16 +2699,16 @@ fn apply_node_props(
                             .routes
                             .iter()
                             .map(|r| {
-                                (
-                                    r.destination.clone(),
+                                Ok((
+                                    r.destination.to_text()?,
                                     types::RouteConfig {
-                                        via: r.via.clone(),
+                                        via: r.via.as_ref().map(ast::Val::to_text).transpose()?,
                                         dev: r.dev.clone(),
                                         metric: r.metric,
                                     },
-                                )
+                                ))
                             })
-                            .collect(),
+                            .collect::<Result<BTreeMap<_, _>>>()?,
                     },
                 );
             }
@@ -3035,29 +3055,25 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
     if let Some(imp) = effective_impair {
         let left_ep = format!("{}:{}", link.left_node, link.left_iface);
         let right_ep = format!("{}:{}", link.right_node, link.right_iface);
-        topo.impairments.insert(left_ep, lower_impair_props(imp));
-        topo.impairments.insert(right_ep, lower_impair_props(imp));
+        topo.impairments.insert(left_ep, lower_impair_props(imp)?);
+        topo.impairments.insert(right_ep, lower_impair_props(imp)?);
     }
 
     // Lower directional impairments
     if let Some(imp) = &link.left_impair {
         let ep = format!("{}:{}", link.left_node, link.left_iface);
-        topo.impairments.insert(ep, lower_impair_props(imp));
+        topo.impairments.insert(ep, lower_impair_props(imp)?);
     }
     if let Some(imp) = &link.right_impair {
         let ep = format!("{}:{}", link.right_node, link.right_iface);
-        topo.impairments.insert(ep, lower_impair_props(imp));
+        topo.impairments.insert(ep, lower_impair_props(imp)?);
     }
 
     // Lower rate (both endpoints)
     if let Some(rate) = &link.rate {
         let left_ep = format!("{}:{}", link.left_node, link.left_iface);
         let right_ep = format!("{}:{}", link.right_node, link.right_iface);
-        let rl = types::RateLimit {
-            egress: rate.egress.clone(),
-            ingress: rate.ingress.clone(),
-            burst: rate.burst.clone(),
-        };
+        let rl = lower_rate_props(rate)?;
         topo.rate_limits.insert(left_ep, rl.clone());
         topo.rate_limits.insert(right_ep, rl);
     }
@@ -3070,19 +3086,32 @@ fn increment_ip(base: std::net::IpAddr, offset: u32) -> std::net::IpAddr {
     crate::helpers::ip_offset(base, u128::from(offset)).unwrap_or(base)
 }
 
-fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
-    types::Impairment {
-        delay: props.delay.clone(),
-        jitter: props.jitter.clone(),
-        loss: props.loss.clone(),
-        rate: props.rate.clone(),
-        corrupt: props.corrupt.clone(),
-        reorder: props.reorder.clone(),
-        duplicate: props.duplicate.clone(),
-        delay_correlation: props.delay_correlation.clone(),
-        loss_correlation: props.loss_correlation.clone(),
-        limit: props.limit.clone(),
+/// Typed AST → the string-carrying public type. Literals keep their
+/// spelling; deferred values are validated here (error at their span).
+fn lower_impair_props(props: &ast::ImpairProps) -> Result<types::Impairment> {
+    fn t<T: ast::NllValue>(v: &Option<ast::Val<T>>) -> Result<Option<String>> {
+        v.as_ref().map(ast::Val::to_text).transpose()
     }
+    Ok(types::Impairment {
+        delay: t(&props.delay)?,
+        jitter: t(&props.jitter)?,
+        loss: t(&props.loss)?,
+        rate: t(&props.rate)?,
+        corrupt: t(&props.corrupt)?,
+        reorder: t(&props.reorder)?,
+        duplicate: t(&props.duplicate)?,
+        delay_correlation: t(&props.delay_correlation)?,
+        loss_correlation: t(&props.loss_correlation)?,
+        limit: t(&props.limit)?,
+    })
+}
+
+fn lower_rate_props(props: &ast::RateProps) -> Result<types::RateLimit> {
+    Ok(types::RateLimit {
+        egress: props.egress.as_ref().map(ast::Val::to_text).transpose()?,
+        ingress: props.ingress.as_ref().map(ast::Val::to_text).transpose()?,
+        burst: props.burst.as_ref().map(ast::Val::to_text).transpose()?,
+    })
 }
 
 /// Resolve glob patterns in network member lists.
@@ -3214,8 +3243,8 @@ fn lower_network(
         network.impairments.push(types::NetworkImpairment {
             src: imp.src.clone(),
             dst: imp.dst.clone(),
-            impairment: lower_impair_props(&imp.props),
-            rate_cap: imp.rate_cap.clone(),
+            impairment: lower_impair_props(&imp.props)?,
+            rate_cap: imp.rate_cap.as_ref().map(ast::Val::to_text).transpose()?,
         });
     }
 
@@ -3283,21 +3312,16 @@ fn lower_network(
     Ok(())
 }
 
-fn lower_impair(topo: &mut types::Topology, imp: &ast::ImpairDef) {
+fn lower_impair(topo: &mut types::Topology, imp: &ast::ImpairDef) -> Result<()> {
     let ep = format!("{}:{}", imp.node, imp.iface);
-    topo.impairments.insert(ep, lower_impair_props(&imp.props));
+    topo.impairments.insert(ep, lower_impair_props(&imp.props)?);
+    Ok(())
 }
 
-fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) {
+fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) -> Result<()> {
     let ep = format!("{}:{}", rate.node, rate.iface);
-    topo.rate_limits.insert(
-        ep,
-        types::RateLimit {
-            egress: rate.props.egress.clone(),
-            ingress: rate.props.ingress.clone(),
-            burst: rate.props.burst.clone(),
-        },
-    );
+    topo.rate_limits.insert(ep, lower_rate_props(&rate.props)?);
+    Ok(())
 }
 
 fn lower_benchmark(b: &ast::BenchmarkDef) -> Result<types::Benchmark> {
@@ -3315,7 +3339,7 @@ fn lower_benchmark(b: &ast::BenchmarkDef) -> Result<types::Benchmark> {
             } => Ok(types::BenchmarkTest::Iperf3 {
                 from: from.clone(),
                 to: to.clone(),
-                duration: duration.clone(),
+                duration: duration.as_ref().map(ast::Val::to_text).transpose()?,
                 streams: *streams,
                 udp: *udp,
                 assertions: lower_benchmark_assertions(assertions)?,
@@ -3370,18 +3394,14 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
     let mut cumulative_ms: u64 = 0;
 
     for step in &s.steps {
-        let time_str = step.time.trim();
-        let (is_relative, dur_str) = if let Some(stripped) = time_str.strip_prefix('+') {
-            (true, stripped)
-        } else {
-            (false, time_str)
-        };
-
-        let dur = crate::helpers::parse_duration(dur_str).map_err(|_| {
-            crate::error::Error::invalid_topology(format!(
-                "invalid duration '{}' in scenario '{}'",
-                step.time, s.name
-            ))
+        // `at +5s` is relative to the previous step; the literal keeps
+        // its `+` and `parse_duration` accepts the sign.
+        let is_relative = step.time.text().trim().starts_with('+');
+        let dur = step.time.to_value().map_err(|e| match e {
+            crate::Error::NllParseAt { message, span } => {
+                crate::Error::at(span, format!("{message} (in scenario '{}')", s.name))
+            }
+            other => other,
         })?;
         let ms = dur.as_millis() as u64;
 
@@ -3427,9 +3447,9 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                                 from: from.clone(),
                                 to: to.clone(),
                                 port: *port,
-                                timeout: timeout.clone(),
+                                timeout: timeout.as_ref().map(ast::Val::to_text).transpose()?,
                                 retries: *retries,
-                                interval: interval.clone(),
+                                interval: interval.as_ref().map(ast::Val::to_text).transpose()?,
                             },
                             ast::AssertionDef::LatencyUnder {
                                 from,
@@ -3439,7 +3459,7 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                             } => types::Assertion::LatencyUnder {
                                 from: from.clone(),
                                 to: to.clone(),
-                                max: max.clone(),
+                                max: max.to_text()?,
                                 samples: *samples,
                             },
                             ast::AssertionDef::RouteHas {
@@ -5454,13 +5474,162 @@ link a:eth0 -- b:eth0 {
         assert_eq!(back.impairments["a:eth0"], *imp);
         assert!(crate::deploy::plan::qdisc::build_netem(imp).is_ok());
         assert!(!topo.validate().has_errors());
-        let bad = parse_and_lower(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  limit 0 }\n",
+        // `limit 0` is a parse error now (issue #71), pointing at the `0`.
+        let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  limit 0 }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "0");
+        assert!(msg.contains("packet count"), "{msg}");
+    }
+
+    /// Parse `src` expecting an `NllParseAt`; returns (message, span).
+    fn parse_err_span(src: &str) -> (String, std::ops::Range<usize>) {
+        match nll::parse(src) {
+            Err(crate::Error::NllParseAt { message, span }) => (message, span),
+            Err(other) => panic!("expected NllParseAt, got {other:?}"),
+            Ok(_) => panic!("expected a parse error for:\n{src}"),
+        }
+    }
+
+    #[test]
+    fn typed_literal_out_of_range_is_parse_error_with_span() {
+        let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 loss 150% }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "150%");
+        assert!(msg.contains("percentage"), "{msg}");
+    }
+
+    #[test]
+    fn rate_egress_rejects_a_duration_at_parse_time() {
+        let src = "lab \"t\"\nnode a\nrate a:eth0 egress 10ms\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "10ms");
+        assert!(msg.contains("expected rate"), "{msg}");
+    }
+
+    #[test]
+    fn burst_is_a_size() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode a\nnode b\nrate a:eth0 egress 10mbit burst 32kbyte\nrate b:eth0 egress 10mbit burst 65536\n",
         );
-        assert!(
-            bad.validate()
-                .errors()
-                .any(|e| e.rule == "invalid-impairment-value")
+        assert_eq!(topo.rate_limits["a:eth0"].burst.as_deref(), Some("32kbyte"));
+        assert_eq!(topo.rate_limits["b:eth0"].burst.as_deref(), Some("65536"));
+        let src = "lab \"t\"\nnode a\nrate a:eth0 egress 10mbit burst 10ms\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "10ms");
+        assert!(msg.contains("size"), "{msg}");
+    }
+
+    #[test]
+    fn cpu_and_memory_are_typed() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nlet m = 512m\nnode c { image \"x\" cpu 0.5 memory 256m }\nnode d { image \"x\" cpu 2 memory ${m} }\n",
+        );
+        assert_eq!(topo.nodes["c"].cpu.as_deref(), Some("0.5"));
+        assert_eq!(topo.nodes["c"].memory.as_deref(), Some("256m"));
+        assert_eq!(topo.nodes["d"].memory.as_deref(), Some("512m"));
+        let src = "lab \"t\"\nnode c { image \"x\" cpu 0 }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "0");
+        assert!(msg.contains("cpu"), "{msg}");
+    }
+
+    #[test]
+    fn interpolated_value_invalid_points_at_the_interpolation() {
+        let src = "lab \"t\"\nlet d = abc\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay ${d} }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "${d}");
+        assert!(msg.contains("abc") && msg.contains("duration"), "{msg}");
+    }
+
+    #[test]
+    fn interpolated_value_valid_is_kept_verbatim() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nlet d = 50ms\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay ${d} }\n",
+        );
+        assert_eq!(topo.impairments["a:eth0"].delay.as_deref(), Some("50ms"));
+    }
+
+    #[test]
+    fn param_override_invalid_points_at_the_interpolation() {
+        let src = "lab \"t\"\nparam d default 10ms\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay ${d} }\n";
+        let err = nll::parse_with_params(src, &[("d".to_string(), "5%".to_string())]).unwrap_err();
+        let crate::Error::NllParseAt { message, span } = err else {
+            panic!("{err:?}");
+        };
+        assert_eq!(&src[span], "${d}");
+        assert!(message.contains("5%"), "{message}");
+    }
+
+    #[test]
+    fn quoted_duration_is_validated_at_lowering() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay \"2m\" }\n",
+        );
+        assert_eq!(topo.impairments["a:eth0"].delay.as_deref(), Some("2m"));
+        let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay \"soon\" }\n";
+        let (_, span) = parse_err_span(src);
+        assert_eq!(&src[span], "\"soon\"");
+    }
+
+    #[test]
+    fn route_destination_and_gateway_are_typed() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode gw\nfor i in 1..2 {\n  node h${i} { route 10.255.0.${i}/32 via ${gw.eth0}  route default via 10.0.0.1 }\n  link gw:eth${i} -- h${i}:eth0 { 10.0.${i}.1/24 -- 10.0.${i}.2/24 }\n}\n",
+        );
+        let h1 = &topo.nodes["h1"];
+        assert!(h1.routes.contains_key("10.255.0.1/32"));
+        assert_eq!(h1.routes["default"].via.as_deref(), Some("10.0.0.1"));
+        let src = "lab \"t\"\nnode a { route 999.0.0.1/24 dev eth0 }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "999.0.0.1/24");
+        assert!(msg.contains("route destination"), "{msg}");
+    }
+
+    #[test]
+    fn nat_operands_are_typed() {
+        let src = "lab \"t\"\nnode r { nat { dnat dst 10.0.0.0/33 to 10.0.0.1 } }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "10.0.0.0/33");
+        assert!(msg.contains("IP address or CIDR"), "{msg}");
+    }
+
+    #[test]
+    fn scenario_times_relative_and_invalid() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\nscenario \"s\" {\n  at 1s { down a:eth0 }\n  at +2s { up a:eth0 }\n}\n",
+        );
+        let times: Vec<u64> = topo.scenarios[0].steps.iter().map(|s| s.time_ms).collect();
+        assert_eq!(times, vec![1000, 3000]);
+        let src =
+            "lab \"t\"\nlet t = abc\nnode a\nscenario \"s\" {\n  at ${t} { down a:eth0 }\n}\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "${t}");
+        assert!(msg.contains("scenario 's'"), "{msg}");
+    }
+
+    #[test]
+    fn network_impair_block_merges_every_field() {
+        let topo = parse_and_lower(
+            "lab \"t\"\nnode a\nnode b\nnetwork lan {\n  members [a:eth0, b:eth0]\n  subnet 10.0.0.0/24\n  impair a -- b {\n    delay 1ms\n    duplicate 1% limit 100\n    loss-correlation 5%\n  }\n}\n",
+        );
+        let imp = &topo.networks["lan"].impairments[0].impairment;
+        assert_eq!(imp.delay.as_deref(), Some("1ms"));
+        assert_eq!(imp.duplicate.as_deref(), Some("1%"));
+        assert_eq!(imp.limit.as_deref(), Some("100"));
+        assert_eq!(imp.loss_correlation.as_deref(), Some("5%"));
+    }
+
+    #[test]
+    fn diagnostic_span_covers_the_whole_token() {
+        let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 loss 150% }\n";
+        let err = nll::parse_with_source(src, "t.nll").unwrap_err();
+        let crate::Error::NllDiagnostic(d) = err else {
+            panic!("{err:?}");
+        };
+        assert_eq!(d.span.len(), 4);
+        assert_eq!(
+            &src[d.span.offset()..d.span.offset() + d.span.len()],
+            "150%"
         );
     }
 

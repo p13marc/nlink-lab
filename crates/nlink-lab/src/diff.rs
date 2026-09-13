@@ -40,6 +40,10 @@ pub struct TopologyDiff {
     /// Per-endpoint rate-limit changes. Plan 152 Phase B.
     pub rate_limits_changed: Vec<RateLimitChange>,
 
+    /// Per-endpoint `qdisc` block changes (#67).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub qdiscs_changed: Vec<QdiscChange>,
+
     /// Per-node nftables ruleset changes (firewall + NAT, both
     /// rooted in the same `nlink-lab` table). Reconcile is coarse:
     /// any change triggers a full atomic flush + rebuild for the
@@ -69,6 +73,15 @@ pub struct NftablesChange {
 pub struct RateLimitChange {
     pub endpoint: String,
     pub desired: Option<RateLimit>,
+    pub was_present: bool,
+}
+
+/// A change to the `qdisc` block of one endpoint.
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct QdiscChange {
+    pub endpoint: String,
+    /// `None` → the qdisc should be removed.
+    pub desired: Option<crate::types::QdiscConfig>,
     pub was_present: bool,
 }
 
@@ -139,6 +152,7 @@ impl TopologyDiff {
             && self.routes_changed.is_empty()
             && self.sysctls_changed.is_empty()
             && self.rate_limits_changed.is_empty()
+            && self.qdiscs_changed.is_empty()
             && self.nftables_changed.is_empty()
     }
 
@@ -155,6 +169,7 @@ impl TopologyDiff {
             + self.routes_changed.len()
             + self.sysctls_changed.len()
             + self.rate_limits_changed.len()
+            + self.qdiscs_changed.len()
             + self.nftables_changed.len()
     }
 }
@@ -240,6 +255,17 @@ impl std::fmt::Display for TopologyDiff {
                 (Some(_), false) => writeln!(f, "  + add rate-limit: {}", r.endpoint)?,
                 (Some(_), true) => writeln!(f, "  ~ update rate-limit: {}", r.endpoint)?,
                 (None, _) => writeln!(f, "  - remove rate-limit: {}", r.endpoint)?,
+            }
+        }
+        for q in &self.qdiscs_changed {
+            match (&q.desired, q.was_present) {
+                (Some(d), false) => {
+                    writeln!(f, "  + add qdisc: {} ({})", q.endpoint, d.kind.name())?
+                }
+                (Some(d), true) => {
+                    writeln!(f, "  ~ update qdisc: {} ({})", q.endpoint, d.kind.name())?
+                }
+                (None, _) => writeln!(f, "  - remove qdisc: {}", q.endpoint)?,
             }
         }
         for n in &self.nftables_changed {
@@ -586,6 +612,32 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         }
     }
 
+    // ── qdisc blocks (per-endpoint) ──
+    for (ep, new_q) in &desired.qdiscs {
+        match current.qdiscs.get(ep) {
+            None => diff.qdiscs_changed.push(QdiscChange {
+                endpoint: ep.clone(),
+                desired: Some(new_q.clone()),
+                was_present: false,
+            }),
+            Some(old) if old != new_q => diff.qdiscs_changed.push(QdiscChange {
+                endpoint: ep.clone(),
+                desired: Some(new_q.clone()),
+                was_present: true,
+            }),
+            _ => {}
+        }
+    }
+    for ep in current.qdiscs.keys() {
+        if !desired.qdiscs.contains_key(ep) {
+            diff.qdiscs_changed.push(QdiscChange {
+                endpoint: ep.clone(),
+                desired: None,
+                was_present: true,
+            });
+        }
+    }
+
     // ── nftables (per-node firewall + NAT) ──
     // Coarse reconcile: if either firewall OR nat differs on a
     // node that exists on both sides, emit one NftablesChange.
@@ -622,6 +674,8 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     diff.sysctls_changed.sort_by(|a, b| a.node.cmp(&b.node));
     diff.rate_limits_changed
         .sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+    diff.qdiscs_changed
+        .sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
     diff.nftables_changed.sort_by(|a, b| a.node.cmp(&b.node));
 
     diff
@@ -631,6 +685,53 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
 mod tests {
     use super::*;
     use crate::Lab;
+
+    #[test]
+    fn qdisc_added_changed_removed() {
+        use crate::types::{QdiscConfig, QdiscKind};
+        let base = crate::Lab::new("t")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1/24", "10.0.0.2/24")
+            })
+            .build();
+        let mut with = base.clone();
+        with.qdiscs.insert(
+            "a:eth0".into(),
+            QdiscConfig {
+                kind: QdiscKind::Prio { bands: Some(3) },
+            },
+        );
+        let d = diff_topologies(&base, &with);
+        assert_eq!(d.qdiscs_changed.len(), 1);
+        assert!(!d.qdiscs_changed[0].was_present);
+        assert!(d.to_string().contains("+ add qdisc: a:eth0 (prio)"), "{d}");
+
+        let mut changed = with.clone();
+        changed.qdiscs.insert(
+            "a:eth0".into(),
+            QdiscConfig {
+                kind: QdiscKind::Sfq {
+                    perturb: None,
+                    limit: None,
+                    quantum: None,
+                },
+            },
+        );
+        let d = diff_topologies(&with, &changed);
+        assert_eq!(d.qdiscs_changed.len(), 1);
+        assert!(d.qdiscs_changed[0].was_present);
+        assert!(
+            d.to_string().contains("~ update qdisc: a:eth0 (sfq)"),
+            "{d}"
+        );
+
+        let d = diff_topologies(&with, &base);
+        assert_eq!(d.qdiscs_changed.len(), 1);
+        assert!(d.qdiscs_changed[0].desired.is_none());
+        assert!(!d.is_empty());
+    }
 
     #[test]
     fn test_identical_topologies() {

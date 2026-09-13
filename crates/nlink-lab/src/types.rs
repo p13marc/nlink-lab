@@ -51,6 +51,10 @@ pub struct Topology {
     #[serde(default)]
     pub rate_limits: BTreeMap<String, RateLimit>,
 
+    /// Per-interface root qdisc other than netem (`qdisc a:eth0 tbf { … }`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub qdiscs: BTreeMap<String, QdiscConfig>,
+
     /// Post-deploy reachability assertions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertions: Vec<Assertion>,
@@ -740,6 +744,74 @@ pub struct RateLimit {
 
     /// Burst size (e.g., "10mbit").
     pub burst: Option<String>,
+}
+
+/// A root qdisc other than netem on one interface (issue #67).
+///
+/// Values keep the NLL spelling (`"10mbit"`, `"32kb"`, `"5ms"`) like
+/// [`Impairment`]; the planner parses them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct QdiscConfig {
+    #[serde(flatten)]
+    pub kind: QdiscKind,
+}
+
+/// Which classless qdisc and its parameters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum QdiscKind {
+    /// Token bucket filter: `rate` and `burst` are mandatory.
+    Tbf {
+        rate: String,
+        burst: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        peakrate: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mtu: Option<u32>,
+    },
+    /// Fair queuing with controlled delay.
+    FqCodel {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        interval: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        flows: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quantum: Option<u32>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        ecn: bool,
+    },
+    /// Stochastic fairness queuing.
+    Sfq {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        perturb: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quantum: Option<u32>,
+    },
+    /// Priority bands.
+    Prio {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bands: Option<u8>,
+    },
+}
+
+impl QdiscKind {
+    /// The tc kind name (`tbf`, `fq_codel`, `sfq`, `prio`).
+    pub fn name(&self) -> &'static str {
+        match self {
+            QdiscKind::Tbf { .. } => "tbf",
+            QdiscKind::FqCodel { .. } => "fq_codel",
+            QdiscKind::Sfq { .. } => "sfq",
+            QdiscKind::Prio { .. } => "prio",
+        }
+    }
 }
 
 /// Firewall configuration (nftables).

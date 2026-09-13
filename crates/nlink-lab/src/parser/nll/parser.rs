@@ -452,6 +452,7 @@ fn parse_value(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         Token::Ipv6Addr(s) => s.clone(),
         Token::Duration(s) => s.clone(),
         Token::RateLit(s) => s.clone(),
+        Token::SizeLit(s) => s.clone(),
         Token::Percent(s) => s.clone(),
         Token::Interp(s) => s.clone(),
         other => {
@@ -567,7 +568,7 @@ fn expect_percent(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::P
 /// lexes as a rate literal and a bare number as an integer.
 fn expect_size(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Size>> {
     expect_val(tokens, pos, |t| match t {
-        Token::RateLit(s) | Token::Int(s) => Some(s.as_str()),
+        Token::SizeLit(s) | Token::RateLit(s) | Token::Int(s) => Some(s.as_str()),
         _ => None,
     })
 }
@@ -739,13 +740,14 @@ fn parse_statement(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Statement
         Token::Param => parse_param(tokens, pos).map(ast::Statement::Param),
         Token::Let => parse_let(tokens, pos).map(ast::Statement::Let),
         Token::For => parse_for(tokens, pos).map(ast::Statement::For),
+        Token::Ident(s) if s == "qdisc" => parse_qdisc_stmt(tokens, pos).map(ast::Statement::Qdisc),
         Token::Ident(s) if s == "site" => parse_site(tokens, pos).map(ast::Statement::Site),
         Token::Ident(s) if s == "if" => parse_if(tokens, pos).map(ast::Statement::If),
         other => Err(err(
             tokens,
             *pos,
             format!(
-                "expected statement (profile, node, link, network, impair, rate, defaults, pool, validate, scenario, site, param, let, for), found {other}"
+                "expected statement (profile, node, link, network, impair, rate, qdisc, defaults, pool, validate, scenario, site, param, let, for), found {other}"
             ),
         )),
     }
@@ -2423,6 +2425,189 @@ fn parse_rate_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::RateDef> 
     let (node, iface) = parse_endpoint(tokens, pos)?;
     let props = parse_rate_props(tokens, pos)?;
     Ok(ast::RateDef { node, iface, props })
+}
+
+/// `qdisc NODE:IFACE KIND { prop… }` where KIND is `tbf`, `fq_codel`,
+/// `sfq` or `prio` (issue #67). Properties may span several lines.
+fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef> {
+    expect_kw(tokens, pos, "qdisc")?;
+    let (node, iface) = parse_endpoint(tokens, pos)?;
+    let kind_pos = *pos;
+    let kind_name = expect_ident(tokens, pos)?;
+    expect(tokens, pos, &Token::LBrace)?;
+
+    // Accumulate every property, then check the kind's requirements.
+    let mut rate = None;
+    let mut burst = None;
+    let mut limit_size = None;
+    let mut limit_count: Option<u32> = None;
+    let mut peakrate = None;
+    let mut mtu = None;
+    let mut target = None;
+    let mut interval = None;
+    let mut flows = None;
+    let mut quantum = None;
+    let mut ecn = false;
+    let mut perturb = None;
+    let mut bands = None;
+    let is_tbf = kind_name == "tbf";
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if check(tokens, *pos, &Token::Rate) {
+            *pos += 1;
+            rate = Some(expect_rate(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "burst") {
+            burst = Some(expect_size(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "limit") {
+            if is_tbf {
+                limit_size = Some(expect_size(tokens, pos)?);
+            } else {
+                limit_count = Some(expect_u32(tokens, pos, "limit", 1)?);
+            }
+        } else if eat_kw(tokens, pos, "peakrate") {
+            peakrate = Some(expect_rate(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "mtu") {
+            mtu = Some(expect_u32(tokens, pos, "mtu", 1)?);
+        } else if eat_kw(tokens, pos, "target") {
+            target = Some(expect_duration(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "interval") {
+            interval = Some(expect_duration(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "flows") {
+            flows = Some(expect_u32(tokens, pos, "flows", 1)?);
+        } else if eat_kw(tokens, pos, "quantum") {
+            quantum = Some(expect_u32(tokens, pos, "quantum", 1)?);
+        } else if eat_kw(tokens, pos, "ecn") {
+            ecn = true;
+        } else if eat_kw(tokens, pos, "perturb") {
+            perturb = Some(expect_duration(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "bands") {
+            let b = expect_u32(tokens, pos, "bands", 2)?;
+            bands = Some(u8::try_from(b).map_err(|_| {
+                err(
+                    tokens,
+                    *pos - 1,
+                    format!("prio bands {b} out of range 2..=16"),
+                )
+            })?);
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "unexpected {other} in qdisc block (rate, burst, limit, peakrate, mtu, target, interval, flows, quantum, ecn, perturb, bands)"
+                    ),
+                ),
+                None => err(
+                    tokens,
+                    *pos,
+                    "unexpected end of input in qdisc block".into(),
+                ),
+            });
+        }
+    }
+
+    let unexpected = |props: &[(&str, bool)]| -> Result<()> {
+        for (name, set) in props {
+            if *set {
+                return Err(err(
+                    tokens,
+                    kind_pos,
+                    format!("qdisc {kind_name}: '{name}' is not a {kind_name} parameter"),
+                ));
+            }
+        }
+        Ok(())
+    };
+    let kind = match kind_name.as_str() {
+        "tbf" => {
+            unexpected(&[
+                ("target", target.is_some()),
+                ("interval", interval.is_some()),
+                ("flows", flows.is_some()),
+                ("quantum", quantum.is_some()),
+                ("ecn", ecn),
+                ("perturb", perturb.is_some()),
+                ("bands", bands.is_some()),
+            ])?;
+            let Some(rate) = rate else {
+                return Err(err(tokens, kind_pos, "qdisc tbf requires 'rate'".into()));
+            };
+            let Some(burst) = burst else {
+                return Err(err(tokens, kind_pos, "qdisc tbf requires 'burst'".into()));
+            };
+            ast::QdiscKindDef::Tbf {
+                rate,
+                burst,
+                limit: limit_size,
+                peakrate,
+                mtu,
+            }
+        }
+        "fq_codel" => {
+            unexpected(&[
+                ("rate", rate.is_some()),
+                ("burst", burst.is_some()),
+                ("peakrate", peakrate.is_some()),
+                ("mtu", mtu.is_some()),
+                ("perturb", perturb.is_some()),
+                ("bands", bands.is_some()),
+            ])?;
+            ast::QdiscKindDef::FqCodel {
+                target,
+                interval,
+                limit: limit_count,
+                flows,
+                quantum,
+                ecn,
+            }
+        }
+        "sfq" => {
+            unexpected(&[
+                ("rate", rate.is_some()),
+                ("burst", burst.is_some()),
+                ("peakrate", peakrate.is_some()),
+                ("mtu", mtu.is_some()),
+                ("target", target.is_some()),
+                ("interval", interval.is_some()),
+                ("flows", flows.is_some()),
+                ("ecn", ecn),
+                ("bands", bands.is_some()),
+            ])?;
+            ast::QdiscKindDef::Sfq {
+                perturb,
+                limit: limit_count,
+                quantum,
+            }
+        }
+        "prio" => {
+            unexpected(&[
+                ("rate", rate.is_some()),
+                ("burst", burst.is_some()),
+                ("limit", limit_count.is_some()),
+                ("peakrate", peakrate.is_some()),
+                ("mtu", mtu.is_some()),
+                ("target", target.is_some()),
+                ("interval", interval.is_some()),
+                ("flows", flows.is_some()),
+                ("quantum", quantum.is_some()),
+                ("ecn", ecn),
+                ("perturb", perturb.is_some()),
+            ])?;
+            ast::QdiscKindDef::Prio { bands }
+        }
+        other => {
+            return Err(err(
+                tokens,
+                kind_pos,
+                format!("unknown qdisc kind '{other}' (expected tbf, fq_codel, sfq or prio)"),
+            ));
+        }
+    };
+    Ok(ast::QdiscDef { node, iface, kind })
 }
 
 // ─── Defaults ─────────────────────────────────────────────

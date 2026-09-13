@@ -529,6 +529,25 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 iface: iface.clone(),
             });
         }
+        Op::Qdisc { node, iface, qdisc } => {
+            let conn = env.route(node)?;
+            let kind = qdisc.kind.name();
+            let res = match super::build_qdisc(qdisc)? {
+                super::BuiltQdisc::Tbf(c) => conn.replace_qdisc(iface.as_str(), c).await,
+                super::BuiltQdisc::FqCodel(c) => conn.replace_qdisc(iface.as_str(), c).await,
+                super::BuiltQdisc::Sfq(c) => conn.replace_qdisc(iface.as_str(), c).await,
+                super::BuiltQdisc::Prio(c) => conn.replace_qdisc(iface.as_str(), c).await,
+            };
+            res.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to apply {kind} qdisc on '{node}:{iface}': {e}"
+                ))
+            })?;
+            journal.record(Undo::ClearQdisc {
+                ns: env.handle(node)?.clone(),
+                iface: iface.clone(),
+            });
+        }
         Op::NetworkImpairments => {
             apply_network_impairments(&env.topology, &env.ns).await?;
         }

@@ -64,6 +64,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -132,6 +136,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -222,6 +230,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -323,6 +335,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -399,6 +415,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -650,6 +670,10 @@
           "named": true
         },
         {
+          "type": "qdisc_statement",
+          "named": true
+        },
+        {
           "type": "rate_statement",
           "named": true
         },
@@ -789,6 +813,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -896,6 +924,10 @@
         },
         {
           "type": "route_property",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -1022,6 +1054,10 @@
           "named": true
         },
         {
+          "type": "qdisc_statement",
+          "named": true
+        },
+        {
           "type": "rate_statement",
           "named": true
         },
@@ -1145,6 +1181,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -1284,6 +1324,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -1379,6 +1423,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -1499,6 +1547,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -1587,6 +1639,10 @@
         },
         {
           "type": "rate_properties",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -1719,6 +1775,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -1798,6 +1858,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -1866,6 +1930,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -1967,6 +2035,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -2057,6 +2129,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -2141,6 +2217,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -2383,6 +2463,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -2451,6 +2535,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -2594,6 +2682,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -2703,6 +2795,85 @@
     }
   },
   {
+    "type": "qdisc_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "endpoint",
+          "named": true
+        },
+        {
+          "type": "float",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "function_cidr",
+          "named": true
+        },
+        {
+          "type": "glob",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "rate_properties",
     "named": true,
     "fields": {},
@@ -2764,6 +2935,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -2861,6 +3036,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -2929,6 +3108,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -3122,6 +3305,10 @@
           "named": true
         },
         {
+          "type": "qdisc_statement",
+          "named": true
+        },
+        {
           "type": "rate_statement",
           "named": true
         },
@@ -3211,6 +3398,10 @@
         },
         {
           "type": "profile_definition",
+          "named": true
+        },
+        {
+          "type": "qdisc_statement",
           "named": true
         },
         {
@@ -3471,6 +3662,10 @@
     "named": false
   },
   {
+    "type": "bands",
+    "named": false
+  },
+  {
     "type": "below",
     "named": false
   },
@@ -3604,6 +3799,10 @@
     "named": true
   },
   {
+    "type": "ecn",
+    "named": false
+  },
+  {
     "type": "egress",
     "named": false
   },
@@ -3630,6 +3829,10 @@
   {
     "type": "float",
     "named": true
+  },
+  {
+    "type": "flows",
+    "named": false
   },
   {
     "type": "for",
@@ -3901,12 +4104,20 @@
     "named": false
   },
   {
+    "type": "peakrate",
+    "named": false
+  },
+  {
     "type": "peers",
     "named": false
   },
   {
     "type": "percent",
     "named": true
+  },
+  {
+    "type": "perturb",
+    "named": false
   },
   {
     "type": "ping",
@@ -3942,6 +4153,14 @@
   },
   {
     "type": "pvid",
+    "named": false
+  },
+  {
+    "type": "qdisc",
+    "named": false
+  },
+  {
+    "type": "quantum",
     "named": false
   },
   {
@@ -4013,6 +4232,10 @@
     "named": false
   },
   {
+    "type": "size",
+    "named": true
+  },
+  {
     "type": "snat",
     "named": false
   },
@@ -4066,6 +4289,10 @@
   },
   {
     "type": "tags",
+    "named": false
+  },
+  {
+    "type": "target",
     "named": false
   },
   {

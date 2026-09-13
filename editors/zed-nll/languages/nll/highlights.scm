@@ -43,6 +43,9 @@
 (network_impair ["impair" "rate-cap"] @keyword)
 (impairment_statement "impair" @keyword)
 (rate_statement "rate" @keyword)
+(qdisc_statement "qdisc" @keyword)
+(qdisc_statement ["rate" "burst" "limit" "peakrate" "mtu" "target" "interval" "flows" "quantum" "perturb" "bands" "ecn"] @keyword)
+(qdisc_statement (identifier) @type)
 (rate_properties "burst" @keyword)
 (port_definition ["port" "pvid" "vlans" "tagged" "untagged"] @keyword)
 (network_definition ["members" "vlan-filtering" "mtu" "subnet" "vlan"] @keyword)
@@ -84,6 +87,7 @@
 (float) @number
 (duration) @number
 (rate) @number
+(size) @number
 (percent) @number
 
 ; ── Interpolation ────────────────────────────────

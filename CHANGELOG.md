@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — `qdisc` blocks: tbf, fq_codel, sfq, prio (issue #67)
+
+- **`qdisc NODE:IFACE KIND { … }`** installs a root qdisc other than
+  netem on an interface: `tbf { rate 10mbit burst 32kb [limit 100kb]
+  [peakrate 20mbit] [mtu 1500] }`, `fq_codel { [target 5ms] [interval
+  100ms] [limit 10240] [flows 1024] [quantum 1514] [ecn] }`, `sfq {
+  [perturb 10s] [limit 127] [quantum 1514] }`, `prio { [bands 3] }`.
+  Values are typed (#71) and parameters of another kind are parse
+  errors. Planned as `Op::Qdisc` in the Tc stage (inverse
+  `ClearQdisc`), applied through nlink's `TbfConfig`/`FqCodelConfig`/
+  `SfqConfig`/`PrioConfig` + `replace_qdisc`; `apply` replaces a
+  changed block and clears a removed one; `deploy --dry-run` lists
+  `<kind> qdisc on node:iface`.
+- Byte sizes have their own literal: `32kb`, `1mb`, `4kib`, `10k` lex as
+  one token (`SIZE`) wherever a size is expected (`burst`, `memory`,
+  tbf `limit`); `32kbyte`/`256m` keep working.
+- New validator rules `qdisc-ref-valid`, `qdisc-conflicts` (an interface
+  has one root qdisc: `qdisc` cannot be combined with `impair`/`rate` on
+  the same endpoint) and `invalid-qdisc-value`.
+- `nlink-lab edit --set-qdisc NODE:IFACE=KIND[,K=V…]` / `--clear-qdisc`;
+  `nlink-lab diff` reports `+ add / ~ update / - remove qdisc`;
+  `render` emits the blocks; builder `.qdisc(endpoint, QdiscKind)`.
+- Example `examples/qdisc-kinds.nll`; tree-sitter/Zed/VS Code grammars
+  know the statement. `Topology.qdiscs` is additive in `topology.toml`
+  and the JSON schemas.
+
+Netem itself stays imperative until nlink #332 lands (declarative
+netem lacks `rate` and sub-millisecond jitter).
+
 ### Changed — typed values in the NLL AST (issue #71)
 
 - **Values are typed while parsing.** Durations, percentages, rates,

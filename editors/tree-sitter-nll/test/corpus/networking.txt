@@ -118,3 +118,28 @@ impair router:eth0 delay 10ms jitter 2ms loss 0.1%
       (duration)
       (duration)
       (percent))))
+
+================
+Qdisc block
+================
+qdisc hub:eth0 tbf {
+  rate 10mbit
+  burst 32kb
+}
+qdisc hub:eth1 fq_codel { target 5ms ecn }
+---
+
+(source_file
+  (qdisc_statement
+    (endpoint
+      (identifier)
+      (identifier))
+    (identifier)
+    (rate)
+    (size))
+  (qdisc_statement
+    (endpoint
+      (identifier)
+      (identifier))
+    (identifier)
+    (duration)))

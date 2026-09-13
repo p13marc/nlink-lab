@@ -61,6 +61,7 @@ pub enum Statement {
     Network(NetworkDef),
     Impair(ImpairDef),
     Rate(RateDef),
+    Qdisc(QdiscDef),
     Defaults(DefaultsDef),
     Param(ParamDef),
     Pool(PoolDef),
@@ -586,6 +587,42 @@ pub struct RateDef {
     pub node: String,
     pub iface: String,
     pub props: RateProps,
+}
+
+/// `qdisc NODE:IFACE KIND { … }` — a non-netem root qdisc (issue #67).
+#[derive(Debug, Clone, PartialEq)]
+pub struct QdiscDef {
+    pub node: String,
+    pub iface: String,
+    pub kind: QdiscKindDef,
+}
+
+/// The qdisc kind and its (typed) parameters.
+#[derive(Debug, Clone, PartialEq)]
+pub enum QdiscKindDef {
+    Tbf {
+        rate: Val<Rate>,
+        burst: Val<Size>,
+        limit: Option<Val<Size>>,
+        peakrate: Option<Val<Rate>>,
+        mtu: Option<u32>,
+    },
+    FqCodel {
+        target: Option<Val<Duration>>,
+        interval: Option<Val<Duration>>,
+        limit: Option<u32>,
+        flows: Option<u32>,
+        quantum: Option<u32>,
+        ecn: bool,
+    },
+    Sfq {
+        perturb: Option<Val<Duration>>,
+        limit: Option<u32>,
+        quantum: Option<u32>,
+    },
+    Prio {
+        bands: Option<u8>,
+    },
 }
 
 /// Scenario definition.

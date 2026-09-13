@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nlink-lab lint --json",
+  "description": "`lint --json` envelope.",
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LintFinding"
+      }
+    },
+    "lab": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lab",
+    "findings"
+  ],
+  "$defs": {
+    "LintFinding": {
+      "description": "One lint finding. Same shape as a validator warning so tooling can\ntreat both alike.",
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "message"
+      ]
+    }
+  }
+}

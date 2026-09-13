@@ -34,10 +34,11 @@ pub struct TopoViewer {
     // UI state
     pub selected_node: Option<String>,
     pub camera: Camera,
-    pub dragging: Option<String>,
     pub canvas_cache: canvas::Cache,
     pub show_addresses: bool,
     pub show_metrics: bool,
+    /// One-line feedback for the sidebar (PNG export, for now).
+    pub status: Option<String>,
 }
 
 pub struct Camera {
@@ -74,6 +75,8 @@ pub enum Message {
     // Export
     ExportPng,
     ScreenshotReady(iced::window::Screenshot),
+    /// PNG export finished: the path it went to, or why it did not.
+    ExportDone(Result<String, String>),
 
     // Controls
     ToggleAddresses,
@@ -111,10 +114,10 @@ impl TopoViewer {
                 offset: Vector::new(50.0, 50.0),
                 scale: 1.0,
             },
-            dragging: None,
             canvas_cache: canvas::Cache::new(),
             show_addresses: true,
             show_metrics: false,
+            status: None,
         };
 
         if let Some(topo) = topology {
@@ -194,8 +197,7 @@ impl TopoViewer {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::NodeClicked(name) => {
-                self.selected_node = Some(name.clone());
-                self.dragging = Some(name);
+                self.selected_node = Some(name);
                 self.exec_output = None;
                 self.canvas_cache.clear();
             }
@@ -203,8 +205,10 @@ impl TopoViewer {
                 self.node_positions.insert(name, pos);
                 self.canvas_cache.clear();
             }
+            // The canvas owns the drag state (`CanvasState::drag_node`);
+            // this only exists so the canvas can request a redraw.
             Message::NodeDragEnd => {
-                self.dragging = None;
+                self.canvas_cache.clear();
             }
             Message::BackgroundClicked => {
                 self.selected_node = None;
@@ -230,8 +234,10 @@ impl TopoViewer {
                 self.canvas_cache.clear();
             }
             Message::MetricsReceived(metrics) => {
+                // Do *not* force `show_metrics`: it used to be set on every
+                // sample, so the toggle could never be turned off while the
+                // daemon was publishing (issue #48).
                 self.metrics = metrics;
-                self.show_metrics = true;
                 self.canvas_cache.clear();
             }
             Message::HealthReceived(status) => {
@@ -251,16 +257,38 @@ impl TopoViewer {
                 }
             }
             Message::ZenohReady(session) => {
-                self.zenoh_session = Some(session);
+                self.zenoh_session = Some(session.clone());
+                // The backend publishes the topology once, at its own
+                // startup: a viewer that connects later has to ask.
+                if let Some(lab) = self.active_lab().cloned() {
+                    return Task::perform(
+                        crate::zenoh_client::query_topology(session, lab),
+                        |update| match update {
+                            Some(update) => Message::TopologyReceived(update),
+                            None => Message::Noop,
+                        },
+                    );
+                }
             }
             Message::LabSelected(name) => {
-                self.lab_name = Some(name);
+                self.lab_name = Some(name.clone());
                 self.topology = None;
                 self.node_positions.clear();
                 self.metrics.clear();
                 self.selected_node = None;
                 self.exec_output = None;
                 self.canvas_cache.clear();
+                // Switching labs used to be a one-way trip to a blank
+                // canvas, for the same reason (issue #48).
+                if let Some(session) = self.zenoh_session.clone() {
+                    return Task::perform(
+                        crate::zenoh_client::query_topology(session, name),
+                        |update| match update {
+                            Some(update) => Message::TopologyReceived(update),
+                            None => Message::Noop,
+                        },
+                    );
+                }
             }
             Message::ExecInputChanged(input) => {
                 self.exec_input = input;
@@ -303,7 +331,15 @@ impl TopoViewer {
                     .map(Message::ScreenshotReady);
             }
             Message::ScreenshotReady(screenshot) => {
-                return Task::perform(save_png(screenshot), |_| Message::Noop);
+                // The `Result` used to be dropped, so a failed export was
+                // completely silent (issue #48).
+                return Task::perform(save_png(screenshot), Message::ExportDone);
+            }
+            Message::ExportDone(result) => {
+                self.status = Some(match result {
+                    Ok(path) => format!("Exported {path}"),
+                    Err(e) => format!("Export failed: {e}"),
+                });
             }
             Message::ToggleAddresses => {
                 self.show_addresses = !self.show_addresses;
@@ -396,6 +432,9 @@ impl TopoViewer {
             ]
             .spacing(4),
         );
+        if let Some(status) = &self.status {
+            col = col.push(text(status.clone()).size(11));
+        }
 
         col = col.push(text("").size(4));
 
@@ -501,9 +540,13 @@ impl TopoViewer {
 
         let mut subs = Vec::new();
 
+        // Topology in every live mode, not just discovery: `--lab foo`
+        // rendered an empty canvas because this was gated (issue #48).
+        // `Message::TopologyReceived` already filters by lab name.
+        subs.push(crate::zenoh_client::topology_subscription(session.clone()));
+
         if self.discovery_mode {
             subs.push(crate::zenoh_client::health_subscription(session.clone()));
-            subs.push(crate::zenoh_client::topology_subscription(session.clone()));
         }
 
         if let Some(ref lab) = self.lab_name {
@@ -525,20 +568,60 @@ impl TopoViewer {
     }
 }
 
-async fn save_png(screenshot: iced::window::Screenshot) -> Result<(), String> {
+/// Where a PNG export goes: `$XDG_PICTURES_DIR`, else `$HOME/Pictures` if
+/// it exists, else the current directory.
+///
+/// The filename used to be relative, so it landed in the process's CWD —
+/// arbitrary for a desktop launch and unwritable inside the flatpak
+/// sandbox (issue #48).
+pub fn png_dir() -> std::path::PathBuf {
+    png_dir_from(
+        std::env::var_os("XDG_PICTURES_DIR"),
+        std::env::var_os("HOME"),
+    )
+}
+
+/// The environment-free core of [`png_dir`], so the choice is testable
+/// without mutating the process environment (which is racy across the
+/// test threads, and `unsafe` in edition 2024).
+fn png_dir_from(
+    xdg_pictures: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> std::path::PathBuf {
+    if let Some(dir) = xdg_pictures.filter(|v| !v.is_empty()) {
+        return std::path::PathBuf::from(dir);
+    }
+    if let Some(home) = home {
+        let pictures = std::path::Path::new(&home).join("Pictures");
+        // Only if it exists: creating a Pictures directory for someone who
+        // does not have one would be presumptuous.
+        if pictures.is_dir() {
+            return pictures;
+        }
+    }
+    std::path::PathBuf::from(".")
+}
+
+/// Millisecond precision, so two exports in the same second cannot
+/// silently overwrite each other.
+fn png_name() -> String {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("topoviewer-{millis}.png")
+}
+
+/// Write the screenshot as a PNG and return where it went, so the UI can
+/// show the path instead of an `eprintln!` nobody sees.
+async fn save_png(screenshot: iced::window::Screenshot) -> Result<String, String> {
     let width = screenshot.size.width;
     let height = screenshot.size.height;
     let rgba = screenshot.rgba;
 
-    let filename = format!(
-        "topoviewer-{}.png",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-    );
-
-    let file = std::fs::File::create(&filename).map_err(|e| format!("create {filename}: {e}"))?;
+    let path = png_dir().join(png_name());
+    let shown = path.display().to_string();
+    let file = std::fs::File::create(&path).map_err(|e| format!("create {shown}: {e}"))?;
     let w = std::io::BufWriter::new(file);
 
     let mut encoder = png::Encoder::new(w, width, height);
@@ -552,6 +635,54 @@ async fn save_png(screenshot: iced::window::Screenshot) -> Result<(), String> {
         .write_image_data(&rgba)
         .map_err(|e| format!("png data: {e}"))?;
 
-    eprintln!("Exported to {filename}");
-    Ok(())
+    Ok(shown)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{png_dir_from, png_name};
+
+    #[test]
+    fn png_dir_prefers_xdg_pictures() {
+        let dir = png_dir_from(Some("/pics".into()), Some("/home/someone".into()));
+        assert_eq!(dir, std::path::Path::new("/pics"));
+    }
+
+    #[test]
+    fn an_empty_xdg_pictures_is_ignored() {
+        let dir = png_dir_from(Some("".into()), None);
+        assert_eq!(dir, std::path::Path::new("."));
+    }
+
+    #[test]
+    fn falls_back_to_home_pictures_only_when_it_exists() {
+        let home = tempfile::tempdir().unwrap();
+        // No `Pictures` yet: fall through to the working directory rather
+        // than naming a path that does not exist.
+        assert_eq!(
+            png_dir_from(None, Some(home.path().as_os_str().to_owned())),
+            std::path::Path::new(".")
+        );
+        std::fs::create_dir(home.path().join("Pictures")).unwrap();
+        assert_eq!(
+            png_dir_from(None, Some(home.path().as_os_str().to_owned())),
+            home.path().join("Pictures")
+        );
+    }
+
+    #[test]
+    fn with_no_environment_at_all_it_is_the_working_directory() {
+        assert_eq!(png_dir_from(None, None), std::path::Path::new("."));
+    }
+
+    #[test]
+    fn png_name_is_millisecond_stamped_and_changes() {
+        let a = png_name();
+        assert!(a.starts_with("topoviewer-") && a.ends_with(".png"), "{a}");
+        let stamp = &a["topoviewer-".len()..a.len() - ".png".len()];
+        assert!(stamp.parse::<u128>().is_ok(), "{a}");
+        // Millisecond precision: two exports a tick apart cannot collide.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert_ne!(a, png_name());
+    }
 }

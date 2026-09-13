@@ -143,6 +143,34 @@ pub async fn apply_impairment_request(
     }
 }
 
+/// `topology`: reply with the lab's current topology.
+///
+/// The topology is *published* once at startup, which is invisible to any
+/// viewer that connects later (zenoh keeps no history here). This
+/// queryable is how a late joiner gets it — `topoviewer --lab foo` used to
+/// render an empty canvas for exactly this reason (issue #48). The query
+/// payload is ignored.
+pub async fn handle_topology(lab: &RunningLab, query: zenoh::query::Query) {
+    let lab_name = lab.name().to_string();
+    let topo = lab.topology();
+    let topology_json = match serde_json::to_string(topo) {
+        Ok(json) => json,
+        Err(e) => {
+            warn!("serialize topology: {e}");
+            return;
+        }
+    };
+    let response = TopologyUpdate {
+        wire_version: WIRE_VERSION,
+        lab_name: lab_name.clone(),
+        timestamp: crate::now_unix(),
+        node_count: topo.nodes.len(),
+        link_count: topo.links.len(),
+        topology_json,
+    };
+    reply_json("topology", &query, topics::topology(&lab_name), &response).await;
+}
+
 /// `rpc/status`: reply with a lab summary. The query payload is ignored.
 pub async fn handle_status(lab: &RunningLab, started: Instant, query: zenoh::query::Query) {
     let lab_name = lab.name().to_string();

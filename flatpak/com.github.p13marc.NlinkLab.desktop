@@ -1,9 +1,12 @@
 [Desktop Entry]
 Name=Nlink Lab Topoviewer
 Comment=Visualize nlink-lab network topologies
-Exec=nlink-lab-topoviewer
+Exec=nlink-lab-topoviewer %f
 Icon=com.github.p13marc.NlinkLab
 Terminal=false
 Type=Application
 Categories=Network;Development;
 Keywords=network;topology;netlink;lab;
+# `.nll` has no registered media type; the glob in the metainfo is what
+# associates it, so a file manager can hand one to the viewer.
+MimeType=text/x-nll;

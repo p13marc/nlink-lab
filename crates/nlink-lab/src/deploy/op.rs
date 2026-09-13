@@ -250,14 +250,14 @@ pub enum Op {
     },
     CreateMgmtBridge {
         name: String,
-        ip: std::net::Ipv4Addr,
+        ip: std::net::IpAddr,
         prefix: u8,
     },
     CreateMgmtVeth {
         node: String,
         peer: String,
         bridge: String,
-        node_ip: std::net::Ipv4Addr,
+        node_ip: std::net::IpAddr,
         prefix: u8,
     },
     CreateMgmtNamespace {

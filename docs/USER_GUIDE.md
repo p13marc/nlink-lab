@@ -774,7 +774,61 @@ lab "mylab" {
 
 All nodes get a `mgmt0` interface with a sequential IP from the subnet.
 
-### 18. Container Management
+### 18. IPv6 and Dual-Stack
+
+IPv6 works everywhere an address is accepted. Dual-stack segments are
+`network` ports with one address per family; NAT66 and IPv6 firewall
+matches use the same keywords as IPv4:
+
+```nll
+lab "dual-stack" { routing auto }
+
+profile router {
+  forward ipv4
+  forward ipv6
+}
+
+node router : router {
+  nat { masquerade src fd00:2::/64 }
+}
+
+node server {
+  firewall policy drop {
+    accept ct established,related
+    accept icmpv6 135        # neighbour solicitation
+    accept icmpv6 136        # neighbour advertisement
+    accept src fd00:1::1/128      # only the router (NAT66 source)
+    accept src 10.0.1.0/24
+    accept src 10.0.2.0/24
+  }
+}
+
+node client
+
+network lan {
+  members [router:eth0, server:eth0]
+  port router:eth0 { 10.0.1.1/24 fd00:1::1/64 }
+  port server:eth0 { 10.0.1.2/24 fd00:1::2/64 }
+}
+
+network wan {
+  members [router:eth1, client:eth0]
+  port router:eth1 { 10.0.2.1/24 fd00:2::1/64 }
+  port client:eth0 { 10.0.2.2/24 fd00:2::2/64 }
+}
+```
+
+`routing auto` fills in `default` and `::/0` separately; `mgmt
+fd00:20::/64` gives every node an IPv6 `mgmt0`; `subnet()`/`host()`,
+`pool` and `lo pool` do IPv6 math; `dnat … to [fd00::2]:8080` takes the
+target in brackets. A default-drop IPv6 firewall must admit ICMPv6
+types 135/136 (neighbour discovery) or the node becomes unreachable once
+its neighbour cache expires. IPv6 addresses stay `tentative` for about a second
+after deploy (Duplicate Address Detection), so give the first `ping -6`
+a retry — the management network is exempt (`nodad`). See
+`examples/ipv6-dual-stack.nll` and `examples/management-network-v6.nll`.
+
+### 19. Container Management
 
 ```bash
 nlink-lab containers mylab               # list container nodes

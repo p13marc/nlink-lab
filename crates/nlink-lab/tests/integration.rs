@@ -2231,6 +2231,9 @@ impl Drop for LabCleanup {
                     let _ = std::process::Command::new("ip")
                         .args(["netns", "delete", ns])
                         .status();
+                    // The ownership tag is not part of the namespace; the
+                    // CI debris gate checks it too.
+                    nlink_lab::netns_tag::untag(ns);
                 }
             }
         }
@@ -3066,4 +3069,161 @@ async fn exec_under_timeout_returns_normally(lab: RunningLab) {
     let out = lab.exec_with_opts("host", "echo", &["hi"], opts).unwrap();
     assert_eq!(out.exit_code, 0);
     assert_eq!(out.stdout.trim(), "hi");
+}
+
+// ─── IPv6: NAT66, ip6 firewall matching, dual-stack auto-routing (#72) ───
+
+/// IPv6 DAD keeps addresses `tentative` for ~1s after assignment; poll
+/// until the interface has no tentative address (10s ceiling).
+async fn wait_for_dad(lab: &RunningLab, node: &str, iface: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let out = lab
+            .exec(node, "ip", &["-6", "-o", "addr", "show", iface])
+            .unwrap();
+        if out.exit_code == 0 && !out.stdout.contains("tentative") {
+            return;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!(
+                "DAD did not complete on {node}:{iface} within 10s; last `ip -6 addr` = {}",
+                out.stdout
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+}
+
+/// `ping -6 -c1 -W3` with retries; returns whether any attempt succeeded.
+async fn ping6_ok(lab: &RunningLab, node: &str, target: &str, attempts: usize) -> bool {
+    for _ in 0..attempts {
+        let out = lab
+            .exec(node, "ping", &["-6", "-c1", "-W3", target])
+            .unwrap();
+        if out.exit_code == 0 {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    false
+}
+
+#[tokio::test]
+async fn ipv6_dual_stack_nat66_and_firewall() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping ipv6_dual_stack_nat66_and_firewall: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping ipv6_dual_stack_nat66_and_firewall: nftables not functional");
+        return;
+    }
+    let mut topo = nlink_lab::parser::parse_file("examples/ipv6-dual-stack.nll").unwrap();
+    topo.lab.name = format!("ds6-{}", std::process::id());
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    for node in ["router", "server", "client", "other"] {
+        wait_for_dad(&lab, node, "eth0").await;
+    }
+    wait_for_dad(&lab, "router", "eth1").await;
+
+    // client → server over IPv6 goes through the router's NAT66, arriving
+    // with the router's LAN address, which the server's firewall admits.
+    assert!(
+        ping6_ok(&lab, "client", "fd00:0:0:1::2", 4).await,
+        "client → server IPv6 should succeed through NAT66"
+    );
+    // other is on the LAN but untranslated: `policy drop` applies.
+    assert!(
+        !ping6_ok(&lab, "other", "fd00:0:0:1::2", 2).await,
+        "other → server IPv6 must be dropped by the ip6 saddr firewall"
+    );
+    // IPv4 path works through the same auto-routes.
+    let v4 = lab
+        .exec("client", "ping", &["-c1", "-W3", "10.0.1.2"])
+        .unwrap();
+    assert_eq!(v4.exit_code, 0, "client → server IPv4: {}", v4.stderr);
+
+    let router_rules = lab.exec("router", "nft", &["list", "ruleset"]).unwrap();
+    assert!(
+        router_rules.stdout.contains("masquerade"),
+        "router ruleset should masquerade: {}",
+        router_rules.stdout
+    );
+    assert!(
+        router_rules.stdout.contains("fd00:0:0:2::/64"),
+        "router ruleset should match the WAN IPv6 prefix: {}",
+        router_rules.stdout
+    );
+    let server_rules = lab.exec("server", "nft", &["list", "ruleset"]).unwrap();
+    assert!(
+        server_rules.stdout.contains("ip6 saddr fd00:0:0:1::1"),
+        "server ruleset should carry the ip6 saddr match: {}",
+        server_rules.stdout
+    );
+
+    lab.destroy().await.expect("destroy failed");
+}
+
+#[tokio::test]
+async fn mgmt_ipv6_host_reachable() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping mgmt_ipv6_host_reachable: requires root");
+        return;
+    }
+    let lab_name = format!("mgmt6-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}" {{ mgmt fd00:20::/64 host-reachable }}
+node a
+node b
+link a:eth0 -- b:eth0 {{ fd00:1::1/64 -- fd00:1::2/64 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let bridge = lab.topology().lab.mgmt_bridge_name();
+
+    // mgmt0 addresses are assigned with nodad, so they are usable at once.
+    let addrs = lab.node_addresses("a").unwrap();
+    assert!(
+        addrs["mgmt0"].iter().any(|a| a == "fd00:20::2/64"),
+        "node a mgmt0 = {:?}",
+        addrs.get("mgmt0")
+    );
+    let addrs_b = lab.node_addresses("b").unwrap();
+    assert!(addrs_b["mgmt0"].iter().any(|a| a == "fd00:20::3/64"));
+
+    // From the host: the bridge holds fd00:20::1 and nodes answer.
+    let mut ok = false;
+    for _ in 0..5 {
+        let st = std::process::Command::new("ping")
+            .args(["-6", "-c1", "-W2", "fd00:20::2"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        if st.success() {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(ok, "host could not ping node a over the IPv6 mgmt bridge");
+
+    lab.destroy().await.expect("destroy failed");
+    let links = std::process::Command::new("ip")
+        .args(["link", "show", &bridge])
+        .output()
+        .unwrap();
+    assert!(
+        !links.status.success(),
+        "mgmt bridge {bridge} should be gone after destroy"
+    );
 }

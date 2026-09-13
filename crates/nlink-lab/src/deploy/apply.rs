@@ -247,7 +247,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             root.set_link_up(name.as_str()).await.map_err(|e| {
                 Error::deploy_failed(format!("failed to bring up mgmt bridge '{name}': {e}"))
             })?;
-            root.add_address_by_name(name, std::net::IpAddr::V4(*ip), *prefix)
+            add_addr_nodad(&root, name, *ip, *prefix)
                 .await
                 .map_err(|e| {
                     Error::deploy_failed(format!("failed to assign IP to mgmt bridge: {e}"))
@@ -281,7 +281,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .await
                 .map_err(|e| Error::deploy_failed(format!("failed to bring up '{peer}': {e}")))?;
             let conn = env.route(node)?;
-            conn.add_address_by_name("mgmt0", std::net::IpAddr::V4(*node_ip), *prefix)
+            add_addr_nodad(&conn, "mgmt0", *node_ip, *prefix)
                 .await
                 .map_err(|e| {
                     Error::deploy_failed(format!("failed to assign mgmt IP to '{node}': {e}"))
@@ -1035,6 +1035,25 @@ fn route_v6(spec: &RouteSpec, dst: std::net::Ipv6Addr) -> nlink::netlink::route:
         r = r.metric(m);
     }
     r
+}
+
+/// Assign a management address. IPv6 addresses are added with `nodad`
+/// so the host-reachable bridge and `mgmt0` are usable immediately
+/// instead of sitting in `tentative` for a second; the segment is
+/// static and nlink-lab hands out every address, so DAD adds nothing.
+async fn add_addr_nodad(
+    conn: &nlink::Connection<nlink::netlink::Route>,
+    iface: &str,
+    ip: std::net::IpAddr,
+    prefix: u8,
+) -> nlink::Result<()> {
+    match ip {
+        std::net::IpAddr::V4(_) => conn.add_address_by_name(iface, ip, prefix).await,
+        std::net::IpAddr::V6(v6) => {
+            conn.add_address(nlink::netlink::addr::Ipv6Address::new(iface, v6, prefix).nodad())
+                .await
+        }
+    }
 }
 
 fn wifi_pidfile(lab: &str, node: &str, iface: &str) -> String {

@@ -1,0 +1,22 @@
+# IPv6 management network.
+#
+# The out-of-band `mgmt0` bridge can use an IPv6 prefix: the bridge
+# takes the first host address (fd00:20::1) and every node the next
+# ones in name order. With `host-reachable` the bridge lives in the
+# root namespace, so `ping -6 fd00:20::2` works from the host.
+
+lab "mgmt-v6" {
+  description "Lab with an IPv6 management network"
+  mgmt fd00:20::/64 host-reachable
+}
+
+profile router {
+  forward ipv6
+}
+
+node router : router
+node host1 { route default via fd00:1::1 }
+node host2 { route default via fd00:2::1 }
+
+link router:eth0 -- host1:eth0 { subnet fd00:1::/64 }
+link router:eth1 -- host2:eth0 { subnet fd00:2::/64 }

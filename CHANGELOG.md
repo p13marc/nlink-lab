@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — first-class IPv6 (issue #72)
+
+- **Firewall and NAT are dual-stack.** `src`/`dst` matches with IPv6
+  operands lower to `ip6 saddr`/`ip6 daddr` (nlink `match_*_v6`);
+  `masquerade`, `snat` and `dnat` accept IPv6 prefixes and targets
+  (NAT66 via `snat_v6`/`dnat_v6`); `translate` expands IPv6 ranges.
+  `dnat … to [fd00::2]:8080` takes an IPv6 target with a port in
+  brackets (`fd00::2:8080` is itself a valid address). A bare IP in a
+  match (`masquerade src 10.0.0.7`) is a host prefix instead of a
+  deploy-time error.
+- **IPv6 management network.** `mgmt fd00:20::/64 [host-reachable]`:
+  the bridge takes the first host address, nodes the following ones in
+  name order; addresses are assigned with `nodad` so the segment is
+  usable immediately. `nlink-lab ip <lab> <node> --iface mgmt0` reports
+  it.
+- **IPv6 address math.** `subnet()`/`host()`, `pool … /N` (`/0..=128`),
+  `lo pool`, the link `subnet fd00:2::/64` shorthand (`/127` uses both
+  addresses, like `/31`) and the bare-CIDR shorthand inside `macvlan`,
+  `ipvlan`, `wifi` and `port` blocks all accept IPv6.
+- **`routing auto` is per family.** A dual-stack stub gets both
+  `default` and `::/0`; a node routes a family only when it forwards it
+  (`forward ipv4` / `forward ipv6`); next hops never cross families;
+  every address on a `port` counts, not just the first.
+- **Validation catches mixed families**: new rules `nat-family-mismatch`
+  (`snat src fd00::/64 to 10.0.0.1`), `firewall-match-expr` (every
+  `match_expr` is lowered at validate time — unsupported tokens and
+  `ip saddr` with an IPv6 address are validation errors, not deploy
+  failures) and `vxlan-underlay-address` (local/remote must share a
+  family and be IPv4: nlink 0.26 drops `IFLA_VXLAN_LOCAL6`/`GROUP6`).
+  `mgmt-subnet-capacity` does IPv6 math.
+- Examples `ipv6-dual-stack.nll` (NAT66 + `ip6 saddr` firewall +
+  per-family auto routes) and `management-network-v6.nll`; USER_GUIDE
+  §18 and the NLL design doc §14 cover IPv6.
+
+### Removed
+
+- Validator rule `mgmt-ipv6-unsupported` — IPv6 management subnets are
+  supported.
+
+**Migration:** `validate --deny/--allow mgmt-ipv6-unsupported` now
+fails with "unknown validation rule" (the rule was error-level, so the
+flags never changed its behaviour). Labs with IPv6-only stubs or
+IPv6-forwarding routers under `routing auto` gain `::/0` / prefix
+routes on their first `apply`. Known limits: one address pair per
+`link` (use `network` ports for dual-stack), `subnet auto/N` is
+IPv4-only, IPv6 VXLAN underlays are rejected until nlink supports them.
+
 ### Added — formatter, live edits, metrics endpoint, netem extras, cgroup limits (issues #54, #64, #66, #67, #69)
 
 - **`nlink-lab fmt`** (#54): a token-level formatter — the real lexer

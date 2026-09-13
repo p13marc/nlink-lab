@@ -381,6 +381,43 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
 "#;
 
     #[test]
+    fn plan_topology_mgmt_v6_ops() {
+        let plan = plan_of(
+            r#"lab "m6" { mgmt fd00:20::/64 host-reachable }
+node a
+node b
+link a:eth0 -- b:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
+"#,
+        );
+        let bridge: Vec<_> = plan
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::CreateMgmtBridge { ip, prefix, .. } => Some((ip.to_string(), *prefix)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(bridge, vec![("fd00:20::1".to_string(), 64)]);
+        let nodes: Vec<_> = plan
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::CreateMgmtVeth { node, node_ip, .. } => {
+                    Some((node.clone(), node_ip.to_string()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            nodes,
+            vec![
+                ("a".to_string(), "fd00:20::2".to_string()),
+                ("b".to_string(), "fd00:20::3".to_string())
+            ]
+        );
+    }
+
+    #[test]
     fn plan_emits_vrf_routes_as_ops_after_the_stack() {
         let p = plan_of(VRF);
         let routes: Vec<&Op> = p.stage(Stage::Routes).collect();

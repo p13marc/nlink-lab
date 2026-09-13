@@ -1037,6 +1037,154 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         );
     }
 
+    #[test]
+    fn test_auto_route_shared_segment_prefers_forwarding_neighbour() {
+        // On a bridge the first neighbour in name order is `other`, a
+        // plain host; the default must still point at the router.
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4  forward ipv6 }
+node router : router
+node server
+node other
+node client
+network lan {
+  members [router:eth0, server:eth0, other:eth0]
+  port router:eth0 { 10.0.1.1/24 fd00:1::1/64 }
+  port server:eth0 { 10.0.1.2/24 fd00:1::2/64 }
+  port other:eth0 { 10.0.1.3/24 fd00:1::3/64 }
+}
+link router:eth1 -- client:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        assert_eq!(routes["server"]["default"].via.as_deref(), Some("10.0.1.1"));
+        assert_eq!(routes["server"]["::/0"].via.as_deref(), Some("fd00:1::1"));
+        assert_eq!(routes["other"]["default"].via.as_deref(), Some("10.0.1.1"));
+        assert_eq!(routes["client"]["default"].via.as_deref(), Some("10.0.2.1"));
+    }
+
+    #[test]
+    fn test_auto_route_dual_stack_stub_gets_both_defaults() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4  forward ipv6 }
+node router : router
+node host
+network lan {
+  members [router:eth0, host:eth0]
+  port router:eth0 { 10.0.0.1/24 fd00:1::1/64 }
+  port host:eth0 { 10.0.0.2/24 fd00:1::2/64 }
+}
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        assert_eq!(routes["host"]["default"].via.as_deref(), Some("10.0.0.1"));
+        assert_eq!(routes["host"]["::/0"].via.as_deref(), Some("fd00:1::1"));
+    }
+
+    #[test]
+    fn test_auto_route_v6_only_uses_ipv6_forwarding_sysctl() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv6 }
+node r1 : router
+node r2 : router
+node host
+link r1:eth0 -- r2:eth0 { fd00:12::1/64 -- fd00:12::2/64 }
+link r2:eth1 -- host:eth0 { fd00:2::1/64 -- fd00:2::2/64 }
+node far
+link r1:eth1 -- far:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        assert_eq!(routes["host"]["::/0"].via.as_deref(), Some("fd00:2::1"));
+        assert!(!routes["host"].contains_key("default"));
+        // r2 forwards IPv6 and has two neighbours → prefix routes
+        assert_eq!(
+            routes["r2"]["fd00:1::/64"].via.as_deref(),
+            Some("fd00:12::1")
+        );
+        // r1 likewise learns host's subnet through r2
+        assert_eq!(
+            routes["r1"]["fd00:2::/64"].via.as_deref(),
+            Some("fd00:12::2")
+        );
+    }
+
+    #[test]
+    fn test_auto_route_transit_prefix_routes_per_family() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4  forward ipv6 }
+node r1 : router
+node r2 : router
+node h1
+node h2
+network a {
+  members [r1:eth0, h1:eth0]
+  port r1:eth0 { 10.0.1.1/24 fd00:1::1/64 }
+  port h1:eth0 { 10.0.1.2/24 fd00:1::2/64 }
+}
+network core {
+  members [r1:eth1, r2:eth0]
+  port r1:eth1 { 10.0.9.1/24 fd00:9::1/64 }
+  port r2:eth0 { 10.0.9.2/24 fd00:9::2/64 }
+}
+network b {
+  members [r2:eth1, h2:eth0]
+  port r2:eth1 { 10.0.2.1/24 fd00:2::1/64 }
+  port h2:eth0 { 10.0.2.2/24 fd00:2::2/64 }
+}
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        assert_eq!(routes["r1"]["10.0.2.0/24"].via.as_deref(), Some("10.0.9.2"));
+        assert_eq!(
+            routes["r1"]["fd00:2::/64"].via.as_deref(),
+            Some("fd00:9::2")
+        );
+        assert_eq!(routes["r2"]["10.0.1.0/24"].via.as_deref(), Some("10.0.9.1"));
+        assert_eq!(
+            routes["r2"]["fd00:1::/64"].via.as_deref(),
+            Some("fd00:9::1")
+        );
+        // never a cross-family next hop
+        for node_routes in routes.values() {
+            for (dest, cfg) in node_routes {
+                let dest_v6 = dest.contains(':');
+                let via_v6 = cfg.via.as_deref().unwrap().contains(':');
+                assert_eq!(dest_v6, via_v6, "{dest} via {:?}", cfg.via);
+            }
+        }
+    }
+
+    #[test]
+    fn test_auto_route_manual_v6_default_not_overridden() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4  forward ipv6 }
+node router : router
+node host { route default via fd00:1::99 }
+network lan {
+  members [router:eth0, host:eth0]
+  port router:eth0 { 10.0.0.1/24 fd00:1::1/64 }
+  port host:eth0 { 10.0.0.2/24 fd00:1::2/64 }
+}
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        // `default via <v6>` counts as the IPv6 default; the v4 one is
+        // still filled in.
+        assert!(!routes["host"].contains_key("::/0"));
+        assert_eq!(routes["host"]["default"].via.as_deref(), Some("10.0.0.1"));
+    }
+
     /// Step 19 wrapper: returns the structured vector (not `()`), and a
     /// rootless / undeployed lab yields non-pass results with details
     /// rather than a silent pass. `parse_ping_avg` tests moved to
@@ -1330,6 +1478,126 @@ validate {
             err.to_string().contains("invalid IPv4 CIDR"),
             "want validation error from up-front match_expr check, got: {err}"
         );
+    }
+
+    #[test]
+    fn nftables_config_ip6_saddr_lowers() {
+        let fw = crate::types::FirewallConfig {
+            policy: Some("drop".into()),
+            rules: vec![
+                crate::types::FirewallRule {
+                    match_expr: Some("ip6 saddr fd00::/64 tcp dport 22".into()),
+                    action: Some("accept".into()),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("ip6 daddr fd00::1".into()),
+                    action: Some("accept".into()),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("ip saddr 10.0.0.1".into()),
+                    action: Some("accept".into()),
+                },
+            ],
+        };
+        let cfg = topology_to_nftables_config(Some(&fw), None).unwrap();
+        let input_rules = cfg.tables()[0]
+            .rules()
+            .iter()
+            .filter(|r| r.chain() == "input")
+            .count();
+        assert_eq!(input_rules, 3);
+    }
+
+    #[test]
+    fn nftables_config_ip_keyword_with_v6_address_errors() {
+        let fw = crate::types::FirewallConfig {
+            policy: None,
+            rules: vec![crate::types::FirewallRule {
+                match_expr: Some("ip saddr fd00::/64".into()),
+                action: Some("accept".into()),
+            }],
+        };
+        let err = topology_to_nftables_config(Some(&fw), None).unwrap_err();
+        assert!(err.to_string().contains("use 'ip6 saddr'"), "{err}");
+        let fw = crate::types::FirewallConfig {
+            policy: None,
+            rules: vec![crate::types::FirewallRule {
+                match_expr: Some("ip6 daddr 10.0.0.0/8".into()),
+                action: Some("accept".into()),
+            }],
+        };
+        let err = topology_to_nftables_config(Some(&fw), None).unwrap_err();
+        assert!(err.to_string().contains("use 'ip daddr'"), "{err}");
+    }
+
+    #[test]
+    fn nftables_config_nat66_masquerade_snat_dnat() {
+        let nat = crate::types::NatConfig {
+            rules: vec![
+                crate::types::NatRule {
+                    action: crate::types::NatAction::Masquerade,
+                    src: Some("fd00:2::/64".into()),
+                    dst: None,
+                    target: None,
+                    target_port: None,
+                },
+                crate::types::NatRule {
+                    action: crate::types::NatAction::Snat,
+                    src: Some("fd00:2::/64".into()),
+                    dst: None,
+                    target: Some("fd00:1::1".into()),
+                    target_port: None,
+                },
+                crate::types::NatRule {
+                    action: crate::types::NatAction::Dnat,
+                    src: None,
+                    dst: Some("2001:db8::1/128".into()),
+                    target: Some("fd00:1::2".into()),
+                    target_port: Some(8080),
+                },
+            ],
+        };
+        validate_nat_rule_literals(&nat).unwrap();
+        let cfg = topology_to_nftables_config(None, Some(&nat)).unwrap();
+        let table = &cfg.tables()[0];
+        let count = |chain: &str| table.rules().iter().filter(|r| r.chain() == chain).count();
+        assert_eq!(count("postrouting"), 2);
+        assert_eq!(count("prerouting"), 1);
+    }
+
+    #[test]
+    fn nftables_config_nat_family_mismatch_surfaces_via_validate() {
+        let nat = crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Snat,
+                src: Some("fd00:2::/64".into()),
+                dst: None,
+                target: Some("10.0.0.1".into()),
+                target_port: None,
+            }],
+        };
+        let err = validate_nat_rule_literals(&nat).unwrap_err();
+        assert!(
+            err.to_string().contains("different address families"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn nftables_config_bare_ip_in_match_is_host_prefix() {
+        // Used to pass `validate` (bare IP accepted) and fail at deploy
+        // (planner demanded a `/`).
+        let nat = crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Masquerade,
+                src: Some("10.0.0.7".into()),
+                dst: None,
+                target: None,
+                target_port: None,
+            }],
+        };
+        validate_nat_rule_literals(&nat).unwrap();
+        topology_to_nftables_config(None, Some(&nat)).unwrap();
     }
 
     #[test]

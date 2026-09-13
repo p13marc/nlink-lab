@@ -47,6 +47,42 @@ pub struct LabDecl {
     pub mgmt_host_reachable: bool,
     pub dns: Option<String>,
     pub routing: Option<String>,
+    /// `routing frr { … }` lab-wide defaults.
+    pub frr: Option<FrrDef>,
+}
+
+/// `frr { ospf { … } bgp { … } }` (#65).
+#[derive(Debug, Clone, Default)]
+pub struct FrrDef {
+    pub ospf: Option<OspfDef>,
+    pub bgp: Option<BgpDef>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct OspfDef {
+    pub area: Option<String>,
+    pub router_id: Option<String>,
+    pub passive: Vec<String>,
+    pub hello: Option<Val<Duration>>,
+    pub dead: Option<Val<Duration>>,
+    pub redistribute: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BgpDef {
+    /// Kept as text so `${asn}` interpolates; parsed to `u32` at lowering.
+    pub asn: String,
+    pub router_id: Option<String>,
+    pub neighbors: Vec<BgpNeighborDef>,
+    pub networks: Vec<String>,
+    pub redistribute: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BgpNeighborDef {
+    pub node: String,
+    pub remote_as: Option<String>,
+    pub remote: Option<String>,
 }
 
 /// Top-level statement.
@@ -282,6 +318,8 @@ pub enum NodeProp {
     Ipvlan(IpvlanDef),
     Wifi(WifiDef),
     Run(RunDef),
+    /// `frr { ospf … bgp … }` (#65).
+    Frr(FrrDef),
     /// For loop that generates node properties.
     ForLoop(PropForLoop),
 }

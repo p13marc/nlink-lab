@@ -71,6 +71,7 @@ pub mod dns;
 pub mod error;
 pub mod events;
 pub mod fmt;
+pub mod frr;
 pub mod helpers;
 pub mod impair_parse;
 pub mod ipfunc;

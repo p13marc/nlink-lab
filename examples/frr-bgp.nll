@@ -1,0 +1,52 @@
+# eBGP between two autonomous systems with FRR (zebra + bgpd).
+#
+# r1 (AS 65001) peers with r2 (AS 65002) over the inter-AS link; each
+# side redistributes its connected LAN so the hosts reach each other.
+# `neighbor r2` resolves the peer address from the shared link and the
+# remote AS from r2's own `bgp { as … }`.
+#
+#   sudo nlink-lab exec frr-bgp r1 -- vtysh -N nl-frr-bgp-r1 -c "show bgp summary"
+
+lab "frr-bgp" {
+  description "Two-AS eBGP peering with redistributed connected networks"
+  dns hosts
+  routing frr
+}
+
+profile router { forward ipv4 }
+
+node r1 : router {
+  lo 1.1.1.1/32
+  frr {
+    bgp {
+      as 65001
+      router-id 1.1.1.1
+      neighbor r2
+      redistribute [connected]
+    }
+  }
+}
+
+node r2 : router {
+  lo 2.2.2.2/32
+  frr {
+    bgp {
+      as 65002
+      router-id 2.2.2.2
+      neighbor r1
+      redistribute [connected]
+    }
+  }
+}
+
+node h1
+node h2
+
+link r1:eth0 -- r2:eth0 { 192.0.2.1/30 -- 192.0.2.2/30 }
+link r1:eth1 -- h1:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
+link r2:eth1 -- h2:eth0 { 10.2.0.1/24 -- 10.2.0.2/24 }
+
+validate {
+  route-has r1 10.2.0.0/24 via 192.0.2.2
+  reach h1 h2
+}

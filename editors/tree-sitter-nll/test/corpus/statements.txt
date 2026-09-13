@@ -1,0 +1,57 @@
+
+
+================================================================================
+FRR routing blocks
+================================================================================
+
+lab "x" { routing frr { ospf { area 0.0.0.1 } } }
+node r1 : router {
+  frr {
+    ospf { area 0.0.0.0 router-id 1.1.1.1 passive [eth2] hello 1s dead 4s redistribute [connected] }
+    bgp { as 65001 neighbor r2 neighbor r3 as 65003 remote 10.0.2.2 network 10.10.0.0/24 }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (lab_declaration
+    (string)
+    (lab_property
+      (frr_block
+        (generic_block
+          (known_property
+            (ipv4_address))))))
+  (node_definition
+    (identifier)
+    (profile_list
+      (identifier))
+    (node_body
+      (frr_property
+        (frr_block
+          (generic_block
+            (known_property
+              (ipv4_address))
+            (known_property
+              (ipv4_address))
+            (known_property
+              (list
+                (identifier)))
+            (known_property
+              (duration))
+            (known_property
+              (duration))
+            (known_property
+              (list
+                (identifier))))
+          (generic_block
+            (known_property
+              (integer))
+            (known_property
+              (identifier))
+            (known_property
+              (identifier)
+              (integer)
+              (ipv4_address))
+            (known_property
+              (cidr))))))))

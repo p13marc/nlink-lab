@@ -127,6 +127,54 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
         ));
     }
 
+    // FRR routing daemons (#65): not on $PATH on Debian (/usr/lib/frr).
+    for (daemon, why) in [
+        (nlink_lab::frr::Daemon::Zebra, "routing frr"),
+        (nlink_lab::frr::Daemon::Ospfd, "routing frr { ospf }"),
+        (nlink_lab::frr::Daemon::Bgpd, "frr { bgp … }"),
+    ] {
+        let found = nlink_lab::frr::locate_daemon(daemon);
+        checks.push(check(
+            "binary (optional)",
+            found.is_some(),
+            false,
+            match &found {
+                Some(p) => format!("{} found at {} — {why}", daemon.name(), p.display()),
+                None => format!(
+                    "{} not found ($PATH, {}) — {why} unavailable",
+                    daemon.name(),
+                    nlink_lab::frr::DAEMON_DIRS.join(", ")
+                ),
+            },
+        ));
+    }
+    checks.push(check(
+        "binary (optional)",
+        nlink_lab::frr::locate_vtysh().is_some(),
+        false,
+        match nlink_lab::frr::locate_vtysh() {
+            Some(p) => format!(
+                "vtysh found at {} — FRR convergence wait / inspection",
+                p.display()
+            ),
+            None => "vtysh not found — FRR convergence uses a fixed 5s settle".to_string(),
+        },
+    ));
+    checks.push(check(
+        "frr user",
+        nlink_lab::frr::frr_ids().is_some(),
+        false,
+        match nlink_lab::frr::frr_ids() {
+            Some((uid, gid)) => format!(
+                "user '{}' exists (uid {uid}, gid {gid})",
+                nlink_lab::frr::FRR_USER
+            ),
+            None => format!(
+                "user '{}' missing — FRR daemons drop to it (install the frr package)",
+                nlink_lab::frr::FRR_USER
+            ),
+        },
+    ));
     let runtime = ["podman", "docker"].iter().find(|b| on_path(b).is_some());
     checks.push(Check {
         name: "container runtime",

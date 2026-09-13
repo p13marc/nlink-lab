@@ -872,6 +872,56 @@ sudo nlink-lab restart mylab web         # restart one container
 nlink-lab pull topology.nll              # pre-pull all images
 ```
 
+### 21. Dynamic Routing with FRR (OSPF, BGP)
+
+`routing frr { ospf }` runs FRR's `zebra` + `ospfd` inside every
+router (forwarding) namespace; hosts keep a static default. Install
+the `frr` package first (`nlink-lab doctor` lists what it finds; on
+Debian the daemons live in `/usr/lib/frr`). A routed triangle:
+
+```nll
+lab "ospf-demo" {
+  description "OSPF area 0 across three routers"
+  routing frr { ospf }
+}
+
+profile router { forward ipv4 }
+
+node r1 : router { lo 1.1.1.1/32 }
+node r2 : router { lo 2.2.2.2/32 }
+node r3 : router { lo 3.3.3.3/32 }
+node h1
+node h2
+
+link r1:eth0 -- r2:eth0 { 10.0.12.1/30 -- 10.0.12.2/30 }
+link r2:eth1 -- r3:eth0 { 10.0.23.1/30 -- 10.0.23.2/30 }
+link r3:eth1 -- r1:eth1 { 10.0.31.1/30 -- 10.0.31.2/30 }
+link r1:eth2 -- h1:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
+link r3:eth2 -- h2:eth0 { 10.3.0.1/24 -- 10.3.0.2/24 }
+
+validate {
+  route-has r1 10.3.0.0/24 via 10.0.31.1
+  reach h1 h2
+}
+```
+
+Deploy waits for the adjacencies to reach `Full` before the
+assertions run. Per-node `frr { ospf { … } bgp { as 65001 neighbor r2
+… } }` blocks tune or add protocols (see `examples/frr-bgp.nll` for a
+two-AS eBGP peering). Inspect the daemons with FRR's own shell, one
+pathspace per node:
+
+```bash
+sudo nlink-lab exec ospf-demo r1 -- vtysh -N nl-ospf-demo-r1 -c "show ip ospf neighbor"
+sudo nlink-lab exec ospf-demo r1 -- ip route          # OSPF routes carry `proto ospf`
+sudo nlink-lab watch ospf-demo --family route         # watch reconvergence live
+sudo nlink-lab impair ospf-demo r1:eth0 --partition   # then watch the reroute
+nlink-lab ps ospf-demo                                # zebra/ospfd are tracked pids
+```
+
+Logs are in `/run/nlink-lab/frr/<lab>/<node>/`; `apply` restarts a
+router's daemons only when its generated configuration changed.
+
 ---
 
 ## CLI Reference

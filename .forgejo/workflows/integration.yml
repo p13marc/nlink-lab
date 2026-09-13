@@ -27,7 +27,10 @@ jobs:
       # The tests exec `ip`/`nft`/`ping`/`tc`/`wg`/`getent` INSIDE the lab
       # namespaces, which share this job's rootfs (only the net namespace
       # changes) — so every one of those binaries must be installed here.
-      - run: sudo apt-get update && sudo apt-get install -y iproute2 nftables iputils-ping procps libc-bin wireguard-tools iperf3
+      - run: sudo apt-get update && sudo apt-get install -y iproute2 nftables iputils-ping procps libc-bin wireguard-tools iperf3 frr
+      # The FRR tests run zebra/ospfd/bgpd from /usr/lib/frr inside lab
+      # namespaces; the package's host service must not compete for them.
+      - run: sudo systemctl disable --now frr 2>/dev/null || true
       - uses: https://github.com/dtolnay/rust-toolchain@stable
       - uses: https://github.com/Swatinem/rust-cache@v2.9.2
         with:

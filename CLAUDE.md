@@ -104,7 +104,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (47 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (53 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -116,6 +116,7 @@ crates/nlink-lab/src/
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence ($XDG_STATE_HOME/nlink-lab/labs, schema 2, flock in .locks/; snapshots/<name>/ checkpoints)
   events.rs         # Lifecycle event log (events.ndjson per lab; `events` command, backend republish)
+  frr.rs            # FRR routing daemons: pathspaces, per-daemon config generation, neighbour resolution
   netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
   templates/        # Built-in topology templates for `nlink-lab init`
@@ -131,7 +132,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (38 top-level; 47 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (40 top-level; 49 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -161,6 +162,7 @@ examples/
 | `IpvlanConfig` | ipvlan interface (name, parent, mode, addresses) |
 | `WifiConfig` | Wi-Fi interface (name, mode, ssid, channel, passphrase) |
 | `WifiMode` | Wi-Fi mode (Ap, Station, Mesh) |
+| `FrrConfig` / `OspfConfig` / `BgpConfig` | FRR daemons for a node (`frr { ospf … bgp … }`, `routing frr`) |
 | `Scenario` | Timed fault-injection test (steps with down/up/clear/validate) |
 | `ScenarioStep` | Single timed step at a time offset |
 | `Benchmark` | Performance test (ping/iperf3 with metric assertions) |
@@ -212,7 +214,8 @@ node names), IP computation functions (`subnet()`, `host()`),
 conditional logic (`if` blocks with `==`/`!=`/`<`/`>`/`&&`/`||`),
 `for` loops inside node/nat/network blocks, loopback pool allocation
 (`lo pool name`), auto-routing (`routing auto` computes static routes
-from topology graph), fleet `for_each` imports (instantiate templates
+from topology graph), dynamic routing with FRR (`routing frr { ospf }`,
+per-node `frr { ospf … bgp … }`), fleet `for_each` imports (instantiate templates
 N times), glob patterns in network members (`*-black:fo`),
 `param` declarations with CLI `--set` for parameterized topologies,
 first-class IPv6 (dual-stack `port` addresses, `ip6` firewall matches,
@@ -286,8 +289,8 @@ execute**:
 ```
 
 Stages, in order (`Stage`): Namespaces → Hwsim → MgmtBridge → Networks →
-Links → HostLinks → LinksUp → Sysctls → Stack → Tc → Dns → Processes →
-Wifi. Removals in an apply run first, in reverse stage order. Every
+Links → HostLinks → LinksUp → Sysctls → Stack → Tc → Dns →
+RoutingDaemons → Processes → Wifi. Removals in an apply run first, in reverse stage order. Every
 netlink resource still commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile paths
 (zero kernel calls when unchanged); in apply mode the network layer uses

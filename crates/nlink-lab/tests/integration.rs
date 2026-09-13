@@ -2237,6 +2237,22 @@ impl Drop for LabCleanup {
                 }
             }
         }
+        // FRR daemons pin a deleted namespace until they are killed; a
+        // failed test must not leave them (or their runtime dirs) behind.
+        let _ = std::process::Command::new("pkill")
+            .args(["-f", "--", &format!("-N nl-{prefix}")])
+            .status();
+        let _ = std::fs::remove_dir_all(nlink_lab::frr::lab_dir(&self.name));
+        if let Ok(entries) = std::fs::read_dir(nlink_lab::frr::RUN_ROOT) {
+            for e in entries.flatten() {
+                if e.file_name()
+                    .to_string_lossy()
+                    .starts_with(&format!("nl-{prefix}"))
+                {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
         let _ = nlink_lab::state::remove(&self.name);
     }
 }
@@ -3650,4 +3666,210 @@ link left:eth1 -- right:eth1
     }
     assert!(ok, "ping over the bonded 802.1ad VLAN failed");
     lab.destroy().await.expect("destroy failed");
+}
+
+// ─── FRR routing daemons (#65) ─────────────────────────
+
+fn has_frr() -> bool {
+    nlink_lab::frr::locate_daemon(nlink_lab::frr::Daemon::Zebra).is_some()
+        && nlink_lab::frr::locate_daemon(nlink_lab::frr::Daemon::Ospfd).is_some()
+        && nlink_lab::frr::frr_ids().is_some()
+}
+
+/// Poll `ip route show <dest>` on `node` until it carries `needle`.
+async fn wait_route(lab: &RunningLab, node: &str, dest: &str, needle: &str, secs: u64) -> String {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    let mut last = String::new();
+    while std::time::Instant::now() < deadline {
+        let out = lab.exec(node, "ip", &["route", "show", dest]).unwrap();
+        last = out.stdout.clone();
+        if last.contains(needle) {
+            return last;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    panic!("route {dest} on {node} never matched {needle:?}; last: {last:?}");
+}
+
+#[tokio::test]
+async fn frr_ospf_converges_and_apply_restarts_daemons() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping frr_ospf_converges_and_apply_restarts_daemons: requires root");
+        return;
+    }
+    if !has_frr() {
+        eprintln!("skipping frr_ospf_converges_and_apply_restarts_daemons: frr not installed");
+        return;
+    }
+    let mut topo = nlink_lab::parser::parse_file("examples/frr-ospf.nll").unwrap();
+    let lab_name = format!("frr-{}", std::process::id());
+    topo.lab.name = lab_name.clone();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    // zebra + ospfd per router, tracked
+    let routers = ["r1", "r2", "r3"];
+    for r in routers {
+        let n = lab.pids().iter().filter(|(node, _)| node == r).count();
+        assert_eq!(n, 2, "{r} should track zebra + ospfd, got {:?}", lab.pids());
+    }
+    let ps = nlink_lab::frr::pathspace(&format!("{lab_name}-r1"));
+    assert!(nlink_lab::frr::run_dir(&ps).join("zserv.api").exists());
+
+    // OSPF route on r1 for the far LAN via r3, and end-to-end reachability.
+    let route = wait_route(&lab, "r1", "10.3.0.0/24", "10.0.31.1", 60).await;
+    assert!(
+        route.contains("proto ospf") || route.contains("proto 188"),
+        "expected an OSPF-installed route: {route}"
+    );
+    let mut ok = false;
+    for _ in 0..10 {
+        let ping = lab.exec("h1", "ping", &["-c1", "-W2", "10.3.0.2"]).unwrap();
+        if ping.exit_code == 0 {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(ok, "h1 → h2 through OSPF-learned routes failed");
+    let r = lab.assertion_results();
+    assert!(!r.is_empty() && r.iter().all(|a| a.passed), "{r:?}");
+
+    // apply with `redistribute [connected]` on r1 only (timers must match
+    // on both ends of a link, so they are not a safe single-node change):
+    // r1's daemons restart, r2's do not, and the adjacency re-forms.
+    let pid_of = |lab: &RunningLab, node: &str| -> Vec<u32> {
+        let mut v: Vec<u32> = lab
+            .pids()
+            .iter()
+            .filter(|(n, _)| n == node)
+            .map(|(_, p)| *p)
+            .collect();
+        v.sort();
+        v
+    };
+    let r1_before = pid_of(&lab, "r1");
+    let r2_before = pid_of(&lab, "r2");
+    let mut desired = lab.topology().clone();
+    desired.nodes.get_mut("r1").unwrap().frr = Some(nlink_lab::types::FrrConfig {
+        ospf: Some(nlink_lab::types::OspfConfig {
+            redistribute: vec!["connected".to_string()],
+            ..Default::default()
+        }),
+        bgp: None,
+    });
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert_ne!(
+        pid_of(&lab, "r1"),
+        r1_before,
+        "r1 daemons should have restarted"
+    );
+    assert_eq!(
+        pid_of(&lab, "r2"),
+        r2_before,
+        "r2 daemons must be untouched"
+    );
+    let conf = std::fs::read_to_string(nlink_lab::frr::conf_path(
+        &lab_name,
+        "r1",
+        nlink_lab::frr::Daemon::Ospfd,
+    ))
+    .unwrap();
+    assert!(conf.contains("redistribute connected"), "{conf}");
+    wait_route(&lab, "r1", "10.3.0.0/24", "10.0.31.1", 60).await;
+
+    lab.destroy().await.expect("destroy failed");
+    assert!(
+        !nlink_lab::frr::run_dir(&ps).exists(),
+        "run dir must be removed on destroy"
+    );
+    assert!(
+        !nlink_lab::frr::lab_dir(&lab_name).exists(),
+        "lab frr dir must be removed on destroy"
+    );
+    for pid in r1_before {
+        assert!(
+            !std::path::Path::new(&format!("/proc/{pid}")).exists() || {
+                std::fs::read_to_string(format!("/proc/{pid}/comm"))
+                    .map(|c| !c.contains("zebra") && !c.contains("ospfd"))
+                    .unwrap_or(true)
+            },
+            "old daemon pid {pid} still alive"
+        );
+    }
+}
+
+#[tokio::test]
+async fn frr_bgp_established() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping frr_bgp_established: requires root");
+        return;
+    }
+    if !has_frr() || nlink_lab::frr::locate_daemon(nlink_lab::frr::Daemon::Bgpd).is_none() {
+        eprintln!("skipping frr_bgp_established: frr/bgpd not installed");
+        return;
+    }
+    let mut topo = nlink_lab::parser::parse_file("examples/frr-bgp.nll").unwrap();
+    topo.lab.name = format!("frrbgp-{}", std::process::id());
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let route = wait_route(&lab, "r1", "10.2.0.0/24", "192.0.2.2", 60).await;
+    assert!(
+        route.contains("proto bgp") || route.contains("proto 186"),
+        "expected a BGP-installed route: {route}"
+    );
+    let mut ok = false;
+    for _ in 0..10 {
+        let ping = lab.exec("h1", "ping", &["-c1", "-W2", "10.2.0.2"]).unwrap();
+        if ping.exit_code == 0 {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(ok, "h1 → h2 through eBGP-learned routes failed");
+    lab.destroy().await.expect("destroy failed");
+}
+
+#[tokio::test]
+async fn frr_missing_daemon_is_a_clear_error_before_any_namespace() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping frr_missing_daemon_is_a_clear_error_before_any_namespace: requires root"
+        );
+        return;
+    }
+    if has_frr() {
+        eprintln!(
+            "skipping frr_missing_daemon_is_a_clear_error_before_any_namespace: frr is installed"
+        );
+        return;
+    }
+    let mut topo = nlink_lab::parser::parse_file("examples/frr-ospf.nll").unwrap();
+    let lab_name = format!("frrmiss-{}", std::process::id());
+    topo.lab.name = lab_name.clone();
+    let err = topo
+        .deploy()
+        .await
+        .err()
+        .expect("deploy must fail without frr");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("zebra") || msg.contains("ospfd") || msg.contains("frr"),
+        "{msg}"
+    );
+    assert!(msg.contains("/usr/lib/frr"), "{msg}");
+    let ns = std::process::Command::new("ip")
+        .args(["netns", "list"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&ns.stdout).contains(&lab_name),
+        "no namespace may exist after a preflight failure"
+    );
 }

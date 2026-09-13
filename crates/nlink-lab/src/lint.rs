@@ -27,6 +27,7 @@ pub const LINT_RULE_IDS: &[&str] = &[
     "asymmetric-impairment",
     "disconnected-topology",
     "no-description",
+    "frr-without-routers",
 ];
 
 /// Run every lint over `topology`, skipping the rules in `allow`.
@@ -37,8 +38,19 @@ pub fn lint(topology: &Topology, allow: &[String]) -> Vec<LintFinding> {
     lint_asymmetric_impairment(topology, &mut out);
     lint_disconnected_topology(topology, &mut out);
     lint_no_description(topology, &mut out);
+    lint_frr_without_routers(topology, &mut out);
     out.retain(|f| !allow.iter().any(|a| a == f.rule));
     out
+}
+
+fn lint_frr_without_routers(t: &Topology, out: &mut Vec<LintFinding>) {
+    if t.lab.routing == crate::types::RoutingMode::Frr && crate::frr::frr_nodes(t).is_empty() {
+        out.push(LintFinding {
+            rule: "frr-without-routers",
+            message: "`routing frr` but no node runs FRR: add `forward ipv4` to the routers (lab-level `routing frr { ospf }`) or a per-node `frr { … }` block".to_string(),
+            location: Some("lab.routing".to_string()),
+        });
+    }
 }
 
 fn lint_no_assertions(t: &Topology, out: &mut Vec<LintFinding>) {
@@ -225,7 +237,17 @@ impair a:eth0 delay 10ms
         ] {
             assert!(r.contains(&id), "{id} missing in {r:?}");
         }
-        assert!(LINT_RULE_IDS.iter().all(|id| r.contains(id)));
+        let frr = rules(
+            r#"lab "x" { description "d" routing frr { ospf } }
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+validate { reach a b }
+"#,
+        );
+        assert!(frr.contains(&"frr-without-routers"), "{frr:?}");
+        let all: Vec<&str> = r.iter().chain(frr.iter()).copied().collect();
+        assert!(LINT_RULE_IDS.iter().all(|id| all.contains(id)), "{all:?}");
     }
 
     #[test]

@@ -2050,6 +2050,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
             mode: iv.mode.as_ref().map(|s| i(s, vars)),
             addresses: iv.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
+        ast::NodeProp::Frr(f) => ast::NodeProp::Frr(interpolate_frr(f, vars)),
         ast::NodeProp::Wifi(w) => ast::NodeProp::Wifi(ast::WifiDef {
             name: i(&w.name, vars),
             mode: w.mode.clone(),
@@ -2489,6 +2490,11 @@ fn lower_profile(profile: &ast::ProfileDef) -> types::Profile {
             ast::NodeProp::Sysctl(k, v) => {
                 p.sysctls.insert(k.clone(), v.clone());
             }
+            ast::NodeProp::Frr(f) => {
+                // Errors surface again when a node using the profile is
+                // lowered; here the profile keeps what parses.
+                p.frr = lower_frr(f).ok();
+            }
             ast::NodeProp::Firewall(fw) => {
                 p.firewall = Some(types::FirewallConfig {
                     policy: Some(fw.policy.clone()),
@@ -2532,12 +2538,14 @@ fn lower_lab(lab: &ast::LabDecl) -> Result<types::LabConfig> {
     let routing = match lab.routing.as_deref() {
         None | Some("manual") => types::RoutingMode::Manual,
         Some("auto") => types::RoutingMode::Auto,
+        Some("frr") => types::RoutingMode::Frr,
         Some(other) => {
             return Err(crate::Error::NllParse(format!(
-                "unknown routing mode '{other}' (expected manual or auto)"
+                "unknown routing mode '{other}' (expected manual, auto or frr)"
             )));
         }
     };
+    let frr = lab.frr.as_ref().map(lower_frr).transpose()?;
     Ok(types::LabConfig {
         name: lab.name.clone(),
         description: lab.description.clone(),
@@ -2550,7 +2558,99 @@ fn lower_lab(lab: &ast::LabDecl) -> Result<types::LabConfig> {
         mgmt_host_reachable: lab.mgmt_host_reachable,
         dns,
         routing,
+        frr,
     })
+}
+
+/// `frr { ospf … bgp … }` → [`types::FrrConfig`] (#65). Numbers are
+/// parsed here so a `${asn}` parameter still works.
+fn lower_frr(def: &ast::FrrDef) -> Result<types::FrrConfig> {
+    let secs = |v: &Option<ast::Val<std::time::Duration>>, what: &str| -> Result<Option<u32>> {
+        let Some(v) = v else {
+            return Ok(None);
+        };
+        let d = v.to_value()?;
+        if d.as_millis() % 1000 != 0 || d.as_secs() == 0 {
+            return Err(crate::Error::at(
+                v.span().clone(),
+                format!(
+                    "ospf {what} must be a whole number of seconds (got '{}')",
+                    v.text()
+                ),
+            ));
+        }
+        Ok(Some(d.as_secs() as u32))
+    };
+    let ospf = match &def.ospf {
+        None => None,
+        Some(o) => Some(types::OspfConfig {
+            area: o.area.clone(),
+            router_id: o.router_id.clone(),
+            passive: o.passive.clone(),
+            hello: secs(&o.hello, "hello")?,
+            dead: secs(&o.dead, "dead")?,
+            redistribute: o.redistribute.clone(),
+        }),
+    };
+    let asn = |s: &str, what: &str| -> Result<u32> {
+        s.trim()
+            .parse::<u32>()
+            .map_err(|_| crate::Error::NllParse(format!("bgp {what} '{s}' is not an AS number")))
+    };
+    let bgp = match &def.bgp {
+        None => None,
+        Some(b) => Some(types::BgpConfig {
+            asn: asn(&b.asn, "as")?,
+            router_id: b.router_id.clone(),
+            neighbors: b
+                .neighbors
+                .iter()
+                .map(|n| {
+                    Ok(types::BgpNeighbor {
+                        node: n.node.clone(),
+                        remote_as: n
+                            .remote_as
+                            .as_deref()
+                            .map(|a| asn(a, "neighbor as"))
+                            .transpose()?,
+                        remote: n.remote.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            networks: b.networks.clone(),
+            redistribute: b.redistribute.clone(),
+        }),
+    };
+    Ok(types::FrrConfig { ospf, bgp })
+}
+
+/// Interpolate every text field of an `frr` block.
+fn interpolate_frr(f: &ast::FrrDef, vars: &BTreeMap<String, String>) -> ast::FrrDef {
+    ast::FrrDef {
+        ospf: f.ospf.as_ref().map(|o| ast::OspfDef {
+            area: io(&o.area, vars),
+            router_id: io(&o.router_id, vars),
+            passive: o.passive.iter().map(|s| i(s, vars)).collect(),
+            hello: iv(&o.hello, vars),
+            dead: iv(&o.dead, vars),
+            redistribute: o.redistribute.iter().map(|s| i(s, vars)).collect(),
+        }),
+        bgp: f.bgp.as_ref().map(|b| ast::BgpDef {
+            asn: i(&b.asn, vars),
+            router_id: io(&b.router_id, vars),
+            neighbors: b
+                .neighbors
+                .iter()
+                .map(|n| ast::BgpNeighborDef {
+                    node: i(&n.node, vars),
+                    remote_as: io(&n.remote_as, vars),
+                    remote: io(&n.remote, vars),
+                })
+                .collect(),
+            networks: b.networks.iter().map(|s| i(s, vars)).collect(),
+            redistribute: b.redistribute.iter().map(|s| i(s, vars)).collect(),
+        }),
+    }
 }
 
 fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCtx) -> Result<()> {
@@ -2878,6 +2978,9 @@ fn apply_node_props(
                     },
                     addresses: iv.addresses.clone(),
                 });
+            }
+            ast::NodeProp::Frr(f) => {
+                node.frr = Some(lower_frr(f)?);
             }
             ast::NodeProp::Wifi(w) => {
                 node.wifi.push(types::WifiConfig {

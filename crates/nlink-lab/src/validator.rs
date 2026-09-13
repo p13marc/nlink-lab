@@ -56,6 +56,10 @@ pub const RULE_IDS: &[&str] = &[
     "invalid-qdisc-value",
     "bond-member-exists",
     "vlan-parent-exists",
+    "frr-requires-routing-frr",
+    "frr-container-node",
+    "frr-invalid-value",
+    "bgp-neighbor-unresolved",
     "route-gateway-type",
     "interface-name-length",
     "wireguard-peer-exists",
@@ -81,6 +85,7 @@ pub const RULE_IDS: &[&str] = &[
     "depends-on-exists",
     "depends-on-cycle",
     // Warning-level
+    "frr-requires-forwarding",
     "mgmt-subnet-not-network-address",
     "unique-ips",
     "mtu-consistency",
@@ -98,6 +103,7 @@ pub fn rule_ids() -> &'static [&'static str] {
 /// [`RULE_IDS`] is an error. Kept as a list (not derived from position)
 /// so `rule_severity` is explicit; `warning_rules_are_listed` checks it.
 const WARNING_RULE_IDS: &[&str] = &[
+    "frr-requires-forwarding",
     "mgmt-subnet-not-network-address",
     "unique-ips",
     "mtu-consistency",
@@ -369,6 +375,7 @@ impl Topology {
         validate_rate_limit_refs(self, &interfaces, &mut issues);
         validate_qdiscs(self, &interfaces, &mut issues);
         validate_bond_and_vlan_refs(self, &interfaces, &mut issues);
+        validate_frr(self, &mut issues);
         validate_route_config(self, &mut issues);
         validate_interface_name_length(self, &interfaces, &mut issues);
         validate_wireguard_peers(self, &mut issues);
@@ -1002,6 +1009,184 @@ fn validate_bond_and_vlan_refs(
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+}
+
+/// `frr { … }` blocks (#65): only under `routing frr`, never on a
+/// container node, values must parse, BGP neighbours must resolve; a
+/// router that does not forward IPv4 is a warning.
+fn validate_frr(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    use crate::types::{FrrConfig, RoutingMode};
+    let frr_mode = topology.lab.routing == RoutingMode::Frr;
+    let check_values = |cfg: &FrrConfig, location: &str, issues: &mut Vec<ValidationIssue>| {
+        if let Some(o) = &cfg.ospf {
+            if let Some(a) = &o.area
+                && a.parse::<std::net::Ipv4Addr>().is_err()
+                && a.parse::<u32>().is_err()
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-invalid-value",
+                    message: format!("ospf area '{a}' is neither a dotted quad nor an integer"),
+                    location: Some(format!("{location}.ospf.area")),
+                });
+            }
+            if let Some(id) = &o.router_id
+                && id.parse::<std::net::Ipv4Addr>().is_err()
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-invalid-value",
+                    message: format!("ospf router-id '{id}' is not an IPv4 address"),
+                    location: Some(format!("{location}.ospf.router_id")),
+                });
+            }
+            if let (Some(h), Some(d)) = (o.hello, o.dead)
+                && h >= d
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-invalid-value",
+                    message: format!("ospf hello {h}s must be shorter than dead {d}s"),
+                    location: Some(format!("{location}.ospf.hello")),
+                });
+            }
+            for r in &o.redistribute {
+                if !matches!(r.as_str(), "connected" | "static" | "bgp" | "kernel") {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "frr-invalid-value",
+                        message: format!(
+                            "ospf redistribute '{r}' (connected, static, bgp, kernel)"
+                        ),
+                        location: Some(format!("{location}.ospf.redistribute")),
+                    });
+                }
+            }
+        }
+        if let Some(b) = &cfg.bgp {
+            if b.asn == 0 {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-invalid-value",
+                    message: "bgp as must be at least 1".to_string(),
+                    location: Some(format!("{location}.bgp.asn")),
+                });
+            }
+            if let Some(id) = &b.router_id
+                && id.parse::<std::net::Ipv4Addr>().is_err()
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-invalid-value",
+                    message: format!("bgp router-id '{id}' is not an IPv4 address"),
+                    location: Some(format!("{location}.bgp.router_id")),
+                });
+            }
+            for n in &b.networks {
+                if !n.contains("${") && parse_cidr(n).is_err() {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "frr-invalid-value",
+                        message: format!("bgp network '{n}' is not a CIDR"),
+                        location: Some(format!("{location}.bgp.networks")),
+                    });
+                }
+            }
+            for r in &b.redistribute {
+                if !matches!(r.as_str(), "connected" | "static" | "ospf" | "kernel") {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "frr-invalid-value",
+                        message: format!(
+                            "bgp redistribute '{r}' (connected, static, ospf, kernel)"
+                        ),
+                        location: Some(format!("{location}.bgp.redistribute")),
+                    });
+                }
+            }
+        }
+    };
+
+    if let Some(lab_cfg) = &topology.lab.frr {
+        if !frr_mode {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "frr-requires-routing-frr",
+                message: "lab has an frr block but `routing` is not `frr`".to_string(),
+                location: Some("lab.frr".to_string()),
+            });
+        }
+        check_values(lab_cfg, "lab.frr", issues);
+    }
+    for (name, profile) in sorted(&topology.profiles) {
+        if let Some(cfg) = &profile.frr {
+            if !frr_mode {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-requires-routing-frr",
+                    message: format!(
+                        "profile '{name}' has an frr block but the lab's `routing` is not `frr`"
+                    ),
+                    location: Some(format!("profiles.{name}.frr")),
+                });
+            }
+            check_values(cfg, &format!("profiles.{name}.frr"), issues);
+        }
+    }
+    for (node_name, node) in sorted(&topology.nodes) {
+        let location = format!("nodes.{node_name}.frr");
+        if let Some(cfg) = &node.frr {
+            if !frr_mode {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "frr-requires-routing-frr",
+                    message: format!(
+                        "node '{node_name}' has an frr block but the lab's `routing` is not `frr`"
+                    ),
+                    location: Some(location.clone()),
+                });
+            }
+            if node.is_container() {
+                issues.push(ValidationIssue { severity: Severity::Error, rule: "frr-container-node", message: format!("node '{node_name}' is a container; frr blocks run daemons in namespace nodes only"), location: Some(location.clone()) });
+            }
+            check_values(cfg, &location, issues);
+        }
+        if !frr_mode {
+            continue;
+        }
+        let Some(cfg) = topology.effective_frr(node) else {
+            continue;
+        };
+        let forwards = topology
+            .effective_sysctls(node)
+            .get("net.ipv4.ip_forward")
+            .is_some_and(|v| v == "1");
+        if !forwards {
+            issues.push(ValidationIssue {
+                severity: Severity::Warning,
+                rule: "frr-requires-forwarding",
+                message: format!("node '{node_name}' runs FRR but does not `forward ipv4`"),
+                location: Some(location.clone()),
+            });
+        }
+        if let Some(b) = &cfg.bgp {
+            for nb in &b.neighbors {
+                if let Err(e) = crate::frr::resolve_bgp_neighbor(topology, node_name, nb) {
+                    let msg = e.to_string();
+                    let msg = msg
+                        .strip_prefix("invalid topology: ")
+                        .unwrap_or(&msg)
+                        .to_string();
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "bgp-neighbor-unresolved",
+                        message: msg,
+                        location: Some(format!("{location}.bgp.neighbors")),
+                    });
+                }
             }
         }
     }

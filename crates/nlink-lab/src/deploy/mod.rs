@@ -977,11 +977,7 @@ pub async fn compute_layered_diff(
 
     let topology = crate::diff::diff_topologies(running.topology(), desired);
 
-    let auto_routes = if desired.lab.routing == crate::types::RoutingMode::Auto {
-        auto_generate_routes(desired)
-    } else {
-        BTreeMap::new()
-    };
+    let auto_routes = auto_routes_for(desired);
 
     let mut network = BTreeMap::new();
     let mut nftables = BTreeMap::new();

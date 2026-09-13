@@ -173,6 +173,9 @@ pub enum Stage {
     Tc,
     /// /etc/hosts and per-namespace /etc overlays.
     Dns,
+    /// FRR daemons (zebra + ospfd/bgpd) — after DNS overlays, before user
+    /// processes so services see converged routes (#65).
+    RoutingDaemons,
     /// Background processes and healthchecks.
     Processes,
     /// hostapd / wpa_supplicant / mesh join.
@@ -352,6 +355,12 @@ pub enum Op {
         node: String,
         wifi: WifiConfig,
     },
+    /// Start FRR daemons for a router node (#65); the spec (configs)
+    /// rides in the op so a config change restarts them.
+    FrrDaemons {
+        node: String,
+        spec: Box<crate::frr::FrrNodeSpec>,
+    },
 
     // ── diff-only (apply): inverses of the ops above ──
     DeleteNamespace {
@@ -400,6 +409,12 @@ pub enum Op {
         name: String,
         mode: crate::types::WifiMode,
     },
+    /// Stop a node's FRR daemons and remove their runtime directories.
+    KillFrrDaemons {
+        node: String,
+        pathspace: String,
+        daemons: Vec<crate::frr::Daemon>,
+    },
     RemoveDns {
         lab: String,
     },
@@ -440,6 +455,7 @@ impl Op {
             | Healthcheck { .. }
             | KillNodeProcesses { .. }
             | KillExec { .. } => Stage::Processes,
+            FrrDaemons { .. } | KillFrrDaemons { .. } => Stage::RoutingDaemons,
             WifiDaemon { .. } | KillWifiDaemon { .. } => Stage::Wifi,
         }
     }
@@ -487,6 +503,7 @@ impl Op {
             StartupDelay { node, .. } => format!("delay:{node}"),
             Exec { node, index, .. } | KillExec { node, index } => format!("exec:{node}:{index}"),
             Healthcheck { node, .. } => format!("healthcheck:{node}"),
+            FrrDaemons { node, .. } | KillFrrDaemons { node, .. } => format!("frr:{node}"),
             WifiDaemon { node, wifi } => format!("wifi:{node}:{}", wifi.name),
             KillWifiDaemon { node, name, .. } => format!("wifi:{node}:{name}"),
             KillNodeProcesses { node } => format!("procs:{node}"),
@@ -517,6 +534,11 @@ impl Op {
             CreateBridge { ns, name, .. } => DeleteBridge {
                 ns: ns.clone(),
                 name: name.clone(),
+            },
+            FrrDaemons { node, spec } => KillFrrDaemons {
+                node: node.clone(),
+                pathspace: spec.pathspace.clone(),
+                daemons: spec.daemons.clone(),
             },
             WifiDaemon { node, wifi } => KillWifiDaemon {
                 node: node.clone(),
@@ -583,6 +605,7 @@ impl Op {
                 | KillNodeProcesses { .. }
                 | KillExec { .. }
                 | KillWifiDaemon { .. }
+                | KillFrrDaemons { .. }
                 | RemoveDns { .. }
         )
     }
@@ -643,6 +666,16 @@ impl Op {
                 if exec.background { " (background)" } else { "" }
             ),
             Healthcheck { node, cmd, .. } => format!("{node}: healthcheck `{cmd}`"),
+            FrrDaemons { node, spec } => format!(
+                "{node}: frr {} (pathspace {})",
+                spec.daemons
+                    .iter()
+                    .map(|d| d.name())
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                spec.pathspace
+            ),
+            KillFrrDaemons { node, .. } => format!("{node}: stop frr daemons"),
             WifiDaemon { node, wifi } => format!("{node}: wifi {} ({:?})", wifi.name, wifi.mode),
             DeleteNamespace { ns, .. } => format!("delete namespace {ns}"),
             RemoveContainer { node, .. } => format!("remove container of {node}"),

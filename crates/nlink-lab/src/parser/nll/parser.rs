@@ -641,6 +641,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut mgmt_host_reachable = false;
     let mut dns = None;
     let mut routing = None;
+    let mut frr = None;
 
     // Parse optional inline runtime before block
     if eat_kw(tokens, pos, "runtime") {
@@ -674,6 +675,9 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                 dns = Some(expect_ident(tokens, pos)?);
             } else if eat_kw(tokens, pos, "routing") {
                 routing = Some(expect_ident(tokens, pos)?);
+                if routing.as_deref() == Some("frr") && check(tokens, *pos, &Token::LBrace) {
+                    frr = Some(parse_frr_block(tokens, pos)?);
+                }
             } else {
                 match at(tokens, *pos) {
                     Some(other) => {
@@ -707,6 +711,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         mgmt_host_reachable,
         dns,
         routing,
+        frr,
     })
 }
 
@@ -1027,6 +1032,9 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
     } else if check_kw(tokens, *pos, "wireguard") {
         *pos += 1;
         parse_wireguard_def(tokens, pos).map(ast::NodeProp::Wireguard)
+    } else if check_kw(tokens, *pos, "frr") {
+        *pos += 1;
+        parse_frr_block(tokens, pos).map(ast::NodeProp::Frr)
     } else if check_kw(tokens, *pos, "vxlan") {
         *pos += 1;
         parse_vxlan_def(tokens, pos).map(ast::NodeProp::Vxlan)
@@ -1057,7 +1065,7 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
                 tokens,
                 *pos,
                 format!(
-                    "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, macvlan, ipvlan, wifi, run), found {other}"
+                    "expected node property (forward, sysctl, lo, route, firewall, vrf, wireguard, vxlan, dummy, bond, vlan, macvlan, ipvlan, wifi, frr, run), found {other}"
                 ),
             )),
             None => Err(err(
@@ -1747,6 +1755,127 @@ fn parse_glued_word(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
         *pos += 1;
     }
     Ok(word)
+}
+
+/// `{ ospf [ { … } ] bgp { … } }` — FRR daemons (#65). The opening brace
+/// has not been consumed.
+fn parse_frr_block(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FrrDef> {
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut def = ast::FrrDef::default();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if eat_kw(tokens, pos, "ospf") {
+            def.ospf = Some(if check(tokens, *pos, &Token::LBrace) {
+                parse_ospf_block(tokens, pos)?
+            } else {
+                ast::OspfDef::default()
+            });
+        } else if eat_kw(tokens, pos, "bgp") {
+            def.bgp = Some(parse_bgp_block(tokens, pos)?);
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in frr block (ospf, bgp)"),
+                ),
+                None => err(tokens, *pos, "unexpected end of input in frr block".into()),
+            });
+        }
+    }
+    Ok(def)
+}
+
+fn parse_ospf_block(tokens: &[Spanned], pos: &mut usize) -> Result<ast::OspfDef> {
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut o = ast::OspfDef::default();
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if eat_kw(tokens, pos, "area") {
+            o.area = Some(parse_glued_word(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "router-id") {
+            o.router_id = Some(parse_value(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "passive") {
+            o.passive = parse_ident_list(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "hello") {
+            o.hello = Some(expect_duration(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "dead") {
+            o.dead = Some(expect_duration(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "redistribute") {
+            o.redistribute = parse_ident_list(tokens, pos)?;
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "unexpected {other} in ospf block (area, router-id, passive, hello, dead, redistribute)"
+                    ),
+                ),
+                None => err(tokens, *pos, "unexpected end of input in ospf block".into()),
+            });
+        }
+    }
+    Ok(o)
+}
+
+fn parse_bgp_block(tokens: &[Spanned], pos: &mut usize) -> Result<ast::BgpDef> {
+    expect(tokens, pos, &Token::LBrace)?;
+    let mut b = ast::BgpDef::default();
+    let open = *pos - 1;
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if eat(tokens, pos, &Token::As) {
+            b.asn = parse_value(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "router-id") {
+            b.router_id = Some(parse_value(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "neighbor") {
+            let node = parse_name(tokens, pos)?;
+            let mut nb = ast::BgpNeighborDef {
+                node,
+                remote_as: None,
+                remote: None,
+            };
+            loop {
+                if eat(tokens, pos, &Token::As) {
+                    nb.remote_as = Some(parse_value(tokens, pos)?);
+                } else if eat_kw(tokens, pos, "remote") {
+                    nb.remote = Some(parse_cidr_or_name(tokens, pos)?);
+                } else {
+                    break;
+                }
+            }
+            b.neighbors.push(nb);
+        } else if eat(tokens, pos, &Token::Network) {
+            b.networks.push(parse_cidr_or_name(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "redistribute") {
+            b.redistribute = parse_ident_list(tokens, pos)?;
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "unexpected {other} in bgp block (as, router-id, neighbor, network, redistribute)"
+                    ),
+                ),
+                None => err(tokens, *pos, "unexpected end of input in bgp block".into()),
+            });
+        }
+    }
+    if b.asn.is_empty() {
+        return Err(err(tokens, open, "bgp block requires `as N`".into()));
+    }
+    Ok(b)
 }
 
 /// `bond NAME { members [a, b] mode 802.3ad miimon 100 lacp-rate fast

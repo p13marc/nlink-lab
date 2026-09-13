@@ -114,6 +114,24 @@ pub enum Commands {
     /// to stderr. See docs/cli/lsp.md for editor configuration.
     Lsp(cmd::lsp::Args),
 
+    /// Live terminal UI for a running lab (nodes, interfaces, flows).
+    ///
+    /// Collects a metrics snapshot every `--interval` seconds with the
+    /// same collector `daemon` uses, which needs root like `diagnose`;
+    /// `--zenoh` / `--zenoh-connect` instead reads a running daemon's
+    /// stream, with no root and no write actions.
+    ///
+    /// KEYS
+    ///   up/down or j/k  select        Tab  next pane      s  cycle sort
+    ///   i  impair prompt (`delay 50ms loss 1%`)           c  clear
+    ///   p  partition    h  heal       /  filter    ?  help    q  quit
+    ///
+    /// `--once` prints a single text frame and exits — no terminal
+    /// control, so it is safe in pipes, CI and `watch -n1`. With `--json`
+    /// it prints the raw snapshot
+    /// (schema: docs/json-schemas/metrics-snapshot.schema.json).
+    Top(cmd::top::Args),
+
     /// Check a running lab for drift against its topology (exit 2 on drift).
     ///
     /// Compares every node's live links/addresses/routes/nftables with

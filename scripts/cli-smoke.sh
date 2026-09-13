@@ -90,5 +90,15 @@ printf 'Content-Length: %d\r\n\r\n%s' "${#req}" "$req" \
   | timeout 10 "$bin" -v lsp 2>/dev/null | grep -q '"capabilities"' \
   || { say "FAIL: lsp initialize did not answer with capabilities on stdout"; fail=1; }
 
+say "== top (headless)"
+# `--once` on a missing lab: a clean exit 1, never a hang.
+set +e; XDG_STATE_HOME="$tmp/state" timeout 10 "$bin" top no-such-lab --once >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 1 ] || { say "FAIL: top --once on a missing lab exited $rc (expected 1)"; fail=1; }
+# Without a tty the interactive form must refuse immediately, not hang or
+# garble the terminal.
+set +e; XDG_STATE_HOME="$tmp/state" timeout 10 "$bin" top no-such-lab </dev/null >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -ne 124 ] || { say "FAIL: top hung without a tty"; fail=1; }
+"$bin" top --help | grep -q -- '--once' || { say "FAIL: top --help lacks --once"; fail=1; }
+
 if [ "$fail" -ne 0 ]; then say "cli-smoke: FAILED"; exit 1; fi
 say "cli-smoke: OK"

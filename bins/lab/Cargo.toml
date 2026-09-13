@@ -51,6 +51,17 @@ miette = { version = "7", features = ["fancy"] }
 # `LanguageServer` trait uses native `async fn` (no `async-trait`).
 tower-lsp-server = "0.23"
 
+# `top` — live TUI (issue #63). ratatui's default `crossterm` backend is
+# pinned to the same crossterm we depend on directly, so only one
+# crossterm (and one raw-mode state machine) is ever in the tree;
+# `event-stream` is what lets the key reader and the metrics ticker share
+# a single `tokio::select!` instead of a reader thread.
+ratatui = { version = "0.30", features = ["crossterm_0_29"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
+tokio-stream = "0.1"
+# Parsing the lab's ISO 8601 `created_at` for the `top` header uptime.
+time = { workspace = true, features = ["parsing"] }
+
 # `spawn --wait-log REGEX` compiles the user's regex CLI-side and
 # passes it to `RunningLab::wait_for_log_line` (Plan 155 PR E).
 regex = "1"

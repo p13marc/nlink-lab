@@ -1340,6 +1340,22 @@ The daemon publishes on these Zenoh key expressions:
 - `nlink-lab/<lab>/metrics/snapshot` -- full metrics snapshot (all nodes, all interfaces)
 - `nlink-lab/<lab>/metrics/<node>/<iface>` -- per-interface metrics
 
+### Live TUI
+
+`nlink-lab top` puts the same data on one screen, refreshed in place:
+
+```bash
+sudo nlink-lab top mylab            # collect locally (needs root)
+nlink-lab top mylab --zenoh         # read a running daemon (no root)
+nlink-lab top mylab --once          # one plain-text frame, for scripts
+```
+
+Three panes — nodes, the selected node's interfaces (with the impairment in
+effect and where it came from), and its TCP flows. `↑↓`/`jk` select, `Tab`
+switches pane, `s` sorts, `/` filters, and `i`/`c`/`p`/`h` impair, clear,
+partition and heal the selected interface using the same calls as
+`nlink-lab impair`. Full reference: [`docs/cli/top.md`](cli/top.md).
+
 ### Streaming Metrics
 
 Subscribe from any machine (no root required):

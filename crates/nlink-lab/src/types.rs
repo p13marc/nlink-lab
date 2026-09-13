@@ -979,6 +979,75 @@ pub struct Impairment {
     pub limit: Option<String>,
 }
 
+impl Impairment {
+    /// Every property name [`Impairment::set_property`] accepts, in the
+    /// order they are listed to the user.
+    pub const PROPERTIES: [&'static str; 10] = [
+        "delay",
+        "jitter",
+        "loss",
+        "rate",
+        "corrupt",
+        "reorder",
+        "duplicate",
+        "delay-correlation",
+        "loss-correlation",
+        "limit",
+    ];
+
+    /// Set one property by its NLL/CLI name.
+    ///
+    /// Values are kept verbatim: the tc planner is what parses units, so
+    /// `impair --loss`, `edit --set-impair` and the `top` prompt all
+    /// behave identically. Returns the list of accepted names on an
+    /// unknown key, so callers do not each maintain their own copy.
+    pub fn set_property(&mut self, key: &str, value: &str) -> Result<(), String> {
+        let value = Some(value.trim().to_string());
+        match key.trim() {
+            "delay" => self.delay = value,
+            "jitter" => self.jitter = value,
+            "loss" => self.loss = value,
+            "rate" => self.rate = value,
+            "corrupt" => self.corrupt = value,
+            "reorder" => self.reorder = value,
+            "duplicate" => self.duplicate = value,
+            "delay-correlation" => self.delay_correlation = value,
+            "loss-correlation" => self.loss_correlation = value,
+            "limit" => self.limit = value,
+            other => {
+                return Err(format!(
+                    "unknown property {other:?} ({})",
+                    Self::PROPERTIES.join(", ")
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// The inverse of [`Impairment::set_property`]: a one-line
+    /// `delay 50ms loss 1%` rendering, empty when nothing is set.
+    pub fn summary(&self) -> String {
+        let mut parts = Vec::new();
+        for (key, value) in [
+            ("delay", &self.delay),
+            ("jitter", &self.jitter),
+            ("loss", &self.loss),
+            ("rate", &self.rate),
+            ("corrupt", &self.corrupt),
+            ("reorder", &self.reorder),
+            ("duplicate", &self.duplicate),
+            ("delay-correlation", &self.delay_correlation),
+            ("loss-correlation", &self.loss_correlation),
+            ("limit", &self.limit),
+        ] {
+            if let Some(v) = value {
+                parts.push(format!("{key} {v}"));
+            }
+        }
+        parts.join(" ")
+    }
+}
+
 /// Per-interface rate limiting.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct RateLimit {

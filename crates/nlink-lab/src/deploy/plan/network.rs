@@ -106,36 +106,46 @@ pub(crate) fn topology_to_network_config(
                          '{node_name}' missing vni"
                     ))
                 })?;
-                let local = if let Some(l) = &iface_config.local {
-                    Some(l.parse::<std::net::Ipv4Addr>().map_err(|e| {
+                // nlink 0.26 only plumbs IPv4 underlay addresses
+                // (`IFLA_VXLAN_LOCAL6`/`GROUP6` are dropped silently), so
+                // an IPv6 underlay is refused here rather than deployed
+                // as a tunnel without endpoints. The validator reports
+                // it first (`vxlan-underlay-address`).
+                let parse_underlay = |what: &str, v: &str| -> Result<std::net::IpAddr> {
+                    let ip: std::net::IpAddr = v.parse().map_err(|e| {
                         Error::invalid_topology(format!(
-                            "bad vxlan local address '{l}' on \
+                            "bad vxlan {what} address '{v}' on \
                              '{node_name}:{iface_name}': {e}"
                         ))
-                    })?)
-                } else {
-                    None
+                    })?;
+                    if ip.is_ipv6() {
+                        return Err(Error::invalid_topology(format!(
+                            "vxlan {what} address '{v}' on '{node_name}:{iface_name}' is IPv6: \
+                             an IPv6 underlay is not applied by nlink 0.26"
+                        )));
+                    }
+                    Ok(ip)
                 };
-                let remote = if let Some(r) = &iface_config.remote {
-                    Some(r.parse::<std::net::Ipv4Addr>().map_err(|e| {
-                        Error::invalid_topology(format!(
-                            "bad vxlan remote address '{r}' on \
-                             '{node_name}:{iface_name}': {e}"
-                        ))
-                    })?)
-                } else {
-                    None
-                };
+                let local = iface_config
+                    .local
+                    .as_deref()
+                    .map(|l| parse_underlay("local", l))
+                    .transpose()?;
+                let remote = iface_config
+                    .remote
+                    .as_deref()
+                    .map(|r| parse_underlay("remote", r))
+                    .transpose()?;
                 let port = iface_config.port;
                 let underlay = iface_config.underlay.clone();
                 let mtu = iface_config.mtu;
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.vxlan(vni).up();
                     if let Some(l) = local {
-                        b = b.vxlan_local(std::net::IpAddr::V4(l));
+                        b = b.vxlan_local(l);
                     }
                     if let Some(r) = remote {
-                        b = b.vxlan_remote(std::net::IpAddr::V4(r));
+                        b = b.vxlan_remote(r);
                     }
                     if let Some(p) = port {
                         b = b.vxlan_port(p);
@@ -491,15 +501,65 @@ pub(crate) fn with_vrf_routes(
     Ok(cfg)
 }
 
-/// Auto-generate static routes from the topology graph.
+/// Auto-generate static routes from the topology graph, per address
+/// family.
 ///
 /// For stub nodes (single neighbor): adds a default route.
 /// For transit nodes: runs BFS to find shortest paths to all remote subnets.
 /// Manual routes are preserved — auto routes only fill gaps.
+///
+/// IPv4 and IPv6 are computed independently (issue #72): a dual-stack
+/// stub gets both `default` and `::/0`, a router forwards a family only
+/// when its sysctl says so (`net.ipv4.ip_forward` /
+/// `net.ipv6.conf.all.forwarding`), and next hops never cross families.
 pub(crate) fn auto_generate_routes(
     topology: &Topology,
 ) -> BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>> {
+    let mut routes = auto_routes_for_family(topology, false);
+    for (node, v6) in auto_routes_for_family(topology, true) {
+        routes.entry(node).or_default().extend(v6);
+    }
+    routes
+}
+
+/// Does `existing` already carry a default route of this family?
+/// `default` is the v4 default unless its gateway is IPv6; `::/0` and
+/// `0.0.0.0/0` are explicit.
+fn has_default(existing: &BTreeMap<String, crate::types::RouteConfig>, v6: bool) -> bool {
+    existing.iter().any(|(dest, cfg)| {
+        let via_v6 = cfg
+            .via
+            .as_deref()
+            .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+            .map(|ip| ip.is_ipv6());
+        match dest.as_str() {
+            "::/0" => v6,
+            "0.0.0.0/0" => !v6,
+            "default" => via_v6.map_or(!v6, |is_v6| is_v6 == v6),
+            _ => false,
+        }
+    })
+}
+
+fn is_family(addr: &str, v6: bool) -> bool {
+    addr.split('/')
+        .next()
+        .and_then(|ip| ip.parse::<std::net::IpAddr>().ok())
+        .is_some_and(|ip| ip.is_ipv6() == v6)
+}
+
+fn auto_routes_for_family(
+    topology: &Topology,
+    v6: bool,
+) -> BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>> {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+    let default_key = if v6 { "::/0" } else { "default" };
+    let forward_sysctl = if v6 {
+        "net.ipv6.conf.all.forwarding"
+    } else {
+        "net.ipv4.ip_forward"
+    };
 
     // 1. Build adjacency: node_name → Vec<(neighbor_name, gateway_ip)>
     let mut adjacency: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
@@ -509,6 +569,8 @@ pub(crate) fn auto_generate_routes(
     // From point-to-point links
     for link in &topology.links {
         if let Some(addrs) = &link.addresses
+            && is_family(&addrs[0], v6)
+            && is_family(&addrs[1], v6)
             && let (Some(ep_a), Some(ep_b)) = (
                 EndpointRef::parse(&link.endpoints[0]),
                 EndpointRef::parse(&link.endpoints[1]),
@@ -535,15 +597,21 @@ pub(crate) fn auto_generate_routes(
         }
     }
 
-    // From network (bridge) memberships
+    // From network (bridge) memberships — every address of the family
+    // on the port counts (a port may carry several).
     for network in topology.networks.values() {
         let mut net_members: Vec<(String, String)> = Vec::new(); // (node, ip)
         for (ep_str, port) in &network.ports {
-            if let Some(ep) = EndpointRef::parse(ep_str)
-                && let Some(addr) = port.addresses.first()
-            {
+            let Some(ep) = EndpointRef::parse(ep_str) else {
+                continue;
+            };
+            let mut first = true;
+            for addr in port.addresses.iter().filter(|a| is_family(a, v6)) {
                 let ip = addr.split('/').next().unwrap_or(addr);
-                net_members.push((ep.node.clone(), ip.to_string()));
+                if first {
+                    net_members.push((ep.node.clone(), ip.to_string()));
+                    first = false;
+                }
                 node_subnets
                     .entry(ep.node.clone())
                     .or_default()
@@ -573,6 +641,13 @@ pub(crate) fn auto_generate_routes(
     let mut auto_routes: BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>> =
         BTreeMap::new();
 
+    let forwards = |name: &str| {
+        topology
+            .nodes
+            .get(name)
+            .is_some_and(|n| n.sysctls.get(forward_sysctl).is_some_and(|v| v == "1"))
+    };
+
     for node_name in &all_node_names {
         let neighbors = adjacency.get(node_name).cloned().unwrap_or_default();
         let existing_routes = &topology.nodes[node_name].routes;
@@ -581,40 +656,43 @@ pub(crate) fn auto_generate_routes(
             continue;
         }
 
+        // Default gateway for a non-router: prefer a neighbour that
+        // forwards this family (on a shared segment the first neighbour
+        // in name order is often another host), else the first one.
+        let gateway = neighbors
+            .iter()
+            .find(|(n, _)| forwards(n))
+            .unwrap_or(&neighbors[0])
+            .1
+            .clone();
+
+        let default_via =
+            |auto_routes: &mut BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>>,
+             gw: &str| {
+                if !has_default(existing_routes, v6) {
+                    auto_routes.entry(node_name.clone()).or_default().insert(
+                        default_key.to_string(),
+                        crate::types::RouteConfig {
+                            via: Some(gw.to_string()),
+                            dev: None,
+                            metric: None,
+                        },
+                    );
+                }
+            };
+
         // Stub node: single neighbor → default route
         if neighbors.len() == 1 || neighbors.iter().all(|(n, _)| n == &neighbors[0].0) {
-            if !existing_routes.contains_key("default") {
-                auto_routes.entry(node_name.clone()).or_default().insert(
-                    "default".to_string(),
-                    crate::types::RouteConfig {
-                        via: Some(neighbors[0].1.clone()),
-                        dev: None,
-                        metric: None,
-                    },
-                );
-            }
+            default_via(&mut auto_routes, &neighbors[0].1);
             continue;
         }
 
         // Transit node: BFS to find next-hop for remote subnets
-        // Only if this node has ip_forward enabled (is a router)
-        let is_router = topology.nodes[node_name]
-            .sysctls
-            .get("net.ipv4.ip_forward")
-            .is_some_and(|v| v == "1");
-
-        if !is_router {
-            // Non-router with multiple neighbors: just add default via first
-            if !existing_routes.contains_key("default") {
-                auto_routes.entry(node_name.clone()).or_default().insert(
-                    "default".to_string(),
-                    crate::types::RouteConfig {
-                        via: Some(neighbors[0].1.clone()),
-                        dev: None,
-                        metric: None,
-                    },
-                );
-            }
+        // Only if this node forwards this family (is a router)
+        if !forwards(node_name) {
+            // Non-router with multiple neighbors: default via the router
+            // among them (or the first neighbour).
+            default_via(&mut auto_routes, &gateway);
             continue;
         }
 
@@ -676,9 +754,5 @@ pub(crate) fn auto_generate_routes(
         }
     }
 
-    // 3. Convert to BTreeMap and return
     auto_routes
-        .into_iter()
-        .map(|(k, v)| (k, v.into_iter().collect()))
-        .collect()
 }

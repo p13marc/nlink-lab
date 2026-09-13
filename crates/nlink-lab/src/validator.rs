@@ -61,9 +61,11 @@ pub const RULE_IDS: &[&str] = &[
     "invalid-impairment-value",
     "invalid-nat-cidr",
     "invalid-route-dest",
-    "mgmt-ipv6-unsupported",
+    "nat-family-mismatch",
+    "firewall-match-expr",
     "mgmt-subnet-capacity",
     "vxlan-vni-range",
+    "vxlan-underlay-address",
     "wifi-channel-range",
     "macvlan-parent-set",
     "vrf-interface-exists",
@@ -369,9 +371,12 @@ impl Topology {
         validate_overlapping_subnets(self, &mut issues);
         validate_impairment_values(self, &mut issues);
         validate_nat_addresses(self, &mut issues);
+        validate_nat_families(self, &mut issues);
+        validate_firewall_match_exprs(self, &mut issues);
         validate_route_addresses(self, &mut issues);
         validate_mgmt_subnet(self, &mut issues);
         validate_vxlan_vni(self, &mut issues);
+        validate_vxlan_underlay(self, &mut issues);
         validate_wifi_channels(self, &mut issues);
         validate_macvlan_parents(self, &mut issues);
         validate_vrf_interfaces(self, &interfaces, &mut issues);
@@ -1359,6 +1364,144 @@ fn validate_nat_addresses(topology: &Topology, issues: &mut Vec<ValidationIssue>
     }
 }
 
+/// NAT `src`/`dst` and `target` must belong to the same address family
+/// (`masquerade src fd00::/64` is NAT66; `snat src fd00::/64 to 10.0.0.1`
+/// can never match).
+fn validate_nat_families(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        let Some(nat) = &node.nat else {
+            continue;
+        };
+        for (i, rule) in nat.rules.iter().enumerate() {
+            let family = |v: &Option<String>| -> Option<bool> {
+                let v = v.as_deref()?;
+                if v.contains("${") {
+                    return None;
+                }
+                crate::helpers::parse_ip_or_cidr(v)
+                    .ok()
+                    .map(|(ip, _)| ip.is_ipv6())
+            };
+            let fields = [
+                ("src", family(&rule.src), rule.src.as_deref()),
+                ("dst", family(&rule.dst), rule.dst.as_deref()),
+                ("target", family(&rule.target), rule.target.as_deref()),
+            ];
+            let mut known = fields
+                .iter()
+                .filter_map(|(name, fam, val)| fam.map(|f| (*name, f, val.unwrap_or_default())));
+            let Some((first_name, first_v6, first_val)) = known.next() else {
+                continue;
+            };
+            for (name, v6, val) in known {
+                if v6 != first_v6 {
+                    let fam = |v6: bool| if v6 { "IPv6" } else { "IPv4" };
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "nat-family-mismatch",
+                        message: format!(
+                            "NAT rule {first_name} '{first_val}' ({}) and {name} '{val}' ({}) are different address families",
+                            fam(first_v6),
+                            fam(v6)
+                        ),
+                        location: Some(format!("nodes.{node_name}.nat.rules[{i}]")),
+                    });
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Every firewall `match_expr` must lower to nftables expressions. The
+/// planner's parser is pure (it only builds rule bytes), so running it
+/// here turns deploy-time failures — unsupported tokens, `ip saddr` with
+/// an IPv6 address — into validation errors.
+fn validate_firewall_match_exprs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    use nlink::netlink::nftables::types::{Family, Rule};
+    for (node_name, node) in sorted(&topology.nodes) {
+        let Some(fw) = &node.firewall else {
+            continue;
+        };
+        for (i, rule) in fw.rules.iter().enumerate() {
+            let Some(expr) = rule.match_expr.as_deref() else {
+                continue;
+            };
+            if expr.trim().is_empty() || expr.contains("${") {
+                continue;
+            }
+            let probe = Rule::new("probe", "input").family(Family::Inet);
+            if let Err(e) = crate::deploy::plan::nftables::apply_match_expr(probe, expr) {
+                let msg = e.to_string();
+                let msg = msg
+                    .strip_prefix("deploy failed: ")
+                    .unwrap_or(&msg)
+                    .to_string();
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "firewall-match-expr",
+                    message: msg,
+                    location: Some(format!("nodes.{node_name}.firewall.rules[{i}]")),
+                });
+            }
+        }
+    }
+}
+
+/// VXLAN `local`/`remote` must be IP addresses of the same family, and
+/// (until nlink plumbs `IFLA_VXLAN_LOCAL6`/`GROUP6`) IPv4.
+fn validate_vxlan_underlay(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        for (iface_name, iface) in sorted(&node.interfaces) {
+            if iface.kind != Some(InterfaceKind::Vxlan) {
+                continue;
+            }
+            let location = Some(format!("nodes.{node_name}.interfaces.{iface_name}"));
+            let mut parsed: Vec<(&str, IpAddr)> = Vec::new();
+            for (field, value) in [("local", &iface.local), ("remote", &iface.remote)] {
+                let Some(v) = value else {
+                    continue;
+                };
+                if v.contains("${") {
+                    continue;
+                }
+                match v.parse::<IpAddr>() {
+                    Ok(ip) => parsed.push((field, ip)),
+                    Err(e) => issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "vxlan-underlay-address",
+                        message: format!("VXLAN {field} address '{v}' is invalid: {e}"),
+                        location: location.clone(),
+                    }),
+                }
+            }
+            if let [(_, a), (_, b)] = parsed[..]
+                && a.is_ipv6() != b.is_ipv6()
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "vxlan-underlay-address",
+                    message: format!(
+                        "VXLAN local '{a}' and remote '{b}' are different address families"
+                    ),
+                    location: location.clone(),
+                });
+                continue;
+            }
+            if let Some((field, ip)) = parsed.iter().find(|(_, ip)| ip.is_ipv6()) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "vxlan-underlay-address",
+                    message: format!(
+                        "VXLAN {field} '{ip}' is IPv6: an IPv6 underlay is not applied by nlink 0.26 (IFLA_VXLAN_LOCAL6/GROUP6 are not plumbed); use an IPv4 underlay"
+                    ),
+                    location: location.clone(),
+                });
+            }
+        }
+    }
+}
+
 fn check_route_dest(dest: &str, location: String, issues: &mut Vec<ValidationIssue>) {
     if check_unresolved(dest, location.clone(), issues) {
         return;
@@ -1442,8 +1585,8 @@ fn validate_route_addresses(topology: &Topology, issues: &mut Vec<ValidationIssu
     });
 }
 
-/// The management subnet must be IPv4, sized for every node plus the
-/// bridge (`.1`), and given as a network address.
+/// The management subnet (IPv4 or IPv6) must be sized for every node
+/// plus the bridge (first host address), and given as a network address.
 fn validate_mgmt_subnet(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     let Some(mgmt) = &topology.lab.mgmt_subnet else {
         return;
@@ -1464,23 +1607,9 @@ fn validate_mgmt_subnet(topology: &Topology, issues: &mut Vec<ValidationIssue>) 
             return;
         }
     };
-    if ip.is_ipv6() {
-        issues.push(ValidationIssue {
-            severity: Severity::Error,
-            rule: "mgmt-ipv6-unsupported",
-            message: format!("management subnet '{mgmt}' is IPv6; only IPv4 is supported"),
-            location: Some(location),
-        });
-        return;
-    }
-
-    let node_count = topology.nodes.len() as u64;
+    let node_count = topology.nodes.len() as u128;
     let needed = node_count + 1;
-    let usable = if prefix >= 31 {
-        0
-    } else {
-        (1u64 << (32 - u32::from(prefix))) - 2
-    };
+    let usable = crate::helpers::mgmt_usable_hosts(ip, prefix);
     if usable < needed {
         issues.push(ValidationIssue {
             severity: Severity::Error,
@@ -3200,7 +3329,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
     }
 
     #[test]
-    fn test_mgmt_subnet_ipv6_unsupported() {
+    fn test_mgmt_subnet_ipv6_accepted() {
         let mut topo = crate::Lab::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
@@ -3210,8 +3339,120 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             .build();
         topo.lab.mgmt_subnet = Some("fd00:20::/64".into());
         let result = validate_topo(topo);
-        assert_eq!(rules_of(&result, "mgmt-ipv6-unsupported").len(), 1);
+        assert!(!result.has_errors(), "{:?}", result.issues());
         assert!(rules_of(&result, "mgmt-subnet-capacity").is_empty());
+    }
+
+    #[test]
+    fn test_mgmt_subnet_ipv6_capacity() {
+        let mut topo = crate::Lab::new("t")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .node("c", |n| n)
+            .build();
+        // /126 → 2 usable hosts, bridge + 3 nodes need 4.
+        topo.lab.mgmt_subnet = Some("fd00:20::/126".into());
+        let result = validate_topo(topo);
+        let hits = rules_of(&result, "mgmt-subnet-capacity");
+        assert_eq!(hits.len(), 1, "{:?}", result.issues());
+        assert!(hits[0].message.contains("2 usable"));
+        assert!(hits[0].message.contains("4 are needed"));
+    }
+
+    #[test]
+    fn test_nat_family_mismatch() {
+        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        topo.nodes.get_mut("r").unwrap().nat = Some(crate::types::NatConfig {
+            rules: vec![
+                crate::types::NatRule {
+                    action: crate::types::NatAction::Snat,
+                    src: Some("fd00:1::/64".into()),
+                    dst: None,
+                    target: Some("10.0.0.1".into()),
+                    target_port: None,
+                },
+                crate::types::NatRule {
+                    action: crate::types::NatAction::Masquerade,
+                    src: Some("fd00:2::/64".into()),
+                    dst: None,
+                    target: None,
+                    target_port: None,
+                },
+            ],
+        });
+        let result = validate_topo(topo);
+        let hits = rules_of(&result, "nat-family-mismatch");
+        assert_eq!(hits.len(), 1, "{:?}", result.issues());
+        assert!(hits[0].message.contains("IPv6"));
+        assert!(hits[0].message.contains("IPv4"));
+        assert_eq!(hits[0].location.as_deref(), Some("nodes.r.nat.rules[0]"));
+    }
+
+    #[test]
+    fn test_firewall_match_expr_ip6_ok_and_family_mismatch() {
+        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        topo.nodes.get_mut("r").unwrap().firewall = Some(crate::types::FirewallConfig {
+            policy: None,
+            rules: vec![
+                crate::types::FirewallRule {
+                    match_expr: Some("ip6 saddr fd00::/64 tcp dport 22".into()),
+                    action: Some("accept".into()),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("ip saddr fd00::/64".into()),
+                    action: Some("drop".into()),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("bogus 1".into()),
+                    action: Some("drop".into()),
+                },
+            ],
+        });
+        let result = validate_topo(topo);
+        let hits = rules_of(&result, "firewall-match-expr");
+        assert_eq!(hits.len(), 2, "{:?}", result.issues());
+        assert!(
+            hits[0].message.contains("use 'ip6 saddr'"),
+            "{}",
+            hits[0].message
+        );
+        assert_eq!(
+            hits[0].location.as_deref(),
+            Some("nodes.r.firewall.rules[1]")
+        );
+        assert!(hits[1].message.contains("unsupported firewall match token"));
+    }
+
+    #[test]
+    fn test_vxlan_underlay_address_rules() {
+        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        let mut vx = crate::types::InterfaceConfig {
+            kind: Some(InterfaceKind::Vxlan),
+            vni: Some(100),
+            ..Default::default()
+        };
+        vx.local = Some("10.0.0.1".into());
+        vx.remote = Some("fd00::2".into());
+        topo.nodes
+            .get_mut("r")
+            .unwrap()
+            .interfaces
+            .insert("vx0".into(), vx.clone());
+        let result = validate_topo(topo.clone());
+        let hits = rules_of(&result, "vxlan-underlay-address");
+        assert_eq!(hits.len(), 1, "{:?}", result.issues());
+        assert!(hits[0].message.contains("different address families"));
+
+        vx.local = Some("fd00::1".into());
+        topo.nodes
+            .get_mut("r")
+            .unwrap()
+            .interfaces
+            .insert("vx0".into(), vx);
+        let result = validate_topo(topo);
+        let hits = rules_of(&result, "vxlan-underlay-address");
+        assert_eq!(hits.len(), 1, "{:?}", result.issues());
+        assert!(hits[0].message.contains("IPv6 underlay is not applied"));
     }
 
     #[test]

@@ -283,7 +283,8 @@ network lan {
 ```
 
 The pool is `10.0.0.0/8` and supports `/24` today; other prefixes
-return a clear error. (Round-5 §2.5.)
+return a clear error. (Round-5 §2.5.) `auto` is IPv4-only — give IPv6
+segments an explicit prefix or a named `pool`.
 
 Nested loops produce a Cartesian product; see
 [`docs/cookbook/satellite-mesh.md`](cookbook/satellite-mesh.md)
@@ -401,6 +402,57 @@ Range `1..4` is inclusive: 1, 2, 3, 4.
 ```
 
 ---
+
+### 14. IPv6 and Dual-Stack
+
+Every address position accepts IPv6: link pairs, `network` ports,
+`route … via`, `lo`, `mgmt`, `pool` bases, `subnet()`/`host()`, NAT
+and firewall operands. A port may carry one address per family, which
+is how a dual-stack segment is written:
+
+```nll-ignore
+profile router { forward ipv4  forward ipv6 }
+
+network lan {
+  members [router:eth0, host:eth0]
+  port router:eth0 { 10.0.1.1/24 fd00:1::1/64 }
+  port host:eth0   { 10.0.1.2/24 fd00:1::2/64 }
+}
+
+node router : router {
+  nat { masquerade src fd00:2::/64 }          # NAT66
+}
+node host {
+  firewall policy drop {
+    accept icmpv6 135                   # NDP must pass a default drop
+    accept icmpv6 136
+    accept src fd00:1::1/128                 # emitted as `ip6 saddr`
+    accept src 10.0.1.0/24                   # emitted as `ip saddr`
+  }
+}
+```
+
+- `routing auto` computes each family independently: a dual-stack stub
+  gets both `default` and `::/0`, and a node is a router for a family
+  only when it forwards it (`forward ipv4` / `forward ipv6`).
+- A point-to-point `link` carries one address pair; dual-stack per
+  interface goes through `network` ports.
+- `link a:eth0 -- b:eth0 { subnet fd00:2::/64 }` derives `::1`/`::2`;
+  a `/127` uses both addresses of the block (like IPv4 `/31`).
+- `dnat … to [fd00::2]:8080` — brackets separate an IPv6 target from
+  its port (`fd00::2:8080` is itself a valid address).
+- `mgmt fd00:20::/64 [host-reachable]` — the bridge takes `::1`, nodes
+  `::2`, `::3`, … in name order; addresses are assigned with `nodad`
+  so the segment is usable immediately.
+- Validation catches mixed families early: `nat-family-mismatch`
+  (`snat src fd00::/64 to 10.0.0.1`), `firewall-match-expr`
+  (`ip saddr fd00::/64` — use `ip6 saddr`), `vxlan-underlay-address`
+  (VXLAN needs an IPv4 underlay until nlink plumbs `IFLA_VXLAN_LOCAL6`).
+- `subnet auto/N` stays IPv4 (`10.0.0.0/8`).
+- Interface addresses other than `mgmt0` still perform Duplicate Address
+  Detection: allow ~1 s before the first IPv6 packet, as
+  `examples/ipv6-dual-stack.nll` documents.
+
 
 ## Examples
 
@@ -1067,7 +1119,7 @@ lab_decl       = "lab" STRING ("runtime" STRING)? lab_block?
 lab_block      = "{" lab_prop* "}"
 lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
                | "version" STRING | "author" STRING | "tags" ident_list
-               | "mgmt" CIDR ("host-reachable")?
+               | "mgmt" CIDR ("host-reachable")?   # IPv4 or IPv6
                | "dns" ("hosts" | "off")
                | "routing" ("auto" | "manual")
 
@@ -1086,7 +1138,7 @@ network        = "network" IDENT "{" network_prop* "}"
 impair         = "impair" endpoint impair_props
 rate           = "rate" endpoint rate_props
 defaults       = "defaults" ("link" | "impair" | "rate" | IDENT) block
-pool           = "pool" IDENT CIDR "/" INT
+pool           = "pool" IDENT CIDR "/" INT        # IPv4 or IPv6; INT ≤ 32 / 128
 pattern        = ("mesh" | "ring" | "star") IDENT block
 validate       = "validate" "{" assertion* "}"
 param          = "param" IDENT ("default" value)?
@@ -1156,7 +1208,8 @@ site           = "site" IDENT STRING? "{" statement* "}"
                # All node/link/network names inside are prefixed with "site-"
 
 nat_rule       = "masquerade" ("src" CIDR)?
-               | "dnat" ("dst" CIDR)? "to" IP (":" INT)?
+               | "dnat" ("dst" CIDR)? "to" (IP | "[" IP "]") (":" INT)?
+               # an IPv6 target with a port needs brackets: to [fd00::2]:8080
                | "snat" ("src" CIDR)? "to" IP
                | "translate" CIDR "to" CIDR
 
@@ -1192,10 +1245,11 @@ bench_prop     = "duration" DURATION | "streams" INT | "udp"
                | "count" INT | "assert" IDENT ("above"|"below") value
 
 # ── IP computation functions ────────────────────
-# Built-in functions evaluated at lowering time:
+# Built-in functions evaluated at lowering time (IPv4 and IPv6):
 #   subnet(base_cidr, new_prefix, index) → CIDR
 #   host(cidr, host_number) → IP
 # Example: host(subnet("10.0.0.0/16", 24, 18), 1) → "10.0.18.1"
+#          host(subnet("fd00::/48", 64, 1), 1)    → "fd00:0:0:1::1"
 
 # ── Conditional logic ───────────────────────────
 if_block       = "if" condition "{" statement* "}"
@@ -1203,9 +1257,11 @@ condition      = expr ("==" | "!=" | "<" | ">" | "<=" | ">=") expr
                | condition ("&&" | "||") condition
 
 # ── Loopback pool allocation ────────────────────
-# lo pool IDENT — allocate from named pool
+# lo pool IDENT — allocate from named pool (IPv4 /32 or IPv6 /128)
 # Example: pool loopbacks 10.255.0.0/24 /32
 #          node r1 { lo pool loopbacks }  → 10.255.0.0/32
+#          pool loops6 fd00:ff::/112 /128
+#          node r2 { lo pool loops6 }     → fd00:ff::/128
 
 # ── Wi-Fi ───────────────────────────────────────
 wifi_prop      = "wifi" IDENT "mode" ("ap" | "station" | "mesh") wifi_block?

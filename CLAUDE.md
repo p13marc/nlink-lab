@@ -103,7 +103,7 @@ crates/nlink-lab/src/
       parser.rs     # Recursive-descent parser → AST
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (40 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (42 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -129,7 +129,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (34 top-level; 43 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (36 top-level; 45 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -212,6 +212,9 @@ conditional logic (`if` blocks with `==`/`!=`/`<`/`>`/`&&`/`||`),
 from topology graph), fleet `for_each` imports (instantiate templates
 N times), glob patterns in network members (`*-black:fo`),
 `param` declarations with CLI `--set` for parameterized topologies,
+first-class IPv6 (dual-stack `port` addresses, `ip6` firewall matches,
+NAT66, IPv6 `mgmt`, `subnet()`/`host()`/pools on u128, per-family
+`routing auto`, `dnat … to [addr]:port`),
 network (bridge) blocks, and per-pair impairment matrices inside
 `network` blocks (`impair NODE -- NODE { delay … loss … rate-cap … }`
 — one HTB+netem+flower tree per source interface, built via nlink's

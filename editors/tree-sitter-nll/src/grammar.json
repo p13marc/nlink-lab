@@ -380,8 +380,17 @@
               "value": "mgmt"
             },
             {
-              "type": "SYMBOL",
-              "name": "cidr"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "cidr"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "ipv6_cidr"
+                }
+              ]
             },
             {
               "type": "CHOICE",

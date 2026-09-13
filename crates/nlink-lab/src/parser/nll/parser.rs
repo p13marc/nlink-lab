@@ -1252,7 +1252,13 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 None
             };
             expect_kw(tokens, pos, "to")?;
+            // `to [fd00::2]:8080` — brackets disambiguate an IPv6 target
+            // from its port (`fd00::2:8080` lexes as one address).
+            let bracketed = eat(tokens, pos, &Token::LBracket);
             let target = parse_cidr_or_name(tokens, pos)?;
+            if bracketed {
+                expect(tokens, pos, &Token::RBracket)?;
+            }
             // Optional :port (only if Colon follows, not already consumed by CIDR)
             let target_port = if eat(tokens, pos, &Token::Colon) {
                 Some(expect_port(tokens, pos, "port")?)
@@ -1723,7 +1729,7 @@ fn parse_macvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Macvlan
                 mode = Some(expect_ident(tokens, pos)?);
             } else if eat_kw(tokens, pos, "address") {
                 addresses.push(parse_cidr_or_name(tokens, pos)?);
-            } else if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+            } else if let Some(Token::Cidr(c) | Token::Ipv6Cidr(c)) = at(tokens, *pos) {
                 addresses.push(c.clone());
                 *pos += 1;
             } else {
@@ -1781,7 +1787,7 @@ fn parse_ipvlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::IpvlanDe
                 mode = Some(expect_ident(tokens, pos)?);
             } else if eat_kw(tokens, pos, "address") {
                 addresses.push(parse_cidr_or_name(tokens, pos)?);
-            } else if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+            } else if let Some(Token::Cidr(c) | Token::Ipv6Cidr(c)) = at(tokens, *pos) {
                 addresses.push(c.clone());
                 *pos += 1;
             } else {
@@ -1859,7 +1865,7 @@ fn parse_wifi_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WifiDef> {
                 passphrase = Some(expect_string(tokens, pos)?);
             } else if eat_kw(tokens, pos, "mesh-id") {
                 mesh_id = Some(expect_string(tokens, pos)?);
-            } else if let Some(Token::Cidr(c)) = at(tokens, *pos) {
+            } else if let Some(Token::Cidr(c) | Token::Ipv6Cidr(c)) = at(tokens, *pos) {
                 addresses.push(c.clone());
                 *pos += 1;
             } else if eat_kw(tokens, pos, "address") {
@@ -2366,11 +2372,9 @@ fn parse_port_block(tokens: &[Spanned], pos: &mut usize, endpoint: String) -> Re
             port.tagged = true;
         } else if eat_kw(tokens, pos, "untagged") {
             port.untagged = true;
-        } else if matches!(at(tokens, *pos), Some(Token::Cidr(_))) {
-            if let Some(Token::Cidr(c)) = at(tokens, *pos) {
-                port.addresses.push(c.clone());
-                *pos += 1;
-            }
+        } else if let Some(Token::Cidr(c) | Token::Ipv6Cidr(c)) = at(tokens, *pos) {
+            port.addresses.push(c.clone());
+            *pos += 1;
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -3728,6 +3732,101 @@ network wan {
             }
             _ => panic!("expected Network"),
         }
+    }
+
+    #[test]
+    fn test_ipv6_bare_cidr_shorthands() {
+        // macvlan / ipvlan / wifi blocks and network ports accept a bare
+        // IPv6 CIDR exactly like a bare IPv4 one (issue #72).
+        let file = parse_nll(
+            r#"
+lab "t"
+node a {
+  macvlan mv0 parent "eth0" { fd00:a::1/64 }
+  ipvlan iv0 parent "eth0" { fd00:b::1/64 }
+  wifi wlan0 mode station { ssid "x" fd00:c::1/64 }
+}
+network lan {
+  members [a:eth1]
+  port a:eth1 { fd00:d::1/64 10.0.0.1/24 }
+}
+"#,
+        );
+        let mut found = Vec::new();
+        for stmt in &file.statements {
+            match stmt {
+                ast::Statement::Node(n) => {
+                    for prop in &n.props {
+                        match prop {
+                            ast::NodeProp::Macvlan(m) => found.push(m.addresses[0].clone()),
+                            ast::NodeProp::Ipvlan(i) => found.push(i.addresses[0].clone()),
+                            ast::NodeProp::Wifi(w) => found.push(w.addresses[0].clone()),
+                            _ => {}
+                        }
+                    }
+                }
+                ast::Statement::Network(net) => {
+                    let port = net.ports.iter().find(|p| p.endpoint == "a:eth1").unwrap();
+                    found.push(port.addresses.join(" "));
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(
+            found,
+            vec![
+                "fd00:a::1/64",
+                "fd00:b::1/64",
+                "fd00:c::1/64",
+                "fd00:d::1/64 10.0.0.1/24"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_dnat_v6_bracketed_target_port() {
+        let file = parse_nll(
+            r#"
+lab "t"
+node r {
+  nat {
+    dnat dst 2001:db8::1/128 to [fd00::2]:8080
+    dnat to fd00::2:8080
+    dnat to 10.0.0.2:80
+  }
+}
+"#,
+        );
+        let node = file
+            .statements
+            .iter()
+            .find_map(|s| match s {
+                ast::Statement::Node(n) => Some(n),
+                _ => None,
+            })
+            .unwrap();
+        let rules: Vec<&ast::NatRuleDef> = node
+            .props
+            .iter()
+            .filter_map(|p| match p {
+                ast::NodeProp::Nat(nat) => Some(nat.items.iter()),
+                _ => None,
+            })
+            .flatten()
+            .filter_map(|item| match item {
+                ast::NatItem::Rule(r) => Some(r),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rules.len(), 3);
+        assert_eq!(rules[0].dst.as_deref(), Some("2001:db8::1/128"));
+        assert_eq!(rules[0].target.as_deref(), Some("fd00::2"));
+        assert_eq!(rules[0].target_port, Some(8080));
+        // Without brackets the whole thing is one IPv6 address.
+        assert_eq!(rules[1].target.as_deref(), Some("fd00::2:8080"));
+        assert_eq!(rules[1].target_port, None);
+        assert_eq!(rules[2].target.as_deref(), Some("10.0.0.2"));
+        assert_eq!(rules[2].target_port, Some(80));
     }
 
     #[test]

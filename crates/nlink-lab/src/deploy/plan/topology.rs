@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 
 use crate::deploy::op::{Op, PortVlans};
 use crate::error::{Error, Result};
-use crate::helpers::parse_cidr;
 use crate::types::{DnsMode, EndpointRef, Topology};
 
 use super::process::build_create_opts;
@@ -50,37 +49,22 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
     if topology.lab.mgmt_host_reachable
         && let Some(mgmt_subnet) = &topology.lab.mgmt_subnet
     {
-        let (base_ip, prefix) = parse_cidr(mgmt_subnet)?;
-        let std::net::IpAddr::V4(base_v4) = base_ip else {
-            return Err(Error::deploy_failed("mgmt subnet must be IPv4"));
-        };
-        let base_v4 = match crate::helpers::network_address(std::net::IpAddr::V4(base_v4), prefix) {
-            std::net::IpAddr::V4(v) => v,
-            std::net::IpAddr::V6(_) => unreachable!(),
-        };
-        let base = u32::from(base_v4);
-        let usable_hosts = (1u64 << (32 - prefix.min(32) as u32)).saturating_sub(2);
-        let node_count = topology.nodes.len() as u64;
-        if node_count + 1 > usable_hosts {
-            return Err(Error::deploy_failed(format!(
-                "mgmt subnet {mgmt_subnet} has {usable_hosts} usable host address(es) but the bridge plus {node_count} nodes need {}",
-                node_count + 1
-            )));
-        }
+        // IPv4 or IPv6: bridge = first host address, nodes follow in
+        // name order (BTreeMap iterates sorted). Capacity errors here.
+        let mgmt = crate::helpers::mgmt_addresses(mgmt_subnet, topology.nodes.len())?;
         let bridge = topology.lab.mgmt_bridge_name();
         ops.push(Op::CreateMgmtBridge {
             name: bridge.clone(),
-            ip: std::net::Ipv4Addr::from(base + 1),
-            prefix,
+            ip: mgmt.bridge,
+            prefix: mgmt.prefix,
         });
-        // nodes in name order: .2, .3, … (BTreeMap iterates sorted)
         for (idx, node_name) in topology.nodes.keys().enumerate() {
             ops.push(Op::CreateMgmtVeth {
                 node: node_name.clone(),
                 peer: topology.lab.mgmt_peer_name(idx),
                 bridge: bridge.clone(),
-                node_ip: std::net::Ipv4Addr::from(base + 2 + idx as u32),
-                prefix,
+                node_ip: mgmt.nodes[idx],
+                prefix: mgmt.prefix,
             });
         }
     }

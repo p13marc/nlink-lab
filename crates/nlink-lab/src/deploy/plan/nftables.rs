@@ -131,8 +131,8 @@ pub(crate) fn topology_to_nftables_config(
                         t = t.rule_keyed("postrouting", &key, move |mut r| {
                             if let Some(src) = &rule_clone.src {
                                 let (addr, prefix) =
-                                    parse_v4_cidr(src).expect("validated NAT CIDR must parse");
-                                r = r.match_saddr_v4(addr, prefix);
+                                    parse_addr_match(src).expect("validated NAT CIDR must parse");
+                                r = match_addr(r, Dir::Saddr, addr, prefix);
                             }
                             r.masquerade()
                         });
@@ -142,13 +142,13 @@ pub(crate) fn topology_to_nftables_config(
                         t = t.rule_keyed("postrouting", &key, move |mut r| {
                             if let Some(src) = &rule_clone.src {
                                 let (addr, prefix) =
-                                    parse_v4_cidr(src).expect("validated NAT CIDR must parse");
-                                r = r.match_saddr_v4(addr, prefix);
+                                    parse_addr_match(src).expect("validated NAT CIDR must parse");
+                                r = match_addr(r, Dir::Saddr, addr, prefix);
                             }
                             if let Some(target) = &rule_clone.target {
-                                let addr: std::net::Ipv4Addr =
+                                let addr: std::net::IpAddr =
                                     target.parse().expect("validated NAT target must parse");
-                                r = r.snat(addr, None);
+                                r = nat_target(r, NatAction::Snat, addr, None);
                             }
                             r
                         });
@@ -158,13 +158,13 @@ pub(crate) fn topology_to_nftables_config(
                         t = t.rule_keyed("prerouting", &key, move |mut r| {
                             if let Some(dst) = &rule_clone.dst {
                                 let (addr, prefix) =
-                                    parse_v4_cidr(dst).expect("validated NAT CIDR must parse");
-                                r = r.match_daddr_v4(addr, prefix);
+                                    parse_addr_match(dst).expect("validated NAT CIDR must parse");
+                                r = match_addr(r, Dir::Daddr, addr, prefix);
                             }
                             if let Some(target) = &rule_clone.target {
-                                let addr: std::net::Ipv4Addr =
+                                let addr: std::net::IpAddr =
                                     target.parse().expect("validated NAT target must parse");
-                                r = r.dnat(addr, rule_clone.target_port);
+                                r = nat_target(r, NatAction::Dnat, addr, rule_clone.target_port);
                             }
                             r
                         });
@@ -187,23 +187,78 @@ pub(crate) fn topology_to_nftables_config(
 /// `.expect()`. Surfaces the offending value in the error.
 pub(crate) fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Result<()> {
     for nat_rule in &nat.rules {
+        let mut match_family: Option<(&str, &str, bool)> = None;
         if let Some(src) = &nat_rule.src {
-            parse_v4_cidr(src).map_err(|e| {
+            let (ip, _) = parse_addr_match(src).map_err(|e| {
                 Error::deploy_failed(format!("invalid src CIDR '{src}' in NAT rule: {e}"))
             })?;
+            match_family = Some(("src", src, ip.is_ipv6()));
         }
         if let Some(dst) = &nat_rule.dst {
-            parse_v4_cidr(dst).map_err(|e| {
+            let (ip, _) = parse_addr_match(dst).map_err(|e| {
                 Error::deploy_failed(format!("invalid dst CIDR '{dst}' in NAT rule: {e}"))
             })?;
+            match_family = Some(("dst", dst, ip.is_ipv6()));
         }
         if let Some(target) = &nat_rule.target {
-            target
-                .parse::<std::net::Ipv4Addr>()
+            let ip = target
+                .parse::<std::net::IpAddr>()
                 .map_err(|e| Error::deploy_failed(format!("invalid NAT target '{target}': {e}")))?;
+            if let Some((field, value, v6)) = match_family
+                && v6 != ip.is_ipv6()
+            {
+                return Err(Error::deploy_failed(format!(
+                    "NAT rule {field} '{value}' ({}) and target '{target}' ({}) are different address families",
+                    family_name(v6),
+                    family_name(ip.is_ipv6())
+                )));
+            }
         }
     }
     Ok(())
+}
+
+fn family_name(v6: bool) -> &'static str {
+    if v6 { "IPv6" } else { "IPv4" }
+}
+
+/// Which packet address a match applies to.
+#[derive(Clone, Copy)]
+enum Dir {
+    Saddr,
+    Daddr,
+}
+
+/// Add a source/destination address match of the right family.
+fn match_addr(
+    rule: nlink::netlink::nftables::types::Rule,
+    dir: Dir,
+    ip: std::net::IpAddr,
+    prefix: u8,
+) -> nlink::netlink::nftables::types::Rule {
+    match (dir, ip) {
+        (Dir::Saddr, std::net::IpAddr::V4(a)) => rule.match_saddr_v4(a, prefix),
+        (Dir::Saddr, std::net::IpAddr::V6(a)) => rule.match_saddr_v6(a, prefix),
+        (Dir::Daddr, std::net::IpAddr::V4(a)) => rule.match_daddr_v4(a, prefix),
+        (Dir::Daddr, std::net::IpAddr::V6(a)) => rule.match_daddr_v6(a, prefix),
+    }
+}
+
+/// Add the snat/dnat target expression of the right family.
+fn nat_target(
+    rule: nlink::netlink::nftables::types::Rule,
+    action: crate::types::NatAction,
+    ip: std::net::IpAddr,
+    port: Option<u16>,
+) -> nlink::netlink::nftables::types::Rule {
+    use crate::types::NatAction;
+    match (action, ip) {
+        (NatAction::Snat, std::net::IpAddr::V4(a)) => rule.snat(a, port),
+        (NatAction::Snat, std::net::IpAddr::V6(a)) => rule.snat_v6(a, port),
+        (NatAction::Dnat, std::net::IpAddr::V4(a)) => rule.dnat(a, port),
+        (NatAction::Dnat, std::net::IpAddr::V6(a)) => rule.dnat_v6(a, port),
+        (NatAction::Masquerade | NatAction::Translate, _) => rule,
+    }
 }
 
 /// Parse a (possibly compound) match expression and apply it to an nftables rule.
@@ -222,31 +277,34 @@ pub(crate) fn apply_match_expr(
 
     while i < tokens.len() {
         match tokens[i] {
-            // ip saddr <cidr> / ip daddr <cidr>
-            "ip" if i + 2 < tokens.len()
-                && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") =>
-            {
-                let cidr = tokens[i + 2];
-                let (addr, prefix) = parse_v4_cidr(cidr).map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "invalid IPv4 CIDR '{cidr}' in firewall rule: {e}"
-                    ))
-                })?;
-                rule = if tokens[i + 1] == "saddr" {
-                    rule.match_saddr_v4(addr, prefix)
-                } else {
-                    rule.match_daddr_v4(addr, prefix)
-                };
-                i += 3;
-            }
-            // ip6 saddr/daddr — recognised but not yet supported by nlink for v6
-            "ip6"
+            // ip saddr <cidr> / ip daddr <cidr> / ip6 saddr <cidr> / ip6 daddr <cidr>
+            keyword @ ("ip" | "ip6")
                 if i + 2 < tokens.len()
                     && (tokens[i + 1] == "saddr" || tokens[i + 1] == "daddr") =>
             {
-                return Err(Error::deploy_failed(format!(
-                    "IPv6 saddr/daddr matching is not yet supported in firewall rules: '{expr}'"
-                )));
+                let cidr = tokens[i + 2];
+                let want_v6 = keyword == "ip6";
+                let family = if want_v6 { "IPv6" } else { "IPv4" };
+                let (addr, prefix) = parse_addr_match(cidr).map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "invalid {family} CIDR '{cidr}' in firewall rule: {e}"
+                    ))
+                })?;
+                if addr.is_ipv6() != want_v6 {
+                    let other = if want_v6 { "ip" } else { "ip6" };
+                    return Err(Error::deploy_failed(format!(
+                        "'{keyword} {}' needs an {family} address, got '{cidr}' (use '{other} {}')",
+                        tokens[i + 1],
+                        tokens[i + 1]
+                    )));
+                }
+                let dir = if tokens[i + 1] == "saddr" {
+                    Dir::Saddr
+                } else {
+                    Dir::Daddr
+                };
+                rule = match_addr(rule, dir, addr, prefix);
+                i += 3;
             }
             // tcp dport/sport <port>
             "tcp"
@@ -336,8 +394,9 @@ pub(crate) fn apply_match_expr(
             other => {
                 return Err(Error::deploy_failed(format!(
                     "unsupported firewall match token '{other}' in expression: '{expr}'. \
-                     Supported: 'ip saddr/daddr CIDR', 'ct state ...', 'tcp dport/sport N', \
-                     'udp dport/sport N', 'icmp type N', 'icmpv6 type N', 'mark N'"
+                     Supported: 'ip saddr/daddr CIDR', 'ip6 saddr/daddr CIDR', 'ct state ...', \
+                     'tcp dport/sport N', 'udp dport/sport N', 'icmp type N', 'icmpv6 type N', \
+                     'mark N'"
                 )));
             }
         }
@@ -346,22 +405,8 @@ pub(crate) fn apply_match_expr(
     Ok(rule)
 }
 
-/// Parse an IPv4 CIDR like `10.0.1.0/24` into address and prefix length.
-///
-/// Plan 158c — uses bare `?` on the inner parses via the new
-/// `From<AddrParseError>` / `From<ParseIntError>` impls on
-/// `Error`. Returns `Result<_, Error>` so callers can propagate
-/// directly without a `.map_err` ceremony.
-pub(crate) fn parse_v4_cidr(s: &str) -> Result<(std::net::Ipv4Addr, u8)> {
-    let (addr_str, prefix_str) = s
-        .split_once('/')
-        .ok_or_else(|| Error::invalid_topology(format!("missing '/' in CIDR notation: {s}")))?;
-    let addr: std::net::Ipv4Addr = addr_str.parse()?;
-    let prefix: u8 = prefix_str.parse()?;
-    if prefix > 32 {
-        return Err(Error::invalid_topology(format!(
-            "prefix length {prefix} exceeds 32"
-        )));
-    }
-    Ok((addr, prefix))
+/// Parse an address match operand: a CIDR (`10.0.1.0/24`, `fd00::/64`)
+/// or a bare address (host prefix), either family.
+pub(crate) fn parse_addr_match(s: &str) -> Result<(std::net::IpAddr, u8)> {
+    crate::helpers::parse_ip_or_cidr(s)
 }

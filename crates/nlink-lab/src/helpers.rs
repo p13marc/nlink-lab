@@ -51,6 +51,114 @@ pub fn network_address(ip: IpAddr, prefix: u8) -> IpAddr {
     }
 }
 
+/// Bit width of an address family: 32 for IPv4, 128 for IPv6.
+pub fn addr_bits(ip: IpAddr) -> u8 {
+    if ip.is_ipv4() { 32 } else { 128 }
+}
+
+/// Integer value of an address (zero-extended to 128 bits for IPv4).
+pub fn ip_to_bits(ip: IpAddr) -> u128 {
+    match ip {
+        IpAddr::V4(v4) => u128::from(u32::from(v4)),
+        IpAddr::V6(v6) => u128::from(v6),
+    }
+}
+
+/// Build an address of the given family width (32 or 128) from its
+/// integer value. Values wider than the family are truncated, so callers
+/// range-check first (`ip_offset` does).
+pub fn ip_from_bits(bits: u8, value: u128) -> IpAddr {
+    if bits == 32 {
+        IpAddr::V4(std::net::Ipv4Addr::from(value as u32))
+    } else {
+        IpAddr::V6(std::net::Ipv6Addr::from(value))
+    }
+}
+
+/// `base + offset` inside the family's address space; `None` when the
+/// result would not fit (IPv4 past 255.255.255.255, IPv6 past `u128`).
+pub fn ip_offset(base: IpAddr, offset: u128) -> Option<IpAddr> {
+    match base {
+        IpAddr::V4(v4) => {
+            let n = u128::from(u32::from(v4)).checked_add(offset)?;
+            u32::try_from(n)
+                .ok()
+                .map(|n| IpAddr::V4(std::net::Ipv4Addr::from(n)))
+        }
+        IpAddr::V6(v6) => u128::from(v6)
+            .checked_add(offset)
+            .map(|n| IpAddr::V6(std::net::Ipv6Addr::from(n))),
+    }
+}
+
+/// Parse either a bare IP address (`10.0.0.1`, `fd00::1` → host prefix
+/// `/32` / `/128`) or a CIDR (`10.0.0.0/24`, `fd00::/64`).
+pub fn parse_ip_or_cidr(s: &str) -> Result<(IpAddr, u8)> {
+    if s.contains('/') {
+        parse_cidr(s)
+    } else {
+        let ip: IpAddr = s
+            .parse()
+            .map_err(|e| Error::invalid_topology(format!("invalid IP address '{s}': {e}")))?;
+        Ok((ip, addr_bits(ip)))
+    }
+}
+
+/// Usable host addresses in a management subnet: the block minus the
+/// network and broadcast/anycast addresses, `0` for point-to-point and
+/// host prefixes. Saturates for very short IPv6 prefixes.
+pub fn mgmt_usable_hosts(ip: IpAddr, prefix: u8) -> u128 {
+    let bits = addr_bits(ip);
+    if prefix >= bits.saturating_sub(1) {
+        return 0;
+    }
+    1u128
+        .checked_shl(u32::from(bits - prefix))
+        .map(|n| n - 2)
+        .unwrap_or(u128::MAX)
+}
+
+/// Resolved addresses of a host-reachable management network:
+/// the bridge takes the first host address and every node the next
+/// ones in name order. Both families are supported.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MgmtAddrs {
+    pub bridge: IpAddr,
+    pub nodes: Vec<IpAddr>,
+    pub prefix: u8,
+}
+
+/// Compute the management addresses for `node_count` nodes from the
+/// lab's `mgmt` subnet. Errors when the block is too small; the message
+/// matches the validator's `mgmt-subnet-capacity` wording.
+pub fn mgmt_addresses(mgmt_subnet: &str, node_count: usize) -> Result<MgmtAddrs> {
+    let (ip, prefix) = parse_cidr(mgmt_subnet)?;
+    let network = network_address(ip, prefix);
+    let usable = mgmt_usable_hosts(ip, prefix);
+    let needed = node_count as u128 + 1;
+    if needed > usable {
+        return Err(Error::deploy_failed(format!(
+            "mgmt subnet {mgmt_subnet} has {usable} usable host address(es) but the bridge plus {node_count} nodes need {needed}"
+        )));
+    }
+    let at = |offset: u128| {
+        ip_offset(network, offset).ok_or_else(|| {
+            Error::deploy_failed(format!(
+                "mgmt subnet {mgmt_subnet}: address offset {offset} overflows the address space"
+            ))
+        })
+    };
+    let bridge = at(1)?;
+    let nodes = (0..node_count)
+        .map(|idx| at(2 + idx as u128))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(MgmtAddrs {
+        bridge,
+        nodes,
+        prefix,
+    })
+}
+
 /// Duration unit suffixes and their length in nanoseconds.
 ///
 /// Ordered longest-suffix-first so that `ms` wins over `s` and `m`, and
@@ -544,6 +652,66 @@ mod tests {
         let ip2: IpAddr = "fd01::1".parse().unwrap();
         assert!(ip_in_subnet(ip1, net, 64));
         assert!(!ip_in_subnet(ip2, net, 64));
+    }
+
+    #[test]
+    fn test_ip_offset_and_overflow() {
+        let v4: IpAddr = "10.0.0.250".parse().unwrap();
+        assert_eq!(ip_offset(v4, 5).unwrap().to_string(), "10.0.0.255");
+        let last: IpAddr = "255.255.255.255".parse().unwrap();
+        assert!(ip_offset(last, 1).is_none());
+        let v6: IpAddr = "fd00::ffff".parse().unwrap();
+        assert_eq!(ip_offset(v6, 1).unwrap().to_string(), "fd00::1:0");
+        assert!(
+            ip_offset(
+                "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff".parse().unwrap(),
+                1
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn test_parse_ip_or_cidr() {
+        assert_eq!(parse_ip_or_cidr("10.0.0.1").unwrap().1, 32);
+        assert_eq!(parse_ip_or_cidr("fd00::1").unwrap().1, 128);
+        assert_eq!(parse_ip_or_cidr("fd00::/64").unwrap().1, 64);
+        assert!(parse_ip_or_cidr("nope").is_err());
+    }
+
+    #[test]
+    fn test_mgmt_usable_hosts() {
+        assert_eq!(mgmt_usable_hosts("10.0.0.0".parse().unwrap(), 24), 254);
+        assert_eq!(mgmt_usable_hosts("10.0.0.0".parse().unwrap(), 31), 0);
+        assert_eq!(mgmt_usable_hosts("fd00::".parse().unwrap(), 126), 2);
+        assert_eq!(mgmt_usable_hosts("fd00::".parse().unwrap(), 127), 0);
+        assert_eq!(
+            mgmt_usable_hosts("fd00::".parse().unwrap(), 64),
+            (1u128 << 64) - 2
+        );
+        assert_eq!(mgmt_usable_hosts("::".parse().unwrap(), 0), u128::MAX);
+    }
+
+    #[test]
+    fn test_mgmt_addresses_v4_and_v6() {
+        let m = mgmt_addresses("172.20.0.0/24", 2).unwrap();
+        assert_eq!(m.bridge.to_string(), "172.20.0.1");
+        assert_eq!(m.nodes[0].to_string(), "172.20.0.2");
+        assert_eq!(m.nodes[1].to_string(), "172.20.0.3");
+        assert_eq!(m.prefix, 24);
+
+        let m = mgmt_addresses("fd00:20::/64", 3).unwrap();
+        assert_eq!(m.bridge.to_string(), "fd00:20::1");
+        assert_eq!(m.nodes[2].to_string(), "fd00:20::4");
+        assert_eq!(m.prefix, 64);
+
+        // host bits are masked off first
+        let m = mgmt_addresses("fd00:20::dead/64", 1).unwrap();
+        assert_eq!(m.bridge.to_string(), "fd00:20::1");
+
+        let err = mgmt_addresses("fd00:20::/126", 3).unwrap_err().to_string();
+        assert!(err.contains("2 usable"), "{err}");
+        assert!(err.contains("need 4"), "{err}");
     }
 
     #[test]

@@ -514,9 +514,15 @@ fn render_nat(out: &mut String, indent: &str, nat: &crate::types::NatConfig) -> 
                 if let Some(dst) = &rule.dst {
                     write!(out, " dst {}", nll_addr(dst)?).unwrap();
                 }
-                write!(out, " to {}", need(rule.target.as_ref(), "target")?).unwrap();
-                if let Some(port) = rule.target_port {
-                    write!(out, ":{port}").unwrap();
+                let target = need(rule.target.as_ref(), "target")?;
+                match rule.target_port {
+                    // `[fd00::2]:8080` — an IPv6 target with a port needs
+                    // brackets, otherwise the lexer reads one address.
+                    Some(port) if target.contains(':') => {
+                        write!(out, " to [{target}]:{port}").unwrap();
+                    }
+                    Some(port) => write!(out, " to {target}:{port}").unwrap(),
+                    None => write!(out, " to {target}").unwrap(),
                 }
             }
             NatAction::Snat => {
@@ -1081,11 +1087,11 @@ fn render_network(out: &mut String, name: &str, net: &Network) -> Result<()> {
         };
         write!(out, "  port {rendered_key} {{").unwrap();
         for addr in &port.addresses {
-            if !is_ipv4(addr) || !addr.contains('/') {
+            if !addr.contains('/') || crate::helpers::parse_cidr(addr).is_err() {
                 return Err(unrepresentable(
                     "port address",
                     addr,
-                    "port blocks accept IPv4 CIDRs only",
+                    "port blocks accept IPv4/IPv6 CIDRs only",
                 ));
             }
             write!(out, " {addr}").unwrap();
@@ -2145,6 +2151,30 @@ node gw {
         topo.lab.name = "has \"quote\"".into();
         let err = try_render(&topo).unwrap_err();
         assert!(err.to_string().contains("double quote"), "{err}");
+    }
+
+    #[test]
+    fn test_render_nat_dnat_v6_port_roundtrip() {
+        let (_a, out, b) = roundtrip(
+            r#"
+lab "t"
+node r {
+  nat {
+    dnat dst 2001:db8::1/128 to [fd00::2]:8080
+    dnat to fd00::2:8080
+    snat src fd00:1::/64 to fd00:2::1
+    masquerade src fd00:3::/64
+  }
+}
+"#,
+        );
+        assert!(out.contains("to [fd00::2]:8080"), "{out}");
+        assert!(out.contains("to fd00::2:8080\n"), "{out}");
+        let rules = &b.nodes["r"].nat.as_ref().unwrap().rules;
+        assert_eq!(rules[0].target.as_deref(), Some("fd00::2"));
+        assert_eq!(rules[0].target_port, Some(8080));
+        assert_eq!(rules[1].target.as_deref(), Some("fd00::2:8080"));
+        assert_eq!(rules[1].target_port, None);
     }
 
     #[test]

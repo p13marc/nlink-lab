@@ -132,31 +132,21 @@ fn lower_with_base_dir_and_params(
                         p.name, p.base
                     ))
                 })?;
-                let std::net::IpAddr::V4(v4) = ip else {
+                let bits = crate::helpers::addr_bits(ip);
+                if p.prefix > bits || p.prefix < prefix {
                     return Err(crate::Error::NllParse(format!(
-                        "pool '{}': only IPv4 pools are supported (got '{}')",
-                        p.name, p.base
-                    )));
-                };
-                if p.prefix > 32 || p.prefix < prefix {
-                    return Err(crate::Error::NllParse(format!(
-                        "pool '{}': allocation prefix /{} must be between the pool prefix /{prefix} and /32",
+                        "pool '{}': allocation prefix /{} must be between the pool prefix /{prefix} and /{bits}",
                         p.name, p.prefix
                     )));
                 }
                 // Mask to the network address so `pool p 10.0.0.5/8 /30`
                 // allocates from 10.0.0.0.
-                let base = if prefix == 0 {
-                    0
-                } else {
-                    u32::from(v4) & (u32::MAX << (32 - prefix as u32))
-                };
-                // A /0 pool has 2^32 addresses, which does not fit u32;
-                // saturate — no lab will exhaust it.
-                let pool_size = 1u64
-                    .checked_shl(32 - prefix as u32)
-                    .map(|n| n.min(u32::MAX as u64) as u32)
-                    .unwrap_or(u32::MAX);
+                let base = crate::helpers::ip_to_bits(crate::helpers::network_address(ip, prefix));
+                // An IPv6 /0 pool has 2^128 addresses, which does not fit
+                // u128; saturate — no lab will exhaust it.
+                let pool_size = 1u128
+                    .checked_shl(u32::from(bits - prefix))
+                    .unwrap_or(u128::MAX);
                 if ctx.pools.contains_key(&p.name) {
                     return Err(crate::Error::NllParse(format!(
                         "duplicate pool name '{}'",
@@ -170,6 +160,7 @@ fn lower_with_base_dir_and_params(
                         pool_size,
                         alloc_prefix: p.prefix,
                         next_offset: 0,
+                        bits,
                     },
                 );
             }
@@ -640,15 +631,16 @@ fn build_address_map(topology: &types::Topology) -> BTreeMap<String, String> {
 /// Expand `Translate` NAT rules into per-host DNAT rules by scanning
 /// the topology for addresses in the destination range.
 fn expand_translate_rules(topology: &mut types::Topology) {
-    // Collect all assigned IPv4 addresses from links and node interfaces.
-    let mut assigned: Vec<std::net::Ipv4Addr> = Vec::new();
+    // Collect all assigned addresses (both families) from links and
+    // node interfaces.
+    let mut assigned: Vec<std::net::IpAddr> = Vec::new();
     for link in &topology.links {
         if let Some(addrs) = &link.addresses {
             for addr in addrs {
                 if let Some(ip) = addr.split('/').next()
-                    && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>()
+                    && let Ok(ip) = ip.parse::<std::net::IpAddr>()
                 {
-                    assigned.push(v4);
+                    assigned.push(ip);
                 }
             }
         }
@@ -657,9 +649,9 @@ fn expand_translate_rules(topology: &mut types::Topology) {
         for iface_cfg in node.interfaces.values() {
             for addr in &iface_cfg.addresses {
                 if let Some(ip) = addr.split('/').next()
-                    && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>()
+                    && let Ok(ip) = ip.parse::<std::net::IpAddr>()
                 {
-                    assigned.push(v4);
+                    assigned.push(ip);
                 }
             }
         }
@@ -696,20 +688,25 @@ fn expand_translate_rules(topology: &mut types::Topology) {
                 Some(s) => s.as_str(),
                 None => continue,
             };
-            let Some((src_net, src_prefix)) = parse_v4_cidr_pair(src_cidr) else {
+            let Ok((src_net, src_prefix)) = crate::helpers::parse_cidr(src_cidr) else {
                 continue;
             };
-            let Some((dst_net, dst_prefix)) = parse_v4_cidr_pair(dst_cidr) else {
+            let Ok((dst_net, dst_prefix)) = crate::helpers::parse_cidr(dst_cidr) else {
                 continue;
             };
+            // Family mismatch is reported by the validator
+            // (`nat-family-mismatch`); nothing sensible can be expanded.
+            if src_net.is_ipv6() != dst_net.is_ipv6() {
+                continue;
+            }
+            let host_prefix = crate::helpers::addr_bits(dst_net);
             for &addr in &assigned {
-                if in_prefix(addr, dst_net, dst_prefix) {
-                    let mapped =
-                        map_translate_address(addr, dst_net, dst_prefix, src_net, src_prefix);
+                if crate::helpers::ip_in_subnet(addr, dst_net, dst_prefix) {
+                    let mapped = map_translate_address(addr, dst_prefix, src_net, src_prefix);
                     expanded.push(types::NatRule {
                         action: types::NatAction::Dnat,
                         src: None,
-                        dst: Some(format!("{mapped}/32")),
+                        dst: Some(format!("{mapped}/{host_prefix}")),
                         target: Some(addr.to_string()),
                         target_port: None,
                     });
@@ -720,36 +717,34 @@ fn expand_translate_rules(topology: &mut types::Topology) {
     }
 }
 
-/// Parse "A.B.C.D/N" into (Ipv4Addr, u8).
-fn parse_v4_cidr_pair(s: &str) -> Option<(std::net::Ipv4Addr, u8)> {
-    let (ip_str, prefix_str) = s.split_once('/')?;
-    let ip: std::net::Ipv4Addr = ip_str.parse().ok()?;
-    let prefix: u8 = prefix_str.parse().ok()?;
-    Some((ip, prefix))
-}
-
-/// Check whether `addr` is inside the network defined by `net/prefix`.
-fn in_prefix(addr: std::net::Ipv4Addr, net: std::net::Ipv4Addr, prefix: u8) -> bool {
-    if prefix == 0 {
-        return true;
-    }
-    let mask = !0u32 << (32 - prefix);
-    (u32::from(addr) & mask) == (u32::from(net) & mask)
-}
-
 /// Map an address from the destination range to the source range,
 /// preserving host bits. E.g., 172.100.1.18 with dst /16 → src /8
-/// yields 144.0.1.18.
+/// yields 144.0.1.18. Both addresses must be of the same family
+/// (checked by the caller).
 fn map_translate_address(
-    addr: std::net::Ipv4Addr,
-    _dst_net: std::net::Ipv4Addr,
+    addr: std::net::IpAddr,
     dst_prefix: u8,
-    src_net: std::net::Ipv4Addr,
+    src_net: std::net::IpAddr,
     src_prefix: u8,
-) -> std::net::Ipv4Addr {
-    let host_bits = u32::from(addr) & !(!0u32 << (32 - dst_prefix));
-    let src_masked = u32::from(src_net) & (!0u32 << (32 - src_prefix));
-    std::net::Ipv4Addr::from(src_masked | host_bits)
+) -> std::net::IpAddr {
+    let bits = crate::helpers::addr_bits(addr);
+    let width = u32::from(bits);
+    let mask = |prefix: u8| -> u128 {
+        if prefix == 0 {
+            0
+        } else {
+            let m = !0u128 << (width - u32::from(prefix));
+            // keep only the family's bits
+            if bits == 32 {
+                m & u128::from(u32::MAX)
+            } else {
+                m
+            }
+        }
+    };
+    let host_bits = crate::helpers::ip_to_bits(addr) & !mask(dst_prefix);
+    let src_masked = crate::helpers::ip_to_bits(src_net) & mask(src_prefix);
+    crate::helpers::ip_from_bits(bits, src_masked | host_bits)
 }
 
 /// Replace `${node.iface}` references with resolved IP addresses.
@@ -797,12 +792,41 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
             for rule in &mut fw.rules {
                 if let Some(match_expr) = &mut rule.match_expr {
                     *match_expr = resolve_ref(match_expr, &addr_map)?;
+                    *match_expr = normalize_match_family(match_expr);
                 }
             }
         }
     }
 
     Ok(())
+}
+
+/// Make the `ip`/`ip6` keyword of every `saddr`/`daddr` match agree with
+/// the address that follows it.
+///
+/// `src`/`dst` in NLL are family-neutral; the parser picks `ip` or `ip6`
+/// from the literal, but a `${var}` or `${node.iface}` operand is only
+/// known here, after interpolation and cross-reference resolution.
+fn normalize_match_family(expr: &str) -> String {
+    let tokens: Vec<&str> = expr.split_whitespace().collect();
+    let mut out: Vec<String> = Vec::with_capacity(tokens.len());
+    let mut i = 0;
+    while i < tokens.len() {
+        if matches!(tokens[i], "ip" | "ip6")
+            && i + 2 < tokens.len()
+            && matches!(tokens[i + 1], "saddr" | "daddr")
+            && let Ok((ip, _)) = crate::helpers::parse_ip_or_cidr(tokens[i + 2])
+        {
+            out.push(if ip.is_ipv6() { "ip6" } else { "ip" }.to_string());
+            out.push(tokens[i + 1].to_string());
+            out.push(tokens[i + 2].to_string());
+            i += 3;
+            continue;
+        }
+        out.push(tokens[i].to_string());
+        i += 1;
+    }
+    out.join(" ")
 }
 
 /// Warn about unresolved cross-references remaining after lowering.
@@ -831,33 +855,43 @@ fn warn_unresolved_refs(topology: &types::Topology) {
 
 // ─── Context ──────────────────────────────────────────────
 
-/// State for a named subnet pool.
+/// State for a named subnet pool (IPv4 or IPv6; all math in u128).
 struct PoolState {
-    base: u32,        // base network address as u32
-    pool_size: u32,   // total addresses in the pool (for exhaustion check)
-    alloc_prefix: u8, // allocation prefix size (e.g., 30 for /30)
-    next_offset: u32, // next allocation offset from base
+    base: u128,        // base network address
+    pool_size: u128,   // total addresses in the pool (for exhaustion check)
+    alloc_prefix: u8,  // allocation prefix size (e.g., 30 for /30)
+    next_offset: u128, // next allocation offset from base
+    bits: u8,          // 32 or 128
 }
 
 impl PoolState {
     /// Allocate the next `/alloc_prefix` block, returned as a CIDR
     /// string, or an error when the pool is exhausted.
     fn allocate_subnet(&mut self, pool_name: &str) -> Result<String> {
-        let subnet_size = 1u64 << (32 - self.alloc_prefix as u32);
-        let next = self.next_offset as u64 + subnet_size;
-        let exhausted = next > self.pool_size as u64
-            || (self.base as u64 + self.next_offset as u64 + subnet_size) > (u32::MAX as u64 + 1);
+        // alloc_prefix <= bits is checked when the pool is declared; a
+        // /128 block is one address.
+        let subnet_size = 1u128
+            .checked_shl(u32::from(self.bits - self.alloc_prefix))
+            .unwrap_or(u128::MAX);
+        let space = 1u128.checked_shl(u32::from(self.bits)).unwrap_or(u128::MAX);
+        let next = self.next_offset.checked_add(subnet_size);
+        let exhausted = match next {
+            None => true,
+            Some(next) => {
+                next > self.pool_size || self.base.checked_add(next).is_none_or(|end| end > space)
+            }
+        };
         if exhausted {
             return Err(crate::Error::NllParse(format!(
                 "pool '{pool_name}' exhausted: {} /{} blocks of {} addresses already allocated",
-                self.next_offset as u64 / subnet_size,
+                self.next_offset / subnet_size,
                 self.alloc_prefix,
                 self.pool_size
             )));
         }
         let network = self.base + self.next_offset;
-        self.next_offset = next as u32;
-        let ip = std::net::Ipv4Addr::from(network);
+        self.next_offset = next.unwrap_or(u128::MAX);
+        let ip = crate::helpers::ip_from_bits(self.bits, network);
         Ok(format!("{ip}/{}", self.alloc_prefix))
     }
 
@@ -2767,36 +2801,26 @@ fn apply_node_props(
 }
 
 /// Expand a ForRange into a list of string values.
-/// Split a subnet CIDR into two endpoint addresses.
+/// Split a subnet CIDR into two endpoint addresses (either family).
 ///
-/// - `/31`: `.0` and `.1` (RFC 3021 point-to-point)
-/// - `/30` and larger: network+1 and network+2
+/// - `/31` (IPv4) and `/127` (IPv6): the two addresses of the block
+///   (RFC 3021 point-to-point)
+/// - anything larger: network+1 and network+2
 fn split_subnet(cidr: &str) -> std::result::Result<[String; 2], ()> {
-    let (ip_str, prefix_str) = cidr.rsplit_once('/').ok_or(())?;
-    let prefix: u8 = prefix_str.parse().map_err(|_| ())?;
-    if prefix >= 32 {
+    let (ip, prefix) = crate::helpers::parse_cidr(cidr).map_err(|_| ())?;
+    let bits = crate::helpers::addr_bits(ip);
+    if prefix >= bits {
         return Err(());
     }
-    let ip: std::net::Ipv4Addr = ip_str.parse().map_err(|_| ())?;
-    let bits = u32::from(ip);
-    if prefix == 31 {
-        // RFC 3021: .0 and .1
-        let base = bits & !(1u32);
-        let a = std::net::Ipv4Addr::from(base);
-        let b = std::net::Ipv4Addr::from(base + 1);
-        Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
+    let network = crate::helpers::network_address(ip, prefix);
+    let (a, b) = if prefix == bits - 1 {
+        (0u128, 1u128)
     } else {
-        // Standard: network+1 and network+2
-        let mask = if prefix == 0 {
-            0
-        } else {
-            u32::MAX << (32 - prefix)
-        };
-        let network = bits & mask;
-        let a = std::net::Ipv4Addr::from(network.checked_add(1).ok_or(())?);
-        let b = std::net::Ipv4Addr::from(network.checked_add(2).ok_or(())?);
-        Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
-    }
+        (1u128, 2u128)
+    };
+    let a = crate::helpers::ip_offset(network, a).ok_or(())?;
+    let b = crate::helpers::ip_offset(network, b).ok_or(())?;
+    Ok([format!("{a}/{prefix}"), format!("{b}/{prefix}")])
 }
 
 /// Allocate the next subnet from a pool and split it into the two
@@ -2810,7 +2834,7 @@ fn allocate_from_pool(pool: &mut PoolState, pool_name: &str) -> Result<[String; 
     let cidr = pool.allocate_subnet(pool_name)?;
     split_subnet(&cidr).map_err(|_| {
         crate::Error::NllParse(format!(
-            "pool '{pool_name}': cannot split /{} into two endpoint addresses (use /31 or larger)",
+            "pool '{pool_name}': cannot split /{} into two endpoint addresses (use /31 (IPv4) or /127 (IPv6) or larger)",
             pool.alloc_prefix
         ))
     })
@@ -2966,7 +2990,7 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
             } else {
                 Some(split_subnet(subnet).map_err(|_| {
                     crate::Error::NllParse(format!(
-                        "link {} -- {}: cannot derive two endpoint addresses from subnet '{subnet}' (IPv4 /31 or larger required)",
+                        "link {} -- {}: cannot derive two endpoint addresses from subnet '{subnet}' (/31 (IPv4) or /127 (IPv6) or larger required)",
                         endpoints[0], endpoints[1]
                     ))
                 })?)
@@ -3040,18 +3064,10 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
     Ok(())
 }
 
-/// Increment an IP address by a host number offset.
+/// Increment an IP address by a host number offset (saturating at the
+/// end of the address space; callers bound `offset` by the subnet size).
 fn increment_ip(base: std::net::IpAddr, offset: u32) -> std::net::IpAddr {
-    match base {
-        std::net::IpAddr::V4(v4) => {
-            let n = u32::from(v4) + offset;
-            std::net::IpAddr::V4(std::net::Ipv4Addr::from(n))
-        }
-        std::net::IpAddr::V6(v6) => {
-            let n = u128::from(v6) + offset as u128;
-            std::net::IpAddr::V6(std::net::Ipv6Addr::from(n))
-        }
-    }
+    crate::helpers::ip_offset(base, u128::from(offset)).unwrap_or(base)
 }
 
 fn lower_impair_props(props: &ast::ImpairProps) -> types::Impairment {
@@ -4874,6 +4890,178 @@ link c:eth0 -- d:eth0 { pool fabric }
     }
 
     #[test]
+    fn test_firewall_src_interpolated_v6_uses_ip6() {
+        let topo = parse_and_lower(
+            r#"
+lab "t"
+let lan6 = subnet("fd00::/48", 64, 1)
+node s {
+  firewall policy drop {
+    accept src ${lan6}
+    accept src 10.0.1.0/24
+    accept dst ${s.eth0} tcp dport 22
+  }
+}
+node r
+link r:eth0 -- s:eth0 { fd00:0:0:1::1/64 -- fd00:0:0:1::2/64 }
+"#,
+        );
+        let rules = &topo.nodes["s"].firewall.as_ref().unwrap().rules;
+        assert_eq!(
+            rules[0].match_expr.as_deref(),
+            Some("ip6 saddr fd00:0:0:1::/64")
+        );
+        assert_eq!(rules[1].match_expr.as_deref(), Some("ip saddr 10.0.1.0/24"));
+        assert_eq!(
+            rules[2].match_expr.as_deref(),
+            Some("ip6 daddr fd00:0:0:1::2 tcp dport 22")
+        );
+    }
+
+    #[test]
+    fn test_pool_v6_allocation() {
+        let topo = parse_and_lower(
+            r#"
+lab "t"
+pool fabric fd00:f::/48 /64
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { pool fabric }
+link b:eth1 -- c:eth0 { pool fabric }
+"#,
+        );
+        let addrs: Vec<[String; 2]> = topo
+            .links
+            .iter()
+            .filter_map(|l| l.addresses.clone())
+            .collect();
+        assert_eq!(
+            addrs[0],
+            ["fd00:f::1/64".to_string(), "fd00:f::2/64".to_string()]
+        );
+        assert_eq!(
+            addrs[1],
+            [
+                "fd00:f:0:1::1/64".to_string(),
+                "fd00:f:0:1::2/64".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_pool_v6_slash127() {
+        let topo = parse_and_lower(
+            r#"
+lab "t"
+pool p2p fd00:7::/64 /127
+node a
+node b
+link a:eth0 -- b:eth0 { pool p2p }
+"#,
+        );
+        assert_eq!(
+            topo.links[0].addresses.clone().unwrap(),
+            ["fd00:7::/127".to_string(), "fd00:7::1/127".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_lo_pool_v6_slash128() {
+        let topo = parse_and_lower(
+            r#"
+lab "t"
+pool loops fd00:ff::/112 /128
+node r1 { lo pool loops }
+node r2 { lo pool loops }
+"#,
+        );
+        assert_eq!(
+            topo.nodes["r1"].interfaces["lo"].addresses,
+            vec!["fd00:ff::/128"]
+        );
+        assert_eq!(
+            topo.nodes["r2"].interfaces["lo"].addresses,
+            vec!["fd00:ff::1/128"]
+        );
+    }
+
+    #[test]
+    fn test_pool_prefix_exceeds_family_bits() {
+        let err = crate::parser::parse(
+            r#"
+lab "t"
+pool p 10.0.0.0/8 /33
+"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("between the pool prefix /8 and /32"), "{err}");
+        let err = crate::parser::parse(
+            r#"
+lab "t"
+pool p fd00::/48 /129
+"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("/129") || err.contains("prefix"), "{err}");
+    }
+
+    #[test]
+    fn test_link_subnet_shorthand_v6() {
+        let topo = parse_and_lower(
+            r#"
+lab "t"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { subnet fd00:2::/64 }
+link b:eth1 -- c:eth0 { subnet fd00:3::/127 }
+"#,
+        );
+        assert_eq!(
+            topo.links[0].addresses.clone().unwrap(),
+            ["fd00:2::1/64".to_string(), "fd00:2::2/64".to_string()]
+        );
+        assert_eq!(
+            topo.links[1].addresses.clone().unwrap(),
+            ["fd00:3::/127".to_string(), "fd00:3::1/127".to_string()]
+        );
+        let err = crate::parser::parse(
+            r#"
+lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { subnet fd00:3::/128 }
+"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("/127 (IPv6)"), "{err}");
+    }
+
+    #[test]
+    fn test_ip_functions_v6_via_let() {
+        let topo = parse_and_lower(
+            r#"
+lab "t"
+let lan = subnet("fd00::/48", 64, 1)
+node a
+node b
+link a:eth0 -- b:eth0 { host(${lan}, 1)/64 -- host(${lan}, 2)/64 }
+"#,
+        );
+        assert_eq!(
+            topo.links[0].addresses.clone().unwrap(),
+            [
+                "fd00:0:0:1::1/64".to_string(),
+                "fd00:0:0:1::2/64".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn test_pool_with_slash31() {
         let topo = parse_and_lower(
             r#"lab "t"
@@ -5771,49 +5959,77 @@ link fw:eth0 -- a:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
 
     #[test]
     fn test_map_translate_address() {
-        use std::net::Ipv4Addr;
+        use std::net::{IpAddr, Ipv4Addr};
         // 172.100.1.18 with dst=/16 → src=/8 should yield 144.0.1.18
         let result = super::map_translate_address(
-            Ipv4Addr::new(172, 100, 1, 18),
-            Ipv4Addr::new(172, 100, 0, 0),
+            IpAddr::V4(Ipv4Addr::new(172, 100, 1, 18)),
             16,
-            Ipv4Addr::new(144, 0, 0, 0),
+            IpAddr::V4(Ipv4Addr::new(144, 0, 0, 0)),
             8,
         );
-        assert_eq!(result, Ipv4Addr::new(144, 0, 1, 18));
+        assert_eq!(result, IpAddr::V4(Ipv4Addr::new(144, 0, 1, 18)));
     }
 
     #[test]
     fn test_map_translate_address_same_prefix() {
-        use std::net::Ipv4Addr;
+        use std::net::{IpAddr, Ipv4Addr};
         // Same prefix length: 10.1.2.3 with /16 → /16 yields 192.168.2.3
         let result = super::map_translate_address(
-            Ipv4Addr::new(10, 1, 2, 3),
-            Ipv4Addr::new(10, 1, 0, 0),
+            IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3)),
             16,
-            Ipv4Addr::new(192, 168, 0, 0),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 0, 0)),
             16,
         );
-        assert_eq!(result, Ipv4Addr::new(192, 168, 2, 3));
+        assert_eq!(result, IpAddr::V4(Ipv4Addr::new(192, 168, 2, 3)));
     }
 
     #[test]
-    fn test_in_prefix() {
-        use std::net::Ipv4Addr;
-        assert!(super::in_prefix(
-            Ipv4Addr::new(172, 100, 1, 18),
-            Ipv4Addr::new(172, 100, 0, 0),
-            16
-        ));
-        assert!(!super::in_prefix(
-            Ipv4Addr::new(10, 0, 1, 1),
-            Ipv4Addr::new(172, 100, 0, 0),
-            16
-        ));
-        assert!(super::in_prefix(
-            Ipv4Addr::new(10, 1, 2, 3),
-            Ipv4Addr::new(10, 0, 0, 0),
-            8
-        ));
+    fn test_map_translate_address_v6() {
+        use std::net::IpAddr;
+        // fd00:1::a:b with dst=/64 → src fd00:2::/64 keeps the host bits
+        let result = super::map_translate_address(
+            "fd00:1::a:b".parse::<IpAddr>().unwrap(),
+            64,
+            "fd00:2::/64"
+                .parse::<IpAddr>()
+                .unwrap_or("fd00:2::".parse().unwrap()),
+            64,
+        );
+        assert_eq!(result, "fd00:2::a:b".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_lower_translate_v6() {
+        let src = r#"
+lab "t"
+node r {
+  nat { translate fd00:100::/64 to fd00:1::/64 }
+}
+node h
+link r:eth0 -- h:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
+"#;
+        let topo = crate::parser::parse(src).unwrap();
+        let nat = topo.nodes["r"].nat.as_ref().unwrap();
+        let dsts: Vec<&str> = nat.rules.iter().filter_map(|r| r.dst.as_deref()).collect();
+        assert!(dsts.contains(&"fd00:100::1/128"), "{dsts:?}");
+        assert!(dsts.contains(&"fd00:100::2/128"), "{dsts:?}");
+        assert!(nat.rules.iter().all(|r| r.action == types::NatAction::Dnat));
+    }
+
+    #[test]
+    fn test_lower_translate_family_mismatch_is_skipped() {
+        let src = r#"
+lab "t"
+node r {
+  nat { translate 172.100.0.0/16 to fd00:1::/64 }
+}
+node h
+link r:eth0 -- h:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
+"#;
+        let topo = crate::parser::parse(src).unwrap();
+        let nat = topo.nodes["r"].nat.as_ref().unwrap();
+        // Nothing sensible can be expanded; the validator reports the
+        // family mismatch (`nat-family-mismatch`).
+        assert!(nat.rules.is_empty(), "{:?}", nat.rules);
     }
 }

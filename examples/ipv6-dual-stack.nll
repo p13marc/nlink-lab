@@ -1,0 +1,70 @@
+# Dual-stack (IPv4 + IPv6) lab: NAT66, IPv6 firewall matching and
+# per-family auto-routing.
+#
+# `client` sits on the WAN segment and reaches `server` on the LAN
+# through `router`, which masquerades the WAN prefix (NAT66). The
+# server's firewall only admits IPv6 traffic that arrives with the
+# router's LAN address as source — so `client` (translated) gets
+# through and `other` (untranslated, on the LAN) is dropped.
+#
+# `routing auto` computes IPv4 and IPv6 routes independently: every
+# stub gets both `default` and `::/0`, and only nodes that forward
+# a family act as routers for it.
+#
+# Demonstrates: dual-stack ports, `forward ipv6`, `ip6 saddr`,
+# `masquerade` on an IPv6 prefix, `subnet()`/`host()` on IPv6, NDP
+# through a default-drop firewall.
+
+lab "ipv6-dual-stack" {
+  description "Dual-stack router with NAT66, IPv6 firewall and auto-routing"
+  routing auto
+}
+
+let lan6 = subnet("fd00::/48", 64, 1)
+let wan6 = subnet("fd00::/48", 64, 2)
+
+profile router {
+  forward ipv4
+  forward ipv6
+}
+
+node router : router {
+  nat { masquerade src ${wan6} }
+}
+
+# With `policy drop` IPv6 neighbour discovery (ICMPv6 135/136) must be
+# admitted explicitly, or nobody can resolve the server's address once
+# its neighbour cache expires. Only the router's LAN address may send
+# traffic in — that is what NAT66 rewrites the client's source to.
+node server {
+  firewall policy drop {
+    accept ct established,related
+    accept icmpv6 135
+    accept icmpv6 136
+    accept src host(${lan6}, 1)
+    accept src 10.0.1.0/24
+    accept src 10.0.2.0/24
+  }
+}
+
+node client
+node other
+
+# ${lan6} = fd00:0:0:1::/64, ${wan6} = fd00:0:0:2::/64
+network lan {
+  members [router:eth0, server:eth0, other:eth0]
+  port router:eth0 { 10.0.1.1/24 fd00:0:0:1::1/64 }
+  port server:eth0 { 10.0.1.2/24 fd00:0:0:1::2/64 }
+  port other:eth0 { 10.0.1.3/24 fd00:0:0:1::3/64 }
+}
+
+network wan {
+  members [router:eth1, client:eth0]
+  port router:eth1 { 10.0.2.1/24 fd00:0:0:2::1/64 }
+  port client:eth0 { 10.0.2.2/24 fd00:0:0:2::2/64 }
+}
+
+validate {
+  reach client server
+  reach client router
+}

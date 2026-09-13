@@ -448,16 +448,28 @@ fn completions_at(a: &Analysis, pos: Position) -> Vec<CompletionItem> {
         if matches!(a.tokens[p].token, Token::Colon)
             && let Some(Token::Ident(node)) = p.checked_sub(1).map(|k| &a.tokens[k].token)
         {
-            if let Some(n) = a.topology.as_ref().and_then(|t| t.nodes.get(node)) {
-                let mut out: Vec<_> = n
-                    .interfaces
-                    .keys()
-                    .map(|i| item(i.clone(), CompletionItemKind::FIELD, None))
+            if let Some(topo) = a.topology.as_ref()
+                && let Some(n) = topo.nodes.get(node)
+            {
+                // `Node::interfaces` only holds *explicitly declared*
+                // interfaces (macvlan, vxlan, vlan, …) — an interface that
+                // exists because a `link` or a `network` names it is not in
+                // there, so this map alone offers nothing for a typical
+                // node. `collect_node_addrs` is the same source hover uses
+                // and covers every way an interface can come about.
+                let mut names: std::collections::BTreeSet<String> =
+                    n.interfaces.keys().cloned().collect();
+                names.extend(
+                    nlink_lab::ipmap::collect_node_addrs(topo)
+                        .get(node)
+                        .into_iter()
+                        .flatten()
+                        .map(|addr| addr.iface.clone()),
+                );
+                return names
+                    .into_iter()
+                    .map(|i| item(i, CompletionItemKind::FIELD, None))
                     .collect();
-                if out.is_empty() {
-                    out.push(item("eth0".into(), CompletionItemKind::FIELD, None));
-                }
-                return out;
             }
             // Unknown node after a colon inside a `node` head: profiles.
             return names(symbols::DefKind::Profile)
@@ -681,6 +693,29 @@ mod tests {
             "{:?}",
             items.iter().map(|i| &i.label).collect::<Vec<_>>()
         );
+    }
+
+    /// `Node::interfaces` is empty for an interface that exists only
+    /// because a `link` or a `network` names it, so completion must not be
+    /// built from that map alone — it would offer nothing (or, worse, a
+    /// hardcoded guess) for a typical node.
+    #[test]
+    fn completion_offers_interfaces_that_only_a_link_or_network_creates() {
+        let a = doc(SRC);
+        assert!(
+            a.topology.as_ref().unwrap().nodes["r1"]
+                .interfaces
+                .is_empty(),
+            "the premise of this test: link-derived interfaces are not in Node::interfaces"
+        );
+        let at = a.text.find("link r1:eth0").unwrap() + 8;
+        let labels: Vec<String> = completions_at(&a, a.index.position(at))
+            .into_iter()
+            .map(|i| i.label)
+            .collect();
+        // eth0 from the `link`, eth1 from the `network` member list.
+        assert!(labels.contains(&"eth0".to_string()), "{labels:?}");
+        assert!(labels.contains(&"eth1".to_string()), "{labels:?}");
     }
 
     #[test]

@@ -496,6 +496,66 @@ cannot share an endpoint with `impair` or `rate` (`qdisc-conflicts`).
 `edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb` edits a running
 lab. See `examples/qdisc-kinds.nll`.
 
+### 17. Dynamic Routing with FRR
+
+`routing frr` swaps static auto-routes for real routing protocols on
+the routers: every forwarding namespace node runs FRR's `zebra` plus
+`ospfd`/`bgpd`, configured from the topology. Hosts (nodes that do
+not forward) keep the `routing auto`-style static default, so the
+lab-level form is a drop-in replacement for `routing auto`:
+
+```nll-ignore
+lab "core" {
+  routing frr { ospf }                  # OSPF area 0 on every router interface
+  # routing frr { ospf { area 0.0.0.1 hello 1s dead 4s } }   # tune the lab default
+  # routing frr                         # only nodes with an explicit frr block
+}
+
+node r1 : router {
+  lo 1.1.1.1/32                         # becomes the router-id
+  frr {
+    ospf {
+      area 0.0.0.0
+      router-id 1.1.1.1
+      passive [eth2]                    # advertise, never form adjacencies
+      hello 1s  dead 4s
+      redistribute [connected]          # connected | static | bgp | kernel
+    }
+    bgp {
+      as 65001
+      router-id 1.1.1.1
+      neighbor r2                       # address + remote AS from the topology
+      neighbor r3 as 65003 remote 10.0.2.2
+      network 10.10.0.0/24
+      redistribute [connected]          # connected | static | ospf | kernel
+    }
+  }
+}
+```
+
+Defaults: each IPv4 interface joins the OSPF area, point-to-point
+links are `ip ospf network point-to-point`, interfaces whose peers run
+no FRR are passive, and the router-id is the first `lo` address (else
+the lowest IPv4). `neighbor NODE` resolves the peer address from the
+segment the two nodes share and the remote AS from the peer's own
+`bgp { as … }`; eBGP works without policy (`no bgp
+ebgp-requires-policy`). `frr` blocks are also allowed in profiles.
+
+Run model: one config file per daemon, one FRR *pathspace* per node
+(`-N nl-<lab>-<node>`, sockets in `/var/run/frr/<pathspace>/`),
+pidfiles and logs under `/run/nlink-lab/frr/<lab>/<node>/`; the
+daemons run as the packaged `frr` user. `apply` restarts a node's
+daemons only when its generated config changed; `destroy` stops them
+and removes the runtime directories. Deploy waits (30 s;
+`NLINK_LAB_FRR_WAIT=<secs>`, `0` disables) for the expected OSPF `Full`
+adjacencies and BGP `Established` sessions before running `validate`.
+Rules: `frr-requires-routing-frr`, `frr-container-node`,
+`frr-invalid-value`, `bgp-neighbor-unresolved`; warning
+`frr-requires-forwarding`; lint `frr-without-routers`. Requires the
+`frr` package (`nlink-lab doctor` shows what it found). OSPFv3/IPv6,
+IS-IS and FRR inside container nodes are out of scope. See
+`examples/frr-ospf.nll` and `examples/frr-bgp.nll`.
+
 ## Examples
 
 ### 1. Simple (2 nodes)
@@ -1163,7 +1223,7 @@ lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
                | "version" STRING | "author" STRING | "tags" ident_list
                | "mgmt" CIDR ("host-reachable")?   # IPv4 or IPv6
                | "dns" ("hosts" | "off")
-               | "routing" ("auto" | "manual")
+               | "routing" ("auto" | "manual" | "frr" frr_block?)
 
 statement      = profile | node | link | network
                | impair | rate | defaults | pool | pattern
@@ -1216,6 +1276,7 @@ property       = "forward" ("ipv4" | "ipv6")
                | "vxlan" IDENT block
                | "dummy" IDENT block
                | nat_block | wifi_prop | macvlan_prop | ipvlan_prop
+               | "frr" frr_block
                | "image" STRING | "cmd" (STRING | string_list)
                | run_config
 
@@ -1324,6 +1385,14 @@ wifi_setting   = "ssid" STRING | "channel" INT | "wpa2" STRING
 macvlan_prop   = "macvlan" IDENT "parent" STRING ("mode" IDENT)? macvlan_block?
 macvlan_block  = "{" CIDR* "}"
 ipvlan_prop    = "ipvlan" IDENT "parent" STRING ("mode" IDENT)?
+
+# ── Dynamic routing (FRR) ────────────────────────
+frr_block      = "{" ("ospf" ospf_block? | "bgp" bgp_block)* "}"
+ospf_block     = "{" ("area" (IPV4 | INT) | "router-id" IPV4 | "passive" ident_list
+               | "hello" DURATION | "dead" DURATION | "redistribute" ident_list)* "}"
+bgp_block      = "{" ("as" INT | "router-id" IPV4 | "network" CIDR
+               | "neighbor" IDENT ("as" INT)? ("remote" IPV4)?
+               | "redistribute" ident_list)* "}"
 
 # ── Process execution ───────────────────────────
 run_config     = "run" ("background")? (STRING | "[" STRING ("," STRING)* "]") ("background")?

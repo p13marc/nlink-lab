@@ -379,6 +379,13 @@ fn render_lab(out: &mut String, lab: &LabConfig) -> Result<()> {
     match lab.routing {
         RoutingMode::Manual => {}
         RoutingMode::Auto => body.push_str("  routing auto\n"),
+        RoutingMode::Frr => match &lab.frr {
+            None => body.push_str("  routing frr\n"),
+            Some(f) => {
+                body.push_str("  routing frr");
+                render_frr_block(&mut body, "  ", f)?;
+            }
+        },
     }
 
     write!(out, "lab {}", nll_string(&lab.name)?).unwrap();
@@ -608,7 +615,85 @@ fn render_profile(out: &mut String, name: &str, profile: &Profile) -> Result<()>
     if let Some(fw) = &profile.firewall {
         render_firewall(out, "  ", fw)?;
     }
+    if let Some(f) = &profile.frr {
+        out.push_str("  frr");
+        render_frr_block(out, "  ", f)?;
+    }
     out.push_str("}\n");
+    Ok(())
+}
+
+/// ` { ospf { … } bgp { … } }` after a `routing frr` / `frr` keyword,
+/// indented by `indent` (the keyword's own indentation).
+fn render_frr_block(out: &mut String, indent: &str, f: &crate::types::FrrConfig) -> Result<()> {
+    out.push_str(" {\n");
+    if let Some(o) = &f.ospf {
+        let default = o.area.is_none()
+            && o.router_id.is_none()
+            && o.passive.is_empty()
+            && o.hello.is_none()
+            && o.dead.is_none()
+            && o.redistribute.is_empty();
+        if default {
+            writeln!(out, "{indent}  ospf").unwrap();
+        } else {
+            writeln!(out, "{indent}  ospf {{").unwrap();
+            if let Some(a) = &o.area {
+                writeln!(out, "{indent}    area {a}").unwrap();
+            }
+            if let Some(id) = &o.router_id {
+                writeln!(out, "{indent}    router-id {}", lit_value(id)?).unwrap();
+            }
+            if !o.passive.is_empty() {
+                writeln!(out, "{indent}    passive {}", ident_list(&o.passive)?).unwrap();
+            }
+            if let Some(h) = o.hello {
+                writeln!(out, "{indent}    hello {h}s").unwrap();
+            }
+            if let Some(d) = o.dead {
+                writeln!(out, "{indent}    dead {d}s").unwrap();
+            }
+            if !o.redistribute.is_empty() {
+                writeln!(
+                    out,
+                    "{indent}    redistribute {}",
+                    ident_list(&o.redistribute)?
+                )
+                .unwrap();
+            }
+            writeln!(out, "{indent}  }}").unwrap();
+        }
+    }
+    if let Some(b) = &f.bgp {
+        writeln!(out, "{indent}  bgp {{").unwrap();
+        writeln!(out, "{indent}    as {}", b.asn).unwrap();
+        if let Some(id) = &b.router_id {
+            writeln!(out, "{indent}    router-id {}", lit_value(id)?).unwrap();
+        }
+        for n in &b.neighbors {
+            write!(out, "{indent}    neighbor {}", nll_name(&n.node)?).unwrap();
+            if let Some(asn) = n.remote_as {
+                write!(out, " as {asn}").unwrap();
+            }
+            if let Some(r) = &n.remote {
+                write!(out, " remote {}", nll_addr(r)?).unwrap();
+            }
+            out.push('\n');
+        }
+        for net in &b.networks {
+            writeln!(out, "{indent}    network {}", nll_addr(net)?).unwrap();
+        }
+        if !b.redistribute.is_empty() {
+            writeln!(
+                out,
+                "{indent}    redistribute {}",
+                ident_list(&b.redistribute)?
+            )
+            .unwrap();
+        }
+        writeln!(out, "{indent}  }}").unwrap();
+    }
+    writeln!(out, "{indent}}}").unwrap();
     Ok(())
 }
 
@@ -816,6 +901,10 @@ fn render_node_body(out: &mut String, node: &Node) -> Result<()> {
         )
         .unwrap();
         render_addr_block(out, &iv.addresses)?;
+    }
+    if let Some(f) = &node.frr {
+        out.push_str("  frr");
+        render_frr_block(out, "  ", f)?;
     }
     for w in &node.wifi {
         let mode = match w.mode {

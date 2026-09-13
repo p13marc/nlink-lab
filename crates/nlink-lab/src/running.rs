@@ -340,8 +340,9 @@ impl RunningLab {
         &self.containers
     }
 
-    /// Access background PIDs (crate-internal).
-    pub(crate) fn pids(&self) -> &[(String, u32)] {
+    /// Tracked background PIDs as `(node, pid)` pairs: `spawn`ed
+    /// processes, background `run` blocks, Wi-Fi and FRR daemons.
+    pub fn pids(&self) -> &[(String, u32)] {
         &self.pids
     }
 
@@ -1640,6 +1641,9 @@ impl RunningLab {
             crate::wifi::release_hwsim(&self.topology.lab.name);
             crate::wifi::cleanup_configs(&self.topology.lab.name);
         }
+
+        // 5d. FRR runtime directories (daemons were killed in step 1)
+        crate::frr::cleanup(&self.topology);
 
         // 6. Remove state file
         // Recorded before the state directory (and the log with it) goes

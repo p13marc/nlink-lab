@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — dynamic routing with FRR (issue #65)
+
+- **`routing frr { ospf }`** (lab block) runs `zebra` + `ospfd` in every
+  forwarding namespace node: OSPF area 0 on all IPv4 interfaces,
+  `point-to-point` on veth links, passive towards nodes that run no FRR;
+  router-id from `lo`, else the lowest IPv4. Non-router nodes keep the
+  `auto`-style static defaults, so it is a drop-in for `routing auto` on
+  router-only topologies. `routing frr { ospf { area 0.0.0.1 } }` sets
+  the lab default; a per-node (or profile) **`frr { ospf { area … router-id …
+  passive [...] hello 1s dead 4s redistribute [connected] } bgp { as 65001
+  router-id … neighbor r2 [as N] [remote IP] network 10.10.0.0/24
+  redistribute [connected] } }`** overrides it. `neighbor NODE` resolves
+  the peer address from the shared segment and the remote AS from the
+  peer's own `bgp { as … }`.
+- **Run model** (verified on FRR 10.3): one config per daemon (`-f`),
+  `-N <pathspace>` per node (`nl-<lab>-<node>`, sockets in
+  `/var/run/frr/<ps>/`), pidfiles/logs under
+  `/run/nlink-lab/frr/<lab>/<node>/`; the daemons drop to the packaged
+  `frr` user, so those directories are chowned to it. New
+  `Stage::RoutingDaemons` (after DNS, before user processes) with
+  `Op::FrrDaemons` / `KillFrrDaemons`: `apply` restarts a node's daemons
+  when its config changes and stops them when the block or node goes;
+  `destroy` and the undo journal remove the runtime directories. The
+  applier waits (30 s, `NLINK_LAB_FRR_WAIT=<secs>`, `0` disables) for
+  the expected OSPF `Full` adjacencies / BGP `Established` sessions via
+  `vtysh -N`, so `validate { reach … }` sees converged routes. A missing
+  daemon fails the deploy before any namespace exists.
+- Validator rules `frr-requires-routing-frr`, `frr-container-node`,
+  `frr-invalid-value`, `bgp-neighbor-unresolved`, warning
+  `frr-requires-forwarding`; lint `frr-without-routers`; `doctor` reports
+  zebra/ospfd/bgpd/vtysh (searched in `/usr/lib/frr` too) and the `frr`
+  user. Examples `frr-ospf.nll`, `frr-bgp.nll`; the integration lane
+  installs `frr`. Not in scope: OSPFv3/IPv6, IS-IS, FRR in container
+  nodes, OSPF over Wi-Fi interfaces.
+
 ### Changed — nlink 0.26 adoption leftovers (issue #75)
 
 - **Listener probes use sock_diag.** `wait-for --tcp` and `spawn

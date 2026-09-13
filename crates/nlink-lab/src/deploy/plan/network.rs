@@ -554,6 +554,25 @@ pub(crate) fn with_vrf_routes(
     Ok(cfg)
 }
 
+/// Static routes the planner adds per node for the lab's routing mode:
+/// none for `manual`, the BFS result for `auto`, and for `frr` the same
+/// result minus the FRR routers (they learn routes from their daemons;
+/// hosts and stubs keep their static defaults).
+pub(crate) fn auto_routes_for(
+    topology: &Topology,
+) -> BTreeMap<String, BTreeMap<String, crate::types::RouteConfig>> {
+    match topology.lab.routing {
+        crate::types::RoutingMode::Manual => BTreeMap::new(),
+        crate::types::RoutingMode::Auto => auto_generate_routes(topology),
+        crate::types::RoutingMode::Frr => {
+            let routers = crate::frr::frr_nodes(topology);
+            let mut routes = auto_generate_routes(topology);
+            routes.retain(|n, _| !routers.contains(n));
+            routes
+        }
+    }
+}
+
 /// Auto-generate static routes from the topology graph, per address
 /// family.
 ///

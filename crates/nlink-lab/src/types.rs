@@ -209,6 +209,9 @@ pub enum RoutingMode {
     /// No auto-routing (default).
     #[default]
     Manual,
+    /// Routers run FRR daemons (`routing frr { ospf }`, per-node `frr { … }`);
+    /// non-router nodes still get `auto`-style static defaults (#65).
+    Frr,
     /// Compute static routes from topology graph.
     Auto,
 }
@@ -268,6 +271,71 @@ pub struct LabConfig {
     /// Routing mode.
     #[serde(default, skip_serializing_if = "is_routing_manual")]
     pub routing: RoutingMode,
+
+    /// Lab-wide FRR defaults (`routing frr { ospf area … }`): every
+    /// forwarding namespace node without its own `frr { … }` runs this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frr: Option<FrrConfig>,
+}
+
+/// FRR routing daemons for one node (issue #65).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FrrConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ospf: Option<OspfConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bgp: Option<BgpConfig>,
+}
+
+/// `ospf { area … router-id … passive [...] hello … dead … redistribute [...] }`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct OspfConfig {
+    /// OSPF area (`0.0.0.0` when absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub router_id: Option<String>,
+    /// Interfaces that advertise their prefix but form no adjacency.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub passive: Vec<String>,
+    /// Hello interval in seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hello: Option<u32>,
+    /// Dead interval in seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dead: Option<u32>,
+    /// `connected`, `static`, `bgp`, `kernel`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub redistribute: Vec<String>,
+}
+
+/// `bgp { as … router-id … neighbor … network … redistribute [...] }`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BgpConfig {
+    /// Local autonomous system number.
+    pub asn: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub router_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub neighbors: Vec<BgpNeighbor>,
+    /// Prefixes to originate (`network 10.10.0.0/24`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub networks: Vec<String>,
+    /// `connected`, `static`, `ospf`, `kernel`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub redistribute: Vec<String>,
+}
+
+/// `neighbor NODE [as N] [remote IP]` — the address defaults to the
+/// neighbour's IP on the segment shared with this node, the remote AS to
+/// the neighbour's own `bgp { as … }`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BgpNeighbor {
+    pub node: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_as: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
 }
 
 fn is_dns_off(mode: &DnsMode) -> bool {
@@ -355,6 +423,10 @@ pub struct Profile {
 
     /// Firewall configuration.
     pub firewall: Option<FirewallConfig>,
+
+    /// FRR daemons for nodes using this profile (#65).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frr: Option<FrrConfig>,
 }
 
 /// Accept `"router"`, `null`, or `["a", "b"]` for `Node::profiles`.
@@ -480,6 +552,11 @@ pub struct Node {
     /// Nodes this node depends on (deployed after dependencies are healthy).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends_on: Vec<String>,
+
+    /// FRR daemons on this node (`frr { ospf … bgp … }`, #65). Overrides
+    /// the profile's and the lab's `routing frr { … }` defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frr: Option<FrrConfig>,
 
     /// Sysctl values (merged with profile).
     #[serde(default)]
@@ -1241,6 +1318,32 @@ impl Topology {
     }
 
     /// Get the effective sysctls for a node (profile + node-level merged).
+    /// The FRR configuration a node runs under `routing frr`: the node's
+    /// own `frr { … }`, else the last profile's, else the lab default
+    /// (`routing frr { … }`) for every forwarding namespace node.
+    /// `None` when the lab is not in FRR mode or the node runs nothing.
+    pub fn effective_frr(&self, node: &Node) -> Option<FrrConfig> {
+        if self.lab.routing != RoutingMode::Frr || node.is_container() {
+            return None;
+        }
+        if let Some(f) = &node.frr {
+            return Some(f.clone());
+        }
+        for profile_name in node.profiles.iter().rev() {
+            if let Some(f) = self.profiles.get(profile_name).and_then(|p| p.frr.as_ref()) {
+                return Some(f.clone());
+            }
+        }
+        let forwards = self
+            .effective_sysctls(node)
+            .get("net.ipv4.ip_forward")
+            .is_some_and(|v| v == "1");
+        if forwards {
+            return self.lab.frr.clone();
+        }
+        None
+    }
+
     pub fn effective_sysctls(&self, node: &Node) -> BTreeMap<String, String> {
         let mut sysctls = BTreeMap::new();
 

@@ -1,0 +1,37 @@
+# OSPF with FRR: three routers in a triangle, a host behind r1 and r3.
+#
+# `routing frr { ospf }` makes every forwarding namespace node run
+# zebra + ospfd (area 0 on all interfaces, point-to-point on veth links,
+# passive towards hosts); hosts keep `auto`-style static defaults.
+# Requires the `frr` package (daemons live in /usr/lib/frr on Debian).
+#
+#   sudo nlink-lab exec frr-ospf r1 -- vtysh -N nl-frr-ospf-r1 -c "show ip ospf neighbor"
+#   sudo nlink-lab exec frr-ospf h1 -- ip route     # far subnets appear as `proto ospf`
+#   sudo nlink-lab watch frr-ospf --family route    # watch convergence live
+
+lab "frr-ospf" {
+  description "OSPF area 0 over a router triangle, hosts get static defaults"
+  dns hosts
+  routing frr { ospf }
+}
+
+profile router { forward ipv4 }
+
+node r1 : router { lo 1.1.1.1/32 }
+node r2 : router { lo 2.2.2.2/32 }
+node r3 : router { lo 3.3.3.3/32 }
+node h1
+node h2
+
+link r1:eth0 -- r2:eth0 { 10.0.12.1/30 -- 10.0.12.2/30 }
+link r2:eth1 -- r3:eth0 { 10.0.23.1/30 -- 10.0.23.2/30 }
+link r3:eth1 -- r1:eth1 { 10.0.31.1/30 -- 10.0.31.2/30 }
+link r1:eth2 -- h1:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
+link r3:eth2 -- h2:eth0 { 10.3.0.1/24 -- 10.3.0.2/24 }
+
+validate {
+  route-has h1 default via 10.1.0.1
+  route-has r1 10.3.0.0/24 via 10.0.31.1
+  reach h1 h2
+  reach r1 r3
+}

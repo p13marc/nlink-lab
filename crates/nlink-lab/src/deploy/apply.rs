@@ -42,6 +42,9 @@ pub(super) struct ApplyEnv {
     pub wifi_loaded: bool,
     /// Reconcile the declarative layers with purge (apply mode).
     pub purge: bool,
+    /// Resolved FRR daemon binaries (filled by the preflight when the
+    /// plan starts routing daemons, #65).
+    pub frr_bins: BTreeMap<crate::frr::Daemon, std::path::PathBuf>,
 }
 
 impl ApplyEnv {
@@ -68,6 +71,7 @@ impl ApplyEnv {
             dns_injected: false,
             wifi_loaded: false,
             purge: false,
+            frr_bins: BTreeMap::new(),
         })
     }
 
@@ -127,6 +131,20 @@ impl ApplyEnv {
 /// Execute every op of `plan` in order, journaling inverses.
 pub(super) async fn execute(plan: &Plan, env: &mut ApplyEnv, journal: &mut Journal) -> Result<()> {
     let mut last_stage: Option<Stage> = None;
+    // Preflight: every FRR daemon the plan needs must exist before the
+    // first kernel mutation, so a missing `frr` package fails cleanly.
+    let frr_needed: std::collections::BTreeSet<crate::frr::Daemon> = plan
+        .ops
+        .iter()
+        .filter_map(|o| match o {
+            Op::FrrDaemons { spec, .. } => Some(spec.daemons.iter().copied()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    if !frr_needed.is_empty() {
+        env.frr_bins = crate::frr::require_daemons(&frr_needed)?;
+    }
     for op in &plan.ops {
         let stage = op.stage();
         if last_stage != Some(stage) {
@@ -143,6 +161,97 @@ pub(super) async fn execute(plan: &Plan, env: &mut ApplyEnv, journal: &mut Journ
         tracing::info!("waiting for WiFi association...");
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
+    wait_frr_converged(plan, env).await;
+    Ok(())
+}
+
+/// Wait (bounded) for the OSPF adjacencies / BGP sessions the plan's
+/// FRR nodes expect, so `validate { reach … }` and user processes see
+/// converged routes. `NLINK_LAB_FRR_WAIT=<secs>` overrides the 30 s
+/// budget (`0` disables); without `vtysh` a fixed 5 s settle is used.
+async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) {
+    let nodes: Vec<(&String, &crate::frr::FrrNodeSpec)> = plan
+        .ops
+        .iter()
+        .filter_map(|o| match o {
+            Op::FrrDaemons { node, spec } => Some((node, spec.as_ref())),
+            _ => None,
+        })
+        .collect();
+    if nodes.is_empty() {
+        return;
+    }
+    let budget = std::env::var("NLINK_LAB_FRR_WAIT")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(30);
+    if budget == 0 {
+        return;
+    }
+    let Some(vtysh) = crate::frr::locate_vtysh() else {
+        tracing::info!("waiting 5s for FRR to converge (no vtysh to ask)");
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        return;
+    };
+    tracing::info!("waiting for FRR adjacencies (up to {budget}s)...");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(budget);
+    loop {
+        let mut all_ok = true;
+        for (node, spec) in &nodes {
+            let Ok(handle) = env.handle(node) else {
+                continue;
+            };
+            let count = |cmd: &str, needle: &str| -> usize {
+                let mut c = std::process::Command::new(&vtysh);
+                c.args(["-N", &spec.pathspace, "-c", cmd]);
+                match handle.spawn_output(c) {
+                    Ok(out) => String::from_utf8_lossy(&out.stdout).matches(needle).count(),
+                    Err(_) => 0,
+                }
+            };
+            if spec.expected_ospf_neighbors > 0
+                && count("show ip ospf neighbor json", "\"Full/") < spec.expected_ospf_neighbors
+            {
+                all_ok = false;
+            }
+            if spec.expected_bgp_peers > 0
+                && count("show bgp summary json", "\"state\":\"Established\"")
+                    < spec.expected_bgp_peers
+            {
+                all_ok = false;
+            }
+        }
+        if all_ok {
+            tracing::info!("FRR converged");
+            return;
+        }
+        if std::time::Instant::now() >= deadline {
+            tracing::warn!("FRR did not converge within {budget}s; continuing");
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
+/// Create `dir` (0750) owned by the `frr` user so the daemons, which
+/// drop privileges themselves, can write there.
+fn frr_dir(dir: &std::path::Path, ids: (u32, u32)) -> Result<()> {
+    std::fs::create_dir_all(dir)
+        .map_err(|e| Error::deploy_failed(format!("failed to create {}: {e}", dir.display())))?;
+    std::fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o750))
+        .map_err(|e| Error::deploy_failed(format!("chmod {}: {e}", dir.display())))?;
+    std::os::unix::fs::chown(dir, Some(ids.0), Some(ids.1))
+        .map_err(|e| Error::deploy_failed(format!("chown {}: {e}", dir.display())))?;
+    Ok(())
+}
+
+fn frr_file(path: &std::path::Path, content: &str, ids: (u32, u32)) -> Result<()> {
+    std::fs::write(path, content)
+        .map_err(|e| Error::deploy_failed(format!("failed to write {}: {e}", path.display())))?;
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o640))
+        .map_err(|e| Error::deploy_failed(format!("chmod {}: {e}", path.display())))?;
+    std::os::unix::fs::chown(path, Some(ids.0), Some(ids.1))
+        .map_err(|e| Error::deploy_failed(format!("chown {}: {e}", path.display())))?;
     Ok(())
 }
 
@@ -643,6 +752,102 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 tokio::time::sleep(every).await;
             }
         }
+        Op::FrrDaemons { node, spec } => {
+            use crate::frr;
+            let ids = frr::frr_ids().ok_or_else(|| {
+                Error::deploy_failed(format!(
+                    "routing frr: user '{}' does not exist",
+                    frr::FRR_USER
+                ))
+            })?;
+            let handle = env.handle(node)?.clone();
+            for dir in frr::runtime_dirs(&env.lab, node, &spec.pathspace) {
+                frr_dir(&dir, ids)?;
+                journal.record(Undo::RemoveDir { path: dir });
+            }
+            for (d, text) in &spec.confs {
+                frr_file(&frr::conf_path(&env.lab, node, *d), text, ids)?;
+            }
+            frr_file(
+                &frr::node_dir(&env.lab, node).join("frr.conf"),
+                &spec.integrated,
+                ids,
+            )?;
+            for d in &spec.daemons {
+                let bin = env
+                    .frr_bins
+                    .get(d)
+                    .cloned()
+                    .or_else(|| frr::locate_daemon(*d))
+                    .ok_or_else(|| {
+                        Error::deploy_failed(format!("routing frr: {} not found", d.name()))
+                    })?;
+                let pidfile = frr::pidfile(&env.lab, node, *d);
+                let conf = frr::conf_path(&env.lab, node, *d);
+                let log = frr::log_path(&env.lab, node, *d);
+                let mut cmd = std::process::Command::new(bin);
+                cmd.arg("-d")
+                    .args(["-N", &spec.pathspace])
+                    .arg("-f")
+                    .arg(&conf)
+                    .arg("-i")
+                    .arg(&pidfile)
+                    .arg(format!("--log=file:{}", log.display()))
+                    .args(["--log-level", "informational"]);
+                let pidfile_str = pidfile.to_string_lossy().to_string();
+                let stderr_file =
+                    frr::node_dir(&env.lab, node).join(format!("{}.stderr", d.name()));
+                start_forking_daemon(
+                    &handle,
+                    cmd,
+                    d.name(),
+                    node,
+                    &pidfile_str,
+                    &stderr_file,
+                    env,
+                    journal,
+                )?;
+                if *d == frr::Daemon::Zebra {
+                    // Protocol daemons retry the zapi socket anyway; waiting
+                    // keeps their logs clean.
+                    let sock = frr::run_dir(&spec.pathspace).join("zserv.api");
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                    while !sock.exists() && std::time::Instant::now() < deadline {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                }
+            }
+        }
+        Op::KillFrrDaemons {
+            node,
+            pathspace,
+            daemons,
+        } => {
+            use crate::frr;
+            for d in daemons.iter().rev() {
+                let pidfile = frr::pidfile(&env.lab, node, *d);
+                let pid = std::fs::read_to_string(&pidfile)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u32>().ok());
+                match pid {
+                    Some(pid) => {
+                        let outcome =
+                            crate::running::kill_tracked(pid, env.starttimes.get(&pid).copied());
+                        tracing::info!("stop {} of '{node}' (pid {pid}): {outcome:?}", d.name());
+                        env.starttimes.remove(&pid);
+                        env.pids.retain(|(_, p)| *p != pid);
+                    }
+                    None => tracing::warn!(
+                        "{} of '{node}': no pidfile at {}; left running",
+                        d.name(),
+                        pidfile.display()
+                    ),
+                }
+            }
+            for dir in frr::runtime_dirs(&env.lab, node, pathspace) {
+                let _ = std::fs::remove_dir_all(dir);
+            }
+        }
         Op::WifiDaemon { node, wifi } => {
             let handle = env.handle(node)?.clone();
             match wifi.mode {
@@ -1114,6 +1319,52 @@ fn start_wifi_daemon(
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
+    track_pidfile(what, node, pidfile, env, journal);
+    Ok(())
+}
+
+/// Start a daemon that forks itself into the background (FRR's `-d`)
+/// *without* capturing its stdio through pipes: the daemonised child
+/// inherits them and would keep a pipe open forever, so the launcher
+/// would never see EOF. stdout goes to `/dev/null`, stderr to a file
+/// that is read back only when the foreground parent exits non-zero.
+#[allow(clippy::too_many_arguments)]
+fn start_forking_daemon(
+    handle: &NsRef,
+    mut cmd: std::process::Command,
+    what: &str,
+    node: &str,
+    pidfile: &str,
+    stderr_file: &std::path::Path,
+    env: &mut ApplyEnv,
+    journal: &mut Journal,
+) -> Result<()> {
+    let _ = std::fs::remove_file(pidfile);
+    let stderr = std::fs::File::create(stderr_file).map_err(|e| {
+        Error::deploy_failed(format!("failed to create {}: {e}", stderr_file.display()))
+    })?;
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::from(stderr));
+    let mut child = handle
+        .spawn(cmd)
+        .map_err(|e| Error::deploy_failed(format!("failed to start {what} on '{node}': {e}")))?;
+    let status = child
+        .wait()
+        .map_err(|e| Error::deploy_failed(format!("failed to wait for {what} on '{node}': {e}")))?;
+    if !status.success() {
+        let msg = std::fs::read_to_string(stderr_file).unwrap_or_default();
+        return Err(Error::deploy_failed(format!(
+            "{what} on '{node}' exited with {status}: {}",
+            msg.trim()
+        )));
+    }
+    track_pidfile(what, node, pidfile, env, journal);
+    Ok(())
+}
+
+/// Wait up to 2 s for `pidfile`, then journal + track the pid it names.
+fn track_pidfile(what: &str, node: &str, pidfile: &str, env: &mut ApplyEnv, journal: &mut Journal) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     let pid = loop {
         if let Some(pid) = std::fs::read_to_string(pidfile)
@@ -1141,5 +1392,4 @@ fn start_wifi_daemon(
         }
         None => tracing::warn!("{what} on '{node}' wrote no pidfile at {pidfile}; not tracked"),
     }
-    Ok(())
 }

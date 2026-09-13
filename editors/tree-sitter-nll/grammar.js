@@ -88,7 +88,7 @@ module.exports = grammar({
         seq("tags", $.list),
         seq("mgmt", choice($.cidr, $.ipv6_cidr), optional("host-reachable")),
         seq("dns", choice("hosts", "off")),
-        seq("routing", choice("auto", "manual")),
+        seq("routing", choice("auto", "manual", seq("frr", optional($.frr_block)))),
       ),
 
     // ── Profile ─────────────────────────────────────
@@ -128,6 +128,7 @@ module.exports = grammar({
         $.dummy_block,
         $.bond_block,
         $.vlan_block,
+        $.frr_property,
         $.macvlan_block,
         $.ipvlan_block,
         $.wifi_block,
@@ -214,6 +215,16 @@ module.exports = grammar({
 
     dummy_block: ($) =>
       seq("dummy", $.identifier, $.generic_block),
+
+    // `frr { ospf [{ … }] bgp { … } }` (#65)
+    frr_property: ($) => seq("frr", $.frr_block),
+
+    frr_block: ($) =>
+      seq(
+        "{",
+        repeat(choice(seq("ospf", optional($.generic_block)), seq("bgp", $.generic_block))),
+        "}",
+      ),
 
     bond_block: ($) => seq("bond", $.iface_name, $.generic_block),
 
@@ -592,6 +603,22 @@ module.exports = grammar({
         seq("parent", choice($.iface_name, $._name)),
         seq("id", $.integer),
         seq("protocol", choice($.option_word, $._value)),
+        seq("area", $._value),
+        seq("router-id", $._value),
+        seq("passive", $.list),
+        seq("hello", $.duration),
+        seq("dead", $.duration),
+        seq("redistribute", $.list),
+        seq("as", $.integer),
+        seq("network", $.cidr),
+        prec.right(
+          seq(
+            "neighbor",
+            $._name,
+            optional(seq("as", $.integer)),
+            optional(seq("remote", $._value)),
+          ),
+        ),
       ),
 
     // ── Expressions and literals ────────────────────

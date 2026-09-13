@@ -74,11 +74,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
     let mut ops = topology::plan_topology(topology, &dns_extra_hosts)?;
 
     // ── per-node declarative stack ──
-    let auto_routes = if topology.lab.routing == crate::types::RoutingMode::Auto {
-        network::auto_generate_routes(topology)
-    } else {
-        Default::default()
-    };
+    let auto_routes = network::auto_routes_for(topology);
     for (node_name, node) in &topology.nodes {
         let net = network::topology_to_network_config(
             node_name,
@@ -153,6 +149,16 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
             iface: ep.iface,
             limit: limit.clone(),
         });
+    }
+
+    // ── FRR routing daemons (#65) ──
+    for (node_name, node) in &topology.nodes {
+        if let Some(cfg) = topology.effective_frr(node) {
+            ops.push(Op::FrrDaemons {
+                node: node_name.clone(),
+                spec: Box::new(crate::frr::build_spec(topology, node_name, node, &cfg)?),
+            });
+        }
     }
 
     // ── processes, dependency-ordered ──

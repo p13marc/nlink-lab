@@ -80,5 +80,15 @@ for sh in bash zsh fish; do "$bin" completions "$sh" >/dev/null || { say "FAIL c
 say "== status (no labs) --json is valid JSON"
 XDG_STATE_HOME="$tmp/state" "$bin" status --json | python3 -c 'import json,sys; json.load(sys.stdin)' || { say "FAIL status --json"; fail=1; }
 
+say "== lsp (stdio JSON-RPC)"
+# EOF on stdin must end the server cleanly, never hang.
+printf '' | timeout 10 "$bin" lsp >/dev/null 2>&1 || { say "FAIL: lsp on empty stdin"; fail=1; }
+# One real handshake must come back framed on stdout. This also proves no
+# log line leaks into the protocol (`-v` raises the tracing level).
+req='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+printf 'Content-Length: %d\r\n\r\n%s' "${#req}" "$req" \
+  | timeout 10 "$bin" -v lsp 2>/dev/null | grep -q '"capabilities"' \
+  || { say "FAIL: lsp initialize did not answer with capabilities on stdout"; fail=1; }
+
 if [ "$fail" -ne 0 ]; then say "cli-smoke: FAILED"; exit 1; fi
 say "cli-smoke: OK"

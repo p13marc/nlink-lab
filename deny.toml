@@ -40,6 +40,10 @@ allow = [
     # Community Data License Agreement – Permissive 2.0. Used by
     # `webpki-roots` (the Mozilla CA bundle) in zenoh's TLS stack.
     "CDLA-Permissive-2.0",
+    # MIT No Attribution — a public-domain-equivalent MIT variant. Used by
+    # `borrow-or-share`, pulled in by `fluent-uri` <- `ls-types` <-
+    # `tower-lsp-server` (the `lsp` subcommand, issue #56).
+    "MIT-0",
 ]
 confidence-threshold = 0.8
 

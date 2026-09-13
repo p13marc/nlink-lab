@@ -127,6 +127,9 @@ bins/lab/src/
   ctx.rs            # Ctx {json, quiet, verbose}, parse_topology(--set), require_root
   output.rs         # exit-code policy (0/1/2/124/child)
   cmd/<name>.rs     # one handler per subcommand (Args + run)
+  cmd/lsp/          # `lsp`: analyze (diagnostics), locate (validator
+                    #   location -> span), position (byte <-> UTF-16),
+                    #   symbols (token queries)
   render/           # dot / ascii / mermaid topology renderers
   host_scan.rs      # orphan/stale detection + reaper (tag-gated, nlink-based)
   util.rs           # tail, env pairs, byte sizes, BPF glue
@@ -232,7 +235,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (37 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (45 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply` (`--reset-impairments`),
 `snapshot` (`--list`, `--delete`), `restore` (`--dry-run`),
 `events` (`--follow`, `--since`, `--kind`, `--socket`),
@@ -249,7 +252,9 @@ CLI commands (37 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json
 `ip` (`--iface`, `--cidr`),
 `ps`, `kill`, `proc-stat`, `init`, `completions`, `daemon`, `metrics`,
 `containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
-`pull`, `stats`, `restart`.
+`pull`, `stats`, `restart`, `fmt` (`--check`, `-w`, `-`), `lint`
+(`--strict`, `--allow`), `doctor`, `verify`, `edit` (`--set-impair`),
+`scenario`, `lsp` (LSP server over stdio, issue #56).
 
 Global flags: `--json`, `--verbose`, `--quiet`, `--skip-validate`.
 

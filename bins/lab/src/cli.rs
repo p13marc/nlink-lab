@@ -98,6 +98,22 @@ pub enum Commands {
     /// silences one.
     Lint(cmd::lint::Args),
 
+    /// Run a Language Server Protocol server for `.nll` files on stdio.
+    ///
+    /// Editors get the same diagnostics `validate` and `lint` print
+    /// (errors, warnings and style hints, each carrying its rule id),
+    /// plus document symbols, go-to-definition on `node:iface` endpoints
+    /// and `: profile` references, hover showing a node's interfaces and
+    /// addresses, keyword/name completion, and formatting through the
+    /// same token-level formatter as `nlink-lab fmt`.
+    ///
+    /// `import` statements resolve against the document's own directory,
+    /// so an unsaved buffer is checked exactly like a saved file.
+    ///
+    /// This subcommand reads and writes JSON-RPC on stdin/stdout; logs go
+    /// to stderr. See docs/cli/lsp.md for editor configuration.
+    Lsp(cmd::lsp::Args),
+
     /// Check a running lab for drift against its topology (exit 2 on drift).
     ///
     /// Compares every node's live links/addresses/routes/nftables with

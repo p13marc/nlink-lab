@@ -69,6 +69,7 @@ Things you'd reach for in a chaos test.
 | [`import`](import.md) | Import a `.nlz` archive — verify, extract, deploy |
 | [`pull`](pull.md) | Pre-pull container images for a topology |
 | [`completions`](completions.md) | Generate shell completions |
+| [`lsp`](lsp.md) | Language server for `.nll` files (stdio) |
 | [`daemon`](daemon.md) | Run the zenoh backend for a lab (metrics, RPC, events) |
 | [`metrics`](metrics.md) | Stream live metrics published by `daemon` |
 | [`watch`](watch.md) | Print RTNETLINK + nftables drift events for a lab |

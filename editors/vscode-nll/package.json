@@ -1,6 +1,6 @@
 {
   "name": "nll",
-  "displayName": "NLL — nlink-lab Language",
+  "displayName": "NLL \u2014 nlink-lab Language",
   "description": "Syntax highlighting for NLL network topology files",
   "version": "0.1.0",
   "publisher": "nlink-lab",
@@ -8,13 +8,20 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "nll",
-        "aliases": ["NLL", "nlink-lab"],
-        "extensions": [".nll"],
+        "aliases": [
+          "NLL",
+          "nlink-lab"
+        ],
+        "extensions": [
+          ".nll"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -24,6 +31,33 @@
         "scopeName": "source.nll",
         "path": "./syntaxes/nll.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "NLL",
+      "properties": {
+        "nll.serverPath": {
+          "type": "string",
+          "default": "nlink-lab",
+          "description": "Path to the nlink-lab binary that provides the language server (`nlink-lab lsp`)."
+        },
+        "nll.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the JSON-RPC traffic between VS Code and the NLL language server."
+        }
+      }
+    }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:nll"
+  ],
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }

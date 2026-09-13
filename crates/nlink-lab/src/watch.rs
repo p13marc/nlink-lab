@@ -19,7 +19,7 @@ use nlink::netlink::events::NetworkEvent;
 use nlink::netlink::nftables::events::NftablesEvent;
 use nlink::netlink::resync::ResyncedEvent;
 use nlink::{Connection, Nftables, Route};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, Result};
@@ -30,7 +30,7 @@ use crate::running::RunningLab;
 pub use crate::deploy::NsRef as NsResolver;
 
 /// Which event families to subscribe to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WatchFamily {
     /// RTNETLINK only (link/addr/route/neighbor/qdisc/filter/...).
@@ -51,7 +51,7 @@ impl WatchFamily {
 }
 
 /// One emitted event line.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchEvent {
     /// Lab node the event came from.
     pub node: String,
@@ -64,7 +64,7 @@ pub struct WatchEvent {
     /// True when this frame came from an ENOBUFS resync replay
     /// (rather than live multicast). Defaults false on the live
     /// path.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub from_snapshot: bool,
 }
 
@@ -72,7 +72,7 @@ pub struct WatchEvent {
 /// human-readable / NDJSON consumer use cases. Anything that
 /// doesn't fit one of the typed variants falls through to
 /// `Other { raw }`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WatchEventKind {
     NewLink {
@@ -747,6 +747,53 @@ impl Default for WatchOpts {
 /// the rest of the lab keeps tailing. Errors are written to
 /// stderr.
 pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
+    let print_json = opts.json;
+    let Some((mut rx, tasks)) = watch_stream(lab, &opts)? else {
+        return Ok(());
+    };
+
+    let printer = tokio::spawn(async move {
+        while let Some(ev) = rx.recv().await {
+            if print_json {
+                match serde_json::to_string(&ev) {
+                    Ok(line) => println!("{line}"),
+                    Err(e) => eprintln!("[watch] json encode failed: {e}"),
+                }
+            } else {
+                println!("{}", ev.render_line());
+            }
+        }
+    });
+
+    // Wait for Ctrl-C OR every subscription task to finish (the
+    // latter happens if every node fails to subscribe).
+    let all_subs = futures_join_all(tasks);
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("watch: Ctrl-C — shutting down");
+        }
+        _ = all_subs => {
+            tracing::info!("watch: all subscriptions ended");
+        }
+    }
+    // Drop the printer task (channel closes when tasks exit).
+    drop(printer);
+    Ok(())
+}
+
+/// The drift channel and the per-node subscription tasks feeding it.
+pub type WatchStream = (
+    tokio::sync::mpsc::Receiver<WatchEvent>,
+    Vec<tokio::task::JoinHandle<()>>,
+);
+
+/// Subscribe to the lab's drift events and hand back the stream.
+///
+/// Returns `None` when no node matches `opts.node`. The channel closes
+/// once every subscription task has exited; drop the receiver (or abort
+/// the tasks) to stop. `opts.json` is ignored — rendering is the
+/// caller's business. Used by [`watch_loop`] and `nlink-lab events`.
+pub fn watch_stream(lab: &RunningLab, opts: &WatchOpts) -> Result<Option<WatchStream>> {
     let node_names: Vec<String> = lab
         .topology()
         .nodes
@@ -764,10 +811,10 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
                 opts.node
             );
         }
-        return Ok(());
+        return Ok(None);
     }
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<WatchEvent>(1024);
+    let (tx, rx) = tokio::sync::mpsc::channel::<WatchEvent>(1024);
     let mut tasks = Vec::new();
     let include_snapshot = opts.include_snapshot;
 
@@ -810,35 +857,7 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
     // Drop the local sender so the channel closes once all
     // tasks exit.
     drop(tx);
-
-    let print_json = opts.json;
-    let printer = tokio::spawn(async move {
-        while let Some(ev) = rx.recv().await {
-            if print_json {
-                match serde_json::to_string(&ev) {
-                    Ok(line) => println!("{line}"),
-                    Err(e) => eprintln!("[watch] json encode failed: {e}"),
-                }
-            } else {
-                println!("{}", ev.render_line());
-            }
-        }
-    });
-
-    // Wait for Ctrl-C OR every subscription task to finish (the
-    // latter happens if every node fails to subscribe).
-    let all_subs = futures_join_all(tasks);
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            tracing::info!("watch: Ctrl-C — shutting down");
-        }
-        _ = all_subs => {
-            tracing::info!("watch: all subscriptions ended");
-        }
-    }
-    // Drop the printer task (channel closes when tasks exit).
-    drop(printer);
-    Ok(())
+    Ok(Some((rx, tasks)))
 }
 
 /// Join a Vec of `JoinHandle<()>` futures, awaiting them all

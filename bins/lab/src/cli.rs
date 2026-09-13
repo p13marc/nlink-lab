@@ -127,6 +127,15 @@ pub enum Commands {
     #[command(group = clap::ArgGroup::new("impair_mode").args(["show", "clear", "partition", "heal"]).multiple(false))]
     Impair(cmd::impair::Args),
 
+    /// Show a lab's lifecycle log (deploy, apply, spawn, kill, impair,
+    /// partition, snapshot, …); `--follow` merges live drift (RTNETLINK /
+    /// nftables) and runtime (process exit, link state) events, optionally
+    /// fanned out on a unix socket.
+    ///
+    /// JSON OUTPUT (with `--json`): one record per line tagged
+    /// `source: lifecycle | drift | runtime`. Schema: docs/json-schemas/events.schema.json
+    Events(cmd::events::Args),
+
     /// Save a checkpoint of a running lab (topology + runtime impairments
     /// + partitions) under `<state>/<lab>/snapshots/<name>/`.
     ///

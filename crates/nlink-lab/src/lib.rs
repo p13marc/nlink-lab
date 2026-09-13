@@ -69,6 +69,7 @@ pub mod deploy;
 pub mod diff;
 pub mod dns;
 pub mod error;
+pub mod events;
 pub mod fmt;
 pub mod helpers;
 pub mod impair_parse;
@@ -102,6 +103,7 @@ pub use deploy::{
 };
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
+pub use events::{LifecycleEvent, LifecycleKind};
 pub use lint::{LINT_RULE_IDS, LintFinding, lint};
 pub use proc_stat::ProcStat;
 pub use running::{
@@ -116,7 +118,10 @@ pub use types::{
 pub use validator::{
     RuleOptions, Severity, ValidationIssue, ValidationResult, rule_ids, rule_severity,
 };
-pub use watch::{NsResolver, WatchEvent, WatchEventKind, WatchFamily, WatchOpts, watch_loop};
+pub use watch::{
+    NsResolver, WatchEvent, WatchEventKind, WatchFamily, WatchOpts, WatchStream, watch_loop,
+    watch_stream,
+};
 
 /// Proc macro for integration testing. See [`lab_test`] for details.
 pub use nlink_lab_macros::lab_test;

@@ -309,6 +309,14 @@ pub async fn serve(
     .await?;
     let events_publisher =
         declare_publisher(session, "events publisher", topics::events(&lab_name)).await?;
+    let lifecycle_publisher =
+        declare_publisher(session, "lifecycle publisher", topics::lifecycle(&lab_name)).await?;
+    // Lifecycle events are recorded by the CLI in events.ndjson (#70);
+    // republish new lines from the current end of the file.
+    let lifecycle_path = nlink_lab::events::events_path(&lab_name);
+    let mut lifecycle_offset = std::fs::metadata(&lifecycle_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
 
     // ── Queryables ─────────────────────────────────────────
     let exec_queryable =
@@ -392,6 +400,30 @@ pub async fn serve(
     loop {
         tokio::select! {
             _ = metrics_interval.tick() => {
+                // New lifecycle lines since the last tick.
+                if let Ok(meta) = std::fs::metadata(&lifecycle_path) {
+                    if meta.len() < lifecycle_offset {
+                        lifecycle_offset = 0;
+                    }
+                    if meta.len() > lifecycle_offset
+                        && let Ok(bytes) = std::fs::read(&lifecycle_path)
+                    {
+                        let new = &bytes[lifecycle_offset as usize..];
+                        let end = new.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+                        lifecycle_offset += end as u64;
+                        for line in String::from_utf8_lossy(&new[..end]).lines() {
+                            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                                continue;
+                            };
+                            if let Err(e) = lifecycle_publisher.put(line.as_bytes().to_vec()).await {
+                                warn!("publish lifecycle event: {e}");
+                            }
+                            if http_task.is_some() {
+                                http_state.write().await.push_event("lifecycle", value);
+                            }
+                        }
+                    }
+                }
                 match collector.snapshot(&lab).await {
                     Ok((snapshot, events)) => {
                         for event in &events {
@@ -399,6 +431,11 @@ pub async fn serve(
                                 && let Err(e) = events_publisher.put(bytes).await
                             {
                                 warn!("publish event: {e}");
+                            }
+                            if http_task.is_some()
+                                && let Ok(v) = serde_json::to_value(event)
+                            {
+                                http_state.write().await.push_event("runtime", v);
                             }
                         }
                         for (node_name, node_metrics) in &snapshot.nodes {

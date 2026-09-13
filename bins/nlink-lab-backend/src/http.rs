@@ -17,12 +17,47 @@ use nlink_lab_shared::metrics::MetricsSnapshot;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::RwLock;
 
+/// Ring of recent events for `/api/v1/events`.
+const EVENT_RING: usize = 500;
+
 /// What the endpoint serves; the backend loop updates it on every tick.
-#[derive(Default)]
 pub struct State {
     pub snapshot: Option<MetricsSnapshot>,
     pub health: Option<HealthStatus>,
     pub topology: serde_json::Value,
+    /// Most recent lifecycle + runtime events, oldest first.
+    pub events: std::collections::VecDeque<serde_json::Value>,
+    /// Live fan-out for `/api/v1/events/stream` (SSE).
+    pub event_stream: tokio::sync::broadcast::Sender<String>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        let (event_stream, _) = tokio::sync::broadcast::channel(256);
+        Self {
+            snapshot: None,
+            health: None,
+            topology: serde_json::Value::Null,
+            events: std::collections::VecDeque::new(),
+            event_stream,
+        }
+    }
+}
+
+impl State {
+    /// Record an event (tagged with its `source`) for `/api/v1/events`
+    /// and push it to SSE subscribers.
+    pub fn push_event(&mut self, source: &str, mut value: serde_json::Value) {
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("source".into(), serde_json::Value::String(source.into()));
+        }
+        if self.events.len() >= EVENT_RING {
+            self.events.pop_front();
+        }
+        let line = serde_json::to_string(&value).unwrap_or_default();
+        self.events.push_back(value);
+        let _ = self.event_stream.send(line);
+    }
 }
 
 pub type Shared = Arc<RwLock<State>>;
@@ -56,6 +91,9 @@ async fn handle(mut stream: tokio::net::TcpStream, state: Shared) -> std::io::Re
     let mut parts = request.lines().next().unwrap_or("").split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
     let path = path.split('?').next().unwrap_or("/");
+    if method == "GET" && path == "/api/v1/events/stream" {
+        return serve_sse(stream, state).await;
+    }
     let (status, content_type, body) = if method != "GET" {
         (
             "405 Method Not Allowed",
@@ -71,6 +109,11 @@ async fn handle(mut stream: tokio::net::TcpStream, state: Shared) -> std::io::Re
             ),
             "/api/v1/snapshot" => json_or_404(state.read().await.snapshot.as_ref()),
             "/api/v1/health" => json_or_404(state.read().await.health.as_ref()),
+            "/api/v1/events" => (
+                "200 OK",
+                "application/json",
+                serde_json::to_string_pretty(&state.read().await.events).unwrap_or_default(),
+            ),
             "/api/v1/topology" => (
                 "200 OK",
                 "application/json",
@@ -79,7 +122,7 @@ async fn handle(mut stream: tokio::net::TcpStream, state: Shared) -> std::io::Re
             "/" => (
                 "200 OK",
                 "text/plain",
-                "nlink-lab backend: /metrics, /api/v1/snapshot, /api/v1/health, /api/v1/topology\n"
+                "nlink-lab backend: /metrics, /api/v1/snapshot, /api/v1/health, /api/v1/topology, /api/v1/events, /api/v1/events/stream\n"
                     .to_string(),
             ),
             _ => ("404 Not Found", "text/plain", "not found\n".to_string()),
@@ -90,6 +133,38 @@ async fn handle(mut stream: tokio::net::TcpStream, state: Shared) -> std::io::Re
         body.len()
     );
     stream.write_all(response.as_bytes()).await?;
+    stream.shutdown().await
+}
+
+/// `text/event-stream`: replay the ring, then push every new event as a
+/// `data:` frame until the client goes away.
+async fn serve_sse(mut stream: tokio::net::TcpStream, state: Shared) -> std::io::Result<()> {
+    let (backlog, mut rx) = {
+        let st = state.read().await;
+        (st.events.clone(), st.event_stream.subscribe())
+    };
+    stream
+        .write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n",
+        )
+        .await?;
+    for ev in backlog {
+        let line = serde_json::to_string(&ev).unwrap_or_default();
+        stream
+            .write_all(format!("data: {line}\n\n").as_bytes())
+            .await?;
+    }
+    loop {
+        match rx.recv().await {
+            Ok(line) => {
+                stream
+                    .write_all(format!("data: {line}\n\n").as_bytes())
+                    .await?
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(_) => break,
+        }
+    }
     stream.shutdown().await
 }
 
@@ -311,6 +386,7 @@ mod tests {
                 uptime_secs: 9,
             }),
             topology: serde_json::json!({}),
+            ..Default::default()
         }
     }
 

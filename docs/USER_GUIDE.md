@@ -1119,6 +1119,22 @@ sudo nlink-lab impair mylab router:wan0 --out-delay 50ms --in-delay 200ms
 sudo nlink-lab impair mylab router:wan0 --out-loss 0% --in-loss 5%
 ```
 
+### Events
+
+Every operation on a lab is logged; `events` shows the history and can
+follow it live, merged with kernel drift and process/interface events:
+
+```bash
+nlink-lab events mylab                        # deployed, spawned, impaired, …
+nlink-lab events mylab --since 10m --kind impaired --kind partitioned
+sudo nlink-lab events mylab --follow          # + drift (RTNETLINK/nftables) + runtime
+sudo nlink-lab events mylab --follow --json --socket /run/mylab-events.sock
+nlink-lab daemon mylab --http 127.0.0.1:9100  # then GET /api/v1/events, /api/v1/events/stream (SSE)
+```
+
+Lifecycle lines live in `<state>/<lab>/events.ndjson` (rotated at 10 MB);
+`--json` records carry `source: lifecycle | drift | runtime`.
+
 ### Snapshots
 
 Save a checkpoint of a running lab and come back to it later — after a

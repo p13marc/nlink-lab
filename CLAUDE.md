@@ -115,6 +115,7 @@ crates/nlink-lab/src/
   deploy.rs         # Deployer — 18-step deployment sequence
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence ($XDG_STATE_HOME/nlink-lab/labs, schema 2, flock in .locks/; snapshots/<name>/ checkpoints)
+  events.rs         # Lifecycle event log (events.ndjson per lab; `events` command, backend republish)
   netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
   templates/        # Built-in topology templates for `nlink-lab init`
@@ -227,9 +228,10 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (36 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (37 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply` (`--reset-impairments`),
 `snapshot` (`--list`, `--delete`), `restore` (`--dry-run`),
+`events` (`--follow`, `--since`, `--kind`, `--socket`),
 `status` (with `--scan`, reports orphans + stale labs),
 `exec` (`--json`, `--env`, `--workdir`),
 `spawn` (`--log-dir`, `--env`, `--workdir`, `--wait-tcp`),

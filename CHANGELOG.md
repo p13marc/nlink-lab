@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — lifecycle event log, `nlink-lab events`, backend republishing (issue #70)
+
+- **Every lab operation is recorded** as one NDJSON line in
+  `<state>/<lab>/events.ndjson` (`crate::events`): `deployed`,
+  `applied` / `apply_failed`, `destroyed`, `spawned`, `killed`,
+  `impaired`, `impair_cleared`, `partitioned`, `healed`,
+  `snapshot_taken`, `restored`, `assertions_run`, `scenario_step`.
+  Recording is best effort (never fails the operation); the file rotates
+  once past 10 MB. Lifecycle events cannot be observed by one process —
+  each is a separate CLI invocation — so they are written by the
+  library at the point they happen.
+- **`nlink-lab events <lab> [--follow] [--since 10m] [--kind …]
+  [--socket PATH] [--json]`** prints the log; `--follow` merges it with
+  live drift (`watch`'s RTNETLINK + nftables subscriptions) and runtime
+  events (process exits, interface state from the metrics collector) as
+  one stream tagged `source: lifecycle | drift | runtime` (schema
+  `events`); `--socket` fans the NDJSON stream out to every unix-socket
+  client. Drift/runtime need root; the log alone does not.
+- **Library**: `watch_stream(lab, &opts)` returns the drift channel
+  (`watch_loop` is now its printing wrapper); `WatchEvent` derives
+  `Deserialize`; `events::{record, read, append, parse_lines}`.
+- **Backend**: new lines are republished on zenoh
+  `nlink-lab/<lab>/lifecycle` (raw JSON, separate from the wire-typed
+  `events` topic so old consumers are unaffected) and, with `--http`,
+  `GET /api/v1/events` (last 500 lifecycle + runtime events) and
+  `GET /api/v1/events/stream` (Server-Sent Events).
+
 ### Added — `snapshot` / `restore` and persisted runtime impairments (issue #59)
 
 - **`nlink-lab snapshot <lab> <name> [--description …]`** saves a

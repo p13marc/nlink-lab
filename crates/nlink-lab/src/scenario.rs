@@ -56,7 +56,7 @@ pub async fn run_scenario(lab: &RunningLab, scenario: &Scenario) -> Result<Scena
             tokio::time::sleep(std::time::Duration::from_millis(step.time_ms - elapsed_ms)).await;
         }
 
-        let step_result = execute_step(lab, step).await?;
+        let step_result = execute_step(lab, &scenario.name, step).await?;
         if step_result.actions.iter().any(|a| !a.ok) {
             all_passed = false;
         }
@@ -73,13 +73,27 @@ pub async fn run_scenario(lab: &RunningLab, scenario: &Scenario) -> Result<Scena
     })
 }
 
-async fn execute_step(lab: &RunningLab, step: &ScenarioStep) -> Result<StepResult> {
+async fn execute_step(
+    lab: &RunningLab,
+    scenario_name: &str,
+    step: &ScenarioStep,
+) -> Result<StepResult> {
     let mut action_results = Vec::new();
 
     for action in &step.actions {
         let result = execute_action(lab, action).await;
         action_results.push(result);
     }
+
+    crate::events::record(
+        lab.name(),
+        crate::events::LifecycleKind::ScenarioStep {
+            scenario: scenario_name.to_string(),
+            time_ms: step.time_ms,
+            ok: action_results.iter().all(|a| a.ok),
+            actions: action_results.len(),
+        },
+    );
 
     Ok(StepResult {
         time_ms: step.time_ms,

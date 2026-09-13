@@ -116,6 +116,17 @@ impl LabState {
     }
 }
 
+/// Process-wide lock serializing every test that mutates `XDG_STATE_HOME`
+/// (this module's tests and `events::tests`). Poisoning is fine — the
+/// panic that poisoned the lock is already reported by the test runner.
+#[cfg(test)]
+pub(crate) fn xdg_state_lock_for_tests() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    let m = LOCK.get_or_init(|| Mutex::new(()));
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 // ─── Snapshots (#59) ────────────────────────────────────────
 
 /// Directory holding a lab's snapshots: `<state_dir>/snapshots/<name>/`.
@@ -208,6 +219,12 @@ pub fn snapshot_save(
         &dir.join("meta.json"),
         &serde_json::to_string_pretty(&meta)?,
     )?;
+    crate::events::record(
+        lab,
+        crate::events::LifecycleKind::SnapshotTaken {
+            name: name.to_string(),
+        },
+    );
     Ok(meta)
 }
 
@@ -598,13 +615,7 @@ mod tests {
     /// env while we mutate it, and serializing the
     /// state-test set is the cleanest way to honor that.
     fn xdg_state_lock() -> std::sync::MutexGuard<'static, ()> {
-        use std::sync::{Mutex, OnceLock};
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        let m = LOCK.get_or_init(|| Mutex::new(()));
-        // Poisoning is fine — the panic that poisoned the lock
-        // is already reported by the test runner; we just keep
-        // going so the remaining tests run cleanly.
-        m.lock().unwrap_or_else(|e| e.into_inner())
+        super::xdg_state_lock_for_tests()
     }
 
     /// `_dir` keeps the tempdir alive; the returned guard keeps

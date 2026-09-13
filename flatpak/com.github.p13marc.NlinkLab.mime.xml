@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  `.nll` is not a registered media type, so declare it here: without a
+  shared-mime-info glob the desktop file's `MimeType=` matches nothing and
+  a file manager cannot hand a topology to the viewer.
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/x-nll">
+    <comment>nlink-lab topology</comment>
+    <sub-class-of type="text/plain"/>
+    <glob pattern="*.nll"/>
+    <magic priority="40">
+      <match type="string" value="lab &quot;" offset="0:512"/>
+    </magic>
+  </mime-type>
+</mime-info>

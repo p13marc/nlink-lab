@@ -23,8 +23,6 @@ pub struct CanvasState {
     drag_node: Option<String>,
     /// Mouse offset within the dragged node.
     drag_offset: Vector,
-    /// Last known cursor position.
-    last_cursor: Option<Point>,
 }
 
 impl canvas::Program<Message> for TopoViewer {
@@ -37,8 +35,48 @@ impl canvas::Program<Message> for TopoViewer {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
+        // Keyboard events carry no cursor position, and a drag released
+        // over the sidebar must still end the drag — neither can sit
+        // behind the `position_in` guard below, which is where the
+        // shortcuts and the stuck-node bug came from (issue #48).
+        match event {
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            }) => return Some(Action::publish(Message::BackgroundClicked)),
+
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Character(c),
+                ..
+            }) => {
+                return match c.as_str() {
+                    "+" | "=" => Some(Action::publish(Message::ZoomIn)),
+                    "-" => Some(Action::publish(Message::ZoomOut)),
+                    "f" => Some(Action::publish(Message::FitToScreen)),
+                    "a" => Some(Action::publish(Message::ToggleAddresses)),
+                    "m" => Some(Action::publish(Message::ToggleMetrics)),
+                    "e" => Some(Action::publish(Message::ExportPng)),
+                    _ => None,
+                };
+            }
+
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                let was_interacting = state.pan_start.is_some() || state.drag_node.is_some();
+                state.pan_start = None;
+                if state.drag_node.take().is_some() {
+                    return Some(Action::publish(Message::NodeDragEnd).and_capture());
+                }
+                return if was_interacting {
+                    Some(Action::capture())
+                } else {
+                    None
+                };
+            }
+
+            _ => {}
+        }
+
         let cursor_pos = cursor.position_in(bounds)?;
-        state.last_cursor = Some(cursor_pos);
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
@@ -59,24 +97,13 @@ impl canvas::Program<Message> for TopoViewer {
                 Some(Action::publish(Message::BackgroundClicked).and_capture())
             }
 
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                let was_interacting = state.pan_start.is_some() || state.drag_node.is_some();
-                state.pan_start = None;
-                if let Some(node) = state.drag_node.take() {
-                    drop(node);
-                    return Some(Action::publish(Message::NodeDragEnd).and_capture());
-                }
-                if was_interacting {
-                    Some(Action::capture())
-                } else {
-                    None
-                }
-            }
-
-            Event::Mouse(mouse::Event::CursorMoved { position }) => {
+            // `position` is window-absolute; `cursor_pos` is relative to
+            // the canvas. Mixing them only worked because the canvas sits
+            // at the window origin today (issue #48).
+            Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if let Some(ref node) = state.drag_node {
                     // Drag node
-                    let world = self.screen_to_world(*position);
+                    let world = self.screen_to_world(cursor_pos);
                     let new_pos =
                         Point::new(world.x - state.drag_offset.x, world.y - state.drag_offset.y);
                     return Some(
@@ -86,8 +113,8 @@ impl canvas::Program<Message> for TopoViewer {
 
                 if let Some(start) = state.pan_start {
                     // Pan camera
-                    let delta = Vector::new(position.x - start.x, position.y - start.y);
-                    state.pan_start = Some(*position);
+                    let delta = Vector::new(cursor_pos.x - start.x, cursor_pos.y - start.y);
+                    state.pan_start = Some(cursor_pos);
                     return Some(Action::publish(Message::PanCamera(delta)).and_capture());
                 }
 
@@ -106,24 +133,6 @@ impl canvas::Program<Message> for TopoViewer {
                     None
                 }
             }
-
-            Event::Keyboard(keyboard::Event::KeyPressed {
-                key: keyboard::Key::Named(keyboard::key::Named::Escape),
-                ..
-            }) => Some(Action::publish(Message::BackgroundClicked)),
-
-            Event::Keyboard(keyboard::Event::KeyPressed {
-                key: keyboard::Key::Character(c),
-                ..
-            }) => match c.as_str() {
-                "+" | "=" => Some(Action::publish(Message::ZoomIn)),
-                "-" => Some(Action::publish(Message::ZoomOut)),
-                "f" => Some(Action::publish(Message::FitToScreen)),
-                "a" => Some(Action::publish(Message::ToggleAddresses)),
-                "m" => Some(Action::publish(Message::ToggleMetrics)),
-                "e" => Some(Action::publish(Message::ExportPng)),
-                _ => None,
-            },
 
             _ => None,
         }

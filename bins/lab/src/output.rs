@@ -209,5 +209,9 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             "events",
             schemars::schema_for!(Vec<crate::cmd::events::Event>),
         ),
+        (
+            "lint",
+            schemars::schema_for!(crate::cmd::lint::LintReport<'static>),
+        ),
     ]
 }

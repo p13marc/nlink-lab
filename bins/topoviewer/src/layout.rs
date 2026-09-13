@@ -42,7 +42,6 @@ impl LayoutEngine {
         };
 
         // Run layout iterations
-        let _ = edges; // edges used in step()
         engine.run(node_names, edges, 200);
         engine
     }

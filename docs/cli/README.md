@@ -1,8 +1,7 @@
 # CLI reference
 
-Every `nlink-lab` subcommand has a reference page below. Pages are
-organized by what you'd typically reach for; the alphabetical
-listing at the bottom catches the long tail.
+Every `nlink-lab` subcommand has a reference page below, grouped by what
+you'd typically reach for.
 
 For a high-level walkthrough, start with the
 [user guide](../USER_GUIDE.md) instead.
@@ -16,6 +15,9 @@ The day-to-day commands.
 | [`deploy`](deploy.md) | Bring a topology up |
 | [`destroy`](destroy.md) | Tear a topology down |
 | [`validate`](validate.md) | Parse + validate without deploying |
+| [`edit`](edit.md) | Edit a running lab in place (nodes, links, impairments) |
+| [`snapshot`](snapshot.md) | Checkpoint a running lab |
+| [`restore`](restore.md) | Restore a lab from a checkpoint |
 | [`apply`](apply.md) | Reconcile a running lab to an edited NLL |
 | [`status`](status.md) | List running labs and their nodes |
 
@@ -47,9 +49,11 @@ What's actually running.
 | [`graph`](graph.md) | Topology graph (Dot) |
 | [`diff`](diff.md) | Diff two NLL topologies |
 | [`diagnose`](diagnose.md) | Per-lab health checks |
+| [`verify`](verify.md) | Check a running lab for drift against its topology |
 | [`metrics`](metrics.md) | Zenoh metrics export |
 | [`top`](top.md) | Live TUI: nodes, interfaces, flows |
 | [`containers`](containers.md) | List container nodes |
+| [`events`](events.md) | Lifecycle event log (deploy, impair, spawn, drift) |
 
 ## Network ops
 
@@ -65,6 +69,9 @@ Things you'd reach for in a chaos test.
 | Command | What |
 |---------|------|
 | [`init`](init.md) | Generate a new NLL from a template |
+| [`fmt`](fmt.md) | Format NLL files (`--check` for CI, `-w` in place) |
+| [`lint`](lint.md) | Style and portability advice for a topology |
+| [`doctor`](doctor.md) | Check this host for everything nlink-lab needs |
 | [`test`](test.md) | Deploy → validate → destroy across one or more NLL files |
 | [`export`](export.md) | Export a lab as plain text or a portable `.nlz` archive |
 | [`import`](import.md) | Import a `.nlz` archive — verify, extract, deploy |

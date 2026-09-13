@@ -63,6 +63,11 @@ enum Source {
         /// Unprivileged `state.json` read, for the impairment column.
         /// `None` when the daemon is on another host.
         lab: Option<nlink_lab::RunningLab>,
+        /// Set once the stream has ended. A closed channel returns
+        /// `None` from `recv()` *immediately, every time*, so without
+        /// this the event loop would spin — redrawing and re-reporting
+        /// the error as fast as it can — instead of idling.
+        ended: bool,
     },
 }
 
@@ -130,6 +135,7 @@ impl Source {
             _task: task,
             rx,
             lab: nlink_lab::RunningLab::load(&args.lab).ok(),
+            ended: false,
         })
     }
 
@@ -155,10 +161,20 @@ impl Source {
                 ticker.tick().await;
                 Due::Collect
             }
-            Source::Zenoh { rx, .. } => match rx.recv().await {
-                Some(snap) => Due::Snapshot(snap),
-                None => Due::Closed,
-            },
+            Source::Zenoh { rx, ended, .. } => {
+                if *ended {
+                    // Park forever: the loop must still answer keys, but
+                    // this source will never produce anything again.
+                    std::future::pending::<()>().await;
+                }
+                match rx.recv().await {
+                    Some(snap) => Due::Snapshot(snap),
+                    None => {
+                        *ended = true;
+                        Due::Closed
+                    }
+                }
+            }
         }
     }
 
@@ -346,7 +362,9 @@ async fn event_loop(
                 refresh_impairments(app, source);
             }
             Step::Due(Due::Closed) => {
-                app.set_error("the daemon's metrics stream ended");
+                app.set_error(
+                    "the daemon's metrics stream ended — showing the last sample (q to quit)",
+                );
             }
             Step::Input(Event::Key(key)) if key.kind == KeyEventKind::Press => {
                 if let Some(action) = app.on_key(key) {
@@ -410,4 +428,67 @@ fn deployed_at_unix(lab: &str) -> u64 {
     )
     .map(|t| t.unix_timestamp().max(0) as u64)
     .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    /// A Zenoh source whose producer has already gone away.
+    fn closed_zenoh_source() -> Source {
+        let (tx, rx) = tokio::sync::mpsc::channel::<MetricsSnapshot>(1);
+        drop(tx);
+        Source::Zenoh {
+            _task: tokio::spawn(async {}),
+            rx,
+            lab: None,
+            ended: false,
+        }
+    }
+
+    /// A closed channel yields `None` from `recv()` immediately and for
+    /// ever. Reporting that once and then parking is what keeps the event
+    /// loop from spinning at full CPU, redrawing on every iteration, when
+    /// the daemon goes away.
+    #[tokio::test]
+    async fn a_closed_stream_reports_once_and_then_parks() {
+        let mut source = closed_zenoh_source();
+        let mut ticker = tokio::time::interval(Duration::from_secs(1));
+
+        assert!(
+            matches!(source.due(&mut ticker).await, Due::Closed),
+            "the first poll after the stream ends must report it"
+        );
+        // Every later poll must never resolve, so the `select!` falls
+        // through to the key stream instead of looping on this arm.
+        let parked =
+            tokio::time::timeout(Duration::from_millis(200), source.due(&mut ticker)).await;
+        assert!(parked.is_err(), "a second poll must not resolve");
+    }
+
+    #[tokio::test]
+    async fn the_zenoh_source_is_read_only_and_refuses_writes() {
+        let mut source = closed_zenoh_source();
+        assert!(!source.can_mutate());
+        let err = source
+            .act(Action::Partition {
+                endpoint: "a:eth0".into(),
+            })
+            .await
+            .expect_err("the Zenoh source cannot write");
+        assert!(err.contains("read-only"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn collecting_from_the_zenoh_source_is_rejected() {
+        let mut source = closed_zenoh_source();
+        assert!(source.collect().await.is_err(), "Zenoh is push-only");
+    }
+
+    #[test]
+    fn an_unknown_lab_has_no_deploy_time() {
+        assert_eq!(deployed_at_unix("no-such-lab-exists-here"), 0);
+    }
 }

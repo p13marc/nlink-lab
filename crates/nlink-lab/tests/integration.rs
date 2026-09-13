@@ -3808,8 +3808,16 @@ async fn frr_ospf_converges_and_apply_restarts_daemons() {
         "lab frr dir must be removed on destroy"
     );
     for pid in r1_before {
+        // `pid_dead`, not a bare `/proc/<pid>` existence check: a zombie
+        // keeps its /proc entry *and* its `comm`, so a daemon that has
+        // exited but not been reaped looks alive. The integration lane's
+        // container has no reaping PID 1, so every daemon killed here
+        // lingers as `<defunct>` there and only there — which is what made
+        // this lane red on master while every local run passed (#105).
+        // The `comm` check stays: it tolerates PID reuse by an unrelated
+        // process.
         assert!(
-            !std::path::Path::new(&format!("/proc/{pid}")).exists() || {
+            pid_dead(pid) || {
                 std::fs::read_to_string(format!("/proc/{pid}/comm"))
                     .map(|c| !c.contains("zebra") && !c.contains("ospfd"))
                     .unwrap_or(true)

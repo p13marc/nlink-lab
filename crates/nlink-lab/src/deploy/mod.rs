@@ -590,11 +590,19 @@ async fn apply_nftables_for_node(
 }
 
 /// `NetworkConfig::apply` with a small EBUSY/EAGAIN retry budget (three
-/// attempts, 50 ms doubling). nlink's `apply_reconcile` has the same
-/// loop but hardcodes `ApplyOptions::default()` (no purge) and returns a
-/// `ReconcileReport` without the per-op error list the caller inspects,
-/// so the retry lives here. nlink recomputes the diff inside every
-/// `apply`, so a retry never replays a stale plan.
+/// attempts, 50 ms doubling).
+///
+/// nlink 0.27 added `apply_reconcile_with_options`, which fixes the first
+/// half of why this exists — `apply_reconcile` used to hardcode
+/// `ApplyOptions::default()`, so purge was unreachable through it. The
+/// second half stands: it returns a `ReconcileReport { attempts,
+/// change_count }`, while the caller inspects `ApplyResult::errors` to
+/// turn a partially-applied config into a failed deploy. Swapping to it
+/// would silently drop that check, so the retry stays here until the
+/// report carries the per-op errors.
+///
+/// nlink recomputes the diff inside every `apply`, so a retry never
+/// replays a stale plan.
 async fn apply_network_with_retry(
     cfg: &nlink::netlink::config::NetworkConfig,
     conn: &Connection<Route>,
@@ -807,16 +815,24 @@ async fn apply_network_config_for_node(
 /// (`apply_network_config_for_node`, `apply_nftables_for_node`,
 /// `apply_wireguard_for_node`) into a single per-node call site
 /// with one aggregated `tracing::info!` for the whole stack.
-/// Close to upstream `facade::Stack::apply_in`, which is not adopted
-/// because it applies WireGuard *after* the network layer and takes no
-/// `ApplyOptions` (we need `ensure_devices` before addresses land and
-/// purge on apply — see the nlink 0.26 adoption epic). No pre-flight
-/// validation across layers — we don't double-dump;
-/// but routes through `NsRef::connection<P>()` so the
-/// container case (`connection_for_pid`) keeps working
-/// alongside the bare-namespace case. Upstream's
-/// `Stack::apply_in_namespace(&str)` only accepts a name, so
-/// adopting it directly would break containers.
+/// Close to upstream `facade::Stack::apply_in_with`, still not adopted —
+/// but for different reasons than before nlink 0.27, which fixed three of
+/// the four:
+///
+/// * ordering: 0.27 creates (and raises) declared WireGuard links before
+///   the network layer, which is what our `ensure_devices` call does here;
+/// * options: `apply_in_with(ns, ApplyOptions)` can purge now;
+/// * containers: it takes a `NamespaceSpec`, which has `Pid`, so it is no
+///   longer name-only.
+///
+/// What still keeps us on our own path: `apply_in_with` runs an
+/// unconditional pre-flight `diff_in_with` across **all three layers**
+/// before applying, with no way to opt out — a second full dump per node
+/// per apply, which a 200-node lab pays for — and `facade::apply::
+/// network_in_with` calls `apply_with_options` directly, so it has no
+/// EBUSY/EAGAIN retry (see `apply_network_with_retry`). Routing through
+/// `NsRef::connection<P>()` also keeps the container
+/// (`connection_for_pid`) and bare-namespace cases on one code path.
 #[cfg(feature = "wireguard")]
 async fn apply_stack_for_node(
     node_handle: &NsRef,
@@ -868,9 +884,9 @@ async fn apply_stack_for_node(
 /// covering both the bare-namespace and container
 /// (`connection_for_pid`) cases via `NsRef`, which the
 /// name-only `facade::apply::wireguard*` helpers would not. Runs
-/// before the `NetworkConfig` apply so the WG interfaces exist when
-/// their tunnel addresses are assigned; this retired the imperative
-/// step-6c pre-create loop.
+/// before the `NetworkConfig` apply so the WG interfaces exist — and,
+/// since nlink 0.27, are already **up** — when their tunnel addresses
+/// are assigned; this retired the imperative step-6c pre-create loop.
 #[cfg(feature = "wireguard")]
 async fn ensure_wireguard_devices_for_node(
     node_handle: &NsRef,
@@ -882,26 +898,16 @@ async fn ensure_wireguard_devices_for_node(
             "failed to open Route connection for WireGuard bootstrap on '{node_name}': {e}"
         ))
     })?;
+    // Since nlink 0.27 `ensure_devices` raises every declared device on
+    // every call, not just the ones it created — `add_link` makes a link
+    // administratively down and the kernel refuses a nexthop on a down
+    // device, so the loop we used to run here is now redundant (nlink
+    // #330; the 0.26→0.27 migration guide names it).
     cfg.ensure_devices(&route_conn).await.map_err(|e| {
         Error::deploy_failed(format!(
             "WireguardConfig::ensure_devices on '{node_name}': {e}"
         ))
     })?;
-    // `ensure_devices` only creates the link. The NetworkConfig applied
-    // right after declares routes *via* the tunnel, and the kernel
-    // rejects a nexthop on a down device ("Device for nexthop is not
-    // up"), so bring every declared WG interface up here.
-    for dev in cfg.devices() {
-        route_conn
-            .set_link_up(dev.ifname.as_str())
-            .await
-            .map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to bring up WireGuard interface '{}' on '{node_name}': {e}",
-                    dev.ifname
-                ))
-            })?;
-    }
     Ok(())
 }
 

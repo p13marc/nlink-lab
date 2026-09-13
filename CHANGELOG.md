@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — nlink 0.27 (issue #107)
+
+- **`nlink` 0.26 → 0.27**, a declarative-configuration release. It needed
+  no code changes to build: the cycle's two compile breaks are both in the
+  declarative TC builder (`QdiscBuilder::tbf` now takes `Rate`/`Bytes`,
+  and `DeclaredQdiscType::{Netem,Tbf}` gained fields), and nlink-lab uses
+  the *imperative* `NetemConfig`/`TbfConfig` instead.
+- **Removed our WireGuard link-up loop.** `ensure_devices` raises every
+  declared device on every call now, not just the ones it created, so the
+  `set_link_up` loop that existed because "`add_link` creates a link
+  administratively down and the kernel refuses a nexthop on a down
+  device" is redundant. Verified in 0.27's source, not just its changelog.
+- **`del_route_lenient` delegates to `del_route_if_exists`.** 0.27 added
+  the table-aware, full-key form with the same ESRCH/not-found treatment,
+  so our copy of that errno match is gone; the helper is now just the
+  `RouteSpec` → `Ipv4Route`/`Ipv6Route` bridge.
+- **Audited the four silent behaviour changes.** (1) Purge now reaches
+  every table the config declares into, and we both declare VRF-table
+  routes and apply with purge — dry-run and real `apply` on
+  `examples/vrf-multitenant.nll` report no changes, so the widened scope
+  removes nothing it should not. (2) Declared qdiscs are no longer
+  replaced on every reconcile: does not affect us, because our qdiscs are
+  not declared at all (see the follow-up issue). (3) A stale `ip netns`
+  marker is now `NamespaceNotFound` rather than `EINVAL` — we match
+  `is_invalid_argument` nowhere, so we simply get the better error. (4)
+  `NamespaceSpec::Path` now receives the `/etc/netns` overlay — we never
+  hand nlink a `Path` spec.
+- Documentation, where 0.27 changed the reasoning rather than the code:
+  `apply_stack_for_node` records that three of its four reasons for not
+  adopting `facade::Stack::apply_in_with` are fixed, and that the
+  remaining two are the unconditional per-node pre-flight diff across all
+  three layers and the missing EBUSY retry;
+  `apply_network_with_retry` records that
+  `apply_reconcile_with_options` fixes the purge half but still returns a
+  report without the per-op error list the caller turns into a failed
+  deploy; and `ns_exec` records that #334 narrowed the upstream mount
+  problem (no overlay ⇒ no mount namespace, sysfs keeps its flags and
+  tolerates a stale mount) without removing the need for the best-effort
+  wrapper, since a denied `unshare` is still fatal upstream.
+
 ### Fixed — the `integration` lane's FRR restart assertion (issue #105)
 
 - `frr_ospf_converges_and_apply_restarts_daemons` checked that a restarted

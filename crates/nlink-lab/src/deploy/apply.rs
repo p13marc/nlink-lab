@@ -1224,21 +1224,22 @@ async fn replace_route_spec(
     }
 }
 
-/// `ip route del` for a [`RouteSpec`]; an already-absent route is not
-/// an error (ESRCH / not found), like the `del_*_if_exists` family.
+/// `ip route del` for a [`RouteSpec`]; an already-absent route is not an
+/// error.
+///
+/// The ESRCH/not-found swallowing used to live here. nlink 0.27 added
+/// `del_route_if_exists` — table-aware, full-key, same errno treatment —
+/// so this is now just the `RouteSpec` → `Ipv4Route`/`Ipv6Route` bridge
+/// (nlink #333/#335).
 pub(super) async fn del_route_lenient(
     conn: &Connection<Route>,
     spec: &RouteSpec,
 ) -> std::result::Result<(), nlink::netlink::Error> {
-    let res = match spec.dest {
-        std::net::IpAddr::V4(dst) => conn.del_route(route_v4(spec, dst)).await,
-        std::net::IpAddr::V6(dst) => conn.del_route(route_v6(spec, dst)).await,
+    match spec.dest {
+        std::net::IpAddr::V4(dst) => conn.del_route_if_exists(route_v4(spec, dst)).await?,
+        std::net::IpAddr::V6(dst) => conn.del_route_if_exists(route_v6(spec, dst)).await?,
     };
-    match res {
-        Ok(()) => Ok(()),
-        Err(e) if e.is_not_found() || e.errno() == Some(libc::ESRCH) => Ok(()),
-        Err(e) => Err(e),
-    }
+    Ok(())
 }
 
 fn route_v4(spec: &RouteSpec, dst: std::net::Ipv4Addr) -> nlink::netlink::route::Ipv4Route {

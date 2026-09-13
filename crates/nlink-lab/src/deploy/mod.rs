@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 use crate::helpers::parse_rate_bps;
 use crate::running::RunningLab;
 use crate::state::{self, LabState};
-use crate::types::{EndpointRef, Topology};
+use crate::types::{EndpointRef, Impairment, Topology};
 
 mod apply;
 pub mod op;
@@ -183,11 +183,80 @@ pub struct ApplyReport {
 /// show what the layered diff cannot (e.g. VRF-table route removals).
 pub fn apply_plan(running: &RunningLab, desired: &Topology) -> Result<Plan> {
     desired.validate().bail()?;
-    Ok(plan_apply(running, desired)?.1)
+    Ok(plan_apply(running, desired, &ApplyOptions::default())?.1)
 }
 
-fn plan_apply(running: &RunningLab, desired: &Topology) -> Result<(PlanInputs, Plan)> {
-    let current = running.topology().clone();
+/// Knobs for [`apply_with`].
+#[derive(Debug, Clone, Default)]
+pub struct ApplyOptions {
+    /// Drop every runtime impairment (`nlink-lab impair`) and converge
+    /// on the topology's `impair` declarations instead of keeping the
+    /// live values (#59).
+    pub reset_impairments: bool,
+}
+
+/// Runtime impairments (`impair` at the CLI) are not in either topology.
+/// Unless the topology *changed* that endpoint's declaration (or the
+/// caller asked for a reset), the live value stays: it is overlaid onto
+/// both the current and the desired topology so the plan diff sees no
+/// change there. Returns the overlaid pair and the live entries kept.
+pub(crate) fn overlay_live_impairments(
+    running: &RunningLab,
+    desired_in: &Topology,
+    opts: &ApplyOptions,
+) -> (Topology, Topology, BTreeMap<String, Impairment>) {
+    let mut current = running.topology().clone();
+    let mut desired = desired_in.clone();
+    let mut kept = BTreeMap::new();
+    let overlay = |topo: &mut Topology, ep: &str, live: &Impairment| {
+        if *live == Impairment::default() {
+            topo.impairments.remove(ep);
+        } else {
+            topo.impairments.insert(ep.to_string(), live.clone());
+        }
+    };
+    let unchanged =
+        |ep: &str| running.topology().impairments.get(ep) == desired_in.impairments.get(ep);
+    for (ep, live) in running.live_impairments() {
+        // The current plan must describe what is really installed, or
+        // the diff sees "declared == declared" and never touches tc.
+        overlay(&mut current, ep, live);
+        if opts.reset_impairments || !unchanged(ep) {
+            // Reset, or the topology changed this endpoint: its
+            // declaration wins.
+            continue;
+        }
+        overlay(&mut desired, ep, live);
+        kept.insert(ep.clone(), live.clone());
+    }
+    // A partitioned endpoint really carries 100% loss. It stays
+    // partitioned across an apply unless reset was asked for or the
+    // topology changed that endpoint; `apply_with` drops the partition
+    // record for every endpoint the plan touched.
+    let partition_imp = Impairment {
+        loss: Some("100%".to_string()),
+        ..Default::default()
+    };
+    for ep in running.partitions().keys() {
+        current
+            .impairments
+            .insert(ep.clone(), partition_imp.clone());
+        if !opts.reset_impairments && unchanged(ep) {
+            desired
+                .impairments
+                .insert(ep.clone(), partition_imp.clone());
+        }
+    }
+    (current, desired, kept)
+}
+
+fn plan_apply(
+    running: &RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+) -> Result<(PlanInputs, Plan)> {
+    let (current, desired, _) = overlay_live_impairments(running, desired, opts);
+    let desired = &desired;
 
     #[cfg(feature = "wireguard")]
     let inputs = {
@@ -218,9 +287,19 @@ fn plan_apply(running: &RunningLab, desired: &Topology) -> Result<(PlanInputs, P
 }
 
 pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<ApplyReport> {
+    apply_with(running, desired, &ApplyOptions::default()).await
+}
+
+/// [`apply`] with [`ApplyOptions`].
+pub async fn apply_with(
+    running: &mut RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+) -> Result<ApplyReport> {
     desired.validate().bail()?;
     let _lock = state::lock(running.name())?;
-    let (inputs, diff) = plan_apply(running, desired)?;
+    let (_, _, kept_live) = overlay_live_impairments(running, desired, opts);
+    let (inputs, diff) = plan_apply(running, desired, opts)?;
     let report = ApplyReport {
         ops: diff.ops.len(),
         removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
@@ -246,6 +325,19 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     }
 
     running.set_topology(desired.clone());
+    running.set_live_impairments(kept_live);
+    // Partitions whose qdisc the plan replaced or cleared are healed.
+    let touched: std::collections::BTreeSet<String> = diff
+        .ops
+        .iter()
+        .filter_map(|o| match o {
+            Op::Netem { node, iface, .. }
+            | Op::ClearQdisc { node, iface }
+            | Op::Qdisc { node, iface, .. } => Some(format!("{node}:{iface}")),
+            _ => None,
+        })
+        .collect();
+    running.retain_partitions(|ep| !touched.contains(ep));
     running.absorb_apply(
         env.namespace_names,
         env.containers,
@@ -274,6 +366,7 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     lab_state.wifi_loaded = running.wifi_loaded();
     lab_state.process_logs = running.process_logs_map().clone();
     lab_state.saved_impairments = running.saved_impairments_map().clone();
+    lab_state.live_impairments = running.live_impairments().clone();
     state::save(&lab_state, desired)?;
 
     // ── validate { … } assertions, exactly as after deploy (#86) ──
@@ -284,6 +377,42 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
         tracing::info!("running validate assertions");
         let results = run_assertions(running, desired);
         running.set_assertion_results(results);
+    }
+    Ok(report)
+}
+
+/// Restore a lab to a [`Snapshot`](crate::state::Snapshot) (#59): apply
+/// the snapshot's topology (dropping the current runtime impairments),
+/// then put back the snapshot's runtime impairments and partitions.
+///
+/// Checkpoint semantics — this restores everything nlink-lab itself
+/// manages (topology, `impair`, `partition`), not hand-made `ip`/`tc`
+/// edits inside the namespaces.
+pub async fn restore(
+    running: &mut RunningLab,
+    snapshot: &crate::state::Snapshot,
+) -> Result<ApplyReport> {
+    let opts = ApplyOptions {
+        reset_impairments: true,
+    };
+    // With reset the plan replaces every runtime impairment and every
+    // partition by the snapshot topology's declarations, and the
+    // bookkeeping is dropped with them.
+    let report = apply_with(running, &snapshot.topology, &opts).await?;
+
+    // Runtime impairments, then partitions on top (a partition saves the
+    // live value as what `heal` restores).
+    for (ep, imp) in &snapshot.state.live_impairments {
+        if *imp == Impairment::default() {
+            running.clear_impairment(ep).await?;
+        } else {
+            running.set_impairment(ep, imp).await?;
+        }
+    }
+    for ep in snapshot.state.saved_impairments.keys() {
+        if !running.is_partitioned(ep) {
+            running.partition(ep).await?;
+        }
     }
     Ok(report)
 }
@@ -965,7 +1094,7 @@ fn freq_from_channel(channel: u32) -> String {
     freq.to_string()
 }
 
-fn now_iso8601() -> String {
+pub(crate) fn now_iso8601() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "unknown".to_string())
@@ -1035,6 +1164,155 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
             Some("10.0.1.2"),
             "r1 should default via r2"
         );
+    }
+
+    fn running_with_live(topo: &Topology, live: &[(&str, Option<&str>)]) -> crate::RunningLab {
+        let mut running = crate::RunningLab::new(
+            topo.clone(),
+            Default::default(),
+            Default::default(),
+            None,
+            Vec::new(),
+            false,
+            false,
+        );
+        let mut map = BTreeMap::new();
+        for (ep, delay) in live {
+            map.insert(
+                ep.to_string(),
+                Impairment {
+                    delay: delay.map(str::to_string),
+                    ..Default::default()
+                },
+            );
+        }
+        running.set_live_impairments(map);
+        running
+    }
+
+    #[test]
+    fn overlay_keeps_live_impairment_when_topology_unchanged() {
+        let topo = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
+        )
+        .unwrap();
+        let running =
+            running_with_live(&topo, &[("a:eth0", Some("50ms")), ("b:eth0", Some("7ms"))]);
+        let (cur, des, kept) = overlay_live_impairments(&running, &topo, &ApplyOptions::default());
+        // both sides carry the live values → no tc change in the plan
+        assert_eq!(cur.impairments["a:eth0"].delay.as_deref(), Some("50ms"));
+        assert_eq!(des.impairments["a:eth0"].delay.as_deref(), Some("50ms"));
+        assert_eq!(des.impairments["b:eth0"].delay.as_deref(), Some("7ms"));
+        assert_eq!(kept.len(), 2);
+        let plan = plan_apply(&running, &topo, &ApplyOptions::default())
+            .unwrap()
+            .1;
+        assert!(
+            plan.ops
+                .iter()
+                .all(|o| !matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. }))
+        );
+    }
+
+    #[test]
+    fn overlay_drops_live_impairment_when_topology_changes_the_endpoint() {
+        let topo = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
+        )
+        .unwrap();
+        let desired = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 2ms }\n",
+        )
+        .unwrap();
+        let running = running_with_live(&topo, &[("a:eth0", Some("50ms"))]);
+        let (_, des, kept) = overlay_live_impairments(&running, &desired, &ApplyOptions::default());
+        assert_eq!(des.impairments["a:eth0"].delay.as_deref(), Some("2ms"));
+        assert!(kept.is_empty());
+        let plan = plan_apply(&running, &desired, &ApplyOptions::default())
+            .unwrap()
+            .1;
+        assert!(plan.ops.iter().any(|o| matches!(o, Op::Netem { .. })));
+    }
+
+    #[test]
+    fn overlay_reset_and_cleared_live_impairment() {
+        let topo = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
+        )
+        .unwrap();
+        // `impair --clear` on a declared endpoint records an empty value:
+        // the overlay removes the declaration on both sides.
+        let running = running_with_live(&topo, &[("a:eth0", None)]);
+        let (cur, des, kept) = overlay_live_impairments(&running, &topo, &ApplyOptions::default());
+        assert!(!cur.impairments.contains_key("a:eth0"));
+        assert!(!des.impairments.contains_key("a:eth0"));
+        assert_eq!(kept.len(), 1);
+        // --reset-impairments: the topology wins again → a Netem op.
+        let reset = ApplyOptions {
+            reset_impairments: true,
+        };
+        let (cur, des, kept) = overlay_live_impairments(&running, &topo, &reset);
+        assert!(
+            !cur.impairments.contains_key("a:eth0"),
+            "current reflects the kernel"
+        );
+        assert_eq!(des.impairments["a:eth0"].delay.as_deref(), Some("1ms"));
+        assert!(kept.is_empty());
+        let plan = plan_apply(&running, &topo, &reset).unwrap().1;
+        assert!(
+            plan.ops.iter().any(|o| matches!(o, Op::Netem { .. })),
+            "reset must re-install the declaration"
+        );
+        // A live value different from the declaration is replaced too.
+        let running = running_with_live(&topo, &[("a:eth0", Some("50ms"))]);
+        let plan = plan_apply(&running, &topo, &reset).unwrap().1;
+        assert!(
+            plan.ops.iter().any(|o| matches!(o, Op::Netem { impairment, .. } if impairment.delay.as_deref() == Some("1ms")))
+        );
+    }
+
+    #[test]
+    fn overlay_partitions_survive_unless_reset_or_changed() {
+        let topo = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
+        )
+        .unwrap();
+        let mut running = running_with_live(&topo, &[]);
+        running.set_partitions(BTreeMap::from([(
+            "a:eth0".to_string(),
+            Impairment {
+                delay: Some("1ms".into()),
+                ..Default::default()
+            },
+        )]));
+        // unchanged topology: the partition stays (no Tc op)
+        let plan = plan_apply(&running, &topo, &ApplyOptions::default())
+            .unwrap()
+            .1;
+        assert!(
+            plan.ops
+                .iter()
+                .all(|o| !matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. }))
+        );
+        // reset: the declaration replaces the 100% loss
+        let reset = ApplyOptions {
+            reset_impairments: true,
+        };
+        let plan = plan_apply(&running, &topo, &reset).unwrap().1;
+        assert!(plan.ops.iter().any(
+            |o| matches!(o, Op::Netem { impairment, .. } if impairment.delay.as_deref() == Some("1ms"))
+        ));
+        // topology change on that endpoint: the new declaration replaces it
+        let desired = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 2ms }\n",
+        )
+        .unwrap();
+        let plan = plan_apply(&running, &desired, &ApplyOptions::default())
+            .unwrap()
+            .1;
+        assert!(plan.ops.iter().any(
+            |o| matches!(o, Op::Netem { impairment, .. } if impairment.delay.as_deref() == Some("2ms"))
+        ));
     }
 
     #[test]

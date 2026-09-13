@@ -32,8 +32,10 @@ pub mod ps;
 pub mod pull;
 pub mod render;
 pub mod restart;
+pub mod restore;
 pub mod scenario;
 pub mod shell;
+pub mod snapshot;
 pub mod spawn;
 pub mod stats;
 pub mod status;
@@ -87,6 +89,8 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Pull(args) => pull::run(ctx, args),
         Commands::Stats(args) => stats::run(ctx, args),
         Commands::Restart(args) => restart::run(ctx, args),
+        Commands::Snapshot(args) => snapshot::run(ctx, args),
+        Commands::Restore(args) => restore::run(ctx, args).await,
         Commands::Completions { .. } => {
             // Already handled before async runtime
             Ok(())

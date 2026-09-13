@@ -201,5 +201,9 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             "metrics-snapshot",
             schemars::schema_for!(nlink_lab_shared::metrics::MetricsSnapshot),
         ),
+        (
+            "snapshot-list",
+            schemars::schema_for!(Vec<nlink_lab::state::SnapshotInfo>),
+        ),
     ]
 }

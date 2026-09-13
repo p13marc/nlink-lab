@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Array_of_SnapshotInfo",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/SnapshotInfo"
+  },
+  "$defs": {
+    "SnapshotInfo": {
+      "description": "Listing entry for `nlink-lab snapshot <lab> --list`.",
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "description": "ISO 8601 creation timestamp.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Free-text description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "link_count": {
+          "description": "Links in the snapshot's topology.",
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "live_impairments": {
+          "description": "Runtime impairments (`nlink-lab impair`) captured.",
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "name": {
+          "description": "Snapshot name (unique per lab).",
+          "type": "string"
+        },
+        "node_count": {
+          "description": "Nodes in the snapshot's topology.",
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "partitions": {
+          "description": "Partitioned endpoints captured.",
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "created_at"
+      ]
+    }
+  }
+}

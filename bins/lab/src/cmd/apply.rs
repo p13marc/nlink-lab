@@ -33,6 +33,13 @@ pub struct Args {
     /// applying.
     #[arg(long)]
     pub skip_validate: bool,
+
+    /// Drop the impairments set at runtime with `nlink-lab impair` and
+    /// converge on the topology's `impair` declarations. Without this,
+    /// a runtime impairment survives `apply` unless the topology changes
+    /// that endpoint.
+    #[arg(long)]
+    pub reset_impairments: bool,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -43,7 +50,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         check,
         strict,
         skip_validate,
+        reset_impairments,
     } = args;
+    let apply_opts = nlink_lab::ApplyOptions { reset_impairments };
     // --check implies --dry-run.
     let dry_run = dry_run || check;
 
@@ -174,7 +183,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     require_root()?;
     let start = Instant::now();
-    let report = nlink_lab::apply(&mut running, &desired).await?;
+    let report = nlink_lab::apply_with(&mut running, &desired, &apply_opts).await?;
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     let elapsed = start.elapsed();
     let assertions_failed = running.assertions_failed();

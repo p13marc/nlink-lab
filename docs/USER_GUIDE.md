@@ -1119,6 +1119,33 @@ sudo nlink-lab impair mylab router:wan0 --out-delay 50ms --in-delay 200ms
 sudo nlink-lab impair mylab router:wan0 --out-loss 0% --in-loss 5%
 ```
 
+### Snapshots
+
+Save a checkpoint of a running lab and come back to it later — after a
+chaos run, before a risky `apply`, or to hand a colleague a known state:
+
+```bash
+sudo nlink-lab snapshot mylab before-chaos --description "clean baseline"
+sudo nlink-lab impair mylab wan:eth0 --loss 30%
+sudo nlink-lab impair mylab core:eth1 --partition
+sudo nlink-lab snapshot mylab chaos
+nlink-lab snapshot mylab --list
+sudo nlink-lab restore mylab before-chaos          # back to the baseline
+sudo nlink-lab restore mylab chaos --dry-run       # what would change
+nlink-lab snapshot mylab --delete chaos
+```
+
+A snapshot holds the topology plus the runtime impairments and
+partitions nlink-lab installed; `restore` runs `apply` against the saved
+topology (nodes and links added since are removed, removed ones return)
+and then re-installs the saved impairments and partitions. Hand-made
+`ip`/`tc` changes inside the namespaces are not captured.
+
+Runtime impairments (`nlink-lab impair`) are remembered: an `apply`
+keeps them unless the new topology changes that endpoint's `impair`
+line. Use `apply --reset-impairments` to drop them and converge on the
+declarations.
+
 ### Partition and Heal
 
 Simulate network partitions with automatic baseline preservation:

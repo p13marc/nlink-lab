@@ -1420,6 +1420,10 @@
           "named": true
         },
         {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
           "type": "list",
           "named": true
         },

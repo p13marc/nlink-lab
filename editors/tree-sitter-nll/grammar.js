@@ -85,7 +85,7 @@ module.exports = grammar({
         seq("version", $.string),
         seq("author", $.string),
         seq("tags", $.list),
-        seq("mgmt", $.cidr, optional("host-reachable")),
+        seq("mgmt", choice($.cidr, $.ipv6_cidr), optional("host-reachable")),
         seq("dns", choice("hosts", "off")),
         seq("routing", choice("auto", "manual")),
       ),

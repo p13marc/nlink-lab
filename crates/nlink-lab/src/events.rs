@@ -209,7 +209,7 @@ pub fn record(lab: &str, kind: LifecycleKind) {
     }
 }
 
-/// Append an event line (rotating a file past [`MAX_BYTES`]).
+/// Append an event line (rotating the file once it passes 10 MiB).
 pub fn append(lab: &str, event: &LifecycleEvent) -> Result<()> {
     let path = events_path(lab);
     let Some(dir) = path.parent() else {

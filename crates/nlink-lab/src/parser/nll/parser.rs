@@ -2486,7 +2486,11 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
         } else if eat_kw(tokens, pos, "bands") {
             let b = expect_u32(tokens, pos, "bands", 2)?;
             bands = Some(u8::try_from(b).map_err(|_| {
-                err(tokens, *pos - 1, format!("prio bands {b} out of range 2..=16"))
+                err(
+                    tokens,
+                    *pos - 1,
+                    format!("prio bands {b} out of range 2..=16"),
+                )
             })?);
         } else {
             return Err(match at(tokens, *pos) {
@@ -2497,7 +2501,11 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
                         "unexpected {other} in qdisc block (rate, burst, limit, peakrate, mtu, target, interval, flows, quantum, ecn, perturb, bands)"
                     ),
                 ),
-                None => err(tokens, *pos, "unexpected end of input in qdisc block".into()),
+                None => err(
+                    tokens,
+                    *pos,
+                    "unexpected end of input in qdisc block".into(),
+                ),
             });
         }
     }

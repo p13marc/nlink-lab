@@ -1231,7 +1231,13 @@ fn render_qdiscs(out: &mut String, topo: &Topology) -> Result<()> {
     use crate::types::QdiscKind;
     for endpoint in sorted_keys(&topo.qdiscs) {
         let q = &topo.qdiscs[endpoint];
-        writeln!(out, "qdisc {} {} {{", nll_endpoint(endpoint)?, q.kind.name()).unwrap();
+        writeln!(
+            out,
+            "qdisc {} {} {{",
+            nll_endpoint(endpoint)?,
+            q.kind.name()
+        )
+        .unwrap();
         match &q.kind {
             QdiscKind::Tbf {
                 rate,
@@ -2252,7 +2258,10 @@ qdisc a:eth0 tbf { rate 10mbit burst 32kb limit 100kb }
 qdisc b:eth0 prio { bands 3 }
 "#,
         );
-        assert!(out.contains("qdisc a:eth0 tbf {\n  rate 10mbit\n  burst 32kb\n  limit 100kb\n}"), "{out}");
+        assert!(
+            out.contains("qdisc a:eth0 tbf {\n  rate 10mbit\n  burst 32kb\n  limit 100kb\n}"),
+            "{out}"
+        );
         assert!(out.contains("qdisc b:eth0 prio {\n  bands 3\n}"), "{out}");
         assert_eq!(a.qdiscs, b.qdiscs);
     }

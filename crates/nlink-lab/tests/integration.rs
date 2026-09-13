@@ -3309,7 +3309,9 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
         "qdisc a:eth0 fq_codel { target 5ms interval 100ms ecn }",
     ))
     .unwrap();
-    nlink_lab::apply(&mut lab, &desired).await.expect("apply (fq_codel) failed");
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (fq_codel) failed");
     let out = show(&lab);
     assert!(out.contains("qdisc fq_codel"), "fq_codel expected: {out}");
     assert!(!out.contains("qdisc tbf"), "tbf must be gone: {out}");
@@ -3317,7 +3319,9 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 
     // Remove the block: apply must clear the root qdisc.
     let desired = nlink_lab::parser::parse(&src("")).unwrap();
-    nlink_lab::apply(&mut lab, &desired).await.expect("apply (clear) failed");
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (clear) failed");
     let out = show(&lab);
     assert!(
         !out.contains("qdisc fq_codel") && !out.contains("qdisc tbf"),
@@ -3329,14 +3333,22 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
         "qdisc a:eth0 sfq { perturb 10s }\nqdisc b:eth0 prio { bands 4 }",
     ))
     .unwrap();
-    nlink_lab::apply(&mut lab, &desired).await.expect("apply (sfq/prio) failed");
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (sfq/prio) failed");
     let out = show(&lab);
-    assert!(out.contains("qdisc sfq") && out.contains("perturb 10sec"), "{out}");
+    assert!(
+        out.contains("qdisc sfq") && out.contains("perturb 10sec"),
+        "{out}"
+    );
     let out_b = lab
         .exec("b", "tc", &["qdisc", "show", "dev", "eth0"])
         .unwrap()
         .stdout;
-    assert!(out_b.contains("qdisc prio") && out_b.contains("bands 4"), "{out_b}");
+    assert!(
+        out_b.contains("qdisc prio") && out_b.contains("bands 4"),
+        "{out_b}"
+    );
 
     lab.destroy().await.expect("destroy failed");
 }

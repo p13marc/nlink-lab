@@ -3496,12 +3496,23 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             },
         );
         let result = validate_topo(topo);
-        assert_eq!(rules_of(&result, "qdisc-conflicts").len(), 1, "{:?}", result.issues());
+        assert_eq!(
+            rules_of(&result, "qdisc-conflicts").len(),
+            1,
+            "{:?}",
+            result.issues()
+        );
         assert_eq!(rules_of(&result, "qdisc-ref-valid").len(), 1);
         let bad = rules_of(&result, "invalid-qdisc-value");
         assert_eq!(bad.len(), 2, "{bad:?}");
-        assert!(bad.iter().any(|i| i.location.as_deref() == Some("qdiscs.\"a:eth0\".burst")));
-        assert!(bad.iter().any(|i| i.message.contains("bands 1 out of range")));
+        assert!(
+            bad.iter()
+                .any(|i| i.location.as_deref() == Some("qdiscs.\"a:eth0\".burst"))
+        );
+        assert!(
+            bad.iter()
+                .any(|i| i.message.contains("bands 1 out of range"))
+        );
     }
 
     #[test]

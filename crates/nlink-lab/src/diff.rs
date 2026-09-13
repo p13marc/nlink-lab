@@ -674,7 +674,8 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     diff.sysctls_changed.sort_by(|a, b| a.node.cmp(&b.node));
     diff.rate_limits_changed
         .sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
-    diff.qdiscs_changed.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+    diff.qdiscs_changed
+        .sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
     diff.nftables_changed.sort_by(|a, b| a.node.cmp(&b.node));
 
     diff
@@ -684,7 +685,6 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
 mod tests {
     use super::*;
     use crate::Lab;
-
 
     #[test]
     fn qdisc_added_changed_removed() {
@@ -722,7 +722,10 @@ mod tests {
         let d = diff_topologies(&with, &changed);
         assert_eq!(d.qdiscs_changed.len(), 1);
         assert!(d.qdiscs_changed[0].was_present);
-        assert!(d.to_string().contains("~ update qdisc: a:eth0 (sfq)"), "{d}");
+        assert!(
+            d.to_string().contains("~ update qdisc: a:eth0 (sfq)"),
+            "{d}"
+        );
 
         let d = diff_topologies(&with, &base);
         assert_eq!(d.qdiscs_changed.len(), 1);

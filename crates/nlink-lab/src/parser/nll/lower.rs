@@ -5631,7 +5631,11 @@ qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum
                 ecn: true,
             }
         );
-        assert!(!topo.validate().has_errors(), "{:?}", topo.validate().issues());
+        assert!(
+            !topo.validate().has_errors(),
+            "{:?}",
+            topo.validate().issues()
+        );
         assert!(crate::deploy::plan::qdisc::build_qdisc(&topo.qdiscs["a:eth0"]).is_ok());
         assert!(crate::deploy::plan::qdisc::build_qdisc(&topo.qdiscs["b:eth0"]).is_ok());
     }

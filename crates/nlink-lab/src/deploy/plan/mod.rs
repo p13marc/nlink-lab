@@ -417,11 +417,9 @@ qdisc a:eth0 {kind}
 
         let changed = plan_of(&src("sfq { perturb 10s }"));
         let diff = Plan::diff(&plan, &changed);
-        assert!(
-            diff.ops
-                .iter()
-                .any(|o| matches!(o, Op::ClearQdisc { node, iface } if node == "a" && iface == "eth0"))
-        );
+        assert!(diff.ops.iter().any(
+            |o| matches!(o, Op::ClearQdisc { node, iface } if node == "a" && iface == "eth0")
+        ));
         assert!(
             diff.ops
                 .iter()

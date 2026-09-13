@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — the `integration` lane's FRR restart assertion (issue #105)
+
+- `frr_ospf_converges_and_apply_restarts_daemons` checked that a restarted
+  daemon's old pid was gone with a bare `/proc/<pid>` existence test. A
+  **zombie keeps both its `/proc` entry and its `comm`**, so a daemon that
+  had exited but not been reaped still looked alive. The privileged lane's
+  job container has no reaping PID 1, so every daemon killed during the
+  test lingered as `<defunct>` there — and only there, which is why the
+  lane went red on master while every local run passed. It now uses the
+  `pid_dead` helper already in that file (added for the same class of bug
+  in the wave A hotfix), which treats state `Z` as dead, and keeps the
+  `comm` check so PID reuse is still tolerated. Test-only: `nlink-lab`
+  stops FRR daemons through `kill_tracked` and never consults `/proc`, and
+  a zombie holds no namespace, so nothing user-visible was affected.
+
 ### Fixed — lock files no longer accumulate for ever (issue #103)
 
 - **`.locks/<lab>.lock` was never removed.** Every lab name that had ever

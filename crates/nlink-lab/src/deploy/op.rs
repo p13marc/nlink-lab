@@ -320,6 +320,12 @@ pub enum Op {
         iface: String,
         limit: RateLimit,
     },
+    /// A non-netem root qdisc (`qdisc a:eth0 tbf { … }`, #67).
+    Qdisc {
+        node: String,
+        iface: String,
+        qdisc: crate::types::QdiscConfig,
+    },
     DnsInject {
         lab: String,
     },
@@ -425,6 +431,7 @@ impl Op {
             Netem { .. }
             | NetworkImpairments
             | RateLimit { .. }
+            | Qdisc { .. }
             | ClearQdisc { .. }
             | RemoveRateLimit { .. } => Stage::Tc,
             DnsInject { .. } | DnsNetnsEtc { .. } | RemoveDns { .. } => Stage::Dns,
@@ -471,6 +478,7 @@ impl Op {
                 format!("qdisc:{node}:{iface}")
             }
             NetworkImpairments => "network-impairments".into(),
+            Qdisc { node, iface, .. } => format!("qdisc:{node}:{iface}"),
             RateLimit { node, iface, .. } | RemoveRateLimit { node, iface } => {
                 format!("ratelimit:{node}:{iface}")
             }
@@ -535,6 +543,10 @@ impl Op {
             Route { node, route } => DelRoute {
                 node: node.clone(),
                 route: route.clone(),
+            },
+            Qdisc { node, iface, .. } => ClearQdisc {
+                node: node.clone(),
+                iface: iface.clone(),
             },
             Netem { node, iface, .. } => ClearQdisc {
                 node: node.clone(),
@@ -617,6 +629,9 @@ impl Op {
             }
             Route { node, route } => format!("{node}: route {route}"),
             Netem { node, iface, .. } => format!("netem on {node}:{iface}"),
+            Qdisc { node, iface, qdisc } => {
+                format!("{} qdisc on {node}:{iface}", qdisc.kind.name())
+            }
             NetworkImpairments => "per-pair network impairments".into(),
             RateLimit { node, iface, .. } => format!("rate limit on {node}:{iface}"),
             DnsInject { lab } => format!("inject /etc/hosts entries for {lab}"),

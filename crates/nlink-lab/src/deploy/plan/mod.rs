@@ -126,6 +126,18 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
     {
         ops.push(Op::NetworkImpairments);
     }
+    for (endpoint, qdisc) in &topology.qdiscs {
+        // Conflicts with `impair`/`rate` on the same endpoint are
+        // validator errors (`qdisc-conflicts`); the plan just emits.
+        let ep = EndpointRef::parse(endpoint).ok_or_else(|| crate::Error::InvalidEndpoint {
+            endpoint: endpoint.clone(),
+        })?;
+        ops.push(Op::Qdisc {
+            node: ep.node,
+            iface: ep.iface,
+            qdisc: qdisc.clone(),
+        });
+    }
     for (endpoint, limit) in &topology.rate_limits {
         if topology.impairments.contains_key(endpoint) {
             tracing::warn!(
@@ -379,6 +391,49 @@ node pe : router {
 node a { route default via 10.10.0.1 }
 link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
 "#;
+
+    #[test]
+    fn plan_emits_qdisc_ops_in_tc_stage_and_diff_replaces_them() {
+        let src = |kind: &str| {
+            format!(
+                r#"lab "q"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+qdisc a:eth0 {kind}
+"#
+            )
+        };
+        let plan = plan_of(&src("tbf { rate 10mbit burst 32kb }"));
+        let q: Vec<&Op> = plan
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::Qdisc { .. }))
+            .collect();
+        assert_eq!(q.len(), 1);
+        assert_eq!(q[0].stage(), Stage::Tc);
+        assert_eq!(q[0].key(), "qdisc:a:eth0");
+        assert!(matches!(q[0].inverse(), Some(Op::ClearQdisc { .. })));
+
+        let changed = plan_of(&src("sfq { perturb 10s }"));
+        let diff = Plan::diff(&plan, &changed);
+        assert!(
+            diff.ops
+                .iter()
+                .any(|o| matches!(o, Op::ClearQdisc { node, iface } if node == "a" && iface == "eth0"))
+        );
+        assert!(
+            diff.ops
+                .iter()
+                .any(|o| matches!(o, Op::Qdisc { qdisc, .. } if qdisc.kind.name() == "sfq"))
+        );
+        let removed = plan_of(
+            "lab \"q\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n",
+        );
+        let diff = Plan::diff(&plan, &removed);
+        assert!(diff.ops.iter().any(|o| matches!(o, Op::ClearQdisc { .. })));
+        assert!(!diff.ops.iter().any(|o| matches!(o, Op::Qdisc { .. })));
+    }
 
     #[test]
     fn plan_topology_mgmt_v6_ops() {

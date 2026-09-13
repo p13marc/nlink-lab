@@ -128,6 +128,15 @@ impl Lab {
         self
     }
 
+    /// Set a non-netem root qdisc (`tbf`, `fq_codel`, `sfq`, `prio`) on an
+    /// endpoint (issue #67).
+    pub fn qdisc(mut self, endpoint: &str, kind: crate::types::QdiscKind) -> Self {
+        self.topology
+            .qdiscs
+            .insert(endpoint.to_string(), crate::types::QdiscConfig { kind });
+        self
+    }
+
     /// Add rate limiting to an endpoint.
     pub fn rate_limit(
         mut self,

@@ -3266,3 +3266,77 @@ rate a:eth0 egress 10mbit burst 64kbyte
     );
     lab.destroy().await.expect("destroy failed");
 }
+
+// ─── `qdisc` blocks reach tc and follow apply (#67) ─────
+
+#[tokio::test]
+async fn qdisc_blocks_apply_replace_and_clear() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping qdisc_blocks_apply_replace_and_clear: requires root");
+        return;
+    }
+    let lab_name = format!("qdisc-{}", std::process::id());
+    let src = |qdisc: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+{qdisc}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 tbf { rate 10mbit burst 32kb limit 100kb }",
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let show = |lab: &RunningLab| {
+        lab.exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+            .unwrap()
+            .stdout
+    };
+    let out = show(&lab);
+    assert!(out.contains("qdisc tbf"), "tbf expected: {out}");
+    assert!(out.to_ascii_lowercase().contains("rate 10mbit"), "{out}");
+
+    // Change the kind: apply must replace the root qdisc.
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 fq_codel { target 5ms interval 100ms ecn }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired).await.expect("apply (fq_codel) failed");
+    let out = show(&lab);
+    assert!(out.contains("qdisc fq_codel"), "fq_codel expected: {out}");
+    assert!(!out.contains("qdisc tbf"), "tbf must be gone: {out}");
+    assert!(out.contains("ecn"), "{out}");
+
+    // Remove the block: apply must clear the root qdisc.
+    let desired = nlink_lab::parser::parse(&src("")).unwrap();
+    nlink_lab::apply(&mut lab, &desired).await.expect("apply (clear) failed");
+    let out = show(&lab);
+    assert!(
+        !out.contains("qdisc fq_codel") && !out.contains("qdisc tbf"),
+        "root qdisc should be cleared: {out}"
+    );
+
+    // sfq and prio parameters reach the kernel too.
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 sfq { perturb 10s }\nqdisc b:eth0 prio { bands 4 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired).await.expect("apply (sfq/prio) failed");
+    let out = show(&lab);
+    assert!(out.contains("qdisc sfq") && out.contains("perturb 10sec"), "{out}");
+    let out_b = lab
+        .exec("b", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap()
+        .stdout;
+    assert!(out_b.contains("qdisc prio") && out_b.contains("bands 4"), "{out_b}");
+
+    lab.destroy().await.expect("destroy failed");
+}

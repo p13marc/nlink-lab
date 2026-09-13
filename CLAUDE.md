@@ -104,7 +104,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (42 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (45 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -130,7 +130,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (36 top-level; 45 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (37 top-level; 46 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -148,6 +148,7 @@ examples/
 | `Impairment` | Netem config (delay, jitter, loss, rate, corrupt, reorder, duplicate, correlations, limit) |
 | `NetworkImpairment` | Per-pair impairment on a shared network (src/dst nodes + netem + optional rate-cap) |
 | `RateLimit` | Per-interface traffic shaping |
+| `QdiscConfig` / `QdiscKind` | Non-netem root qdisc (tbf, fq_codel, sfq, prio) |
 | `FirewallConfig` | nftables rules (with src/dst matching) |
 | `NatConfig` | NAT rules (masquerade, snat, dnat, translate) |
 | `ExecConfig` | Process to spawn in namespace |
@@ -216,6 +217,7 @@ N times), glob patterns in network members (`*-black:fo`),
 first-class IPv6 (dual-stack `port` addresses, `ip6` firewall matches,
 NAT66, IPv6 `mgmt`, `subnet()`/`host()`/pools on u128, per-family
 `routing auto`, `dnat … to [addr]:port`),
+`qdisc NODE:IFACE tbf|fq_codel|sfq|prio { … }` root qdiscs,
 network (bridge) blocks, and per-pair impairment matrices inside
 `network` blocks (`impair NODE -- NODE { delay … loss … rate-cap … }`
 — one HTB+netem+flower tree per source interface, built via nlink's

@@ -51,6 +51,9 @@ pub const RULE_IDS: &[&str] = &[
     "network-impair-self-pair",
     "network-impair-member",
     "rate-limit-ref-valid",
+    "qdisc-ref-valid",
+    "qdisc-conflicts",
+    "invalid-qdisc-value",
     "route-gateway-type",
     "interface-name-length",
     "wireguard-peer-exists",
@@ -362,6 +365,7 @@ impl Topology {
         validate_vlan_range(self, &mut issues);
         validate_impairment_refs(self, &interfaces, &mut issues);
         validate_rate_limit_refs(self, &interfaces, &mut issues);
+        validate_qdiscs(self, &interfaces, &mut issues);
         validate_route_config(self, &mut issues);
         validate_interface_name_length(self, &interfaces, &mut issues);
         validate_wireguard_peers(self, &mut issues);
@@ -833,6 +837,111 @@ fn validate_rate_limit_refs(
                 location: Some(format!("rate_limits.\"{key}\"")),
             });
         }
+    }
+}
+
+/// `qdisc` blocks: the endpoint must exist, must not also carry an
+/// `impair`/`rate` (one root qdisc per interface), and every parameter
+/// must parse.
+fn validate_qdiscs(
+    topology: &Topology,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    use crate::types::QdiscKind;
+    for (key, qdisc) in sorted(&topology.qdiscs) {
+        let location = format!("qdiscs.\"{key}\"");
+        if let Some(ep) = EndpointRef::parse(key)
+            && let Some(node_ifaces) = interfaces.get(&ep.node)
+            && !node_ifaces.contains_key(&ep.iface)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "qdisc-ref-valid",
+                message: format!("node '{}' has no interface '{}'", ep.node, ep.iface),
+                location: Some(location.clone()),
+            });
+        }
+        let other = if topology.impairments.contains_key(key) {
+            Some("impair")
+        } else if topology.rate_limits.contains_key(key) {
+            Some("rate")
+        } else {
+            None
+        };
+        if let Some(other) = other {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "qdisc-conflicts",
+                message: format!(
+                    "'{key}' has both a `qdisc {}` and an `{other}`: an interface has one root qdisc",
+                    qdisc.kind.name()
+                ),
+                location: Some(location.clone()),
+            });
+        }
+        match &qdisc.kind {
+            QdiscKind::Tbf {
+                rate,
+                burst,
+                limit,
+                peakrate,
+                ..
+            } => {
+                check_qdisc_value(ValueKind::Rate, rate, &location, "rate", issues);
+                check_qdisc_value(ValueKind::Size, burst, &location, "burst", issues);
+                if let Some(l) = limit {
+                    check_qdisc_value(ValueKind::Size, l, &location, "limit", issues);
+                }
+                if let Some(p) = peakrate {
+                    check_qdisc_value(ValueKind::Rate, p, &location, "peakrate", issues);
+                }
+            }
+            QdiscKind::FqCodel {
+                target, interval, ..
+            } => {
+                if let Some(t) = target {
+                    check_qdisc_value(ValueKind::Duration, t, &location, "target", issues);
+                }
+                if let Some(i) = interval {
+                    check_qdisc_value(ValueKind::Duration, i, &location, "interval", issues);
+                }
+            }
+            QdiscKind::Sfq { perturb, .. } => {
+                if let Some(p) = perturb {
+                    check_qdisc_value(ValueKind::Duration, p, &location, "perturb", issues);
+                }
+            }
+            QdiscKind::Prio { bands } => {
+                if let Some(b) = bands
+                    && !(2..=16).contains(b)
+                {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "invalid-qdisc-value",
+                        message: format!("prio bands {b} out of range 2..=16"),
+                        location: Some(format!("{location}.bands")),
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn check_qdisc_value(
+    kind: ValueKind,
+    value: &str,
+    location: &str,
+    field: &str,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let mut local = Vec::new();
+    check_value(kind, value, format!("{location}.{field}"), &mut local);
+    for mut issue in local {
+        if issue.rule == "invalid-impairment-value" {
+            issue.rule = "invalid-qdisc-value";
+        }
+        issues.push(issue);
     }
 }
 
@@ -3355,6 +3464,44 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
         assert_eq!(hits.len(), 1, "{:?}", result.issues());
         assert!(hits[0].message.contains("2 usable"));
         assert!(hits[0].message.contains("4 are needed"));
+    }
+
+    #[test]
+    fn test_qdisc_rules() {
+        use crate::types::{QdiscConfig, QdiscKind};
+        let mut topo = crate::Lab::new("t")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1/24", "10.0.0.2/24")
+            })
+            .impair("a:eth0", |i| i.delay("1ms"))
+            .build();
+        topo.qdiscs.insert(
+            "a:eth0".into(),
+            QdiscConfig {
+                kind: QdiscKind::Tbf {
+                    rate: "10mbit".into(),
+                    burst: "nope".into(),
+                    limit: None,
+                    peakrate: None,
+                    mtu: None,
+                },
+            },
+        );
+        topo.qdiscs.insert(
+            "a:eth9".into(),
+            QdiscConfig {
+                kind: QdiscKind::Prio { bands: Some(1) },
+            },
+        );
+        let result = validate_topo(topo);
+        assert_eq!(rules_of(&result, "qdisc-conflicts").len(), 1, "{:?}", result.issues());
+        assert_eq!(rules_of(&result, "qdisc-ref-valid").len(), 1);
+        let bad = rules_of(&result, "invalid-qdisc-value");
+        assert_eq!(bad.len(), 2, "{bad:?}");
+        assert!(bad.iter().any(|i| i.location.as_deref() == Some("qdiscs.\"a:eth0\".burst")));
+        assert!(bad.iter().any(|i| i.message.contains("bands 1 out of range")));
     }
 
     #[test]

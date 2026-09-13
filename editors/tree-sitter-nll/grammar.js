@@ -38,6 +38,7 @@ module.exports = grammar({
         $.network_definition,
         $.impairment_statement,
         $.rate_statement,
+        $.qdisc_statement,
         $.defaults_definition,
         $.pool_definition,
         $.pattern_definition,
@@ -361,6 +362,33 @@ module.exports = grammar({
     directional_impairment: ($) =>
       seq(choice("->", "<-"), $.impairment_properties),
 
+    // `qdisc a:eth0 tbf { rate 10mbit burst 32kb }` — the kind is an
+    // identifier (tbf, fq_codel, sfq, prio), not a keyword.
+    qdisc_statement: ($) =>
+      seq(
+        "qdisc",
+        $.endpoint,
+        $.identifier,
+        "{",
+        repeat(
+          choice(
+            seq("rate", $._value),
+            seq("burst", $._value),
+            seq("limit", $._value),
+            seq("peakrate", $._value),
+            seq("mtu", $._value),
+            seq("target", $._value),
+            seq("interval", $._value),
+            seq("flows", $._value),
+            seq("quantum", $._value),
+            seq("perturb", $._value),
+            seq("bands", $._value),
+            "ecn",
+          ),
+        ),
+        "}",
+      ),
+
     rate_properties: ($) =>
       prec.left(
         repeat1(
@@ -550,6 +578,7 @@ module.exports = grammar({
         $.ipv4_address,
         $.duration,
         $.rate,
+        $.size,
         $.percent,
         $.float,
         $.integer,
@@ -627,6 +656,9 @@ module.exports = grammar({
       token(/[0-9]+(\.[0-9]+)?(bit|bps|kbit|kbps|mbit|mbps|gbit|gbps|kbyte|mbyte|gbyte)/),
 
     percent: ($) => token(/[0-9]+(\.[0-9]+)?%/),
+
+    // Byte size literal (`32kb`, `1mb`, `4kib`, `10k`); mirrors `SizeLit`.
+    size: ($) => token(/[0-9]+(\.[0-9]+)?(kib|mib|gib|tib|kb|mb|gb|tb|k)/),
 
     // A token containing `${…}`: `spine${s}`, `10.255.0.${s}/32`,
     // `${(i + 1) % 12}`. Mirrors the Rust lexer, which keeps

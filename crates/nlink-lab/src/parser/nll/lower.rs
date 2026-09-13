@@ -211,6 +211,7 @@ fn lower_with_base_dir_and_params(
             ast::Statement::Network(n) => lower_network(&mut topology, n, &ctx.variables)?,
             ast::Statement::Impair(i) => lower_impair(&mut topology, i)?,
             ast::Statement::Rate(r) => lower_rate(&mut topology, r)?,
+            ast::Statement::Qdisc(q) => lower_qdisc(&mut topology, q)?,
             ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx)?,
             ast::Statement::Validate(v) => {
                 for a in &v.assertions {
@@ -1774,6 +1775,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
         ast::Statement::Network(n) => ast::Statement::Network(interpolate_network(n, vars)),
         ast::Statement::Impair(i) => ast::Statement::Impair(interpolate_impair_def(i, vars)),
         ast::Statement::Rate(r) => ast::Statement::Rate(interpolate_rate_def(r, vars)),
+        ast::Statement::Qdisc(q) => ast::Statement::Qdisc(interpolate_qdisc_def(q, vars)),
         ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
         ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
         ast::Statement::Pool(p) => ast::Statement::Pool(p.clone()),
@@ -2353,6 +2355,55 @@ fn interpolate_rate_def(r: &ast::RateDef, vars: &BTreeMap<String, String>) -> as
         node: i(&r.node, vars),
         iface: i(&r.iface, vars),
         props: interpolate_rate_props(&r.props, vars),
+    }
+}
+
+fn interpolate_qdisc_def(q: &ast::QdiscDef, vars: &BTreeMap<String, String>) -> ast::QdiscDef {
+    use ast::QdiscKindDef as K;
+    let kind = match &q.kind {
+        K::Tbf {
+            rate,
+            burst,
+            limit,
+            peakrate,
+            mtu,
+        } => K::Tbf {
+            rate: rate.interp(vars),
+            burst: burst.interp(vars),
+            limit: iv(limit, vars),
+            peakrate: iv(peakrate, vars),
+            mtu: *mtu,
+        },
+        K::FqCodel {
+            target,
+            interval,
+            limit,
+            flows,
+            quantum,
+            ecn,
+        } => K::FqCodel {
+            target: iv(target, vars),
+            interval: iv(interval, vars),
+            limit: *limit,
+            flows: *flows,
+            quantum: *quantum,
+            ecn: *ecn,
+        },
+        K::Sfq {
+            perturb,
+            limit,
+            quantum,
+        } => K::Sfq {
+            perturb: iv(perturb, vars),
+            limit: *limit,
+            quantum: *quantum,
+        },
+        K::Prio { bands } => K::Prio { bands: *bands },
+    };
+    ast::QdiscDef {
+        node: i(&q.node, vars),
+        iface: i(&q.iface, vars),
+        kind,
     }
 }
 
@@ -3321,6 +3372,56 @@ fn lower_impair(topo: &mut types::Topology, imp: &ast::ImpairDef) -> Result<()> 
 fn lower_rate(topo: &mut types::Topology, rate: &ast::RateDef) -> Result<()> {
     let ep = format!("{}:{}", rate.node, rate.iface);
     topo.rate_limits.insert(ep, lower_rate_props(&rate.props)?);
+    Ok(())
+}
+
+fn lower_qdisc(topo: &mut types::Topology, q: &ast::QdiscDef) -> Result<()> {
+    use ast::QdiscKindDef as K;
+    fn t<T: ast::NllValue>(v: &Option<ast::Val<T>>) -> Result<Option<String>> {
+        v.as_ref().map(ast::Val::to_text).transpose()
+    }
+    let kind = match &q.kind {
+        K::Tbf {
+            rate,
+            burst,
+            limit,
+            peakrate,
+            mtu,
+        } => types::QdiscKind::Tbf {
+            rate: rate.to_text()?,
+            burst: burst.to_text()?,
+            limit: t(limit)?,
+            peakrate: t(peakrate)?,
+            mtu: *mtu,
+        },
+        K::FqCodel {
+            target,
+            interval,
+            limit,
+            flows,
+            quantum,
+            ecn,
+        } => types::QdiscKind::FqCodel {
+            target: t(target)?,
+            interval: t(interval)?,
+            limit: *limit,
+            flows: *flows,
+            quantum: *quantum,
+            ecn: *ecn,
+        },
+        K::Sfq {
+            perturb,
+            limit,
+            quantum,
+        } => types::QdiscKind::Sfq {
+            perturb: t(perturb)?,
+            limit: *limit,
+            quantum: *quantum,
+        },
+        K::Prio { bands } => types::QdiscKind::Prio { bands: *bands },
+    };
+    let ep = format!("{}:{}", q.node, q.iface);
+    topo.qdiscs.insert(ep, types::QdiscConfig { kind });
     Ok(())
 }
 
@@ -5488,6 +5589,73 @@ link a:eth0 -- b:eth0 {
             Err(other) => panic!("expected NllParseAt, got {other:?}"),
             Ok(_) => panic!("expected a parse error for:\n{src}"),
         }
+    }
+
+    #[test]
+    fn qdisc_blocks_lower_to_typed_configs() {
+        use crate::types::QdiscKind;
+        let topo = parse_and_lower(
+            r#"lab "t"
+let r = 10mbit
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+qdisc a:eth0 tbf {
+  rate ${r}
+  burst 32kb
+  limit 100kb
+  peakrate 20mbit
+  mtu 1500
+}
+qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum 1514 ecn }
+"#,
+        );
+        assert_eq!(
+            topo.qdiscs["a:eth0"].kind,
+            QdiscKind::Tbf {
+                rate: "10mbit".into(),
+                burst: "32kb".into(),
+                limit: Some("100kb".into()),
+                peakrate: Some("20mbit".into()),
+                mtu: Some(1500),
+            }
+        );
+        assert_eq!(
+            topo.qdiscs["b:eth0"].kind,
+            QdiscKind::FqCodel {
+                target: Some("5ms".into()),
+                interval: Some("100ms".into()),
+                limit: Some(10240),
+                flows: Some(1024),
+                quantum: Some(1514),
+                ecn: true,
+            }
+        );
+        assert!(!topo.validate().has_errors(), "{:?}", topo.validate().issues());
+        assert!(crate::deploy::plan::qdisc::build_qdisc(&topo.qdiscs["a:eth0"]).is_ok());
+        assert!(crate::deploy::plan::qdisc::build_qdisc(&topo.qdiscs["b:eth0"]).is_ok());
+    }
+
+    #[test]
+    fn qdisc_block_errors() {
+        // tbf needs rate + burst
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 tbf { rate 10mbit }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "tbf");
+        assert!(msg.contains("requires 'burst'"), "{msg}");
+        // parameter of another kind
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 sfq { rate 10mbit }\n";
+        let (msg, _) = parse_err_span(src);
+        assert!(msg.contains("not a sfq parameter"), "{msg}");
+        // unknown kind
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 htb { }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "htb");
+        assert!(msg.contains("unknown qdisc kind"), "{msg}");
+        // typed value
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 tbf { rate 10mbit burst 10ms }\n";
+        let (_, span) = parse_err_span(src);
+        assert_eq!(&src[span], "10ms");
     }
 
     #[test]

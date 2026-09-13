@@ -46,6 +46,7 @@ pub fn try_render(topology: &Topology) -> Result<String> {
     render_networks(&mut out, topology)?;
     render_impairments(&mut out, topology)?;
     render_rate_limits(&mut out, topology)?;
+    render_qdiscs(&mut out, topology)?;
     render_assertions(&mut out, topology)?;
     render_scenarios(&mut out, topology)?;
     render_benchmarks(&mut out, topology)?;
@@ -209,6 +210,13 @@ fn is_duration(s: &str) -> bool {
 
 /// `[0-9]+(mbit|kbit|gbit|bit|mbyte|kbyte|gbyte|byte|[mgtp])` — note: no
 /// decimal part, unlike durations.
+/// `[0-9]+(\.[0-9]+)?(kib|mib|gib|tib|kb|mb|gb|tb|k)` — the `SizeLit` token.
+fn is_size(s: &str) -> bool {
+    ["kib", "mib", "gib", "tib", "kb", "mb", "gb", "tb", "k"]
+        .iter()
+        .any(|suf| s.strip_suffix(suf).is_some_and(is_number))
+}
+
 fn is_rate(s: &str) -> bool {
     [
         "mbit", "kbit", "gbit", "bit", "mbyte", "kbyte", "gbyte", "byte", "m", "g", "t", "p",
@@ -272,6 +280,7 @@ fn lit_value(s: &str) -> Result<String> {
         || is_number(s)
         || is_duration(s)
         || is_rate(s)
+        || is_size(s)
         || is_percent(s)
         || is_ipv4(s)
         || is_ipv6(s)
@@ -1218,6 +1227,84 @@ fn render_impairments(out: &mut String, topo: &Topology) -> Result<()> {
     Ok(())
 }
 
+fn render_qdiscs(out: &mut String, topo: &Topology) -> Result<()> {
+    use crate::types::QdiscKind;
+    for endpoint in sorted_keys(&topo.qdiscs) {
+        let q = &topo.qdiscs[endpoint];
+        writeln!(out, "qdisc {} {} {{", nll_endpoint(endpoint)?, q.kind.name()).unwrap();
+        match &q.kind {
+            QdiscKind::Tbf {
+                rate,
+                burst,
+                limit,
+                peakrate,
+                mtu,
+            } => {
+                writeln!(out, "  rate {}", lit_value(rate)?).unwrap();
+                writeln!(out, "  burst {}", lit_value(burst)?).unwrap();
+                if let Some(l) = limit {
+                    writeln!(out, "  limit {}", lit_value(l)?).unwrap();
+                }
+                if let Some(p) = peakrate {
+                    writeln!(out, "  peakrate {}", lit_value(p)?).unwrap();
+                }
+                if let Some(m) = mtu {
+                    writeln!(out, "  mtu {m}").unwrap();
+                }
+            }
+            QdiscKind::FqCodel {
+                target,
+                interval,
+                limit,
+                flows,
+                quantum,
+                ecn,
+            } => {
+                if let Some(t) = target {
+                    writeln!(out, "  target {}", lit_value(t)?).unwrap();
+                }
+                if let Some(i) = interval {
+                    writeln!(out, "  interval {}", lit_value(i)?).unwrap();
+                }
+                if let Some(l) = limit {
+                    writeln!(out, "  limit {l}").unwrap();
+                }
+                if let Some(f) = flows {
+                    writeln!(out, "  flows {f}").unwrap();
+                }
+                if let Some(q) = quantum {
+                    writeln!(out, "  quantum {q}").unwrap();
+                }
+                if *ecn {
+                    out.push_str("  ecn\n");
+                }
+            }
+            QdiscKind::Sfq {
+                perturb,
+                limit,
+                quantum,
+            } => {
+                if let Some(p) = perturb {
+                    writeln!(out, "  perturb {}", lit_value(p)?).unwrap();
+                }
+                if let Some(l) = limit {
+                    writeln!(out, "  limit {l}").unwrap();
+                }
+                if let Some(q) = quantum {
+                    writeln!(out, "  quantum {q}").unwrap();
+                }
+            }
+            QdiscKind::Prio { bands } => {
+                if let Some(b) = bands {
+                    writeln!(out, "  bands {b}").unwrap();
+                }
+            }
+        }
+        out.push_str("}\n\n");
+    }
+    Ok(())
+}
+
 fn render_rate_limits(out: &mut String, topo: &Topology) -> Result<()> {
     for endpoint in sorted_keys(&topo.rate_limits) {
         let rl = &topo.rate_limits[endpoint];
@@ -2151,6 +2238,23 @@ node gw {
         topo.lab.name = "has \"quote\"".into();
         let err = try_render(&topo).unwrap_err();
         assert!(err.to_string().contains("double quote"), "{err}");
+    }
+
+    #[test]
+    fn test_render_qdisc_blocks_roundtrip() {
+        let (a, out, b) = roundtrip(
+            r#"
+lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+qdisc a:eth0 tbf { rate 10mbit burst 32kb limit 100kb }
+qdisc b:eth0 prio { bands 3 }
+"#,
+        );
+        assert!(out.contains("qdisc a:eth0 tbf {\n  rate 10mbit\n  burst 32kb\n  limit 100kb\n}"), "{out}");
+        assert!(out.contains("qdisc b:eth0 prio {\n  bands 3\n}"), "{out}");
+        assert_eq!(a.qdiscs, b.qdiscs);
     }
 
     #[test]

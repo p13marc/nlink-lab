@@ -454,6 +454,26 @@ node host {
   `examples/ipv6-dual-stack.nll` documents.
 
 
+### 15. Queue Disciplines
+
+`impair` installs netem and `rate` an HTB shaper; a `qdisc` block picks
+any other classless root qdisc for an interface:
+
+```nll-ignore
+qdisc hub:eth0 tbf { rate 10mbit burst 32kb limit 100kb }
+qdisc hub:eth1 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 ecn }
+qdisc hub:eth2 sfq { perturb 10s limit 127 }
+qdisc hub:eth3 prio { bands 3 }
+```
+
+`tbf` requires `rate` and `burst` (`limit` is a byte size there; for
+`fq_codel`/`sfq` it is a packet count). A parameter of another kind is
+a parse error. An interface has exactly one root qdisc, so `qdisc`
+cannot share an endpoint with `impair` or `rate` (`qdisc-conflicts`).
+`apply` replaces a changed block and clears a removed one;
+`edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb` edits a running
+lab. See `examples/qdisc-kinds.nll`.
+
 ## Examples
 
 ### 1. Simple (2 nodes)
@@ -1137,6 +1157,10 @@ link           = "link" endpoint "--" endpoint (":" IDENT)? (link_block | NEWLIN
 network        = "network" IDENT "{" network_prop* "}"
 impair         = "impair" endpoint impair_props
 rate           = "rate" endpoint rate_props
+qdisc          = "qdisc" endpoint ("tbf" | "fq_codel" | "sfq" | "prio") "{" qdisc_prop* "}"
+qdisc_prop     = "rate" RATE | "burst" SIZE | "limit" (SIZE | INT) | "peakrate" RATE
+               | "mtu" INT | "target" DURATION | "interval" DURATION | "flows" INT
+               | "quantum" INT | "ecn" | "perturb" DURATION | "bands" INT
 defaults       = "defaults" ("link" | "impair" | "rate" | IDENT) block
 pool           = "pool" IDENT CIDR "/" INT        # IPv4 or IPv6; INT ≤ 32 / 128
 pattern        = ("mesh" | "ring" | "star") IDENT block

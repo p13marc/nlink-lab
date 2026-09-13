@@ -235,6 +235,11 @@ pub enum Token {
     #[regex(r"[0-9]+(mbit|kbit|gbit|bit|mbyte|kbyte|gbyte|byte|[mgtp])", |lex| lex.slice().to_string(), priority = 3)]
     RateLit(String),
 
+    // Byte size: `32kb`, `1mb`, `4kib`, `10k` (1024-based; `256m` and
+    // `32kbyte` lex as `RateLit` and are accepted as sizes too).
+    #[regex(r"[0-9]+(\.[0-9]+)?(kib|mib|gib|tib|kb|mb|gb|tb|k)", |lex| lex.slice().to_string(), priority = 3)]
+    SizeLit(String),
+
     #[regex(r"[0-9]+(\.[0-9]+)?%", |lex| lex.slice().to_string())]
     Percent(String),
 
@@ -326,6 +331,7 @@ impl std::fmt::Display for Token {
             Token::Ipv4Addr(v) => write!(f, "{v}"),
             Token::Duration(v) => write!(f, "{v}"),
             Token::RateLit(v) => write!(f, "{v}"),
+            Token::SizeLit(v) => write!(f, "{v}"),
             Token::Percent(v) => write!(f, "{v}"),
             Token::Ident(v) => write!(f, "{v}"),
             Token::Interp(v) => write!(f, "{v}"),

@@ -34,6 +34,17 @@ pub struct Args {
     #[arg(long, value_name = "NODE:IFACE")]
     pub clear_impair: Vec<String>,
 
+    /// Set a non-netem root qdisc on an endpoint:
+    /// `a:eth0=tbf,rate=10mbit,burst=32kb` / `a:eth0=fq_codel,target=5ms,ecn`
+    /// / `a:eth0=sfq,perturb=10s` / `a:eth0=prio,bands=3` (repeatable;
+    /// replaces the endpoint's qdisc block).
+    #[arg(long, value_name = "NODE:IFACE=KIND[,K=V…]")]
+    pub set_qdisc: Vec<String>,
+
+    /// Remove the qdisc block of an endpoint (repeatable).
+    #[arg(long, value_name = "NODE:IFACE")]
+    pub clear_qdisc: Vec<String>,
+
     /// Show the resulting plan without applying it.
     #[arg(long)]
     pub dry_run: bool,
@@ -146,6 +157,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         }
         topo.impairments.remove(&key);
         topo.rate_limits.remove(&key);
+        topo.qdiscs.remove(&key);
         log.push(format!("remove link at {key}"));
     }
     for spec in &args.set_impair {
@@ -195,12 +207,107 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         }
         log.push(format!("clear impairment on {key}"));
     }
+    for spec in &args.set_qdisc {
+        let (ep, rest) = spec.split_once('=').ok_or_else(|| {
+            nlink_lab::Error::invalid_topology(format!(
+                "--set-qdisc {spec:?}: expected NODE:IFACE=KIND[,K=V…]"
+            ))
+        })?;
+        let ep = endpoint(ep.trim())?;
+        let key = format!("{}:{}", ep.node, ep.iface);
+        let kind = parse_qdisc_spec(spec, rest)?;
+        topo.qdiscs.insert(key.clone(), nlink_lab::types::QdiscConfig { kind });
+        log.push(format!("set qdisc on {key}: {}", rest.trim()));
+    }
+    for ep in &args.clear_qdisc {
+        let ep = endpoint(ep)?;
+        let key = format!("{}:{}", ep.node, ep.iface);
+        if topo.qdiscs.remove(&key).is_none() {
+            return Err(nlink_lab::Error::invalid_topology(format!(
+                "no qdisc on '{key}'"
+            )));
+        }
+        log.push(format!("clear qdisc on {key}"));
+    }
     if log.is_empty() {
         return Err(nlink_lab::Error::invalid_topology(
-            "nothing to do: pass --add-node/--remove-node/--add-link/--remove-link/--set-impair/--clear-impair",
+            "nothing to do: pass --add-node/--remove-node/--add-link/--remove-link/--set-impair/--clear-impair/--set-qdisc/--clear-qdisc",
         ));
     }
     Ok(log)
+}
+
+/// `KIND[,K=V…]` → [`QdiscKind`](nlink_lab::types::QdiscKind). Bare
+/// `ecn` toggles the flag.
+fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::types::QdiscKind> {
+    use nlink_lab::types::QdiscKind;
+    let bad = |what: String| nlink_lab::Error::invalid_topology(format!("--set-qdisc {spec:?}: {what}"));
+    let mut items = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
+    let kind = items.next().ok_or_else(|| bad("missing qdisc kind".into()))?;
+    let mut kv: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
+    let mut ecn = false;
+    for item in items {
+        match item.split_once('=') {
+            Some((k, v)) => {
+                kv.insert(k.trim(), v.trim().to_string());
+            }
+            None if item == "ecn" => ecn = true,
+            None => return Err(bad(format!("bad item {item:?} (expected K=V)"))),
+        }
+    }
+    let num = |k: &str| -> nlink_lab::Result<Option<u32>> {
+        kv.get(k)
+            .map(|v| v.parse::<u32>().map_err(|_| bad(format!("{k}: expected an integer, got {v:?}"))))
+            .transpose()
+    };
+    let allowed = |names: &[&str]| -> nlink_lab::Result<()> {
+        for k in kv.keys() {
+            if !names.contains(k) {
+                return Err(bad(format!("unknown {kind} parameter {k:?} (allowed: {})", names.join(", "))));
+            }
+        }
+        Ok(())
+    };
+    Ok(match kind {
+        "tbf" => {
+            allowed(&["rate", "burst", "limit", "peakrate", "mtu"])?;
+            QdiscKind::Tbf {
+                rate: kv.get("rate").cloned().ok_or_else(|| bad("tbf requires rate=".into()))?,
+                burst: kv.get("burst").cloned().ok_or_else(|| bad("tbf requires burst=".into()))?,
+                limit: kv.get("limit").cloned(),
+                peakrate: kv.get("peakrate").cloned(),
+                mtu: num("mtu")?,
+            }
+        }
+        "fq_codel" => {
+            allowed(&["target", "interval", "limit", "flows", "quantum"])?;
+            QdiscKind::FqCodel {
+                target: kv.get("target").cloned(),
+                interval: kv.get("interval").cloned(),
+                limit: num("limit")?,
+                flows: num("flows")?,
+                quantum: num("quantum")?,
+                ecn,
+            }
+        }
+        "sfq" => {
+            allowed(&["perturb", "limit", "quantum"])?;
+            QdiscKind::Sfq {
+                perturb: kv.get("perturb").cloned(),
+                limit: num("limit")?,
+                quantum: num("quantum")?,
+            }
+        }
+        "prio" => {
+            allowed(&["bands"])?;
+            QdiscKind::Prio {
+                bands: num("bands")?
+                    .map(|b| u8::try_from(b).map_err(|_| bad(format!("bands {b} out of range"))))
+                    .transpose()?,
+            }
+        }
+        other => return Err(bad(format!("unknown qdisc kind {other:?} (tbf, fq_codel, sfq, prio)"))),
+    })
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -277,6 +384,8 @@ mod tests {
             remove_link: vec![],
             set_impair: vec![],
             clear_impair: vec![],
+            set_qdisc: vec![],
+            clear_qdisc: vec![],
             dry_run: false,
         }
     }
@@ -349,4 +458,36 @@ mod tests {
                 .contains("nothing to do")
         );
     }
+    #[test]
+    fn set_qdisc_parses_and_clears() {
+        use nlink_lab::types::QdiscKind;
+        let mut topo = topo();
+        let mut a = args();
+        a.set_qdisc = vec![
+            "a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb".into(),
+            "b:eth0=fq_codel,target=5ms,ecn".into(),
+        ];
+        let log = apply_edits(&mut topo, &a).unwrap();
+        assert_eq!(log.len(), 2);
+        assert!(matches!(
+            &topo.qdiscs["a:eth0"].kind,
+            QdiscKind::Tbf { rate, burst, limit: Some(l), .. } if rate == "10mbit" && burst == "32kb" && l == "100kb"
+        ));
+        assert!(matches!(&topo.qdiscs["b:eth0"].kind, QdiscKind::FqCodel { ecn: true, target: Some(t), .. } if t == "5ms"));
+
+        let mut a = args();
+        a.clear_qdisc = vec!["a:eth0".into()];
+        apply_edits(&mut topo, &a).unwrap();
+        assert!(!topo.qdiscs.contains_key("a:eth0"));
+
+        let mut a = args();
+        a.set_qdisc = vec!["a:eth0=tbf,rate=10mbit".into()];
+        let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
+        assert!(err.contains("requires burst"), "{err}");
+        let mut a = args();
+        a.set_qdisc = vec!["a:eth0=sfq,rate=1mbit".into()];
+        let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
+        assert!(err.contains("unknown sfq parameter"), "{err}");
+    }
+
 }

@@ -828,7 +828,41 @@ after deploy (Duplicate Address Detection), so give the first `ping -6`
 a retry — the management network is exempt (`nodad`). See
 `examples/ipv6-dual-stack.nll` and `examples/management-network-v6.nll`.
 
-### 19. Container Management
+### 19. Queue Disciplines (tbf, fq_codel, sfq, prio)
+
+Besides netem (`impair`) and HTB shaping (`rate`), a `qdisc` block sets
+the root qdisc of an interface directly:
+
+```nll
+lab "qdiscs"
+
+node hub
+node a
+node b
+
+link hub:eth0 -- a:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+link hub:eth1 -- b:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
+
+qdisc hub:eth0 tbf {
+  rate 10mbit
+  burst 32kb
+  limit 100kb
+}
+
+qdisc hub:eth1 fq_codel {
+  target 5ms
+  ecn
+}
+```
+
+Kinds: `tbf` (needs `rate` + `burst`; `limit`, `peakrate`, `mtu`),
+`fq_codel` (`target`, `interval`, `limit`, `flows`, `quantum`, `ecn`),
+`sfq` (`perturb`, `limit`, `quantum`), `prio` (`bands`). One root qdisc
+per interface — a `qdisc` endpoint cannot also carry `impair` or
+`rate`. At runtime: `nlink-lab edit mylab --set-qdisc hub:eth0=sfq,perturb=10s`
+and `nlink-lab impair mylab --show` to see what tc installed.
+
+### 20. Container Management
 
 ```bash
 nlink-lab containers mylab               # list container nodes

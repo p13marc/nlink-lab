@@ -1,0 +1,53 @@
+# Queue disciplines other than netem on an interface.
+#
+# `impair` installs netem; `rate` installs an HTB shaper. This lab
+# shows the third option: a `qdisc` block picks the root qdisc kind
+# directly — token bucket (`tbf`), fair queuing with controlled delay
+# (`fq_codel`), stochastic fairness (`sfq`) or priority bands (`prio`).
+# One root qdisc per interface: `qdisc` cannot be combined with
+# `impair` or `rate` on the same endpoint (validation error).
+#
+#   sudo nlink-lab exec qdisc-kinds hub -- tc qdisc show
+#   sudo nlink-lab impair qdisc-kinds --show
+
+lab "qdisc-kinds" {
+  description "tbf, fq_codel, sfq and prio root qdiscs"
+}
+
+profile router { forward ipv4 }
+
+node hub : router
+node shaped
+node fair
+node stochastic
+node priority
+
+link hub:eth0 -- shaped:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+link hub:eth1 -- fair:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
+link hub:eth2 -- stochastic:eth0 { 10.0.3.1/24 -- 10.0.3.2/24 }
+link hub:eth3 -- priority:eth0 { 10.0.4.1/24 -- 10.0.4.2/24 }
+
+# Shape the hub's egress towards `shaped` to 10 Mbit/s with a 32 KiB
+# bucket and a 100 KiB queue.
+qdisc hub:eth0 tbf {
+  rate 10mbit
+  burst 32kb
+  limit 100kb
+}
+
+qdisc hub:eth1 fq_codel {
+  target 5ms
+  interval 100ms
+  limit 10240
+  flows 1024
+  ecn
+}
+
+qdisc hub:eth2 sfq {
+  perturb 10s
+  limit 127
+}
+
+qdisc hub:eth3 prio {
+  bands 3
+}

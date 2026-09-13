@@ -17,8 +17,9 @@ pub struct Args {
     pub all: bool,
 
     /// Also reap mgmt bridges / veths / namespaces with no state file
-    /// (left behind by a crashed deploy). Implies best-effort cleanup;
-    /// can be combined with --all or used on its own.
+    /// (left behind by a crashed deploy), and remove lock files of labs
+    /// that no longer exist. Implies best-effort cleanup; can be combined
+    /// with --all or used on its own.
     #[arg(long)]
     pub orphans: bool,
 }

@@ -358,6 +358,13 @@ fn base_dir() -> PathBuf {
 /// state directory so `remove()` can never unlink a lock another process
 /// is holding (which used to let a concurrent `lock()` succeed against a
 /// fresh inode mid-destroy).
+///
+/// A lock file can still be deleted deliberately — `destroy` does, and
+/// [`sweep_locks`] cleans up after labs that are already gone (issue
+/// #103) — but only by whoever holds it, and `acquire` revalidates the
+/// inode it locked so a waiter can never inherit a detached one. That is
+/// the same hazard this directory placement avoids, handled explicitly
+/// rather than by never unlinking.
 fn locks_dir() -> PathBuf {
     base_dir().join(".locks")
 }
@@ -377,29 +384,78 @@ pub fn exists(name: &str) -> bool {
 /// Returns a [`LabLock`] guard that holds the lock until dropped.
 /// Fails immediately if another process holds the lock.
 pub fn lock(name: &str) -> Result<LabLock> {
-    let file = open_lock_file(name)?;
-    let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    if ret != 0 {
-        return Err(Error::deploy_failed(format!(
-            "lab '{name}' is locked by another process"
-        )));
-    }
-    Ok(LabLock { _file: file })
+    acquire(name, false)
 }
 
 /// Like [`lock`] but waits for the lock instead of failing. Used by
 /// short read-modify-write updates of the state file (`save_state`)
 /// that merely need to take turns with a concurrent deploy/apply/destroy.
 pub fn lock_blocking(name: &str) -> Result<LabLock> {
-    let file = open_lock_file(name)?;
-    let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-    if ret != 0 {
-        return Err(Error::deploy_failed(format!(
-            "failed to lock lab '{name}': {}",
-            std::io::Error::last_os_error()
-        )));
+    acquire(name, true)
+}
+
+/// How many times [`acquire`] re-opens before giving up. A retry only
+/// happens when the lock file was removed or replaced between our `open`
+/// and our `flock`, so more than one is already unusual.
+const ACQUIRE_ATTEMPTS: u32 = 8;
+
+/// `flock` a lab's lock file, then **prove it is still the file at that
+/// path**.
+///
+/// The revalidation is what makes removing a lock file safe (issue #103).
+/// `flock` is a property of an inode, not a path: if a lock file is
+/// unlinked while a second process sits between its `open` and its
+/// `flock`, that process would lock the now-detached inode and a third
+/// process would create and lock a *fresh* one — two holders, no mutual
+/// exclusion. Comparing the locked file's identity against the path
+/// closes that window: a stale inode is detected and the attempt is
+/// retried against whatever is at the path now.
+fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
+    let path = lock_path(name);
+    let op = if blocking {
+        libc::LOCK_EX
+    } else {
+        libc::LOCK_EX | libc::LOCK_NB
+    };
+    for _ in 0..ACQUIRE_ATTEMPTS {
+        let file = open_lock_file(name)?;
+        let ret = unsafe { libc::flock(file.as_raw_fd(), op) };
+        if ret != 0 {
+            if blocking {
+                return Err(Error::deploy_failed(format!(
+                    "failed to lock lab '{name}': {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            return Err(Error::deploy_failed(format!(
+                "lab '{name}' is locked by another process"
+            )));
+        }
+        if same_file(&file, &path) {
+            return Ok(LabLock { _file: file, path });
+        }
+        // The file we locked is no longer the one at this path — it was
+        // removed (a `destroy`) or replaced while we were acquiring. Drop
+        // it and lock whatever is there now.
+        drop(file);
     }
-    Ok(LabLock { _file: file })
+    Err(Error::deploy_failed(format!(
+        "lab '{name}': lock file kept changing under us ({ACQUIRE_ATTEMPTS} attempts)"
+    )))
+}
+
+/// Is `file` the same inode as whatever `path` names right now?
+fn same_file(file: &std::fs::File, path: &std::path::Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let (Ok(held), Ok(current)) = (file.metadata(), std::fs::metadata(path)) else {
+        // The path is gone: our inode is certainly detached.
+        return false;
+    };
+    held.dev() == current.dev() && held.ino() == current.ino()
+}
+
+fn lock_path(name: &str) -> PathBuf {
+    locks_dir().join(format!("{name}.lock"))
 }
 
 fn open_lock_file(name: &str) -> Result<std::fs::File> {
@@ -409,13 +465,36 @@ fn open_lock_file(name: &str) -> Result<std::fs::File> {
         .create(true)
         .truncate(false)
         .write(true)
-        .open(dir.join(format!("{name}.lock")))?)
+        .open(lock_path(name))?)
 }
 
 /// Guard that holds a file lock on a lab's state directory.
 /// The lock is released when this guard is dropped.
 pub struct LabLock {
+    /// Held, never read: dropping it is what releases the `flock`.
     _file: std::fs::File,
+    path: PathBuf,
+}
+
+impl LabLock {
+    /// Delete the lock file, then release the lock.
+    ///
+    /// Only correct because the holder is the one deleting it and
+    /// `acquire` revalidates: a process already blocked on this inode
+    /// wakes up, sees that the path no longer resolves to it, and retries
+    /// against the new file. Called by `destroy`, so a lab's lock file
+    /// does not outlive the lab (issue #103).
+    pub fn remove_file(self) {
+        if let Err(e) = std::fs::remove_file(&self.path)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::debug!("could not remove lock file {}: {e}", self.path.display());
+        }
+        // `self` (and with it the flock) is released here, after the
+        // unlink — never before, or a waiter could take the dead inode
+        // and believe it holds the lock.
+        drop(self);
+    }
 }
 
 use std::os::unix::io::AsRawFd;
@@ -445,7 +524,12 @@ pub fn hosts_lock() -> Result<LabLock> {
             std::io::Error::last_os_error()
         )));
     }
-    Ok(LabLock { _file: file })
+    // This sentinel is never removed (there is exactly one of it, not one
+    // per lab), so it needs no revalidation.
+    Ok(LabLock {
+        _file: file,
+        path: lock_path,
+    })
 }
 
 /// Save lab state and topology.
@@ -572,6 +656,64 @@ pub fn remove(name: &str) -> Result<()> {
         std::fs::remove_dir_all(&dir)?;
     }
     Ok(())
+}
+
+/// Lock files in `.locks/` whose lab has no state directory.
+///
+/// Every lab name that has ever been locked leaves a file behind, and
+/// before issue #103 nothing removed them: a machine that runs the test
+/// suite accumulates thousands (each test lab is uniquely named). `destroy`
+/// now removes its own, and this finds the ones left by everything that
+/// came before — or by a lab whose state directory was deleted by hand.
+pub fn stale_locks() -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(locks_dir()) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_str()?.strip_suffix(".lock")?;
+            // "No state.json" and not merely "no directory": a crashed
+            // deploy can leave an empty directory behind, and its lock is
+            // stale too. This is safe to be liberal about because nothing
+            // is ever removed without acquiring it first — an in-flight
+            // deploy, which takes the lock *before* writing state.json,
+            // holds it and is skipped.
+            (!exists(name)).then(|| path.clone())
+        })
+        .collect()
+}
+
+/// Remove one lab's lock file, but only if nobody holds it. Returns
+/// whether it went away.
+///
+/// Acquiring it first is the proof that no other process is mid-deploy on
+/// that name, and the unlink happens while *we* hold it, so a waiter
+/// revalidates instead of taking a detached inode (see `acquire`).
+pub fn remove_lock_if_unheld(name: &str) -> bool {
+    match lock(name) {
+        Ok(held) => {
+            held.remove_file();
+            true
+        }
+        // Held by someone else: leave it, it is doing its job.
+        Err(_) => false,
+    }
+}
+
+/// Remove the lock files [`stale_locks`] found, skipping any that are
+/// currently held. Returns how many went away.
+pub fn sweep_locks() -> usize {
+    stale_locks()
+        .iter()
+        .filter_map(|path| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".lock"))
+        })
+        .filter(|name| remove_lock_if_unheld(name))
+        .count()
 }
 
 /// Load only the `namespaces` map from a lab's state.json.
@@ -712,6 +854,115 @@ link r1:eth0 -- h1:eth0
         assert!(lock("locked-lab").is_ok());
         // A blocking lock acquires once the other is released.
         assert!(lock_blocking("locked-lab").is_ok());
+    }
+
+    /// The whole point of `.locks/` living outside the lab directory: a
+    /// lab's lock must outlive `remove()`. Extended for #103 — the lock
+    /// file *is* removable now, but only by the holder.
+    #[test]
+    fn destroy_style_removal_frees_the_lock_and_deletes_its_file() {
+        let _guard = xdg_state_lock();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+
+        let held = lock("doomed").expect("first lock");
+        let path = lock_path("doomed");
+        assert!(path.exists());
+        assert!(lock("doomed").is_err(), "still held");
+
+        // What `RunningLab::destroy` does: unlink while holding, then release.
+        held.remove_file();
+        assert!(!path.exists(), "the lock file goes with the lab");
+        // …and the name is immediately lockable again, against a fresh file.
+        let again = lock("doomed").expect("lockable after removal");
+        assert!(path.exists(), "a fresh lock file was created");
+        assert!(lock("doomed").is_err(), "and it excludes properly");
+        drop(again);
+    }
+
+    #[test]
+    fn stale_locks_finds_only_locks_without_a_lab() {
+        let _guard = xdg_state_lock();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+
+        // A live lab: state.json present.
+        drop(lock("live"));
+        let live_dir = state_dir("live");
+        std::fs::create_dir_all(&live_dir).unwrap();
+        std::fs::write(live_dir.join("state.json"), "{}").unwrap();
+        // A lab whose directory exists but never got a state file — a
+        // crashed deploy. Its lock is stale too.
+        drop(lock("crashed"));
+        std::fs::create_dir_all(state_dir("crashed")).unwrap();
+        // And one with nothing left at all.
+        drop(lock("gone"));
+
+        let stale: Vec<String> = stale_locks()
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(stale.contains(&"gone.lock".to_string()), "{stale:?}");
+        assert!(stale.contains(&"crashed.lock".to_string()), "{stale:?}");
+        assert!(!stale.contains(&"live.lock".to_string()), "{stale:?}");
+    }
+
+    #[test]
+    fn sweep_removes_stale_locks_but_never_a_held_one() {
+        let _guard = xdg_state_lock();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+
+        drop(lock("stale-a"));
+        drop(lock("stale-b"));
+        // Held by "another process": the sweep must leave it alone, since
+        // acquiring it is the proof that nobody is mid-deploy.
+        let held = lock("busy").expect("hold one");
+
+        assert_eq!(sweep_locks(), 2, "both unheld ones");
+        assert!(!lock_path("stale-a").exists());
+        assert!(!lock_path("stale-b").exists());
+        assert!(lock_path("busy").exists(), "a held lock is never swept");
+        drop(held);
+        assert_eq!(sweep_locks(), 1, "and is swept once released");
+    }
+
+    /// The protocol that makes removal safe. Without the inode
+    /// revalidation in `acquire`, the waiter below would wake up owning a
+    /// lock on a deleted file while a *third* caller locks a fresh one at
+    /// the same path — two holders, no mutual exclusion.
+    #[test]
+    fn a_waiter_revalidates_instead_of_inheriting_a_deleted_lock() {
+        let _guard = xdg_state_lock();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+
+        let held = lock("raced").expect("first lock");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            // Blocks on the inode that is about to be unlinked.
+            let got = lock_blocking("raced").expect("acquires eventually");
+            tx.send(()).unwrap();
+            // Hold it until the test says so.
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            drop(got);
+        });
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Destroy: unlink while holding, then release.
+        held.remove_file();
+        rx.recv_timeout(std::time::Duration::from_secs(5))
+            .expect("the waiter must acquire after the lock file is removed");
+
+        // The waiter holds a lock on whatever is at the path *now*, so a
+        // fresh attempt must be excluded. If it revalidated wrongly, the
+        // waiter would be holding a detached inode and this would succeed.
+        assert!(
+            lock("raced").is_err(),
+            "the waiter's lock must still exclude a new caller"
+        );
+        waiter.join().unwrap();
+        assert!(lock("raced").is_ok(), "lockable again once released");
     }
 
     #[test]

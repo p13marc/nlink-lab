@@ -329,6 +329,10 @@ pub async fn serve(
     .await?;
     let status_queryable =
         declare_queryable(session, "status queryable", topics::rpc_status(&lab_name)).await?;
+    // The topology is published once below; a viewer that connects later
+    // needs to be able to ask for it (issue #48).
+    let topo_queryable =
+        declare_queryable(session, "topology queryable", topics::topology(&lab_name)).await?;
 
     // ── Publish initial topology ───────────────────────────
     let topo = lab.topology();
@@ -492,6 +496,10 @@ pub async fn serve(
 
             Ok(query) = status_queryable.recv_async() => {
                 handlers::handle_status(&lab, start_time, query).await;
+            }
+
+            Ok(query) = topo_queryable.recv_async() => {
+                handlers::handle_topology(&lab, query).await;
             }
 
             () = &mut shutdown => {

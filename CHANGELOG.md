@@ -4,6 +4,72 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — topoviewer, and the topology the backend never re-sent (issue #48)
+
+- **`topoviewer --lab foo` rendered an empty canvas**, and the cause was
+  in two places. The viewer only declared the topology subscription in
+  discovery mode, so `--lab` never received one — but removing that gate
+  is not enough: the backend publishes the topology **exactly once**, at
+  its own startup, with no retention and no queryable, so a viewer that
+  connects later never sees it in *any* mode. The backend now also serves
+  a **topology queryable** on `nlink-lab/<lab>/topology`, and the viewer
+  queries it on `ZenohReady` and on `LabSelected`. Switching labs was a
+  one-way trip to a blank canvas for the same reason, and now is not.
+- **Metrics no longer fight the user.** `MetricsReceived` forced
+  `show_metrics = true` on every sample, so the toggle could not be turned
+  off while the daemon was publishing; and the metrics stream emitted an
+  empty map both when the subscriber was declared and on any deserialize
+  failure, wiping the displayed metrics. Both now behave like the health
+  and topology streams (`Noop`), keeping the last good sample.
+- **`--zenoh-connect` no longer panics** on a bad endpoint: it is parsed
+  in a testable `build_zenoh_config` and reported like a bad topology
+  file. Passing it with a positional `.nll` and no `--lab` now warns that
+  it is ignored instead of silently dropping it.
+- **Canvas input**: keyboard shortcuts and mouse-button release were
+  behind a `cursor.position_in(bounds)?` guard, so `Escape`/`+`/`-`/`f`/
+  `a`/`m`/`e` only worked while the pointer happened to be over the
+  canvas, and releasing a drag over the sidebar left the node stuck to the
+  cursor. Both are now handled before the guard, and drag/pan use
+  canvas-relative coordinates throughout instead of mixing them with
+  window-absolute ones.
+- **Exec arguments are tokenised**, not `split_whitespace`: quotes and
+  backslash escapes are honoured (and the quote characters removed), so
+  `sh -c "ip addr add 10.0.0.1/24 dev eth0"` reaches the node as one
+  argument. A zenoh reply error is rendered with `Display`, not `{e:?}`.
+- **PNG export** wrote a relative filename into the process's working
+  directory — arbitrary for a desktop launch, unwritable in the flatpak
+  sandbox — and discarded the `Result`, so failures were silent. It now
+  writes to `$XDG_PICTURES_DIR` (else `~/Pictures`, else the working
+  directory) with millisecond precision, and reports the absolute path or
+  the error in the sidebar.
+- **Flatpak**: `project_license` corrected to `MIT OR Apache-2.0`, the
+  0.8.0 release recorded in the metainfo (the release job's `sed` never
+  commits back, so the in-tree file stayed at 0.1.0), `finish-args` gained
+  `xdg-documents:ro` and `xdg-pictures:create` so the positional `.nll`
+  and PNG export can work at all, and the desktop entry gained `%f` plus a
+  `text/x-nll` media type with a matching shared-mime-info glob.
+- Dead code: the write-only `TopoViewer::dragging` and
+  `CanvasState::last_cursor` fields, a no-op `drop` of an already-moved
+  `String`, and a vestigial `let _ = edges;`.
+- topoviewer gained its first tests outside `layout.rs`: the zenoh config
+  parser and the command tokeniser.
+
+  Not in scope (still open on #48): the force-directed layout's 200
+  fixed all-pairs iterations on the UI thread, Flathub-grade packaging
+  (offline cargo sources, screenshots, branding), and `wire_version`
+  negotiation.
+
+### Fixed — documentation and schema rot
+
+- `docs/cli/README.md` was missing rows for eight shipped commands
+  (`doctor`, `edit`, `events`, `fmt`, `lint`, `restore`, `snapshot`,
+  `verify`) and promised an alphabetical listing that does not exist.
+- `docs/json-schemas/README.md` advertised `lint.schema.json`, which was
+  never generated: `LintReport` already derived `JsonSchema`, so it is now
+  registered in `all_schemas()` and the file is committed.
+- `deny.toml` dropped two `RUSTSEC-2026-0194/0195` ignores that no longer
+  match any crate in the graph (`cargo deny` warned on both).
+
 ### Added — `nlink-lab top`, a live TUI (issue #63)
 
 - **`nlink-lab top <lab>`** is a ratatui terminal UI over a running lab:

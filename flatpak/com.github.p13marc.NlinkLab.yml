@@ -17,6 +17,11 @@ finish-args:
   - --share=network
   # Access to config directory
   - --filesystem=xdg-config/nlink-lab:create
+  # Read a `.nll` passed as the positional argument (static mode): with no
+  # host filesystem access at all, that path could never be opened (#48).
+  - --filesystem=xdg-documents:ro
+  # …and somewhere to put a PNG export.
+  - --filesystem=xdg-pictures:create
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
@@ -37,6 +42,9 @@ modules:
       - install -Dm755 target/release/nlink-lab-topoviewer ${FLATPAK_DEST}/bin/nlink-lab-topoviewer
       - install -Dm644 flatpak/com.github.p13marc.NlinkLab.desktop ${FLATPAK_DEST}/share/applications/com.github.p13marc.NlinkLab.desktop
       - install -Dm644 flatpak/com.github.p13marc.NlinkLab.metainfo.xml ${FLATPAK_DEST}/share/metainfo/com.github.p13marc.NlinkLab.metainfo.xml
+      # `text/x-nll` is ours; without this glob the desktop file's
+      # `MimeType=` matches nothing (#48).
+      - install -Dm644 flatpak/com.github.p13marc.NlinkLab.mime.xml ${FLATPAK_DEST}/share/mime/packages/com.github.p13marc.NlinkLab.xml
       - install -Dm644 flatpak/icons/hicolor/scalable/apps/com.github.p13marc.NlinkLab.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/com.github.p13marc.NlinkLab.svg
     sources:
       - type: dir

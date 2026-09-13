@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — `nlink-lab top`, a live TUI (issue #63)
+
+- **`nlink-lab top <lab>`** is a ratatui terminal UI over a running lab:
+  a Nodes pane (kind, interface count, summed rx/tx, issue count), an
+  Interfaces pane for the selected node (state, rx/tx, packets/s, errors,
+  drops with tc drops called out, and the **effective impairment with its
+  origin** — `topology`, `live` or `partitioned`), and a Flows pane from
+  the collector's sock_diag probes (process, pid, addresses, goodput,
+  retransmit ratio). `↑↓`/`jk` select, `Tab` switches pane, `s` sorts by
+  name/traffic/issues, `/` filters, `?` shows the keys.
+- **Write actions from the UI**: `i` opens a prompt taking `KEY VALUE`
+  pairs (`delay 50ms loss 1%`, or `KEY=VALUE`), `c` clears, `p`/`h`
+  partition and heal — all through the same `RunningLab` calls as
+  `nlink-lab impair`, so edits are persisted and survive an `apply`.
+  Impairing a partitioned endpoint records the value for `heal` and says
+  so rather than silently lifting the partition. Values pass through
+  verbatim as elsewhere, but a missing unit, an out-of-range percentage
+  or a duplicate key is rejected in the prompt, where it can be fixed.
+- **Two sources.** The default collects in-process with the same
+  collector `daemon` uses, which calls `diagnose` in every namespace and
+  so needs root — it fails immediately with a message pointing at `sudo`
+  or `--zenoh` rather than rendering an empty screen. `--zenoh` /
+  `--zenoh-connect` subscribes to a running `daemon` instead: no root,
+  and the write keys are disabled with an explanation, because there is
+  no partition RPC and `ImpairmentRequest` carries only six of the ten
+  knobs.
+- **`--once`** prints a single plain-text frame and exits without
+  touching the terminal — safe in pipes, CI and `watch -n1`; with
+  `--json` it prints the raw `MetricsSnapshot` (the existing
+  `metrics-snapshot` schema, so no new envelope). The interactive view
+  refuses to start without a tty and says to use `--once`.
+- Terminal handling: raw mode and the alternate screen via
+  `ratatui::try_init`, whose panic hook restores the terminal before the
+  payload is printed; `SIGTERM`/`SIGHUP` break the loop so teardown still
+  runs; Ctrl-C is handled as a **key**, since raw mode means the tty no
+  longer raises SIGINT. Keystrokes and the metrics ticker share one
+  `tokio::select!` over a `crossterm::EventStream`, with the (not
+  cancel-safe) collector future awaited outside it.
+- `Impairment::set_property` / `Impairment::summary` on the library type
+  now own the ten property names and their error message;
+  `edit --set-impair` and the `top` prompt both call them instead of
+  keeping their own copy of the match.
+- `nlink-lab metrics` is unchanged: it stays the non-interactive,
+  pipe-friendly, rootless consumer. `top` is the interactive view of the
+  same snapshots.
+
+  Not in scope: write actions over Zenoh (needs a partition RPC and four
+  more `ImpairmentRequest` fields), a rootless local view (`diagnose` is
+  all-or-nothing), mouse support, per-flow history and sparklines.
+
 ### Added — NLL language server (issue #56)
 
 - **`nlink-lab lsp`** speaks LSP 3.17 over stdio, so any editor gets the

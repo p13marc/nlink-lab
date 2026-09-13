@@ -42,6 +42,7 @@ pub mod spawn;
 pub mod stats;
 pub mod status;
 pub mod test;
+pub mod top;
 pub mod validate;
 pub mod verify;
 pub mod wait;
@@ -69,6 +70,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Events(args) => events::run(ctx, args).await,
         Commands::Doctor(args) => doctor::run(ctx, args).await,
         Commands::Test(args) => test::run(ctx, args).await,
+        Commands::Top(args) => top::run(ctx, args).await,
         Commands::Impair(args) => impair::run(ctx, args).await,
         Commands::Scenario(args) => scenario::run(ctx, args).await,
         Commands::DocsGen(args) => docs_gen::run(ctx, args),

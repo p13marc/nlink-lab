@@ -292,8 +292,9 @@ For honesty about scope:
   couple your harness to nlink-lab internals; we'd rather you
   build the wrapper you need.
 - **In-process embedding**. Same reason. The CLI is the API.
-- **A GUI / TUI**. `nlink-lab status --json` + `tail -f` covers
-  every observability use case we've seen.
+- **A desktop GUI**. `nlink-lab top` is a terminal UI over the same
+  snapshots `daemon` publishes, and `status --json` + `tail -f` covers
+  the scripted cases. `bins/topoviewer` is an experiment, not a product.
 - **Container-based labs as default**. nlink-lab is namespace-first.
   Container nodes work but aren't the focus; if you need container
   orchestration, containerlab is the better tool.

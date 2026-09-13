@@ -48,6 +48,7 @@ What's actually running.
 | [`diff`](diff.md) | Diff two NLL topologies |
 | [`diagnose`](diagnose.md) | Per-lab health checks |
 | [`metrics`](metrics.md) | Zenoh metrics export |
+| [`top`](top.md) | Live TUI: nodes, interfaces, flows |
 | [`containers`](containers.md) | List container nodes |
 
 ## Network ops

@@ -575,11 +575,26 @@ impl TopoViewer {
 /// arbitrary for a desktop launch and unwritable inside the flatpak
 /// sandbox (issue #48).
 pub fn png_dir() -> std::path::PathBuf {
-    if let Some(dir) = std::env::var_os("XDG_PICTURES_DIR").filter(|v| !v.is_empty()) {
+    png_dir_from(
+        std::env::var_os("XDG_PICTURES_DIR"),
+        std::env::var_os("HOME"),
+    )
+}
+
+/// The environment-free core of [`png_dir`], so the choice is testable
+/// without mutating the process environment (which is racy across the
+/// test threads, and `unsafe` in edition 2024).
+fn png_dir_from(
+    xdg_pictures: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> std::path::PathBuf {
+    if let Some(dir) = xdg_pictures.filter(|v| !v.is_empty()) {
         return std::path::PathBuf::from(dir);
     }
-    if let Some(home) = std::env::var_os("HOME") {
+    if let Some(home) = home {
         let pictures = std::path::Path::new(&home).join("Pictures");
+        // Only if it exists: creating a Pictures directory for someone who
+        // does not have one would be presumptuous.
         if pictures.is_dir() {
             return pictures;
         }
@@ -621,4 +636,53 @@ async fn save_png(screenshot: iced::window::Screenshot) -> Result<String, String
         .map_err(|e| format!("png data: {e}"))?;
 
     Ok(shown)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{png_dir_from, png_name};
+
+    #[test]
+    fn png_dir_prefers_xdg_pictures() {
+        let dir = png_dir_from(Some("/pics".into()), Some("/home/someone".into()));
+        assert_eq!(dir, std::path::Path::new("/pics"));
+    }
+
+    #[test]
+    fn an_empty_xdg_pictures_is_ignored() {
+        let dir = png_dir_from(Some("".into()), None);
+        assert_eq!(dir, std::path::Path::new("."));
+    }
+
+    #[test]
+    fn falls_back_to_home_pictures_only_when_it_exists() {
+        let home = tempfile::tempdir().unwrap();
+        // No `Pictures` yet: fall through to the working directory rather
+        // than naming a path that does not exist.
+        assert_eq!(
+            png_dir_from(None, Some(home.path().as_os_str().to_owned())),
+            std::path::Path::new(".")
+        );
+        std::fs::create_dir(home.path().join("Pictures")).unwrap();
+        assert_eq!(
+            png_dir_from(None, Some(home.path().as_os_str().to_owned())),
+            home.path().join("Pictures")
+        );
+    }
+
+    #[test]
+    fn with_no_environment_at_all_it_is_the_working_directory() {
+        assert_eq!(png_dir_from(None, None), std::path::Path::new("."));
+    }
+
+    #[test]
+    fn png_name_is_millisecond_stamped_and_changes() {
+        let a = png_name();
+        assert!(a.starts_with("topoviewer-") && a.ends_with(".png"), "{a}");
+        let stamp = &a["topoviewer-".len()..a.len() - ".png".len()];
+        assert!(stamp.parse::<u128>().is_ok(), "{a}");
+        // Millisecond precision: two exports a tick apart cannot collide.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert_ne!(a, png_name());
+    }
 }

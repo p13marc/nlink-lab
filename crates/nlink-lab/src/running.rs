@@ -1526,7 +1526,7 @@ impl RunningLab {
     /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
     pub async fn destroy(self) -> Result<()> {
         // Acquire exclusive lock
-        let _lock = crate::state::lock(&self.topology.lab.name)?;
+        let lock = crate::state::lock(&self.topology.lab.name)?;
 
         // Release any subnet-pool entries this lab claimed at deploy
         // time (round-5 §2.5). Best-effort — pool errors are not
@@ -1653,6 +1653,10 @@ impl RunningLab {
             crate::events::LifecycleKind::Destroyed,
         );
         state::remove(&self.topology.lab.name)?;
+
+        // The lab is gone, so its lock file should be too (issue #103) —
+        // unlinked while we still hold it, which is what makes it safe.
+        lock.remove_file();
 
         Ok(())
     }

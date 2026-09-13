@@ -804,6 +804,10 @@ async fn network_config_coexists_with_macvlan() {
             eprintln!(
                 "skipping network_config_coexists_with_macvlan: deploy failed (likely no parent): {e}"
             );
+            // A failed deploy still took the lock and created the state
+            // directory; without this the skip leaves both behind on every
+            // run (issue #103).
+            discard_lab_state(&topo.lab.name);
             return;
         }
     };
@@ -841,6 +845,7 @@ async fn network_config_coexists_with_vrf() {
         Ok(l) => l,
         Err(e) => {
             eprintln!("skipping network_config_coexists_with_vrf: deploy failed: {e}");
+            discard_lab_state(&topo.lab.name);
             return;
         }
     };
@@ -2254,7 +2259,19 @@ impl Drop for LabCleanup {
             }
         }
         let _ = nlink_lab::state::remove(&self.name);
+        // Every test lab has a unique name, so without this `.locks/`
+        // grows by one file per test, for ever (issue #103).
+        nlink_lab::state::remove_lock_if_unheld(&self.name);
     }
+}
+
+/// Drop a lab's state directory and lock file without going through
+/// `destroy` — for the skip paths that bail out after a *failed* deploy,
+/// which has already taken the lock and created the directory but has no
+/// `RunningLab` to destroy.
+fn discard_lab_state(name: &str) {
+    let _ = nlink_lab::state::remove(name);
+    nlink_lab::state::remove_lock_if_unheld(name);
 }
 
 #[tokio::test]

@@ -68,6 +68,10 @@ fn writable_dir(p: &std::path::Path) -> bool {
     ok
 }
 
+/// A handful of stale lock files is normal between a `destroy` and the
+/// next `destroy --orphans`; a pile of them is the issue #103 symptom.
+const STALE_LOCK_WARN: usize = 32;
+
 /// Every check nlink-lab's own commands would otherwise fail on later:
 /// privileges, netlink, the binaries exec'd inside namespaces, kernel
 /// modules the examples need, writable state dir, and leftovers on the
@@ -284,6 +288,26 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
             format!(
                 "{} — a crashed deploy/apply is unwound by the next deploy or `destroy --orphans`",
                 pending.join(", ")
+            )
+        },
+    });
+    // Stale lock files (#103): harmless, but nothing used to report or
+    // remove them, so they accumulated silently — one per lab name ever
+    // locked, which on a machine that runs the test suite is thousands.
+    let stale_locks = nlink_lab::state::stale_locks();
+    checks.push(Check {
+        name: "lock files",
+        status: if stale_locks.len() < STALE_LOCK_WARN {
+            Status::Ok
+        } else {
+            Status::Warn
+        },
+        detail: if stale_locks.is_empty() {
+            "none left by labs that no longer exist".to_string()
+        } else {
+            format!(
+                "{} left by labs that no longer exist — `destroy --orphans` removes them",
+                stale_locks.len()
             )
         },
     });

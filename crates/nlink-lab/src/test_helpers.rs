@@ -253,6 +253,8 @@ pub async fn cleanup_lab(topology: &Topology) -> CleanupReport {
     if let Err(e) = crate::state::remove(&lab_name) {
         report.warnings.push(format!("remove state dir: {e}"));
     }
+    // …and its lock file, or `.locks/` grows by one per test (issue #103).
+    crate::state::remove_lock_if_unheld(&lab_name);
 
     report
 }

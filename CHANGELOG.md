@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — lock files no longer accumulate for ever (issue #103)
+
+- **`.locks/<lab>.lock` was never removed.** Every lab name that had ever
+  been locked left a file behind — including every destroyed lab and,
+  the case that actually grew without bound, every uniquely-named lab from
+  a test run. On the development machine this had reached 1787 files.
+  `destroy` now removes a lab's lock file, `destroy --orphans` sweeps the
+  ones left by labs that are already gone, `doctor` reports them (warning
+  past 32), and the test harnesses clean up after themselves — including
+  the skip paths that bail out after a *failed* deploy, which had already
+  taken the lock and created the state directory but had no `RunningLab`
+  to destroy (where the stray `macvlan-demo` husk came from). A full
+  root-suite run now leaves no state directories and no lock files at all.
+- **The unlink is only safe because acquiring a lock now revalidates the
+  inode it locked.** `flock` is a property of an inode, not a path: if a
+  lock file is unlinked while a second process sits between its `open` and
+  its `flock`, that process locks the detached inode while a third creates
+  and locks a fresh one — two holders and no mutual exclusion, which is
+  exactly why `.locks/` was placed outside the lab directory in the first
+  place. `state::lock`/`lock_blocking` now compare the locked file's
+  identity against the path and retry against whatever is there now, so
+  a waiter can never inherit a deleted lock. Nothing is ever removed
+  without acquiring it first, which is what proves no other process is
+  mid-deploy on that name; a held lock is skipped, not forced.
+- Tests: the existing "a lock survives `remove()`" invariant still holds,
+  plus destroy-style removal, `stale_locks` classification (a crashed
+  deploy's empty directory counts as stale; a lab with `state.json` does
+  not), a sweep that skips a held lock, and a threaded test in which a
+  waiter blocked on a lock file that is then deleted must still exclude a
+  third caller — it fails without the revalidation.
+
 ### Fixed — topoviewer, and the topology the backend never re-sent (issue #48)
 
 - **`topoviewer --lab foo` rendered an empty canvas**, and the cause was

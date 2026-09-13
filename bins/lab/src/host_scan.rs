@@ -53,8 +53,9 @@ pub async fn force_cleanup(name: &str) {
         Err(e) => eprintln!("  warning: cannot open netlink socket: {e}"),
     }
 
-    // Also clean up state directory
+    // Also clean up state directory, and the lock file with it (#103).
     let _ = nlink_lab::state::remove(name);
+    nlink_lab::state::remove_lock_if_unheld(name);
 }
 
 /// Resources on the host that look like lab-owned state but have no matching
@@ -301,7 +302,15 @@ pub async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
             journal.unwind().await;
             println!("  unwound {n} journal entries of interrupted lab '{lab}'");
             let _ = nlink_lab::state::remove(lab);
+            nlink_lab::state::remove_lock_if_unheld(lab);
         }
+    }
+    // Lock files of labs that no longer exist (#103). Independent of the
+    // host resources below, and done before their early returns so it
+    // always runs.
+    match nlink_lab::state::sweep_locks() {
+        0 => {}
+        n => println!("  removed {n} stale lock file(s)"),
     }
     let orphans = find_orphans(known).await;
     if orphans.is_empty() {

@@ -32,6 +32,9 @@ pub struct RunningLab {
     wifi_loaded: bool,
     /// Saved impairments before partition (endpoint → Impairment).
     saved_impairments: BTreeMap<String, crate::types::Impairment>,
+    /// Impairments set at runtime (`impair`), persisted so `apply`,
+    /// `verify` and snapshots see them (#59).
+    live_impairments: BTreeMap<String, crate::types::Impairment>,
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
     process_logs: BTreeMap<u32, (String, String)>,
     /// `/proc/<pid>/stat` start time per tracked PID (see
@@ -177,6 +180,7 @@ impl RunningLab {
             exec_pids: BTreeMap::new(),
             mgmt_peers: std::collections::BTreeMap::new(),
             saved_impairments: BTreeMap::new(),
+            live_impairments: BTreeMap::new(),
             process_logs: BTreeMap::new(),
             assertion_results: Vec::new(),
         }
@@ -443,6 +447,38 @@ impl RunningLab {
 
     pub(crate) fn saved_impairments_map(&self) -> &BTreeMap<String, crate::types::Impairment> {
         &self.saved_impairments
+    }
+
+    /// Impairments set at runtime with [`set_impairment`](Self::set_impairment),
+    /// keyed by endpoint. They override the topology's `impair` until the
+    /// topology changes that endpoint (see [`crate::apply`]).
+    pub fn live_impairments(&self) -> &BTreeMap<String, crate::types::Impairment> {
+        &self.live_impairments
+    }
+
+    /// Replace the runtime-impairment record (used by `apply` to drop
+    /// entries the new topology overrides, or to reset them all).
+    pub(crate) fn set_live_impairments(
+        &mut self,
+        live: BTreeMap<String, crate::types::Impairment>,
+    ) {
+        self.live_impairments = live;
+    }
+
+    /// Partitioned endpoints (pre-partition impairment per endpoint).
+    pub fn partitions(&self) -> &BTreeMap<String, crate::types::Impairment> {
+        &self.saved_impairments
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_partitions(&mut self, map: BTreeMap<String, crate::types::Impairment>) {
+        self.saved_impairments = map;
+    }
+
+    /// Forget the partitions `apply` just converged over (their 100%
+    /// loss qdisc was replaced by the plan), keeping the rest.
+    pub(crate) fn retain_partitions(&mut self, keep: impl Fn(&str) -> bool) {
+        self.saved_impairments.retain(|ep, _| keep(ep));
     }
 
     /// Track a freshly spawned background process: its PID and the start
@@ -716,6 +752,7 @@ impl RunningLab {
         lab_state.exec_pids = self.exec_pids.clone();
         lab_state.mgmt_peers = self.mgmt_peers.clone();
         lab_state.saved_impairments = self.saved_impairments.clone();
+        lab_state.live_impairments = self.live_impairments.clone();
         lab_state.process_logs = self.process_logs.clone();
         state::save(&lab_state, &self.topology)
     }
@@ -1156,7 +1193,33 @@ impl RunningLab {
     }
 
     /// Modify the netem impairment on an interface at runtime.
+    ///
+    /// The value is recorded in the lab state (`live_impairments`) so a
+    /// later `apply`, `verify` or `snapshot` sees what is really installed
+    /// instead of the topology's declaration (#59). A partitioned endpoint
+    /// keeps its partition; the new value becomes what `heal` restores.
     pub async fn set_impairment(
+        &mut self,
+        endpoint: &str,
+        impairment: &crate::types::Impairment,
+    ) -> Result<()> {
+        if self.saved_impairments.contains_key(endpoint) {
+            // Partitioned: remember the new value for `heal`, leave the
+            // 100% loss in place.
+            self.saved_impairments
+                .insert(endpoint.to_string(), impairment.clone());
+            self.live_impairments
+                .insert(endpoint.to_string(), impairment.clone());
+            return self.save_state();
+        }
+        self.install_impairment(endpoint, impairment).await?;
+        self.live_impairments
+            .insert(endpoint.to_string(), impairment.clone());
+        self.save_state()
+    }
+
+    /// Install a netem qdisc without touching the bookkeeping.
+    async fn install_impairment(
         &self,
         endpoint: &str,
         impairment: &crate::types::Impairment,
@@ -1211,7 +1274,18 @@ impl RunningLab {
         // persist. Without this, a follow-up `partition()` would see
         // the stale entry and return early without installing the
         // qdisc — the silent no-op reported as round-4 §1.
-        if self.saved_impairments.remove(endpoint).is_some() {
+        let removed_partition = self.saved_impairments.remove(endpoint).is_some();
+        // A cleared endpoint is "no impairment" until the topology says
+        // otherwise again: record the empty value so `apply` does not
+        // reinstall the declared one behind the operator's back.
+        let changed_live = if self.topology.impairments.contains_key(endpoint) {
+            self.live_impairments
+                .insert(endpoint.to_string(), crate::types::Impairment::default());
+            true
+        } else {
+            self.live_impairments.remove(endpoint).is_some()
+        };
+        if removed_partition || changed_live {
             self.save_state()?;
         }
         Ok(())
@@ -1224,11 +1298,12 @@ impl RunningLab {
             return Ok(());
         }
 
-        // Read current impairment from topology (or default if none)
+        // What `heal` should put back: the runtime value if the operator
+        // set one, else the topology's declaration (or nothing).
         let current = self
-            .topology
-            .impairments
+            .live_impairments
             .get(endpoint)
+            .or_else(|| self.topology.impairments.get(endpoint))
             .cloned()
             .unwrap_or_default();
 
@@ -1239,7 +1314,7 @@ impl RunningLab {
             loss: Some("100%".to_string()),
             ..Default::default()
         };
-        self.set_impairment(endpoint, &partition_imp).await?;
+        self.install_impairment(endpoint, &partition_imp).await?;
         self.save_state()?;
         Ok(())
     }
@@ -1253,7 +1328,7 @@ impl RunningLab {
         if saved == crate::types::Impairment::default() {
             self.clear_impairment(endpoint).await?;
         } else {
-            self.set_impairment(endpoint, &saved).await?;
+            self.install_impairment(endpoint, &saved).await?;
         }
         self.save_state()?;
         Ok(())
@@ -1465,6 +1540,7 @@ impl RunningLab {
             dns_injected: lab_state.dns_injected,
             wifi_loaded: lab_state.wifi_loaded,
             saved_impairments: lab_state.saved_impairments,
+            live_impairments: lab_state.live_impairments,
             process_logs: lab_state.process_logs,
             starttimes: lab_state.starttimes,
             exec_pids: lab_state.exec_pids,

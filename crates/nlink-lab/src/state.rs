@@ -69,6 +69,13 @@ pub struct LabState {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub saved_impairments: std::collections::BTreeMap<String, crate::types::Impairment>,
 
+    /// Impairments set at runtime with `nlink-lab impair` (endpoint →
+    /// Impairment). They override the topology's `impair` for `apply`,
+    /// `verify` and snapshots until the topology changes that endpoint
+    /// or `apply --reset-impairments` drops them (#59).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub live_impairments: std::collections::BTreeMap<String, crate::types::Impairment>,
+
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub process_logs: std::collections::BTreeMap<u32, (String, String)>,
@@ -102,10 +109,178 @@ impl LabState {
             dns_injected: false,
             wifi_loaded: false,
             saved_impairments: Default::default(),
+            live_impairments: Default::default(),
             process_logs: Default::default(),
             exec_pids: Default::default(),
         }
     }
+}
+
+// ─── Snapshots (#59) ────────────────────────────────────────
+
+/// Directory holding a lab's snapshots: `<state_dir>/snapshots/<name>/`.
+pub fn snapshots_dir(lab: &str) -> PathBuf {
+    state_dir(lab).join("snapshots")
+}
+
+/// A checkpoint of everything nlink-lab manages for a lab: the topology,
+/// the runtime bookkeeping (`state.json`, including live impairments and
+/// partitions) and a little metadata.
+#[derive(Debug, Clone)]
+pub struct Snapshot {
+    pub meta: SnapshotInfo,
+    pub topology: Topology,
+    pub state: LabState,
+}
+
+/// Listing entry for `nlink-lab snapshot <lab> --list`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SnapshotInfo {
+    /// Snapshot name (unique per lab).
+    pub name: String,
+    /// ISO 8601 creation timestamp.
+    pub created_at: String,
+    /// Free-text description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Nodes in the snapshot's topology.
+    #[serde(default)]
+    pub node_count: usize,
+    /// Links in the snapshot's topology.
+    #[serde(default)]
+    pub link_count: usize,
+    /// Runtime impairments (`nlink-lab impair`) captured.
+    #[serde(default)]
+    pub live_impairments: usize,
+    /// Partitioned endpoints captured.
+    #[serde(default)]
+    pub partitions: usize,
+}
+
+/// Snapshot names are path components: letters, digits, `-`, `_`, `.`
+/// (not leading), at most 64 bytes.
+pub fn validate_snapshot_name(name: &str) -> Result<()> {
+    let ok = !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with('.')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+    if !ok {
+        return Err(Error::invalid_topology(format!(
+            "invalid snapshot name '{name}': use letters, digits, '-', '_' or '.' (max 64, not starting with '.')"
+        )));
+    }
+    Ok(())
+}
+
+/// Write a snapshot; an existing one with the same name is replaced.
+pub fn snapshot_save(
+    lab: &str,
+    name: &str,
+    description: Option<&str>,
+    state: &LabState,
+    topology: &Topology,
+) -> Result<SnapshotInfo> {
+    validate_snapshot_name(name)?;
+    let dir = snapshots_dir(lab).join(name);
+    std::fs::create_dir_all(&dir)?;
+    let meta = SnapshotInfo {
+        name: name.to_string(),
+        created_at: crate::deploy::now_iso8601(),
+        description: description.map(str::to_string),
+        node_count: topology.nodes.len(),
+        link_count: topology.links.len(),
+        live_impairments: state.live_impairments.len(),
+        partitions: state.saved_impairments.len(),
+    };
+    atomic_write(
+        &dir.join("state.json"),
+        &serde_json::to_string_pretty(state)?,
+    )?;
+    let topo_toml = toml::to_string_pretty(topology).map_err(|e| Error::State {
+        op: "write",
+        detail: format!("failed to serialize topology: {e}"),
+        path: dir.join("topology.toml"),
+    })?;
+    atomic_write(&dir.join("topology.toml"), &topo_toml)?;
+    atomic_write(
+        &dir.join("meta.json"),
+        &serde_json::to_string_pretty(&meta)?,
+    )?;
+    Ok(meta)
+}
+
+/// Load one snapshot.
+pub fn snapshot_load(lab: &str, name: &str) -> Result<Snapshot> {
+    validate_snapshot_name(name)?;
+    let dir = snapshots_dir(lab).join(name);
+    if !dir.join("meta.json").exists() {
+        return Err(Error::NotFound {
+            name: format!("snapshot '{name}' of lab '{lab}'"),
+        });
+    }
+    let read = |file: &str| -> Result<String> {
+        std::fs::read_to_string(dir.join(file)).map_err(|e| Error::State {
+            op: "read",
+            detail: e.to_string(),
+            path: dir.join(file),
+        })
+    };
+    let meta: SnapshotInfo =
+        serde_json::from_str(&read("meta.json")?).map_err(|e| Error::State {
+            op: "parse",
+            detail: format!("failed to parse snapshot metadata: {e}"),
+            path: dir.join("meta.json"),
+        })?;
+    let state: LabState = serde_json::from_str(&read("state.json")?).map_err(|e| Error::State {
+        op: "parse",
+        detail: format!("failed to parse snapshot state: {e}"),
+        path: dir.join("state.json"),
+    })?;
+    let topology: Topology = toml::from_str(&read("topology.toml")?).map_err(|e| Error::State {
+        op: "parse",
+        detail: format!("failed to parse snapshot topology: {e}"),
+        path: dir.join("topology.toml"),
+    })?;
+    Ok(Snapshot {
+        meta,
+        topology,
+        state,
+    })
+}
+
+/// All snapshots of a lab, newest first.
+pub fn snapshot_list(lab: &str) -> Result<Vec<SnapshotInfo>> {
+    let dir = snapshots_dir(lab);
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Ok(out);
+    };
+    for entry in entries.flatten() {
+        let meta_path = entry.path().join("meta.json");
+        let Ok(text) = std::fs::read_to_string(&meta_path) else {
+            continue;
+        };
+        if let Ok(meta) = serde_json::from_str::<SnapshotInfo>(&text) {
+            out.push(meta);
+        }
+    }
+    out.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.name.cmp(&b.name)));
+    Ok(out)
+}
+
+/// Delete one snapshot.
+pub fn snapshot_remove(lab: &str, name: &str) -> Result<()> {
+    validate_snapshot_name(name)?;
+    let dir = snapshots_dir(lab).join(name);
+    if !dir.exists() {
+        return Err(Error::NotFound {
+            name: format!("snapshot '{name}' of lab '{lab}'"),
+        });
+    }
+    std::fs::remove_dir_all(&dir)?;
+    Ok(())
 }
 
 /// Get the logs directory for a specific lab.
@@ -543,5 +718,96 @@ link r1:eth0 -- h1:eth0
         assert_eq!(fresh.schema_version, SCHEMA_VERSION);
         let back: LabState = serde_json::from_str(&serde_json::to_string(&fresh).unwrap()).unwrap();
         assert_eq!(back.schema_version, SCHEMA_VERSION);
+    }
+    #[test]
+    fn snapshots_save_list_load_remove() {
+        let _env = temp_state_env();
+        let topo = crate::Lab::new("snap-lab")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .link("a:eth0", "b:eth0", |l| {
+                l.addresses("10.0.0.1/24", "10.0.0.2/24")
+            })
+            .build();
+        let mut st = LabState::new("snap-lab".to_string(), "2026-09-13T00:00:00Z".to_string());
+        st.live_impairments.insert(
+            "a:eth0".into(),
+            crate::types::Impairment {
+                delay: Some("5ms".into()),
+                ..Default::default()
+            },
+        );
+        st.saved_impairments
+            .insert("b:eth0".into(), crate::types::Impairment::default());
+        save(&st, &topo).unwrap();
+
+        let meta = snapshot_save("snap-lab", "before", Some("baseline"), &st, &topo).unwrap();
+        assert_eq!(meta.node_count, 2);
+        assert_eq!(meta.link_count, 1);
+        assert_eq!(meta.live_impairments, 1);
+        assert_eq!(meta.partitions, 1);
+        snapshot_save("snap-lab", "after", None, &st, &topo).unwrap();
+
+        let list = snapshot_list("snap-lab").unwrap();
+        assert_eq!(list.len(), 2);
+        assert!(
+            list.iter()
+                .any(|s| s.name == "before" && s.description.as_deref() == Some("baseline"))
+        );
+
+        let snap = snapshot_load("snap-lab", "before").unwrap();
+        assert_eq!(snap.topology.nodes.len(), 2);
+        assert_eq!(
+            snap.state.live_impairments["a:eth0"].delay.as_deref(),
+            Some("5ms")
+        );
+        assert!(snap.state.saved_impairments.contains_key("b:eth0"));
+
+        snapshot_remove("snap-lab", "before").unwrap();
+        assert_eq!(snapshot_list("snap-lab").unwrap().len(), 1);
+        assert!(matches!(
+            snapshot_load("snap-lab", "before"),
+            Err(Error::NotFound { .. })
+        ));
+        assert!(snapshot_remove("snap-lab", "before").is_err());
+        assert!(snapshot_list("no-such-lab").unwrap().is_empty());
+    }
+
+    #[test]
+    fn snapshot_names_are_validated() {
+        for bad in ["", ".hidden", "a/b", "x y", "é", &"n".repeat(65)] {
+            assert!(
+                validate_snapshot_name(bad).is_err(),
+                "{bad:?} should be rejected"
+            );
+        }
+        for ok in ["before", "v1.2", "run_3-final", "A"] {
+            validate_snapshot_name(ok).unwrap();
+        }
+    }
+
+    #[test]
+    fn live_impairments_survive_state_roundtrip() {
+        let _env = temp_state_env();
+        let topo = crate::Lab::new("live-lab").node("a", |n| n).build();
+        let mut st = LabState::new("live-lab".to_string(), "t".to_string());
+        st.live_impairments.insert(
+            "a:eth0".into(),
+            crate::types::Impairment {
+                loss: Some("1%".into()),
+                ..Default::default()
+            },
+        );
+        save(&st, &topo).unwrap();
+        let (back, _) = load("live-lab").unwrap();
+        assert_eq!(back.live_impairments["a:eth0"].loss.as_deref(), Some("1%"));
+        // Old files without the field still load.
+        let json = std::fs::read_to_string(state_dir("live-lab").join("state.json")).unwrap();
+        assert!(json.contains("live_impairments"));
+        let stripped: LabState = serde_json::from_str(
+            &json.replace("\"live_impairments\"", "\"unknown_field_ignored\""),
+        )
+        .unwrap_or_else(|_| LabState::new("live-lab".to_string(), "t".to_string()));
+        assert!(stripped.live_impairments.is_empty());
     }
 }

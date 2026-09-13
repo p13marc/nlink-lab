@@ -3352,3 +3352,137 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 
     lab.destroy().await.expect("destroy failed");
 }
+
+// ─── Runtime impairments persist; snapshot / restore (#59) ───
+
+#[tokio::test]
+async fn impair_persists_across_apply_and_snapshot_restore() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping impair_persists_across_apply_and_snapshot_restore: requires root");
+        return;
+    }
+    let lab_name = format!("snap-{}", std::process::id());
+    let src = |extra: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
+{extra}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let qdisc = |lab: &RunningLab, node: &str| {
+        lab.exec(node, "tc", &["qdisc", "show", "dev", "eth0"])
+            .unwrap()
+            .stdout
+    };
+
+    // Baseline snapshot: declared 1ms delay on a:eth0, nothing else.
+    let (st, tp) = nlink_lab::state::load(&lab_name).unwrap();
+    nlink_lab::state::snapshot_save(&lab_name, "base", Some("baseline"), &st, &tp).unwrap();
+
+    // Runtime impairment: recorded in state, overrides the declaration.
+    lab.set_impairment(
+        "a:eth0",
+        &nlink_lab::Impairment {
+            delay: Some("50ms".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(qdisc(&lab, "a").contains("50"), "{}", qdisc(&lab, "a"));
+    let reloaded = RunningLab::load(&lab_name).unwrap();
+    assert_eq!(
+        reloaded.live_impairments()["a:eth0"].delay.as_deref(),
+        Some("50ms")
+    );
+
+    // apply with an unrelated change keeps the live impairment …
+    let desired = nlink_lab::parser::parse(&src(
+        "node c\nlink b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert!(
+        qdisc(&lab, "a").contains("50"),
+        "live impairment must survive apply: {}",
+        qdisc(&lab, "a")
+    );
+    assert!(lab.live_impairments().contains_key("a:eth0"));
+
+    // … a partition on top saves the live value for heal …
+    lab.partition("a:eth0").await.unwrap();
+    assert!(
+        qdisc(&lab, "a").contains("loss 100%"),
+        "{}",
+        qdisc(&lab, "a")
+    );
+    let (st, tp) = nlink_lab::state::load(&lab_name).unwrap();
+    nlink_lab::state::snapshot_save(&lab_name, "chaos", None, &st, &tp).unwrap();
+    lab.heal("a:eth0").await.unwrap();
+    assert!(
+        qdisc(&lab, "a").contains("50"),
+        "heal restores the live value: {}",
+        qdisc(&lab, "a")
+    );
+
+    // --reset-impairments converges on the declaration again.
+    let reset = nlink_lab::ApplyOptions {
+        reset_impairments: true,
+    };
+    nlink_lab::apply_with(&mut lab, &desired, &reset)
+        .await
+        .expect("apply --reset failed");
+    let out = qdisc(&lab, "a");
+    assert!(
+        out.contains("1ms") || out.contains("1.0ms"),
+        "declared delay back: {out}"
+    );
+    assert!(lab.live_impairments().is_empty());
+
+    // restore "chaos": node c stays gone? No — chaos was taken *after*
+    // apply, so c exists, a:eth0 is partitioned with 50ms saved.
+    let chaos = nlink_lab::state::snapshot_load(&lab_name, "chaos").unwrap();
+    nlink_lab::restore(&mut lab, &chaos)
+        .await
+        .expect("restore chaos failed");
+    assert!(
+        qdisc(&lab, "a").contains("loss 100%"),
+        "{}",
+        qdisc(&lab, "a")
+    );
+    assert!(lab.is_partitioned("a:eth0"));
+    assert!(lab.topology().nodes.contains_key("c"));
+
+    // restore "base": back to two nodes, declared 1ms, no partition.
+    let base = nlink_lab::state::snapshot_load(&lab_name, "base").unwrap();
+    nlink_lab::restore(&mut lab, &base)
+        .await
+        .expect("restore base failed");
+    assert!(!lab.topology().nodes.contains_key("c"));
+    assert!(!lab.is_partitioned("a:eth0"));
+    let out = qdisc(&lab, "a");
+    assert!(out.contains("1ms") || out.contains("1.0ms"), "{out}");
+    assert!(!out.contains("loss"), "{out}");
+    let ns_c = std::process::Command::new("ip")
+        .args(["netns", "list"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&ns_c.stdout).contains(&format!("{lab_name}-c")),
+        "node c namespace must be gone after restoring the base snapshot"
+    );
+
+    assert_eq!(nlink_lab::state::snapshot_list(&lab_name).unwrap().len(), 2);
+    lab.destroy().await.expect("destroy failed");
+}

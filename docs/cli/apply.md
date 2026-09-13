@@ -179,6 +179,9 @@ Options:
       --skip-validate
           Do not run the topology's `validate { … }` assertions after applying
 
+      --reset-impairments
+          Drop the impairments set at runtime with `nlink-lab impair` and converge on the topology's `impair` declarations. Without this, a runtime impairment survives `apply` unless the topology changes that endpoint
+
   -h, --help
           Print help (see a summary with '-h')
 ```

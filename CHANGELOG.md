@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — `snapshot` / `restore` and persisted runtime impairments (issue #59)
+
+- **`nlink-lab snapshot <lab> <name> [--description …]`** saves a
+  checkpoint of everything nlink-lab manages for a running lab — the
+  topology, the runtime impairments set with `impair`, and the
+  partitions — under `<state>/<lab>/snapshots/<name>/` (`topology.toml`,
+  `state.json`, `meta.json`). `--list` (`--json`: schema
+  `snapshot-list`) and `--delete NAME` manage them.
+- **`nlink-lab restore <lab> <name> [--dry-run]`** applies the saved
+  topology (`apply` with purge, so added nodes/links go away and removed
+  ones come back), then re-installs the saved runtime impairments and
+  partitions. Library: `nlink_lab::restore(&mut running, &snapshot)`,
+  `state::{snapshot_save, snapshot_list, snapshot_load, snapshot_remove}`.
+  Checkpoint semantics: hand-made `ip`/`tc` edits inside namespaces are
+  not captured (a live→`NetworkConfig` dump would need nlink support).
+- **`nlink-lab impair` is persisted.** `RunningLab::set_impairment`
+  records the value in `state.json` (`live_impairments`), so it survives
+  `apply` unless the topology changes that endpoint's `impair`
+  declaration; `impair --clear` on a declared endpoint records "none" the
+  same way; `partition` saves the live value (not the declaration) for
+  `heal`. New `apply --reset-impairments` (library
+  `ApplyOptions { reset_impairments }` / `apply_with`) drops them and
+  converges on the topology. Previously an `apply` silently reverted
+  every runtime impairment to the declaration.
+
+**Migration:** `state.json` gains `live_impairments` (additive, schema
+unchanged). An `apply` after a runtime `impair` no longer resets that
+endpoint — pass `--reset-impairments` for the old behaviour.
+
 ### Added — `qdisc` blocks: tbf, fq_codel, sfq, prio (issue #67)
 
 - **`qdisc NODE:IFACE KIND { … }`** installs a root qdisc other than

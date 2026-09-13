@@ -127,6 +127,22 @@ pub enum Commands {
     #[command(group = clap::ArgGroup::new("impair_mode").args(["show", "clear", "partition", "heal"]).multiple(false))]
     Impair(cmd::impair::Args),
 
+    /// Save a checkpoint of a running lab (topology + runtime impairments
+    /// + partitions) under `<state>/<lab>/snapshots/<name>/`.
+    ///
+    /// `--list` shows the lab's snapshots, `--delete NAME` removes one.
+    ///
+    /// JSON OUTPUT (with `--json`): the snapshot's metadata; with
+    /// `--list` an array of them. Schema: docs/json-schemas/snapshot-list.schema.json
+    Snapshot(cmd::snapshot::Args),
+
+    /// Bring a running lab back to a snapshot: `apply` the saved topology,
+    /// then re-install the saved runtime impairments and partitions.
+    ///
+    /// Restores what nlink-lab manages, not hand-made `ip`/`tc` edits
+    /// inside the namespaces. `--dry-run` prints the plan.
+    Restore(cmd::restore::Args),
+
     /// Run a `scenario` block from a deployed lab's topology.
     ///
     /// JSON OUTPUT (with `--json`): the full `ScenarioResult` (steps,

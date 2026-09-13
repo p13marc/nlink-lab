@@ -3616,6 +3616,7 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "zenoh",
 ]

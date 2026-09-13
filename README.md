@@ -156,6 +156,13 @@ tree-sitter (`editors/tree-sitter-nll`, usable from Neovim and Helix)
 and Zed (`editors/zed-nll`) under [`editors/`](editors/). The
 tree-sitter grammar mirrors the Rust lexer's token rules.
 
+`nlink-lab lsp` adds live diagnostics on top: the same errors, warnings
+and style hints `validate` and `lint` report, positioned in the file,
+plus document symbols, go-to-definition, hover and formatting. Client
+snippets for VS Code, Neovim, Helix, Emacs and Zed are in
+[`editors/README.md`](editors/README.md); see
+[`docs/cli/lsp.md`](docs/cli/lsp.md) for what the server provides.
+
 ## License
 
 MIT OR Apache-2.0

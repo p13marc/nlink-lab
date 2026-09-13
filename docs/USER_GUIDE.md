@@ -924,6 +924,28 @@ router's daemons only when its generated configuration changed.
 
 ---
 
+## Editing NLL
+
+`nlink-lab fmt` keeps files canonically formatted (`--check` in CI, `-w` in
+place), and `nlink-lab lsp` is a Language Server Protocol server that gives
+any editor the same checks live:
+
+```bash
+nlink-lab fmt -w topology.nll     # format in place
+nlink-lab fmt --check examples    # CI gate
+nlink-lab lsp                     # LSP over stdio; editors start this for you
+```
+
+Diagnostics are exactly what `validate` and `lint` report — errors, warnings
+and style hints, each labelled with its rule id — positioned on the offending
+token instead of printed as a path. You also get document symbols,
+go-to-definition on `node:iface` endpoints and `: profile` references, hover
+showing a node's interfaces and addresses, completion, and formatting.
+
+Client configuration for VS Code, Neovim, Helix, Emacs and Zed is in
+[`editors/README.md`](../editors/README.md); the server's behaviour and its
+limits are documented in [`docs/cli/lsp.md`](cli/lsp.md).
+
 ## CLI Reference
 
 ### Commands

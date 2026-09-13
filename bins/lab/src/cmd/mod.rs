@@ -27,6 +27,7 @@ pub mod ip;
 pub mod kill;
 pub mod lint;
 pub mod logs;
+pub mod lsp;
 pub mod metrics;
 pub mod proc_stat;
 pub mod ps;
@@ -62,6 +63,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Validate(args) => validate::run(ctx, args),
         Commands::Verify(args) => verify::run(ctx, args).await,
         Commands::Lint(args) => lint::run(ctx, args),
+        Commands::Lsp(args) => lsp::run(ctx, args).await,
         Commands::Fmt(args) => fmt::run(ctx, args),
         Commands::Edit(args) => edit::run(ctx, args).await,
         Commands::Events(args) => events::run(ctx, args).await,

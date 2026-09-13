@@ -61,7 +61,17 @@ fn main() -> ExitCode {
     } else {
         tracing_subscriber::EnvFilter::from_default_env()
     };
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    // `lsp` speaks JSON-RPC on stdout: a single log line written there
+    // corrupts the framing and the editor drops the connection. Every
+    // other subcommand keeps the historical stdout writer.
+    if matches!(cli.command, Commands::Lsp(_)) {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_writer(std::io::stderr)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    }
 
     // Handle completions synchronously (no runtime needed)
     if let Commands::Completions { shell } = &cli.command {

@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — NLL language server (issue #56)
+
+- **`nlink-lab lsp`** speaks LSP 3.17 over stdio, so any editor gets the
+  checks `validate` and `lint` already perform, positioned on the
+  offending token instead of printed as a data-model path: lex/parse
+  errors at their exact span, every validator error and warning, and
+  every lint finding as a hint, each carrying its rule id as the
+  diagnostic `code` and `nlink-lab` as its `source`. Also document
+  symbols (`lab`, `node`, `profile`, `network`, `pool`, `site`, `let`,
+  `param`), go-to-definition on `node:iface` endpoints, `: profile`
+  references, `${node.iface}` cross-references and `import` strings,
+  hover (a node's profiles, image and resolved addresses per interface; a
+  profile's users; keyword syntax), keyword/name/interface completion,
+  and `textDocument/formatting` routed through the same token-level
+  formatter as `nlink-lab fmt` — so the editor and the `fmt --check` CI
+  gate cannot disagree.
+- **Imports resolve against the document's own directory**, and the
+  buffer is never read from disk, so an unsaved file is checked exactly
+  like a saved one. An error inside an imported module is reported on the
+  `import` statement that pulled it in, with the module's own path, line
+  and column in the message.
+- **Positions**: UTF-16 code units (the LSP default), with a byte ⇄
+  position index that handles multi-byte characters and surrogate pairs.
+  Validator locations are lowered-model paths (`links[3].addresses[1]`),
+  so they are mapped back onto the token stream — a declaration's name
+  where possible, the enclosing statement otherwise. Entities with no
+  source span at all (a node from `for i in 1..4 { node spine${i} }`, a
+  `mesh`/`ring`/`star`-generated link, a `site`- or import-prefixed name)
+  are reported at the top of the file with the path appended to the
+  message rather than pointed somewhere wrong.
+- **Clients**: `editors/vscode-nll` is now a real extension (an
+  `extension.js` on `vscode-languageclient`, settings `nll.serverPath`
+  and `nll.trace.server`), and the new `editors/README.md` carries
+  copy-paste configuration for Neovim, Helix, Emacs and Zed.
+- Hardening: `lsp` routes tracing output to **stderr** (every other
+  subcommand keeps the historical stdout writer) — one log line on stdout
+  corrupts the JSON-RPC framing and drops the editor connection, and
+  `cli-smoke` now asserts a real `initialize` handshake survives `-v`.
+  The analysis pipeline runs inside `catch_unwind` and reports an
+  internal-error diagnostic rather than taking the editor session down.
+- `deny.toml` allows `MIT-0`, the license of `borrow-or-share`
+  (`fluent-uri` ← `ls-types` ← `tower-lsp-server`).
+
+  Not in scope: references, rename, code actions, semantic tokens,
+  incremental sync, a virtual filesystem so unsaved edits to an imported
+  module are visible to its importers, and the compiled WASM extension
+  Zed needs to launch a server itself.
+
 ### Added — dynamic routing with FRR (issue #65)
 
 - **`routing frr { ospf }`** (lab block) runs `zebra` + `ospfd` in every

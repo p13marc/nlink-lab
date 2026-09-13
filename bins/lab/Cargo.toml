@@ -45,6 +45,12 @@ nlink-lab-shared = { workspace = true }
 nlink-lab-backend = { path = "../nlink-lab-backend" }
 miette = { version = "7", features = ["fancy"] }
 
+# `lsp` — Language Server Protocol server for NLL (issue #56). The
+# maintained fork of the archived `tower-lsp`; its default
+# `runtime-tokio` feature is the transport we use, and its
+# `LanguageServer` trait uses native `async fn` (no `async-trait`).
+tower-lsp-server = "0.23"
+
 # `spawn --wait-log REGEX` compiles the user's regex CLI-side and
 # passes it to `RunningLab::wait_for_log_line` (Plan 155 PR E).
 regex = "1"

@@ -8,13 +8,23 @@
 //! Everything after `setns` is **best effort**. Container runtimes deny
 //! `unshare(CLONE_NEWNS)`, sysfs mounts or bind mounts even to a root
 //! process holding `CAP_SYS_ADMIN` (Docker/Podman AppArmor + seccomp
-//! profiles), while creating network namespaces still works. nlink's
-//! `spawn_with_etc` treats every step as fatal, which made every `exec`
-//! in a `dns hosts` lab fail with `EPERM` on such hosts. Here a denied
-//! step only costs that step; the process still runs in the right network
-//! namespace. A one-time strict probe reports the degradation once.
-//! `dns hosts` labs stay functional either way because the lab's entries
-//! are also injected into the host `/etc/hosts`.
+//! profiles), while creating network namespaces still works. Here a
+//! denied step only costs that step; the process still runs in the right
+//! network namespace. A one-time strict probe reports the degradation
+//! once. `dns hosts` labs stay functional either way because the lab's
+//! entries are also injected into the host `/etc/hosts`.
+//!
+//! nlink 0.27 (#334) narrowed the upstream problem this works around, but
+//! did not remove it. `spawn_with_etc` now skips the mount namespace
+//! entirely when there is nothing to overlay, and its sysfs replacement
+//! copies the `ro`/`nosuid`/`nodev`/`noexec` flags of the `/sys` it
+//! replaces and proceeds over a stale one instead of refusing — so a lab
+//! *without* `dns hosts` execs fine through upstream now. With overlay
+//! files present, a denied `unshare(CLONE_NEWNS)` or `MS_SLAVE` is still
+//! fatal there, which is the case this module exists for. And
+//! [`spawn_detached`] has no upstream equivalent regardless: the
+//! double-fork is what keeps nlink-lab from ever owning a child it would
+//! have to reap.
 //!
 //! Background processes go through [`spawn_detached`]: double-forked and
 //! session-detached, so nlink-lab never owns a child it would have to

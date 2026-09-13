@@ -876,6 +876,14 @@ impl RunningLab {
                 final_stderr.to_string_lossy().to_string(),
             ),
         );
+        crate::events::record(
+            &self.topology.lab.name,
+            crate::events::LifecycleKind::Spawned {
+                node: node.to_string(),
+                pid,
+                cmd: cmd.join(" "),
+            },
+        );
 
         Ok(pid)
     }
@@ -1215,7 +1223,29 @@ impl RunningLab {
         self.install_impairment(endpoint, impairment).await?;
         self.live_impairments
             .insert(endpoint.to_string(), impairment.clone());
+        crate::events::record(
+            &self.topology.lab.name,
+            crate::events::LifecycleKind::Impaired {
+                endpoint: endpoint.to_string(),
+                impairment: Box::new(impairment.clone()),
+            },
+        );
         self.save_state()
+    }
+
+    /// Delete the root qdisc (removes all netem config) without touching
+    /// the bookkeeping. Idempotent: a missing qdisc is the same as
+    /// "already cleared" — `del_qdisc_if_exists` (nlink 0.24) returns
+    /// Ok(false) rather than a `QdiscNotFound` error we'd have to match.
+    async fn uninstall_impairment(&self, endpoint: &str) -> Result<()> {
+        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: endpoint.to_string(),
+        })?;
+        let conn = self.route_conn_for(&ep.node)?;
+        conn.del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
+        Ok(())
     }
 
     /// Install a netem qdisc without touching the bookkeeping.
@@ -1257,18 +1287,7 @@ impl RunningLab {
     /// the same endpoint goes through the real install path instead of
     /// short-circuiting on a stale "is partitioned" flag.
     pub async fn clear_impairment(&mut self, endpoint: &str) -> Result<()> {
-        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: endpoint.to_string(),
-        })?;
-        let conn = self.route_conn_for(&ep.node)?;
-
-        // Delete the root qdisc (removes all netem config). Idempotent:
-        // a missing qdisc is the same as "already cleared" —
-        // `del_qdisc_if_exists` (nlink 0.24) returns Ok(false) rather
-        // than a `QdiscNotFound` error we'd have to match.
-        conn.del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
-            .await
-            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
+        self.uninstall_impairment(endpoint).await?;
 
         // Drop any "is partitioned" bookkeeping for this endpoint and
         // persist. Without this, a follow-up `partition()` would see
@@ -1288,6 +1307,12 @@ impl RunningLab {
         if removed_partition || changed_live {
             self.save_state()?;
         }
+        crate::events::record(
+            &self.topology.lab.name,
+            crate::events::LifecycleKind::ImpairCleared {
+                endpoint: endpoint.to_string(),
+            },
+        );
         Ok(())
     }
 
@@ -1316,6 +1341,12 @@ impl RunningLab {
         };
         self.install_impairment(endpoint, &partition_imp).await?;
         self.save_state()?;
+        crate::events::record(
+            &self.topology.lab.name,
+            crate::events::LifecycleKind::Partitioned {
+                endpoint: endpoint.to_string(),
+            },
+        );
         Ok(())
     }
 
@@ -1326,11 +1357,19 @@ impl RunningLab {
         })?;
 
         if saved == crate::types::Impairment::default() {
-            self.clear_impairment(endpoint).await?;
+            // Back to "nothing installed" — one `healed` record, not an
+            // `impair_cleared` as well.
+            self.uninstall_impairment(endpoint).await?;
         } else {
             self.install_impairment(endpoint, &saved).await?;
         }
         self.save_state()?;
+        crate::events::record(
+            &self.topology.lab.name,
+            crate::events::LifecycleKind::Healed {
+                endpoint: endpoint.to_string(),
+            },
+        );
         Ok(())
     }
 
@@ -1392,7 +1431,20 @@ impl RunningLab {
             )));
         }
         match kill_tracked(pid, self.starttimes.get(&pid).copied()) {
-            KillOutcome::Signalled | KillOutcome::Gone => Ok(()),
+            KillOutcome::Signalled | KillOutcome::Gone => {
+                crate::events::record(
+                    &self.topology.lab.name,
+                    crate::events::LifecycleKind::Killed {
+                        node: self
+                            .pids
+                            .iter()
+                            .find(|(_, p)| *p == pid)
+                            .map(|(n, _)| n.clone()),
+                        pid,
+                    },
+                );
+                Ok(())
+            }
             KillOutcome::Unverified => Err(Error::deploy_failed(format!(
                 "refusing to signal pid {pid}: its start time was not recorded (state file \
                  written by an older release) so it cannot be proven to still be the lab's process"
@@ -1523,6 +1575,12 @@ impl RunningLab {
         }
 
         // 6. Remove state file
+        // Recorded before the state directory (and the log with it) goes
+        // away: an `events --follow` reader sees the line first.
+        crate::events::record(
+            &self.topology.lab.name,
+            crate::events::LifecycleKind::Destroyed,
+        );
         state::remove(&self.topology.lab.name)?;
 
         Ok(())

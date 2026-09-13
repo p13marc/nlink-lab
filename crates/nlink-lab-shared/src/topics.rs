@@ -27,6 +27,12 @@ pub fn events(lab: &str) -> String {
     format!("nlink-lab/{lab}/events")
 }
 
+/// Lifecycle events recorded by the CLI (`events.ndjson` lines,
+/// republished by the backend as JSON), issue #70.
+pub fn lifecycle(lab: &str) -> String {
+    format!("nlink-lab/{lab}/lifecycle")
+}
+
 /// RPC: execute command in a node.
 pub fn rpc_exec(lab: &str) -> String {
     format!("nlink-lab/{lab}/rpc/exec")

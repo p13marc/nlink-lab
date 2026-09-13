@@ -129,6 +129,13 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     lab_state.wifi_loaded = env.wifi_loaded;
     lab_state.process_logs = env.process_logs.clone();
     state::save(&lab_state, topology)?;
+    crate::events::record(
+        &topology.lab.name,
+        crate::events::LifecycleKind::Deployed {
+            nodes: topology.nodes.len(),
+            links: topology.links.len(),
+        },
+    );
 
     let mut running = RunningLab::new(
         topology.clone(),
@@ -315,9 +322,22 @@ pub async fn apply_with(
             running.name()
         );
         journal.unwind().await;
+        crate::events::record(
+            running.name(),
+            crate::events::LifecycleKind::ApplyFailed {
+                error: e.to_string(),
+            },
+        );
         return Err(e);
     }
     journal.discard();
+    crate::events::record(
+        running.name(),
+        crate::events::LifecycleKind::Applied {
+            ops: report.ops,
+            removed: report.removed,
+        },
+    );
 
     #[cfg(feature = "wireguard")]
     if let Some(keys) = &inputs.wg_keys {
@@ -414,6 +434,12 @@ pub async fn restore(
             running.partition(ep).await?;
         }
     }
+    crate::events::record(
+        running.name(),
+        crate::events::LifecycleKind::Restored {
+            name: snapshot.meta.name.clone(),
+        },
+    );
     Ok(report)
 }
 
@@ -1017,6 +1043,13 @@ fn run_assertions(
     if failed > 0 {
         tracing::warn!("{failed} of {} validate assertion(s) failed", results.len());
     }
+    crate::events::record(
+        running.name(),
+        crate::events::LifecycleKind::AssertionsRun {
+            passed: results.len() - failed,
+            failed,
+        },
+    );
     results
 }
 

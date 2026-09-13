@@ -1,0 +1,447 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Array_of_Event",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/Event"
+  },
+  "$defs": {
+    "Event": {
+      "description": "One record on the merged stream.",
+      "oneOf": [
+        {
+          "description": "Recorded by a CLI operation (`events.ndjson`).",
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "const": "lifecycle"
+            }
+          },
+          "$ref": "#/$defs/LifecycleEvent",
+          "required": [
+            "source"
+          ]
+        },
+        {
+          "description": "RTNETLINK / nftables change inside a node (`nlink-lab watch`).",
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "const": "drift"
+            },
+            "ts": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true,
+          "required": [
+            "source",
+            "ts",
+            "node"
+          ]
+        },
+        {
+          "description": "Process exit / interface state derived from sampling.",
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "const": "runtime"
+            },
+            "ts": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true,
+          "required": [
+            "source",
+            "ts"
+          ]
+        }
+      ]
+    },
+    "Impairment": {
+      "description": "Network impairment configuration (netem).",
+      "type": "object",
+      "properties": {
+        "corrupt": {
+          "description": "Packet corruption (e.g., \"0.01%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay": {
+          "description": "Delay (e.g., \"10ms\", \"100us\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay_correlation": {
+          "description": "Correlation of successive delay values (e.g., \"25%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duplicate": {
+          "description": "Packet duplication (e.g., \"1%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jitter": {
+          "description": "Jitter (e.g., \"2ms\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "netem queue limit in packets (default 1000).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss": {
+          "description": "Packet loss (e.g., \"0.1%\", \"5%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss_correlation": {
+          "description": "Correlation of successive loss decisions (e.g., \"25%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate": {
+          "description": "Bandwidth rate limit (e.g., \"100mbit\", \"1gbit\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reorder": {
+          "description": "Packet reordering (e.g., \"0.5%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LifecycleEvent": {
+      "description": "One recorded lifecycle event.",
+      "type": "object",
+      "properties": {
+        "lab": {
+          "description": "Lab name.",
+          "type": "string"
+        },
+        "ts": {
+          "description": "ISO 8601 timestamp (UTC).",
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "deployed"
+            },
+            "links": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "nodes": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "event",
+            "nodes",
+            "links"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "applied"
+            },
+            "ops": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "removed": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "event",
+            "ops",
+            "removed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "const": "apply_failed"
+            }
+          },
+          "required": [
+            "event",
+            "error"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "destroyed"
+            }
+          },
+          "required": [
+            "event"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cmd": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "const": "spawned"
+            },
+            "node": {
+              "type": "string"
+            },
+            "pid": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "event",
+            "node",
+            "pid",
+            "cmd"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "killed"
+            },
+            "node": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pid": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "event",
+            "pid"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "const": "impaired"
+            },
+            "impairment": {
+              "$ref": "#/$defs/Impairment"
+            }
+          },
+          "required": [
+            "event",
+            "endpoint",
+            "impairment"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "const": "impair_cleared"
+            }
+          },
+          "required": [
+            "event",
+            "endpoint"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "const": "partitioned"
+            }
+          },
+          "required": [
+            "event",
+            "endpoint"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "const": "healed"
+            }
+          },
+          "required": [
+            "event",
+            "endpoint"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "snapshot_taken"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "restored"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "assertions_run"
+            },
+            "failed": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "passed": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "event",
+            "passed",
+            "failed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "actions": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "event": {
+              "type": "string",
+              "const": "scenario_step"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "scenario": {
+              "type": "string"
+            },
+            "time_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "event",
+            "scenario",
+            "time_ms",
+            "ok",
+            "actions"
+          ]
+        }
+      ],
+      "required": [
+        "ts",
+        "lab"
+      ]
+    }
+  }
+}

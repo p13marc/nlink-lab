@@ -205,5 +205,9 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             "snapshot-list",
             schemars::schema_for!(Vec<nlink_lab::state::SnapshotInfo>),
         ),
+        (
+            "events",
+            schemars::schema_for!(Vec<crate::cmd::events::Event>),
+        ),
     ]
 }

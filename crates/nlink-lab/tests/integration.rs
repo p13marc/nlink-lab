@@ -3486,3 +3486,103 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
     assert_eq!(nlink_lab::state::snapshot_list(&lab_name).unwrap().len(), 2);
     lab.destroy().await.expect("destroy failed");
 }
+
+// ─── Lifecycle event log + drift stream (#70) ───────────
+
+#[tokio::test]
+async fn lifecycle_events_recorded_and_drift_streamed() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping lifecycle_events_recorded_and_drift_streamed: requires root");
+        return;
+    }
+    let lab_name = format!("events-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+validate {{ reach a b }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    let pid = lab
+        .spawn_with_logs("a", &["sleep", "30"], None)
+        .expect("spawn failed");
+    lab.set_impairment(
+        "a:eth0",
+        &nlink_lab::Impairment {
+            delay: Some("5ms".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    lab.partition("b:eth0").await.unwrap();
+    lab.heal("b:eth0").await.unwrap();
+    lab.clear_impairment("a:eth0").await.unwrap();
+    lab.kill_process(pid).unwrap();
+    let (st, tp) = nlink_lab::state::load(&lab_name).unwrap();
+    nlink_lab::state::snapshot_save(&lab_name, "s1", None, &st, &tp).unwrap();
+
+    let names: Vec<String> = nlink_lab::events::read(&lab_name)
+        .unwrap()
+        .iter()
+        .map(|e| e.kind.name().to_string())
+        .collect();
+    assert_eq!(
+        names,
+        vec![
+            "deployed",
+            "assertions_run",
+            "spawned",
+            "impaired",
+            "partitioned",
+            "healed",
+            "impair_cleared",
+            "killed",
+            "snapshot_taken",
+        ],
+        "{names:?}"
+    );
+    let evs = nlink_lab::events::read(&lab_name).unwrap();
+    assert!(matches!(
+        &evs[2].kind,
+        nlink_lab::LifecycleKind::Spawned { node, pid: p, cmd } if node == "a" && *p == pid && cmd == "sleep 30"
+    ));
+
+    // Drift: a hand-made address inside a node shows up on the stream.
+    let opts = nlink_lab::WatchOpts::default();
+    let (mut rx, tasks) = nlink_lab::watch_stream(&lab, &opts)
+        .unwrap()
+        .expect("nodes to watch");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    lab.exec("a", "ip", &["addr", "add", "10.9.9.9/32", "dev", "eth0"])
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut seen = false;
+    while std::time::Instant::now() < deadline {
+        match tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv()).await {
+            Ok(Some(ev)) => {
+                let json = serde_json::to_string(&ev).unwrap();
+                if ev.node == "a" && json.contains("10.9.9.9") {
+                    seen = true;
+                    break;
+                }
+            }
+            Ok(None) => break,
+            Err(_) => continue,
+        }
+    }
+    for t in tasks {
+        t.abort();
+    }
+    assert!(seen, "expected a drift event for the new address on a:eth0");
+
+    lab.destroy().await.expect("destroy failed");
+}

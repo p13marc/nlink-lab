@@ -589,6 +589,38 @@ async fn apply_nftables_for_node(
     Ok(())
 }
 
+/// `NetworkConfig::apply` with a small EBUSY/EAGAIN retry budget (three
+/// attempts, 50 ms doubling). nlink's `apply_reconcile` has the same
+/// loop but hardcodes `ApplyOptions::default()` (no purge) and returns a
+/// `ReconcileReport` without the per-op error list the caller inspects,
+/// so the retry lives here. nlink recomputes the diff inside every
+/// `apply`, so a retry never replays a stale plan.
+async fn apply_network_with_retry(
+    cfg: &nlink::netlink::config::NetworkConfig,
+    conn: &Connection<Route>,
+    purge: bool,
+) -> std::result::Result<nlink::netlink::config::ApplyResult, nlink::netlink::Error> {
+    let mut backoff = std::time::Duration::from_millis(50);
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let res = if purge {
+            let opts = nlink::netlink::config::ApplyOptions::default().with_purge(true);
+            cfg.apply_with_options(conn, opts).await
+        } else {
+            cfg.apply(conn).await
+        };
+        match res {
+            Err(e) if attempt < 3 && (e.is_busy() || e.is_try_again()) => {
+                tracing::debug!(attempt, "NetworkConfig::apply busy, retrying: {e}");
+                tokio::time::sleep(backoff).await;
+                backoff *= 2;
+            }
+            other => return other,
+        }
+    }
+}
+
 /// Apply per-pair network impairments using `PerPeerImpairer`.
 ///
 /// For each network with impairments, group rules by source node and
@@ -741,16 +773,13 @@ async fn apply_network_config_for_node(
     // `NetworkConfig::apply` computes the diff and applies it.
     // Idempotent — re-apply on an unchanged topology completes
     // with `changes_made == 0`.
-    let result = if purge {
-        // apply mode: undeclared global addresses and main-table static
-        // routes on managed interfaces are removed (nlink's
-        // conservative purge — links and qdiscs are never touched)
-        let opts = nlink::netlink::config::ApplyOptions::default().with_purge(true);
-        cfg.apply_with_options(&conn, opts).await
-    } else {
-        cfg.apply(&conn).await
-    }
-    .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
+    // apply mode: undeclared global addresses and main-table static
+    // routes on managed interfaces are removed (nlink's conservative
+    // purge — links and qdiscs are never touched). Retries on
+    // EBUSY/EAGAIN like the nftables and WireGuard layers (#75).
+    let result = apply_network_with_retry(&cfg, &conn, purge)
+        .await
+        .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
 
     tracing::info!(
         node = %node_name,

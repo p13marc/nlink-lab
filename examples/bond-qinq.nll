@@ -1,0 +1,62 @@
+# Bonding and Q-in-Q.
+#
+# Two veth pairs between `left` and `right` are aggregated into an
+# 802.3ad (LACP) bond on each side; on top of the bond an 802.1ad
+# (Q-in-Q) outer VLAN 100 carries the addressed traffic. `mon` hangs off
+# a plain 802.1Q sub-interface of a third link.
+#
+#   sudo nlink-lab exec bond-qinq left -- cat /proc/net/bonding/bond0
+#   sudo nlink-lab exec bond-qinq left -- ip -d link show bond0.100
+
+lab "bond-qinq" {
+  description "LACP bond with an 802.1ad (Q-in-Q) VLAN on top"
+}
+
+node left {
+  bond bond0 {
+    members [eth0, eth1]
+    mode 802.3ad
+    miimon 100
+    lacp-rate fast
+    xmit-hash layer3+4
+  }
+  vlan bond0.100 {
+    parent bond0
+    id 100
+    protocol 802.1ad
+    address 10.100.0.1/24
+  }
+  vlan eth2.20 {
+    parent eth2
+    id 20
+    address 10.20.0.1/24
+  }
+}
+
+node right {
+  bond bond0 {
+    members [eth0, eth1]
+    mode 802.3ad
+    miimon 100
+    lacp-rate fast
+    xmit-hash layer3+4
+  }
+  vlan bond0.100 {
+    parent bond0
+    id 100
+    protocol 802.1ad
+    address 10.100.0.2/24
+  }
+}
+
+node mon {
+  vlan eth0.20 {
+    parent eth0
+    id 20
+    address 10.20.0.2/24
+  }
+}
+
+link left:eth0 -- right:eth0
+link left:eth1 -- right:eth1
+link left:eth2 -- mon:eth0

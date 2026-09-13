@@ -54,6 +54,8 @@ pub const RULE_IDS: &[&str] = &[
     "qdisc-ref-valid",
     "qdisc-conflicts",
     "invalid-qdisc-value",
+    "bond-member-exists",
+    "vlan-parent-exists",
     "route-gateway-type",
     "interface-name-length",
     "wireguard-peer-exists",
@@ -366,6 +368,7 @@ impl Topology {
         validate_impairment_refs(self, &interfaces, &mut issues);
         validate_rate_limit_refs(self, &interfaces, &mut issues);
         validate_qdiscs(self, &interfaces, &mut issues);
+        validate_bond_and_vlan_refs(self, &interfaces, &mut issues);
         validate_route_config(self, &mut issues);
         validate_interface_name_length(self, &interfaces, &mut issues);
         validate_wireguard_peers(self, &mut issues);
@@ -945,6 +948,65 @@ fn check_qdisc_value(
     }
 }
 
+/// `bond` members and `vlan` parents must be interfaces of the same node
+/// (#75), and an interface cannot be enslaved to two bonds.
+fn validate_bond_and_vlan_refs(
+    topology: &Topology,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        let known = interfaces.get(node_name);
+        let mut enslaved: BTreeMap<&str, &str> = BTreeMap::new();
+        for (iface_name, iface) in sorted(&node.interfaces) {
+            match iface.kind {
+                Some(InterfaceKind::Bond) => {
+                    for member in &iface.members {
+                        let location =
+                            Some(format!("nodes.{node_name}.interfaces.{iface_name}.members"));
+                        if member == iface_name || !known.is_some_and(|k| k.contains_key(member)) {
+                            issues.push(ValidationIssue {
+                                severity: Severity::Error,
+                                rule: "bond-member-exists",
+                                message: format!(
+                                    "bond '{iface_name}' on node '{node_name}': member '{member}' is not an interface of the node"
+                                ),
+                                location,
+                            });
+                        } else if let Some(other) = enslaved.insert(member, iface_name) {
+                            issues.push(ValidationIssue {
+                                severity: Severity::Error,
+                                rule: "bond-member-exists",
+                                message: format!(
+                                    "'{member}' on node '{node_name}' is a member of both '{other}' and '{iface_name}'"
+                                ),
+                                location,
+                            });
+                        }
+                    }
+                }
+                Some(InterfaceKind::Vlan) => {
+                    if let Some(parent) = &iface.parent
+                        && (parent == iface_name || !known.is_some_and(|k| k.contains_key(parent)))
+                    {
+                        issues.push(ValidationIssue {
+                            severity: Severity::Error,
+                            rule: "vlan-parent-exists",
+                            message: format!(
+                                "vlan '{iface_name}' on node '{node_name}': parent '{parent}' is not an interface of the node"
+                            ),
+                            location: Some(format!(
+                                "nodes.{node_name}.interfaces.{iface_name}.parent"
+                            )),
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Routes must have at least `via` or `dev`.
 fn validate_route_config(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
@@ -969,14 +1031,15 @@ fn validate_interface_name_length(
 ) {
     for (node_name, ifaces) in interfaces {
         for iface_name in ifaces.keys() {
-            if iface_name.len() > 15 {
+            // Full Linux rules (#75): 1-15 bytes, no '/' or whitespace,
+            // not "." / "..". The rule id predates the wider check.
+            if let Err(e) = validate_interface_name(iface_name) {
+                let why = e.to_string();
+                let why = why.strip_prefix("validation error: ").unwrap_or(&why);
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
                     rule: "interface-name-length",
-                    message: format!(
-                        "interface '{iface_name}' on node '{node_name}' is {} chars (max 15)",
-                        iface_name.len()
-                    ),
+                    message: format!("on node '{node_name}': {why}"),
                     location: Some(format!("nodes.{node_name}.{iface_name}")),
                 });
             }

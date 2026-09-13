@@ -3586,3 +3586,68 @@ validate {{ reach a b }}
 
     lab.destroy().await.expect("destroy failed");
 }
+
+// ─── Bond options + Q-in-Q reach the kernel (#75) ───────
+
+#[tokio::test]
+async fn bond_options_and_qinq_vlan_apply() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping bond_options_and_qinq_vlan_apply: requires root");
+        return;
+    }
+    if !has_kernel_module("bonding") || !has_kernel_module("8021q") {
+        eprintln!("skipping bond_options_and_qinq_vlan_apply: bonding/8021q modules unavailable");
+        return;
+    }
+    let lab_name = format!("bondq-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node left {{
+  bond bond0 {{ members [eth0, eth1] mode active-backup miimon 100 }}
+  vlan bond0.100 {{ parent bond0 id 100 protocol 802.1ad address 10.100.0.1/24 }}
+}}
+node right {{
+  bond bond0 {{ members [eth0, eth1] mode active-backup miimon 100 }}
+  vlan bond0.100 {{ parent bond0 id 100 protocol 802.1ad address 10.100.0.2/24 }}
+}}
+link left:eth0 -- right:eth0
+link left:eth1 -- right:eth1
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let bond = lab
+        .exec("left", "ip", &["-d", "link", "show", "bond0"])
+        .unwrap();
+    assert_eq!(bond.exit_code, 0, "{}", bond.stderr);
+    assert!(
+        bond.stdout.contains("mode active-backup") && bond.stdout.contains("miimon 100"),
+        "bond options should reach the kernel: {}",
+        bond.stdout
+    );
+    let vlan = lab
+        .exec("left", "ip", &["-d", "link", "show", "bond0.100"])
+        .unwrap();
+    assert!(
+        vlan.stdout.contains("802.1ad") && vlan.stdout.contains("id 100"),
+        "Q-in-Q outer tag expected: {}",
+        vlan.stdout
+    );
+    let mut ok = false;
+    for _ in 0..5 {
+        let ping = lab
+            .exec("left", "ping", &["-c1", "-W2", "10.100.0.2"])
+            .unwrap();
+        if ping.exit_code == 0 {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(ok, "ping over the bonded 802.1ad VLAN failed");
+    lab.destroy().await.expect("destroy failed");
+}

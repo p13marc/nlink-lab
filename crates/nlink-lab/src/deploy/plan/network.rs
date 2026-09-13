@@ -78,16 +78,59 @@ pub(crate) fn topology_to_network_config(
             }
             Some(InterfaceKind::Bond) => {
                 let mtu = iface_config.mtu;
+                let bond = iface_config.bond.clone();
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.bond().up();
                     if let Some(m) = mtu {
                         b = b.mtu(m);
                     }
+                    // Bonding options (#75): nlink 0.26 `LinkBuilder::bond_*`.
+                    if let Some(o) = &bond {
+                        use crate::types::{BondMode as M, LacpRate as L};
+                        use nlink::netlink::config::{BondLacpRate, BondMode};
+                        if let Some(mode) = o.mode {
+                            b = b.bond_mode(match mode {
+                                M::BalanceRr => BondMode::BalanceRr,
+                                M::ActiveBackup => BondMode::ActiveBackup,
+                                M::BalanceXor => BondMode::BalanceXor,
+                                M::Broadcast => BondMode::Broadcast,
+                                M::Lacp => BondMode::Ieee802_3ad,
+                                M::BalanceTlb => BondMode::BalanceTlb,
+                                M::BalanceAlb => BondMode::BalanceAlb,
+                            });
+                        }
+                        if let Some(ms) = o.miimon {
+                            b = b.miimon(ms);
+                        }
+                        if let Some(rate) = o.lacp_rate {
+                            b = b.bond_lacp_rate(match rate {
+                                L::Slow => BondLacpRate::Slow,
+                                L::Fast => BondLacpRate::Fast,
+                            });
+                        }
+                        if let Some(policy) = o.xmit_hash {
+                            b = b.xmit_hash_policy(policy.kernel_value());
+                        }
+                        if let Some(n) = o.min_links {
+                            b = b.min_links(n);
+                        }
+                        if let Some(ms) = o.updelay {
+                            b = b.bond_updelay(ms);
+                        }
+                        if let Some(ms) = o.downdelay {
+                            b = b.bond_downdelay(ms);
+                        }
+                    }
                     b
                 });
                 // Enslave each member (Plan 158e Slice 2 folds in
                 // what was step 10b). The member link itself must
-                // exist already (veth — created in step 5).
+                // exist already (veth — created in step 5) and is left
+                // *down* by the LinksUp stage: the kernel refuses to
+                // enslave an up device, and nlink would `set_link_up`
+                // before `set_link_master`. The bonding driver opens the
+                // slave itself once enslaved, so the state stays
+                // `Unchanged` here.
                 for member in &iface_config.members {
                     let bond_name = iface_name.clone();
                     cfg = cfg.link(member, move |b| b.master(&bond_name));
@@ -200,8 +243,18 @@ pub(crate) fn topology_to_network_config(
             }
         };
         let mtu = iface_config.mtu;
+        let protocol = iface_config.vlan_protocol;
         cfg = cfg.link(iface_name, move |mut b| {
             b = b.vlan(&parent, vid).up();
+            // 802.1ad outer tag for Q-in-Q (#75).
+            if let Some(p) = protocol {
+                b = b.vlan_protocol(match p {
+                    crate::types::VlanProtocol::Dot1q => nlink::netlink::link::VlanProtocol::Dot1q,
+                    crate::types::VlanProtocol::Dot1ad => {
+                        nlink::netlink::link::VlanProtocol::Dot1ad
+                    }
+                });
+            }
             if let Some(m) = mtu {
                 b = b.mtu(m);
             }

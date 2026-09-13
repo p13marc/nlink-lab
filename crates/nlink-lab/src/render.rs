@@ -883,6 +883,23 @@ fn render_addr_block(out: &mut String, addresses: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Interface name in a `bond`/`vlan` block: bare when it is a plain
+/// identifier or an identifier with a numeric VLAN suffix (`bond0.100`),
+/// quoted otherwise.
+fn nll_iface_name(s: &str) -> Result<String> {
+    if is_plain_ident(s) {
+        return Ok(s.to_string());
+    }
+    if let Some((base, suffix)) = s.rsplit_once('.')
+        && is_plain_ident(base)
+        && !suffix.is_empty()
+        && suffix.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Ok(s.to_string());
+    }
+    nll_string(s)
+}
+
 fn render_interface(
     out: &mut String,
     name: &str,
@@ -968,8 +985,68 @@ fn render_interface(
             }
             out.push_str("  }\n");
         }
-        InterfaceKind::Bond => return Err(bad("bond interfaces have no NLL syntax")),
-        InterfaceKind::Vlan => return Err(bad("vlan sub-interfaces have no NLL syntax")),
+        InterfaceKind::Bond => {
+            if iface.members.is_empty() {
+                return Err(bad("a bond needs members"));
+            }
+            writeln!(out, "  bond {} {{", nll_iface_name(name)?).unwrap();
+            let members: Result<Vec<String>> =
+                iface.members.iter().map(|m| nll_iface_name(m)).collect();
+            writeln!(out, "    members [{}]", members?.join(", ")).unwrap();
+            if let Some(o) = &iface.bond {
+                if let Some(mode) = o.mode {
+                    writeln!(out, "    mode {}", mode.as_str()).unwrap();
+                }
+                if let Some(ms) = o.miimon {
+                    writeln!(out, "    miimon {ms}").unwrap();
+                }
+                if let Some(rate) = o.lacp_rate {
+                    writeln!(
+                        out,
+                        "    lacp-rate {}",
+                        match rate {
+                            crate::types::LacpRate::Slow => "slow",
+                            crate::types::LacpRate::Fast => "fast",
+                        }
+                    )
+                    .unwrap();
+                }
+                if let Some(p) = o.xmit_hash {
+                    writeln!(out, "    xmit-hash {}", p.as_str()).unwrap();
+                }
+                if let Some(n) = o.min_links {
+                    writeln!(out, "    min-links {n}").unwrap();
+                }
+                if let Some(ms) = o.updelay {
+                    writeln!(out, "    updelay {ms}").unwrap();
+                }
+                if let Some(ms) = o.downdelay {
+                    writeln!(out, "    downdelay {ms}").unwrap();
+                }
+            }
+            for addr in &iface.addresses {
+                writeln!(out, "    address {}", nll_addr(addr)?).unwrap();
+            }
+            out.push_str("  }\n");
+        }
+        InterfaceKind::Vlan => {
+            let Some(parent) = &iface.parent else {
+                return Err(bad("a vlan sub-interface needs a parent"));
+            };
+            let Some(id) = iface.vni else {
+                return Err(bad("a vlan sub-interface needs an id"));
+            };
+            writeln!(out, "  vlan {} {{", nll_iface_name(name)?).unwrap();
+            writeln!(out, "    parent {}", nll_iface_name(parent)?).unwrap();
+            writeln!(out, "    id {id}").unwrap();
+            if let Some(p) = iface.vlan_protocol {
+                writeln!(out, "    protocol {}", p.as_str()).unwrap();
+            }
+            for addr in &iface.addresses {
+                writeln!(out, "    address {}", nll_addr(addr)?).unwrap();
+            }
+            out.push_str("  }\n");
+        }
     }
     Ok(())
 }
@@ -1565,8 +1642,7 @@ mod tests {
     use super::*;
     use crate::parser;
     use crate::types::{
-        BenchmarkAssertion, ExecConfig, InterfaceConfig, NatConfig, NatRule, Network, PortConfig,
-        RateLimit,
+        BenchmarkAssertion, ExecConfig, NatConfig, NatRule, Network, PortConfig, RateLimit,
     };
 
     /// parse → render → parse, asserting structural equality via JSON.
@@ -1795,21 +1871,48 @@ node vtep {
     }
 
     #[test]
-    fn test_render_bond_is_error() {
-        let mut topo = Topology::default();
-        topo.lab.name = "t".into();
-        let mut n = Node::default();
-        n.interfaces.insert(
-            "bond0".into(),
-            InterfaceConfig {
-                kind: Some(InterfaceKind::Bond),
-                members: vec!["eth0".into(), "eth1".into()],
-                ..Default::default()
-            },
+    fn test_render_bond_and_vlan_roundtrip() {
+        let (a, out, b) = roundtrip(
+            r#"
+lab "t"
+node left {
+  bond bond0 {
+    members [eth0, eth1]
+    mode 802.3ad
+    miimon 100
+    lacp-rate fast
+    xmit-hash layer3+4
+    min-links 1
+  }
+  vlan bond0.100 {
+    parent bond0
+    id 100
+    protocol 802.1ad
+    address 10.100.0.1/24
+  }
+  vlan eth2.20 { parent eth2 id 20 address 10.20.0.1/24 }
+}
+node right
+link left:eth0 -- right:eth0
+link left:eth1 -- right:eth1
+link left:eth2 -- right:eth1
+"#,
         );
-        topo.nodes.insert("a".into(), n);
-        let err = try_render(&topo).unwrap_err();
-        assert!(err.to_string().contains("bond"), "{err}");
+        assert!(out.contains("  bond bond0 {\n    members [eth0, eth1]\n    mode 802.3ad\n    miimon 100\n    lacp-rate fast\n    xmit-hash layer3+4\n    min-links 1\n  }"), "{out}");
+        assert!(out.contains("  vlan bond0.100 {\n    parent bond0\n    id 100\n    protocol 802.1ad\n    address 10.100.0.1/24\n  }"), "{out}");
+        assert_eq!(
+            serde_json::to_value(&a.nodes["left"].interfaces).unwrap(),
+            serde_json::to_value(&b.nodes["left"].interfaces).unwrap()
+        );
+        let bond = &b.nodes["left"].interfaces["bond0"];
+        assert_eq!(
+            bond.bond.as_ref().unwrap().mode,
+            Some(crate::types::BondMode::Lacp)
+        );
+        assert_eq!(
+            b.nodes["left"].interfaces["bond0.100"].vlan_protocol,
+            Some(crate::types::VlanProtocol::Dot1ad)
+        );
     }
 
     #[test]

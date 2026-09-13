@@ -1033,6 +1033,12 @@ fn parse_node_prop(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeProp>
     } else if check_kw(tokens, *pos, "dummy") {
         *pos += 1;
         parse_dummy_def(tokens, pos).map(ast::NodeProp::Dummy)
+    } else if check_kw(tokens, *pos, "bond") {
+        *pos += 1;
+        parse_bond_def(tokens, pos).map(ast::NodeProp::Bond)
+    } else if check_kw(tokens, *pos, "vlan") {
+        *pos += 1;
+        parse_vlan_iface_def(tokens, pos).map(ast::NodeProp::VlanIface)
     } else if check_kw(tokens, *pos, "macvlan") {
         *pos += 1;
         parse_macvlan_def(tokens, pos).map(ast::NodeProp::Macvlan)
@@ -1694,6 +1700,211 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
 }
 
 // ─── Dummy ────────────────────────────────────────────────
+
+/// An interface name that may carry a VLAN-style suffix: `eth0`,
+/// `bond0.100`, `eth2.20` (the lexer splits `bond0.100` into
+/// `bond0` `.` `100`; only touching tokens are glued back).
+fn parse_iface_name(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    let mut name = parse_name(tokens, pos)?;
+    while *pos + 1 < tokens.len()
+        && tokens[*pos].token == Token::Dot
+        && tokens[*pos].span.start == tokens[*pos - 1].span.end
+        && tokens[*pos + 1].span.start == tokens[*pos].span.end
+        && matches!(tokens[*pos + 1].token, Token::Int(_))
+    {
+        name.push('.');
+        name.push_str(&tokens[*pos + 1].token.to_string());
+        *pos += 2;
+    }
+    Ok(name)
+}
+
+/// A "word" that the lexer splits into several touching tokens —
+/// `802.3ad` (Int `802.3` + Ident `ad`), `layer3+4`, `802.1ad`. Glues
+/// consecutive tokens whose spans touch back into the source text.
+fn parse_glued_word(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    let Some(first) = tokens.get(*pos) else {
+        return Err(err(tokens, *pos, "expected a value".into()));
+    };
+    if matches!(first.token, Token::Newline | Token::LBrace | Token::RBrace) {
+        return Err(err(
+            tokens,
+            *pos,
+            format!("expected a value, found {}", first.token),
+        ));
+    }
+    let mut word = first.token.to_string();
+    let mut end = first.span.end;
+    *pos += 1;
+    while let Some(next) = tokens.get(*pos) {
+        if next.span.start != end
+            || matches!(next.token, Token::Newline | Token::LBrace | Token::RBrace)
+        {
+            break;
+        }
+        word.push_str(&next.token.to_string());
+        end = next.span.end;
+        *pos += 1;
+    }
+    Ok(word)
+}
+
+/// `bond NAME { members [a, b] mode 802.3ad miimon 100 lacp-rate fast
+/// xmit-hash layer3+4 min-links 1 updelay 200 downdelay 200 address … }`
+fn parse_bond_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::BondDef> {
+    let name = parse_iface_name(tokens, pos)?;
+    let mut members = Vec::new();
+    let mut options = crate::types::BondOptions::default();
+    let mut addresses = Vec::new();
+    expect(tokens, pos, &Token::LBrace)?;
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if eat_kw(tokens, pos, "members") {
+            members = parse_ident_list(tokens, pos)?;
+        } else if eat_kw(tokens, pos, "mode") {
+            let at_pos = *pos;
+            let word = parse_glued_word(tokens, pos)?;
+            options.mode = Some(crate::types::BondMode::parse(&word).ok_or_else(|| {
+                err(
+                    tokens,
+                    at_pos,
+                    format!(
+                        "unknown bond mode '{word}' (balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb, balance-alb)"
+                    ),
+                )
+            })?);
+        } else if eat_kw(tokens, pos, "miimon") {
+            options.miimon = Some(expect_u32(tokens, pos, "miimon", 0)?);
+        } else if eat_kw(tokens, pos, "lacp-rate") {
+            let at_pos = *pos;
+            let word = expect_ident(tokens, pos)?;
+            options.lacp_rate = Some(match word.as_str() {
+                "slow" => crate::types::LacpRate::Slow,
+                "fast" => crate::types::LacpRate::Fast,
+                other => {
+                    return Err(err(
+                        tokens,
+                        at_pos,
+                        format!("unknown lacp-rate '{other}' (slow, fast)"),
+                    ));
+                }
+            });
+        } else if eat_kw(tokens, pos, "xmit-hash") {
+            let at_pos = *pos;
+            let word = parse_glued_word(tokens, pos)?;
+            options.xmit_hash =
+                Some(crate::types::XmitHashPolicy::parse(&word).ok_or_else(|| {
+                    err(
+                        tokens,
+                        at_pos,
+                        format!(
+                            "unknown xmit-hash '{word}' (layer2, layer3+4, layer2+3, encap2+3, encap3+4)"
+                        ),
+                    )
+                })?);
+        } else if eat_kw(tokens, pos, "min-links") {
+            options.min_links = Some(expect_u32(tokens, pos, "min-links", 0)?);
+        } else if eat_kw(tokens, pos, "updelay") {
+            options.updelay = Some(expect_u32(tokens, pos, "updelay", 0)?);
+        } else if eat_kw(tokens, pos, "downdelay") {
+            options.downdelay = Some(expect_u32(tokens, pos, "downdelay", 0)?);
+        } else if eat_kw(tokens, pos, "address") {
+            addresses.push(parse_cidr_or_name(tokens, pos)?);
+        } else if let Some(Token::Cidr(c) | Token::Ipv6Cidr(c)) = at(tokens, *pos) {
+            addresses.push(c.clone());
+            *pos += 1;
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!(
+                        "unexpected {other} in bond block (members, mode, miimon, lacp-rate, xmit-hash, min-links, updelay, downdelay, address)"
+                    ),
+                ),
+                None => err(tokens, *pos, "unexpected end of input in bond block".into()),
+            });
+        }
+    }
+    if members.is_empty() {
+        return Err(err(
+            tokens,
+            *pos - 1,
+            format!("bond '{name}' needs `members [ … ]`"),
+        ));
+    }
+    Ok(ast::BondDef {
+        name,
+        members,
+        options,
+        addresses,
+    })
+}
+
+/// `vlan NAME { parent IFACE id N [protocol 802.1q|802.1ad] address … }`
+fn parse_vlan_iface_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VlanIfaceDef> {
+    let name = parse_iface_name(tokens, pos)?;
+    let mut parent = None;
+    let mut id = None;
+    let mut protocol = None;
+    let mut addresses = Vec::new();
+    expect(tokens, pos, &Token::LBrace)?;
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if eat_kw(tokens, pos, "parent") {
+            parent = Some(parse_iface_name(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "id") {
+            id = Some(expect_int_range(tokens, pos, "id", 1, 4094)? as u16);
+        } else if eat_kw(tokens, pos, "protocol") {
+            let at_pos = *pos;
+            let word = parse_glued_word(tokens, pos)?;
+            protocol = Some(crate::types::VlanProtocol::parse(&word).ok_or_else(|| {
+                err(
+                    tokens,
+                    at_pos,
+                    format!("unknown vlan protocol '{word}' (802.1q, 802.1ad)"),
+                )
+            })?);
+        } else if eat_kw(tokens, pos, "address") {
+            addresses.push(parse_cidr_or_name(tokens, pos)?);
+        } else if let Some(Token::Cidr(c) | Token::Ipv6Cidr(c)) = at(tokens, *pos) {
+            addresses.push(c.clone());
+            *pos += 1;
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in vlan block (parent, id, protocol, address)"),
+                ),
+                None => err(tokens, *pos, "unexpected end of input in vlan block".into()),
+            });
+        }
+    }
+    let Some(parent) = parent else {
+        return Err(err(
+            tokens,
+            *pos - 1,
+            format!("vlan '{name}' needs `parent IFACE`"),
+        ));
+    };
+    let Some(id) = id else {
+        return Err(err(tokens, *pos - 1, format!("vlan '{name}' needs `id N`")));
+    };
+    Ok(ast::VlanIfaceDef {
+        name,
+        parent,
+        id,
+        protocol,
+        addresses,
+    })
+}
 
 fn parse_dummy_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::DummyDef> {
     let name = parse_name(tokens, pos)?;

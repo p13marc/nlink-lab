@@ -137,6 +137,10 @@ pub enum Token {
     RParen,
     #[token("--")]
     DashDash,
+    // Only meaningful glued to its neighbours (`xmit-hash layer3+4`);
+    // arithmetic lives inside `${…}` tokens.
+    #[token("+")]
+    Plus,
     #[token("->")]
     ArrowRight,
     #[token("<-")]
@@ -304,6 +308,7 @@ impl std::fmt::Display for Token {
             Token::LBracket => write!(f, "["),
             Token::RBracket => write!(f, "]"),
             Token::DashDash => write!(f, "--"),
+            Token::Plus => write!(f, "+"),
             Token::ArrowRight => write!(f, "->"),
             Token::ArrowLeft => write!(f, "<-"),
             Token::Comma => write!(f, ","),

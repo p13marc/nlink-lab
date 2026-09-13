@@ -104,7 +104,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (45 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (47 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -131,7 +131,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (37 top-level; 46 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (38 top-level; 47 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -219,6 +219,7 @@ first-class IPv6 (dual-stack `port` addresses, `ip6` firewall matches,
 NAT66, IPv6 `mgmt`, `subnet()`/`host()`/pools on u128, per-family
 `routing auto`, `dnat … to [addr]:port`),
 `qdisc NODE:IFACE tbf|fq_codel|sfq|prio { … }` root qdiscs,
+`bond NAME { members [...] mode 802.3ad … }` and `vlan NAME { parent … id … protocol 802.1ad }` blocks,
 network (bridge) blocks, and per-pair impairment matrices inside
 `network` blocks (`impair NODE -- NODE { delay … loss … rate-cap … }`
 — one HTB+netem+flower tree per source interface, built via nlink's

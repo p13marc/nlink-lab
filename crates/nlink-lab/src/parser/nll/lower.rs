@@ -2025,6 +2025,19 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
             name: i(&d.name, vars),
             addresses: d.addresses.iter().map(|s| i(s, vars)).collect(),
         }),
+        ast::NodeProp::Bond(b) => ast::NodeProp::Bond(ast::BondDef {
+            name: i(&b.name, vars),
+            members: b.members.iter().map(|s| i(s, vars)).collect(),
+            options: b.options.clone(),
+            addresses: b.addresses.iter().map(|s| i(s, vars)).collect(),
+        }),
+        ast::NodeProp::VlanIface(v) => ast::NodeProp::VlanIface(ast::VlanIfaceDef {
+            name: i(&v.name, vars),
+            parent: i(&v.parent, vars),
+            id: v.id,
+            protocol: v.protocol,
+            addresses: v.addresses.iter().map(|s| i(s, vars)).collect(),
+        }),
         ast::NodeProp::Macvlan(m) => ast::NodeProp::Macvlan(ast::MacvlanDef {
             name: i(&m.name, vars),
             parent: i(&m.parent, vars),
@@ -2796,6 +2809,35 @@ fn apply_node_props(
                     types::InterfaceConfig {
                         kind: Some(types::InterfaceKind::Dummy),
                         addresses: d.addresses.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
+            ast::NodeProp::Bond(b) => {
+                node.interfaces.insert(
+                    b.name.clone(),
+                    types::InterfaceConfig {
+                        kind: Some(types::InterfaceKind::Bond),
+                        members: b.members.clone(),
+                        bond: if b.options == types::BondOptions::default() {
+                            None
+                        } else {
+                            Some(b.options.clone())
+                        },
+                        addresses: b.addresses.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
+            ast::NodeProp::VlanIface(v) => {
+                node.interfaces.insert(
+                    v.name.clone(),
+                    types::InterfaceConfig {
+                        kind: Some(types::InterfaceKind::Vlan),
+                        parent: Some(v.parent.clone()),
+                        vni: Some(u32::from(v.id)),
+                        vlan_protocol: v.protocol,
+                        addresses: v.addresses.clone(),
                         ..Default::default()
                     },
                 );

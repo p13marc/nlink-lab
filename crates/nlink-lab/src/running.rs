@@ -978,7 +978,59 @@ impl RunningLab {
         Ok(addrs)
     }
 
-    /// Wait for a TCP port to accept connections inside a node's namespace.
+    /// A sock_diag connection into a node's namespace (#75: listener
+    /// probes ask the kernel instead of shelling `bash`/`cat`).
+    fn sockdiag_conn_for(&self, node: &str) -> Result<Connection<nlink::netlink::SockDiag>> {
+        if let Some(container) = self.containers.get(node) {
+            return namespace::connection_for_pid(container.pid).map_err(|e| {
+                Error::deploy_failed(format!(
+                    "sock_diag connection for container node '{node}' (pid {}): {e}",
+                    container.pid
+                ))
+            });
+        }
+        let ns_name = self.namespace_for(node)?;
+        namespace::connection_for(ns_name)
+            .map_err(|e| Error::deploy_failed(format!("sock_diag connection for '{ns_name}': {e}")))
+    }
+
+    /// Is there a TCP listener on `port` in `node`'s namespace bound to
+    /// `ip` (or to the wildcard address)? `Ok(None)` when sock_diag is
+    /// unavailable (a hardened container runtime), so callers can fall
+    /// back to procfs/exec probes.
+    async fn tcp_listener_present(
+        &self,
+        node: &str,
+        ip: Option<std::net::IpAddr>,
+        port: u16,
+    ) -> Option<bool> {
+        use nlink::sockdiag::SocketFilter;
+        let conn = self.sockdiag_conn_for(node).ok()?;
+        let filter = SocketFilter::tcp().listening().local_port(port).build();
+        let sockets = conn.query(&filter).await.ok()?;
+        Some(sockets.iter().any(|s| {
+            let Some(inet) = s.as_inet() else {
+                return false;
+            };
+            if inet.local.port() != port {
+                return false;
+            }
+            match ip {
+                None => true,
+                Some(want) => {
+                    let bound = inet.local.ip();
+                    bound.is_unspecified() || bound == want
+                }
+            }
+        }))
+    }
+
+    /// Wait for a TCP listener on `ip:port` inside a node's namespace.
+    ///
+    /// Probes the kernel's socket table through sock_diag (no `bash` in
+    /// the node, no connection attempts that leave `connection refused`
+    /// noise in the service's logs); falls back to a `/dev/tcp` connect
+    /// where sock_diag is not permitted.
     pub async fn wait_for_tcp(
         &self,
         node: &str,
@@ -988,13 +1040,20 @@ impl RunningLab {
         interval: std::time::Duration,
     ) -> Result<()> {
         let deadline = std::time::Instant::now() + timeout;
+        let want: Option<std::net::IpAddr> = ip.parse().ok();
         loop {
-            let probe = self.exec(
-                node,
-                "bash",
-                &["-c", &format!("echo > /dev/tcp/{ip}/{port}")],
-            );
-            if probe.is_ok_and(|o| o.exit_code == 0) {
+            let present = match self.tcp_listener_present(node, want, port).await {
+                Some(present) => present,
+                None => {
+                    let probe = self.exec(
+                        node,
+                        "bash",
+                        &["-c", &format!("echo > /dev/tcp/{ip}/{port}")],
+                    );
+                    probe.is_ok_and(|o| o.exit_code == 0)
+                }
+            };
+            if present {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
@@ -1100,13 +1159,21 @@ impl RunningLab {
         let interval = std::cmp::min(interval, std::time::Duration::from_millis(250));
         let port_hex = format!("{port:04X}");
         loop {
-            for proto in &["tcp", "tcp6"] {
-                let path = format!("/proc/{pid}/net/{proto}");
-                if let Ok(out) = self.exec(node, "cat", &[&path])
-                    && out.exit_code == 0
-                    && proc_net_tcp_has_listener(&out.stdout, &port_hex)
-                {
-                    return Ok(());
+            // sock_diag first (#75); the procfs scan stays as the
+            // fallback for runtimes that deny NETLINK_SOCK_DIAG.
+            match self.tcp_listener_present(node, None, port).await {
+                Some(true) => return Ok(()),
+                Some(false) => {}
+                None => {
+                    for proto in &["tcp", "tcp6"] {
+                        let path = format!("/proc/{pid}/net/{proto}");
+                        if let Ok(out) = self.exec(node, "cat", &[&path])
+                            && out.exit_code == 0
+                            && proc_net_tcp_has_listener(&out.stdout, &port_hex)
+                        {
+                            return Ok(());
+                        }
+                    }
                 }
             }
             if std::time::Instant::now() >= deadline {

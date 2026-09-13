@@ -126,6 +126,8 @@ module.exports = grammar({
         $.wireguard_block,
         $.vxlan_block,
         $.dummy_block,
+        $.bond_block,
+        $.vlan_block,
         $.macvlan_block,
         $.ipvlan_block,
         $.wifi_block,
@@ -212,6 +214,18 @@ module.exports = grammar({
 
     dummy_block: ($) =>
       seq("dummy", $.identifier, $.generic_block),
+
+    bond_block: ($) => seq("bond", $.iface_name, $.generic_block),
+
+    vlan_block: ($) => seq("vlan", $.iface_name, $.generic_block),
+
+    // `eth0`, `bond0.100` — an identifier with an optional numeric VLAN
+    // suffix (the Rust parser glues `bond0` `.` `100`).
+    iface_name: ($) => token(/[A-Za-z_][A-Za-z0-9_-]*(\.[0-9]+)?/),
+
+    // `802.3ad`, `802.1ad`, `layer3+4` — option words that are not
+    // identifiers.
+    option_word: ($) => token(/[0-9]+\.[0-9]+[a-z]+|[a-z][a-z0-9]*\+[0-9]+/),
 
     macvlan_block: ($) =>
       seq("macvlan", $.identifier, repeat($.inline_property), $.generic_block),
@@ -567,6 +581,17 @@ module.exports = grammar({
         seq("interval", $.duration),
         seq("timeout", $.duration),
         seq("retries", $.integer),
+        seq("members", $.list),
+        seq("mode", choice($.option_word, $._value)),
+        seq("miimon", $.integer),
+        seq("lacp-rate", $.identifier),
+        seq("xmit-hash", choice($.option_word, $._value)),
+        seq("min-links", $.integer),
+        seq("updelay", $.integer),
+        seq("downdelay", $.integer),
+        seq("parent", choice($.iface_name, $._name)),
+        seq("id", $.integer),
+        seq("protocol", choice($.option_word, $._value)),
       ),
 
     // ── Expressions and literals ────────────────────

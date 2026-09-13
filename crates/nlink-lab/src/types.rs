@@ -580,6 +580,175 @@ pub struct InterfaceConfig {
     /// Member interfaces (for bond interfaces).
     #[serde(default)]
     pub members: Vec<String>,
+
+    /// Bonding options (`bond … { mode … }`); kernel defaults when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bond: Option<BondOptions>,
+
+    /// VLAN tag protocol for `vlan` sub-interfaces: 802.1Q (default) or
+    /// 802.1ad (Q-in-Q outer tag).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vlan_protocol: Option<VlanProtocol>,
+}
+
+/// Bonding driver options (issue #75: nlink 0.26 `LinkBuilder::bond_*`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BondOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<BondMode>,
+    /// Link monitoring interval in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miimon: Option<u32>,
+    /// LACP rate (802.3ad only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lacp_rate: Option<LacpRate>,
+    /// Transmit hash policy (balance-xor / 802.3ad).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xmit_hash: Option<XmitHashPolicy>,
+    /// Minimum active links before the bond is up (802.3ad).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_links: Option<u32>,
+    /// Delay before enabling a link after it comes up, in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updelay: Option<u32>,
+    /// Delay before disabling a link after it goes down, in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downdelay: Option<u32>,
+}
+
+/// Bonding mode (NLL spelling in parentheses).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum BondMode {
+    /// `balance-rr`
+    BalanceRr,
+    /// `active-backup`
+    ActiveBackup,
+    /// `balance-xor`
+    BalanceXor,
+    /// `broadcast`
+    Broadcast,
+    /// `802.3ad` (LACP)
+    #[serde(rename = "802.3ad")]
+    Lacp,
+    /// `balance-tlb`
+    BalanceTlb,
+    /// `balance-alb`
+    BalanceAlb,
+}
+
+impl BondMode {
+    /// Parse the NLL / iproute2 spelling.
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "balance-rr" => BondMode::BalanceRr,
+            "active-backup" => BondMode::ActiveBackup,
+            "balance-xor" => BondMode::BalanceXor,
+            "broadcast" => BondMode::Broadcast,
+            "802.3ad" | "lacp" => BondMode::Lacp,
+            "balance-tlb" => BondMode::BalanceTlb,
+            "balance-alb" => BondMode::BalanceAlb,
+            _ => return None,
+        })
+    }
+
+    /// The NLL / iproute2 spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BondMode::BalanceRr => "balance-rr",
+            BondMode::ActiveBackup => "active-backup",
+            BondMode::BalanceXor => "balance-xor",
+            BondMode::Broadcast => "broadcast",
+            BondMode::Lacp => "802.3ad",
+            BondMode::BalanceTlb => "balance-tlb",
+            BondMode::BalanceAlb => "balance-alb",
+        }
+    }
+}
+
+/// LACPDU rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum LacpRate {
+    /// Every 30 s.
+    Slow,
+    /// Every second.
+    Fast,
+}
+
+/// Transmit hash policy (iproute2 spelling).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub enum XmitHashPolicy {
+    #[serde(rename = "layer2")]
+    Layer2,
+    #[serde(rename = "layer3+4")]
+    Layer34,
+    #[serde(rename = "layer2+3")]
+    Layer23,
+    #[serde(rename = "encap2+3")]
+    Encap23,
+    #[serde(rename = "encap3+4")]
+    Encap34,
+}
+
+impl XmitHashPolicy {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "layer2" => XmitHashPolicy::Layer2,
+            "layer3+4" => XmitHashPolicy::Layer34,
+            "layer2+3" => XmitHashPolicy::Layer23,
+            "encap2+3" => XmitHashPolicy::Encap23,
+            "encap3+4" => XmitHashPolicy::Encap34,
+            _ => return None,
+        })
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            XmitHashPolicy::Layer2 => "layer2",
+            XmitHashPolicy::Layer34 => "layer3+4",
+            XmitHashPolicy::Layer23 => "layer2+3",
+            XmitHashPolicy::Encap23 => "encap2+3",
+            XmitHashPolicy::Encap34 => "encap3+4",
+        }
+    }
+
+    /// Kernel `xmit_hash_policy` value (`IFLA_BOND_XMIT_HASH_POLICY`).
+    pub fn kernel_value(&self) -> u8 {
+        match self {
+            XmitHashPolicy::Layer2 => 0,
+            XmitHashPolicy::Layer34 => 1,
+            XmitHashPolicy::Layer23 => 2,
+            XmitHashPolicy::Encap23 => 3,
+            XmitHashPolicy::Encap34 => 4,
+        }
+    }
+}
+
+/// VLAN tag protocol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub enum VlanProtocol {
+    #[serde(rename = "802.1q")]
+    Dot1q,
+    #[serde(rename = "802.1ad")]
+    Dot1ad,
+}
+
+impl VlanProtocol {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "802.1q" | "dot1q" => Some(VlanProtocol::Dot1q),
+            "802.1ad" | "dot1ad" | "qinq" => Some(VlanProtocol::Dot1ad),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VlanProtocol::Dot1q => "802.1q",
+            VlanProtocol::Dot1ad => "802.1ad",
+        }
+    }
 }
 
 /// Route configuration.

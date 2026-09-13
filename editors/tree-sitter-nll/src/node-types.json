@@ -271,6 +271,25 @@
     }
   },
   {
+    "type": "bond_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "iface_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "condition",
     "named": true,
     "fields": {},
@@ -562,6 +581,10 @@
           "named": true
         },
         {
+          "type": "bond_block",
+          "named": true
+        },
+        {
           "type": "container_property",
           "named": true
         },
@@ -699,6 +722,10 @@
         },
         {
           "type": "validate_block",
+          "named": true
+        },
+        {
+          "type": "vlan_block",
           "named": true
         },
         {
@@ -950,6 +977,10 @@
           "named": true
         },
         {
+          "type": "bond_block",
+          "named": true
+        },
+        {
           "type": "condition",
           "named": true
         },
@@ -1083,6 +1114,10 @@
         },
         {
           "type": "validate_block",
+          "named": true
+        },
+        {
+          "type": "vlan_block",
           "named": true
         },
         {
@@ -1394,6 +1429,10 @@
           "named": true
         },
         {
+          "type": "iface_name",
+          "named": true
+        },
+        {
           "type": "integer",
           "named": true
         },
@@ -1415,6 +1454,10 @@
         },
         {
           "type": "list",
+          "named": true
+        },
+        {
+          "type": "option_word",
           "named": true
         },
         {
@@ -2270,6 +2313,10 @@
       "required": false,
       "types": [
         {
+          "type": "bond_block",
+          "named": true
+        },
+        {
           "type": "container_property",
           "named": true
         },
@@ -2323,6 +2370,10 @@
         },
         {
           "type": "sysctl_property",
+          "named": true
+        },
+        {
+          "type": "vlan_block",
           "named": true
         },
         {
@@ -2701,6 +2752,10 @@
       "required": true,
       "types": [
         {
+          "type": "bond_block",
+          "named": true
+        },
+        {
           "type": "container_property",
           "named": true
         },
@@ -2750,6 +2805,10 @@
         },
         {
           "type": "sysctl_property",
+          "named": true
+        },
+        {
+          "type": "vlan_block",
           "named": true
         },
         {
@@ -3454,6 +3513,25 @@
     }
   },
   {
+    "type": "vlan_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "generic_block",
+          "named": true
+        },
+        {
+          "type": "iface_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "vrf_block",
     "named": true,
     "fields": {},
@@ -3679,6 +3757,10 @@
     "extra": true
   },
   {
+    "type": "bond",
+    "named": false
+  },
+  {
     "type": "burst",
     "named": false
   },
@@ -3768,6 +3850,10 @@
   },
   {
     "type": "down",
+    "named": false
+  },
+  {
+    "type": "downdelay",
     "named": false
   },
   {
@@ -3891,12 +3977,20 @@
     "named": false
   },
   {
+    "type": "id",
+    "named": false
+  },
+  {
     "type": "identifier",
     "named": true
   },
   {
     "type": "if",
     "named": false
+  },
+  {
+    "type": "iface_name",
+    "named": true
   },
   {
     "type": "image",
@@ -3976,6 +4070,10 @@
   },
   {
     "type": "labels",
+    "named": false
+  },
+  {
+    "type": "lacp-rate",
     "named": false
   },
   {
@@ -4064,6 +4162,14 @@
     "named": false
   },
   {
+    "type": "miimon",
+    "named": false
+  },
+  {
+    "type": "min-links",
+    "named": false
+  },
+  {
     "type": "mode",
     "named": false
   },
@@ -4090,6 +4196,10 @@
   {
     "type": "off",
     "named": false
+  },
+  {
+    "type": "option_word",
+    "named": true
   },
   {
     "type": "overlay",
@@ -4145,6 +4255,10 @@
   },
   {
     "type": "profile",
+    "named": false
+  },
+  {
+    "type": "protocol",
     "named": false
   },
   {
@@ -4332,6 +4446,10 @@
     "named": false
   },
   {
+    "type": "updelay",
+    "named": false
+  },
+  {
     "type": "validate",
     "named": false
   },
@@ -4385,6 +4503,10 @@
   },
   {
     "type": "wpa2",
+    "named": false
+  },
+  {
+    "type": "xmit-hash",
     "named": false
   },
   {

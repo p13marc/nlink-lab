@@ -653,6 +653,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "bond_block"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "vlan_block"
+        },
+        {
+          "type": "SYMBOL",
           "name": "macvlan_block"
         },
         {
@@ -1319,6 +1327,54 @@
           "name": "generic_block"
         }
       ]
+    },
+    "bond_block": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "bond"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "iface_name"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "generic_block"
+        }
+      ]
+    },
+    "vlan_block": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "vlan"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "iface_name"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "generic_block"
+        }
+      ]
+    },
+    "iface_name": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[A-Za-z_][A-Za-z0-9_-]*(\\.[0-9]+)?"
+      }
+    },
+    "option_word": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[0-9]+\\.[0-9]+[a-z]+|[a-z][a-z0-9]*\\+[0-9]+"
+      }
     },
     "macvlan_block": {
       "type": "SEQ",
@@ -4066,6 +4122,185 @@
             {
               "type": "SYMBOL",
               "name": "integer"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "members"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "list"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "mode"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "option_word"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_value"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "miimon"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "integer"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "lacp-rate"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "identifier"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "xmit-hash"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "option_word"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_value"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "min-links"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "integer"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "updelay"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "integer"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "downdelay"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "integer"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "parent"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "iface_name"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_name"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "id"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "integer"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "protocol"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "option_word"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_value"
+                }
+              ]
             }
           ]
         }

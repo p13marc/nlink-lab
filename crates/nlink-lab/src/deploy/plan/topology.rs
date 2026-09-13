@@ -176,6 +176,16 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
         ifaces.extend(node.macvlans.iter().map(|m| m.name.clone()));
         ifaces.extend(node.ipvlans.iter().map(|i| i.name.clone()));
         ifaces.extend(node.wifi.iter().map(|w| w.name.clone()));
+        // Bond members must be *down* to be enslaved; the stack brings
+        // them up together with the `master` assignment (the kernel
+        // applies IFLA_MASTER before the flag change in one message).
+        let bond_members: std::collections::BTreeSet<&String> = node
+            .interfaces
+            .values()
+            .filter(|i| i.kind == Some(crate::types::InterfaceKind::Bond))
+            .flat_map(|i| i.members.iter())
+            .collect();
+        ifaces.retain(|i| !bond_members.contains(i));
         ifaces.sort();
         ifaces.dedup();
         ops.push(Op::LinksUp {

@@ -434,6 +434,33 @@ qdisc a:eth0 {kind}
     }
 
     #[test]
+    fn bond_members_are_not_brought_up_before_enslaving() {
+        let plan = plan_of(
+            r#"lab "b"
+node left {
+  bond bond0 { members [eth0, eth1] mode active-backup }
+}
+node right
+link left:eth0 -- right:eth0
+link left:eth1 -- right:eth1
+link left:eth2 -- right:eth2
+"#,
+        );
+        let up: Vec<&Vec<String>> = plan
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::LinksUp { node, ifaces } if node == "left" => Some(ifaces),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(up.len(), 1);
+        // the kernel refuses to enslave an up device: members stay down
+        // until the stack sets their master (the bond opens them)
+        assert_eq!(up[0], &vec!["eth2".to_string(), "lo".to_string()]);
+    }
+
+    #[test]
     fn plan_topology_mgmt_v6_ops() {
         let plan = plan_of(
             r#"lab "m6" { mgmt fd00:20::/64 host-reachable }

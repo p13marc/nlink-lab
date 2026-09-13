@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — nlink 0.26 adoption leftovers (issue #75)
+
+- **Listener probes use sock_diag.** `wait-for --tcp` and `spawn
+  --wait-port` ask the kernel's socket table
+  (`Connection<SockDiag>` + `SocketFilter::tcp().listening()`) instead of
+  running `bash -c 'echo > /dev/tcp/…'` or `cat /proc/<pid>/net/tcp`
+  inside the node — no `bash` needed in the namespace and no `connection
+  refused` noise in the service's log. Where sock_diag is denied (some
+  container runtimes) the old probes remain as fallback.
+- **Bonds and VLANs have NLL syntax.** `bond bond0 { members [eth0,
+  eth1] mode 802.3ad miimon 100 lacp-rate fast xmit-hash layer3+4
+  min-links 1 updelay … downdelay … address … }` and `vlan bond0.100 {
+  parent bond0 id 100 [protocol 802.1ad] address … }` (Q-in-Q via
+  nlink's `vlan_protocol(Dot1ad)`); bonding options ride on
+  `InterfaceConfig.bond` / `vlan_protocol` (additive) and reach the
+  kernel through `LinkBuilder::bond_mode/miimon/bond_lacp_rate/
+  xmit_hash_policy/min_links/bond_updelay/bond_downdelay`. `render`
+  round-trips them; validator rules `bond-member-exists` and
+  `vlan-parent-exists`. Example `examples/bond-qinq.nll`.
+- **`interface-name-length` checks the full Linux rules** (1–15 bytes,
+  no `/` or whitespace, not `.`/`..`) for every interface, not only the
+  length.
+- **The network layer retries on EBUSY/EAGAIN** (three attempts, 50 ms
+  doubling) like the nftables and WireGuard layers already did.
+- **Bond members are no longer brought up before they are enslaved.** The
+  LinksUp stage used to `set_link_up` every link endpoint, and the kernel
+  refuses to enslave an up device (`Device can not be enslaved while up`),
+  so every bond deploy failed; members now stay down until the stack
+  sets their master and the bonding driver opens them.
+- Not adopted, with reasons recorded on #75: `ConnectionPool` (one
+  short-lived single-flight socket per op is cheaper than N namespaces ×
+  pool size), `NetworkConfig::apply_reconcile` (cannot purge, drops the
+  per-op error list — a local retry instead), `util::parse::get_time`
+  (bare number is µs, no `m`/`h`), `get_percent` (returns a fraction),
+  `fib_lookup` (IPv4-only and no next-hop/dev, cannot back `route-has`),
+  `netlink::stats` (the collector already gets the same counters from
+  `Diagnostics`), `reflector::Store`/`namespace_watcher` (no consumer
+  yet; `events --follow` would be the first).
+
 ### Added — lifecycle event log, `nlink-lab events`, backend republishing (issue #70)
 
 - **Every lab operation is recorded** as one NDJSON line in

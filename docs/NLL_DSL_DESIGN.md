@@ -454,7 +454,29 @@ node host {
   `examples/ipv6-dual-stack.nll` documents.
 
 
-### 15. Queue Disciplines
+### 15. Bonds and VLAN Sub-Interfaces
+
+```nll-ignore
+node left {
+  bond bond0 {
+    members [eth0, eth1]          # veths from `link` statements
+    mode 802.3ad                  # balance-rr | active-backup | balance-xor | broadcast | 802.3ad | balance-tlb | balance-alb
+    miimon 100  lacp-rate fast  xmit-hash layer3+4  min-links 1
+  }
+  vlan bond0.100 {
+    parent bond0
+    id 100
+    protocol 802.1ad              # Q-in-Q outer tag (default 802.1q)
+    address 10.100.0.1/24
+  }
+}
+```
+
+Members and parents must be interfaces of the same node
+(`bond-member-exists`, `vlan-parent-exists`). Options map to the
+kernel's bonding driver through nlink's `LinkBuilder::bond_*` setters.
+
+### 16. Queue Disciplines
 
 `impair` installs netem and `rate` an HTB shaper; a `qdisc` block picks
 any other classless root qdisc for an interface:
@@ -1155,6 +1177,11 @@ node           = "node" name (":" profile_list)?
 profile_list   = name ("," name)*
 link           = "link" endpoint "--" endpoint (":" IDENT)? (link_block | NEWLINE)
 network        = "network" IDENT "{" network_prop* "}"
+bond           = "bond" IDENT "{" ("members" ident_list | "mode" IDENT | "miimon" INT
+               | "lacp-rate" ("slow" | "fast") | "xmit-hash" IDENT | "min-links" INT
+               | "updelay" INT | "downdelay" INT | "address" CIDR | CIDR)* "}"
+vlan           = "vlan" IDENT "{" ("parent" IDENT | "id" INT | "protocol" ("802.1q" | "802.1ad")
+               | "address" CIDR | CIDR)* "}"
 impair         = "impair" endpoint impair_props
 rate           = "rate" endpoint rate_props
 qdisc          = "qdisc" endpoint ("tbf" | "fq_codel" | "sfq" | "prio") "{" qdisc_prop* "}"

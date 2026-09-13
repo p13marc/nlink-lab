@@ -276,6 +276,8 @@ pub enum NodeProp {
     Wireguard(WireguardDef),
     Vxlan(VxlanDef),
     Dummy(DummyDef),
+    Bond(BondDef),
+    VlanIface(VlanIfaceDef),
     Macvlan(MacvlanDef),
     Ipvlan(IpvlanDef),
     Wifi(WifiDef),
@@ -421,6 +423,28 @@ pub struct VxlanDef {
 #[derive(Debug, Clone)]
 pub struct DummyDef {
     pub name: String,
+    pub addresses: Vec<String>,
+}
+
+/// `bond NAME { members [a, b] mode … miimon … lacp-rate … xmit-hash …
+/// min-links … updelay … downdelay … address … }` (issue #75).
+#[derive(Debug, Clone)]
+pub struct BondDef {
+    pub name: String,
+    pub members: Vec<String>,
+    pub options: crate::types::BondOptions,
+    pub addresses: Vec<String>,
+}
+
+/// `vlan NAME { parent IFACE id N [protocol 802.1ad] address … }` — a
+/// VLAN sub-interface of a node (the `network { vlan … }` entry is
+/// [`VlanDef`]).
+#[derive(Debug, Clone)]
+pub struct VlanIfaceDef {
+    pub name: String,
+    pub parent: String,
+    pub id: u16,
+    pub protocol: Option<crate::types::VlanProtocol>,
     pub addresses: Vec<String>,
 }
 

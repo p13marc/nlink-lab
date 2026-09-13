@@ -8,6 +8,7 @@ pub(crate) mod ast;
 pub mod lexer;
 pub(crate) mod lower;
 pub(crate) mod parser;
+pub(crate) mod value;
 
 use std::path::Path;
 
@@ -71,15 +72,28 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
 /// not to the importing file. Errors that already carry a source (or
 /// are not parse errors) pass through unchanged.
 pub(crate) fn attach_source(err: crate::Error, input: &str, filename: &str) -> crate::Error {
-    let (message, offset) = match err {
-        crate::Error::NllParseAt { message, offset } => (message, offset.min(input.len())),
-        crate::Error::NllParse(message) => (message, 0),
+    let (message, offset, len) = match err {
+        crate::Error::NllParseAt { message, span } => {
+            let offset = span.start.min(input.len());
+            let end = span.end.clamp(offset, input.len());
+            // A zero-width span at end of input stays empty; anything
+            // else covers the whole token (at least one byte).
+            let len = if end > offset {
+                end - offset
+            } else if offset < input.len() {
+                1
+            } else {
+                0
+            };
+            (message, offset, len)
+        }
+        crate::Error::NllParse(message) => (message, 0, if input.is_empty() { 0 } else { 1 }),
         other => return other,
     };
     crate::Error::NllDiagnostic(Box::new(crate::error::NllDiagnostic {
         message,
         src: miette::NamedSource::new(filename, input.to_string()),
-        span: (offset, if offset < input.len() { 1 } else { 0 }).into(),
+        span: (offset, len).into(),
         label: "here".to_string(),
         help: None,
     }))

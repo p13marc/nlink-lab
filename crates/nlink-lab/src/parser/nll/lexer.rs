@@ -358,10 +358,7 @@ pub fn lex(input: &str) -> Result<Vec<Spanned>> {
                         format!("unterminated block comment at line {line}, column {col}")
                     }
                 };
-                return Err(crate::Error::NllParseAt {
-                    message: msg,
-                    offset: span.start,
-                });
+                return Err(crate::Error::at(span.clone(), msg));
             }
         }
     }
@@ -1151,10 +1148,10 @@ link router:eth0 -- host:eth0 {
         assert!(msg.contains("line 3, column 3"), "{msg}");
         // The error carries the byte offset of the opening `/*`.
         let src = "lab \"t\"\nnode a\n  /* never closed\nnode b";
-        let crate::Error::NllParseAt { offset, .. } = err else {
+        let crate::Error::NllParseAt { span, .. } = err else {
             panic!("expected NllParseAt, got {err:?}");
         };
-        assert_eq!(&src[offset..offset + 2], "/*");
+        assert_eq!(&src[span.start..span.start + 2], "/*");
     }
 
     /// Spans index the original input, so a token after a block comment

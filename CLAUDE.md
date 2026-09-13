@@ -101,6 +101,7 @@ crates/nlink-lab/src/
       lexer.rs      # logos-based lexer (typed tokens: CIDR, Duration, Rate, etc.)
       ast.rs        # AST types (imports, statements, before lowering)
       parser.rs     # Recursive-descent parser → AST
+      value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
   validator.rs      # Topology validation (42 rules with stable ids, see RULE_IDS)

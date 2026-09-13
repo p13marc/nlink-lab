@@ -335,6 +335,58 @@ pub fn parse_rate_bps(s: &str) -> Result<u64> {
     Ok(bits.round() as u64)
 }
 
+/// Parse a byte size: `256m`, `1g`, `512k`, `1048576`, `1gb`, `256MiB`,
+/// `32kbyte`. Units are 1024-based (`k`/`kb`/`kib`/`kbyte`, `m`…, `g`…,
+/// `t`…), a bare number is bytes, fractions are allowed (`0.5g`).
+pub fn parse_size(s: &str) -> Result<u64> {
+    let raw = s.trim();
+    let lower = raw.to_ascii_lowercase();
+    let digits: String = lower
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    let unit = lower[digits.len()..].trim();
+    if digits.is_empty() {
+        return Err(Error::invalid_topology(format!(
+            "invalid size '{raw}': expected a number with an optional unit (k, m, g, t)"
+        )));
+    }
+    let n: f64 = digits
+        .parse()
+        .map_err(|_| Error::invalid_topology(format!("invalid size '{raw}': expected a number")))?;
+    let mul: f64 = match unit {
+        "" | "b" | "byte" | "bytes" => 1.0,
+        "k" | "kb" | "kib" | "kbyte" | "kbytes" => 1024.0,
+        "m" | "mb" | "mib" | "mbyte" | "mbytes" => 1024.0 * 1024.0,
+        "g" | "gb" | "gib" | "gbyte" | "gbytes" => 1024.0 * 1024.0 * 1024.0,
+        "t" | "tb" | "tib" | "tbyte" | "tbytes" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        other => {
+            return Err(Error::invalid_topology(format!(
+                "invalid size '{raw}': unknown unit '{other}' (use k, m, g, t)"
+            )));
+        }
+    };
+    let bytes = n * mul;
+    if !bytes.is_finite() || bytes > u64::MAX as f64 {
+        return Err(Error::invalid_topology(format!(
+            "invalid size '{raw}': too large"
+        )));
+    }
+    Ok(bytes.round() as u64)
+}
+
+/// Parse a CPU share in cores (`0.5`, `2`): finite and strictly positive.
+pub fn parse_cpu(s: &str) -> Result<f64> {
+    let raw = s.trim();
+    let cores: f64 = raw
+        .parse()
+        .map_err(|_| Error::invalid_topology(format!("cpu '{raw}': expected a number of cores")))?;
+    if cores <= 0.0 || !cores.is_finite() {
+        return Err(Error::invalid_topology(format!("cpu '{raw}': must be > 0")));
+    }
+    Ok(cores)
+}
+
 /// Check if an IP address falls within a subnet.
 pub fn ip_in_subnet(ip: IpAddr, network: IpAddr, prefix_len: u8) -> bool {
     match (ip, network) {
@@ -652,6 +704,30 @@ mod tests {
         let ip2: IpAddr = "fd01::1".parse().unwrap();
         assert!(ip_in_subnet(ip1, net, 64));
         assert!(!ip_in_subnet(ip2, net, 64));
+    }
+
+    #[test]
+    fn test_parse_size() {
+        assert_eq!(parse_size("256m").unwrap(), 256 * 1024 * 1024);
+        assert_eq!(parse_size("1g").unwrap(), 1024 * 1024 * 1024);
+        assert_eq!(parse_size("1gb").unwrap(), 1024 * 1024 * 1024);
+        assert_eq!(parse_size("256MiB").unwrap(), 256 * 1024 * 1024);
+        assert_eq!(parse_size("32kbyte").unwrap(), 32 * 1024);
+        assert_eq!(parse_size("1048576").unwrap(), 1_048_576);
+        assert_eq!(parse_size("0.5g").unwrap(), 512 * 1024 * 1024);
+        assert_eq!(parse_size(" 64k ").unwrap(), 65_536);
+        for bad in ["abc", "10x", "-1m", "", "10ms", "5%", "1mbit"] {
+            assert!(parse_size(bad).is_err(), "{bad} should be rejected");
+        }
+    }
+
+    #[test]
+    fn test_parse_cpu() {
+        assert_eq!(parse_cpu("0.5").unwrap(), 0.5);
+        assert_eq!(parse_cpu("2").unwrap(), 2.0);
+        for bad in ["0", "-1", "nan", "abc", ""] {
+            assert!(parse_cpu(bad).is_err(), "{bad} should be rejected");
+        }
     }
 
     #[test]

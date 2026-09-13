@@ -49,11 +49,16 @@ pub enum Error {
     #[error("NLL parse error: {0}")]
     NllParse(String),
 
-    /// NLL parse error with the byte offset it was raised at. Turned into
+    /// NLL parse error with the byte span it was raised at. Turned into
     /// an [`NllDiagnostic`] (with the source attached) by the parse entry
-    /// points; the offset is data, not text to re-parse.
+    /// points; the span is data, not text to re-parse. `span.start` is
+    /// the offset, `span.end - span.start` the width of the offending
+    /// token (0 at end of input).
     #[error("NLL parse error: {message}")]
-    NllParseAt { message: String, offset: usize },
+    NllParseAt {
+        message: String,
+        span: std::ops::Range<usize>,
+    },
 
     /// NLL parse error with source context for rich diagnostics.
     #[error("{}", .0)]
@@ -142,6 +147,14 @@ impl From<std::num::ParseIntError> for Error {
 }
 
 impl Error {
+    /// An NLL parse error pointing at a byte span of the source.
+    pub fn at(span: std::ops::Range<usize>, message: impl Into<String>) -> Self {
+        Error::NllParseAt {
+            message: message.into(),
+            span,
+        }
+    }
+
     /// Create an invalid topology error.
     pub fn invalid_topology(message: impl Into<String>) -> Self {
         Self::InvalidTopology(message.into())

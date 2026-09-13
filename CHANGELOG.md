@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — typed values in the NLL AST (issue #71)
+
+- **Values are typed while parsing.** Durations, percentages, rates,
+  byte sizes, packet counts, CPU shares, route destinations/gateways and
+  NAT operands are parsed and range-checked where they appear
+  (`parser/nll/value.rs`: `Val<T>` with the token's byte span). A bad
+  literal (`loss 150%`, `limit 0`, `cpu 0`, `route 999.0.0.1/24`) is an
+  `NLL parse error` pointing at the token; a bad `${var}`, `param`
+  override or quoted string is reported at the `${…}` that produced it,
+  once variables are known — instead of surfacing as `deploy failed` or
+  as a validator error after the fact. Parse-error spans now cover the
+  whole token, not one byte.
+- **`rate … egress/ingress` only accept rate literals** (`rate egress
+  10ms` used to parse and fail at deploy). **`burst` is a byte size**
+  (`32kbyte`, `1m`, `65536`) and is now applied through tc
+  (`RateLimiter::burst_size`); it was checked as a rate and ignored.
+- `network { impair a -- b { … } }` blocks spread over several lines no
+  longer drop `duplicate`, `*-correlation` or `limit`.
+- Library: `Error::NllParseAt` carries `span: Range<usize>` instead of
+  `offset`; new `Error::at(span, message)`; `helpers::parse_size` /
+  `parse_cpu` (the cgroup code uses them).
+
+**Migration:** `.nll` files that deployed successfully are unaffected —
+every value tc/cgroups accepted still parses. Files that only *parsed*
+(values never deployed, or `validate` reported `invalid-impairment-value`
+/ `invalid-route-dest` / `invalid-nat-cidr` for them) now fail at
+`parse`/`validate` with a span. `burst` values written as bit rates
+(`1mbit`) must become sizes (`128kbyte`). Stored `topology.toml`, JSON
+schemas, `edit --set-impair`, `render` and the builder DSL are unchanged
+(the public `types::*` keep the user's spelling as strings).
+
 ### Added — first-class IPv6 (issue #72)
 
 - **Firewall and NAT are dual-stack.** `src`/`dst` matches with IPv6

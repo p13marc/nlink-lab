@@ -547,6 +547,14 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 })?;
                 limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
             }
+            // `burst` is a byte size (issue #71); it applies to whichever
+            // directions are limited (a no-op otherwise).
+            if let Some(burst) = &limit.burst {
+                let bytes = crate::helpers::parse_size(burst).map_err(|e| {
+                    Error::deploy_failed(format!("bad burst on '{node}:{iface}': {e}"))
+                })?;
+                limiter = limiter.burst_size(nlink::util::Bytes::new(bytes));
+            }
             let report = limiter.reconcile(&conn).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to reconcile rate limit on '{node}:{iface}': {e}"

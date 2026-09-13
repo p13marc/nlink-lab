@@ -2,6 +2,13 @@
 //!
 //! These types represent the parsed syntax tree before lowering to [`crate::types::Topology`].
 //! The AST preserves `for` loops and `let` bindings for expansion during lowering.
+//!
+//! Value positions (durations, percentages, rates, sizes, addresses) are
+//! typed [`Val`]s carrying their source span — see [`super::value`].
+
+use std::time::Duration;
+
+pub use super::value::{Cpu, IpOrCidr, NllValue, Packets, Percent, Rate, RouteDest, Size, Val};
 
 /// A complete NLL file.
 #[derive(Debug)]
@@ -97,7 +104,7 @@ pub enum BenchmarkTestDef {
     Iperf3 {
         from: String,
         to: String,
-        duration: Option<String>,
+        duration: Option<Val<Duration>>,
         streams: Option<u32>,
         udp: bool,
         assertions: Vec<BenchmarkAssertionDef>,
@@ -147,14 +154,14 @@ pub enum AssertionDef {
         from: String,
         to: String,
         port: u16,
-        timeout: Option<String>,
+        timeout: Option<Val<Duration>>,
         retries: Option<u32>,
-        interval: Option<String>,
+        interval: Option<Val<Duration>>,
     },
     LatencyUnder {
         from: String,
         to: String,
-        max: String,
+        max: Val<Duration>,
         samples: Option<u32>,
     },
     RouteHas {
@@ -225,8 +232,8 @@ pub struct NodeDef {
     pub env: Vec<String>,
     pub volumes: Vec<String>,
     // Container properties
-    pub cpu: Option<String>,
-    pub memory: Option<String>,
+    pub cpu: Option<Val<Cpu>>,
+    pub memory: Option<Val<Size>>,
     pub privileged: bool,
     pub cap_add: Vec<String>,
     pub cap_drop: Vec<String>,
@@ -238,9 +245,9 @@ pub struct NodeDef {
     pub container_exec: Vec<String>,
     // Lifecycle (plan 096)
     pub healthcheck: Option<String>,
-    pub healthcheck_interval: Option<String>,
-    pub healthcheck_timeout: Option<String>,
-    pub startup_delay: Option<String>,
+    pub healthcheck_interval: Option<Val<Duration>>,
+    pub healthcheck_timeout: Option<Val<Duration>>,
+    pub startup_delay: Option<Val<Duration>>,
     pub env_file: Option<String>,
     pub configs: Vec<(String, String)>,
     pub overlay: Option<String>,
@@ -317,8 +324,8 @@ pub struct IpvlanDef {
 /// Route definition.
 #[derive(Debug, Clone)]
 pub struct RouteDef {
-    pub destination: String,
-    pub via: Option<String>,
+    pub destination: Val<RouteDest>,
+    pub via: Option<Val<IpOrCidr>>,
     pub dev: Option<String>,
     pub metric: Option<u32>,
 }
@@ -364,9 +371,9 @@ pub struct NatForLoop {
 #[derive(Debug, Clone)]
 pub struct NatRuleDef {
     pub action: String,
-    pub src: Option<String>,
-    pub dst: Option<String>,
-    pub target: Option<String>,
+    pub src: Option<Val<IpOrCidr>>,
+    pub dst: Option<Val<IpOrCidr>>,
+    pub target: Option<Val<IpOrCidr>>,
     pub target_port: Option<u16>,
 }
 
@@ -423,19 +430,26 @@ pub struct RunDef {
     pub background: bool,
 }
 
-/// Impairment properties.
-#[derive(Debug, Clone, Default)]
+/// `theirs` wins when set; used by the `merge` methods below.
+fn overlay<T>(mine: &mut Option<T>, theirs: Option<T>) {
+    if theirs.is_some() {
+        *mine = theirs;
+    }
+}
+
+/// Impairment properties (typed, see [`Val`]).
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ImpairProps {
-    pub delay: Option<String>,
-    pub jitter: Option<String>,
-    pub loss: Option<String>,
-    pub rate: Option<String>,
-    pub corrupt: Option<String>,
-    pub reorder: Option<String>,
-    pub duplicate: Option<String>,
-    pub delay_correlation: Option<String>,
-    pub loss_correlation: Option<String>,
-    pub limit: Option<String>,
+    pub delay: Option<Val<Duration>>,
+    pub jitter: Option<Val<Duration>>,
+    pub loss: Option<Val<Percent>>,
+    pub rate: Option<Val<Rate>>,
+    pub corrupt: Option<Val<Percent>>,
+    pub reorder: Option<Val<Percent>>,
+    pub duplicate: Option<Val<Percent>>,
+    pub delay_correlation: Option<Val<Percent>>,
+    pub loss_correlation: Option<Val<Percent>>,
+    pub limit: Option<Val<Packets>>,
 }
 
 impl ImpairProps {
@@ -444,31 +458,25 @@ impl ImpairProps {
     /// spread over several lines of a block accumulate instead of the
     /// last line replacing the earlier ones.
     pub fn merge(&mut self, other: ImpairProps) {
-        for (mine, theirs) in [
-            (&mut self.delay, other.delay),
-            (&mut self.jitter, other.jitter),
-            (&mut self.loss, other.loss),
-            (&mut self.rate, other.rate),
-            (&mut self.corrupt, other.corrupt),
-            (&mut self.reorder, other.reorder),
-            (&mut self.duplicate, other.duplicate),
-            (&mut self.delay_correlation, other.delay_correlation),
-            (&mut self.loss_correlation, other.loss_correlation),
-            (&mut self.limit, other.limit),
-        ] {
-            if theirs.is_some() {
-                *mine = theirs;
-            }
-        }
+        overlay(&mut self.delay, other.delay);
+        overlay(&mut self.jitter, other.jitter);
+        overlay(&mut self.loss, other.loss);
+        overlay(&mut self.rate, other.rate);
+        overlay(&mut self.corrupt, other.corrupt);
+        overlay(&mut self.reorder, other.reorder);
+        overlay(&mut self.duplicate, other.duplicate);
+        overlay(&mut self.delay_correlation, other.delay_correlation);
+        overlay(&mut self.loss_correlation, other.loss_correlation);
+        overlay(&mut self.limit, other.limit);
     }
 }
 
 /// Rate limiting properties.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct RateProps {
-    pub egress: Option<String>,
-    pub ingress: Option<String>,
-    pub burst: Option<String>,
+    pub egress: Option<Val<Rate>>,
+    pub ingress: Option<Val<Rate>>,
+    pub burst: Option<Val<Size>>,
 }
 
 impl RateProps {
@@ -479,15 +487,9 @@ impl RateProps {
             ingress,
             burst,
         } = other;
-        if egress.is_some() {
-            self.egress = egress;
-        }
-        if ingress.is_some() {
-            self.ingress = ingress;
-        }
-        if burst.is_some() {
-            self.burst = burst;
-        }
+        overlay(&mut self.egress, egress);
+        overlay(&mut self.ingress, ingress);
+        overlay(&mut self.burst, burst);
     }
 }
 
@@ -549,7 +551,7 @@ pub struct NetworkImpairDef {
     pub src: String,
     pub dst: String,
     pub props: ImpairProps,
-    pub rate_cap: Option<String>,
+    pub rate_cap: Option<Val<Rate>>,
 }
 
 /// VLAN definition within a network.
@@ -596,7 +598,7 @@ pub struct ScenarioDef {
 /// A timed step in a scenario.
 #[derive(Debug, Clone)]
 pub struct ScenarioStepDef {
-    pub time: String,
+    pub time: Val<Duration>,
     pub actions: Vec<ScenarioActionDef>,
 }
 

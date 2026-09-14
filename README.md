@@ -123,9 +123,16 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
 on [`nlink`](https://github.com/p13marc/nlink) 0.27 as of
-nlink-lab 0.9.0.
+nlink-lab 0.10.0.
 
-Current release: **0.9.0** (2026-09-14) — the deep-analysis
+Current release: **0.10.0** (2026-09-14) — four silent-no-op fixes:
+container nodes now honour `config` / `overlay` / `env-file` / `exec`
+(they parsed and validated but were never applied, #111), a container's
+`run … background` output is captured like a namespace node's instead of
+being discarded (#112), `//` is a line comment (#113), and the release
+workflow hashes the real artifacts rather than their JSON metadata.
+
+Previous release: **0.9.0** (2026-09-14) — the deep-analysis
 series: six audit waves plus the `lsp`, `top`, IPv6, `qdisc`,
 snapshot/restore, events and FRR waves. WireGuard is fully declarative (device bootstrap via
 `WireguardConfig::ensure_devices`), rate limits reconcile instead

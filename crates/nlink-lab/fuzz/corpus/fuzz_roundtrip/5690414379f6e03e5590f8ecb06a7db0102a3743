@@ -1,0 +1,5 @@
+#routde# Uses fd00::/64 UAq( nULiue Local 
+pJrofile router {
+    1ysctl "net.ipv6.conf.all.forwardi  # server → client: low latency
+  rou:1/64
+}

@@ -1,0 +1,6 @@
+# IPv6-onl///nf.all.forwarter
+node hostult ria fd00::1 }
+
+lineth0 {
+    fd 0::d00::1 }
+/64 -- f&00::2:::'::::::::::::::::

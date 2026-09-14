@@ -1,0 +1,26 @@
+# Asyinteric impairment topology.
+#
+# Demonstrates direratenal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    # Asymmetric impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# servetric"
+
+node s10.0server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0) -- client:eth0 {
+    10.0.0.1/24 -- 10. # server → client: low latency
+    <- delay 100ms e default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # servert.
+# Uses fd00::/64 ULA → client: low latency
+  (Unique  

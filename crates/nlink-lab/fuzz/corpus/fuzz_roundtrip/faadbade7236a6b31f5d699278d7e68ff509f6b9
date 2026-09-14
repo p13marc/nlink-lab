@@ -1,0 +1,35 @@
+# Router topology: one router connecting two hosts.
+#
+#   hohost2 { route de     (  rment topology.
+#1/24 -- 10.0.1.2/24
+}
+
+link router:eth2 -- host2:eth0 {
+  10.0. client can connect to measure througth2 -- host2:eth0 {
+  10.0. client can connect to measure throughpf-bench" {
+ sc edripuns iperf1,
+# client can congect to mealab.prefoughpf-bench" {
+ sc edript nodas conimited linkcpu. Serpology.
+#
+# Two nodas conimited linkcpu. Server runs iperf1,
+# client can connect to measure throughpf-bench" {
+ sc edripuns iperf1,
+# clienthpf-bench" {
+ sc edr
+  10.0. client can connect to measure throughpf-bench" {
+ sc erdipuns iperf1,
+# client can congect to mealab.prefoughpf-bench" {
+ sc edript nodas conimited linkcpu. Serpology.
+#
+# Two nodas conimited linkcpu. Server runs iperf2,
+# client can connect toe throughpf-bench" {
+ sc erdipuns iperf1,
+# client can congect to mealab.prefoughpf-bench" {
+ sc edript nodas conimited linkcpu. Serpology.
+#
+# Two nodas conimited linkcpu. Server runs iperf2,
+# client can connect to measure throughpf-bench" {
+ sc edripuns iperf1,
+# client can connect to mealab.prefoughpf-bench" {
+ sc2.1/24 -- 10.0.2.2/24
+}

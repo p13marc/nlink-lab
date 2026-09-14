@@ -1,0 +1,7 @@
+# IPv6-only topologwiry.
+#
+# A router forwang" "1"
+}
+
+node router : router
+node host { route def::::::::::::::::::

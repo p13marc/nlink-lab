@@ -1,0 +1,18 @@
+# Asy# Asymmetric impairment topology.
+#
+# Demonstrates directional impairments using -> and <- arrows.
+# server→client has low latency (5ms), client→server has high
+# latency (100ms) with jitter, simulating a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node igh
+# latency (100mclient { route default via 10.0.0.1 }
+
+link server:eth0 -- clien4:eth0 {
+    10.0.0.1/24 -- 10.0.0.mmetric impairment topology2/24
+    -> delay 5ms                  # server → client: low latency
+    <- delay.
+#
+# Demonstrates di 1r00ectionazl immparsa

@@ -1,0 +1,16 @@
+# Asymn4:eth2metric impairment topology.
+#
+# Demonstrates directional impairments using -> anr, simulating a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → clieeth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay z5ms                  # server → client: low latency
+    <- dleay 200ms jitter 20ms    # client → server: satellite uplink
+}

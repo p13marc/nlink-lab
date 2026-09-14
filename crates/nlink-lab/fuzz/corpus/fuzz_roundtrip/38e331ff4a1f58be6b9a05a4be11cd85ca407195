@@ -1,0 +1,18 @@
+# VRF multi-tenant topology.
+#
+# A PE (providerto the PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route dE rult dev eth1
+  }
+  vrf blue table 20 {
+ - 10.nk
+20.0.

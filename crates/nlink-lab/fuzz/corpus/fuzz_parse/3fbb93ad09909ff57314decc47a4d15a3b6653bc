@@ -1,0 +1,3 @@
+# IPv2/router:eth0th0 {
+    fd00    fd00::1/64 -- 02:0df:/64
+}

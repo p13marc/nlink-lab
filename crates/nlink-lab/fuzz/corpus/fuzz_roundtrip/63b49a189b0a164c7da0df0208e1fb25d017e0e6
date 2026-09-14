@@ -1,0 +1,26 @@
+ing a    locption "VXLA overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 050) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192  10%
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    address 197.168.100.2  1001...1/24 -- 10.0.1.2 vtep2 : router {
+  vxlan vxlan168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    niv 10%
+    local 10.0.0.2
+    remote 10rt 4789
+    address 197.168.100.2  1001...1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:eth0 {
+  10.}

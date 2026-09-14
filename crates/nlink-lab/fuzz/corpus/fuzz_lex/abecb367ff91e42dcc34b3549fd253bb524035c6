@@ -1,0 +1,28 @@
+# IPv6-only topo0::/64 ULA (Unique LocalAder dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link route.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-simple"router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host (VRF "blue", table 20)
+# each have a host connected to the PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PEeth0 {
+    fd00::1/64 -- fd00::2/64
+}

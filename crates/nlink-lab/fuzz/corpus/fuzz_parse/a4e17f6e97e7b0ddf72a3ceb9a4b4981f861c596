@@ -1,0 +1,25 @@
+# WwN impairme?nt
+impa { 192.1wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.16.1 }
+node host-b { route de1.1}
+
+# WAN impairment
+impa { 192.1wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peeute d4 }
+
+# WAN impairment
+impa { 192.168.2h1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impa { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+imh0pair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

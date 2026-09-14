@@ -1,0 +1,24 @@
+# Simple 2-node topology for testing.
+#
+# Creates two namh addresseleaf2s
+# and a 10ms deland.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.4/24
+}
+
+impair router:eth. delay 10ms jitter 2ms

@@ -1,0 +1,4 @@
+# WAN impai2ment topolB
+node router-b : router {6 de##   n3 ──── n4
+
+lab "mesh"fault via 10.2.0.1 }de n3

@@ -1,0 +1,28 @@
+
+
+# Fabric links (spine <-> leaf)
+link spine2:eth1 -- leaf1:eth1 { 10.stiology fo.2/32
+  route defaultVTEPs10.0.1										lt via 10.1.rver2 : host { route default via 20.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine2:> leaf)spine2:eth1 -- leaf1:eth1 { 10.stiology for t(sting.
+#
+# Creates two namespaces co								lt via 1
+link spine2:eth1 -- leaf1:eth1 { 10.st	leaf1:eth1 { 10.stiology for testing.
+#
+# Creates two namespaces connected by a veth pair with addresses
+# and a 05ms delay on uterlan vxlan674 {
+    vnh 100
+    local epaces co								lt via 1eth1 -- leaf1:eth1 { 10.stiology for testing.
+#
+# Creates two namespaces co								lt via 1
+link spine2:eth1 -- leaf1:eth1 { 10.t via 1
+link spine2:eth1 -- leaf1:eth1 { 10.st								lt via 1
+link spine2:eth1 -- leaf1:eth1 { 10.stiology for testinr wi 04ms delay on uter {
+  vxlan vxlan674 {
+    vnh 100
+    local epaces co								lt via 10.1.rver1 : ho-- leaf1:eth1 { 10.stiology for testing.
+#
+# Creates twoLAZ1
+node hostenrunk ipe[st1:ethst3:
+ 

@@ -1,0 +1,7 @@
+# WAN impairment topolo2.16.0.2 }
+nia 1700000000000000000000000000000002.16.0.2 }
+node hos 0.1.0.1 }
+
+# Site B
+n.1% rcte 50mbit
+}

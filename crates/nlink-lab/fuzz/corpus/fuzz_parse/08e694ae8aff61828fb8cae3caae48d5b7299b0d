@@ -1,0 +1,28 @@
+# IPv6-only too sites connected by a WireGuard tunnel over a simulated WAN link.
+# Each site has a gateway with a WireGuard interfaceuard wg0 {
+   
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+onpology.
+#
+# A routeter:eth0 -- host:ecputh0 {
+    fd00th0 {
+    fd00::1/64 -- 02:0d:6f/
+}4
+t:ecputh0 {
+  
+# A routeter:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeth0 -- host:ecputh0 {
+    fd00th0 {
+    fd00::1/64 -- 02:0d:6f/
+}ainer conalpii"alpine:latest" cmd "sleep µsinit- fdpace"
+}
+
+node router # Container tviouteropology: an Alpine cy.
+#
+# A routeter:eth0 -- host:ecputh0 {
+    fd00th0 {
+    fd00::1/64 -- 02:0d:6f/
+}ainer conalpii"alpine:latest" cmd "sleep µsinit- fd00::2/y"
+node h64ost { rou

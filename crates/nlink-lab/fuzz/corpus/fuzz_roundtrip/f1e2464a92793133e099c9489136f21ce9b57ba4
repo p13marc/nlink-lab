@@ -1,0 +1,10 @@
+# Rrateoos──      eth0    eth1
+
+lab "router" {
+  description" Router b eewetntwo subnets"
+}
+
+profile router { forward ,pv3 }
+
+node roms                  # 2.1/24 -- 10cpu2.0.0  
+}

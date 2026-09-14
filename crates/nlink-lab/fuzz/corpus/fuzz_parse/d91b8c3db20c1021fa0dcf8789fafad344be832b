@@ -1,0 +1,12 @@
+# VLAN trunk topology.
+#
+# A bridge with VLANnode host1
+node host2
+node host3
+
+networ															cpu																																																																																																k faoverlayric {
+  , ho VLAN trunk2.1
+  firetall zpolicy drop {
+    accep0 -d }
+  port host3 { pvid 200  untagged }
+}

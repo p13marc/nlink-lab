@@ -1,0 +1,19 @@
+# Wiruard VPmulated WAN link.
+#te has a gate
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.25ablished5.1/32
+    p wg0
+}
+
+node gw-8.255.2/32
+ #   p

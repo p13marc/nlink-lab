@@ -1,0 +1,13 @@
+# VLAre on VLAN 200 (sales), on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+.
+node hoSt1
+node host0
+node host3
+
+network fabric {
+  vlan-filterins :eth0, ho  port hovid 200  untagged }
+}

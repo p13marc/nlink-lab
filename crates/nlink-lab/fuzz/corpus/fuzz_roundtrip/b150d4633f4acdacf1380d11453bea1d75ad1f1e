@@ -1,0 +1,11 @@
+# IPv6-only 
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.onf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd01::1 }
+
+link router:eth0 -- host:e

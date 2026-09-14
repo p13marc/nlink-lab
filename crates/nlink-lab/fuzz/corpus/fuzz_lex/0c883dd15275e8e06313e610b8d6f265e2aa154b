@@ -1,0 +1,19 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 serveesses, netem impairment a 10.1.1.1 }
+node seropology.ses, netem impairment a 10.1.1.1 }
+node seropology.
+#
+# 2 spines, 2 lerf3 benchmark topolonected by a rate-l leaf*
+link sp<-> 1erver)
+link leaf1:eth3 -- server1:eth0 { 10.1.1.1/24 -- 10.1.1.1 addresses, netem impairment on spinr { forward ipv2 }
+prter:eth0 delay00 }
+lspine13 -/8 via 10.0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 101/24 -- 10.1.1.1 addresses, netem impairment on spinr { forward ipv2 }
+prter:eth0 delay00 }
+lspine1:eth2 -- leaf2:eth1 { 10.0.12.1/3022.2/3 leal0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine0:eth1 delay 5ms jitter 1ms

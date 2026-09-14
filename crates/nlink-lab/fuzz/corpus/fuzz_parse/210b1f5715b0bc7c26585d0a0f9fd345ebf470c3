@@ -1,0 +1,24 @@
+# WAN impairment topoexeclogy.
+#
+# ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZistic impairment: 60ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site K
+node router-b : router { route 10.1.0.0/24 via 14 via 1for(((((((((((((((((((((((((((((((((((fa/64
+}
+.
+
+#0 -- host-b:eth0 { 10.2.0.1/24 -- 10.2.0.110.250/24 }
+
+# WAN link with  0.1% rate 50mbit
+}

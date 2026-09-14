@@ -1,0 +1,10 @@
+# Simple 2-node topology for testing.
+#
+# CreatEs twoma enspaces connec {
+  description "Minimal two-node lab"
+}
+
+profil 4
+}
+
+impair router:eth0 del  2 0ms jitter 2ms

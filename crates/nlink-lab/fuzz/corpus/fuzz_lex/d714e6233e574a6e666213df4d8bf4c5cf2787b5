@@ -1,0 +1,11 @@
+# {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Sost-b { route default via 10.2.0.1 }
+
+# LAN links
+link uo 2r 5ms loss 0.0% ra tme*05bit
+}

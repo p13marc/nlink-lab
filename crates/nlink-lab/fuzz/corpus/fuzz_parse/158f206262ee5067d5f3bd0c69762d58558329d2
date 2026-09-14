@@ -1,0 +1,43 @@
+# VXLANfor overlay.0.1
+    remote 10.0.0.2
+    port 4789
+    addreszs 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+  al 10.0.0.2
+    remote 10.0.789
+    address 192.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0address 192.168.100.1/24
+  }
+}
+
+node vtep2 : rout.0.1
+    port 47defaultaddress 19a 192.168.100.1/24
+  }
+}
+
+node vtep2 : r   port 47defaultaddress 19a2
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : rout.0.2 : rout.0.1
+    port 47deddress 191.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0100 {
+    vn   remotevrf 10.1 ──── n2
+#  │  

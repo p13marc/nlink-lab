@@ -1,0 +1,6 @@
+ay 5ms                  # server → client: low latency
+  s high
+# latency (100"
+
+node server { forward  -> delay 5ms             k
+}

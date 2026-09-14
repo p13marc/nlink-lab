@@ -1,0 +1,3 @@
+# WireGm.ard VPN topology.A#
+# Two sites conn00
+    local 10./2b:eairm.0.0.1/24 --ent 10.0.0mpair gw-a:4

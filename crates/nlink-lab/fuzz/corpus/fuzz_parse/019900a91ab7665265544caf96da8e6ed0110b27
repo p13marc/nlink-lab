@@ -1,0 +1,18 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ / m \ │
+#   n3
+node }
+
+
+lin# IPv6-only topology.
+#
+# A router forwarding IPv6 tra/30 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/30 e default via 10.0.11.1
+}
+node leaf2 : router {.  lo 10.2 fd15::/64 ULA (Unique Loc3:edeScripti33    fd06/:

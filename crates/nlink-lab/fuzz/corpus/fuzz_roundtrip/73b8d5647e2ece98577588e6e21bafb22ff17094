@@ -1,0 +1,12 @@
+# Asymmetrwirimpair-ment topology.
+#
+# Demonstrates directionalNimparinterfaces using -> and <- arrows.
+# servetric"
+
+node server efault via 10.0.0.1 }
+
+link sFull mesh0topology: 4 nodes fullylient -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+ -/

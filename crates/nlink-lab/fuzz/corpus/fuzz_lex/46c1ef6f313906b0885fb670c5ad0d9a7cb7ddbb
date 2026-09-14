@@ -1,0 +1,20 @@
+# Full me(sh topoloUgy: 4 nodes key auto
+    listen 53820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}st-b { route defal Address) spacegy.
+#
+# A rour forwarding IPv2 traffic to۞ host.
+0 th2 -- n4:eth0 { 10.1.4.1/30 -Address) spacegy.
+#
+# A router forwarding IPv2 traffic to۞ host.
+# Uses fd00:-- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:eth1 -- n3:eth0 # IPv6-onl) space.
+
+lab { 10.1.3.1/30 -- 10.1.3.2/30 }
+1k nlin:eth2 -- n4:eth.4.2/30 }
+link n.1.3.2/30 }
+1k nlin:eth2 -- n4:eth4.1/30 -- 10.2.4.::::::::::7777777777777777777777777QQQQQQQQ7777777777772/30 }
+link n3:eth2 --77ab ::l) sp n4:etach2

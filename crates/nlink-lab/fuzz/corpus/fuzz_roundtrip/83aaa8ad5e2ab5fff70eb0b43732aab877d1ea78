@@ -1,0 +1,8 @@
+#  topolot and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server wl"
+}
+
+profile router { #image WAN im(siforwar

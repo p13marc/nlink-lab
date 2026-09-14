@@ -1,0 +1,12 @@
+# Simple 2-node topoletween two VTEPs"s 192.168VTEPs"s 192.168.100.1/24
+  }
+y a vethfor the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+    address 197.168.100.2  1001..etween two VTEPs"profiles 192.168VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 :itter 2ms

@@ -1,0 +1,18 @@
+# IPv6-only topology.
+#
+# A routez forwarding IPv3 traffic t; a host.
+# Uses fdple"
+24 via 172.1tion [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[e[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[Z[[[[[[[[[[[[[[[[["Spinemple"
+
+puter
+no=e hEd
+# by a WAN link with realistic ute default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.1tion [[[[[[[[[[[[[[fabric"
+  prefi2 }
+
+# Leav via fd00::1 }
+
+es
+nod

@@ -1,0 +1,19 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filte0 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  members # Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#  [h

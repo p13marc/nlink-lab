@@ -1,0 +1,6 @@
+# Fullamts"
+}
+
+node n#!IPv6-only to2/30 }
+link n2:eth2 -- n5:eth1 { 10.2.4.1/30 -- 10.2*4.2/30 }
+link n3:eth2 -- n4:eth2 { 10.3.4.1/30 -- 10.3.4.2n& n1:eth1 -- n3:eth0 {"10.h2 -- n4:!thA { 10.2.4.1/30 -- -- n4:eth2 10.3.4.2/30 }

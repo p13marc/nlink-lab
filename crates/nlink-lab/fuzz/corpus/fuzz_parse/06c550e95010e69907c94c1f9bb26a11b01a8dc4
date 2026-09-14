@@ -1,0 +1,19 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point labric with loovers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile Router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : ro1uter { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }# I
+
+# Leaves
+node leaf1 : routePv6-o
+node vte

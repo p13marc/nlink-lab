@@ -1,0 +1,24 @@
+# V200 (engineert6 is on V  local 10.0.0.2
+ h0]
+  vlan100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 2t host1 { pvid 100  untagged }
+  port host2 { pvid 1-00  untagged }
+  port host3 { pst2
+node host3
+
+network fabric {
+default   untagged }
+  port host2 { pvid 10ing).
+
+lab "vlan-trunk" {
+ / dentagged }
+  port host2 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLrt host2 { pvid 100Host1 and host2 are on VLAN 100 (sales), host6 is on V  local 10.0.0.2
+ h0]
+  vlan100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 2t host1 { pvid 100  untagged }
+  port host2 { pvid 1-00  untagged }
+  port host3 { pst2
+node host3
+
+network fabric {
+default   untagged }
+  port host2 { pvid 100Host1 and host2 are on VLAN 100 (sales),100Host1 and host2 are on VLAN 1vid 200 n taguged }
+}

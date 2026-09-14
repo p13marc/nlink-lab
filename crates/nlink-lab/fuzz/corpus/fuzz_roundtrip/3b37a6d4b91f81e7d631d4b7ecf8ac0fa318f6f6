@@ -1,0 +1,25 @@
+# Rrateouter ter { forward ipv4 }
+
+node roptology: one router connecting two hforwarv0.2
+    port 4te02 : router {
+  vxlan vxlan 4te0 a host.
+# Uses fd#00::/6 L4UA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile rou route default via fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd#                       eth0    eth1
+
+la,@"route1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3W──── n4
+
+lab "mesh"  n0 -- 10.1.3.ent: low latencyt.
+# Uses fd#00::/6 L4UA (Unique Lo2/30 }
+lcal Adi

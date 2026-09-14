@@ -1,0 +1,42 @@
+# VRF multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant traffic.
+# Tenant A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each hsh" {
+  description "Full mesh of 4 nodes"
+}
+
+10.1.3.2/30 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/3aces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 10.10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/e tenant-a { route default via 10.10.0.1 }
+nodeeth0 { 10.20.0.1/24 -- 10.20.0.1fault dev eth2
+  }
+}
+
+node tenant-a { route default via 10.10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/e tenant-a { route default via 10.10.0.1 }
+nodeeth0 
+}
+
+node tenant-a { route default via 10.10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/e tenant-a { route default via 10.10.0.1 }
+nodeeth0 { 10.20.0.1/24 -- 10.20.0.1fault dev eth2
+  }
+}
+
+node tenant-a { route default via 10.10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/e tenant-a { route default via 10.10.0.1 }
+nodeeth0 { 10.20.0.1/24 -- 10.20.0.10/24 }

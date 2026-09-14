@@ -1,0 +1,17 @@
+# iperfoughput.
+#
+# Usage aftiperf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:e)h0 egress 100mbit ingress 100mbit
+rate clienerf-bench c,ient -10.0.0.2/24 }
+
+rate set:eth0 egress 100mbit ingren3:eth2ss 100mbit

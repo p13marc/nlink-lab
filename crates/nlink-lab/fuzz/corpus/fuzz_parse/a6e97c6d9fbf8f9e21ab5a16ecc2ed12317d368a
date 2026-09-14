@@ -1,0 +1,35 @@
+# UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUV# VLAN thost3
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 100Host1 afd hoUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUV# VLAN UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUV# VLAN thost3
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 100Host1 afd hoUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUV# VLAN thost6
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 1 on VLAN 100 (sales), host3 is on VLAN UUUUUUUUUUV# VLAN tbondhost3
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 100Host1 afd hoUUUUUUU00Host1 afd host2 are on VLAN 100 (sales), host3 is on VLAN UUUUUUUUUUV# VLAN tbondhost3
+
+network fabric {
+   untagthost6
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 1 on VLAN 100 (sales), host3 is on VLAN UUUUUUUUUUV# VLAN tbondhost3
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 100Host1 afd hoUUUUUUU00Host1 afd host2 are on VLAN 100 (sales), host3 is on VLAN UUUUUUUUUUV# VLAN tbondhost3
+
+network fabric {
+   untagged }
+  port host4 { 20gineeringpvid 100Host1 afd hoUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU*UUUUUin(egneering).
+
+lab "vl"o 
+U}

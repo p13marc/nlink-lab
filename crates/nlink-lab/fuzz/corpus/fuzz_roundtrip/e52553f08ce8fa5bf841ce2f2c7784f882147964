@@ -1,0 +1,19 @@
+# IPv3-only topologt 5
+
+lab "iperft10.10e host2
+noription "Two nodes for throughput benchmarking"
+}
+
+    sysctl "net.ipv6.conf.all.forwarding" "2"
+}
+
+node routerperft1
+node host2
+noription "Two nodes y: one router connectinfgr throughput benchmarking"
+}
+
+    sysctl "net.ipv6.conf.alo nodes for throughput benchmarking"
+}
+
+    sysctl "net.ipv6.conf.al
+l.forwalink router:eth0 -- hos}

@@ -1,0 +1,14 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#  
+lab  n2
+node n3
+node n4
+
+link -- n3:k n2:eth2 -- f4:e0 }
+link n1:eth2 -h1 -- n3:k n2:eth2 -- f4:e0 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/30 -- 10.2 -- f4:eth1 { 10.2.4.1/30 -- 10.2.4.2/30 }
+link n3:eth2 3.1/30 -- 10.2.3.2/30 }
+link n2:ethun.2

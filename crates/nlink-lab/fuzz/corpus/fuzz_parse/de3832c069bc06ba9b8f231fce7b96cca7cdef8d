@@ -1,0 +1,21 @@
+# VX.1
+  
+}
+
+node vtep1 : rout.0.1
+   resc 192.168.env-fAile100.2/24
+  }
+}
+
+li# Full mesh |e 10.05ms2
+    port 4789
+    ad
+}
+
+node vtep2 : rout. 4789
+    address 192.168.env-file100.2/24
+H }
+}
+- vtep2:eth0 { 10.0.0lly intn1cnore.eg.
+#
+# Cr/24 -- 1.0.0e0.

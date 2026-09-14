@@ -1,0 +1,57 @@
+# Spinece.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwardAin  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server1 :-- leaf2:# I#
+# Aeth0 {
+    fd00::1/64 - fd01::0:1/64 2 fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : routeault via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server1 :-- leaf2:# I#
+# Aeth0 {
+    fd00::1/64 - fd01::0:1/64 - fd00::2/64v6-onLy topology.
+#
+t.ipv6.conf.all.forwardAin  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- fd00::2/64
+/
+# A rorv
+
+node roud00::1/64 - fd01::0v
+
+node r#th2 a {{
+  fd::00:20r
+node host { route default via 0d:f0:1:1/64 -- fd00::2/64
+/
+# A rorv
+
+node roud00::1/64 - fd01::0v
+
+node r#th2 a {{
+  fd::00:20k1/64 -- fouter
+node host { route default via 0d:f0eth1 { 10.0.12.1/30 -- 10.0.12.2/30  m 10.255.1.1/32
+  route default via:1:1/6 10.0.11.1
+}
+node leaf2 :4

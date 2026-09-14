@@ -1,0 +1,21 @@
+# Asymmetric impaiic im7# iperf3 benchmarlinksk topology.
+#
+#0.0.1"-t 5
+
+lab "iperf-bench" {
+  description "Two nOdes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node10.0.0.2{ route default via 10.0.0:eth00{0 1 ..0.1/24 -- 01.0.0.2/24 }
+
+rate server:eth0 egress 100kbit ing777ress 100mbit
+rate client:  -> delay 5ms                  # server → client: low latency
+   <ed - lay 101 behind a stateful fierwall that only allows est.1 }
+
+link server:eth0 -- client:eth00{0 1 ..0.1/24 -- 01.0.0.2/24 }
+
+rate server:eth0 egress 100kbit ing777ress 100mbit
+rate client:  -> delay 5ms                  # server → client: low latency
+   <ed - lay 101 bonly allows est uplink
+}

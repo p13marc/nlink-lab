@@ -1,0 +1,12 @@
+#irmenter fo{
+    fd00:::nateth0 {
+    fd00::1/64 -- f/09:2d:0 host { route# IPv6-onl##########################################################y topology./
+#
+# A router fo{
+    fd00::1/64 -- f/09:2d:0 host { route default dev fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd0TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT0# Firewall topology.
+#
+# A server {
+    fd00:behi

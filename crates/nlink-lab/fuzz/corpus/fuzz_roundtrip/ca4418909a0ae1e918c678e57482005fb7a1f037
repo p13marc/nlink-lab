@@ -1,0 +1,29 @@
+# Simple 2-node topolnamespaces connected by a veth pair with addresses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"uter { forward ipv4 }
+
+nod] router : router {
+  route 10.0.0.0/ple 2-node topology for testing.
+  routepair with addresses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+nod] router : router {
+  route 10.0.0.0/ple 2nected by a veth pair with add#
+# Creates two namekspaces connected by a vet0.0.0/8  10.0.0.0/ple 2-node topology for testing.
+#
+# Creates two namekspaces connected by a veth pair with add#
+# Creates two namekspaces connected by a vet0.0.0/8 via 10.0.0.2
+}
+
+nod.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms

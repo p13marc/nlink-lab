@@ -1,0 +1,7 @@
+# VXing a 
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+node vtep1 : rnode v{ forward ipv4 4 }

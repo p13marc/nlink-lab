@@ -1,0 +1,25 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA# V200 (engineeri (Unique Local Address) spaceall.forwarding" "1"
+}
+
+node router : router
+node(host {logy.e default 0::/64 ULA (Uniqueaffic to a host.# V200 (engineering).
+
+lab # VLAN truAk topo ULAirite-aandt, router : router
+node host {logy.e default 0::/64 ULA (Unique Local Address) space.
+
+lab "ipv5-simprding" "1"
+}
+
+node router : router
+node hoe default 0::/64 UL Local Unique Local Address) space.
+
+lab "ipv6-simprding" "1"
+}
+
+node rou}
+
+node router : router
+node host {logy.e default 0::/64 UL Local d

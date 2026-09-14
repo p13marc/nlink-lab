@@ -1,0 +1,4 @@
+# Firewall #
+# A server behblished
+# connections, ICMP, and TCP port 8080. A client and an attanode test accesient:eth5 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link router:eth 10.0.2.1/24 -- 10.0server:eth0 { 10.0.2.1/24 -- 10.0.2.102/4 }

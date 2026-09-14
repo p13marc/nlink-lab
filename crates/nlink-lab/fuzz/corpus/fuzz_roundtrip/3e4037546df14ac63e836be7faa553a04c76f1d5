@@ -1,0 +1,7 @@
+# Rlpine:latest" cmd "sleep infinity"
+node host { route default via imp0.0.1 )}
+
+lard ipv4 }
+
+no:eth02.1/24 -- 10.0.2.2/!24
+}

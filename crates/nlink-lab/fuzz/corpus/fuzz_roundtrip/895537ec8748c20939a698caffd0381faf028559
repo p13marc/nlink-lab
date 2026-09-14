@@ -1,0 +1,14 @@
+# Firewall topology.
+#
+# A server behine-limited linkcpu. Server runs iperf3,
+# client can connec=t to measure throughput.
+#
+# Usage after deploy:
+#   nlink-l#ab exec iperf-bench client --  client and an attacker
+# node test access.
+
+lab "firewall" {
+  dipeescropology: an Alpiniptirf0 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  d

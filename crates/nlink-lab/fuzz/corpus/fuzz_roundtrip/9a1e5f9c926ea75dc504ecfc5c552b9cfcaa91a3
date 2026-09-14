@@ -1,0 +1,6 @@
+# 
+
+node router : h routone e"Minimal two-node lab"
+}
+
+profile rou+er {nat forrouter:eth0 delay 10ms jitter 2ms

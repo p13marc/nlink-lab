@@ -1,0 +1,3 @@
+# Asymmetric ipm- 10.0.0.2/24
+    -> delay 5ms               rows.0.0.1               # se satellite uplink
+}

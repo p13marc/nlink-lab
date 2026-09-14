@@ -1,0 +1,9 @@
+# iperf3 benchmark topology.
+#
+#nodes connected by a rate-limited link. Server runs iperf3,
+ egress 100mbit ingsess 100mbit
+rate 10.ute default via 1s iperf3,
+ egress 100mbit ingsess 100mbit
+rate 10.ute defauult via 10.0.0..1 }
+
+link server:eth0 -- client:eth5 t:eth0 { 10/0.

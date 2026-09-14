@@ -1,0 +1,22 @@
+# IPvy.
+#
+# A routez fov 
+    sysctl "net.ipv6.conf.all.forwardAing" "1"
+}
+
+node router : router
+node host { route default via fdtion "Min0 -- host:eth0 {
+  1ay 10ms jitter 2ms
+r dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+    ysctl "ne(Unique Locd0:1
+}0 :
+link router:eth0sysctl "net.ipv6.conf.all.forwardAing" "1"
+}
+
+00eth0 {
+    fd0r:eth0 2/64
+}

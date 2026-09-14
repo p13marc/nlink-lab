@@ -1,0 +1,56 @@
+E router wE r.1 via 10. rment
+imponlyth0 { 10.10uter {
+    syit0.1 .0.1 b 8.2 192.168.2.10/24 }
+
+# WAN Ampafault via 10.0.12. host:eth0 {
+    fd00::44444444444
+#
+# Crea((
+# Crea((((((te(U4444444444444444462/4444
+}
+.0.1/24 - -- host:eth0 {
+    fd00::444444444441/ea((((((te(U4444t:eth0 {
+    fd00::44444444444
+#
+# Crea((
+# Crea((((((te(U4444444444444444462/4444
+}
+.0.1/24 - -- host:eth0 {
+    fd00::44444444444444444462/4444
+}
+.0.1/24 - -- host:eth0 {t:eth0 {
+    fd00::44444444444abric links (spine <-> leaf)
+link spine2:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.64 -- fd00::2444444444444442/64
+}
+.0.1/24 - -- hosault via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server2 : hos : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12. host:eth0 {
+    fd00::44444444444
+#
+# Crea((
+# Crea((((((te(U4444444444444444462/4444
+}
+.0.1/24 - -- host:eth0 {t:eth0 {
+    fd00::44444444444abric links (spine <-> leaf)
+link spine2:eth1 --irment
+i168.2.10/24 }
+
+# WAN Ampairment
+imponlyth0 { 05..10/24 }
+
+# WAN Ampairment
+imponlyth0 { 05.10uter {
+    sy ts

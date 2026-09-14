@@ -1,0 +1,8 @@
+# Cto 0.0.2
+
+lab "container" {
+  description "Continected to bare namespace"
+}
+
+node router image /12
+}

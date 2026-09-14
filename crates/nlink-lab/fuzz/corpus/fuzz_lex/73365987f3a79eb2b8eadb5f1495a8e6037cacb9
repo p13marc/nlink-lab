@@ -1,0 +1,7 @@
+# WAN impa 1
+lab "wan-impairment" {
+  d<scr4 }
+
+# Site A
+d by. impairede 50mbit
+}

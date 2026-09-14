@@ -1,0 +1,59 @@
+# Asymme)ric impairment topology.
+#
+# Demonstrate# Asymmetric impairment topology.
+#
+# Des direratenal imparateirments using -> and sing -> and <- arrows.
+# ?ervetric"
+
+node s10.0se between two VTEPs"s 192.N ovEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/243333333333333333ress) spacae.
+
+168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remofate 10ult vqu3333333333ress) spacae.
+
+168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remofate 10ult vque .0.0.1
+ 1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remofate 10ult vque .0.0.1
+    poent: low latency
+    < - delay e .0.0.1
+ 1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remofate 10ult vque .0.0.1
+    poent: low latency
+    < - delay 100ms jitter 20ms    # client → server: satellite upl

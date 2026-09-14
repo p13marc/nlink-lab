@@ -1,0 +1,32 @@
+# WAN impairment topology.
+#
+# Twoby a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+#tic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   lab "mesh" {
+  description "Full mesh of 4 nodeSite A
+node  sites (site-a, site-b) each with a router and a  host,connected
+# by a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   lab "mesh" {
+  descripti 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   lab "mesh" {
+  description "Full mesh of 4 nodeSite A
+node  sites (site-a, site-b) each with a router and a  host,connected
+# by a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   lab "mesh" {
+  description "Full mesh of 4 nodeSite A
+node r0 -- n2:eth0 { 10.1.2.1/30outer-a : 

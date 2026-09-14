@@ -1,0 +1,60 @@
+# VXLAN b "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv5 }
+
+fode vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port4 789
+    address 192.168.100.2/24
+ ter { forward ipv5 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni i 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port4 789
+    address 192.168.100.2/24
+  }
+}
+
+li address 192.168.100.1/24
+  }
+}
+
+no{
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port4 789
+    address 192.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

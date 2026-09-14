@@ -40,14 +40,23 @@ jobs:
       - name: Require a green CI run for the tagged commit
         # A tag used to release with red fmt/clippy/test/deny (issue #53).
         # ci.yml runs on the push that carried the commit; wait for its
-        # jobs (fuzz is skipped by design) and refuse on any failure.
+        # jobs and refuse on any failure.
+        #
+        # `fuzz` is excluded explicitly. It is `continue-on-error: true` in
+        # ci.yml, i.e. non-blocking by design, and it only runs on
+        # workflow_dispatch/schedule -- so it used to be absent from a push
+        # run and the exclusion was implicit. Anyone who dispatches ci.yml by
+        # hand on a release commit (to re-run a flaky lane, say) makes fuzz
+        # run, and a fuzz finding would then block an unrelated release.
+        # See issue #116 for the finding that exposed this.
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
           for attempt in $(seq 1 60); do
             tasks=$(curl -sf -H "Authorization: token $TOKEN" "$api/actions/tasks?limit=200" \
-              | jq -c --arg sha "$RELEASE_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .workflow_id=="ci.yml")]')
+              | jq -c --arg sha "$RELEASE_SHA" '[.workflow_runs[]
+                    | select(.head_sha==$sha and .workflow_id=="ci.yml" and .name!="fuzz")]')
             n=$(echo "$tasks" | jq 'length')
             bad=$(echo "$tasks" | jq '[.[] | select(.status=="failure" or .status=="cancelled")] | length')
             pending=$(echo "$tasks" | jq '[.[] | select(.status=="running" or .status=="waiting")] | length')

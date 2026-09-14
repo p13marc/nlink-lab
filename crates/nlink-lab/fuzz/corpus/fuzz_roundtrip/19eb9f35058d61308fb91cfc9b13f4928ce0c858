@@ -1,0 +1,9 @@
+##z@ ple"
+
+profile router {
+    sysctl "tne.ipv6 VXLAN6 VXLAN overlay topoface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "o/*//////1////////"
+}
+/

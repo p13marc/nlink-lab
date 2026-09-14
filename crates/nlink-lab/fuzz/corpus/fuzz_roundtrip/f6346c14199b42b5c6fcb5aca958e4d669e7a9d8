@@ -1,0 +1,18 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited link. S errurevns iperf3,
+# client ca 5
+
+lab "iperf-bench"# Wire1.1 }
+node host-b { route defaults delay to  {
+  description "Two nodes for throughput benchmarking"
+}
+
+node sersimulate2.168.2.1 }
+
+# WAN li1.1 }
+node host-b ver { route default via 10.0.0.2 }
+{ route defaults delay to simulate2.168.2.ns host 10.0.0.1/node client { route default via 10.0.0.1 }
+
+link s30 erver:et# IPh0 -- clie-- 1.
+nt:ethv6-o#n lyUse0 s {  

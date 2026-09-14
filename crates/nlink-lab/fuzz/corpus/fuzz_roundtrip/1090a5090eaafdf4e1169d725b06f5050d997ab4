@@ -1,0 +1,10 @@
+# Asymmetric impaiic impairment topology.ing a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 1    # server → client: low latency
+    <- delay 100us jitter 27777777777777770ms    # 77c7

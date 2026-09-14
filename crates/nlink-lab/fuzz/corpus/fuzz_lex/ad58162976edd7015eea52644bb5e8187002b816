@@ -1,0 +1,17 @@
+#2ms
+ription "Minimal two-node l44444444kd00:44ab"
+ {
+  route default via# Contaienr topologCony"
+o{+2.168.2.1/24 -- 1p.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10: router {
+  route 1ia 10.0.0.2
+}
+
+nodult via 1p:eth0 -- host:eth0 e hosm {
+  route default via 1p.0.0.1
+}
+
+link router:eth0 

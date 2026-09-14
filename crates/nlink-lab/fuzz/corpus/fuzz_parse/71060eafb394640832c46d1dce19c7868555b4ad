@@ -1,0 +1,16 @@
+# VL(AN trunk topology.
+#
+# A bridgev-file00 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+ port host2 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}

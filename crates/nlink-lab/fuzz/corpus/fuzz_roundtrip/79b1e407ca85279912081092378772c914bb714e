@@ -1,0 +1,34 @@
+# Iding IPv6 traffic to a host.
+# Us.
+
+lab "iphostng" "1"
+}
+
+nod router
+node host { rou:04te defaua ivlt fd00::1A }
+
+lin
+k router:eth0 --"1"
+}
+
+n0. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+lin
+kerMP, and TCP port 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaua ivlt fd00::1 }
+
+lin
+k router:eth0 --"1"
+}
+
+n0. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+lin
+k rou0::1/64 -- fd00
+::2/64
+}

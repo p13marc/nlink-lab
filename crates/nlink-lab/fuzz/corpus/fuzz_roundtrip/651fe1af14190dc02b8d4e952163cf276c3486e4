@@ -1,0 +1,4 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuaBBBBBBBBBBBBBBBBBBBBBBBe has a gateway with a WireGuard interface. The underlay w-a : gateway {
+  nateguar jitteZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZr 5ms loss 0.1%

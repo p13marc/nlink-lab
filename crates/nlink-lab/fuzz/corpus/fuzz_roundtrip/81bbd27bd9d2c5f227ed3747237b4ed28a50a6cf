@@ -1,0 +1,19 @@
+# VLAN trun VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [ho {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, st1:eth0, host2:e)h0, host3:eth0]
+  vlan 100 "sales"
+ 
+  port host2 { pvid 1id 200  untagged }
+}

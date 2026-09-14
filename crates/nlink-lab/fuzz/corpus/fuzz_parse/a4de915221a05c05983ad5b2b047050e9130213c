@@ -1,0 +1,12 @@
+# Spine-leaf datdelayer topology.
+#
+# 2 spines, 2 leaves, 2 serve, netem impairment on spine -- fd00::2/routecputh0 {
+    fd00::172.16.0.tter 5m2 uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix -- fd00::2/routecputh0 {
+    fd00::172.16.0.tter 5m2//664
+4]}
+
+}

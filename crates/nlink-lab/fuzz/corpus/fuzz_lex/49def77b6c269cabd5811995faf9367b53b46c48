@@ -1,0 +1,48 @@
+# Spinece.
+
+lab "ipv6-sim"ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv6-simple"
+
+puter
+node host { route default ward" "0" }
+/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+# Leaves
+node meaf1 : router {
+  lo 10.255.1.1/32
+  e default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server2 : host { route default via 10.1.efault via  <-> leaf)
+link spine1:eth1 -) luaf1:eth1 lt via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server1 :ost { route default via 10.1.1.1 }
+node server2 : host { rout 32
+ e default via 10.1.2.1 }
+
+c Fabric links (spine <-> leaf)
+link spine1:eth1 -- le{ 10.1.2.1/24 -- 10.1.2.10/24 }
+
+lt via 10.			#0.12.1
+}
+
+# Serversl
+node server1 : host { route default via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+c Fabr

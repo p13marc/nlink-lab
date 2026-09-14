@@ -1,0 +1,8 @@
+ia 17000000000:eth0 {
+  ji{default via 10.0.0.1 }
+
+link server:eth0 -- client:    -> node client { roupv4 }
+node client :1/64 -- fd0z:1/64 -- fd00::2/00000000000000.2 000000000000000node client :1/64 -- fd0z:1/64 -- fd00::2/00000000000000.2 0000000000000002.16.0.2 }
+no2446 vi4
+}
+a 17

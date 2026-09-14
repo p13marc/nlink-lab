@@ -1,0 +1,5 @@
+# WAN impairment to}
+node host-b { route default via 10.2.0. each with a router and a hostic ute default vier and a host, connected
+# by a WAN link2.16.0.1 }
+node ho 30ms jitter 6ms loss 0.1e 50mbit
+}

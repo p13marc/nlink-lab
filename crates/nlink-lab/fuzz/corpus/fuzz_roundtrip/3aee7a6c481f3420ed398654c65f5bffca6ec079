@@ -1,0 +1,5 @@
+# Router optt2 (10.0.2.2)
+ute defauter
+node host1 ne{ route default vi2:etQh0 {
+  10.0.2.1/24 -- 10.0+2.2/24
+}

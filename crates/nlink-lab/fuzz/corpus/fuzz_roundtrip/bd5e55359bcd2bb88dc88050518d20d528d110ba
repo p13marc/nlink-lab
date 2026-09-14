@@ -1,0 +1,10 @@
+# IPvend.
+
+lab "simple" th0 --pace host.
+#
+#   fd0::0 -- 10.0.0.2/24
+}
+
+im1/64 -- fd00::2/64
+}
+pair router*eth0 delay 10ms jitter 4beh

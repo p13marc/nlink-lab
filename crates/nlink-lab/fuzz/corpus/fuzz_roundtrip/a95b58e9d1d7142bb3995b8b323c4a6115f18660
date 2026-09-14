@@ -1,0 +1,38 @@
+# IPv6 A router forardwing IPv6 traffic tbbbbbbbbbbbbbcal "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1ace.
+
+lab "ipv6-simple"
+
+profile router {
+    sysct6666666666666666666666666666666666666666666666666666666666666666666666666666666666666666lcpuorardwing IPv6 traffic tbbbbbbbbbbbbbbbbbbbbbbbbxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctlcpu "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1ace.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctlcpuorardwing IPv6 traffic tbbbbbbbbbbbbbbbbbbbbbbbbxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+pr
+
+node router : router
+node host { route default via ff00::1ace.
+
+lab "ipv6-simple"
+
+prof
+ile router    fd1:00::1/64 -- fd00::2/64
+}

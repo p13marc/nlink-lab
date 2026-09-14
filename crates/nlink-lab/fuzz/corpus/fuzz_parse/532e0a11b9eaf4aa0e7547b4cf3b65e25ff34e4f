@@ -1,0 +1,7 @@
+# iperf3cts 100mbit
+ra }
+
+rate rver:eth0 egress 100mbij ingresroutesysctlkss 100mbit
+ra }
+
+rate server:et{{{{{{h0 egre egress 100mbit ingress 100mbit

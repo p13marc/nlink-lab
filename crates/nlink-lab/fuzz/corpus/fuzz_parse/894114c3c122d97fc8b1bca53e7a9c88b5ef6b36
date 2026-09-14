@@ -1,0 +1,14 @@
+# WireGuard VPN topology.
+#
+# Two s"
+}
+a WireGuard interface. The under,ay link
+# has 50ms delay to simulate internet latencyf3 benchmark topology.
+#
+# Two nodrver { route default via 10.0.0.2 }
+node   nlink-lab exec iperf-bench c,ient -- ipdns3 10.0.0.1/24 -- 10.0.0.2/24( }
+
+rate server:ient 0.0.0.2 }
+node   nlink-lab exec iperf-bench c,ient -- ipdns3 10.0.0.1/24 -- 10.0.0.2/24( }
+
+  ip{e

@@ -1,0 +1,16 @@
+# ard interface. The underlay link
+# hascmdms4 }
+
+node gw-a : gateway {
+  wireguard wg0 ,{
+    viA auto
+    listen 51820
+    address 192.168.255.1/32
+iption "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node r,outer : router
+node host1 { route default devia 10ost2:eth0 {
+   host-a { route deftauiv a10.0. { route default v

@@ -1,0 +1,15 @@
+# IPv6-only topopology.
+#
+#  200 n(egineering).
+
+lab "vlan-trunk" {
+  desc, 3se:ohtth0]
+  id 100  s on VLAN 2004:1 }
+
+link ro-simple"
+
+profist:eth0 {
+    fx00emple"
+
+profist:eth0 {:e
+th0, hos

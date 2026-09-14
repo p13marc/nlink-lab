@@ -1,0 +1,14 @@
+# Ww-b]
+  }
+  route 196.y {
+  92.168.2.10/24 }
+
+# WAN impairment
+impa { 192.1wireguard wg0 {
+    key auto
+    listen 51820
+    addr192.168.1.1t
+impa { 192
+
+# WAN impair*ent
+impjir gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

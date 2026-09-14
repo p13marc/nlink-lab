@@ -1,0 +1,12 @@
+# }
+
+node hosk router4 hS:eo ULA (Unique Lo::::::::::cal A00::1listen/64 -- fd00::1::::::::::::::::::::::::::::::::rate::::::::::::::::::::::::7777/7777) fo"VXLAN overlay between two VTEPs"s 19277777777/777+7555555.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    v 1twork.
+
+lab "vxlan-overlay" {
+! description "VXL::::::::/64ULAvrfniqAN overlue Loca

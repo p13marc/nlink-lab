@@ -1,0 +1,6 @@
+y#P#yyA4ress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 10{{{{{{{{{{{{{{{{{{h0 egress 100mbij ingress 100mb0 egre.0.0.1/24 -- 10.0.0.2/20 }
+
+rate server:eth0 egr:dd:d:d:d:8d:Add:Ad:A:dd:d:d:d:8d:Add:A:dd:d:d:d:8d::et{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{h0 egress 100mbij ingress 100mb0 egre.0.0.1/24 -- 10.0.0.2/20 }
+
+rate server:eth0 egr:dd:d:d:d:8d:Add:Ad:A:dd:d:d:d:8d:Add:A:dd:d:d:d:8d:Add:dd:d

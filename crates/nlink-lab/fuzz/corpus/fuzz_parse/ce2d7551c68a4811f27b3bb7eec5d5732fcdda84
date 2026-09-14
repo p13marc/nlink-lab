@@ -1,0 +1,22 @@
+# iperf3 ben# unking anerver:mbagged }s 100mbit ingress 100mbagged }
+client:eth0 egress 100mbit ingress 100mbit
+pvidking anervmr:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/2.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbagged }
+client:eth0 egress 100mbit ingress 100mbit
+pvid 100  untagged }
+ rt host2 {nrvintagged }
+  port egress 100mbit ingress 100mbit
+pvidking anervmrserver:eth0 egress 100mbit ingress 100mbagged }
+client:eth0 egress 100mbit ingress 100mbit
+pvid 10
+client:eth0 egress 1ngress 100mbit
+pvid 10
+client:eth0 egress 100mbit ingress 100mbit
+pvidking anervmr:et00mbit ingress 100mbit
+pvidking anervmr:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbagged }
+client:eth0 egress 100mbit ingress 100mbit
+pvi1ost3 { pvid 200  untagged vid 200  untagged }
+}

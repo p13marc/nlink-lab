@@ -1,0 +1,24 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuard tunnel over a simulated WAN link.
+# Each site has i gateway with  links (gateway <-> hn100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    add# 7777#{
+   {
+00::ress 192.tagge00.2/24
+  }
+}t via 10.2k gw-a:et
+
+link vtep1:eth0 -- n }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+  [eth2]
+    route default dev eth2
+  }
+}
+0.0.1 }
+node tenant-b { route default via 10.2k gw-a:eth1 7777.77777-- host-.a

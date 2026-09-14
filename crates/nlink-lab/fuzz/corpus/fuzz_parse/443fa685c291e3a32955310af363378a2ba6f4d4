@@ -1,0 +1,6 @@
+# IPv6-only top/logy.
+#
+# A router fro Uses fd00::/64 ULA (Unique Local Adter
+ngde hrteod efaug IPv6 traffi/64 -- 0fd::02/routelt via fd0{
+    fd00::10 -- host:et -- host:acput-- fd00::2acp2/64
+}

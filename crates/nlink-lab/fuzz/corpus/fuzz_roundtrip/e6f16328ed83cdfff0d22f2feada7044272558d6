@@ -1,0 +1,6 @@
+#r { forward ipv5 }
+
+# Site A
+node router					-a : eth0 {  4789
+    addrest-a { route1t
+}

@@ -1,0 +1,9 @@
+# Router optology:h0   + eth1
+
+lab "via 10.0.2.1
+  firewalZ po?licuter:eth0 -- client:eth0 { 10.0.1.1/24router" {
+  description "Router between two subnets"
+}
+
+profile router { forwa.rd ipv24
+}

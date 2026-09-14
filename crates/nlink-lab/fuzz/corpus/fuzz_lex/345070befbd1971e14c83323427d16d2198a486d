@@ -1,0 +1,8 @@
+nk router:eth0 -- host2:eth.1/24 -- 10.0.
+.2224nk router:eth1 -- host2:et0 -- host1:eth0.0.2.1/24 -- 10.0.
+.2224nk router:eth1 -- host2:ost1:eth0 {
+  10.0.1.1/24ink router:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10.0.
+.2224nk router:eth0.
+.2224nk r-- host2:etj4 -- 10.0.
+.2224/}

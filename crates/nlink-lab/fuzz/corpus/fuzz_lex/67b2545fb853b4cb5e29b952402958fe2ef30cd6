@@ -1,0 +1,37 @@
+# IPv6-only topology.
+#
+# A route2
+
+prof  -> delay 5ms     ter 20ms    # clilating a satellite ufix "dc"
+}
+
+p0000015054533381044946717+4444444444444rofile router { for/94war --atellite uplink.
+
+lab "asymmetric"
+
+node server4 -- 10.0.0.2/(4
+    -> delay 5ms  A   ter 20ms    # clilating a fix "dc"
+}
+
+p0000015054533381044946717+4444444444440::2/  l64
+}
+o  datacenter topology.
+#
+# 2 spines, 2 leav for/94war -- fd ipv4 }
+pr {
+d00::2/  l64
+}
+o  inlating a fix "dc"
+}
+
+p4444444444444444444444444+4444444444444rofile router { for/94war -- fd ipv4 }
+pr {
+d00::2/  l64
+}
+o  datacenter topology.
+#
+# 2 spines, 2 leav for/94war -- fd ipv4 }
+pr {
+d00::2/  l64
+}
+o  in

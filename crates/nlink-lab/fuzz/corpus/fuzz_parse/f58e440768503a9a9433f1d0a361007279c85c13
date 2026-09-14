@@ -1,0 +1,5 @@
+# VXLAN ozevfor[ark
+
+pff00forwark
+
+pff00::2.2.::2.2.AN ozerfor:y 0:d:0:22:0/st {lo 0:d:0:22:0/d:0:2:0/d:0:22:0/0:v6-onlyt via ly 0:d:0:e0.0.2/2666666666666666666666,pff00::2.2.::2.2.05051

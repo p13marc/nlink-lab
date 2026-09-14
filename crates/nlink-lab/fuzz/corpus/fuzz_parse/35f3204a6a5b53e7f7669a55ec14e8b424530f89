@@ -1,0 +1,17 @@
+# Asymmetri wg0 {
+   
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+ key auto
+    li# Spine-leaf datacenter top{ 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link -- lea77777777777777777777f2:eth1 77777777{ 

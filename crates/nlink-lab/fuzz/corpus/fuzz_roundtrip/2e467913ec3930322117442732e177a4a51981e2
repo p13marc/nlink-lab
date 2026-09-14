@@ -1,0 +1,35 @@
+## FirewalEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  fireuat only allows etional imparateirments usinfault via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewal IPv6-only topology.
+#
+# A conf.all.forwarding" "1"
+}
+
+node rpuat only allows etional imparateirments usinfault via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  fireuat only allows etional imparateirments usinfault via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewal IPv6-only topology.
+#
+# A conf.all.forwarding" "1"
+}
+
+node roul policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    g -> and <- arrows.
+# servetric"
+
+no=wal IPv6-only topology.
+#
+# A conf.all.forwarding" "1"
+}
+
+node roul policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    g -> and <- arrows.
+# servetric"
+
+no=de server { forward ipv4 }
+nablishter :ed
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test acces route

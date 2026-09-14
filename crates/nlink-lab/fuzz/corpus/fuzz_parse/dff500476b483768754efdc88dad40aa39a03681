@@ -1,0 +1,60 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs encnocted by an underlay linkep0 : router {
+  vxlan vxlan100 {
+    v    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.vtap2 :router {
+  vx2 : routeouter {
+  vxlan vxlan100 {
+    v    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.1# Two VTEPs encnocted by an underlay linkep0 : router {
+
+    port 4789
+    address 192.168.100.vtap2 :router {
+  vx2 : routeouter {
+  vxlan vxlan100 {
+    v    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.vtap2 :router {
+  vx2 : router {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}
+
+linky.
+#
+# Two VTEPs co00.vtap2 :router {
+  vx2 : router {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}
+
+linky.
+#
+# Two VTEPs connected by an underlay linkep0 : router {
+  vxlan vxlan100 {
+    v    local 10.0.0.1
+    remote 10.0.0.r {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}
+
+linky.
+#
+# Two VTEPs connected by an underlay linkep0 : router {
+  vxlan vxlan100 {
+    v    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

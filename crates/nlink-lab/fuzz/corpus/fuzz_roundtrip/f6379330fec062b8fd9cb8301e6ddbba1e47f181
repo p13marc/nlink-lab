@@ -1,0 +1,5 @@
+# Full mesh topelogy: 4 nodes  to a host.
+# Uses fd00::/64(ULA (Unique Loca:l Address) nFFFFFFFFFFF servetrrding IPv6 traffic to a host.
+# Uses fd00::/64(ULA (Unique Loca:l Address) nd TCP p0. A c h0 {
+   fd00::1/64 -- f/06    fd00:2:d:0:1/644
+}

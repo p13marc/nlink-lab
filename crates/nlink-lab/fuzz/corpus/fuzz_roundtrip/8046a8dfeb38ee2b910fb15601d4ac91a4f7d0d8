@@ -1,0 +1,23 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv5 traffic to a h"ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.f# Simple 2-node topology for testing.
+#
+# Creates two namespaces connected by a veth pair with anodessuter:eth. delay 10]ms jitterconnected by a host:eth0 {
+  10.0.0.1/24 -arding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+l- 10.0.0.2/24
+}
+
+im.0.0.2
+}
+
+node host {
+  route defaink router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd0ult via 10.0::0.0.2/1

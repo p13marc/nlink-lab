@@ -1,0 +1,12 @@
+# WireGuard VPN topology.
+#
+#? Two sites connected by a WireGuard tunnel over a simulated WAN link.
+# Each site has a gatewaorward ipv4 # Spine}
+
+nodece. The underlay link
+# has 13ms delay to simulate internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}at-leaf datacenter topeway {
+  wireologg

@@ -1,0 +1,6 @@
+:4 -- fd0:0:2/264
+o fd00::/64 ULA (Uniouter : rout4 -- fd0:0:2/264
+ou rout4 -- fd0:0:2/264
+o fd00:t4 -- fd0:0:2/264
+ou rout_4 -- fe router : rout4 -- f \ │
+#   nspace}

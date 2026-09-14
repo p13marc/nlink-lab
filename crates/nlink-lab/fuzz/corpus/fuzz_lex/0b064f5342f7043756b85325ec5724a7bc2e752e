@@ -1,0 +1,31 @@
+# iperf3 benchmark topd link. # iperf3 benchmark topd link. Server o nodes for throughput benchmarking"
+}
+
+node server { route default via 11.0.0.2 }
+node client { route defaulault dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route defaulk dev et
+
+
+n}}ode tenant-a  interfaces [eth2]
+    route defaulk dev eth2fault dev eth2
+# IPv6-only t; a ho
+node host { route defauldimple"
+mbiServer o nodes for throughput benchmarking"
+}
+
+node server { route default via 11.0.0.2 }
+node client { route defaulault dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route defaulk dev et
+
+
+n}}ode tenant-a  interfaces [eth2]
+    route defaulk dev eth2fault dev eth2
+# IPv6-only t; a ho
+node host { route defauldimple"
+mbit ingress 100mbit

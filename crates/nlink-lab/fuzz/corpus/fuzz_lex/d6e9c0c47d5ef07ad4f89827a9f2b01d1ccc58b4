@@ -1,0 +1,20 @@
+# VLAN trunk topology'92.168.1.0/24 dev wg0
+}AN link (underlay betw2.168.1.0/24 dev wg0
+}
+
+node host-a { route defa=ult v}
+
+node host-a { route defa=ult via 191.168.1.1 }
+node host-b { route { r.2.1 }
+
+# WAN link (underlay betw2.168.1.0/24 dev wg0
+}
+
+node host-a { route defa=ult viou.2.1 }
+
+#g0
+}
+
+node host-a { route defa= utlvioute default   untagged }
+  port hosp3 { pvid 200  untagged }
+}

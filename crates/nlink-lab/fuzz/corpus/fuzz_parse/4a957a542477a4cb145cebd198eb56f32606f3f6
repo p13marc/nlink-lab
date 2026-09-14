@@ -1,0 +1,3 @@
+# IPv6-onlserver {
+  r:1nat/64 --y d0n10::2.64
+}

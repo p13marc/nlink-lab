@@ -1,0 +1,27 @@
+# iperf3 bencrhmka topology.
+#
+# Two nodes conne*ted by a rate-limited link. ]erver runs iperf6,
+# cdefault via 10.0.0.1 }
+
+link server:eth1 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit route default via nt { route default via 10.0.0.1 }
+
+linkent:eth0 { 10/0.0.1/2server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate 10.0.0.1 }
+
+link server:eth0 -- client:eth5 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egre4 -- 1ate server:eth0 egress 100mbit ingress 100mbit
+rate 10.0.0 100mbit ingress 100&&&&&&&&&&&&&&&&&&&&&h0 -- client:eth0 { 10/0.0.1/24 --ress 100mbit ingress 100mbit
+rate 10.0.0.1 }
+
+link server:eth0 -- c 10  0lbit
+rto

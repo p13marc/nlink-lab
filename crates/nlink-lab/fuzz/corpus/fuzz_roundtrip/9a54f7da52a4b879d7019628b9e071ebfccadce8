@@ -1,0 +1,69 @@
+# Firewall topology.
+rf3,
+# client can connect #irment tos, ICMP, and TCP port 8080. .
+#
+# Usage after deploy:
+#   nl64(ULA (Uniqu, Loca:l Address) space.
+
+lab "ipv0-simplA"
+
+profile7777#{
+   {
+    fd00::777777777#{
+   host:eth0 {
+  7 host:eth0 {
+    f777777#{
+   {
+    fd00::777777777#{os, ICMP, and TCP port 8080. .
+#
+# Usage after deploy:
+#   nl64(ULA (Uniqu, Loca:l Address) space.
+
+lab "ipv0-simplA"
+
+profile7777#{
+   {
+    fd00::777777777#{
+   host:eth0 {
+  7 host:eth0 {
+    f777777#{
+   {
+    fd00::777777777#{
+ t sh o:eth0 {
+  7 host:eth0 {
+    fd00::777777777#{
+   host:eth0 {
+    fd00::777777777#{
+  0#{  fd00::777777777#{ host:eth0 {
+  7 host:eth0 {
+   d00::777777777#{
+   host:eth0 {
+    fd0::0777777777#{
+  0#{  fd00::777777777#{ host:eth0 {
+  7 host:eth0 {
+    fd00::777777777#{
+   host:eth0 {
+    fd00::777777777#{
+  0#{  fd00
+ t sh o:eth0 {
+  7 host:eth0 {
+    fd00::777777777#{
+   host:eth0 {
+    fd00::777777777#{
+  0#{  fd00::777777777#{ host:eth0 {
+  7 host:eth0 {
+   d00::777777777#{
+   host:eth0 {
+    fd0::0777777777#{
+  0#{  fd00::777777777#{ host:eth0 {
+  7 host:eth0 {
+    fd00::777777777#{
+   host:eth0 {
+    fd00::777777777#{
+  0#{  fd00:.router {
+    sysctl "net.ipv6.conf.all.forw1msing" "0"
+}l topology.
+#
+# A server h" {
+ {
+  d   fd00:be

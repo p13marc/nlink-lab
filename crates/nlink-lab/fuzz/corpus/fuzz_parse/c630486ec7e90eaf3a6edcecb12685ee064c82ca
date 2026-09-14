@@ -1,0 +1,33 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  dehost3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:e200 "engineering"
+  port hvlan-filtering
+  mkerembers [host1:eth0, host2:eth0, h		vlan 1ote 10.00..2
+   h0 { 10.0.0.1/Guard interface. The uny { forward ipv5 }
+
+node 
+
+# LAN lin    remote 10.00..2
+   h0 { 10.0.0e 
+
+# LAJ lieth0 { 192.16x.1.1/12 -- 192.168.1.10/24 }
+link gw-1.00beth0]
+  vlan 1LAN trunk topology.
+#
+# A bri
+# N 200 (engine:e.w-a:eth1 -- hkstQQR........
+   h0 { 10.0.0.1/Guard interface. The uny { forwar.....0.0.1/24 -- eth0 { 192.168.1.1/24 -- 1{ forward ipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1/24 -- MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM192.168.1.10/24 }
+link gw-0.00beth0]
+  vlan 1LAN trunk topology.
+#
+# A bri
+# N 200 (ine:e.w-a:eth1 -- hostQQR............0.0.1/24 -- eth0 {e 1r9

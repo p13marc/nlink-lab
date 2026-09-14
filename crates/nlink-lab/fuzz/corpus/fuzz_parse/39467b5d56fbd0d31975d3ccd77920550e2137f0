@@ -1,0 +1,12 @@
+# N tost-ogy.
+#
+# Two sites connected by a WireGuard tunnel over a simulated WAN link.
+# Each site has a g interface. The underlay link
+# has 50m"Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a:  gateway {
+  wireguard wg0 {
+    key!tter 5ms loss 0.1%

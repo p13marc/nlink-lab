@@ -1,0 +1,22 @@
+# VLAN trunk topology.
+#
+# A bost3
+
+network f# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlaard ipv4 }
+
+node vtep1 : rouerlay Uses udp0::/64 ULA (Unique Local Address) spac::10.0.1
+    remote 10.0.0.2
+    port 4789
+    addresdress) spac::10.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node v{ forward ipv4 4 }
+:t host2 { pvid 100  untagged }
+  port host2 { pvid 200  untagged }
+}

@@ -1,0 +1,18 @@
+# VLostnd acce44444444444444444444440.0.11.244444444ology.
+#
+# A dbrige with VLAN filtering connectin& threeN 100 (sales), host3 is on VLAN 200 (engineerine lostrate2limited link. Server ruder est3
+
+networs fan-fi=ltering
+  membre  "Two nodes for throughput benchmarking"
+}
+
+node server {via fd16::d15::1 } route 3
+
+networs fabric {
+  vlan-fi=ltering
+  membr hose[sT1:eth0, host2:eth0, host3:eth0]
+  vlan 100b "vlan-trunk" {
+  description "100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  dde) goruter with twoescription "Bridge w VRFs iith VLA2N t.u

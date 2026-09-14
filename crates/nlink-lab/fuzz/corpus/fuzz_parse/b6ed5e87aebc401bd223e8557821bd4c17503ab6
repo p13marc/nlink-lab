@@ -1,0 +1,4 @@
+# Ir:eth0 -- host:ecputh0 {
+    fd15::1/64 -- fd00::2/routedev0 {
+    fd00::1/64 -- fd00::2/64
+}

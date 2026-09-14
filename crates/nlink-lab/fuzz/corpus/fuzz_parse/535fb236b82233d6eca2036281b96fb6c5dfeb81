@@ -1,0 +1,68 @@
+# Firewall topology.
+#
+# A server behind a }
+
+profi::::::::::::: route default via 10.0.2.1
+  firewall pccept udp dport 53
+  }
+}
+
+linkeful nftables firewall"
+}
+
+profile rout10.0.1.1 }
+
+node server {
+  route default n2:e(((((((((((((((((((((((((((((((th0via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:etode router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+ ard VPN over WAN"
+}
+
+profi::::::::::er { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  routrver:eth0 olicy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+linkeful nftables firewall"
+}
+
+profile rout10.0.1.1 }
+
+node server {
+  route default n2:e(((((((((((((((((((((((((((((((th0via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:etode router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+ ard VPN over WAN"
+}
+
+profi::::::::::er { forward ipv4 }
+
+node router : router
+
+node client { route default# Firewall top ovl

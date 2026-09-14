@@ -1,0 +1,22 @@
+# VLAN trunk topology.
+#
+# A bridge wihosts.
+# Host1 and hAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLANt nurports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host3 { pvid 100  untagged }
+  port host2 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}

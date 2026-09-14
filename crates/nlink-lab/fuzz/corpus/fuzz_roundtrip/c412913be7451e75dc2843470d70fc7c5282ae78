@@ -1,0 +1,4 @@
+# VLAN trunk topology. via 10.0.0.14 --.1.0 01.2/24
+}
+
+lprefixk roinh ost1 { pvid 100  untasag  port h→ ser

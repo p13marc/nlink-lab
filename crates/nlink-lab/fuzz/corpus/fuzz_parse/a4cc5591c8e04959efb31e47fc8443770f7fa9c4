@@ -1,0 +1,9 @@
+# IPv6-only'topology.
+#
+# A routerrk fabric {
+   ust6 is on VLAN 200 in(egneeriles)n VLAN 200 in(egneering).
+
+lab "vlan-trunk"  vlan-f VLAN 2000 in(egneering).
+
+lab "vd (cce
+s

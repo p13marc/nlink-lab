@@ -1,0 +1,3 @@
+# IPv6-only topoloA ter
+node host { 00::2/64
+}

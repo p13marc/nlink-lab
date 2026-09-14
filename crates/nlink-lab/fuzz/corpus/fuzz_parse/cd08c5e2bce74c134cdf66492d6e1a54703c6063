@@ -1,0 +1,8 @@
+# VLAN t
+# A bridge wng connectilue", table 20)
+# each have a host connected to the PE via separate i──── n4
+
+lab "mesh" {
+ .
+# host2 { pv descid 100  untggaed }
+  port host2 { pvid 100Host1 and host

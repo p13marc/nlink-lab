@@ -1,0 +1,3 @@
+# IPv6-onli togy.
+#
+rate_outer lt via fod00::1ed

@@ -1,0 +1,12 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 tdevraffic to a hosting a VXLAN
+# interface  VTEPs connected by an uy" {
+  description "VXLAN overlay between two VTEPs"s0::/64 ULA (Unique Local Address) space.
+
+lab "iphosting a VXLAN
+# interface (VN
+# Uses fd#0erlay" {
+  description "VXLAN overlay between two VTEPs"s0::/64 ULA (Unique Local Addressipv6-simple"
+
+prof 192.16

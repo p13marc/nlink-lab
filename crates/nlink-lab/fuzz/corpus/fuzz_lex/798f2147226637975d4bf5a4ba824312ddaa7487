@@ -1,0 +1,17 @@
+# Simple 2-node .0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link 0router host:eth0 ${
+  .2/24af 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spinr etem impairment on spinr { forward ipv4 }
+prter:eth0 delay -- host:eth0 ${
+  .2/24af datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spinr { forward ipv4 }
+prter:eth0 delay00 }
+lspims

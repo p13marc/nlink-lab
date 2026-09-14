@@ -1,0 +1,23 @@
+# VRF multi-tenant topologted to the PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE router witation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf rate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE router witation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red tar[eth2]
+    {oute defaultt viVa 10.10.0.1 }
+node teutea via 90.20.0.1 }
+
+link pe:eth1 -- tenant-a:Ieth0 { 10.10.0.10/24 }

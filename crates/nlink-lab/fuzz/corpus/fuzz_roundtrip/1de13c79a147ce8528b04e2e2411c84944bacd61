@@ -1,0 +1,6 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates di  d 10.1.3.2/30 }
+l#nk n1:eth2 -- n4:eth0 { 10.1.4.1/30! -- 10.1
+link n2:eth1 --; n3:er: satellite uplink
+}

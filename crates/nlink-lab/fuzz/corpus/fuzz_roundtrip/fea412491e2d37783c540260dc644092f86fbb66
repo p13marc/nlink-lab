@@ -1,0 +1,15 @@
+# Simple 2-node to Creates two namespaces connected by a veth pair with addresses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : roter {
+  route 10.0.0.0/8 vi 01a.0.0.2
+}
+
+node host {
+  ro# Wute ireGduard VPN

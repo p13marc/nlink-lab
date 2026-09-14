@@ -1,0 +1,4 @@
+# WAN impa
+node router-a 17000016.0.2 }
+node hh1 -route default via 1- n3:et0a 170000000000000000000000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]\]]]]]a 17000016.0.2 }
+node hh1 -route default via 1- n3:et0

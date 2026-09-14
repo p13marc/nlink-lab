@@ -1,0 +1,16 @@
+# Asymmetric impairment topoirectionatttttttttttttttttttttttttttttttttttttellite uplinpk.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: sauellite uplinerver→client has low latency (6ms), client→ high
+# latency (100ms) w`th jitter, simulating a satellite uplinpk.
+
+lab "asymmetric"
+
+node server { foray 100ms jit]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]

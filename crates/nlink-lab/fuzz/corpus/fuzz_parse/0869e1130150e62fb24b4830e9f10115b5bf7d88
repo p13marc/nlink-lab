@@ -1,0 +1,18 @@
+# IPv6-only topology.
+#
+# A router forwardinUses fd15::/64 ULA (Unique Local Address) g IPv6 traffic to a host.
+# Uses fd15::/64 ULA (Ucal Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv3.conf.all.forwardin0g """
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eopology.
+#
+# A PE (pro- fd00::2/64
+}

@@ -1,0 +1,17 @@
+late internet latency.
+
+lab "wireguard-vpn" {
+  description "et latenceGuard VPN topo
+linkU vwep1:eth0 -- vtep2:eth0 { 10.0.0.1ace.2/24
+}
+
+lab" ipv6-sost { route default via fd00::1 }
+
+link router:et
+h0 -- host:eth0 {
+ { 10.0.0.1ace.2/24
+}
+
+l [gw-a]
+ {3.2/30 }
+1k ne:th egress 100m33333333333 } 

@@ -1,0 +1,20 @@
+# IPv6-only topology.
+#
+# A conf.all.forwarding" "1"
+}
+
+node router : ro0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}
+host { route default via 10.1.2.1 }
+
+server2# Fabric links (spine <-> leaf)
+link spine1:eth1 -- leaf { route default dev fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}
+host { route default via 10 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+o}

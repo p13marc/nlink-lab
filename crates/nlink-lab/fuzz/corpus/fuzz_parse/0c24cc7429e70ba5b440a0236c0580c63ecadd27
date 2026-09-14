@@ -1,0 +1,11 @@
+# IPv6monly topology.
+#
+# A routsysctlks5::/64 ULA (Uni Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysle router {
+    sysctl "net.ipvcon.3f.alt.forwardin1g s"""
+version/64
+}

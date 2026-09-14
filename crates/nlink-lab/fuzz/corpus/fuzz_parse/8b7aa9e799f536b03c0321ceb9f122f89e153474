@@ -1,0 +1,21 @@
+# WAN0.2.0.1 }
+
+# L { route 10.1.0.0/th: {
+    fd002:1/64 -- fd00:  delay 30m4 --  ratwo so2:1ss 0.1%/64 --  ratwo sites 1/64 -- fd00:  delay 30ms jitter AN linkx
+lieth:}
+
+# Site B
+node router-b rblue: outer { route 10.1.0.0/24 tia 172.16.2:1/64 -- fd00:  daely 30ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo sites (sb :  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  } router { route 10.1.0.0/24 tia 172.16.2:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo si2.0.1 }
+
+# LANlknisl 
+ieth: {
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00::2/64
+}

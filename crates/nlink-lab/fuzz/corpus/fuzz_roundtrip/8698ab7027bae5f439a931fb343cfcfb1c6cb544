@@ -1,0 +1,4 @@
+# WireGua
+    vni 100
+    local 10./2b:eth1 -- sitesed by810./2b:eth1 -- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 19200
+    local 10./2b:ethimpair gw-a:4

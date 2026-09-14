@@ -1,0 +1,12 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connct to measure 
+
+rate server:eth0 eegs1 0sr0mbit ingress 100mibt
+rate client:eth0 egress 100ut.
+#
+## VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, each hostinglay between twt VTEPs"s 19 Usage after deploy:
+# nlink-ln1 }
+nod

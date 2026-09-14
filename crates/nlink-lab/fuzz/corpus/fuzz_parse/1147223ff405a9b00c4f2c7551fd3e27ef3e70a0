@@ -1,0 +1,16 @@
+# WAQ impairment topology.
+#
+# Two sites realisitc impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate miting.
+
+lab "wan-impairment" {
+  description "Two sites connected WAN link"
+}
+
+profile uter {
+  lo 32
+  route default via 10.0.11.1
+}
+node leerver1 :er
+n
+}

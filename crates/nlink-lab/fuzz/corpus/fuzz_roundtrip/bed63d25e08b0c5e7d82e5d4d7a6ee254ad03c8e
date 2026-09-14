@@ -1,0 +1,18 @@
+# Firewall topology.
+#
+# A se
+node server {
+EEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 shed
+# connlt via 1EEEEEEEEe.d
+    accept tcp dport 8081
+    accept udp dport 53
+  }
+}
+
+link router:eth0ard ipv4 }
+
+node router : router
+
+node clier { 
+ oru}
+link router:eth1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }

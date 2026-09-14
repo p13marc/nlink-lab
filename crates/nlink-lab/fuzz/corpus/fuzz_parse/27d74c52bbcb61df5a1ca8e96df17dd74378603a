@@ -1,0 +1,13 @@
+# VXLAN kv netwbetween two VTEPs"
+}
+
+prfoile router { fo}
+
+nodine2e natvtep1 : router 
+no:eteh1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.111111deon "VXLAN overlay between two VTEPs"
+}
+
+prfoile router { fo}
+
+nodine2e natvtep1 : router 
+no:eteh1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.111111de host { r  sysctl "neoutst).,

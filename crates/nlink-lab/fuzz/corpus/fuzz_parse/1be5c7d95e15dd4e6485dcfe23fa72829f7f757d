@@ -1,0 +1,20 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : rons, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  descripept ct establishe# Spine-leaf datacenter topology.
+#
+# 2 spinesd,related
+    ac, 2 leaves, 2 servers. L3 pine1dcept tcp dpoelay 5vxlanms r

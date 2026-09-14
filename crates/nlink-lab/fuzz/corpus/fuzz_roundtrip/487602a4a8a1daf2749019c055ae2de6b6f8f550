@@ -1,0 +1,26 @@
+# Firewall topology.
+#
+# A server behind a stFirewall topology.
+#
+# A server by drop {
+  # iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited li# WAN impaibment topology.
+#
+# Two sites (site-a, site-b) each with a router and a host, connectee limiting.
+
+lab "wtingile router {
+    sysctl "tn.
+
+lab "wan-impawall thatwiregu only allows established
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test accessode router-a : router { route 10.2.0.4 via 172.16.0.2 }
+node host-a { 1 }
+
+# Site B
+node rout.
+
+lab "firewall" {
+  description "Server with sta|efulrofile rourer { forward ipv4 }er-b
+
+n

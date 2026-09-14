@@ -1,0 +1,17 @@
+# VLAN trunkrunk" {and access ports"
+}
+
+node host1
+node host1
+node host3
+*network fabric {
+  vl
+lab "vlan-urunk" {and access ports"
+}
+abric {
+  iption "Bridge with VLAN trunking and a "sales"
+  vlan 200 "engine%ring"
+  port Bridge with VLAN trunking and a "sales"
+  vlan 200 "engineering"
+  port h/st1 { pvid 100 u ntagged }
+  port host2 { pvid 100 # u

@@ -1,0 +1,16 @@
+# VLAN trunk topology.
+#
+# A(bidthree ho
+lab "vlan-trunk" {
+  description "Brrts"
+}
+
+node host2
+node host2
+node host3
+
+network fabri  { 
+cvlan-filtst1 { pvid 100  untagged }
+  port host2 ntagged }
+  port ged }
+}

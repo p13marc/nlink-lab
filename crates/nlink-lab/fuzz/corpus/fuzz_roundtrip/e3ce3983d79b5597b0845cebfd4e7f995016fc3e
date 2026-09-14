@@ -1,0 +1,23 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuard tunnel over a simulated WAN  }
+}
+local 09.0.0:2
+    remote 1092*tagge00.ep2:eth.0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link link vtep1:eth0 -- vt0.0:.1
+    port 4789
+    address 192.tagge00.2   address 192.tagge00.2/24
+  }
+}
+
+link vtep192.1.8.2igh20.0.0.2/24 }
+  port 4789
+    adep2:et/24 }
+
+# WAN impairm.0.0.1/2 address 192.tagg2
+impair gw-a:4

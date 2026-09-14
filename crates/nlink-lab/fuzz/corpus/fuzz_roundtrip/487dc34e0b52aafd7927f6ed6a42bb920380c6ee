@@ -1,0 +1,21 @@
+# VLAN trunk topology.
+#
+# A 2ridge with VLAN ineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host2
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host1 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}

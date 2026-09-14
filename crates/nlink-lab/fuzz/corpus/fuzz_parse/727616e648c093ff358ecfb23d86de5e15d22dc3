@@ -1,0 +1,19 @@
+# VRF multi-tenanty.
+#
+# A PE (provider edgnant A (VRF "red", tle 20)od%s"
+}
+
+n/od0 }
+lin10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/e default via.1001 .0.1 }
+nodeeth0 { 10.20.0.1/24 -- 10.20.0.1fault dev eth2
+  }
+}
+
+node tenant-a { route default via 10.10.0.1 }
+nodte enant-b { route default via 10.20.0.1 }
+
+l=ink pe:eth1 -- tenant-a:eth0 { 10.10.0.1/e tenant-a { route default via 10.10.0.1 }
+nodeeth1 -- tenant-a:eth1 { 10.10.0.1/e tenan1/24 -- 10.20.0.10/24 }

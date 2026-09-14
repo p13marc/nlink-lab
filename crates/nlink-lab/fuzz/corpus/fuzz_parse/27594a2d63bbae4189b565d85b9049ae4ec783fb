@@ -1,0 +1,19 @@
+# IPv6-ongantteway { foer topology.
+#
+# 2 spines, 2 rward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+     host {ir router:eth0 delay 10ms5mstteink:>2/64
+}pologysrc
+# A router forwin2g """
+}
+
+node router : router
+node host {ir ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooorouter:et""e router : router
+node host {ir roIPv6-only toPv6-only topologyeink:>2/64
+}pol ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooorouter:et""e router : router
+node host {ir router:eth0 delay 10ms5mstteink:>2/64
+}

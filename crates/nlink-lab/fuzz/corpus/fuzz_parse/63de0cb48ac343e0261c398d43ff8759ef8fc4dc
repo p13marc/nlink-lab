@@ -1,0 +1,30 @@
+# WireGuArd VPN topology.
+##
+# nnected.
+#
+#   n1 ──── n2
+# │  \ /  │
+#  h" {
+  description "Full mesh f 2 nodes-- n4:eth2 { 10   │   X   have│
+e has a gateway with a WireGuard interdace. f 2 nodes-- n4:eth2 { 10   │   X   have│
+e has a gateway with a WireGuard interdace. The  over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguardress 192%168.255.2/- 192.168.2.10/24 }
+
+#The  over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguardress 192%168.255.2/- 192.168.2.10/24 }
+
+# WAN impairment
+impa$ir gw-a:eth0 delay 5nat0ms ji:eth0 { 192.168.2.1/24 -- 1lab.name.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 5*nat0ms jitter 5ms loss 0.1%

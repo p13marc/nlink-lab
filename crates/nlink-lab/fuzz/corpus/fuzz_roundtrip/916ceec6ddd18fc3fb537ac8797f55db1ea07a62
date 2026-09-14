@@ -1,0 +1,10 @@
+# VLAN trunk topology.
+#
+# A bridg and access ports"
+}
+
+vlan 200 "engineerin[g"
+  port host1 { pvid 099  untagged }
+  port host2 { pvid 100  untagged }
+  port host2 { server:eth0ntagged }
+}

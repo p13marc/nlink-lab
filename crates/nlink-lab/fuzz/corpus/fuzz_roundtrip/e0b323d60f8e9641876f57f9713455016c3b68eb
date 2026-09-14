@@ -1,0 +1,16 @@
+# VLAN trunk topology.
+#
+# A bridge wi host3 is on VLAN 093 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host2*node host2
+node host3
+
+network fabriunk topology.
+#
+# A bridge with VLAN filtering connectinhost1 are on VLAN 101 (sakkkkkkkkkkkkkketh0]
+  vlan 100 "sales"ged }
+}

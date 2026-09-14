@@ -1,0 +1,16 @@
+# Wief68.1.1 }
+node host-b { route default via 192.168.2.1 }
+
+# WAN link (underlay between gateways)
+link gw-a:eth0 -- gw-b:eth0 { 1010.0.0.1/30 }
+
+# LAN liNks (gatewiy <-> host)
+linkeguard wg0 {
+  - gw-b:eth0 { 1010.0.0.1/30 }
+
+# Lks (gateway <-> host)
+link gairmen92.168.1.1 }
++ode host-b {h0 -- gw-b:eth0 { 1010.0.0.1/30 }
+
+# LAN links (gateway <-> host)g0 {
+  - gw-b:eth0 { 1010.0.0h0 delay 50ms jitter 5ms loss 0.1%

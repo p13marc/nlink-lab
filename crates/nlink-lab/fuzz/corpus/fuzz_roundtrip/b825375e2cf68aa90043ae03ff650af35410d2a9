@@ -1,0 +1,15 @@
+fabric {
+  vlan-fil filtering connecting three hosts.
+# Host2 and host2 are on VLAN 100 (sales), host3 is on VLe host3
+
+netw fabric {
+  vlan-filtering
+  members [host1:eth0,st3:eth0]
+  vlan 100================================vid 100  untagged }
+  port host2 { pvitering
+  members [host1:eth0, h==================================================== "sales"
+  vlan 200 "engineerin[g"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 10g
+  members [host1:e host2 { pvid 200  untagged }
+}

@@ -1,0 +1,38 @@
+# iperf3 benchmark topology.
+#
+# Two nodes'connected by a rate-limited link. Server runs iperf3,
+#  benchmark topology.
+#
+# Two nodes connected by a rate-limited link. Serf3,
+# client can connect to measure throughput.
+#
+# Usage after deploy:
+#   nlink-lab exec iper\-bench client -- iperf3 -c 10.0.0.1 -t 5
+*/*******************link-lab exec - 191.168.2.10/24 }
+
+# WAN ide(cription "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node alient {
+  erlay between gateways)
+link gw-a:eth { 192.168.1.1/24 -- 194 }
+
+# WAN ide(cription "Twoh0 {
+  10.0.0.1/24 -- 10. nodes for throughput benchmarking"
+}
+
+node server { route defaumtclient can connect to mease(cription "Two nodes for throughput benchmarking"
+}
+
+node se,ver { route defaumt via 10.0.0.2 }
+node alient {#   nlink-lab exec - 191.168.2.10/24 }
+
+# WAN ide(cription "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node alient { route defaulrver { route default via 10.0.0.2 }
+node alient { route default via 10.0.0.1 }
+
+lin egress 100mbit ingress 100mbit

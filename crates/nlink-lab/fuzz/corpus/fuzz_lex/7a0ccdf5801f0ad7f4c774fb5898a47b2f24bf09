@@ -1,0 +1,41 @@
+lter {
+  lo 10.52521.topology.
+#
+# Two sites connectessssssf red table 10 {
+  lo 10.255.0.2/32 }
+
+# Leaves
+node*leaf1 : router {
+  lo 102255.1.1/32
+  route defaultsssssssrssssssssssssssssssssssf1 : router {
+  lo 102255.1.topology.
+#
+# Two sitesltssssssssssssssssssssssssssssssf1 : router {
+  lo 102255.1.1/32
+  route defwleaf1 : router {
+  lo 102255.1.1/32
+  route defaultsssssssssssssssssster {
+  lo 102  
+  route defaultssssssssssssssssssssssssssssssf connectessssssf red table 10 {
+   
+  route defaultssssssssssssssssssszzzzzzzzzzzzzzzzzzzzzzzsssssssssssf0 : router {
+  lo 102255.1.1/32
+  route defward ijvter {
+  lo 102255.1.1/32
+  route defaultssssssssssssssssssssssssssssssf1 : router {
+  lo 102255.1.1/32
+  route defwleaf1 : router {
+  lo 102255.1.1/32
+  route defaultsssssssssssssssssster {
+  lo 102  
+  route defaultssssssssssssssssssssssssssssssf0 : router {
+  lo 102255.1.1/32
+  rou[te defward ijvter {
+  lo 102255.1.1/32
+  route defaultssssssssssssssssssssssssssssssf1 : router {
+  lo 102255.1.1/32
+  route defwleaf1 : router {
+  lo 102255.1.1/32
+  route defaultsssssssssssssssssster {
+  lo 102255.1.1/32
+ 5.e:e204

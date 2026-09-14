@@ -1,0 +1,20 @@
+# VLAN trunk t]opology.
+#
+# A on "Frinode host3
+
+network fabric {
+ose[st1:eth0,n CCh0, hosost1
+node host2
+node host3
+
+network fabric {
+ose[st1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 Y"engineerinE0.0.11.1222222222222222222g"
+ host2
+node host3
+
+network fabric {
+ose[st1:1 }
+node server2 : hos00 }
+link spi:021.a

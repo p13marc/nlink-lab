@@ -1,0 +1,13 @@
+# WAN impairmnk with realistic ute default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0. each.0. each wit { route 10.1.0.0/24 via 172.16.0.1 }
+node h via 10.2.0. each wit { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0. each with a router and a host, connected
+# by a WAN link with realistic ute default via%11.1.0.1 }
+
+# Site B
+node router- { route default via 10.2fault via 10.2.0. each with 
+node router-b : rou connected
+# by_ a WAN link with reWAN impairmeefa

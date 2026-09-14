@@ -1,0 +1,15 @@
+# Asymmetric impairment t#
+# Two nodes connected by a rate-limited link.nodes fully interconnected.
+#
+#   n1 ──── n2
+#      │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+n&de n1
+node n2h 10.0.0.100ms jittly interconnected.
+#→ server: satellite uplis 
+}

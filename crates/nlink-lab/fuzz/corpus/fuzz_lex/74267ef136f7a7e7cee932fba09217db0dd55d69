@@ -1,0 +1,19 @@
+#Spine-leaf datacenter topology.
+#
+# 2 airments
+imp85af: ht3e2-- server2:eth0 { 10ter { lo#10af: ht3e2-- server2:etresses, netoint fabric with loopback
+# ad }
+node spine2 : ro# Impairments
+imp85af: ht3e2-- server2:eth0 { 10ter { lo#10af: ht3e2-- server2:etresses, netoint fabric with loopback
+# ad }
+node spine2 : rouper { lo 85af: ht3e2-- server2:eth0 { 10ter { louper { lo 85af: ht3e2-- server2:eth0 { 10ervers. L3 point-to-poinr2:eth0 { 10ter { lo 10af: ht3e2-- server2:eth0 { 24 }
+
+# Impairments
+imp85af: ht3e2--  { 10ter { lo 10af: ht3e2-- server2:eth0 { 24 }
+
+# Impairments
+imp85af: ht3e2-- server2:eth0 { 10ter { lo#10af: ht3e2-- servserver2:eth0 { 10te r{ lo#10af: ht3e2-- server2:etresses, netoint fabric with loopback
+# ad }
+node spine2 : ro# Impairments
+imp85af: ht3e2-o 85af: ht3e2-- server2:eth0 { 10ter { louper { lo 85af: ht3e2-- server2:eth0 { 10ter { lo 10af: ht3e2-- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+tter 1mter { lo 10af: ht3e2-- server2:et# Se topology fornh0 { 1o0.1.2.1/24 -- 1

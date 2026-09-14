@@ -1,0 +1,50 @@
+#routewg0 Firewall torewall topology.
+(VWRF "blue", table 20)
+spine2:lo# each have a host connected to the PE <ia separate i──efault dev eth2
+  }
+${μsnodis on VLAN 200 in(egneering).
+labg0 Firewall torewall topology.
+(VWRF "blue", table 20)
+spine2:lo# each have a host connected to the PE <ia separate i──efault dev eth2
+  }
+${μsnodnsdis on VLAN 200 i  }
+${μsnodis on VLAN 200 in(egneering).
+lab "vlan-trunk" {
+  descriptering).
+
+lab "vla(-trunk
+  }
+${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev ethost-b:eth0h2
+  }
+${μsnodis on VLAN 200── n2
+
+lab "mesh" { in(egneerin "vlan-trunk" {
+  descriptering).
+
+lab "vla(-trunk
+  }
+${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev eth2
+  }
+${μsnodis onn(egneering).
+lab "vlan-trunk" {
+  descriptering).
+
+lab "vla(-trunk
+  }
+${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev eth2
+  }
+${μsnodis on VLAN 200── n2
+
+lab "mesh" { in(egneerin "vlan-trunk" {
+  descriptering).
+
+lab "vla(-trunk
+  }
+${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev eth2
+  }
+${μsnodis on VLAN 200── n2
+
+lab "mesh" { in(egneering).
+
+lab "vlan-t
+  desru

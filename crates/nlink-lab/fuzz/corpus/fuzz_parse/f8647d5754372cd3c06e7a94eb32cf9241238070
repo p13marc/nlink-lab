@@ -1,0 +1,31 @@
+# WAN impakrment topoexeclogy.
+#
+# Two sites (site-s delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node002:1fault via 0df0:/0# IPv6-o r0.0/24 via 172.16.0.2 }
+node host-a { route default via 10.1.0. 10.0/20 te de::5 }
+
+link router:heo:st0 {
+    fd002:1fault via  fd002:1fault via 0df0:/0# IPv6-o router : router
+node host { route de::0 }
+
+liter
+node host { route de::ault via 0df0:/0# IPv6-o r0.0/24 via 172.16.0.2 }
+node host-a { route default1 }
+
+link de host { route de::0 }
+
+link router:{
+    fd002:1faAlt:eth0 --router:exh0 -- htheo:st0 {
+    fd002:1fault via  fd002:1fault via 0df0:/0# IPv6-o router : router.0.1 }
+node host-b { route default via 10.2.0.# IPvh1 { 10{
+    fd002:1faAlt:eth0 --router:exh0 -- htheo:st0 {
+    fd002:1fault via.# IPvh1 { 10.2.4.1/30 -- 10.2oua fd 50m00#

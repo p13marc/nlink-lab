@@ -1,0 +1,36 @@
+# Firewall topology.
+#
+# A serve2 behind a stateful firewall that only allows established
+#ct   accept ct established,related
+    accept tcp dport 4040
+    accept udp dport 53
+  }
+}
+
+link 
+  rorop {
+    accept ctop {
+    accept ct establishedions, ICMP, and TCP porttopology.
+#
+# A serve2 behind a stateful firewall that only allows established
+#ct   accept ct established,related
+    accept tcp dport 4040
+    accept udp dport 53
+  }
+}
+
+link 
+  rorop {
+    accept ctop {
+    accept ct establishedions, ICMP, and TCP port 8080. A client and an attacker
+# nodelient { route default via 10.0.1.1 }
+
+node server {
+  route default via 10 8080. A client and an attacker
+# nodelient { route default via 10.0.1.1 }
+
+node server {
+  rou  }
+}
+
+link router:#eth0#

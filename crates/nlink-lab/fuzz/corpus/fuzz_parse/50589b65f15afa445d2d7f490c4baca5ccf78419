@@ -1,0 +1,33 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of default dev eth2
+  }
+}
+
+node tenant-at A (VRF "red", table 10) and Tenant B (VRF "blue", table 2@0)
+# each have a host connect=ed to the PE via separate i──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10)1.2.1/e PE via separate i──── n4
+
+lab "mesh1 {tenant-b:eth0 { 10.20  }
+}
+
+node tenant-a { {:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4{ 10.20.0.1/247777777777777777777777777777777777777777777777777777777777777777777777777777777777777 --

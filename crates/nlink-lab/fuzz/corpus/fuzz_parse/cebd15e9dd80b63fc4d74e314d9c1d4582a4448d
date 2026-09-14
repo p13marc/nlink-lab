@@ -1,0 +1,16 @@
+# Full mesh topology: 4 ─ n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.230 }
+link n1:eth1 .1/30 -- 10.1.2.2/30 }
+lin.2.1.2/30 }
+lik n4:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4.2/30 }
+link n3:eth2- - n4:eth2 { 10).3.4.1/30 -- 10.3.4.2/30 }

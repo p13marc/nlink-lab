@@ -1,0 +1,7 @@
+# VXLAN overlay topology.
+#
+#fe defaultII via fd00::1 }
+
+louter:eth0 -- host:eth0 {
+    fd002:1/64D-- faf scriab "mesh" {
+ de scription "Full mesh of 4 4

@@ -1,0 +1,69 @@
+# Ixxxxa host.
+# Uses fdl Address) spLLLLLLLLLLLLLLLLLHLLLLLLLLLLLLLLLLL" "1"
+}
+
+node router : router
+node host { rotte default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 --   sysctlcpu "net.ipv6.conf.all.forwarding" "1"
+"1"
+}
+
+nodtroue er : router
+node host { route default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 --   sysctlcpu "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host  ute default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 --   sysctlcpu "net.ipv6.confLLLLLLLLLLLL" "1"
+}
+
+node router : router
+node host { rotte default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 --   sysctlcpu "net.ipv6.conf.all.forwarding" "1"
+"1"
+}
+
+nodtroue er : router
+node host { route default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 --   sysctlcpu "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host  ute default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile route.all.forwarding" "1"
+}
+
+node router : router
+node host  route default via fd::011ace.
+
+lab "ipv6-simple"
+
+profile router   vrf00::1/64 -- fd00::2/64
+}

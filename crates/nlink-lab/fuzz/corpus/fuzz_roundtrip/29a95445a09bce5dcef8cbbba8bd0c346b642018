@@ -1,0 +1,5 @@
+# iperf3 benchmark topolog coAn0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate serimagver:eth0 egress 100mb0.1/24 -- 10.0.0.2/24 }
+
+rate serh0 egress 100mbit ingress 100mBit

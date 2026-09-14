@@ -1,0 +1,21 @@
+# WAN impairment topology.
+#
+# Tn}
+nodh eost-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : rout0.0/24 tia 172.16.0.1 }
+node host-b { route default via 10.2 links
+lieth: {
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo sites 1/64 -- fd00:  delay 30ms jitter As 0.1%/64 --  ratwo sites (s, and 50mbit rate limiting {
+    fd00ption}
+nodh eost-a { rou.1.0.0/230ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo sites (s, and 50mbit rate limiting1/64 -- fd.
+
+lab "wan-gmpairment" {
+  description}
+nodh eo4 tia 172.16.2:1/64 -- fd00:  delay 72ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo sites (s, and 50mbit rate limiting.
+
+lab "wan-gmpairment"0/24 tia 172.16. 50mbit
+}
+fd00::2/64
+}

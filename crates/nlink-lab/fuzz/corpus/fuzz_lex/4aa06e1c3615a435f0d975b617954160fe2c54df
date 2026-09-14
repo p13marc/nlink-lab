@@ -1,0 +1,30 @@
+# VLAN trunk topology.
+#
+#   n1 ──── n2
+#    / \  │=#   │ /   \ │
+#   n6 ──── n4
+
+lab "mesh" {
+  description "Full mesh o  \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  members [host1:eth0, host2:t1:eth0, host2:eth0, host3:eth0]
+ val n 100 "sales"
+  vlan- 10.2.0.10/24ic impairme 200 "engineering"
+  port hosspace..3n3 ──── n4
+
+lab "mesh" {
+  members [host1:eth0, host2:t1:eth0, hos" {
+  members [host1:eth0, host2:t1:eth0, host2:eth0, host3:eth0]
+ val n 100 mmetric impairme 200 "engineering"
+  port hosspace..3.1/30 -- 10.2.3.2/30 eth0, h)ost3:eth0]
+ val n 100 "sales"
+  vlan- 10.2.0.10/24 }
+
+# WAN link with symmetric impairme 200 "engineering"
+  port hosspace..3.1/30 -- 10.2.3.2/30 }t2:eth0, host3:eth0]
+ val n 100 "sales"
+  vlan- 10.2.0.10/24 }
+
+# WAN link with symmetr#:aic impaiArL

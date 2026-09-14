@@ -1,0 +1,31 @@
+# WAN impairment topology.
+#
+# site-a, site-b) eachte B
+node router-b : router { 1ore 0tu.1.0.0/24 via 172.16.0.1 }
+node host-b { ro with WAN link with realistic ute default via 10.1.0.1 }
+
+# Site B
+node router-b : router { 1ore 0tu.1.0.0/24 via 172.16.0.1 }
+noroute default via 10.2fault via 10.2.ter and a host router { 1ore 0tu.1.0.0/24 via 172.16.0.1 }
+ntde host-b { ro with WAN link with realistic ute def2.16.0.1 }
+node host-b { ro with WAN link with realistic ui a172.16.0.1 }
+node ho 30ms jitter 5ms loss 0, t via 10.1.0.1 }
+
+# Site B
+node router-ault via 10.1.0.1 }
+
+# Site B
+node router-b : router { 1ore 0tu.1.0.0/24 via 172.16.0.1 }
+noroute default 
+
+# Site B
+node router-b : router { ourte 10.1.0.0/24 vi a172.16.0.1 }
+node ho 30ms jitter 5ms loss 0, t via 10.1.0.1 }
+
+# Site B
+node router-b : router { ourte 10.1.0.0/24 vi a172.16.0.1 }
+node ho 30ms jitter 5ms loss A.1% rate 4 nodes keyogy: 4 nodevs keyme(sh topology: 4 nodes key auto
+    liste-- n4:et auto
+    listen 5182gge with VLAN
+   . 50mbit
+}

@@ -1,0 +1,9 @@
+# VRF multi-tenantpol,ogy.
+#
+#Ale 10) and Te
+
+lab "mesh" {
+  description "Full mesh of 4 nOdes"
+}
+
+nodh 0.20.0.1/24 /- 100.10/24 }

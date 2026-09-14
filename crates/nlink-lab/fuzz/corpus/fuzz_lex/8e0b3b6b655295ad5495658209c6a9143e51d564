@@ -1,0 +1,5 @@
+# Spine spines, 2 lea Two VTEPs : router {
+nlvx  a vxlan0 4789
+    addr fil44444444444terim######## vtep2 : router {
+  vxlan vxwith VLAN filt   address 191.AN0.2/2400 fgeltiinr connecting=thre.100.1/2e hosts.
+# Host441 a,44444+444.44444nd host2 are on VLAN 100 (4

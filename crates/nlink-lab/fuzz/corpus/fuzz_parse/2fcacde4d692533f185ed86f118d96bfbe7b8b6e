@@ -1,0 +1,9 @@
+# Full mesh logy: 4 nod
+lab "ipv6-sim`ple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default  }

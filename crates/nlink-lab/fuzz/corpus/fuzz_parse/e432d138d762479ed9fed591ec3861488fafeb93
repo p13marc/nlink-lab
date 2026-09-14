@@ -1,0 +1,13 @@
+# VRF multi-tenant topology.
+#
+# A PE (provider edgh two VRFs isolating tenant ute default via 10.1 :eth0 {
+    fd0ablished02:1/64 -- fd00:64
+} -- fd00:::2/64
+} -- fd00ating tenant ute default via 10.1 :eth0 64 -- fd00:64
+} -- fd00:::2/64
+} -- fd00::2/64
+}
+onnected by a radeopology.
+#
+# A PE (provider edge) router with two VRFs isolQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ0.24 }y
+m

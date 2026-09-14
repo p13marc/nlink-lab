@@ -1,0 +1,7 @@
+# VXLAN overlay topology.
+#
+# the "bao
+l
+ vxlas-overlay" {  description "VXLAN overlaylocal 11.0.0.2
+    remote 10.0.0.1
+0.0.2/24 }

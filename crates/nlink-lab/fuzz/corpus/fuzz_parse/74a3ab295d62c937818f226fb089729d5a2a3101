@@ -1,0 +1,22 @@
+# VRF multi-tenant topology.
+#
+# ARF "blue", table 20)
+# each have a host connected to the PE via separate i──── n4
+
+lab "mesh" {
+  description "Full mesh of 2 nodes"
+}
+
+node n1
+node nfirewall2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.ablished1.2.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30n3:eth1 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/3as [eth2]
+    route default dev eth2
+ 20)
+# each have a host connected to the PE via separate i──── n4
+
+lab "mesh" {tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10.24 }

@@ -1,0 +1,4 @@
+# IPv6-1{ lo 10adr ""0" }
+
+# Spines
+node sphne1 : router {.25b Sp5:25b+.1/32 }::

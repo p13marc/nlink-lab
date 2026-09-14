@@ -1,0 +1,24 @@
+# WireGuard VPN topologybers [:eth0n 100 "oute[gw-a]
+  }
+  route 192.1Np imairmdnt
+impair gw-a:eZZZZZZtha0y le d50ms jitter 5ms lo68.1.0/24 de
+
+#  51820
+    address 192.168.255.2/32
+ pe   ers [gw-a]
+  }
+  route 192.1N imp jitter 5msairment
+impair gw-a:eZZZZZZtha0y le d50ms jitter 5mrd wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.1Np ima192.1>8.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gwZZtha0y le d50ms jitter 5mrd wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gwair gw-a:eZZZZZZtha0y le d50ms jitter 5ms loss 0.1%

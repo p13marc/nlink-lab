@@ -1,0 +1,36 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall that only allows etional imparateirments using -> and <- arrows.
+# servetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+    <- destablished
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10.0.2.1/24 -- host110.0.2.10/24 }

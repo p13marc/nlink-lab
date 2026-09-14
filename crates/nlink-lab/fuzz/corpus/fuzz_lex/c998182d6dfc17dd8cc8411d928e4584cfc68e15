@@ -1,0 +1,35 @@
+# Spine-leaf datacenter topolspine1 : route via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+nodeaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 90002-node topology for testing.
+#
+#.11.1
+}
+node leaf2 : router {
+  lo 10.255. Creates two namespaces connected by a veth pair with addresses
+# aaf2:e1  2th{8.0.22.1/30 -- 10.0.22.2/3 leaf2:eth3 -- servImpairments
+impair spine1:eth1 delay 5ms jitter 1ms
+dmpair spin}
+
+# Servers
+nodeaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 90002-node topology for testing.
+#
+# Creates two namespaces connected by a veth pair with addresses
+2.2/30  mtu 90002-node topology for testing.
+#
+# Creates two namespaces connected by a veth pair with addresses
+# aaf2:e1  2th{8.0.22.1/30 -- 10.0rments
+impair spine1:eth1 delay 5ms jitter 1mspin}
+
+# Servers
+nodeaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 90002-node topology for testing.
+#
+# Creates two namespaces connected by(a veth pair with addresses
+aeaf# 2:1  2th{0.0.22.1/30 -- 10.0.22.2/3 leaf2:eth3 -- server2:eth0 { 10.1.2.1/pairments
+impair spine1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

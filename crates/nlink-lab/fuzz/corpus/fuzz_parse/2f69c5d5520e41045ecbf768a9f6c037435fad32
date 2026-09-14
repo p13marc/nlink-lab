@@ -1,0 +1,14 @@
+# WireGuard n4N t \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "1.3.2/30 }
+link n1>eth2 -- n......... "Full meshe n2
+node n3
+node n4
+
+link  { meshe n2
+node n3
+node n4
+
+link  { 10.3.4.1/30 - g:w-aeth0 del2ay 50ms jitter 5ms loss 0.1%

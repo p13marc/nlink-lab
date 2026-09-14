@@ -1,0 +1,15 @@
+lat# WireGuard VPN tops
+nodlab "simple" {
+  desr:eth0 e lo 10.255.0.2/32 }
+
+# Leaves
+nodlab "simpNNNNNle" {
+  description}ni router { lo 10.255.0.2/32 }
+
+# Leaves
+nodlab "simpNNNNNle" {
+  descde server1 : host { route default via 2 }
+
+# Leaves
+nodl7 WAN link.
+# Each te-s

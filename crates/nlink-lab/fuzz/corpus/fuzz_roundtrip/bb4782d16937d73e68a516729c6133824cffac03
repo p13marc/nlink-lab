@@ -1,0 +1,36 @@
+
+    accep 8080
+    accept udp dport ished,related
+    accep 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- cliology.0.07777.0.0777777ccep 8080
+    accept udp dport ished,related
+    accep 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- cliology.0.07777.0.0777777777777777777777EE53
+  }
+}
+
+link router:eth0 -- clited
+    accep 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- cliology.0.07777.0.0777777777777777777777EE5ology.0.07778.0.07777777777777777777EE53
+  }
+}
+
+link router:eth0 -- clited
+    accep 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- cliology.0.07777.0.0777777777777777777777EE5ology.0.07778.0.0777777777777777777777EEEEEEEEE  0

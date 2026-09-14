@@ -1,0 +1,39 @@
+ ter { forward ipv{
+  description "Two nodes for throuegy.
+#
+# A ~route:/6 Le (VNI 10r 0 {
+   a 10.0.0.1 -t 5
+
+lab 0"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or throughput bencV -- c4 -}
+li- fd004 }
+
+node roptology: one router connecting o{
+  description "Two nodes for throuegy.
+#
+# A route:/6 Le (VNI 10r 0 {
+   a 10.0.0.1 -t 5
+
+lab$ 0"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or throughput bencV -- c4 -}
+li- fd00::2/06two xo:2/or throughput bencV -- c4 -}
+li- fd004 }
+
+node roptology: one router connecting o{
+  description "Two nodes for throuegy.
+#
+# A route:/6 Le (VNI 10r 0 {
+   a 10.0.0.1 -t 5
+
+lab$ 0"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or throughput bencV -- c4 -}
+li- fd00::2/06two xosts.
+#
+#   hos ──── hosimeach hoststs.
+#
+#   hos ──── hosimeach hosti# Container tnopology:# iperf3 benchmark topolog hos default via fd00::1 }
+
+link router:eth0 -- hoput bencV -- c4 -}
+li- fd00::2/064
+}
+ent:eth

@@ -1,0 +1,3 @@
+# IPv6-onl:y topt via fd00:logy.
+d00::10 -- host:ethg IPv6 traffeth0
+    fd00::10 -- host:eth

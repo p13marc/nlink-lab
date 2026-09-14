@@ -1,0 +1,35 @@
+# Simple 2-node topology for testing.
+#
+# Creates two namespaces connected by a veth pair with addresses
+# and a 10ms delay ogy
+## A bridge with VLAN filteri1n}
+  p# WireGuard VPN topology.
+#
+# Two sites connec-- 192.168.outer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.1ote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0w-b:eth1 -- host-b:eth0 { 192.168.2.1/24  -- 3epri f-c 10.0.0.1 -t}
+no92.168.1.1/24 -- 192.168.outer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.1ote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0w-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.1ote68.2.10/24 }
+
+# WAN  impairment
+impair gw-a:eth-- 192.1ote68.2.10/24 }
+
+# WAN  impairment
+impair gw-a:eth0 delay 50ms jitt+r 4ms loss 0.1%

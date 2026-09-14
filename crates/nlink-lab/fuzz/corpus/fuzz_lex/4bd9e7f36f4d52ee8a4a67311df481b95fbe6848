@@ -1,0 +1,13 @@
+profile rouder { forward ipv2 }
+
+nod [eth2]
+    r {
+  vrf red lefault dev eth1
+  }e table 20 {
+ er { forward ipv4 }
+
+nod [eth2]
+    r {
+  vrf red table 10 {
+    interfaces [eth1]
+  r  o defa  trs jitute defs jitter05ms loss 0.1%

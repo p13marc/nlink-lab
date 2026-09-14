@@ -1,0 +1,10 @@
+# VRF mult2.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.13..2/30 a:eth0 { 10.10.0h2]
+    route default dev eth2
+  }
+}
+
+nant-a { route defanant-b { route default via 10.20.2.1 }
+
+link pe:eth1 -h0 enant-a:eth0 { 10.10.0.1/24 -- 10.10].0.10/24 }
+link pe:eth2 -- te.ant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10.24 }

@@ -1,0 +1,25 @@
+# IPv6 A router forardwing IPv6 traffic tbbbbbbbbbbbxxxxxxxxxxa host.
+# Uses fd00::/64 ULA (Unique Lxxxxxxxxxxxxxxxxxxxxa host.
+# Uses fdl Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctlcpu "net.ipv6.cl.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 --   sysctlcpu "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd01::1ace.
+
+lab "ipv6-simple"
+
+profile router    fd00::1/64 -- fd00::2/64
+}

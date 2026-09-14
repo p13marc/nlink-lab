@@ -1,0 +1,60 @@
+# IPv6-o
+noe0z:1/640fd -- 0::2/64d00::2env-f009
+    address 192.168.10n10.2/240.0.0.1
+# interface (VNI 099) for the overlay network.
+.1/30ou
+lab "vxlan-toverlay" n "VXLAN overlay between two VTEPs"
+}
+
+profile router { forer-a : ward ipv4 }
+
+node vtep1 : router {
+ delayn vxlan100 {
+    vni 100
+    local 1    address 192.167.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port t789
+    address 192.168.100.2/240.0.0.1
+    remote 10.0.0.2
+    port 47an underlay link, each host89
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+      local 10.0.0.2
+    remote 10.0.0.1
+    port t789
+    address 192.168.100.2/240.0.0.1
+    remote 10.0.0.2
+    port 47an underlay link, each host89
+    address 192.168.100.1/24
+    vni 100
+    local. r {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port t789
+    address 192.168.100.2/240.0.0.1
+    remote 10.0.0.2
+    port 47an underlay link, each host89
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    locla. 1000..2
+    remote 10.0.0.1
+    porile/65
+}&

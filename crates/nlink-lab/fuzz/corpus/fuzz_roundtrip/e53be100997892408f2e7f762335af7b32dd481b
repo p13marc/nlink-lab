@@ -1,0 +1,21 @@
+# IPv6-only topology.
+#
+# A routep forwar||||||||||||||||||*|||||||||||||||||||||||00::/64 ULA (Unique Local Address) space.
+
+lab "ipvkind6-sile"
+
+profil|||||||||||||||||||||||||||||||||||||||| space.
+
+lab "ipvkind6-sile"
+
+profil||||||||||||||
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link rguter:eth0 -- host:||||||||||||||0::1/||0::router : router
+node host { route default via fd00::1 }
+
+link rguter:eth0 -- host:||||||||||||||0::1/||0::1/64 -:2/64
+}

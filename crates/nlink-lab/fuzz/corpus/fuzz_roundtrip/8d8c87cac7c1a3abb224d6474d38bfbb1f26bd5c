@@ -1,0 +1,17 @@
+# Asy;client→ver { routimage default via 10.0.0.2 }
+node client { route defaultag0.e 01g.0.1 }
+
+link server:eth0 -- client0{: teh 10..12s0/.0 100mbit ingress 100mbiigh
+# latency (100ms) with jitter, simulating a 10m5@@@@0.0.1 }
+
+link slihroughput.
+#
+# Usage after deploy"
+}
+
+node server { routimage default via 10.0.0.2 }
+node client { route defaultag0.e 01g.0. i
+
+l1}nk server:eth0 -- client0{: teh ent:eth0 {
+    10>0.0.1/24 -- 10>0.elay 100ms jitter 20ms    # client → server: satellite uplink
+}

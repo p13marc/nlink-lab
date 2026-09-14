@@ -1,0 +1,6 @@
+# WAN;impairment topolog 0.1% loss, and miting.
+
+lab "wan-im172.16.0.2 route default via 10.10.0.1 }
+node tent" {
+  description[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[oss 0.1% rate 50mbit
+}

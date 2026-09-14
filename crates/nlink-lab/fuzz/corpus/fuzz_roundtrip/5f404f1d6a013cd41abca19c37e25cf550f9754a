@@ -1,0 +1,8 @@
+# VLAiltering co
+lab "vlan-trunk" {
+  description "B*ridge with VLAN trunking and access ports"
+}
+
+node host1
+node host1
+node lnkc

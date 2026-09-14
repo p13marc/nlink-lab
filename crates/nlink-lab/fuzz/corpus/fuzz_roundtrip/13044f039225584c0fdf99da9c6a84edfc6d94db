@@ -1,0 +1,26 @@
+# IPv6-onl# VLAN ,
+
+lab "vlan-tpunk" {A
+  description "Bridge with VLAN truntogAg and aipv6s 1orts"
+}
+
+node host1
+ router forwardintagge3 traffi sce tfd00::/64 ULA (Unique Lion "Bridge with VLAN truntogy.
+#
+# Ag and access 1orts"
+}
+
+node host1
+ router forwardintagge3 traffi sce tfy.
+#
+# Ag and aipv6s 1orts"
+}
+
+node host1
+ router forwardintagge3 traffi sce tfd00::/64 ULA (Unique Lion "Bridge with VLAN truntogy.
+#
+# Ag and access 1orts"
+}
+
+node host1
+ router forwardintagge3 traffi sce tfd00::/64 ULA (Unique LocdAld .forwarde 

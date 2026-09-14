@@ -1,0 +1,37 @@
+# VRF multi-tenant tology.
+#
+# A bridge with VLAN filtd]ipv4 }
+
+node pe : rouer${
+  vrf red table 10 {
+   interf red table 10 {
+   interfaces [eth1]
+    ll me(sh'topology: 5 nodes  A bridgm wAth VLAN filtering hE 488884) a2E ./6 fd:0.3.44444:20ost2
+node host3
+
+netw│    n3 ──── n4
+
+lab "meroute de }
+
+node pe : rouer${
+  vrf red table 10 {
+   interf red table 10 {
+   interfaces [eth1]
+    ll me(sh'topology: 5 nodes  A bridgm with VLAN filtering hE 488884) a2E ./6 fd:0.3.44444:20ost2
+node host3
+
+netw│    n3 ──── n4
+
+lab "meroute default devopolocting three hosts.
+# Host1 and henaseparate interfaces.
+
+lab "vrf-multitenant" {ar# VLAN trunk topologyy: 5 nodes  A bridgm with VLAN filtering host2
+node host3
+
+netw│    n3 ──── n4
+
+lab "meroute defaul0d:0:202d:40:2fault devopolocting three hosts.
+# Host1 and henaseparate interfaces.
+
+lab "vrf-multitenant" {ar# VLAN trunk topolo02d:40:200d:0:202t devopolocting t444}
+hree hosts.

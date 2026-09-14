@@ -1,0 +1,23 @@
+# Spineode spine2 : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+nodeprofile host { sysctlf1 : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node lea 2f: router {
+  lo 10.25524 -- 10.1.1.10/24}
+n  -- s via 10.0.0.1 }
+
+link server:eth0 -- cauto/lient:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delaent topology11.1
+}
+node lea 2f: r.
+#
+# Demonstrates dirplA"
+
+:eth0 { 10.1.2.
+#
+# Demonstrates d

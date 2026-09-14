@@ -1,0 +1,10 @@
+# Wir 192.168.2.0/24 dev wg0
+}
+
+node host-a { route default via 1v wg0
+}
+
+node host-a { route default via 192.1b:eth0 { 10.0{ route default via 192.1b:eth0 { 10.0st-a { route default via 192.1b:eth0 { 10.0{ route default via 192.1b:eth0 { 10.0.0.1/30 -<-> a { route default via 192.1b:eth0 { 10.0{ route default via 192.1b:eth0 { 10.0.0.1/30 -<-> host)
+link gw-a:eth1 -- host-a:1.1 }
+node host-ia 192.1b:eth0 { 10.0{ route default via 192.1b:eth0 { 10.0.0.1/30 -<-> host)
+link gw-a:eth0 -- host-a:eth0 { 19s loss 0.1%

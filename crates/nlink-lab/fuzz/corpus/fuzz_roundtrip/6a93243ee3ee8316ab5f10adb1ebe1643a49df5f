@@ -1,0 +1,12 @@
+# VRF multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant trafnic.
+# Tena# }
+
+node hosk router4 hS:eo ULA (Unique Local A00::1/64 -- fd00::1:::::::::::::::::::rate:::::::::::::::::::::::::::::::::::::::::::::::::0:::::::::::::::::::::::::::::::::/64ULA (Unique Local A00::1/64 -- fd00:::::::::::::::::::::::::0:::::::::::::::::::::::::::::::::/64ULA (Unique Local A00::1/64 -- fd00::1:::::::::::::::::::rate:::::::1:::::::::::::::::::rate::::::::::::::::::::::::::::::::::::::::::::
+o}
+de tenant-a { route default via 10.10.0.1 }
+node tenant-b { route default via 10.20.0.1 }
+
+link pe:et2h -- tenant-a:eth0*{ 10.10.0.1/24 -- 10.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10/24 }

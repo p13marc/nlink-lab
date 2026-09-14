@@ -1,0 +1,15 @@
+# FICMP, l pd0pnode test access.
+
+le rfault dev 10.0.1j.1 }
+ { route d  firewall pd0pforou{
+ C2> fd00::3020.0.1024. }::3.3pforou{
+ C2> fd00::3019.0.1024. }::3.34.3 }2
+VN
+
+cripVNcripI 100tion  frI 10.0.102ker
+# node test access.
+
+le rfault dev 10.0.1j.1 }
+ { route00::3020.0.1024. }::3.3pforou{
+ C2> fd00::3019.0.1024. }::3.34.3 }2
+VN0::3  fr

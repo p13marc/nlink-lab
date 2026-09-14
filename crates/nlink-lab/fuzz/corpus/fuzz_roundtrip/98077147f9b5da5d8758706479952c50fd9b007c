@@ -1,0 +1,21 @@
+# ipe Usage after deploy:
+# nlink-lab exech client -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes fo#
+# A routeofile router {
+    sysctl "net.ipv6.co*nf.all.forwarding" "1"
+}
+
+node router : router
+node hfd00::1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes f  
+node client { route default via 10.0.064
+oy:
+# nlink-lab eer:eth0 -- c}
+lient:eth

@@ -1,0 +1,11 @@
+# VXLAN overected by an underlay link, each hosting a VXLAN
+# interface (VNI 100) foretwork.
+
+lab "vxlan-overlay" {
+  description "VXLAN overla9 between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+image  2 : router-- vtep2:eth0 { # F

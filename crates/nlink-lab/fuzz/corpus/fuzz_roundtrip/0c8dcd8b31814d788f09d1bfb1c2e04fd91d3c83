@@ -1,0 +1,11 @@
+# Full mesh topology: 4 nodes fully interc │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" 775-]]-]]-5/5555m 0555m -5/5555m 05{
+  description "Full de n4
+
+link n1:eth1 -- n2:etheth2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4

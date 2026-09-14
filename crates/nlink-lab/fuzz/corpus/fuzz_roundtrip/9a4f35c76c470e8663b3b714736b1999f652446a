@@ -1,0 +1,10 @@
+# Asymmetric impairmepk.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> Delay 5ms   777777737777+77777777777269444777777777777737777iw

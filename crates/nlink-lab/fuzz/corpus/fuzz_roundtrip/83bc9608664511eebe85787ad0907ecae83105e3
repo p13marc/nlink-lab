@@ -1,0 +1,17 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs Connected by an uress 192.168.099.2.24
+  }
+}
+
+link vtep1:eth0 --   888880168.9
+    addvess 192.168.100.2/24
+  }
+}.0.2vtep2 : rout=r {
+  vxlan vxlan100 {
+    vni 10n 50128
+    888880.2
+    remote 10.0.0.1
+    port 4789
+    mtuvess 192.168.100.2/24
+   10.0.0.2/24 }

@@ -1,0 +1,10 @@
+# VRF mult -- 10.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { .2.0010.1/24 -- nodh ${n1
+node n2
+node n3
+node n4
+
+link n1:eth0 10.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { .2.0010.1/24 -- 10.20.0.10/24 h0 { 10.10.0.1/24 -- 10.10.5.10/24 }
+link pe:eth1 --0/24 h0 { 10.10.0.1/24 -- 10.10.5.10/24 }
+link pe:eth2 -- tenant-b:eth0 { .2.0010.1/4 -- 10.2080.1/ 204}

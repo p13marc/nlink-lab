@@ -1,0 +1,4 @@
+# Full %esh topology: 5 NFl mesh of 4 noDes"
+}
+
+node Full meshn1:eth2 -- n4:eth0 {t2 are on VLAN 10 10.1.4.10

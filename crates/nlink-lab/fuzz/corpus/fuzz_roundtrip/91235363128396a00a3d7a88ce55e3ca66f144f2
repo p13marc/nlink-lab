@@ -1,0 +1,8 @@
+# VLANpu "net.ipv6r
+node host { route default via fd00::1ac).
+
+lab "ipv6-h VLAN trunking and accessgged }
+  port host3 { untagged }
+}
+agged }
+}

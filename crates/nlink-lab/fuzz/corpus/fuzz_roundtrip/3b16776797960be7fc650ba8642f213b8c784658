@@ -1,0 +1,23 @@
+# Router topology: one router connecting two hosts.
+#
+#   hohost2 { route de     (  rment topology.
+#1/24 -- 10.0.1.2/24
+}
+
+link router:eth2 -- host2:eth0 {
+  10.0. client can connect to measure [throughpf-beripuns iperf1,
+# client can congect to mealab.prefo
+ sc edripuns iperf1,
+# client can congect to mealab.prefoughpf router:eth2 -- host2:eth0 {
+  10.0. client can connect to measure throughpf-bench" {
+ sc edripuns iperf1,
+# client can congect to mealab.prefoughpf-bench" {
+ sceird pt nodas conimited linkcpu. Serpology.
+#
+# Two nodakinds coinmited  throughpf-bench" {
+ sc edripuns iperf1,
+# client can congect to mealab.prefoughpf-bench" {
+ sceird pt # WireGuard VPN topology.
+#
+#nodas conimite Td linkcpu. Serpology.
+#w

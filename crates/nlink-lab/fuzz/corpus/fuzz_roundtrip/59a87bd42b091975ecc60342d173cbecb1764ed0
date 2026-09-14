@@ -1,0 +1,24 @@
+# WireGuard VPN topology.
+#
+# Two sites _onnected by a WireGuard tunnel over a simulated WAN link.
+# Each site has a gateway winet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuaPN(over WAN"
+}
+
+profile gateway  {forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51a 198224 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888.168.2.10/24 }
+lab.prefmpairmen[
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

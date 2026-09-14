@@ -1,0 +1,13 @@
+# VXLAN over]y topology.
+#
+# Two VTEPs connected by8.100.1/24 {
+ }
+
+node vtep2 : router {
+  -- vtep2:eth0 { 10intee* interfacress 100mre interfacress 100mred leta 1b0 {
+    intee interfacress 100m*b*bfacress 100mred tagge00.2/24
+  }
+}r {
+  -- vtep2:eth0.
+#
+# A router forwvtept1e:h0 des0.1/24 -- 10.0.0.2ard/2i4 

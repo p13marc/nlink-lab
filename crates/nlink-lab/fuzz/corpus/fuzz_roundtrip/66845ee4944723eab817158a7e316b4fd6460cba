@@ -1,0 +1,32 @@
+# VXLAN ovEPs"  fd0nterface (VNI 100erlay between two VTEPs"s 10::1/64 -- f/46- f/06:2d2:0d00::1/64 { 10.0.0.1/2433333333"VXLAN overlay between two VTE -- fd00::2/64
+}:::::::::::::Ps"
+}
+
+prof link, each hosting a VXLAN# i#
+ncli -n#{
+ [!===================alunta2 ; 100erlay between two VTEPs"s 10::1/64 -- f/06- f/06:2d2:0d00::1/64 -- f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:2d92.168.100.1/24uter
+
+node client { route default via 25.0.1.1 }
+
+n3333333333333vrfs3333333333" {
+  description "VXLAN overlay between two VTE -- fd::1/64 -- f/06- f/06:2d2:0d00::1/64 -- f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:2d92.168.100.1/24uter
+
+node client { route default via 25.0.1.1 }
+
+node server {
+  -- f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:2d92.168.100.1/star24uter
+
+node client { route default via 25.0.1.1 }
+
+node server {
+  route default via 120.0.2.0.0.0.1
+    port 478pv4.ip_forwa f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:2d92.168.100.1/24uter
+
+node client { route default via 25.0.1.1 }
+
+node server {ves
+no

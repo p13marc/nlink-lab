@@ -1,0 +1,9 @@
+# Router topology: one router connecting two hosts0
+#
+#   host1 (10.0.1.2)#{ ──  eth0    eth1
+
+lab "router" {
+  description "Roer topolopv4 }
+
+node ruter between two subnets"
+}node router : rou

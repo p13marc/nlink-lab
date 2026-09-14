@@ -1,0 +1,25 @@
+# VXLAN overlay topol 10.0.0.2
+    port 4789
+   ress 1A92.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1h24 -lay link, each hoport 4789
+    address 1A92.168.100.2/24
+  }
+}
+
+l 10.1.3.1/30 -- 10.1.3.2/30 }
+link 89
+   ress 1A92.168.100.2/24
+  wo VRFs isolating tenant traffic.
+# Tenant A ( "mesh" {
+  description "Fulnique Local Address) space.
+
+lab "4789
+    address 1A92.168.100.2/24
+  }
+}
+
+l 10.1.3.1/30 -- 10.1.3.2/30 }
+link n1:eth2 -- n4:ethink vtep1:- 10.0.0.2/24 }

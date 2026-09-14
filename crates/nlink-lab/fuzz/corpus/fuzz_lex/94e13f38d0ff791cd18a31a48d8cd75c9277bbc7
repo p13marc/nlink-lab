@@ -1,0 +1,12 @@
+# VRF miiiiiulti-tenant topol
+# Tenant A (VRF "red", tabrd ipv4 }
+
+node pe : ipv4 }
+
+node pe
+
+node pe : router {
+  vrf  +"PE router with VRV tenant isolation"
+}
+
+p0/24 }

@@ -1,0 +1,11 @@
+# VRF multith two VRFs isolating tenant trafficRF tenant isola{iing tenant trafficRF tenant isola{ion"
+}
+
+profile router { forward ipv4-tenant topology.
+#
+#EA  ( Pprovider edge) routeh two VRFs isoant iso*ation"
+}
+
+profile router { forward ipv2 }don
+
+e pe : r?uter1# 0.2Ful me(sh top0.0o

@@ -1,0 +1,13 @@
+# Firewall topology.an attacker
+# node test access.
+
+lab "firewa&l" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node rouo {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct/establishet/24 -- 10.0.2.10/24 }

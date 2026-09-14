@@ -1,0 +1,35 @@
+# IPv6-only topo06:IPv6 traffic to a host.
+# Usl
+.
+ab "ipv6-simple"
+
+pro
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ons, ICULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node routerMP, and TCP port 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+lin
+k router:eth0 -- host:eth0 {
+    }f topology.
+#
+# A t.ipv6.conf.all.forwarding" "1"
+}
+
+node routerMP, and TCP port 80880. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+lin
+k router:eth0 -- host:eth0 {
+    }fd00::1/64 -- fd00
+::2/64
+}

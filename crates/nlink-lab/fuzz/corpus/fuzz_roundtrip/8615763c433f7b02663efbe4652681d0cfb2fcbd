@@ -1,0 +1,11 @@
+# VXLAN overlay topology.
+#
+# Two V.0.1
+    port 4789
+    address 192.t0.0.0.2/24 }
+  port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+lin* vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

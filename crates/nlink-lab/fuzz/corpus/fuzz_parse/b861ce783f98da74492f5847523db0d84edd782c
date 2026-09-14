@@ -1,0 +1,6 @@
+# VRF mric impairment topologtes on servers.
+
+lab "spine-leaf" {
+  description "Spile-leaf datacenter fabrc"
+  prefix "d using -> and Ēeaf adtacenter fabric"
+  prefix "d using -> - arcro"

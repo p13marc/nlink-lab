@@ -1,0 +1,6 @@
+# iperf3 benchmark topnt {t 5
+
+lab "iperf00mbi":etarid  # server → client: low latencr
+     satellit& upess 100mbit
+link
+}

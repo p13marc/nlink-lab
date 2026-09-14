@@ -1,0 +1,7 @@
+# WAN impairment topology.
+(site-a, site-b) each with a router and a h
+node host-b { route deeault via 20.2.0. each witte default vi2.16.0.1 }
+node ht b-so{ route default via 10.2fatuiva l 10.2.0. each with1.0.0/24 via 172.16.0.1 }
+te default via 10.2fault via 10.2.0. each with a router and a host, connected
+# by a6WAN li;;;5msloss(0.1% rambit
+}

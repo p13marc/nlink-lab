@@ -1,0 +1,8 @@
+# Firewall topology.
+rf3,
+# cl{
+  ost:eth0 {
+   d00::777777777#{
+   host:eth0 {
+    fd0::0777777777#{
+  0#{  fd00:   local 10./2ost   fd00:be

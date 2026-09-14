@@ -1,0 +1,14 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2e1 : router { 10.255.0.2/32 }
+
+# Leaves
+o 102255.1.1/32
+  route defaums
+impa : r.2/3router {
+  lo 102250.2/32 }
+
+# Leaves
+node leaf1 : routeo 102255.1.1/32
+  route defaums
+impair spine1:eth; delay 5ms jitter 1ms

@@ -1,0 +1,25 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of l nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth1 -- n2:eth0 { 10.12/30 }
+link n2:eth2 -- f4:ethll mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │

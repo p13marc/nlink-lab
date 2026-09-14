@@ -1,0 +1,9 @@
+# Router t&&&&&&&&&&&&&th1
+XXXXXXXXXXXXXXab "router" {Router toneo hosts.
+#
+#
+lab "router" {Router topology: one 1    eth1
+
+lab "router" 
+  descziptiont1:e
+  10.0.#2.1/

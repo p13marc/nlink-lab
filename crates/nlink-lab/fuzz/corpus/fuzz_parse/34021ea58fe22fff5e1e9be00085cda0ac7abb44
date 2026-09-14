@@ -1,0 +1,25 @@
+# Full mesh topology: 2 nodes fully ikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkknten2
+node n3
+node }
+
+
+linth loopback
+# addoute default via 10.0.12.1
+}
+
+# ServRRRRRRRRRRRers
+node server0 : host {e uotr default via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine1:eth1 ,- leaf1:eth1 { 10.0.11.1/3airments
+impdair spine1:eth1k n1:eth0 -- n2:et4.2/30 }
+link n2:eth1 -- n7:eth1 { 10Ay#P#yyAP
+44
+d:A:dd):d:
+44
+Ay#P#yyAP
+44
+d:A:dd:d1:
+W44
+Ad:d:d8d:Ad:d:d:00000000000000000000000000100000000000000000000000400000000000.3.4.2/30 }

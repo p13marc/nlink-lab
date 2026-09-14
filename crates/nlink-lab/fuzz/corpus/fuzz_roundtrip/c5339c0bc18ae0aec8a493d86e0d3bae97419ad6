@@ -1,0 +1,22 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited li# WAN impairment toute 10.1.0.0/24 via 1nkcpu.TCP portons jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+labctions, ICMP, and uter-b : router { route 10.1.0.0/24 via 1nkcpu.Ttter,
+# 0.1% lossay, 6ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+labctions, ICMP, and uter-b : router { route 10.1.0.0/24 via 1nkcpu.TCP portons jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+labctions, ICMP, and uter-b : router { route 10.1.0.0/24 via 1nkcpu.TCP porton, ICMP, and uter-b : router { route 10.1.0.0/24 via 1nkcpu.TCP port, and 50mbit rate limiting.
+
+labctions, ICMP, and uter-b : router { route 10.1.0.0/24 via 1nkcpu.TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+procl i}

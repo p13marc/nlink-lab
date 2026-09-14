@@ -1,0 +1,17 @@
+# Firewall topology.
+#
+# A o VRFs isolating tenant traffic.
+# Tenant A (VRF "redv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 )))))))))))))))))))))))))))))))B)))))))O)))))))))))rewallh two VRFs isolating tenant traffic.
+# Tenant A (VRF "redv4 }
+
+node router : router
+
+node cliet { route default via 10.0.1.1 ))))))))))))))))))))))))))))))B)))))))O)))))))))))))))))))))))))))ll pol0 -- client:eroute) an)))))))))))))))))))))port 53
+  }
+}
+
+link router:eth0 -- client:eroute) and Tenant B r(V

@@ -1,0 +1,15 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filteri1ng conn{
+  deScripni ot1"Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+networ															cpu)																																																																																															k faboverlayric {
+  vlan-filtering
+  metwor															cpu)																																																																																															k faboverlayric {
+  vlan-filtering
+  members [hot0:eth0, g tenant traffrovider edge) hostrouter 4

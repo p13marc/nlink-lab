@@ -1,0 +1,28 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited link. Server runs iperf3,
+# blient can connect to measure throughput.
+#
+# Usage after deploy:
+#   nlink-lab exec iperf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { rout0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate clienerf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { route default via 09.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate set:eth0 egress 100mbit ingress 100mbit

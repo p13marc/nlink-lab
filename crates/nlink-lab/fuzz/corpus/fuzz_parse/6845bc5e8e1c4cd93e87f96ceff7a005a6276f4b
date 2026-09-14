@@ -1,0 +1,7 @@
+# Asym# server→client has low latency (2ms), client→server has hqgh
+# latency (100ms) with jittsimulatinllite uplink.
+
+lab "asymmetric"
+
+node server {    <- delay 00ms jitter 20ms    # client → server: satenk
+}

@@ -1,0 +1,14 @@
+# IPv6-only topology.
+#
+# A router forw ULA (Unique Local Address)ispace.
+
+lab "ipvkind6-simple"
+
+profile router {
+    sysctl "tne.ipv6.conf.all.forwarding" "1"
+}
+
+node routr  :erouter
+node host { route default via fd00::1 }
+
+link rguter:eth0 --t:||||||||||||||0::1/64 -- fd00:d a hos

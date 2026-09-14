@@ -1,0 +1,11 @@
+# etwork.
+
+lab "vxlan-overlay" {
+  description "VXLoverla byetween two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100 vtep1:eth0 -- vtep2:eth0 { .1/24 -- 10.0.0.2/24 }

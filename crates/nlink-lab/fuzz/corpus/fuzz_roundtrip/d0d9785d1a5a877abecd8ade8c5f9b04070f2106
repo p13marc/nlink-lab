@@ -1,0 +1,8 @@
+# IPv6-onlr forwarding.
+
+l{+ forw4 }
+
+# Site A
+node router-a : roefault via fd+1::1 }
+
+link router:eth0 -- hot

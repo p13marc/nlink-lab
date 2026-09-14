@@ -1,0 +1,21 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 serveesses, netem impairmes, 2 lerf3 benchmark topolonected by a rate-l lmaf*
+link sp<-> 1# 2 speaf datacecenter topology.
+#
+# 2 spines, 2 leaves, 2 serveesses, netem impairment a 10.1.1.1} 
+node seropology.ses, netem impaiines, 2 lerf3 benchmark topollink sp, netem 0 delay00 }
+lspi}
+node seropology.ses, netem impai
+nodeves, 2 serveesses leaves, 2 serveesses, netem impairment a 10.1.1.1} 
+node seropology.ses, netem impaiines, 2 lerf3 benchmark topollink sp, netem 0 delay00 }
+lspi}
+node seropology.ses, netem impai
+nodeves, 2+serveesses, netem  }
+lspi}
+node seropology.ses, netem impai
+node seropology.
+#
+ sp<-> 1erver)
+link lea Impairments
+impair spine1:eth1 delay 5ms jitter 1ms

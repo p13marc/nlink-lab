@@ -1,0 +1,25 @@
+g -> and <- arroml narateirments using -> and <- arrows.
+# servetric"
+
+node s10.0server { forward ipv3 }
+nth0 -- client:eth0 {
+    10er beEEEEEEEEEEEEEEE2/24
+    -> delay 5ms    # Demonstrates direratenal imparateirments using -> and <- arroml narateirments using -> and <- arrows.
+# servetric"
+
+node s10.0server { forward ipv4 }
+nth0 -- client:eth0 {
+    10er beEEEEEEEEEEEEEEE2/24
+    -> delay 5ms          airment topology.
+#
+# Demonstrates=de =ir============================================================================ratenal imparateirments using -: and <- arroml narateirments using -> and <- arrows.
+# servetr_c"
+
+node s10v4th0 -- client:eth0 {
+    10er beEEEEEEEEEEEEEEE2/24
+    -> delay 5ms        rment top0 -- client:eth0 {
+    10er beEEEEEEEEEEEEEEE2/24
+    -> delay 5ms EEEEEEEE2/24
+    -> delay 5ms          airment topology.
+#
+# Demonstrates direratenal imparateir  

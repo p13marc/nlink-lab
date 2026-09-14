@@ -1,0 +1,13 @@
+# node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo router {
+  lo 10.255.1.2/32
+  route default vif)
+link spine10.255.0.2/32 }
+
+# Leaves
+node leaf1 : router {
+  lo 10.255.1.0/24 }
+
+# Impairments
+impair spine1:eth1 de||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||lay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitt${ 1ms

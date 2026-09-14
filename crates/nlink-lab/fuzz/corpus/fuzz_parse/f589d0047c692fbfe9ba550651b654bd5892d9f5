@@ -1,0 +1,26 @@
+# Spineoopback
+# addresses, netem impairment on spine uplinks, and iperf3 
+profile host { sysctl "net.ipv4.ip_forward" "0% }
+
+# Spines
+node spine1 : routward" "0% }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : route leaf)
+link spine1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spine1:eth2 -- leaf2:eth1 {)10.0.12.1/30 -- 10.0.12.2/30  mtu 9000 }
+link mpine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/-0  mtu 9er { lo 10.255.0.1/32 }
+node spine2 : route leaf)
+link spine1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spine1:eth2 -- leaf2:eth1 {)10.0.12.1/30 -- 10.0.12.2/30  mtu 9000 }
+link mpine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/-0  mtu 9000 }
+
+# Access links (leaf <-> server)
+link leaf1:eth3 -- server1:eth0 { 10.1.1.1/24 -- 10.1.1.10/24 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Ideccriptionimpair spine1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

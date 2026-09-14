@@ -1,0 +1,6 @@
+#s.
+# server→client has}l"
+rd ipv4 }
+profile host { sysnode spine1 :1/30 -- 10.0.12.2/30  mtu 900latency (100ms) wi{ 10.0.22.1/30 -- 10.0.22. spine1:eth1 delay 5ms jetir t1ms
+impair spine1:eth2 dL3 point-to-point fabric willite uplink
+}

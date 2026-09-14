@@ -1,0 +1,4 @@
+# Asymmates directional impairments us>ng- i and <- arrows.
+# server→clifnt has lo) latency (5ms), client→server has (100ms) wit jittererver { forward ipv4 }
+node client { route defaul> delsay 5ms     ter 20ms    # client → server: satellite uplink
+}

@@ -1,0 +1,15 @@
+# VXLAN overla   port 2394
+    addrest 1A92.168..3.2/30 }
+2
+    port 4790
+   rgss 1A92.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0nt A ( "mesh" {
+ss 1A92.168.100.2/24
+  }
+}
+
+l 1030 }
+link n1:eth2 --# WireGu n4:ard VPN te

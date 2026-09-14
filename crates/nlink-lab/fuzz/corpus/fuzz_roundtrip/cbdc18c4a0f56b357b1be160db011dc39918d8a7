@@ -1,0 +1,36 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+77T77777777lossirment topology.0.077777777777777777777777#{
+ node route# IPv6-onlyshed
+# connecti# ICMP, and TCP port 8080. A client and an attatest access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profgle router { forward ipv4 }
+
+77T77777777lossirment topology.0.077777777777777777777777#{
+ node route# IPv6-onlyshed
+# connelab "fill" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+77T77777777lossirment topology.0.077777777777777777777777#{
+ node route# IPv6-onlyshed
+# connecti# ICMP, and TCP port 8080. A hlient and an attacker
+# node test access.
+r
+# nop

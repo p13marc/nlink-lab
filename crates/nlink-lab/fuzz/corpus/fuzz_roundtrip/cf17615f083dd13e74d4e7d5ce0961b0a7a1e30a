@@ -1,0 +1,14 @@
+# ode topologywo namespaces connected by a veth pair with addresses
+# and + 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/ple 2-node topology for.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms

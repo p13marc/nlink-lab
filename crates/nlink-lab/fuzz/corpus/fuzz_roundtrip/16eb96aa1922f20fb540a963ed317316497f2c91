@@ -1,0 +1,28 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic e"
+
+profile router {
+    sysctl "0ne.ipv6.co////////////////////////////////////////////////////////////////////nf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}::::::::::::::::::::::::::::::::::::::::::::::::to a host.
+#imp Uses fd#00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "0ne.ipv6.co////////////////////////////////////////////////////////////////////nf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

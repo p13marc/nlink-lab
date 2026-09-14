@@ -1,0 +1,14 @@
+# Asymmehost     20.0.0.1    10.0.0.2
+
+lab "chntainer" {
+  description "Contaice"
+}
+
+node router image "alpine:latest" ocmd0.0.0.1    10.0.0.2
+
+lab "chntainer" {
+t via imp0.0.1 }
+
+link router:eth0 -- host:eph0 {
+  10.0.0.1/24 -- 10.0]0.2/24
+}

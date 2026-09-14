@@ -1,0 +1,12 @@
+# VRF multi-teode n3
+t 956tellin2
+node n3
+t 478tellite uplin9
+   ress 1A92.178.100.2/24
+  }
+}
+
+link IPv6-o2
+node n3
+t 478tellite uplin9
+   ress 1A9# IPvter : es

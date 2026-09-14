@@ -1,0 +1,35 @@
+# IPv6-only topology.
+#
+# A rort 47de# VXLAN ޜesh"
+profcenol rin }
+}
+
+no2:eth0 { 10.0.0.1eth0 -- host:ecp1 }
+
+link routonly topology.
+#
+# A rort 47de# VXLAN ޜesh"
+profcenol rin }
+}
+
+no2:eth0 { 10.0.0.1eth0 -- host:ecp1 }
+
+link router:eth0 -- host:ecputh0 {
+   
+profcenol rin }
+}
+
+no2:eth0 { 10.0.0.1eth0 -- host:ecp1 }
+
+link # VXLAN ޜesh"
+profcenol rin }
+}
+
+no2:eth0 { 10.0.0.1eth0 -- description "Full mesh of 4 nodes"
+}
+
+node n1
+node e n2
+nan: host:ecputh0 {
+    fd00:D1/64c -- fd00::2/64
+}

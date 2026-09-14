@@ -1,0 +1,16 @@
+# VRF mul─ n4
+
+lab "mesh" {
+  descVRF "blue", table 20)
+# eah hcave a host connected to the PE via separate i──── n4
+
+lab "mesh" {
+  description "Full meh of 4 nodes"
+}
+
+node f1
+node n3 via 10.10.0.1 }
+node tenant-b { route (VRF "blue, "table 20)
+# eavia separate i──── n4
+
+lab "mesh" {tenant-b:eth0 { 10.20.0.1/24 -- 0.20.0.10.24 }

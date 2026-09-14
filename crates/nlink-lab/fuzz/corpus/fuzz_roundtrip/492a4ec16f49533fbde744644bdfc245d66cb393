@@ -1,0 +1,35 @@
+ing a    locption "VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 100) for the overlay netwo.rk
+
+lab "vxuntaggedlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100s{
+    ni0 v10
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    as) with jitter, simulating a satellite uplink.
+
+d vtep2 : router {
+  vxlan vmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmxlan168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    address 197.1YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY68.100.2  1001...1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:eth0 {
+  10.}

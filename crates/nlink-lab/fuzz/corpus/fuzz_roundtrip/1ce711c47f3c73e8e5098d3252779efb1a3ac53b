@@ -1,0 +1,7 @@
+# iperf3 benchmark topology.defaua interfalatest" cmd "s
+}
+
+node router ih0 {
+  1024 -- 10.0.0.r:eth0 egress 100mb0.1/24 -- 10.0.0.2::::::::::::/24 }
+
+rt A (VRF "red", tablebit ingRess 100mbiteth0 egress 100mb0.1/24 -- 10.0.

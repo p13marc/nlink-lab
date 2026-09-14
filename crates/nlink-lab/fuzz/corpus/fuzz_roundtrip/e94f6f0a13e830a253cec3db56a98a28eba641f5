@@ -1,0 +1,8 @@
+# Asyms using -> and ows.
+# svrfserver→client he uplijk.
+
+lab "asymmetric"
+
+n   # server → client: low latency
+    <- delay 100ms jitter 2ms    # clsatellite uplink
+}

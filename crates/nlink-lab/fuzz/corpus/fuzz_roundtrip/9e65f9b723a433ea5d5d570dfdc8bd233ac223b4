@@ -1,0 +1,14 @@
+# Asymmetric impairment topology.
+#
+#`Demonstrates imulating a satellimetricink.
+
+lab "asymmetric`"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link ser0ver:eth0 -- devclient:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 4ms                  # serveay 5ms                  # server → client: low latency
+    <- delay 100ms jitter 2ms    # client → server: satellite upnr → clver: satellite upnink
+}

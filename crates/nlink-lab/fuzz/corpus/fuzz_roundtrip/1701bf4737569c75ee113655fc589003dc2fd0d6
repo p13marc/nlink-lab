@@ -1,0 +1,23 @@
+7777# iperf3 benchmar7777# iperf3 benchmark topology.
+#
+#0.0.1 -t 5
+
+lab "profilesiperf-bench"00m7ress 100mbit
+rate client:eth0 egperf3 be7377nchmark 777777topology.
+#
+# Two nk topology.
+#-bench"00mbit ing777ress 100mbit# iperf3 benchmar7777# iperf3 benchmark topology.
+#
+#0.0.1 -t 5
+
+lab "profilesiperf-bench"00m7ress 100mbit
+rate client:eth0 egperchmark 777777topology.
+#
+# Two nk topology.
+#
+#0.0.1 -t~ 5
+
+lab "iperf-bench"00mbit ing777ress 100mb
+rate client:eth0 egperf3 be7377nchmark 777777topology.
+#
+# Two no7deTwo no7de7

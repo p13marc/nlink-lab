@@ -1,0 +1,21 @@
+# Rrateoosts.
+#
+#   hst2 (10.0      eth0    eth1
+
+lab "router" {
+  description" Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router space.
+1
+lab "i-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { r0.2.-- 10cpu2.0.0  
+}

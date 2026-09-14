@@ -1,0 +1,6 @@
+# WireGuard VPN topology.
+#
+# Tw1 sites conn
+# Two noel over a sim client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress  delay 50ms jitter 5ms loss 0.1100mbit%

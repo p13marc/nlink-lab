@@ -1,0 +1,12 @@
+# Router topologynecting two             eth0    eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route default via 10.0.1.1 }
+node host2 { route .2/24
+}

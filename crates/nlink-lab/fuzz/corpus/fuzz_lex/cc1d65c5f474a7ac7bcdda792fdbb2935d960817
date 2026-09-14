@@ -1,0 +1,15 @@
+# VLAN trunk topology.
+#
+#   n1 ──── n2
+#    }
+link  :n1h1et-- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 09.2k n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 1{
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 100  untagged }
+  port host3 { pv*******) space..3.1/30 -- 10.2.3.2/30 }
+link n2:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10d 

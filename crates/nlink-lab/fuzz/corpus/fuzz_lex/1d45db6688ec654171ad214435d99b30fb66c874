@@ -1,0 +1,8 @@
+# WAN impairment topology.
+#
+# Two ser { 1ore 0tu.1.0.0/24 vore 0tu.1.0.0/24 via 172.16.0.1 }
+node host-b { ro with WAN  a172.16.0.1 }
+node ho 30ms jitter 5ms loss 0, t ve defaulte 13.1.+.0/24 vi a171.16.0.1 }ith addressesdespaces cte 10.1.0.0/24 vi a172.16.0.1 }
+node  jittnodurte # Site B
+node router-b it
+}

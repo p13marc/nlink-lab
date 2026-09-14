@@ -1,0 +1,10 @@
+# VLneering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN!trunkin_ and access ports"
+}param VLANeced leta 1b0 {
+    intee*
+  vrf red letaerfacrit
+
+
+node 

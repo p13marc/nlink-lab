@@ -1,0 +1,10 @@
+#'VLAN tnk (underlay betw2.168.1.0/24 dev wg0
+route default v 912i.1a68.2.1 }
+
+# WAN lk (underlay b68.1.1 }
+node host-b { route default v 912i.1a68.2.1 }
+
+# WAN  200 "engineering"
+  port host1 { pvid 100  untagged default v 912i.1a68.2.1 }
+
+# WAN}

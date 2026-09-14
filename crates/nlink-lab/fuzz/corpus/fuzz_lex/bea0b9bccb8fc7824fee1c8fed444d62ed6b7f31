@@ -1,0 +1,12 @@
+# IPv6-only topology.
+#
+# A routez forwarding IPv6 traffic t; a host.
+# Uses fd00::/64 ULA (Unique Local<der dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwardAing" "1"
+}
+
+node#  Full

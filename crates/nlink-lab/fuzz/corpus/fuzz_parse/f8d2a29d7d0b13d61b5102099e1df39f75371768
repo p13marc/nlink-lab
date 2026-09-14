@@ -1,0 +1,20 @@
+# Full mesh topology: 4 nodes fully i  │ /   \ │
+#   n4 ──── n4
+
+lab "m" {
+  description "# VXLAN overl VRF multi-t│ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#oe
+dn sec   │ /   \ay topology.
+#
+# T each hos# VRF multi-t│ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n4 ──── n4
+
+lab "mesh" esh" {
+  descVRFript ion "# VX1rLa

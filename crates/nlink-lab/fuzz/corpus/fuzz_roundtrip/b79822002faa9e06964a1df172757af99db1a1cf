@@ -1,0 +1,6 @@
+# IPv6-only topology.
+#
+# A cPv6-only
+
+profile router {+-+++++++++++++++++++++++++++++++++++++++++
+  

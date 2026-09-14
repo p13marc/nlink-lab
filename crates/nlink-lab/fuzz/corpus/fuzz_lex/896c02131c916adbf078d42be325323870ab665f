@@ -1,0 +1,16 @@
+# WireGuar-site WireGuard VPN over WAN"
+0 }
+noh0 { 1nt:miaways)
+linr gw-a:eth0 -- gw-b:}
+node client { route defure vhroughput. viaways)
+link th0 -- gw-b:eth0 { 1nt:miaways)
+link gw-a:eth0 -- gwient casunderlay link
+# late inteughput. viaways)
+link th0 -- gw-b:eth0 { 1nt:miaways)
+link gw-a:eth0 -- gwiengw-a:eth0 -- gw-b:eth0 { 1nt::eth0 -- gw-b:}
+node client { route defure vhroughput.
+#
+# Usage afw-a:eth0 -- gw-b:eth0 { 1nu:miaways)
+link gw-a:eth0 -- geth0 { 1nt:mth0 { 10.JJJJJJJJJJJJJJJJJJJJJJJJ0.0.1/24 -- 10.0.0.2/24 }
+
+ra}e server:eth0 egress egress 100mbit ingzess 10}0m

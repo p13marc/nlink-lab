@@ -1,0 +1,27 @@
+# IPv6 A router forardwing IPv6 traffic to x point-to-point fabric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+#xxxx (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctlcpu "net.ipvz.c# Firewallonf.all.forwarding" "1"
+}
+
+ topology.
+#
+# A server bnode router : router
+node eh

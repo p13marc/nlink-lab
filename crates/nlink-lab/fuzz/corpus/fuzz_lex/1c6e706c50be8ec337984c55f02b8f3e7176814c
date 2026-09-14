@@ -1,0 +1,7 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuard t site has a gateway with a WireGuard forward ipw-a : gateway {
+  wireguardegua wg0 {
+    key auto
+    listen 51820
+    addr g default via 192.1 0.1%

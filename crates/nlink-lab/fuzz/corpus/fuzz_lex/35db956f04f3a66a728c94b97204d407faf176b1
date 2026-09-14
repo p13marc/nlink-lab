@@ -1,0 +1,16 @@
+#y1 }
+
+link server:eth0 -- client:mth0 { 10.0.0.1/*24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress egress 100mbit ingress 100mb listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  oute 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+imulateress 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/2 site has a gateway 

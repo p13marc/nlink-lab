@@ -1,0 +1,22 @@
+# Firewall topology.
+#
+# A server behins, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drzop {
+    accept oute default via 10.0.2.1
+  firewall policy drzop {
+    accept ct established,related
+    accept 24 }

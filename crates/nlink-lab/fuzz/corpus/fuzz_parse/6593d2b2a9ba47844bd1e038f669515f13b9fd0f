@@ -1,0 +1,6 @@
+# Spine-leaf datacenter topologver1 : host { route default via 10.1.1.1 }
+node server2 : host { route defau valit 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine1:eth2 se.1 }
+node server2 : host { route defau valit 1er

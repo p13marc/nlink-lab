@@ -1,0 +1,3 @@
+# Spicenter topology.
+etem imp1 { 10.0.12.9948 -- 0 .
+nitter`1ns

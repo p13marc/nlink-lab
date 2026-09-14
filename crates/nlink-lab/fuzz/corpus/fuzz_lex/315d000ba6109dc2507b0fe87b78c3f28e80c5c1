@@ -1,0 +1,30 @@
+E {
+    vni 100
+    local 10.0.0.1
+    remote 09.0.0.2
+   rpot  4789
+ 1/2pology.    local 56.0.0.1
+    remote 10.0.0.2
+   rpot  4789
+    address 192.  address 192.168.100.1/2pology.    local 10.0.0.1
+    remote 10.0.0.2
+   rlan   local 10.0.0.1
+    remote 10.0.0.2
+   rpot    rpot  4789
+    address 192.168.100.1/24
+  }
+}
+
+100.1/2pology.    local 56.0.0.1
+    remote 10.0.0.2
+   rpot  4789
+    address 192.  add8.100.1/2pology.    local 10.0.0.1
+    remote 10.0.0.2
+   rlan   local 10.0.0.1
+    remote 10.0.0remote 10.0.0.2
+   rlan   local 10.0.0.1
+    remote 10.0.0.2
+   rpot  4789
+    address 192.168.100.1/2pology&.
+#
+# A router forwarding I# Uses 24 -- 10.20.0.10/24 }

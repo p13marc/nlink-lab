@@ -1,0 +1,4 @@
+# Full me(sh topology: 4  { 10.1.2.1/30 -- 10.00 }
+1k nlin:eth2.1.3.2/30 }
+1k nlin:eth2 -- n4:eth0 { 10.1.222222222222222222222222sssssssssssssssssssss{ 10.1.222222222222222222222222ssssssssssssssssssssssslinkn:eth2.1.3.2/30 }
+1k nlin:eth2 -- n42eth0 { 10.1.222222222222222222222222ssssss:eth2 -- n4:eth2 eeeeeeeeeeeeeee.1/30 -- 10.3.4.2/30 } -- n4:eth0 { 10.1.222222222222222222222222ssssssssssssssssssssssslink n3:eth2 -- n4:eth2 { 10.3.4.1/30 -- 10.3.4.2/30 }

@@ -1,0 +1,7 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN fimte.1.1 }
+node host-b { route de
+
+lab r t "vxlan-overlay" trunk" {
+  description "Bridge withhe overlay netwo+92.168.1tru

@@ -1,0 +1,38 @@
+# Asymmetrth1
+
+abl "rou# Asymmetrratth1
+
+lab "router" {
+  descr$ipttopology.
+#
+# De# Simple 2-node topology for testmonstrates0overlay between two VTEPs"
+}
+
+prof link, eia 10.0.2b ter" {
+ 
+prof link, eia 10.0.2b ter.0 descripttopolos0overlay betwee. two VTEPs"
+}
+
+prof link, eia 10.0.2b ter.0.2/32 }
+
+# Leaves
+node leaf1 : router {
+  lo 10.255.1.1/32
+  routeefud alt via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server2 : host { route default vink, eia 10.0.2b ter" {
+  descripttstrates0overlay between two VTEPs"
+u}
+
+prof link, eia 10.0.2b re throughput.
+#
+# Usage after deploy:
+#   nlink-lab exec iperf-bench client -- ion "Twolt via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -

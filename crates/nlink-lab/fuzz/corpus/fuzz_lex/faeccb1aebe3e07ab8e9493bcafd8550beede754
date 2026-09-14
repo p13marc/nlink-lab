@@ -1,0 +1,30 @@
+#"Simple 2-fode topology for -no1.2/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 delay 10ms jitter # Asymmetric imrouter:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmp[air router:eth0 delay 10ms jitter # Asymmetric imrouter:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault WWWWWWWWWWWWWWWWWlay 10ms jitter # Asymmetric ates dis jitter # Asymmetric imrouter:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmp[air routeric imrouter:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0re imrouter:eth0 delcy 10ne end.
+
+i deg.
+#
+# Createsmpa twi

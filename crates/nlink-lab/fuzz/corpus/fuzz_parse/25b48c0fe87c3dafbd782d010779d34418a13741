@@ -1,0 +1,14 @@
+# uplinks, te default via 10.0.12.1
+}
+
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server4 : host 12.1/*30 -- 10.0.12.2/30  mtu 9000 }
+link spine2:eth1 -- leaf1:eth2 { 10.0/21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/30  mt5 9000 }
+
+# Access links (leaf <-> server)
+link leaf1:eth3 -- server1:eth0 { 1.1.1.1/24 -- 10.1.1.10/24 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 --nee spforou{
+# Spine-leaf drd" "0" }peerspinesnes
+node spine1 let hs { osysctl "ine1:eth2 delay 5ms jitter 1ms

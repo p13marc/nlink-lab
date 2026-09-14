@@ -1,0 +1,17 @@
+# V200 (engineering).
+
+lab "vh topology: 4 nodes fully interconnected.
+#
+#   n1 ─╀── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │th0 { 10.0.0.1 ip4 d{v ─── n2
+#   │ \   / │
+#  [h

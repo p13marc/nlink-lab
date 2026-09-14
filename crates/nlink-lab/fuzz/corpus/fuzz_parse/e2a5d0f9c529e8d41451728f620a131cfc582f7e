@@ -1,0 +1,10 @@
+# IPv6-only topology.
+#
+# A rort 62de }
+}
+
+no2:eth0 { 10.0.0.1eth0 -- host:echost:ecputh0 {
+
+nan host:ecputh0 {
+    fd00:fd00::2/64
+}

@@ -1,0 +1,34 @@
+# Ixxxxa host.
+# Uses fdl Address) spLLLLLLLLLLLLLlLLLHLLLLLLLLLLLLLLLLL" "node doouter
+node h (Unique Local A00::1.all.forwarding" "1"
+}
+
+node router : router
+node host  route default via fd::011ace.
+
+lab "ipv6-simple"
+
+profile router   vrf00:de router : router
+node h (Unique Local A00::1.all.forwarding" "1"
+}
+
+node router :l router
+node doout))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))er
+node h (Unique Local A00::1.all.forwarding" "1"
+}
+
+node router : router
+node host  route default via fd::011ace.
+
+lab "ipv6-simple"
+
+profile router   vrf00::1/64 -- fd00::2/64l A00::1.all.forwarding" "1"
+}
+
+node router :l router
+node doout))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))er
+node h (Unique Local A00::1.all.forwarding" "1"
+}
+
+node router : r
+}

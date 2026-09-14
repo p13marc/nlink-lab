@@ -1,0 +1,17 @@
+# ipe0.1
+}
+
+link router:eth0 -- host:t {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 ${
+
+# 1 ben#ଖWmes conn# IPpb]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]10.0.0.1/24 -- 10.0.0.2/24
+}
+
+int-to-ic with ]]]]]]]]]]]]10.0.0.1/24 -- 10.0.0.2/24
+}
+
+int-to-ic with loopback
+#r 27ms

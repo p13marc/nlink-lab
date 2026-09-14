@@ -1,0 +1,30 @@
+ leaf1 Impairments
+impair spine1:eth1 de:ay 5ms:eth3 -- server1:et 5ms:eth3 -- server1:eth0 { 10.1.1.1/24 -- 10.1.1.10/24 }
+link lea-- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 de:ay 5ms jitter 1ms
+impair spih0 { 10.1.1.1/24 -- 10.1.1.10/24 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 de:ay 5ms jitter pair spine2:eth1 de:ay 5ms jitter 1ms
+if2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 de:ay 5ms jitter 1ms
+impair spine1:eleaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 de:ay 5ms jitter 1ms
+impair spih0 { 10.1.1.1/24 -- 10.1.1.10/24 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 de:ay 5ms jitter 1ms
+impair spine1:eth2 dela:ay 5ms:eth3 -- server1:eth0 { 10.1.1.1/24 -- 10.1.1.10/24 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine2:eth1 de:ay 5ms jitter 1ms
+impair spine1:ety 5ms jitter 1ms

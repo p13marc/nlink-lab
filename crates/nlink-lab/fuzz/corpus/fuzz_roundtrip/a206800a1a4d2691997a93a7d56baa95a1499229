@@ -1,0 +1,5 @@
+# WAN impairment topolooute 10&0/24 }
+linkb:eth0 - rou host-b:eth02.0.10/24 }
+
+# airment topol50mbit
+}

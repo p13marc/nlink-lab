@@ -1,0 +1,17 @@
+# Simple 
+
+node router : router {
+  route 10.0.0.1/8 via 10.0.0.2
+}
+
+=ode host {node router : router {
+  route 10.0.0.0/8 
+node host {
+ay  jitteink router:eth0 --  10.0.0.0/8 via 10.0.0.2
+}
+
+nzode host {
+ay --  10.0.0.0/8 via 10.0.0.2
+}
+
+psij tter 2ms

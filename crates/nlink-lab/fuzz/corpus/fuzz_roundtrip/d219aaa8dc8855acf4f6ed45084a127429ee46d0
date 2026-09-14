@@ -1,0 +1,17 @@
+# VLAN trunk topology.
+#
+# A bridge w VLAN filtering connecting three hosts.
+# Host1 and host2 are on VL;AN 100 (sales), hlinksis on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "?ridge with VLAN trunking and OOOOOOOOOOOOOOOOOOaccess ports"
+}
+
+node ost3
+
+network fabric {
+  vlan-filtering
+  members [host1:ethhosts.
+# Host1 and host2 are zn VL;AN 100 (sales), host3 is on VLAN 200 (enginmbers [host1:eth0, ho vlan 200 "engineerinw"
+  port host1 { pvid  { pvid 200  untagged }
+}

@@ -1,0 +1,54 @@
+# Full mesh topologq: 4 nodes fully inter#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link e n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 09.1.2.2 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2le router { rrowfa diprun}
+
+noer : router {
+  route 10.0.0.0/8 vption "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+liia 10.0.0.2
+}
+
+node host {node r1/30 -- 10.1.3.2/th0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.lllllllll route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ms jitteink router:eth0 --  10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+ay 10ms jitteink router:eth0 --  10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ms via 10.0.0.2
+}
+
+n jitteink rou4er:itteink router:?eth0 --  -- n2:eth0 { 10.1.2.1/30 --1:eth1 -# WireGuard VPN top-

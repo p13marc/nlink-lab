@@ -1,0 +1,13 @@
+# VLAN trunk topology.
+#
+# A bridge with  on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridgee host2
+node host3
+
+netnt:mtgw̝Śt(1 -- h8).2.1/24 -# i
+
+lab - .vfi::582.0.1.22    
+
+lab - .vfi::582.0.1.fi::582.0.1.22    vfil2.22.1- 192.1!%ink gw̝Śth1 -- h8.2.1/24 -- 192#   aWireGuardclient:mtgw̝Śth1 ?- h8/l.2w̝Śth1 ?- h8.2.1/24 -- 192.168yk gw̝Śth1 -- h8.2.1/24 -- 192#   aWireGuardclient:mtgw̝Śth1 ?- h8.2w̝Śth1 ?- h8.2.1/24 -- 192.168y 50ms jitter ,ml loss 0.%!%ink gw̝Śth1 --  aWmreGuardclient:mtgw̝Śt(1 -- h8).2.1/42 -- 192.1!%ink gw̝Śth.1/24 -- 192.168y 50ms jitter ,ms loss 0.168Śth1 ?- h8.2w̝Śth1 ?- h8.2.1/24 -- 192.168y 50ms jitter ,ms loss 0.%!%ink gw̝Śth1 --  aWmreGuardclient:mtgw̝Śt(1 -- h8).2.1/24 -- 192.1!%ink gw̝Śth.1/24 -- 192.168y 50ms jitter ,ms loss 0.168y 50ms jitteh8.2.1/.%!24 -- 192.168y 50ms 50ms jiy 50ms jitteh8.2.1/.%!24 -- 192.168y 50ms 50ms jitter ,ms loss 0.%!%ink gw̝Śth1 --  aWmreGuardclient:mtgw̝Śt(1 -- h8).2.1/24 -- 192.1!%ink gw̝Śth.1/24 -] 192.168y 50ms jitter ,ms loss 0.168y 50ms jitteh8.2.1/.%!24 -- 192.168y 50ms jitter

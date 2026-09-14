@@ -1,0 +1,39 @@
+ via 10.0.0.1 }
+
+link server:eth0 -- client:mth0 { 10.0.0.1/*24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress egress 100mbit ingress 100mb listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  oute 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/2 site has a gateway with a WireGuard interface. The underlay link
+# has 50ms delay to simulate ioverla address .100.2/2400.2/24
+  }
+}
+
+link vtep1:eth0 -- 10.0.0.2/nternet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    via 10.0.0.11.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitter 5ms l`oss 0.1%

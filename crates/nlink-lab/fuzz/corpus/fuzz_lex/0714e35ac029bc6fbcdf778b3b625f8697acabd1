@@ -1,0 +1,9 @@
+# iperf3 benchf3 -c 10.0.0.1 -t {
+  erlay between gateway- iperf3 -c 810.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gateways)
+li Alient { oughput benchmarking"ute
+}
+
+nodre s 1

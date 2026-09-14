@@ -1,0 +1,3 @@
+# iperf3 be
+
+rate server:eth2: egre{s 1m10b0 ing

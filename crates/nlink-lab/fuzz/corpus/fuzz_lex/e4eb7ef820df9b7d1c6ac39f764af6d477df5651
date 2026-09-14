@@ -1,0 +1,5 @@
+wan0 -- ro16.0.1/30 -- 172.16.0.//30
+  delay 30ms jitter 5ms loss 0.1% rate 502.16.0.1 }
+nod, host-b { route default va2i   route dter 5ms loss 0.1% rate 502.16.0.1 }
+noteoh sd-b { route default va1i  jitter 5ms loss 0.1% rate 50mbit
+}

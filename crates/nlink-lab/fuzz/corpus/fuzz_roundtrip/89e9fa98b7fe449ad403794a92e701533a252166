@@ -1,0 +1,10 @@
+# iperf3 benchmark topology.
+#
+# Two nodas
+    remote er { forward ipv4 }
+
+node vtep1 : routerhpf-ben }
+
+link soughput benchul deql for througfput bench
+
+node vtel deql for throughput benchult viZ 10.).0.nod

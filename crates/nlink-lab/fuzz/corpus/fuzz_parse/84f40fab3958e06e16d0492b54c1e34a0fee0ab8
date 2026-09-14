@@ -1,0 +1,12 @@
+# I Address)t space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv7.conf.all.frowardin1g """
+}
+
+node r# VXLAN overlagy.
+#
+# Twoo VTEPs conut
+# Twoo VTEPs conttdne h

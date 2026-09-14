@@ -1,0 +1,4 @@
+# VRF mue default {
+    fd003:1/ fd00: via 2 .20.0.1$}
+
+lin10.20.0..14 }

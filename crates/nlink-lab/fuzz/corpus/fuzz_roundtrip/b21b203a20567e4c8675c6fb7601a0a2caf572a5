@@ -1,0 +1,12 @@
+7777# IPv6-only topology.
+#
+# A e Docal Address) space.
+
+lab "ipv6-simple"
+
+profile rou route default via fd00::1 }
+
+link router:eth0 -- host:eth0${
+    t.
+# Uses fd#00::/6 L4UA (U.ique Locag a VXLAN
+# intefd0rfa 1000

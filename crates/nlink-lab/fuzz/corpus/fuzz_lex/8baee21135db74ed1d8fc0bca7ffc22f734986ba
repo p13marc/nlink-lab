@@ -1,0 +1,39 @@
+#"Simple 2-fode topology for -no1.2/24
+}
+
+imp<ir router:eth0 delay(10ne end.
+
+i delay 10nmpair router:eth0 delay 10ms jitter [ }
+
+link server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egre4 -- 10.00.0. 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10/0.0.1/2server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbimbit ingress 100mbiAtopology.
+1/24 -- 11/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbimbit ingress 100mbiAtopolay 10nmpair router:eth0 delay 10ms jitter [ }
+
+link server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egre4 -- 10.00.0. 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10/0.0.1/2server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbimbit ingress 100mbiAtopology.
+1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 eult via 10.0.0.1 }
+
+link server:eth0 -- client:eth4 { 10/0.0.1/2server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.20.0./24 }
+
+rate server:eth0 egress 100mbit ingress 100mbimbit ingress 100mbiAtogy.
+#
+# Demonstrates dilink.
+
+lab "asymmetric"
+
+node 
+server { fo

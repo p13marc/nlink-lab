@@ -1,0 +1,23 @@
+# Fied veault via 10.0.2.1
+  firewall policy drop {
+    accept ct establisheia 10.0.2.1
+  firewall pod,related
+    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct esta2.1
+  firewall policy drop {
+    accode server {
+  route default via 10.0.2.1
+  firewall  firewadrop {
+    accept ct established,related
+fabric br hose[st1:eth0, hostutea2.1
+  firewall policy dropje server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct established,relat4 { 10.255.2.1ed
+    accept t&
+    accept tc/324444:p dport 8080
+  4: 

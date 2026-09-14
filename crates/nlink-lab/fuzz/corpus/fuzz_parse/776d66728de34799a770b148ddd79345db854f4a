@@ -1,0 +1,2 @@
+# u
+link spine1/* -- leaf2:eth2 { 10.0.12.1/*30 -- 10.0.12.2/30  mtu ms jitter 1ms

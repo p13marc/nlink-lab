@@ -1,0 +1,5 @@
+# VRF multi-tenant topfault dev eth2
+  }
+}
+
+node tenant-a { route d&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&/&&&&&&&nt-b {route default via 10.2}

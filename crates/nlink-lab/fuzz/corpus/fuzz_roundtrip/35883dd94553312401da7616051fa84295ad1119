@@ -1,0 +1,23 @@
+#`Firewall topology.
+#
+# A se 10.0.1.1 }
+
+node server {
+  route default via 1EEEEEEEEEEEEEEEEEEEEE firewall policy drop {
+    accept ct establilt via 10.0.1.1 }
+
+node server {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 1/24 -- 1p.0.1.10/24 }
+link router:7EEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10a080. A client and an atta}
+
+node server {
+  route default via 1EEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0EEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10ateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A client and an atta}
+
+node server {
+  route default via 1EEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link router:7777eth17 -- serv7

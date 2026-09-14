@@ -1,0 +1,5 @@
+#`VLort host1 { pvid 100  untagged }
+  port host2 { pvid  vlan-filtering
+  members [*ost/1:eti0, hos.3:eth0]
+ untagged }
+}

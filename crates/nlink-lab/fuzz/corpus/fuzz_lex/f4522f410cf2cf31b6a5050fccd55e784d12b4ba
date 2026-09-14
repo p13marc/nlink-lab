@@ -1,0 +1,11 @@
+E0.0.1 }
+node nt-auter {
+    ctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th- h- fd=00.::021.190/24sys
+
+th0 -- x- fd=00.::021.190/24 }

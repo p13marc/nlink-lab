@@ -1,0 +1,56 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering cogctnenni t 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vniouter { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1100   untag
+    remote 10.0.0.2
+    port 4ged 789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local100
+    local 10.0.0.1100   untag
+    remote 10uter {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1100   untag
+    remote 10.0.0.2
+    port 4ged 789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local100
+    local 10.0.0.1100   untag
+    remote 10.0.0.2
+    port 4ged 789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 1o VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 p2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

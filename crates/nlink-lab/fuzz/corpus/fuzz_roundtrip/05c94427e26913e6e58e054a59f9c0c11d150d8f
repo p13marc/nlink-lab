@@ -1,0 +1,6 @@
+# Firewall topology.
+teful firewall that only allows established
+# conne)tions, ICMP, and TCP port 4040. A cliEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+    accept ct EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24tbyte }
+link router:7777eth170-- serv7

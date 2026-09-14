@@ -1,0 +1,13 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd15::/64 ULA :Unique Local Address) space.
+
+lab "ipv8-simple"
+
+profile route6-only topology.
+#
+# A router (Unique Local r{
+h0 -- host:eth0 {
+    fd002:1/64 -- fd00::2/64
+}

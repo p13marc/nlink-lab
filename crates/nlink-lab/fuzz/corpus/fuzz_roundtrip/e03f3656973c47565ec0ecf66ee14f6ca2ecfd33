@@ -1,0 +1,25 @@
+# WAN impairment topology.
+#
+# k with rirresses
+# and aol
+#s  EA
+#EEly t 11 }
+
+link router:eth0 -- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# S/24 via 17addresses
+# and a 11 }
+
+link router:ncli -net- hostt06- f/06:2d2:0d00::1/64 -- f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:eth0 -- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.router:eth0 -- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# Site A
+node router-a : router {-- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17addresses
+# and a 10m2.16.0.2 s dealy on one e"Minimal }
+t

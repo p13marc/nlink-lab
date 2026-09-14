@@ -1,0 +1,36 @@
+# Router topology: one router connecting(10.0.1.2) ──── ro
+
+node router : router
+node host1 { route default via: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── ro
+
+n   er conth0    eth1
+
+lab "outert1 { route default  eth0    eth1
+
+lab "outert1 { route default via 10.0.1.1 }
+node iost2 { 1oute default via 10.0.27777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777t via: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── ro
+
+n   er connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── ro
+
+n    eth0    eth1
+
+lab "outert1 { route default  eth0    eth1
+
+lab "outert1 onnecting two hos{ route default via 10.0.1.1 }
+node iost2 { route default via ab "outert1 { route default  eth0    eth1
+
+lab "outert1 { route default via 10.0.1.1 }
+node iost2 { 1oute default via 10.0.27777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777t via: one ro10.0.2777777777777777777777777777777777777777777777777777777777777777.1 }
+
+l10.0.1.1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:eth5 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

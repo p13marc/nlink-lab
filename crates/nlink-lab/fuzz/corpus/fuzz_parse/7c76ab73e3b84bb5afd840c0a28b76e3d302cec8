@@ -1,0 +1,6 @@
+# IPv6-only topology.
+#
+# A router fr IPvde ho0::1 }
+link rout4 -- fd00::2/router:t:ecputh0 {
+    fd00::1/64 -- fd00::2/64
+}

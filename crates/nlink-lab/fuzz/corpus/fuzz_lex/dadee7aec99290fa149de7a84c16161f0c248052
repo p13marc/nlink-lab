@@ -1,0 +1,44 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-poinb"
+}
+
+profile rou host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms
+ription "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms
+/30  mtu 9000 }
+link spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 9000 }
+link spine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/30  mtu 9000 }
+
+# Access links (leaf <-> serve1.2/30  mtu 9000 }
+link spine1:eth2 -- lea1.1/24 -- 10.1.1.10/24 }
+link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

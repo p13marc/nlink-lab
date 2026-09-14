@@ -1,0 +1,9 @@
+# IPv6-onl    fd00::10eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1default via 11.0.0.2 }
+nod { route defauhost3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  po++++777777777.5777ode hostr+++++++++++777777777.4444444444444444444444444444444444444444444444444444444fd00::2/64
+}::::::::::::::::::::::::::::

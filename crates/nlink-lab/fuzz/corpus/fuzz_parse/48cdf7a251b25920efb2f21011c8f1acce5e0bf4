@@ -1,0 +1,12 @@
+# Asymmetric impairment topology.
+#
+#symmetric impafault via 10.0.0.1 }
+
+link server:etelay 5mink.
+
+lab "asymmetric"
+
+nod"asymmetric"-> delay 5mink.
+
+labmtu "a   # client → server: satellite uplink
+}

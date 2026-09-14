@@ -1,0 +1,5 @@
+# FICMP route d  firewall poorou FICMP, and TCPlab~
+    fd0ptest {
+ C2> fd00::30::3.34.3 }2
+
+}

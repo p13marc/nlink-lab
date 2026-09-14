@@ -1,0 +1,8 @@
+# IPvofile router {
+    sysctl "net.ipv6.c"
+}
+
+node rot { route default via fd00::1exec }
+
+linklt via fd00::1execlim -- fd00::2/64
+}

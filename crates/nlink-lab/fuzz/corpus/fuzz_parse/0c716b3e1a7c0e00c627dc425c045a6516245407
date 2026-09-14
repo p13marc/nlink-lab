@@ -1,0 +1,8 @@
+rding IPv6 traffic to a host.
+# Uses fd15::/64 ULA (Unique Local r {
+    sysctl "net.iuter
+nod"""
+}*
+node rouer:eth0 -- host:eth0 {
+    fd002:1/64 -- fd00::2/64
+}

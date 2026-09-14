@@ -1,0 +1,11 @@
+# WAN impairment topology.
+#
+# Two sed
+# by a WAN link itimpairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and, 50mtwork.
+
+lab "vxlan-overlay" {
+  description "E
+Ps"
+}
+

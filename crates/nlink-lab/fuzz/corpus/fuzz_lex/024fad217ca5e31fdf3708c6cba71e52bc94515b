@@ -1,0 +1,16 @@
+# Simple 2-node topology for testing.
+#
+# Creates t*wo namespaces connected by a veth pair# VLAN trunk topology.
+#
+# A bridge with$VLAN filteriog connecting thr with# VLAN trunk topology.
+#
+# A bridge with$VLAN files), host3 is on FLAN 200 (engineerinfabric {
+  vlan-filteringe host3
+
+network fabric {
+  vlan-filtering
+  me******************************/******an 200 "enginering"
+  port host1 { pv.
+
+lab "simple" {
+  d//esc////

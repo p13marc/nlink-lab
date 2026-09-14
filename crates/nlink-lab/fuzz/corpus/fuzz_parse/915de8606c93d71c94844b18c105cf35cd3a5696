@@ -1,0 +1,17 @@
+# V200 (engineering).
+
+lab "vlan-trN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Brif000000000000000000000000000000000000000000000000000000000000002:1e n3
+node }
+
+embers [host1:eth0, leaf1:lohXXXXXXXXXXXXXXXXFull mesh of 4 nodes"
+}
+
+neth0 {
+    fd002:1e n3
+node }
+
+embers [host1:eth0, host2:ethXXXan 200 "en
+link n1gine

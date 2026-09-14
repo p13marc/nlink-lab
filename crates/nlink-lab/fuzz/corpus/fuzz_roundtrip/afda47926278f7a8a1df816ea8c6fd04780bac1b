@@ -1,0 +1,10 @@
+# Router topology: one ro.1.2/24
+}
+
+link router:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10pull. -- h# VLAN0  untagged }
+  portlan-filtering
+
+  vlc {
+  vlan-filtering
+  me

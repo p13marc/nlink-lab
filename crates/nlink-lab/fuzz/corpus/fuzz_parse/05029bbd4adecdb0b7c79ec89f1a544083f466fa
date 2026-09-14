@@ -1,0 +1,14 @@
+#
+# Two sites (site-a, site-b) each withjitteutraen d a host, connected
+# by a WAN link withoss, and 50mbit ratQ limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by link"
+}
+# VLAN trunk topology.
+#
+# A
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/240via 172.16.0.2topology: 4 nodes fully via 10.1.. bridge with VLAN filtering cino

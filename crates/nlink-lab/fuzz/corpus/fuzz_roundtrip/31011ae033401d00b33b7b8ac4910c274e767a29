@@ -1,0 +1,22 @@
+# IPv6-onby t{{{{{{{{{{)))))))))))))))))
+pr# iperf3 benchmark topology.
+#
+#0.0.1 -t 5
+
+lab "iperf-bench" {
+  desofile router ode server { route default via 10.0.0.2nod { route defauhost3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1default via 11.0.0.2 }
+nod { route defauhost3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  po++++777777777.5777ode hostr+++++++++++777777777.5777ode hostr++++++77577++++++++++++77.7777774 -- 10.0.0.2/24 }
+ostr+++++++++++777777777.5777ode hostr++++++77577++++++++++++7777777774 -- 10.0.0.2/24 }
+
+rat4
+ : router
+node hostr+++++++++++++++++e server:eth0 egress 100mbit ingress 100nOde+777777777.5777ode hostr+++s for throughput Fenchmarking++"
+}
+
+n++er

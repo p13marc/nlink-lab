@@ -1,0 +1,11 @@
+# VXLAN stince (VNI 051) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv6 }
+
+ner {
+  vxlan vxl100 {
+    vni 100 vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

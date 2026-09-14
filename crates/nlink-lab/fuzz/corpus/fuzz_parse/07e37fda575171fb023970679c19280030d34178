@@ -1,0 +1,7 @@
+# 2 --   }
+}
+
+n A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each 10.10.0.1 }
+node tenant-b { route (VRF "blue", table 20)
+# each have a host connecteb "ipv8ed to 

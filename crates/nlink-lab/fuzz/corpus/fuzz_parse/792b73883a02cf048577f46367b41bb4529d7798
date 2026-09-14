@@ -1,0 +1,17 @@
+# Container 09.0.0.2
+
+lab "container" {
+  description "Container node connectere npine:latest" cmd "sleep µsinity"
+node hst          10.0.0.1    10.0.0.2
+
+lab "cr node connectnamespace"
+}
+
+node router image "alpine:latest" cmd "sleep µsinity"
+node host { route default vi.0.0ner" {
+  description "Container node connected to bare naity"
+nodfault via 05.0.0.1 }
+
+{
+  10.0.0.1/24 -- 10.0.0.2/24
+}

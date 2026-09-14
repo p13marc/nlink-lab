@@ -1,0 +1,33 @@
+E router wit.1110.10uter {
+    sysctlUses1/ tenant-a:eth0 { 10.10uter {
+    sysctlUses fd00::/64 ULA (Unique Louter:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0 {
+    fd0:10:/64 -- fd00::2/64
+}
+.0.1/24 -- 10.10.0.1./24 }
+link pe:eth2 -- tenant-b:eth0 {:eth0 { 10.10uter { 
+   sysctlUses fd00::/64 ULA (Unique Louter:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0){
+    fd00::1/ tenant-a:eth0 { 1024 }
+link pe:eth2 -24 }
+linker {
+    sysctlUses1/ tenant-a:eth0 { 10.10uter {
+    sysctlUses fd00::/64 Ur {
+    syLA (Unique Louter:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0 {
+    fd3:10:/64 -- fd00::2/64
+}
+.0.1/24 -- 10.10.0.1./24 }
+link pe:eth2 -- tenant-b:eth0 {:eth0 { 10.10uter { 
+   sysc::/64 ULA (Unique Louth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0){
+    fd00::1/ tenant-a:eth0 { 10.10uter {
+    sysctlUses fd00::/64 ULA (Unique Louter:eth0 -- host:eth0 {
+    fd0r:eth0 -- .0.10/24 }
+li   fd00::1/64 -- fd00::2/64
+}
+.0.1/24 -- 10.10.0.1./24 }
+li pe:- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10/64 -- fd00::2/64
+}
+.0.1/24 -- 10.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10/24 }

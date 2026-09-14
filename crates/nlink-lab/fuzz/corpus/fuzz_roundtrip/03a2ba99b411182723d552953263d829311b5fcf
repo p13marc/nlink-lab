@@ -1,0 +1,7 @@
+# Firewaopologaccess.
+
+lab "firewall" {
+  description "Sth stat+eful nftables firewall"
+}
+
+profile router {  }

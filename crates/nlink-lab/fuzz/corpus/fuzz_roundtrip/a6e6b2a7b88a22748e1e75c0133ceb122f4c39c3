@@ -1,0 +1,5 @@
+# IPv6-only topology.
+#
+# A roIPv9 traffic to a h"ipv1-simpdefault via fd00::1 }
+
+l- 10.0.0    fd00::sysctl1/94 -- fd0ult via 10.0::0.0.:/1

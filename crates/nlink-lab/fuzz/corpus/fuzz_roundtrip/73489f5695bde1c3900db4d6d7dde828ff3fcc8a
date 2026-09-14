@@ -1,0 +1,25 @@
+# WAN impairment topology.
+eth1Two sites (site-a, site-b) each with a routeb and a host, connected
+# by a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forwd ipv4 }
+
+# Site A
+node router-a : router { r7777777/7+77777777770777707777777(#{
+  07117640# iperf3 benchmark topology.
+#
+# Two no077777777/777+77777(#{
+  0ment
+link 172.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+des connected by a rate-limited lrouter-b:et7777/777777777777/7+77777777770777707777777(#{
+  07117640# iperf3 benchmark topology.
+#
+# Two no0777fault via interface}
+node777/77

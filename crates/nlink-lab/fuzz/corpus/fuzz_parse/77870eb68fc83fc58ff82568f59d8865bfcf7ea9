@@ -1,0 +1,2 @@
+# uplinks, a.12.2//3mtu 9000 }
+link spine1:eth21 -- leaf1:th1 { 10.0.12.1/*32:eth1 -- leaf1:eth2 {10.0# .21/.130 -F- 10*0.u2

@@ -1,0 +1,37 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting three ho# WireGuard VPN topology.
+#
+# eGuard interface. The underlay w-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.2by a WireGuardsite WireGuard VPN ovey auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  ireGuard tunnel over a simulated WAN link.
+# Each site has a gateway with a WireGuard interface. The underlay w-a : gateway {
+  wiregua key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.2by a WireGuardsite WireGuard VPN over WAN"
+}
+
+profile gateway { forward ich site has a gateway with a WireGuard interface. The underlay w-a : g

@@ -1,0 +1,43 @@
+# Simple 2-node topo&ogy for testing.
+#
+# Creates node host {
+  route defaVVVVVVVVVVVVVVVVVVVVer {
+  route 10.0.0.0/8 vi 01a.0.0# Asymmetric impairm24
+  }
+}
+
+noding.
+#
+# Create ent .2
+}
+
+node host {
+  route defaVVVVVVVVVVstmona.0.0# Asymmetric impairm24
+  }
+}
+
+noding.
+#
+# Create ent .2
+}
+
+node host {
+  route defaVVVVVVVVVVVVVVVVVtopology.
+#
+# De# Simple 2-node topology oute 10.0.0.0/8 vi 01a.0.0# Asymmetric impairm24
+  }
+}
+
+noding.
+#
+# Create ent .2
+}
+
+node host {
+  route defaVVVVVVVVVVVVVVVVVtopology.estmona.0for testmonstrates overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+#VVVVVVVVVVVV interface (VNI 400) for the overlay network.
+
+lab "vx;lan-overent VVVVVVVVtopologyVVu

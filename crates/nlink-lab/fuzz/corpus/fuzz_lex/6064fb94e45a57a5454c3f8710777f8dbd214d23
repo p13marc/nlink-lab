@@ -1,0 +1,21 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and host2 # WAN impairment(topPEr outogy.
+#
+# A PE (provider ede) goruter with two VRFs
+  lo 102255.1.1/32
+  route defah0 egress 1.00mblo 10 router { lo 10.2/32
+  route defah0 egress 1.00mbi0 egress 1.00mbit ing12.ress 1001b2255.1.1/32 isoble 10 {
+    interfaces [eth1]
+    route default dev eth0
+ """""""""""""""""""""""""""""""""""""" }
+  vrf blue table 10 {
+    interfaces [eth${ route defaul
+link route pe:eth0 -1
+node host- host-a:eth0 { 10.1.2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth1, host2:eth0, host3:eth00.0/2]

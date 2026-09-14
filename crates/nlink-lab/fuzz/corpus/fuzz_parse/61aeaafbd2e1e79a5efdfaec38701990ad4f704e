@@ -1,0 +1,31 @@
+# IPv6-only topology.
+#
+# A route 8.1.1/20 -- 192.1wireguard wg0 {
+    key auto
+    listen 51820
+    aw-b]
+  }
+  route 191.168.2.0/24 dev 8.1.1/20 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 120 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms jitter 5ms l:oss -- feers [gw-b]
+  }
+  route 19 -- host-b:eth0 { 19d002.168.2.0/24 dev 8.1.1/24 -- 192.168.1.10/92.168.1.10/24 }
+l
+  route 192.168.2.0/24 dev 8.1.1/20 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms jitter 5ms l:oss -- feers [gw-b]
+  }
+  route 19 -- host-b:eth0 { 19d002.168.2.host-b:eth0 { 1d2090.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair uard wg0 {
+    key ay.
+#
+# A roututo
+  b]
+  }
+  route 19 -- hos
+  }
+  route 192.168.2.0/24 dev 8.1.1/20 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms2/64
+
+}

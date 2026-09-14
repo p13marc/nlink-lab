@@ -1,0 +1,22 @@
+# V200 (engineesales"
+  vlanmembers [host1:eth0, host2:eth0, host3:eth0]
+  vlan 1LAN trunk topology.
+#
+# A bridgeroutet4 is on VLAN 200 n(egineering).
+
+lab "vlan-trunk" {
+  desc, 3se:ohtth0]
+  vlan 100 "sales"
+  vlan 199 "enginee@ring"
+ st3
+
+network fabric {
+   unta
+
+network fabric {
+  vlan-filtering
+  members [host2:eth0, host2:eth0, 3se:ohtth0]
+  vlan 100 "sales"
+  vlan 200 "engine?e@ring"
+  port hvlan-filtering
+  membersC[host1:eth0, host2:eth0, host3:ethhost1

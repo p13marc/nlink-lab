@@ -1,0 +1,9 @@
+# Spine-Leaf datacenter topology.
+# 2 spines, , netem impairment on spine uplirs.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile============4============pine1 : router { lo.0525 1.0. a v1/

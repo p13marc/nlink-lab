@@ -1,0 +1,37 @@
+# Wiunnel over a simulated WAN link.
+# Each site has a gatewa 50ms delay to simulat;e internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    # VXLAN overlay topology.
+#
+# Tw
+    key auto
+    listen 51820
+    # VXLAN oveRlay topology.
+#
+# Two VTEPs connectconnecting two hosd ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 099
+    loaddress 192.1cal 10.0.0.1
+    remote 10.0.0.6

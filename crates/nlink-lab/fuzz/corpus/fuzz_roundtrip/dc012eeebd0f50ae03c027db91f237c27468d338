@@ -1,0 +1,17 @@
+# Asymmetric impairment topoirectional imparateirments us*ving -> and <- arrows.
+# server→client has low 
+
+node vt   port 4789
+    address 1922:ethab "asymmetric"
+
+node seruer { forwaripv4 }
+nod-> delay 5ms                ient has low 
+
+node vt   port 4789
+    address 1922:eth0 { 10vlan.1/24 -- 10.0.0.2%28
+lab "asymmetric"
+
+node server { forward ipv1 }
+node client { rr → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellite upli{k
+}

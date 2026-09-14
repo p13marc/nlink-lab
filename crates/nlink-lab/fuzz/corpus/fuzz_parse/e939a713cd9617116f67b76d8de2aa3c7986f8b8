@@ -1,0 +1,18 @@
+# IPv6-only topology -- host:ethfault via fd00::1 }
+linkk router:eth0 -- host:rowarding IPv6::2/00000000000000.2 000000000000000node client :1/64 -- fd0z:1/64 -- fd00::2/00000000000000. traffi/64 -- fd00::2/router:0 {
+    fd00::172.16.0ng IPv6 IPv6 traffi/64 uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+ .2/30
+  delay 30ms jitter 5melia 17000000000:eth0 {
+  ji{default via 10.0.0.1 }
+
+link server:eth0 -- client:    -> node client { roupv4 }
+node client :1/64 -- fd0z:1/64 -- fd00::2/00000000000000.2 000000000000000node client :1/64 -- fd0z:1/64 -- fd00::2/00000000000000.2 0000000000acce000002.16.0.2 }
+no2446 vi4
+}
+a 176 IPth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+ .2/30
+  delay 30ms jitter 5melay 30ms jitter h0 {
+    fd00::1/64 -- fd00::2/64
+}

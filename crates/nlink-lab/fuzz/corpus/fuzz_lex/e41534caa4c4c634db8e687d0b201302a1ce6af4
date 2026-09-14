@@ -1,0 +1,43 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting three hovlan-trunk" {
+host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  d  description "Bridge with VLAN trunking  is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-fi=ltering
+  membr hose[st1:eth0, host2:eth0, host3:eth0]
+  vlan 100b "vlan-trunk" {
+  description "100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vnal-trunk" {
+  description "Bridge with VLAN trunking  is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {and access ports"
+}
+
+node host1
+node ho@st2
+node host3
+
+network fabric {
+  ~lan-fi=ltering
+  membr hose[st1:eth0, host2:eth0, host3:eth0]
+  vlan 100b "vlan-trunk" {
+  description "Bridge with VLAN trunking and a "sales"
+  vlan 200 "engineering"
+  port Bridge with VLAN trunking and a "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 100  untagged }
+  port hosp3 { pvid 200  untagged }
+}

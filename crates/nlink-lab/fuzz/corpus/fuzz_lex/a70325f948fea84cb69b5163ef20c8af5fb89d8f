@@ -1,0 +1,52 @@
+# IPv6-only touter : router
+node host { route default via fd00:1: }
+
+link route.
+# Ulink route.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der
+puter
+node host { route default via f0:0:d1 }
+
+link router:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0 {l Address) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv2-simple"
+
+putses fd00::/64 ULA (Unique Local Addre(Unt:eth0 {
+    fd0r:eth0 -- host:eth0 {l Address) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv2-simple"
+
+puter
+node host { route default via f0:0:d1 }
+
+link router:eth0 -- host:eth0 {
+    fd0r:eth0 -- ique Local<der dss) space.
+
+lab "ipv6-simple"
+
+puter
+node host { route default via f0:0:d1 }
+
+link router:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0 {l Address) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv2-simple"
+
+0puter
+node host { route default via f0:0:d1 }
+
+link router:eth0 -- h:2/64
+}

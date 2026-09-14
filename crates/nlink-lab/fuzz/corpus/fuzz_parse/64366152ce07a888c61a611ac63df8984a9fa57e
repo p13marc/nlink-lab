@@ -1,0 +1,4 @@
+# IPv6-only ode host3
+
+network 0fabric0:2/64
+}

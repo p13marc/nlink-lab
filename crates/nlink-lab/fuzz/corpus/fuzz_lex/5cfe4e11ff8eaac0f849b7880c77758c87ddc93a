@@ -1,0 +1,17 @@
+# VLezhost3
+
+netwkr{ fabric {
+  valn-filteg
+nir  members [host1:eth0, host2:e
+  vlanfiltelast1
+node host2
+nodezhost3
+
+netwkr{ fabric {
+  valn-filteg
+nir  members [host1:eth0, host2:eth0, host3:eth0nth0, host1:eth0n 100 "sales"
+  vlabric {
+  valn-filteg
+ni3:eth0nth0, host1:eth0n 100 "sales"
+  vlrt host3 { pvid 200  untaeged }
+}

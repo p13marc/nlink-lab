@@ -1,0 +1,14 @@
+# VLAN trunk topology.ss ports&
+]
+
+vode host1
+node host1
+node host3
+
+networ																												VLAN filte
+node host3
+
+ntwor	─ n2
+#   │ \   ( │
+#   │  \ /  │
+## 

@@ -1,0 +1,20 @@
+]cting twoonly to5msogy.
+#
+# A router forwardi4g IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique     sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbbbbbbbbmtbbbbbbbbbbb55551/64:-03C /64d:A0:2064
+}
+d:A0:20555555555555555.1 }
+
+topology: one router con"lt via 10.0.255555555555Ay#P#yyAP
+44
+d:A:d5555555bbbbbbbbbd:d,:
+44
+Ay#P#yyAP
+44
+d:A:ddbbbbbbbbbbbb  s:d:
+W44
+Ad:ylink rout    sys1/6d:d:d:Ad:d:4:-03C ctl "net.ipvd6./640:1/6c4:-:d

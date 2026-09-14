@@ -1,0 +1,22 @@
+4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeaule:eth0 ho-s-:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecpouter:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd0:0:29router:eth0 -- host:ecputh0jitte {
+    fd00::1/6- fd00::2/64# Ir:eth0# WAN imp+ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeaulecputh0 {
+    fd00::1/64 -- fd00::2/router:et::1/32 -- 02:0df:/64
+}
+t:ecputh0 {
++   fd00::1/64 -- fd00::2/router:eth0 ho-s-:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecpouter:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd0:0:29router:eth0 -- host:ecputh0jitte {
+    fd00::1/6- fd00::2/64
+}

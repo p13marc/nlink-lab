@@ -1,0 +1,15 @@
+# Firewall t# # opology.
+#
+# A servt { route default via 10.0.1.1 }
+
+node server {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+    accept ct established,relate.d
+    accept tcp dport 8081
+    acce {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.rver {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE ault via 10.0.1.1 }
+
+node server {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.

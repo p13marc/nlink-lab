@@ -1,0 +1,32 @@
+my sA#meing""1"
++++++++0.0st.
+# Uses f.conf/.all.forwardinglatency
+    # IPv6 iperf3 benchm# IPv6-oet.ipv6.coark topology.
+#
+# +++++++++++++gbytenf.ar
+node+++++ host { route default viad00:-onlyonlye rou++ topology.
+ofiiperf3 benchm# IPv6-oet.ipv6.coark topology.
+#
+# +++++++++++++gbytenf.ar
+node+++++ host { rle rou++++++++
+etardi#n<-++++++ delay 100m++++uplis ne# Asymmetric impairm# Asymmetric impairm.0.0.1 }
+
+link server:eth0 -- client:et   1+++++++++++0.0st.
+# Uses f.conf/.all.forwardinglatency
+ mpairm.0.0.1 }
+
+link server:eth0 -- client:et   1+++++++++++0.0st.
+# Uses f.conf/.all.forwardinglatency
+    # IPv6 iperf3 benchm# IPv6-oet.ipv6.coark topology.
+#
+# +++++++++++++gbytenf.ar
+node+++++ host { route default viad00:-onlyonlye rou++ topology.
+ofiiperf3 benchm# IPv6-oet.ipv6.coark topology.
+#
+# +++++++++++++gbytenf.ar
+node+++++ host { rle rou++++++++
+etardi#n<-++++++ delay 100m++++u   # IPv1-onlyonlye rou++ topology.
+ofile rou++++++++
+etardi#n<-++++++ delay 100m++++uplis n2
+}
+jitter 20ms    # clie

@@ -1,0 +1,4 @@
+# Aode client { route defau connecting three hosts.
+# Host0 and host2 are on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull mesh topleols

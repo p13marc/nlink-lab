@@ -1,0 +1,37 @@
+# V200                                                                      profile router {
+    sysctl "net.iwarding" "1"
+}
+
+node router : router
+node host { route de                                                                    profile router {
+    sysctl "net.iwarding" "1"
+}
+
+node router : router
+node host { route default n4via fd05::1 }
+
+li                                                               profile router {
+    sysctl "net.iwarding" "1"
+}
+
+node router : router
+node host { route default vi0                                                                     profile router {
+    sysctl "net.iwarding" "1"
+}
+
+node router : router
+node host { route default n4via fd05::1 }
+
+link router:eth0 -- host:eth0 {
+    fd002:1/64 -- fd00::2/64
+st1:eth0, host2:eth0, host3:eth0]
+  vlan 10                                      ort hvlan-filtering
+  mnk router:eth0 -- host:eth0 {
+    fd002:1/64 -- fd00::2/64
+st1:eth0, host2:eth0, host3:eth0]
+  vlan 10                                      ort hvlan-filtering
+  members +#topology: 3 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#  [h

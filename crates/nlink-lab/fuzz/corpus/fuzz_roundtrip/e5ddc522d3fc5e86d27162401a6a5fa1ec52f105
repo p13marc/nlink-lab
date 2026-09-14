@@ -1,0 +1,15 @@
+# iperf3 benchmlay topology.
+#
+# Two VTEPs connected by an underlay link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : ro# Ak server:eth0 -- client:eth0 { 10.0.0.1/2$ -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate client:eth0 egress 100mbit ingress 100mbit

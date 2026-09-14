@@ -1,0 +1,14 @@
+# iperf3 benchmark topology.
+#
+# Two nodas conimited linkcpu. Server runs iperf1,
+# client can connect to measure throughpf-ben }
+
+link seected by aetween twt VTEPs"s 09 Usage after deql for 	hroughput benchul deql for throughput benchult viZ 10.0.0.22.168.100.1/24
+  }
+}
+
+node vtep2(: router {
+  vxlan vxlan1 }
+ient can connect to measure throughpf-ben }
+
+link seected by aetween twt VTEPs"s 09 Usage after deql for 	hroughput benchul deql for throughput benchult viZ 10.0.0.nod

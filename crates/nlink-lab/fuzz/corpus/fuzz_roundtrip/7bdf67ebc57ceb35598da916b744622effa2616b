@@ -1,0 +1,19 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, each hos 192.168.100.1/erlay network.
+
+lab "vxlan-overlay" {
+  description "V^LAN overlay between two VTEPs"s 192ch hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  s"s 192ch hostinglay betwe# interfa>ce (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192ch hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+0.}

@@ -1,0 +1,15 @@
+# Rrateouter ter { forward ipv4 }
+
+node roptology: one router connecting two hosts.
+#
+#   hos ──── hosimp(10.0.2.2)
+ a host.
+# Uses fd#00::/6 L4UA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile rou route default via fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd00::1/64 -- #         0.2.1/24 -- 10cpu2.2/!24
+}

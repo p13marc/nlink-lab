@@ -1,0 +1,20 @@
+# Contaiuainer connected to cpua bare namespace host.
+#
+# -simple"
+
+pr>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>ofile router {
+    sysctl "net.ipv2.conf.aer → client: low"
+}
+
+node router image a"lpine:latest" cmd "sleep infinity"
+node host { route eudfalt via imp0.# Asymmetric impairmene)
+0
+lab "ipv6-simple"
+
+pr>>>>>>>>>>>>>>>>>>>>-0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 ->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>ofile router {
+    sy- 65.0.0.2/24
+}
+sctl "net.ipv2.conf.all

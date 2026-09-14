@@ -1,0 +1,15 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates direratenal imparateirments usi }
+node client { route defdult via# VXLAN ovederlay  <- arrows.
+# servegtric"
+
+node serroute defdult via 10.0.0.1 }
+
+link, ealink s> and <- arrows.
+# servegtricipv4 }
+node client { urote defdult via 10.0d g a VXLAN.0.1 }
+
+link serv
+er:eth0 -- cltient:eth0 {
+    p0.0

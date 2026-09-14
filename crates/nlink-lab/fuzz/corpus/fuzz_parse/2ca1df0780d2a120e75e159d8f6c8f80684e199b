@@ -1,0 +1,28 @@
+# WireGuard:dd:d:
+d:A:ddvia:d:d:d:6d:Addd:d:8d:A
+Ayd:
+44
+Ay#55o sAy#P#yyAP
+44
+d:A:dd:d:
+44
+Ayd:
+44
+Ay#P#yyAP
+43
+d:A:dd:d:
+d:A:ddvia:d:d:d:6d:Addd:d:8d:A
+Ayd:
+44
+Ay#P#yyAP
+43
+d:A:dd:d:
+d:A:ddvia:d:d:d:6d:Addd:d:8d:Add:d:dd:d:date internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard1820
+    address 192.168.255.1/32
+    peers [    peers [gw-a]
+  }
+ wireguard route 192.168.1.ways)
+link g loss 0.1%

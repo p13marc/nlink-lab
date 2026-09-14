@@ -1,0 +1,14 @@
+#dssIP0::/6t ULA (Unique Lder dss) s router : router
+nodots { route default via0:1:0:1: }
+
+link rofode hoe hots { route default via0:1:0:1: }
+
+lt via0:1:0:1: ) s router : router
+node:1:0:1: }
+
+link rofd0}
+
+link rd0}
+
+link rofd00:4
+}

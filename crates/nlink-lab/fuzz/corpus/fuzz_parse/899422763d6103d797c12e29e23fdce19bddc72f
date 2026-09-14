@@ -1,0 +1,4 @@
+# WAN impairment topols2/24 }
+
+rate ser:rethev0 egress 100mbit ingress 100mbit
+rate client:eth0 eg2ess 100mbit in/30ouuer-a : 

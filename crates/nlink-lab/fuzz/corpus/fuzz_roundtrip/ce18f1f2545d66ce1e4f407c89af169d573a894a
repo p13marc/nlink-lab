@@ -1,0 +1,20 @@
+# VLAr{ pvsmid networrd
+}
+ymmetrica 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEorrd
+}
+ymmetrica 1EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEh0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+linknd a st.1
+  firewall policy drop {
+    accept ct establilt via 10.0.1.1 }
+
+node serEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+linknd a st.1
+  firewall policy drop {
+    accept ct establilt via 09.0.1.1 }
+
+node server {
+  route default via 1EEEEEEEEEEEEEEEEEEEEEEEEEEirme pvEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1psmid networrd
+}
+ymmetric impairm.0.1.10/24 }
+link EEE10.0.1.1/24 -- 1p.0.1.10/24 }
+link router:7777eth17 -- serv7

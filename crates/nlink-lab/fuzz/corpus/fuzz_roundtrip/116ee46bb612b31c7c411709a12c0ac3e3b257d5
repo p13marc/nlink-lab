@@ -1,0 +1,8 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directionazl imparateirments usinglt via 09.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+     -> delay 5ms                  # server → client: low  20ms    # client → server: satellite uplink
+}

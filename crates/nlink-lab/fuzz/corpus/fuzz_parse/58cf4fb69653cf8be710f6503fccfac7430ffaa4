@@ -1,0 +1,4 @@
+1/64 -- fd00::2/6-- host:eth0 {
+  jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fd0z:1/64 -- fd00::2/6-- host n4:eth2 { 10.3.4/1/30 -- 10.3.4.2/30 }

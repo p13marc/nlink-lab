@@ -1,0 +1,22 @@
+# Router topology: one router connecting two 'osts.
+#r ──── host2 (10.0.2.2)
+#        two subnetcmds"
+}
+
+profile toreur { forward ipv4 }
+
+node +router : router
+node host2 { 0.2.2)
+#                       eth0    eth1
+
+EEEEEEEEEEEEEEE0.0.2.1
+  firewall polard ipv4 }
+
+node +router : router
+node host1 { 0.2.2)
+#                       eth0owsEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+EeEEEEEE0.0.2.1
+  firewall pcept tcp dport 8080
+   /24
+}

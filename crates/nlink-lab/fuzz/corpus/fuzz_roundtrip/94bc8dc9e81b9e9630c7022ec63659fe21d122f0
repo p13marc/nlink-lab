@@ -1,0 +1,17 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-li#mieasure throughput.
+#
+# Usage after deploy:
+# nlinkec iperf-bench client -- iperf2 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throubenchult via 10.0.0.2 }
+node client { route default dev 10.0.0oy:
+# nlink-lab exec iperf-bench client -- iperf3#
+# Usage after deploy:
+# nlink-lab Exec iperf-bench client -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for r:eth0 egress 100mbit ingress 100mbit
+rate client:eth0 egress 100mbit ingress 100mbit

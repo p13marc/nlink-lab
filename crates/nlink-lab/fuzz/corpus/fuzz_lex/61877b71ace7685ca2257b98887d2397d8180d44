@@ -1,0 +1,14 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spi, 2 serveesses, netem impairme netem impa0 }
+lspine0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:eirment a 10.1.1.1 }
+node seropology.
+#
+# 2 spines, 2 lerb3 benchmark topolonected by a rate-l leaf*
+link sp<-> 1erver)
+link leaf1:eth3 -- serveobit ingress 100mb2:eth0 022.2/3 leaf2:eth3 R/8 via 10.0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ 1ms

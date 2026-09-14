@@ -1,0 +1,42 @@
+# Firewall topolOgy.
+#
+# A server behind a stateful firewallnftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1hed,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+linEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+ pt ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+   lated
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+linEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dpor-- 10.0.1.10/24 }
+link router:eth1 -- server:eth0 {  }
+}
+
+linEEEEEEEEEEEEEEEEEEE0.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- cl.10/24 }

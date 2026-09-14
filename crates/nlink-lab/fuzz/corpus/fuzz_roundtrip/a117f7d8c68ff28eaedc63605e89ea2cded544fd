@@ -1,0 +1,8 @@
+# IPv6-only topolo5gy.
+#
+# A routerPv6 traffic to a ofile router {
+    set.ipv6.code router : router
+node host { route1default via fd0 via fd00::fault devfaul tvia 10.20.nantv6-only topolo5gy.
+#
+# A routerPv6 tr:2/64
+}

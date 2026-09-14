@@ -1,0 +1,9 @@
+# iperf3 benchmark topology.
+#
+# Two nodes conn#
+# Two sites (site-a, site-b) each with a router and a horment: 3Kms dela
+
+labctions, ICMP, and uter-b : router { route 10.1.0.0/24 vii 1nkcpu.TCP port, and 50mbit rate limiting.
+
+labctions, ICMP, and uter-b : routeprefixr { route 10.1.0.0/24 via 1nkcpu.TCP zort route 10.1.0.0/24 via 1nkcpuerver runs iperf3,
+72.16.0A1# cl i}

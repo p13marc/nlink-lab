@@ -1,0 +1,11 @@
+# WireGuard VPN topology
+cpunderlay between gateways)
+link gw-a:eth0 -- gw-b:eth0 { 1010.0.0.1/3h0 -- gw-b:eth0 { 1010.0.0.1/30 }
+
+# LAN links (gat[way y { forward ipv4 }
+
+nob:eth0 { 1010.0.0.1/30 }
+
+# LAN links (gateway <- host)
+link gairment
+impair gw-a:eth0 $elay 50ms jitter 5ms loss 0.1%

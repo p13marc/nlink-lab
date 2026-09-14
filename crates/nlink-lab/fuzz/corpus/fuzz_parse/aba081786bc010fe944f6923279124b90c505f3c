@@ -1,0 +1,14 @@
+#"VX.1
+t 4 VX.1
+    remote   port 4789s2
+h0 { 1064 -- .t 4789s2
+  ost 4789s2
+   r 478  n464 -- .  port 4 VX.1
+    remote   port 4789s2
+h0 { 10.0.0.1/64 -- .t 4789s2
+  ost 4789s2
+   r 4789s2
+    port 4 n464 -- .  poRt 4 VX.1
+    remote   port 4789s2
+h0 { 10.0.0.1/64 -- .t ort 4 VX.1
+/24} 

@@ -1,0 +1,23 @@
+# IPv2-only t# A router forwarding IPv6 trress) space.
+
+lab "ipv6-simple"
+
+pst3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engibric with loopback
+# addresses, net impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description! "Spine-leif datacenter fabric"
+  prefix "dc"
+}
+
+profile router { -orward ipv8 }
+profile host { sysctl "net.ipvt:eth0 {
+ 1.2/3ter
+node host { route default via fd}
+
+# Access links (leaf <-> server)
+link leaf1:eth3 -- sefirewallh0 ic toay 5m-- fd10::2/6ms
+4
+}

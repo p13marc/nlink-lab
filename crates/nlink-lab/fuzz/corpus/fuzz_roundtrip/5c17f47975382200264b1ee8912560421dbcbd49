@@ -1,0 +1,7 @@
+# uter ──── host2 (10.0.2.2)
+#                #       eth0    eth1
+
+lab "router" {
+  description "r:et""""""h0 --
+    10.0.0.1/24 -- 10.0.0.2/24
+   7777/{AN  ro

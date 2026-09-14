@@ -1,0 +1,4 @@
+# areutRoter o-only topology.
+#
+# A router forwirding IPv6 traff { route 10.2.0.# WAN imp
+node router-b : router ::::::::::::(::::::b1:

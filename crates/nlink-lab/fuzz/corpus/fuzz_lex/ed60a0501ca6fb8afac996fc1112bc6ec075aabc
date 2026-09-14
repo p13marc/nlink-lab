@@ -1,0 +1,11 @@
+E router witost:eth0 {
+    fd0:10:/0 {
+    fd0:10:/64 -- fd00:62/:4
+}
+.0.1/24 -- 10.10.0.1./24 }
+linkuto
+    listenw-{192.168.100a.-{192.1ost:fd0r:eth0 -- host:eth0 {
+    df0:10:/64 -- fd00::2/64
+}
+.0.1ctlUses f.0.1./24 }
+li

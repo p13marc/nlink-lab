@@ -1,0 +1,5 @@
+# defau- 10.0.0.2/24
+    -> delay 5ms                                                                   au- 10.0.0.2/24
+    -> delay 5ms                                                                                                                                    -   router
+node host { route defau- er: i                                                                 -   router
+node host { route defau- er: i

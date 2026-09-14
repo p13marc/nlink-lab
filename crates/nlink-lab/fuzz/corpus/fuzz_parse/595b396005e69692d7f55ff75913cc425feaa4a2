@@ -1,0 +1,11 @@
+# Contair conalpine:latest     099mbit ingress 100res   WAN    09.0.0.1    10.0.0.1
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node rouoer image "# pairment topology.
+#
+# e-a, site-b) ea# iper -c 10
+
+rate server:eth0 egress 100mbit ingress 100ress 100mbite:latest" cmd  

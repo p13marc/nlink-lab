@@ -1,0 +1,13 @@
+# iperf3 benchmark topology.
+#
+# Two nod~iting.
+
+labctan atorward ipv4 }
+
+node router : router
+
+node client { r
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 1nkcpu. Server runs ipeouter-b : router { route 10.1.0.0/24 via 1nkcpu. Server runs iperf3,
+72.16.0.1# cl i}

@@ -1,0 +1,27 @@
+# Asya Asyates direratenal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node cipv6lient { route default vmmetric impairment topology.
+#
+# Demonstrates direratenal imparateirments using -> and <- ]rrows.
+# servegtric"
+
+nt:eth0 {
+ ric impairme
+# Demonstrates direratenal imparateirmentes direratenal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node cipv6lient { route default vmmetric impairment topology.
+#
+# Demonstrates direratenal imparateirments using -> and <- ]rrows.
+# servegtric"
+
+node server { forward ipv4 }# Asymmetric impairment topology.
+#
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+ ric impairme
+# Demonstrates direratenal imparateirments using -

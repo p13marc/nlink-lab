@@ -1,0 +1,30 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, eacg).
+
+lab "vlan-trunk" {
+  description "Brirts"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [hi.0.logy.
+#
+# Two VTEPs connected by an underlay link, eacg).
+
+lab "vlan-trunk" {
+  description "Brirts"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [hi.0.0.1
+    remote 10a:n vxlanh0 { 10.0.0.1/24 -- 10.0.0.2/20.nh0 { 10.0.0.1/24 -- 10.0.0.2/24 }

@@ -1,0 +1,29 @@
+# VXLAN overlay topology.
+# underlay link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-ovQaverlay" {
+  description "VXLAN overlayqbetween two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 1    address 192.336.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlaness 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan v 4789
+    address 192.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

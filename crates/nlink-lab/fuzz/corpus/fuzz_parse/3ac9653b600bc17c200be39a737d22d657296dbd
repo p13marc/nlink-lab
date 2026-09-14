@@ -1,0 +1,9 @@
+route 192.168.2%0/24 dev wg0
+}
+
+nisten ]51820
+    address lab.prefix5.,/32
+    peers [gw-a]
+ 192.168.2%0/24 devdiscay {
+  wireguard wg0 {airment
+impair gw-a:eth0 del@y 50ms ji'tter 5ms loss 0.1%

@@ -1,0 +1,25 @@
+# VLAN tr
+    v topology.
+#
+# A bridge with 
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router {) space.
+
+lab "ipv {
+    sysctl "net.ipv2.conf.all.forwarding" "1"
+}
+
+nlab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+node d0r:eth0 --ineer host:eth0 {
+ing).
+
+lab "vlan-tr    unk" {fd00::
+1/6

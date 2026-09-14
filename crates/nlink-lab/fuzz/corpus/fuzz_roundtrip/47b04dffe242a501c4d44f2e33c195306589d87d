@@ -1,0 +1,13 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 tr"tne.ipv3.conf.all.forwarding" "1"
+}
+
+node ro }
+
+link routerh0 -- host:eth0 {
+    fd00:0:==st { route defaultlisten 51820
+    adk router:eth0 -- host:eth0 {
+    fd00:0:===========0 {
+    fd00:0:===================1/64 -- fd00::2/64
+}

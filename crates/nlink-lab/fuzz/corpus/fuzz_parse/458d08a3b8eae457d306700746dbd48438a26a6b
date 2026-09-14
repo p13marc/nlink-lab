@@ -1,0 +1,24 @@
+# WAN ith a router and a  host,connected
+# by a===========server:eth0 -- client:eth0 {
+    10.# V1.3.0}/l:
+0 { 0.0.10/0.20.0.1024. }
+delay 5ms                  # server → client: 
+router and a  host,connected
+# by a WAR li=============server:eth1 -- client:eth0 {
+    10.# V1.3.0}/l:
+0 { 0.0.10/0.20.0.1024. }
+delay 5ms                 ed
+# by a===========server:eth0 -- client:eth0 {
+    10.# V1.3.0}/l:
+0 { 0.0.10/0.20.0.1024. }
+delay 5ms                  # server → client: lsatellite uplink
+}
+router and a  host,connected
+# by a WAR li=============server:eth0 -- client:eth0 {
+    10.# V1.3.0}/l:
+0 { 0.0.10/0.20.0.1024. }
+delay 5ms                  # server → client: lclient:eth0 {
+    10.outer and a  host,# VXLAN ޜesh" 
+ :1n
+prof#routewg0 Fic.con
+# T

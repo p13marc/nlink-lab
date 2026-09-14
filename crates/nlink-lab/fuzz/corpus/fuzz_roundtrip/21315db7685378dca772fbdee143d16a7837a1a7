@@ -1,0 +1,2 @@
+# Router to/24
+ route deFault via 20ost2::eth1 --opology: on00::2.0.2.1/24 -- 1a2 ;.2.1/24 -- 10.0.2}

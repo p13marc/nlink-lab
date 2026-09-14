@@ -1,0 +1,7 @@
+# Simppaiz with addresses
+# and 
+  vxlan vxl
+    vni 200
+ {
+    vni 100
+    local 10.0.0.2    address 192.one endtter 2ms

@@ -1,0 +1,37 @@
+# Asymmetric impairment topo${logy.
+#
+#
+node r0 -- n2:eth0 { 1 Demonstrates d->-- client:eth0 }
+
+linkr erver:eth0 -- cer:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+     }
+
+rate server:eth0 egress 100mbit ingress 100mb.1 }
+
+link server:eth0 -- client:eth0 {
+    .1 }
+
+linkr erver:eth0 -- client:eth0 irect using -> and <- arrows.
+# server→clie10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+     }
+
+rate server:eth0 egress 100mbit ingress 100mb.1 }
+
+link server:eth0 -- client:eth0 }
+
+linkr erver:eth0 -- client:eth0 irect using -> and <- arrows.
+# server→-- 10.0.0.2/24
+     }
+
+rate server:eth0 egress 100mbit ingress 100mb.1 }
+
+link server:eth0 -- client:eth0 {
+    .1 }
+
+linkr erver:eth0 -- client:eth0 {
+k
+}

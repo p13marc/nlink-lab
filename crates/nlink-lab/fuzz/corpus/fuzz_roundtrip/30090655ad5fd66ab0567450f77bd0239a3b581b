@@ -1,0 +1,5 @@
+# iperf3 benchmark tault via 80.0.0.1 }
+
+link server:eth0 -- client:eth0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100m connected by a rate-limited linkit ingress 100mbit

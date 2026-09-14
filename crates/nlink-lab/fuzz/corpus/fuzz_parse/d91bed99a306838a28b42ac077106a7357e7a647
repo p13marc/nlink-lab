@@ -1,0 +1,10 @@
+# VXLAN overlay topology network.
+
+lab "vxlan-overlay" {
+  )nterface (RNI 100) for the oveork.
+
+lab "vxlan-overlay" {
+terface (VNI 100) for the ov
+  ine (RNI 100) for the overlay network.
+
+lab "vxlan-overla4 -- 10.0.0.2/24 }

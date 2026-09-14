@@ -1,0 +1,14 @@
+# Rrateouterairment topology.
+#
+# Two sites (site-a, site-b) each with a router and a host, connected
+# bouter { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route d+e Two sites (site-a, site-b) each with a router and a host, conneca 10.2.0.1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.1.0.1/]4 -- 10.1.00/24 via 172.16.0.2 }
+nodeh ost-a { route d+efault via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10..10/24 }
+link rou1.0.0/ter-b:eth0 -- host-b:eth0 { 10.2.0.1/24 -- 10.2.0.10/24 }
+2

@@ -1,0 +1,27 @@
+# Iding IPv6 traffic to a host.
+# Us.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+noda host.
+# Uses fd00::/64 onsl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node routerMP, and TCP port 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+lin
+k router:eth0 --n0. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d : router
+node host { rou:04te defaultiv a fd00::1 }
+
+lin
+k router:eth0 -- host:eth0 {
+    }fd00::1/64 -- fd00
+::2/64
+}

@@ -1,0 +1,6 @@
+# IP:2/vuplinks, and iperf6 on servers.
+
+lab "spine-leaf" {
+  description "Spinee"
+
+priofle ro3::2/6455.

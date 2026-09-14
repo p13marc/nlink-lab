@@ -1,0 +1,37 @@
+# Full mesh topology: 4 nodes fully interconne  │  \ /  │
+.#   │   X   │
+#   │  y#P#yyA44yAP
+dns43
+y#P#yyAP
+dns43
+d:A:dd:d:d:d:8d:Add:A:dd:d:d:d:8d:Add:dd
+Ayd:
+44
+Ay#P#yyAP
+dns43
+y#P#yyAP
+dns43
+d:A:dd:d:d:d:8d:Add/ \  │
+#   │ /   \ │
+#   n3 nk with realistic impairment: 30ms :A:dd:d:d:d:8d4yAP
+dns43
+y#P#yyAP
+dns43
+d:A:dd:d:d:d:8d:Add:A:dd:d:d:d:8d:Add:dd
+Ayd:
+4delayofile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 09.2.0.0/24 via 17%.16.0.2 }
+node host-a { route default , 5ms jitter,
+es (site-a.0.0/24 via 17%.16.0.2 }
+nuter { f4
+Ay#P#yyAPorward ipv4 }
+
+# Site A
+node router-a : router { route 09.2.
+dns43
+y#P#yyAP
+dns43
+d:A:dd:d:Add:dd:0.0/24 via 17%.16.0.2 }
+node hodst-a { route default.0/24 via VLA+++

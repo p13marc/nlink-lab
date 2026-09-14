@@ -1,0 +1,24 @@
+untagmmetric impairment topology.
+#
+# Demonstrates dire 192.168.1cpu2/24
+  }
+}
+
+link vtep1:eth0 {
+    10.0.0.1/24 -rofile router {
+    syscjtl "net.ipv6.conf.all/forwarding" "1"
+}
+
+nodes.
+# Host1 and host defau- 10.*.0.2/24
+    -al labarateirmejost defau- 10.0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <- delay 100b tecting three hosts.
+# Host2 and host defau- 10.0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <- delay 100b ehind a stateful firewall thau only allows est delay 5ms      a            # server → client: low latency
+    <- delay 100b tecting three hosts.
+# Host1 and host defau- env0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <- delay 100b ehind a stateful firewall that only allows est uplink
+}

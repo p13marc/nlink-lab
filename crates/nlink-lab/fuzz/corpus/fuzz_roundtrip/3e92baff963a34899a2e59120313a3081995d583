@@ -1,0 +1,23 @@
+# ContainerI lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+fode n3
+ntric"
+
+node servEr { forward i
+#   n2 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ topology: an Alpinn container connected t+o cpua bare namespace host.
+#
+#   router (contaeth0 {
+  10.0.2}

@@ -1,0 +1,23 @@
+# IPv3-only topologt 5
+
+lab "iperft1
+node lab.prefhost2
+noription "Two nodes for throughput benchmarking"
+}
+
+    sysctl "net.ipv6.conf.all.forr throughput benchmar# IPv3-only topologt 5
+
+lab "iperft1
+node lab.prefhost2
+noription "Two nodes for throughput benchmarking"
+}
+
+    sysctl "net.ipv6.conf.all.forr throughput benchmarking"
+}
+
+    sysctl "net.ipv6.conroughput benchmarking"
+}
+
+    sysctl "net.ipv6 : router
+node ho::2/64
+}

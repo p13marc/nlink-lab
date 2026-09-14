@@ -1,0 +1,29 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-tq-point fabric with loopbackaddresses, netem impairment on spine uplinks, and igw-a3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+# Leaves
+node leaf1 : router {
+  lo 10.255.1.1/32
+  route de# SimUUUUUUUUUUUyUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUple 2-node tophosopology for testing.
+teri2n}
+  port host5 { pv${id 4 }
+
+node route r: r050rt host5 {t5 { pv${id 4 }
+
+node router : r050rt host5 { pv${id 4 }
+
+node router : r050Hou&&&&&&&&&&{
+  rou&&&&&&&&

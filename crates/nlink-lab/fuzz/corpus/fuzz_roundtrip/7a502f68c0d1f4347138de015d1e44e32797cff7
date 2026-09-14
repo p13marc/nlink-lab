@@ -1,0 +1,7 @@
+# Fire
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.y0.1.1/24 -- 10.0.1.10/ i24 }
+link router:et: VXL4 -- 10.0.1.10/ i24 }
+link route24 -- 10.0.2.10/24 }

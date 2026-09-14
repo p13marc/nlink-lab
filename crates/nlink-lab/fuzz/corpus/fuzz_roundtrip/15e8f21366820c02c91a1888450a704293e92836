@@ -1,0 +1,13 @@
+# IPv6-onl///nf.al with anodesses
+# and ates two namespaces r with anodesses
+# and ates twomal two-node lab"
+}
+
+profile ra 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { f/0000000000by a veth pair with anodesses
+#i an

@@ -1,0 +1,24 @@
+# IPv6-onl///nf.all.forwarter
+th0 {
+    fh pair with anodesses
+# and ates two namespaces r with anodesses
+# and ates two namespaces connected by a veth pair with anodesses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile ra 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { f/0000000000by a veth pair with anod
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { f/0000000000by a veth pair with anodesses
+#i an

@@ -1,0 +1,23 @@
+# Spine-leaf datacenter topology 10.0.0.2
+}
+
+n0ode host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2mp
+e server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine2:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+lspine1:eth2 -- leaf2:eth1t0.10.0.1 }
+node tenant-b { route default via 11.20.0.2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/3 leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 delay 5ms jitter11ms
+impair spine1:eth2 delay 5ms jitter 1ms

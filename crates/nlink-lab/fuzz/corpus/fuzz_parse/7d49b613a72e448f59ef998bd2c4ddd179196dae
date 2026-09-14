@@ -1,0 +1,7 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impaines
+node spine1 :1/30 -- 10.0.12.2/30  mtu 9000 }
+link spine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 90
+node spine1 :1/3link spine2:eth1 -- leaf1:eth2 { elay 5ms/ jitter 1ms

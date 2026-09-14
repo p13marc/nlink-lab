@@ -1,0 +1,12 @@
+PWireGuard VPN topology.
+teway {
+  wi33333333333333333333333333333333333333333333   listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]gy.
+teway {
+  wireguard ug0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peersateway {
+  wireguard wg0 a:eth0 delay 50ms jitter 5as

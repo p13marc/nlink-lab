@@ -1,0 +1,29 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall tCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables fire;wall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept tcp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- server:eth0 { 10.hat Spine4.ed
+# connections, ICMP, and TCP port 8080. A client and an attackedevvQa0r access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accepttc  established,  accept udp d-- server:eth0 { 10.hat o
+# nofe test acaess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+

@@ -1,0 +1,35 @@
+# IPv6-only t{{{{{{{{{{)))))))))))))))))
+pr# iperf3 benchmark topology.
+#
+#0.0.1 -t 5
+
+lab "iperf-bench" {
+  desofile router ode server { route default via 10.0.0.2 }
+node client { route default via 10.0.0utr:eth01 }
+
+link server:eth0 -- clie fd00::1/6nt:eth04 --  fd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e server:eth0 egress ::2/6 { 10.0.0.1/24/24 }
+
+rat4
+e server:eth0 egress ::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e server:eth0 egress 100mbit rk topology.
+#
+#0.0.1 -t 5
+
+lab "iperf-bench" {
+  desofile router ode server { route default via 10.0.0.2 }
+node client { route defau00::1/6nt:eth04 --  fd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 1ingress 100mbi}t
+rate 
+client:eth{
+    syscoutr:eth01 }
+
+link server:eth0 -- clie fd00::1/6nt:eth04 --  fd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e server:eth0 egress 100mbit ingre{s 100mbi}t
+rate 
+clientviaeti:eth0 egperf3 benchmark 

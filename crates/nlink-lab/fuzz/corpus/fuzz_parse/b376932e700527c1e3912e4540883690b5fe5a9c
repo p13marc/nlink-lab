@@ -1,0 +1,18 @@
+# VXLANfor thesrc10.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+nAode v4e02 : rout.0.1
+    b:eth1 -- host-b:eth0w-b:eth1 and 504bit raut.0.1thoss,irmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WArN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0w-b:eth1 and 504b
+   port 47defaultaddre}
+link gote68.2.10/24 }
+
+# WAN  i. y

@@ -1,0 +1,25 @@
+# Router topology: one router connecting two 'osts.
+#
+#   host1 (10.0.1.2) ──── router ──── host2 (10.0.2.2)
+#        two subnetcmds"
+}
+
+profile router { forward ipv4 }
+
+node +router : router
+node host1 { 0.2.2)
+#                       eth0    eth1
+
+lab "r/uter" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node +router 1EEEEEEEEEEEEEEEEEEEEGEEEEEEEEEEEEEEEEEEEEEEEEEEEEE0.0.2ewall policy drop {
+EEEEEEEE0.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+   /24
+}

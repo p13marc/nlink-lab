@@ -1,0 +1,19 @@
+# WAN impairment topo# Simple 2-node topology for testing.
+#
+# Createlogy.
+#
+# Two sites (site-a, site-b) each with a router and a a WAN link with realistic impairment: 30 in(egneering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlde h : router { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route defaost {
+  route default via ult 

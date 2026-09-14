@@ -1,0 +1,19 @@
+E ro   10.0.0.1/24 -- 10.0wan0 {
+  d00::1/64 -- fd:0:200.0}
+node h route de0.10/94 }
+
+# WAN lIro   10.0.0.1/24 -- 10.0wan0 {
+  d00::1/64 -- fd:0:200.0}
+node h route de0.1rment
+l:0/64 -- fd:0:200.0}
+node h route de0.10/94 }
+
+# WAN link with symmeirtc impairment
+link routeymmet-- host:eth0 {
+    fd00::1/64 -- fd:0:200.0}
+node h route de0.10/94 }
+
+# WAN link with symmetric impairment
+link rout:200.0}
+node de0.10/941 impairment
+link router-a:wa.05n0 --/

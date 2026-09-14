@@ -1,0 +1,20 @@
+# VXLAN ov  local 10.0.0.1
+    remote 10.0.0.2
+    port 47ress 622.168.100.1/24
+  }
+}
+nk routerremote 10.0.0rt 4789
+    address 192.168.100.2/24
+  }
+}
+
+li:eth04
+}nk vtep1:eth0 -- vtep2:et
+link routerremote 10.0.0.1
+    port 4789
+    address 192.168.100.2/24
+  }
+}
+
+li:eth04
+}nk vtep1:eth0 -- vtep2:eth010.0.0.1/24 -- 10.0.0.2/24 }

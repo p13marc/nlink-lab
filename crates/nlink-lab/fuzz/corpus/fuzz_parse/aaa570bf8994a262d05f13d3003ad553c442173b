@@ -1,0 +1,6 @@
+#──f routepv4 }
+
+node roost2 { route defautl10.0.2.1 }
+
+l2/24
+}

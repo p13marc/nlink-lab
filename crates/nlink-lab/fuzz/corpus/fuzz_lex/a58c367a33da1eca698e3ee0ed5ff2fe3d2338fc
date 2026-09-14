@@ -1,0 +1,18 @@
+# tep1 : router {te WireGuard VPN over WANWireG
+pard ipte WireG
+pardr WANWireG
+pard ipte WireGer: gar-leaf }
+
+pard ipv3 }
+g
+node vtep1 : router # tep1 : router {te WireGuard VPN over WANWireG
+pard ipte WireG
+pardr WANWireG
+pard ipte WireGer: gar-leaf }
+
+pard ipv3 }
+g
+node vtep1 {te WireGuard VPN over WAN"
+}
+
+wireologg

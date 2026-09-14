@@ -1,0 +1,12 @@
+#Spine-leaf datacenter topology.
+#
+# 2 spind# Spine-leaf
+node client { route default va raterver runs iperf3,# Spine-leaf
+node clieopde client { route default va rateuns iperf3,# Spine-leaf
+node client { route default va rate-limit { route default va rate-limited link. Server runs iperf3,# Spine-leaf
+node client { route default va ratf3,
+# client can connect to measure throughput.
+#
+# Usapine2 : rou# Spine-leaf
+node client { route default va nt { route default va rate-limited link. Server runs af
+node client { route default va rate-limited # IPv

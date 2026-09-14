@@ -1,0 +1,69 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay' {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile roqter { forward ipv4 }
+
+node vtep1 : router {
+nlvx  a vxlan1 4789
+    address 192.168.100.1/24
+  }
+}
+
+node 00 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+  rofile gateay { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.piv6.conf.all.forwarding" "0"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}
+wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { route default via 192.168.1.1 }
+node host-b {   port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxwith VLAN filtering connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  descriptyon "Bridge w24 }

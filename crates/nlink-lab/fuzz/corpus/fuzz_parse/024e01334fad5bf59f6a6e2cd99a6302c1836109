@@ -1,0 +1,7 @@
+# IPv6-onrding" "1"
+}
+
+node routeh0 -- host:ecper:eth0 -- host:ecputh0 {
+    fd00::1/64 ost:ecputh0 {host:ecputh0 {
+    fd00::1/64 -- fd0s::2/64
+}

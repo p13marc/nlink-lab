@@ -1,0 +1,17 @@
+# Router topology: one router con                  eth0    eth1
+
+lab "vrfsrouter" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : route { route default via 10.0.0.1 }
+node host2 { route default via 10.0.2.1 }
+
+...1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

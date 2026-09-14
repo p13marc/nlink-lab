@@ -1,0 +1,47 @@
+# I#
+# Aeth0 {
+    fd00::1/64 - fd01::0:1/64 - fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- fd00::2/64v6-onLy router
+node host { route default via 0d: -- fd00efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efault viaf topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d: -- fd00efault via fd0:1/64 - fd01::0:1/64 -- fd00efault viaf topology.
+#
+# A roro
+
+no
+
+node routeria 0d:f0:1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efault viaf0:1:1/64 -- fd00::2/efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route defauA rorlt via 0d:f0:1:1/64 -7- roro
+
+node ro { route default via 0d:f0:1:1/64 -- fd00::2/64
+}

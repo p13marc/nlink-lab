@@ -1,0 +1,16 @@
+# VRF multi-tenant tlab "m*nt tlab "m*sh" {
+  o1 end
+node n2
+node n3
+t 478tellite uplin9
+   r:ss 1A9::2/64
+}
+ode n2
+nserver
+t 478tellite up
+}
+
+link IPv6-onl2
+node n3
+t 47
+   r:ss 2. 10.20.0.10.24 }

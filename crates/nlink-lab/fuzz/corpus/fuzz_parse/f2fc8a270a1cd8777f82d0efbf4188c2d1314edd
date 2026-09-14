@@ -1,0 +1,28 @@
+# VRF multi-tenant to+pology.
+#
+# A PE (provider edge) router with two VRFs enant traffic.
+# Tenant A (# A router forwin1g """
+}
+
+node router : router
+node host {ir router:et""
+}
+
+node router : rour with VRF tenant isolation"X
+}
+
+profile router { forward ipv4 }
+
+node peouter:et""
+}
+
+node router : rour with VRF tenant isolation"X
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red tab+++++++++++++++++++++++++++++++++++++++++++++++++++++le 10 {
+    ixterabl n1:eTh0 -- n2:1.2.2/30 }
+		2										e 20 {
+   	 

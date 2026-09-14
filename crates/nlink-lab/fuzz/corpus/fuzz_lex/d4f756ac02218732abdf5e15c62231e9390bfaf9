@@ -1,0 +1,3 @@
+M# WA72.16.0.2/30
+  delay 30ms jitter 5ms lossinode host-fault va1i 0.2te de host-fault va1i 0.2te default vas2 loss va1i 0.2.0.0mbit
+}

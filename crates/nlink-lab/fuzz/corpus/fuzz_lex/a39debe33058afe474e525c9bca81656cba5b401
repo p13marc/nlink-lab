@@ -1,0 +1,8 @@
+- VLAN trunk topology.
+#irment(topPE routt isolationta }
+
+node pe : rou r {t e
+vrf red table 1 
+{0    inter 1terfaces [eth${ route def:eth0 -1
+node pedef
+lin<<<<<,<<<<<<<<ost- host-a:    i{s

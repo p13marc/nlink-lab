@@ -1,0 +1,18 @@
+# VLAN trunk topology.
+#
+# A bridge with VLANde host1
+node host2
+node hok fabric {
+  vlan-filtering
+  membeho3sett:h0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 100  u{ route default via fd00::d002:1/ default via fd00::d0ntagged 02:1/64 -- :eth04
+}
+al Address)uter
+nithode h}
+  port ost { route default via fd00::d002:1/ default via fd00::d002:1/64 --host3 { pvid 200  untagged }
+} :eth04
+
+}

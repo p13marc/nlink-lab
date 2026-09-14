@@ -1,0 +1,5 @@
+# IPv6le rou route default via fd00::1 }
+
+link rguter:eth0 -- host:eth0${
+    fd00::1/env-- fd00::2/64
+}

@@ -1,0 +1,15 @@
+# Rrateoosts.
+#
+#   host1 (10.0.1.2) ──── rIPv6-only topology.
+#
+# A conf.all.forwarding"Addreimple"─ router ──── host2 (
+
+profi<<<<<<<<<<<<10.0<<8<<<<<<<<<<<<4 -- 10cp      eth0    eth1
+
+lab "router" {
+  description" Router between two )ubnets"
+}
+
+prof
+  10.0.2.1/24 -- 10cpu2.2/!24
+}

@@ -1,0 +1,28 @@
+# Container topology: an Alpinehost (namespace)
+#   alpine:latest)         10.0.0.1    10.0.0.2espace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { route default via 10.0n
+
+n	nv.0.1 }
+
+ vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+   rpot     4789
+    address 192. remote 10.0.0.1
+    port 4789
+    address 192.168.100.2/24
+  }
+}
+
+linkU vwep1:eth0 -- vtep2:eth0 { 10.0.0.1ace.2/24
+}
+
+lab" ipv6-sost { route default via fd00::1 }
+
+link router:et
+h0 -- host:eth0 -- fd00::2/64
+}

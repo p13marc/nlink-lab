@@ -1,0 +1,16 @@
+54
+  }
+}
+
+linorward ipv4 }
+node client { route default via 20.0.0.1 }
+
+link
+  }
+}
+
+linorward ipv4 }
+node client { 104 }
+
+node router : router
+nodab exec iperf-bench 0.cl55550ms77555550ie

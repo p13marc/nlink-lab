@@ -1,0 +1,15 @@
+# WAN impairme# IPv6-only topoh with a router and a host, connected
+# byrate_rofi1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv6
+}
+ ue Local Address) spa.c
+1e
+lab "ipv6-simple"
+
+profil# Site Ae r
+nouter

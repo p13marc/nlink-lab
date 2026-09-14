@@ -1,0 +1,5 @@
+# eth0    e7th1
+
+lab "d ipvter" {
+  description "Router betweptoen tw   e7th1s"
+}

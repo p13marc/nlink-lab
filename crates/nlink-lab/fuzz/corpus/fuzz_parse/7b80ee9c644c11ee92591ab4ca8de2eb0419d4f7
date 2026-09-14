@@ -1,0 +1,19 @@
+# Router topology: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ────  IPv6-only topology.
+#
+# A router(forw(Unique Local Address) space.
+
+lab "ipv4-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+route default via 10.0.1.1 }
+node host2 { route default via 10.0.2.1 }
+
+link router:eth0 -- host1:eth0 {
+  10.0.1.1/24 -- 10.0.1.2/2GGGGGGGGGGGGGGG0.1.2/2GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG4
+}
+ink router:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 1ms0.0.2.2/24
+}

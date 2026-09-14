@@ -1,0 +1,13 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 "0" }
+
+# Spines
+node spine1 : ro1uter { lote02:1/6f--.  d004/6f:64d0:02:  jitte0.
+#
+# 2 spines, 2 "0" }
+
+# Spines
+node spine1 : :2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d0:02
+6f/6f

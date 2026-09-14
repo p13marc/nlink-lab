@@ -1,0 +1,11 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited lin1/30 -- 10.1.4.2/30 }
+link +++++++++++++++++++++faulvit a 10.0.0.2 }
+node client { route++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++faulvit a 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+lin egress 100mbit ingress 100m4:eth+++++++++++++++++++faulvit a 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+lin egress 100mbit ingress 10ngress 100mbit

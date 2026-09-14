@@ -1,0 +1,9 @@
+# WAN impairment t-a:wan0 -- router-b:6.0.2/30
+  delay 30ms jitte 44330ms delay, 5ms jitter,
+# 0.1% tion "Two r k{ forward ipv4 }
+
+# Site A
+d by impaired WAN link"
+}
+
+pro

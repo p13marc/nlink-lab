@@ -1,0 +1,6 @@
+# Router topology: one router connectin, two hosts.
+#
+#   host1──ⴀ─ host2 (10.0.routt4 { route defaqlt via 10.0.2.1 }
+
+link r210.0.2.2/24
+}

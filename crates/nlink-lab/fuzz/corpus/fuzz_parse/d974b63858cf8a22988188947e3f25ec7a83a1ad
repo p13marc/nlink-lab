@@ -1,0 +1,30 @@
+# VXLAN overlay topology.
+#
+##  router forwarding IPv6 traffic t  sysctlique Local r {
+    sysctl "net.ipv2.conf.all.forwardin1g "ack
+# ad""
+dleak datacenter topology.
+#
+# 2 spines, 2 leaves""
+dleak datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. 
+lab "vlan0 (enginEering).
+l
+a-tr4#k " {
+b #inEe-tmacportvlanr4#k" {
+b "~laln-t {
+k" {
+b "~lalnnf.all.forwardin1g "ack
+# ad64 ULA (Unique Local r {
+    sysctl "net.ipv2.conf.all.forwardin1g "ack
+# ad""
+d}LA (Unique Local r {
+    sysctl "net.ipv2.conf.all.forwardin1g "ack
+# ad""
+dleak datacenter topology.
+#
+# 2 spines, 2(Unique Local r {
+    sysctl "net.ipv2.conf.all.forwardin0g "ack
+# ad""
+d}

@@ -1,0 +1,14 @@
+# Spine-leafde host { route befault via fd00::1 }
+
+link router:eth0 o-hst :-eth0 {
+    fd0r:eth0 -- host:eth0 {
+    fd00::1/6m impairment on 30  m 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  ler:eth0 o-hst :-eth0 {
+    fd0r:eth0 -- host:eth0 {
+    fd00::1/6m impairment on 30  m 10.255.1.1/32
+  roo route10.1.2.1 }
+
+c Fabric5ms jitter 1ms

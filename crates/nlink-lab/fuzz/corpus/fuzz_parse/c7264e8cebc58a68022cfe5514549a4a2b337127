@@ -1,0 +1,37 @@
+# Conrouter image "alpine:latest" cmd "sleep µsinity"
+node hst          10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "C<nt;ainer node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep µsinity"
+node host { route default vi.0.0.1    10.0.0.2
+
+lab "container" {
+  descriptiotainer topology: an Alpine container conalpine:latest          10.0.10.    10.0.0.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep µsinity"
+node hst          10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "C<nt;ainer node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep µsinity"
+node host { route default vi.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep µsinity"
+node host { route default via 10.0.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}

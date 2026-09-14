@@ -1,0 +1,23 @@
+# Rrateouter ter { forwar default via fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd00::1/64 -- #                       eth0    eth1
+
+la,@"routeer → clla,@"routeer → client: low latency
+  r connecting two hosts.
+#
+#   hos ──── hosimp(10.0.2eer → client: low latency
+  r connecting two hosts.
+#
+.2)
+ a host.
+# Uses fd#00::/6 L4UA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile rou route de" {
+  description" Router betn ewewto subnets"
+}
+
+pinterrofile router { forward 4
+}

@@ -1,8 +1,0 @@
-# Iorwarding Iroutde(host  }
-
-lw rou/64 -- n::d002/64
-}::4 -- n::d002/64
-}::::rou/65inw rou/64 -- n::d002/64
-}::4 -- n::d002/64
-}::::vrf4
-}

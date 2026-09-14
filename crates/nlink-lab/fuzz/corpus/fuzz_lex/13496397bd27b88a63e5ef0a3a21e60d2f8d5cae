@@ -1,8 +1,0 @@
-# Simple 2-node topology cor testi]
-) }/30 }
-link n1:Aeth1 eth1 -- n3:et { 1h00.1.3.1/30 -- 102 
-leth0 { 10.1.3.1/30 -- 10.1..20.1.3.1/30 -- 10.1.3./}032 
-leth0 { 10.1.31..2/30 }
-3.1/ -- 10.1.3./}032 
-leth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
-linter:eth0 delay 10ms jitter 2ms

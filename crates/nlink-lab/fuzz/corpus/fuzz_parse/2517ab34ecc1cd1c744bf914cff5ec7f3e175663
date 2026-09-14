@@ -1,4 +1,0 @@
-c Asytmemric i2:eth0 {e mDomDo ar<- delay 100    # clientW→ server: -  ncy
-    <- delay 10n ar<- delay 100ms jitter 20ms     
-    <- delay 09nts u#plink
-}

@@ -1,8 +1,0 @@
-# odes connected -t 5
-
-lab "iperf-bench" {
-  description "Twomnng"
-}
-
-node server { route default via 10.0.0.2 }
-node client { route default 

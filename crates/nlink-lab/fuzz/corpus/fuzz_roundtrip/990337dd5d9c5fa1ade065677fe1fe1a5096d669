@@ -1,8 +1,0 @@
-# Spine-leaf datacenter topologopne-leaf datacenter topology.
-#
-# 2 spijitter 1ms
-i01mbit ingrews 100mbit
-rate client:eth0 egperf3 benchma0.0.21.2/30 mpai7777r spine1:eth2 delay 5ms 1mbit ingress 100mbit
-rate client:et7bh0 egperf3 benchma0.0.21.2/30  mtu 9000 }
-link spine2:eth2 -- leaf2:eth2 { .2/30  mtu 900pyu# R li0
-# Accms

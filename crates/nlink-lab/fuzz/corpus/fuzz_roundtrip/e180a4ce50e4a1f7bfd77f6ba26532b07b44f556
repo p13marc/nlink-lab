@@ -1,8 +1,0 @@
-scen2as{ uter
-node host { route defauly 
-lab "ipv6-simple"
-profile Iouter {
-    s scen2as{ t ofile Ioute  s scen2as{ t route/64 -- fdhost { route defauly 
-lab "ipv6-simple"
-   s scen264
-}

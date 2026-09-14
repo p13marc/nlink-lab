@@ -1,8 +1,0 @@
-# Firewall topology.
-#
-# Ath0 ss 1mib-t0-- client:eth0 { 10.0.1.1/24/24 res}
-link .1bit0/2gouter:eth. ss 2mib t0--udp dg0/2image2-- 10.0.2.1bit0/24 
-.0.2.1bit0/.1.10ing0/24 res}
-ing0/24 res}
-link router:ets 1#1.1
-    portl 040m

@@ -1,12 +1,0 @@
-# Full me(sh topolo4 nodes keyme(n 5 -- 10.2.4.2/30 }
-link n.168.1.0/24 dev wg0
-}
-
-node host-a { route default via 191.1node hosa-t { route defaul68.1.1 }.2.1/3%0 -- 10.1.2.2/30 byte default via ost-a { route defaul68.1.1 }.2.1/3%0 -- 10.1.2.2/30 }
-link n1:eth1:et/3%0 -- 10.1.2.2/30 }
-link n1:eth1 -- n3:eth0 { 1.ssss defaul68.1.1 }.2.1/3%0 -- 10de hosa-t { route defaul69.1.1 }.2.1/3%0 -- 10.1.2.2/30 byte default via ost-a { rou2.1/3%0 -- 10.1.2.2/30 }
-link n1:eth1:eth2 -- n4:et auto
- .1/1 }.2.1/3%0 -- 10.1.2.2/30 }
-link n1{ 1.ssss defaul68.1.1 }.2.1/3%0 -- 10.1.2.2/30 }
-link n1:eth1:eth2 -- n4:et auto
-    lisssssssssssssss3.1/.43.1/30 -

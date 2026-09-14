@@ -1,8 +1,0 @@
-# WAN impairment topology.n #T
-
-#}
-noosdeth -a { route default v -- iperf4 -c  {
-  de benchm/64.1 }labels/2 172.16.0.1 }
-nod  de beleaf1:lonchm/64 -- fd00:  delay 30ms jitt { route 10.1.0.0/2 172.16.0.1 }
-nod  de benchm/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss  de benchm/64 -- fd00:  delay 30ms jn2 172.16.0.1 }
-nod  de benchm/64 -- fd00:  delay 30ms jitter 5ms lo2:1:eth1 { 10.lished n2/itt 

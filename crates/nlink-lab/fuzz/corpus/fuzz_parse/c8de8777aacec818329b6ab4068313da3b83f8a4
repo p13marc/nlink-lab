@@ -1,4 +1,0 @@
-# Asymmetr 10.0.0.1/24 -- 10.0.0.2/24
- ablished   -> delay 5ms                  # server → client: lowlatency
-    <- delay 100ms ${tter 20ms    # client → server: satellite uplink
-}

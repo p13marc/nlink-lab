@@ -1,6 +1,0 @@
-#iperf3 benchmark topoed.
-#
-# Two (site-a, sis
-}
-
-node router :st:e router :st:eth :st:7e

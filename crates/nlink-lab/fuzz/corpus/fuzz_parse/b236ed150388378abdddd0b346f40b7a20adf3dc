@@ -1,6 +1,0 @@
-# VRF mric i
-lab "spine-leaf" {
-  description "Spilte02:1/64 -- fabric"
-  prefix "d using -> anaf da"
-  prefix "fabric"
-  prefix "d using -> - arcro"

@@ -1,6 +1,0 @@
-# IPvg IPv6 traffi%c tes/pace.
-
-lab "ipv6-simple"
-
-p/64 -- fd00::2/6464
-}

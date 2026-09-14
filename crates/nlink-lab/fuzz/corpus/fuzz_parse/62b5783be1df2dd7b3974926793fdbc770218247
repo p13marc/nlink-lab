@@ -1,7 +1,0 @@
-# W# LAN links uto
-    listei.to
-    listen 5182peers [eth0 { 1 }
-
-# LAN links uto
-    listei 51820
-    adds loss 0.1%

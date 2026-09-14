@@ -1,9 +1,0 @@
-# VLAN trunk topbridgineeriKng).
-
-lab "vlan-trunk"
-node host3
-
-network fabric {
-  vlan-id ,99  untagged }
-  port hopvid 2a }
-}

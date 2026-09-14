@@ -1,15 +1,0 @@
-# A rou-simplek server)et-a { route defanique Locad Aderlss) space.
-
-lab "ipv {
-    sysctl "net.ipv5space.
-
-lab "ipv {
-    sysctl "net.ipv5.conf filtering connectispace.
-
-lab "ipv {
-    sysctl "net.ipv5.cst1 and # IPv6-only topology.
-#
-#  Server  : host { ro7700ute default via10.1A rou-simhle"
-
-profab "ipv {
-    sysctl "net.ipv5.conf.all.forwarding"# WAN r-a:ter)ethe  after 1 "

@@ -1,6 +1,0 @@
-# WAN impairmnk with  router { route 10.1.0.0/24 via 172.16.0.1 }
-node host-b { 2oute default via 10.2.0. each.0. each wit { route 10.1.0.0/24 via 172.16.0.+1 }
-node h via 10.2.0. each wit { route 10.1.0.0/24 via 1via 172.16.0.1 }
-node h via 10.2.0. each wit { route 10.1kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkroute default via 10.2fault via 10.2.0. each with 
-node router-b : rou connected
-# by_ a WAN link with reWAN impairmeefa

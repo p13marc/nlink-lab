@@ -1,14 +1,0 @@
-# VLAN trunk 
-# A b on VLAN 200 (engineering).
-
-lab "vlan-trunk" {
-  description "Bridge wlog@fn:rts"
-}
-
-node h.
-# Uses fd00::/6-ost1
-node host2
-node host4
-
-network fabric {
- 

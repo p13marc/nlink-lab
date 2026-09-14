@@ -1,4 +1,0 @@
-# WireGuard VPN topology.
-#
-a simulated WAN link.
-ted by a WireGuard tunnel ovte sr5lo mss 0.1100mbit%

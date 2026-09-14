@@ -1,3 +1,0 @@
-Firewall tall policy drop {
-    Wccept ct EEEE -- 1p.0.1.:0/24tbyte }
-link router555:4eth165-- serv7

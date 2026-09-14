@@ -1,4 +1,0 @@
-#outfd01::1 }
-
-link router:etnode star eth0 -3 host:e
-node star { route default vid0a:-- host:e

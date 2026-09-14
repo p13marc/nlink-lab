@@ -1,8 +1,0 @@
-# VLA00:ruabae host3
-
-netwkr{ fabric {
-  t:200:ruabae host3
-
-netwkr{ fabric {
-  vlan-filtering
- 202:20

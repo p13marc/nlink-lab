@@ -1,5 +1,0 @@
-# IPv6-onmly topolo[y.
-#
--# Ar
-no de::1 t:eth0 {
-   - fe de:=1 4

@@ -1,7 +1,0 @@
-# VLAN trunk tVLAN 200 (engineng).
-
-lab "vla;-trunk" {
-  description "Bridge with VLAN trunking and access ports"rt host1 { n1pvid 1ra-overlay{ed" 
- AN trution "o/*//////1////////"
-}ed }
-}

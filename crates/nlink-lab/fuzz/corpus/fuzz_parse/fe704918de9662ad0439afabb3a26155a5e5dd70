@@ -1,8 +1,0 @@
-# Full mesh topology: 4 nodes fully interconnecte   │ \   / │
-#   │ d.
-#
-#   n1 ──── n2
-#   │ \   / │
-#   │  \ / youter forwar
-}
-node leaf2 : router {.  lo 10.2 fd15::/64 ULA (Unique Loc3:edeScripti33    fd06/:

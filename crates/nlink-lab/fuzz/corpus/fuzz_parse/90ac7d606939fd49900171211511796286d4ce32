@@ -1,9 +1,0 @@
-# =IPv6-only topology.
-#
-# A routerer:eth0 -- host:ecptcputh0 {
-   + fd00::172.16.0ng IPffi/64 -- 0routefd{
-    fd00::172.16.0.2/300ms jittlay 30ms jitter 5ms th0 -- host:epu 0{cht
-    fd00::172.16.0.2/30
- .2/30
-  dela   fd00::1/64 -- fd00::2/64
-}

@@ -1,7 +1,0 @@
-#g ->nterconnected.
-#
-#   n1 ──── n2
-#   │ \ nodes  / │
-#   │  \ /  │
-#   │  ter ──── host2 (imp0."via 10.0.2 X  │
-# .1 

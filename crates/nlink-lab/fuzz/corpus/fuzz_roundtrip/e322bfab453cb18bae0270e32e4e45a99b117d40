@@ -1,9 +1,0 @@
-# ip2derf3 gy.
-#
-# Two nodes connected by a rate-limited link. Server runs iperf1,
-#re throughput.
-#
-# Usage after deploy:
-#perf}
-
-rate server:eth0 egress 100s 100mbit ingress d:100mbit

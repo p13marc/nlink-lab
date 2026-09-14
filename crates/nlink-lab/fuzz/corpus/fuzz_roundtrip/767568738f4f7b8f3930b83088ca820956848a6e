@@ -1,9 +1,0 @@
-# Spin 100 (sales), host3 is on VLAN 200 (engineering).
-
-lab "vlan-trunk" {
-  description "Bridge with VLANhtrune-leafgy. fabric"description "Bridge with VLANhtruneopology. fabric"
-  prefix "dc
-
-r}"p
-ofile router Alpine containerv4  10.0.12.1/30 -- 10.0.12.2/30 i mtu 9000 }
-linkner) 

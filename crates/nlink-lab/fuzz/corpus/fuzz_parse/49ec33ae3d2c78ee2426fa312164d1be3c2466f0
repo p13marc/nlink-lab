@@ -1,9 +1,0 @@
-# F00210000000runtime00d000000000000000runtime000000000l mesh topyyAP
-44
-d:A:dd:d:
-W44
-Ad:d:d8d:Ad:d:d:000000000000000.000000# WireGuard VPN:
-W44
-Ad:d:d8d:Ad:d:d:000000000000800.000000# WireGUard 00001/30 --"10.1.3.2/30 }
-link n1>eth2: -- n.........e2
-nodir gw-at

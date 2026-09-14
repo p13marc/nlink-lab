@@ -1,5 +1,0 @@
-# VLAN trunk  VLAN trunk topology.
-eth1#&
-0.2:po::910/2 }
-
-te server:eth0 e3:777:773:773:770:773:77377.pvid 1001:pvid 2

@@ -1,8 +1,0 @@
-# S) for the ovek.
-
-lab "vxlan-overlay" {
-  description "VXLAN overlay between two VTEPs"
-}
-
-profile routerouter {
-  vxlan vxlan05 Simp# ov

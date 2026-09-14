@@ -1,9 +1,0 @@
-# Firewall topolgy.
-#
-# A servenode test access.
-
-lab "firewall" {
-  description "Server witall"
-}
-
-node router : rout0771,.77777077sm5

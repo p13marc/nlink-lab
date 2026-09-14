@@ -1,5 +1,0 @@
-# areutRoterolot pogy: o*ne routd.
-{ 10.1.0.1/]4 -- 10.1.00/24 via 17e d+efa]0.1.0.1/]4 -- 10.0.00/24 via 172.16.0.2 }
-nodeh ost-a { route d+efault via 09.1.0.1 } host-b:eth0 {+efa]lt via 10.1.0.1 }
-10/24 }
-2

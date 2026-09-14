@@ -1,8 +1,0 @@
-# Simple 2-node topology for testing.
-#
-# Creates two namespaces connected by a veth pair with addresses
-#2/30 -- 10.2.3.2/30 }ency
-    <- delay 1001 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/3010.1.4ates directio n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
-link n1:eth1 3.1/30 -- 10.1.3.2/3010.1.4.1/30 -- 30 -- 10.2.3.2/30 }ency
-    <- delay 100ms  n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/3010.1.4.1/30 -- 10.1.4.2/30 }
-link n3:eth1 -- VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV.3.2/3010.1.4.1/30 -- jitter 2ms

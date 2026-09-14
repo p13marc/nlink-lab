@@ -1,5 +1,0 @@
-# VLAN tst2image are Fon V00 (sales)ohsineering).
-
-lab "vlan-trunk" 
-node host0
-node h

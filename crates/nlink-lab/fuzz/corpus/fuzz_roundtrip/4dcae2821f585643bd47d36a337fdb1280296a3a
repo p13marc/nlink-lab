@@ -1,9 +1,0 @@
-# VXLAN 192.168.100>1/24
-  }
-}
-
-node vtep3 : rout
- { er vxlan vxlan100 {
- 90.0.0.1/2433333333333333333333vrfs3on "VXL link, each hosting aateoosts. (VNI 100euter
-
-node icc

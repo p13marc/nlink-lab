@@ -1,8 +1,0 @@
-# Asymmet
-
-rate server:eth0 egress 100kbit ing777ress 100mbiwirete client:  -> delay 5ms                rate server:eth0 egress 100kbit ing777ress 100mbit
-rate client:  -> de <ed - lay 101 behind a stateful fierwall te default via 10.0.0:eth00{0 1 ..0.1/24 -- 01.0.0.2/24 }
-
-rate server:eth0 egress 100kbit ing777ress 100mbegress 100kbit ing777ress 100mbit
-rate client:  -> delay 5ms        rate server:eth0 <ed - lay 101 behind a stateful fierwall that only allows est uplink
-}

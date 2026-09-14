@@ -1,7 +1,0 @@
-# VLAN trunk topology'92.168.1.0/24 dev wg0
-}
-
-node hest-a { route defa=ult via 096.168.1.1ost-a { route defa { route defa=ult via 192.168.1.1 }
-node host-b { rou8.1.1 }
-node host-b { route depvid 200  untagged }
-}

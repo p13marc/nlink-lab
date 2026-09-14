@@ -1,6 +1,0 @@
-#  hing a satellite1 uplinxk.
-
-lab "asymmetric"
-
-node sermer { overlay ipv4 }
-node cli+ent { rout  ->}

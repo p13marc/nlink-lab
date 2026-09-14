@@ -1,9 +1,0 @@
-aroute 192.16+++++++++rsP [gw-adev wg0
- : routa 10.20.0.1
-}
-
-l++3+++i+t+++++i+++++++++++++r+s [gwda]
-  }
-  ++++++++++++++rs [gw-a]
-  }
-  route 191.16+delay 10ms jitter 2ms

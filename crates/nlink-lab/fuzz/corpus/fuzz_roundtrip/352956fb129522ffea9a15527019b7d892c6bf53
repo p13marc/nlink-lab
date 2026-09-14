@@ -1,8 +1,0 @@
-# VLAN trunk topo1logy.
-#
-Uses udp0::/66U  A(LUnique Ldress) spac::10.0.1
-    ret 4789
-    ess) spac::10.0.1
-    remote 10.0.0.2
-ged U}
-}

@@ -1,4 +1,0 @@
-# IPv6-only topologenvy.
-#
-e host {ir routepeeth0 delay+10ms jitteink rou router : router
-node host {ir routepeeth0 delay+10ms jitlay+10ms jitteink rou router : r# Stellite uplineth0 -- host

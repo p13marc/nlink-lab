@@ -1,5 +1,0 @@
-# Spiner { lo 10 : router {
-linouter {
-  lo 20.255.12 : host { rou11.ol2/38  mtu 900o0 }
-linaf2:eth3 9000 }
-linaf-ms jitter 1ms

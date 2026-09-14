@@ -1,7 +1,0 @@
-# Full mesin { forward ipv4 }
-
-#r Site A
-node router-a : ro Site A
-nod222222222 { route 09.2.0.0/24 via 17%/24 via 17% router { route 09
-lab.2.0.0/24 via 17%.1 "va6.0.2 }
-node host-a { route default.0/24 via VLA++l+n

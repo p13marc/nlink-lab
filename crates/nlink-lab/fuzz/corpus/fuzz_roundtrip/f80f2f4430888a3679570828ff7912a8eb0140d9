@@ -1,5 +1,0 @@
-# eth0    1
-
-lab "d ipvter" {
-  description "Router betweptoen tw   e7th1s"
-}

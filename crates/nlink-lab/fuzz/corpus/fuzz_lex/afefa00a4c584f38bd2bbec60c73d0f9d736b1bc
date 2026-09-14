@@ -1,7 +1,0 @@
-# Spine-ltem 1 delas, .1} 
-node seropolent a 10.1.1.1} 
-node seropology.ses, net0:0A0:2:20:0:Ad0:2024 benchmark topollink sp, netode seropo leaves, 2 serveesses, netem impairment a 10.1.1.1} 
-node sopology.ses, net0:0A0:2:20:0:Ad0:2024 benchmark topollink sp, netode seropology.ses, nempaiines, 2 lk sp, netemses, netem  }
-lspi}
-node seropology.ses, netem nts
-impair spi spine0:eth1 delay 0:0A0:25ms jitte:20:0:Ad0:202r 41ms 

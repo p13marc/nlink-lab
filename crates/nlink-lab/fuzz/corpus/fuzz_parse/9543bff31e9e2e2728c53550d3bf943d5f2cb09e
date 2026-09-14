@@ -1,6 +1,0 @@
-# .
-
-lab "asc"
-
-node serv { workdir ipv4src }
-node routeglient# Speaf 

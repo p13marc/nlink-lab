@@ -1,9 +1,0 @@
- --ode router : router
-node4 - fd01::0:1/64 -- fouter
-node host { route default via ::0d10:f1/64 -- roro
-
-node rou:40:f0:1:1/64df- - 00:de tn Alpine coftainer cvia ::0d10:f1/64 1/64 -- roro
-
-node roud00::1/64 - :40:f0:1:1/64df- - 00:de tn Alpine coftainer cvia ::0d10:f1/64 -- onnected to an roro
-
-nodeA

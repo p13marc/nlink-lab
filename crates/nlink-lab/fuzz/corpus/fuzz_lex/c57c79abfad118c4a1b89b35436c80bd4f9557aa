@@ -1,5 +1,0 @@
-# WAN impnt topolo# Simple 2-;ode topology fort estant-a:eth0 { 10.10uter {B
-. ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: .0.1/24 -- 10ink pe:eth1 -- tenant-a:eth0 { 10.10uter {B
-n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: .08.1/24 -- 10.10.0.10/24 }
-linooedruter-b >>.>>>>>>>>>>>>>>>>>>>>>>=>>: router { route0  pe:eth1 -- tenant-a:eth0 { 10.10uter {B
-n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: .0.1/24   ooedruC/

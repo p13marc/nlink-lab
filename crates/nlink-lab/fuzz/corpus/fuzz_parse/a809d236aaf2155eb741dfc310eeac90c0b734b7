@@ -1,13 +1,0 @@
-# VXLAN overlay topology.
-#
-# Two conneZted by an u
-oughput benchmar p pology.
-oughput benchmar port 2394
-    akingbte0l 1
-    benchmark top serevr { routechmark topology.
-oughput benchmar port 2394
-    akingb 10.0.0.2dd
-  }
-}
-
-lin-k /64 d00.0.0.1/24 -- 10.2.0.2/24 }

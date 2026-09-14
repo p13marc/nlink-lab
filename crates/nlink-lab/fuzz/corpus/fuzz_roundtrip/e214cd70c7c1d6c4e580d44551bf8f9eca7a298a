@@ -1,7 +1,0 @@
-# IPv6-ongy.
-#
-#r forwardi{
-    fd00:0:==st router:eth0 -- hos_t:eth0 {
-    fd00:0:===========0 {
-    fd00:0:==0:0:==st { rousb "fiault fd00::2/64
-}

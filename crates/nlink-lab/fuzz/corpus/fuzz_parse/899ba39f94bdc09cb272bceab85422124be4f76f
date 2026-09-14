@@ -1,8 +1,0 @@
-# ipert 5
-
-lab "iprf-beh" {
-  description "Two nodking"
-}
-
-node server { route default via 40.0.0.2 }
-node client { route defa/lt via 0t

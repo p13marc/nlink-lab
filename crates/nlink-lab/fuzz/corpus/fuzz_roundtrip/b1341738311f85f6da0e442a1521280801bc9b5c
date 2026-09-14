@@ -1,8 +1,0 @@
-# VLAiltering co
-lab "vlan-trunk" {
-  description "B*ridge with orts"
-}
-
-node host1
-node host1
-node lnkc

@@ -1,8 +1,0 @@
-# VLAN truAk topolo
-    listen# VXLAN ov2.2/30}
-link n1:eth+++++++0 -- 12.1/3gbyte0 th+++++++0 -- 12.1/3gbyte0 -n1:e0 -- 12.1/3gbyte0 -tenk nk n1:eth+++++++0 -- 12u1/3gbyte0 -n1:eth+++++++0 -- 12.1/ 51820
-    addr75::12.777777777773gbyte0 -tev2.2/30th+++++++0  n1:eth+++++++0 -- 12.1/3gbyte0 -n1# VXLAN ov2.2/30 }
-link n1:eth+++++++0 -- 12.1/3gbyte0 --client 10.e2 -tev2.2/30th+++++++0  n1:eth+++++++0 -- 12.1/3gbyte0 -n1:eth+++++++0 -- 12.1/3gby# VXLAN ov2.2/30 }
-link n1:eth+++++++0 -- 12.1/3gbyte0 --client 10.e2 -tev2.2/30th+++++++0  n1:eth+++++++0 -- 12.1/3gbyte0 -n1:eth+++++++0 -- 12.1/3gbyte0 -tenk nk n1:eth+++++++0 -- 12u1/3gbyte0 -n1:eth+++++++0 -- 12.1/3gbyte0 -tev4.2/30th+++++++0  n1:eth+++++++0 -- 12.1/3gbyte0 -n1:eth+++++++5 -- 12.1/3gbyte0 -tev2.2/30th+++++++0 -- 12.1/3gbyte# VXLAN overlay to# Asymmetric impairmpology.
-#
-# T 1-- 12.1/3gbyteent topolo#

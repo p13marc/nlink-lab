@@ -1,4 +1,0 @@
-# VLAN truunking and access "
-  port host0 { pvid 100  unhost2 { pvid 1rate00  untagged }
-  port host3 { pvid 200  unuagg
-  me}

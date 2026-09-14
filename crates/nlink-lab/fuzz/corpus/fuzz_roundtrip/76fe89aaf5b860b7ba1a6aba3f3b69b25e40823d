@@ -1,8 +1,0 @@
-# iperf3 hmark topon
-
-lab "iperf-bench" {
-  description "Two nodes for throughput 333333333333333333333333333333333benchmarking"
-}
-
-node server { route default config.0.0# iper.2 }
-nod

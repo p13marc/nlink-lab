@@ -1,6 +1,0 @@
-# Conription "Two nodes for thrmug
-link router:eth0 -- host:eth0${
-    fd00::r st:et    eth0    eth1
-
-la,@"routeer → client: low laten2cyt.
-# Uses fd#00::/6 

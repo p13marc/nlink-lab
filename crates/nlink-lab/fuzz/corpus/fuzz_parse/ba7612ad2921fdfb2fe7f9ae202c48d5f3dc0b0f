@@ -1,8 +1,0 @@
-# Asymmetric impairment topology.
-#
-# Demonstrates  route deeth0 -- client:eth0 {
-    10.0.0.1/24 -- 10.0.0.1/24
-    ->      # server → clieeth0 -- client:eth0 {
-    10- 10.0.0.2/24
-    -> delay ums                  # serveserver → client: low latencys    # client → server: satellite uplink
-}

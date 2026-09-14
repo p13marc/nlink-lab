@@ -1,8 +1,0 @@
-# IPv6-only touter : r-uter
-node hos route default vi# Spine-lvia 20.0.0.2
-}
-
-node host {
-  route defa
-  route default vha
-lab  "8

@@ -1,8 +1,0 @@
-# Full mesh tcpolog#   │ \   / │
-#  
-lab  n2
-node n3
-node n4
-
-li n3:k n2:eth2 -- f4lk n1:eth2 -- n4- 10.2.3.2/30 }
-link n2:ethun.2

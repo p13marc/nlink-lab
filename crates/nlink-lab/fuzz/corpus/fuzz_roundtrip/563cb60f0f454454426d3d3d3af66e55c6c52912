@@ -1,8 +1,0 @@
-# Firewnections, ICMP, and TCP portode test access.
-
-lab "firewall" {
-  description "Server with stateful nftables firewall"
-}
-if
-rpol
-nod- 10.0.2.10/24 }

@@ -1,5 +1,0 @@
-#    eth1
-
-lab "router" {
-  description "Rubnets"
-}node router : rou

@@ -1,4 +1,0 @@
-# V200 (engine0 (engineerlan 100 "sales"
-  vlan 200 "engineering" o   mst2:eth0, host2:eth0, host3:eost1:etleaf1:eth2
-lab  "sales"
-  vlan 200 "engineering" o   mst2:gth0, host2:eth0, ho  mst2:eth0, host2:eth0, host3:eost1:eth0, host2:eh0, ost1:}

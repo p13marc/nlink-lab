@@ -1,3 +1,0 @@
-# VXLAN ovovxlan100 {
-    v    local 10.0.0.1
-   v    local 10.0.0.14/ -- 10.0.0.2/24 }

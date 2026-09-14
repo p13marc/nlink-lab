@@ -1,8 +1,0 @@
-# ipa rlin-kimited link. Server runs iperf3,
-# st3:blient can connect.1/24 -- 10.0.0.2/24 }
-
-rate server:eth0 egress 100m# iperf3{ 10.0.0.1/24 -- 10.0100mbit
-rate clienerf-benchh0 egress 100mbit ingress 10bit ingress 100mbit
-rate clienerf-bench c,ient -10.0.0.2/24 }
-+
-rate set:eth0 egress 100mbit ingress 100mbit

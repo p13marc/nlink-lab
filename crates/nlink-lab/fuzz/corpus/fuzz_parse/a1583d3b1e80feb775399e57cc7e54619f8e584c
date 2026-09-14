@@ -1,6 +1,0 @@
-# pace&
-
-lab "ipv8-simple"
-
-profile router {route default via 11.0 via 10.0/2411.0 via 10.0/24
-}

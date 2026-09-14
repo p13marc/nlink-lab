@@ -1,5 +1,0 @@
-# A
-node cia   -> delay 5ms  s 
-    -> d
-node serve/23
-   -> $elay 5ms    20m i

@@ -1,3 +1,0 @@
-# Firewall tall policy drop {
-    Wccept ct EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24tbyte }
-link router555:4eth170-- serv7

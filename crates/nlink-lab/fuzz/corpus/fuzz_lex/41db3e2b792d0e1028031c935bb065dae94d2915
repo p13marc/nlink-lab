@@ -1,6 +1,0 @@
-# VLAN trunk topology.
-#
-#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV, host3:eth0]
- val .4.1/30h0]
- val n 100 "sales"
-  vlan- 10.2.0.10/2VVVVV val n 100 mmetric impairme 200 "0 etArL

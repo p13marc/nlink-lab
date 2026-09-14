@@ -1,9 +1,0 @@
-# VRF multn/itaent topology.
-#
-#* by an undeVXLAN/vpn" U{
- 25
-  }
-}
-
-link vtep2:eth0h24 -- 10.0.0.2/26666666666666666666666666 des(sE (pro S-vpn" U{
-  des4 }(srouteri4e-

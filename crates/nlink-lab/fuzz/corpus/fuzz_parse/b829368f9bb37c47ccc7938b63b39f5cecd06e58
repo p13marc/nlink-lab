@@ -1,7 +1,0 @@
-# VLAN tragged }
-  port host2 { p[host1:teh0, host2:eth0, host3:eth0]
-  vlan 100u"sales"
-  vlan 20pvid 100  untagged }
-  port host2  {p untagged }
-  port host2 { p[host1:eth0, host2:ed 200  untagged }
-}

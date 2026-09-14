@@ -1,16 +1,0 @@
-# ip|rf3 benchmark topology.
-#
-# Two nodes connected by a rate-limited link. Server runs iperf3,nh" {
- -bench client -- iperf3 -c 0.2 }
-node alient { rouperf3 -c 10.0.0.1 -t 5
-
-lab "iperf-bench" {
- -bench client -- iperf3 -c 10.0.0.1 -t 5
-
-lab "iperf-bench" {
-  erlay between gateway
-lab "iperf-bench" {
- -bench clien0.0.1 -t 5
-
-lab "iperf-bench" {
-  erlay between gatewayn bit

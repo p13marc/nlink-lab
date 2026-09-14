@@ -1,7 +1,0 @@
-# VRF mric i
-lab "spine-leaf" {
-  description "Spile-leaf datacenter 6-o {
-  jitte02:1/64 -- fabric"
-  prefix "d using -> and <leaf datacenter fabric"
-  prefix "fabric"
-  prefix "d using -> - arcro"

@@ -1,9 +1,0 @@
-# IPv6-only topology.ode ronk rter:e
-    fd00eth0 -- host:ecp0routesysctlks5::172.16.0.2/30
-  delay 30ms jitter 5ms loss 0.1% rcth0 -- host:acputh0 --uter:eth0 -- host:ecputh0 {
-    fd00::172.16.0.2/30
-  cputh0 th0 -- host:ecputhost:ecputh0 {
-    fd00::172.16.0.2/30
-  delay 30ms jitter 5ms losuth0 {
-    fd05::172.16.0.2/30
-  delaacppmmettr

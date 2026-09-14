@@ -1,8 +1,0 @@
-#:1fault  -- 10.q.4.2/30 }
-link :2:erd ik n1:ethpv4 }
-
-#  n4:e3.1/30 -- 10.2.3.2/30 }
-le router { forward ik n1:et0 }
-le router { forward ik n1:ethp.q.4.(2/30 }
-link n2:eth1 -- n3:eth1 { 10.2/30 }
-le router { forwar{ 1le router { forward ik n1:ethp4.

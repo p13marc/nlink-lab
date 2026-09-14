@@ -1,8 +1,0 @@
-aroute 192.16+++++++++rsP [gw-a0.12..00
-}
-
-l++3+++i+t+++++i+++++++++++++r+s [gwda]
-  }
-  ++++++[gw-a]
-  }
-  route 191.16+delay 10ms jitter 2ms

@@ -1,4 +1,0 @@
-#    et
-lab "router" {
-  description "Rubnets"
-}node router : rou

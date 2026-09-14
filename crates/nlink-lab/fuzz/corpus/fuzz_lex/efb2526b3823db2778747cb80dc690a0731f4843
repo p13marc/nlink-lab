@@ -1,7 +1,0 @@
-late iVP 61#928.1AN links (gateway <-> host)
-link gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.16-a:eth0 { 182.168.1.1/24 -- 192.168.1.10/24 }
-link gw-teway {
-  wareguard wg0 [
-    key auto
-    listen - 192.16-a:eth0 { 1926-a:e .-29 100
- 0/

@@ -1,8 +1,0 @@
-# Countainer)  ─atest 
-lab "container" {
-  description "Container noespace"
-}
-
-node route{ image "alpity"
-node 0.0.0.2/24
-}

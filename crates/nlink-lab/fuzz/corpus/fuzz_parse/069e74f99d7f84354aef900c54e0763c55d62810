@@ -1,12 +1,0 @@
-# IPv6-only topoler:eth0 -- host:ecputh0 {
-    fd00::172.16.0 -- fd00::2/router:0 {
-    fd00::172.16.0ng IPv6 IPv6 t:0 {
-    fd00::172.16.0ng IPv6 IPv6 traffi/64 ute:0 {
-    fd00::172.16.0ng IPv6 IPv65mr/ffi/64 uter:et {
-    fd00::172.16.0ng IPv6 IPv6 traffi/64 uter:eth0th0 {
-    fd00::172.16.0.2/30 IPv6 traffi/64 uter:eth0 -- host:ecputh0 {
-    ::172.16.0ng IPv6 IPv6 traffi/64 uqer:eth0 -- host:ecputh0 {
-    fd00::172.16.0.2/30
- .230ms jitter h0 {
-    fd00::1/64 -- fd00::2/64
-}

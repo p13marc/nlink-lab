@@ -1,4 +1,0 @@
-# VL.
-
-lab "vlan-trunk"runtime hosas
-b "vlan-trunk"de hnkc

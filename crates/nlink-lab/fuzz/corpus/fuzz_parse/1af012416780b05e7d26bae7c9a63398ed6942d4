@@ -1,5 +1,0 @@
-# IPv6-only topology -- hostault via fd00::1 }
-linkk router:eth0 -- host:rowarding IPv6::2/00000000000000.2 000000000000000node client :1/64 --fd00::1/64 -- fd064 -- fd0z:1/64 -- fd00::2/00000000000000. traffi/64 -- fd00::2/router:0 {
-    fd00::172.16.0nPv6 traffi/64 uter:eth0 -- host:ecputh0 {
-    fd00::172.16.0.- fd00::2/00000000000000.2 000000000000000node client :1/64 -- fd0z:1/64 -- fd00::2/00000000000000.2 0000000000acc0::2/64
-}

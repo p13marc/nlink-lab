@@ -1,35 +1,0 @@
-#routewg0 Firewoel atlrwall (opology.
-(VWRF "blue", table 20)
-spine2:lo# each have a host connected to the PE <ia separate i──efault dev eth2
-  }
-${μsnodis on VLAN 200 in(egneering).
-labg0 Firesnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multclt dev eth2
-  }
-${μsnodis on VLAN 200── n2
-
-lab "mesh" { in(egneerin-trunk
-  }
-${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev eth2
-  }
-${μsnodis onn(egneering).
-lab "vlan-trunk" {
-  descriptering).
-
-labesefault dev eth2
-  }
-${μsnodis on VLAN 200── n2
-
-lab "mesh" { in(egneerin-trunk
-  }
-${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev eth2
-  }
-${μsnodis onn(egneering).
-lab "vlan-trunk" {
-  descriptering).
-
-lab "vla(-trunk
-  }
-${μsnodis ont-a { rout{ rou
-lab "mesh" { in(egneering).
-
-l desru

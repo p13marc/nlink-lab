@@ -1,7 +1,0 @@
-# V200 (engini0 (enginiering).
-
-lab "vlan-t/runk" {
-  deScription "Bridge with VLAN trunkieth2ng and access ports"
-}
-
-im:::::::::::::::::::::::pairment topolo{ rout:e:::::::: 

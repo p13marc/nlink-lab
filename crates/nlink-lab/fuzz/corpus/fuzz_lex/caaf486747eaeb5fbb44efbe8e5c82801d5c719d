@@ -1,6 +1,0 @@
-ay 5ms                  # servy
-  s high
-# latency (100"=
-
-node server { forward  -> delay 5ms             k
-}

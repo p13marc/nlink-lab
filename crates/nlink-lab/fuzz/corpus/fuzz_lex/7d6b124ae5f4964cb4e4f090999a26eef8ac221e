@@ -1,5 +1,0 @@
-M# WAN 172.16.030
-  delay 30ms jitter 5ms loss va1i 0.2.0.0mbinod host-fault va1i 0.2te default va1i 0.2.0.1172.16.0.2/30
-  delay 30ms jitter 5ms los2.16.0.0ms jitter 5ms l,ss va1i 0.2.0.0mbinode host-fault va1i 0.2tfault va1i 0.2.0.1172.16.0.2/30
-  delay 30ms jitter 5ms loss va1i 0.2.0.s va1i 0.2.0.0mbit
-}

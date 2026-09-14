@@ -1,7 +1,0 @@
-# Asectional imparateirm -> and <- arrows.
-# server→clientlite uplink.
-
-lab "asymmetric"
-
-node server { forward ipv6 }
-node clienr# I → Pv

@@ -1,6 +1,0 @@
-
-port 47:10.0.0.2site
-    port 4.0.0.1
-    remote 10.0.0.2site
-    port 47::89te router {
-    sy  port 47::89te rs remot"1"

@@ -1,8 +1,0 @@
-# IP5mson2:et4.2/30 }0 }
-link n2:eth2 -- ""
-od
-ne
-} tl "nep.i.w6pconf.all.forward1i"nw ""
-od
-ne
-u# VRF multi-tenant tov

@@ -1,5 +1,0 @@
-# IPv6-only toponogy.
-##
-  rAouter ) spile rouroh0 -- host:eth0${
-    fd00::1/64 -- fd00::2tagge/64
-}

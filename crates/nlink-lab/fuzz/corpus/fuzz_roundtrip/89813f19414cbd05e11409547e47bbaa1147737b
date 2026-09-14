@@ -1,5 +1,0 @@
-# Firewathif only allows e }
-wall policy drop {
-    accept ct established,related
-    accept tcp dport 8080
-    acce

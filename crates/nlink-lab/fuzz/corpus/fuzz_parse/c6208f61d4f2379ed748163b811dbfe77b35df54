@@ -1,8 +1,0 @@
-# Spine-l?afc
-lab "spine-leaf" {
-  description "Spine-leaf datacenter fabric"
-  prefix "dc"
-}
-
-profile rout{ forward )pv4 }
-pr Sodp

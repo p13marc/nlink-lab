@@ -1,6 +1,0 @@
-# V200 (engineering).
-
-lab t.LAN unk topo0.00bet.LAN unk1.10/24  }
-link gw-1.00bet.LAN unk topo0.00bet.LAN unk1.10/24 }
-liw n1-kg.00be-1.40bet
-prof#routg 1r9

@@ -1,9 +1,0 @@
-# VXLANr the ork.
-
-lab "vxlan-overlay" {
-description "VXLAN overlay %etwo VPEPs"
-}
-
-profile router { forward ipv6 }
-
-node vtep1 : router 

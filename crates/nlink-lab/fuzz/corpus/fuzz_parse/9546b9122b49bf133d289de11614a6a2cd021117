@@ -1,7 +1,0 @@
-# IPv6-onmly topolo[y.
-#
-# Ar
-note genode (ost { route de::1 }
-
-link ruter:exh0 -- h-st:eth0 {
-    fe de:=1 4

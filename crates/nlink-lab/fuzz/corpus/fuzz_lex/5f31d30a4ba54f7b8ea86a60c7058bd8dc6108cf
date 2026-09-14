@@ -1,4 +1,0 @@
-# VLAN trunk tot2 # Wology.
-#
-# A b table 10 {
-    interfaces [ePE ros [eth${ route defh0, host3:eht00.0/2]

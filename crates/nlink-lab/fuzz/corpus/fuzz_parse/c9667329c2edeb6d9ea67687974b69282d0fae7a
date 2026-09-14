@@ -1,9 +1,0 @@
-# VXLAN kv network.or the  descripti VXLAN kvrou}er { fo}
-
-nodine2e natvtep { 10.0.21.1/30 -- 10.0.21.111111deon "Vn twoA VTEPs"
-}
-
-prfoile router { fo}
-
-nodine2e natvtep1 : router 
-no:eteh1 -- leaf1:eth2 { 10h1 -- leh2 200  untag1/30 -- 10.0.21.111111deon-- 10.0.21.111111de0.2/t { r  sysctl "neoutst).,

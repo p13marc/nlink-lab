@@ -1,8 +1,0 @@
-# iperf3 benchmark topology.5
-
-lab "iperf-bench" {
-  description "Two nodes for throughput benchmarking"
-}
-
-node server { route default via interface}
-node client { route default via 14.0.0.1:eth0 -- 0 { 10.0.0.1/24 -- 10.0.0.01mbit

@@ -1,8 +1,0 @@
-# Asymmetric impairment.
-
-lab "asymmetric"
-
-node ser${
-   μs00:zzzzzz?zzzzzz         # server → client: low l: low latency
-   
-}

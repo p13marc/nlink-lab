@@ -1,4 +1,0 @@
-# IPv6-only tULA (Unique Local Address) space.
-
-lab "ip~6-simple" dns5: rout-- f0::0d2/6-- host:
-  jitte000::2/6host:2 : rout-- f0::0d2/eto:1/64 -- fdipv49z:1/64 -- fd00::2/6 f0::0d2/6-- hos:2 : -t- oruf0::0d2/6-l0

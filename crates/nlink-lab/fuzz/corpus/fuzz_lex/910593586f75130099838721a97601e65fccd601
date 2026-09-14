@@ -1,6 +1,0 @@
-gy.
-#
-# ro{ter {
-  lo 10.2/32
-  route defaultVTEPs10.0.12.1 : hoso defaultV {
-  lo 1015..2/01e defaultVTEPs1010.2R0.0./24 }

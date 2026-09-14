@@ -1,5 +1,0 @@
-#!S,i0adf  1.255.0.
-o pool t reuro{ lab.lo pool:5.0.2/32 /32 }
-node spine0 : t reuro{ no pool:eth02/32 }
-
-# Lault

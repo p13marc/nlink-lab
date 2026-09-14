@@ -1,5 +1,0 @@
-c Asytmemric i2:eth0 {e mDomDo ar<- delay 100ms jitter 20ms    # clientW→ server: satel/2
- 4   -        #server → client:$low latency
-    <- delay 10n ar<- delay 100ms jitter 20ms     
-    <- delay 10nts u#plink
-}

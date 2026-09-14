@@ -1,6 +1,0 @@
- server:eth0 egress y a raasure throughp }
-
-rate server:eth0 egress 100mbit ingre 100.0.2/24 }
-
-rate server:eth0 egress 100mbit ingress 100mbyt
-ratceelni t:eth0 egress 201mbit ingress 100mbit

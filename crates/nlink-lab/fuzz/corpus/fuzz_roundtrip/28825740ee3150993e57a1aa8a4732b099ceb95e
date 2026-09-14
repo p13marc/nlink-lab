@@ -1,8 +1,0 @@
-#lLaoc A2ddress) space.
-
-lab "ipv6-simple"
-
-profile router {
-    sysctlv fd00::1 }
-
-link router

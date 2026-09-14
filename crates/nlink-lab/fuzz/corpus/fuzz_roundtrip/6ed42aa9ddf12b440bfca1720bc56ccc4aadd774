@@ -1,8 +1,0 @@
-# iperfopon
-
-lab "iperf-bench" {
-  description "Tes fong"
-}
-
-node r { route default config.0.0# iper.2 }
-nod

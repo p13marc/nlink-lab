@@ -1,6 +1,0 @@
-# iperf3 benchmark topology.
-#
-# Two nodes connecteer:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
-
-rate server:eth0 egress 100mbit ingress 100mbit
-rate cli0 { 10.0 egress 100mbit ingress 100mbit

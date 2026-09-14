@@ -1,8 +1,0 @@
-# VLAN trunk topology.
- A(sales), host3s i on VLAN 200 (engineng).
-
-lab "vla;-trunk" {
-  description "Bridge with VLAN trunking and access ports"rt host1 { n1pvid 1ra-overlay{ed" 
-  scription "o/*//////1////////"
-}ed }
-}

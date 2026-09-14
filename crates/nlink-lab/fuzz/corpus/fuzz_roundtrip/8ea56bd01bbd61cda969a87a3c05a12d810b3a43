@@ -1,20 +1,0 @@
-# iperf3 benchmark topology.
-#
-# Two n# Container topoonnect odes c# client can connect to measure thro-ghput.
-#
-# Usage af via imp0.0.1 }
-2:eth0 {
- 1king"
-}
-
-node.
-#
-# Tvrfwo nodes connected by}
-
-rate server:eth0 egress 1m10b00/.24 -m 10.0.0.2::::::::::9:/er deploy:
-#  on "Two nodes for throughput benchmar10.fault vQia imp0.0.1 }
-2:eth0 {
- 1king"
-}
-
-node server { route default via 1t..d.24 -- 10.0.0.2:::bit

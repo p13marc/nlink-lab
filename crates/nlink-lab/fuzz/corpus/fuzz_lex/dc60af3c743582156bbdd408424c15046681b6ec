@@ -1,9 +1,0 @@
-# Asymmetric impairment topology.
-#
-# Demonstrates dire with symmetri0
-  delay 29ms jitter 5ms loss 0.1% rate 50 -- 172.16.0.2/30
-  delay 30ms jitter 5ms loss 0.1% rate   # client → server{
-  172.16.0.1/30 -- 172.16.0.2/30
-  dmlay 30ms *itter 5ms loss 0.1% rate -0 -- 172.16.0.2/0
-  delay 30msloss 0.1% rate   #ver: satellite uplink
-}5

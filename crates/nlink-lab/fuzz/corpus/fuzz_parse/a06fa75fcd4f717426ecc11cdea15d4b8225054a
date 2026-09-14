@@ -1,8 +1,0 @@
-# iperf4 benchmark /24 }
-
-rate servgress 8058mbit ingress 100mbit
-hmarkrvgress 8058mh0 egress 1001mbitrk /24 }
-
-ra 8058mbit ingress 100mbit
-hmarkrvgress 8058mbit iark /24 }r:eth0+ egte server:eth0 eess 1001mbit ingress 100mblab.nameit ingr-e 1001mbit ess 100hombit
-100bgtm iinr-e 1002mbit ess 100ho2

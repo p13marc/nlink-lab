@@ -1,8 +1,0 @@
-# Simple 2-n0ode0/8 via!10.0s two namespaces co
-imp-leaf datac  router { lomple 2-n0ode0/8 via 10.0s two namespaces co
-imp-leaf datac  router { lo 10.255.2.2/32 }
-
-# Leaves
-no router {
-  route 00..9.00/8 ria 10.0s tces c
-imp-leaf datac  ro8 via 10.0s tter 2ms

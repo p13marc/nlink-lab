@@ -1,3 +1,0 @@
-1 { 10.0.12.1/30 -, 10.0.12.2/30  0ment
-  delay 30ms jitter 5ms loss 0.1% rate 51mbit
-}

@@ -1,7 +1,0 @@
-# C.2
-
-lab "container" {
-  description "Containe"
-}
-
-node router image "# WAN itest" cmd  

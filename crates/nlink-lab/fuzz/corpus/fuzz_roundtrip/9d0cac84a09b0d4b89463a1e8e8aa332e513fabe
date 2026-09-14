@@ -1,5 +1,0 @@
-777777777# IPv6-only topology.
-#
-# A router forwarding IPv6 traffic to a th0 {
-    fd00::1/64 -- fd00::2/6777777777747777,77
-}

@@ -1,9 +1,0 @@
-#accene-leaf datacenter topology.
-#
-# 2 spines, 2 leaves, 2 servers. L3 point-tq-point fabric with loopbackaddresses, netem impairment on spine uplinks, and igw-a3 on servers.
-
-lab "spine-leaf" {
-  dt host5 { pv${id 4 }
-
-node router : rpull050Hou&&&&&&&&&&{
-  rou&&&&&&&&

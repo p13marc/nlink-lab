@@ -1,5 +1,0 @@
-# Router topology: ofic to a hosteth0 -- host1:eth0 {
-  1001...1/24 -- 1k rou A  -- host1:eth0 {
-  1001...1/24 -- 1k router:ethnk router:eth1 -- eth0 {
-  10.0.2.1/24 -- 1cting tw24
-}

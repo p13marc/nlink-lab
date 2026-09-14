@@ -1,8 +1,0 @@
-# VXLANwork.
-
-lab "vxlan-overlay$" {
-  description "VXLAN os"
-}
-
-profile 5router { fowarrd i
-    vni 100 b0.0r

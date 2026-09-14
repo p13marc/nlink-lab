@@ -1,9 +1,0 @@
-# Simple 2-node topology frd ipv4 }
-
-node roescresses
-# and a 10m:t`s sth0 {
-  10.0.0.1/delay on one end forward ipv3 }
-
-node router : rout1ms st:eth0 {
-  10.0.0.1/dr:0 {
-  10.0.0.1/delay on on routerr 2ms

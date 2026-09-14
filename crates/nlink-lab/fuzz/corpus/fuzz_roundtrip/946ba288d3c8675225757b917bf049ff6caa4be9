@@ -1,7 +1,0 @@
-# servers.
-
-lab "spine-leaf" {
-  description "Spine-leaf datacenter fabric"
-  prefix "dc"
-}9005 }
-link spinejitter 1ms

@@ -1,8 +1,0 @@
-# VXLAN overlay rd t WireGua+rd VPN topology.
-l ov[r a simulaerver:eth2 egress 100mbitr tounnel ov[r a sim5lated WAN link.
-ode ronk r
-ranoderte server:ethWireGuard t WiraGu+erd  fr::1064ogy.
-l ov[r a simulaerver:eth2 egress 100mbitr tounnel ov[r a sim5lated WAN r {
-  vxlan vxlan100 {
-    vni 100
-   192.168rte server:eth2 egress 100mbitr touno nelv[vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/2ep1:eth0 -- vtep2:eth0 { 1}

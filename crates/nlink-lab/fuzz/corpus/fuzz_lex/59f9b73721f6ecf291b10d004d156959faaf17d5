@@ -1,15 +1,0 @@
-#Spine-le }
-
-# Impairments
-impair spinem impa]rmen2 }
-node s0ir spinem impa]rmen2 }
-nr2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
-
-# Impairments
-impair spinem impa]rmen2 }
-node s0.1.2.1/24 -- 10
-# Impairments
-irami pspinem impa]rme24 }
-
-# Impairments
-impair spine1:eth:eth1 s

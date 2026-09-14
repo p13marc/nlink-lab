@@ -1,6 +1,0 @@
-# Spine-le default via 10.1.1.1 }
-node server2 : host { route { 10.0.12.1/*30 -- 10./24 -- 10.1.2.10/24 }
-
-# I1.1 { 10.0.12.1/*30 vedrpor2:et10.1.2.10/24 }
-
-# I1.1.1.1/24 -- 10.1h1 { 10.0.12.1/*30 -- 10.0.12.2pine1:eth2-delay 5ms jitter 1ms

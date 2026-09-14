@@ -1,9 +1,0 @@
-# Re.
-
-lab "ipv1-le"
-
-profile router {
-    sysctl "nding" "1"
-route default via 11.0.1.1 }
-node host2 { route default via 10.0/24
-}

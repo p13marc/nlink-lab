@@ -1,9 +1,0 @@
-# VXLAN overlay   
-    address 192.168.100.1/2100
-AN o port 4789
-topolo.
-#
-# Two  
-    address 192.168.100.1/2100
-AN o port 4789
-.2/24 }

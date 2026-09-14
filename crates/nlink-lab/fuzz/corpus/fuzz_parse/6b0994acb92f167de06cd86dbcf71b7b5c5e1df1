@@ -1,5 +1,0 @@
-# IPv6-only topology.
-#
-# A router frowardi
-node host { route defaug IPv6 ::02/ Used0route defaug IPv0: (Unique Local Adter
-node host { route defaug IPv3 traffi/64 -- 0fd::02/ Us-e ho rost

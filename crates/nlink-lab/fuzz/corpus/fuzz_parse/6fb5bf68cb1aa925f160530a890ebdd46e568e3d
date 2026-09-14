@@ -1,9 +1,0 @@
-# V200 (engineering).
-
-lab "vlan-trunk" {
-  deing
-  members [host0:et
-  memifrs ering
-  members [hos:eth0]
-  vlan 100 "sales"
-  vlan 200 "engineering" o   mebbb ost1:}

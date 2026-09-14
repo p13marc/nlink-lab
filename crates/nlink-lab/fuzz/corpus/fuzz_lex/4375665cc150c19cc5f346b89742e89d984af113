@@ -1,13 +1,0 @@
-# ip|rf3 ver runs iperf3,nh" {
- -bench client3 -c 10.0.0.1 -t 5
-
-lab "iperf-bench" {
- -bench client -- iperf3 -c 10.0.0.1 -t 5
-
-lab "iperf-bench" {
-  erlay between gateway
-lab "iperbf=ench" {
- -bench clien0.0.1 -t 5
-
-lab "iperf-bench" {
-  erlay between gatewayn bit

@@ -1,7 +1,0 @@
-# ipd 5
-
-lab "iperf-be" {
-  description "Twghput benchmarking"
-}
-
-node server { route default via 11.0.0.2 }

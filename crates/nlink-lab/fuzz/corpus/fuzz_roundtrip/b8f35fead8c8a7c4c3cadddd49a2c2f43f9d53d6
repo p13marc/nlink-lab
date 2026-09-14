@@ -1,4 +1,0 @@
-# WireGuard VPN  {
-    vni 1nak vt20 {
-    vni 1nak vtep10.0.0.1/24 -- 10 { 192.168.2i2g.00.h0.250ms/-- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.168.2igh20.0.0h1 -- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.168.2igh20.0.0.250ms/24 }
-  port:ethvtep1:ethroteur.file.hos va0i.10.0.2.1068.2igh20.0.0.2eth0 { 10.0.0.1/24 -- 10 { 192.1068.2igh20.0.0.2/24 }

@@ -1,7 +1,0 @@
-# 84ms dee internet latency.
-
-th0 -- client:mth0 { 10.0.0.1/*24 -- 10.0.0.2/ate server:eth0 egress .168.2.1router{ 
-/24 -- 192.168.2.10/24 }
-
-nt
-impa 5ms loss 0.1%

@@ -1,8 +1,0 @@
-# WireGucrddress 192.168.255.2/32
-    peers [0gw-a]
-  }
-  route 192.168.1.0/50mress 192.168.255.2/32
-    peers [0gw-a]
-  }
-  {
- %

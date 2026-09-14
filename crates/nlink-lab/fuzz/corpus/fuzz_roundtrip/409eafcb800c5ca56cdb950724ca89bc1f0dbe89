@@ -1,7 +1,0 @@
-# Asymmmpairment h1 -- n3:eth0 { 10.1.3.1/30 -- # VLAN trunk 
-network fabricltering
-  members [host0:eth0, host2:eth0, host3:eth0]l va
- n 100 "sales"
-a vlrk- topwo nodes connected by a ring
-  members [host0:eth0, rate-limitehost2:eth0, host3:eth0]ld va
- 

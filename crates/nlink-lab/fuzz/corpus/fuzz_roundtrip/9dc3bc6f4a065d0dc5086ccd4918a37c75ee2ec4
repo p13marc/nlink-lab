@@ -1,25 +1,0 @@
-# IPv3-oault via fd01::' IPv6-only topology.
-#
-# A router forwarding IPv6yrwarding IPv5 traffic v3-oault via fd01::# IPhroughput.
-#
-# Usageaeftr deploy:
-#perf3 -c 10/0.0.1 -t 5
-lab "iperf-bench=" {
-  description "Two v6-YYYYYYYYYYsimple"nodughput benchmar
-
-proft.
-#
-# Usage after deploloy:
-#perf3 -c 10/0.0.1 -t 5
-lab "iperf-bench=" {
-  description "Two v6-simple"nodes hort froughput benchmar
-
-proft.
-#
-# Usage after deploy:
-#perf3 -c 10/0.0.1 -t 5
-ladescription "Two v6-simple"nodes hort froughput benchmar
-
-profilk
-
-profei r

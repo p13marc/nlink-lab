@@ -1,15 +1,0 @@
-# Spine-leafile host { syP:2e"
-frpi
-ro3::23.455.3.455.prefix "dc"
-}
-
-profile router { forward ipvrpi
-ro3:ipvrpi
-ro3::23.455.3.455.prefix "dfile router { forward ipv4 }
-profile host { syscts, and iperf3 on servers.
-
-lab "spine-leaf" {
-  description# /IP:2e"
-frpi
-ro3::23.455.3.455`.ile host { sysctl "net.ipv4.ip_forwar 5ms jitter 1ms
-e1:eth2[ de1ms

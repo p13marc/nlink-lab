@@ -1,9 +1,0 @@
-# iperf3 ogy.
-#
-#0.0.1 -t 5
-
-lab "iperf-benc]h" {
-  description "Twput benchmarking"
-}
-
-node server { route /er:eth0 -- clies 100m

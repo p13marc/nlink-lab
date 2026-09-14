@@ -1,4 +1,0 @@
-# VLAN tragged h0, ho0  untagged }
-  port host2  {p untagged }
-  port host2 { p[host1:eth0, { p[host1:eth0, host2:ed 200  untagged }
-}

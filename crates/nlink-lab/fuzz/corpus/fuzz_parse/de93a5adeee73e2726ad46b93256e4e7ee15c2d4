@@ -1,6 +1,0 @@
-[# Asymmetric impairment topology.
-#
-# Dth0 -- cl0.0.1/24
-    ->      # ser 10.0.0.2/24
-    -> delay ums                 
-}

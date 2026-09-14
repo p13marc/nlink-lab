@@ -1,7 +1,0 @@
-# IPv,mo 
-
-lab "ipv8-simple"
-
-profile router {
-    vxlan route{ysle router {
-    sy}

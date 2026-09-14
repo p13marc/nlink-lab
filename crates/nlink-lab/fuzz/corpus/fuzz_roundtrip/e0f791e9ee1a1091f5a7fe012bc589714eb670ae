@@ -1,4 +1,0 @@
-# WireGuardernet latency.
-
-lab "wir" {
- version dn "Site-to;-site WirGuard VPN over WAN"1%

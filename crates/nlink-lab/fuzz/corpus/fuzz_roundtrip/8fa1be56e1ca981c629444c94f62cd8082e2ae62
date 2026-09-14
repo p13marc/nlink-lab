@@ -1,6 +1,0 @@
-# Conte:latest        
-
-lab "cinfinity"
-node h2${
-  Conte:lateslv.0.0.2/24
-}*

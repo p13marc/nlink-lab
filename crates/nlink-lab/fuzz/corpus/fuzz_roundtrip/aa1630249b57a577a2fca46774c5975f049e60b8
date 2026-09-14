@@ -1,9 +1,0 @@
-# WireGuard VPN topology.
-teway {
-  wireguard ug0 {
-    key a listen333333333333333333333333333333333333336666666666666666666lllllllllllllllllllll3333303333333333333333eguard wg0 a:eth0 delay 5333:777777777#{
-  0#{  fd00::777777777#{ host:eth0 {
-  gateway {
-  wireguard wg0 a:eth0 delay 50ms jitter 5ms loss77777#{ host:eth0 {
-  gateway {
-  wireguard wg0 a:eth0 delay 50ms jitter 5ms loss 0.0%

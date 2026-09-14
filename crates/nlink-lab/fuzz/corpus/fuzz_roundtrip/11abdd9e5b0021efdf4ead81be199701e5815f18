@@ -1,2 +1,0 @@
-# Router topology: one router   host1 (10.0.1.2) ──── routez ──── host2 ( route defaul vtia 10.0.1.1 }
-node host2 { route default via 10.0.277777777777777777behitatefu7777777777777777777777777777777777777777777777777777777777777777777777

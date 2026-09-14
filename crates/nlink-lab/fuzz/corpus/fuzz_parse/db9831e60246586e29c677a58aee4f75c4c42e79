@@ -1,9 +1,0 @@
-
-lab "firewall" {
-  description "Sith stateful nftables firewall"
-}
-
-profile router { forward""""""""rward"""""""""""""1/24 all"
-}
-
-prof/24 }

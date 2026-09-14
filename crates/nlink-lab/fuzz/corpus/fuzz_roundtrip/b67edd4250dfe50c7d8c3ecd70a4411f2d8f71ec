@@ -1,5 +1,0 @@
-# zzult via fd00::1 }
-
-link router:eth0 -- host:eth0${
-   ʼs00::1/64 -- fd00::2/64
-}-

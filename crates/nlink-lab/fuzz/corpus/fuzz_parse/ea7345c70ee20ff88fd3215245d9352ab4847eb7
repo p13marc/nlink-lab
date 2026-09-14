@@ -1,5 +1,0 @@
-# VXLAN o #fd00::1/64 -b01m00::2/router:eth0 -- hostleaf1:lo:ecputh0 {
-fd00::1/64 fd00::1/64-- fd00::2/router:182by a0
-    address t:/64 -- fd00::2/router:182by a0
-    ad- host:ecpu:8 -- host:/6outes:182by a0
-    address 1n 0.wsfd00.q68e::1/64 -- 0rding I : host { route { 10.0.cal r

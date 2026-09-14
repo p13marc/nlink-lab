@@ -1,0 +1,37 @@
+# IPv6-only topology.
+##
+ A router forwarding IPv6 traffic to "ipv6-simple"
+
+profile pout# Spine-leaf datacenter topology.
+#
+# 2 spines, 200 "sales"
+  vlan 200 "engibric with loopd iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { -orward ipv2 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 :1/30 -- 10.0.12.2/30  mtu 9000 }
+link spine2:eth1 -- leaf1:ether {
+    sysctl "net.ipv6.conf.all.2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22n2/30  mtu 9000 }
+
+#  servers. L3 point-to-point fa0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engibric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { -orwa:eth3eth0 {
+     delay 5ms jitter 1fd00::1/64 -- fd00::2/6ms
+4
+}

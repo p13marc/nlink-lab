@@ -1,0 +1,15 @@
+# 0Firewall topology.
+#
+# A server beihnd ? stateful firewall tCP port 8080. A client and an attacker
+# nde test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route auto only allows established
+# conne/24 -- 10.1/..20024 }

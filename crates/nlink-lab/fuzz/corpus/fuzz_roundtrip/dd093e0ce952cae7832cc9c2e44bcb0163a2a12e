@@ -1,0 +1,7 @@
+# WireGuardserver:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.22
+  }
+}
+0.0.1 }
+node tenant-b { route default via 10.2k gw-:eth1 -- host-a:ethprost-a:ethApr/2
+impair gw-a:4

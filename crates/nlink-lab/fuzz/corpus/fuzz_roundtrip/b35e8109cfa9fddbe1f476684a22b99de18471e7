@@ -1,0 +1,15 @@
+# VXLANhe overlay network.
+
+lab "vxlan-ove`rlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+ an100 {
+    vni 10.0.1
+    port 4789
+    a0.0.0.2/24 }

@@ -1,0 +1,7 @@
+# iperf3 benchiark topd link.ing"
+}
+
+node server { route default via 11.0.0.2 }
+node client { route defaultvia 10.0.5.1 }
+
+lin egress 100mbit ingress 100mbit

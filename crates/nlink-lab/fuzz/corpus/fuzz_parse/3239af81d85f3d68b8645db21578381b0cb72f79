@@ -1,0 +1,22 @@
+ia 17000000000000route defau ltvia 10.1..0/24 via 70010000000000]]]]]]]]]]]]]]]]]000000z002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site6.0a 17000000000000route defau ltvia 10.1..0/24 via 70010000000000]]]]]]]]]]]]]]]]]000000z002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site6.0.2/30
+  debay 30ms jitter  17000000000000route defau ltvia ]]]]]]]]]]]]]]]]]]]]]]]]]]000000z002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/.0.1/307-- 1 2.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1.2/30
+  debay 30ms jitter  17000000000000route defau ltvia 10.1..0/24 via 70010000000000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]000000z002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/.0.1/307-- 1 2.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1%mbit
+}
+5ms loss 0.1%mbit
+}

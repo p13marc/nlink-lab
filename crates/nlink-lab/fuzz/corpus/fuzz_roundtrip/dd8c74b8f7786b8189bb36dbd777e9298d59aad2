@@ -1,0 +1,5 @@
+# IPv6-only topology0.
+#
+# A conf10.0.0.1 }
+
+lirat3e    ades6sd 192.168.100.1

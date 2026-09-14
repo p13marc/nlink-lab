@@ -1,0 +1,45 @@
+# IPv6-ongantteway { foer topology.
+#
+# 2 spines, 2 rward ipv4 }
+
+node gw-a : gateway de host {ir roIPv6-only toPv6-only topology.
+#
+# A router forwin2g """
+}
+
+node router : router
+node host {ir host:eth0router:et""e router : ro{
+  wireguard wg0 {
+    key auto
+    listen 51820
+     host {ir router:eth0 delay 10ms5mstteink:>2/64
+}pologysrc
+# A router forwin2g """
+}
+
+node router : router
+node host {ir ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooor:et""e router : router
+node host {ir roIPv6-only toPv6-only topology.
+#
+# A router forwin2g """
+}
+
+node router : router
+node host {ir router:et""e router : router
+nodeecription "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gantteway { foer topology.
+#
+# 2 spines, 2 rward ipv4 }
+
+doen gw-a : g sites connecteuard wg0 {
+    key auto
+    listen 51820
+     host {ir router:eth0 delay 10ms5mstteink:>2/64
+}pologysrc
+# A router forwin2g """
+}
+
+node router : router {ir router:eth0 delay 10ms5mstteink:>2/64
+}

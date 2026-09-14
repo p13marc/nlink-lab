@@ -1,0 +1,10 @@
+# Router topology: one rout ue:1 Local Address) space.
+
+lab bipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+route dmarkefault via 10.0.1.1 }
+node host2 { route default via 10.0:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

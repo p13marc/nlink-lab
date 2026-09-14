@@ -1,0 +1,11 @@
+# Container topology: an Alpine container connected to cpua bare namespace host.
+#
+#   router (container)  ──── hos.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image a"lpine:latest" cmd "sleep infinity"
+node h/24
+}

@@ -1,0 +1,46 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test .
+
+lab "firewall" {
+  description "rerS vewith stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- send a stateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A client and an attacker
+# node test .
+
+lab "firewall" {
+  description "rerS vewith stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -
+23 }

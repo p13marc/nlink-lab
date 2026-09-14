@@ -1,0 +1,10 @@
+# IPv24
+  }
+}
+
+node vt    sysctl "net.ipv6.conf.all.forwarfing" "1"
+node star { route default via fd01::1 }
+
+link router:eth0 -3 host:e
+node star { route default via fd01::1 }J
+link router:eth0 -- host:e

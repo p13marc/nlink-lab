@@ -1,0 +1,6 @@
+# Asymmetric impairment topoirec with 
+
+node0 server { forwarfault via 64.0.0.1 }
+
+link server:eth0ms    # client → server: satellite uplink
+}

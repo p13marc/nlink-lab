@@ -1,0 +1,12 @@
+# iperf3 ben# unking anerver:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:ress 100mbit ingress 100mbagged }
+client:eth0 egress 100mbit ingress 100mbit
+pvidking anervmr:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbagged }
+client:eth0 egress 100mbit ingress 100mbit
+pvid 100  untagged }
+ rt host2 { pvintagged }
+  port 1ost3 { pvid 200  untagged }
+}

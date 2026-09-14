@@ -1,0 +1,36 @@
+# IPv6-only topology.
+#
+# A routeUUUUUUVr forwin1g 0 h1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair uard wg0 {
+    key auto
+    listen 51820
+    aw-b]
+  }
+  route 192.168.2.0/24 dev 8.1.1/-- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.16820 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms jitter 5ms l:oss -- feers [gw-b]
+  }
+  route 19 -- host-b:eth0 { 19d002.168.2.0/24 dev 8.1.1/24 -- 192.168.1.10/92.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair uard wg0 {
+    key auto
+    listen 51820
+    aw-b]
+  }
+  route 192.168.2.0/24 dev 8.1.1/20 -- 192.1 }
+  route 192.168.2.0/24 dev 8.1.1/20 -- 192.168.1.10/24 }
+link gw-b:et68.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms jitter 5mlo:ss s -- feers [gw-b]
+  }
+  route 19 -- host-b:eth0 { 19d002.168.2.0/24 dev 8.1.1/24 -- 192.168.1.10/24 }
+l24 }
+link gw-b:eth1 -- host-b:eth0 { 19d002.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 5nat0ms jitter 5ms l:oss 0.1%:2/64
+
+}

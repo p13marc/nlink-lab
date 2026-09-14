@@ -1,0 +1,26 @@
+# VRF multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant traffic.
+# Tenant A (VRF "red", table 11) and Tenant B (VRF "blue", table 20)
+#ch have a host connected to the PE via separate i──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+t 478tellite uplin9
+   ress 1o VRFs isolating tenant traf64 -- fd00::2/6 vtep1:et.h0 -- vtep2:eth0 { 10 n1
+node n2
+node n3
+t 478tellite uplin9
+   ress 1A9# IPv6-only topology.
+#
+#enant B (VRF "bl3
+t 478tellite uplin9
+   ress 1A9# IPv6-only top"mesh─── n4
+
+lab "mesh" {tenant-b:t 478tellite uplin9
+   re.20.0.10.24 }

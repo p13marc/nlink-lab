@@ -1,0 +1,46 @@
+# IPv6-only topology.
+#
+# A routeUUUUUUVr forwin1g 0 -- host:eth0 {
+    fd00 { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    aw-b]
+  }
+  route 192.168.2.0/24 dev 8.1.1/20 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 19d002.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 5nat0ms jitter 5ms l:oss -- feers [gw-b]
+  }
+  route 19 -- host-b:eth0 { 19d002.168.2.0/24 dev 8.1.1/24 -- 192.168.1.10/24 }logy.
+#
+# A routeUUUUUUVr forwin1g 0 -- host:eth0 {
+    fd00 { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    aw-b]
+  }
+  route 192.168.2.0/24 dev 8.1.1/20 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 19d002.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 5nat0ms jitter 5ms l:oss -- feers [gw-b]
+  }
+  route 19 -- host-b:eth0 { 19d002.168.2.0/24 dev 8.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 19d002.168.
+# WAN impairment
+impair gw-a:eth0 delay 5nat0ms jitter 5ms l:oss 0.1%:2/64
+
+}
+link gw-b:eth1 -- host-b:eth0 { 19d002.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 5nat0ms jitter 5ms l:oss 0.1%:2/64
+
+}

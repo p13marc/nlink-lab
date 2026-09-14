@@ -1,0 +1,9 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 4 leaves, n3:eth92 ser3!on server
+44
+d:A:dd:d:
+W44
+Ad:d:d8d:Ad:d:d:00000000000iiiiiiiiiiiiiiiiiiiiiii{ route default via 10.1.11# Ir:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 fd00::1/ 

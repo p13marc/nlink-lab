@@ -1,0 +1,3 @@
+#ft.ipv6.conosq:eth0 {
+   fd00:B1/64 -- f/46:2d:04
+}

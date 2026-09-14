@@ -1,0 +1,48 @@
+# WAN impairment topolog 5# Full mesh topology: 4 nodes ard ik'n0:ethpv4 }
+
+# Side A
+node r0 address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100host1  vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port t789
+    address 192.168.100.2/240.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.14 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 1    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port t789
+    address 192.168.100.2/240.0.0.1
+    remote 10.0.0.2
+    port 47an underlay link, each host89
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    address 192.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

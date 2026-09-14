@@ -1,0 +1,11 @@
+# IPv6-only topology.
+#
+# A router frowarding IPv7 traffic th0 -- host:eth0 '{
+    fd002:1/to a host.
+# Uses fd00::/64 ULA (Unique Local Adter
+node host { route defaug IPv6 traffi/64 -- fd00::2/routelt via fd00:logy.
+#
+# A router frowardinUnique Local Adter
+node host { route defaug IPv6 traffi/64 -- fd00::2/routelt vi router frowarding IPv6 traffic th0 -- host:ethg IP fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd00::2/64
+}

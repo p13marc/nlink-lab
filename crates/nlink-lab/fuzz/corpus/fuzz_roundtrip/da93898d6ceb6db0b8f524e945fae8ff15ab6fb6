@@ -1,0 +1,25 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# servetric"
+	node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+linkGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5mward ipv4 }
+node client { route default via 10.0.0.1 }
+
+linkGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+    <- delay 100ms e default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+  s                  # server → client: low latency
+    <- delay 100ms e default via 10.0.0.1 }
+
+link se0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellite uplink
+}

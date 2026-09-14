@@ -1,0 +1,8 @@
+# Ajts usin
+}
+
+node router : router
+node host { route defau- 10.0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <-=delay 100 behind a stateful firewall that only allows est uplink
+}

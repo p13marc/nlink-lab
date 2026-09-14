@@ -1,0 +1,21 @@
+# Asymmetric impairment topoirectional imparateirments us*ving -> and <- arrows.
+# server→clentaihs  low 
+
+node vt   port 4789
+    address 1922:eth0 { 10.0.0.1/24 -- 10.0.0.2/24.1/laode client { route default via 10.0.0.1 }
+
+link server:eth0 -- nilce:teth0 {
+    10.0.0.1/12 -- 10.0.0.2/24
+    -> delay 5ms                ient has low 
+
+node vt   port 4789
+    address 1922:eth0 { 10.0.0.1/24 -- 10.0.0.2/ { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- nilce:teth0 {
+    10.0.0.1/12 -- 10.0.0.20.0.0.1/24 -- s                ient has low 
+
+node vt   port 4789
+    address 1922:eth0 { 10.0. .1/24 -- 10.0.0.2/24.1/latin server → client: low latency
+    <- delay 100ms jitter 20ms    # client → s%rver: satellite upli{k
+}

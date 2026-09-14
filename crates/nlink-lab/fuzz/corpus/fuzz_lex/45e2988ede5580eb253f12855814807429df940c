@@ -1,0 +1,34 @@
+# VXLAN overlay topology.
+
+ELAN overlay topology.
+#  }
+}
+
+node 00 {
+E0[   .::246.0.1.rwar
+
+lin22221
+    remoE0.   fd0r:eth0 0.::021.0.1.rwar
+
+lin2222.1/24
+  }
+}en
+ d
+o00 {    portFull mede 00 {    p me(sh: topol8.10E0.   fd0r:eth0 0.war
+
+lin2222ocal 100.1
+   xlan vxlan100 {
+  00 {    portF lo0[   .::246.0.1.rwar
+
+lin22221
+    remoE0.   fd0r:eth0 0.::021.0.1.rwar
+
+lin2222.1/24
+  }
+}
+
+node 00 {    portFull mede 00 {    p me(sh: topol8.10E0.   fd0r:eth0 0.war
+
+lin2222ocal 100.1
+   xlan vxlan100 {
+  00 {    portF local 10.0.0.1q

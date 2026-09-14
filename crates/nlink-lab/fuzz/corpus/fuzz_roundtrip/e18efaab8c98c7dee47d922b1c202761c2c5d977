@@ -1,0 +1,16 @@
+# n Alpinn containe.fault via imp0.0.1 }
+
+link router:e default vi2:eth0 {
+ 10.0.0.1/24 -- 10.0.0.rate
+eth0    eth1
+r connected to cpua bare namespace host.
+#
+#   router (container)  ────ht s o(namespace)
+#   alpine:latest          06.0.0.1    10.fau.0.1 }
+
+link router:e default vi2:eth0 {
+ 10.0.0.1/24 -- 10.0.0.rate
+eth0    eth1
+
+lab "router" lt vi2:eescripth0 {
+  10.0.2}

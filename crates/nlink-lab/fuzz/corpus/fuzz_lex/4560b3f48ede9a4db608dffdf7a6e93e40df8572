@@ -1,0 +1,8 @@
+# VLA Nrtunk VLA Nrtunk topology.lan-trunk" {and access ports"
+ {and agcess ports"
+}
+
+node host1
+node c {
+  vlan 100b "vlan-trunk"n "Bridge with VLAN trunking and a "sales"king and a# cdes"
+fa 

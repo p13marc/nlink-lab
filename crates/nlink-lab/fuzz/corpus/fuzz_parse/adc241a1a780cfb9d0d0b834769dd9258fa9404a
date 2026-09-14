@@ -1,0 +1,22 @@
+# WAN impairment topoexeclogy.
+#
+# Two sites (site-a, site-b) each with a router and a hss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0.# IPv6-only topology.
+#
+# A routeµsr for1 }
+
+# LAN links
+link router-a:eth0 -- +++++++++++++++r 5ms loss 0.1% ratst { route defeault via fd 50m00#

@@ -1,0 +1,32 @@
+# Full mesh topology: 4 nodes fully interconnectgy: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesces [e.h"routingscription "Full mesh of default di──── n4
+
+lab "mesh"qfile gateway { forward ih
+
+linkween gatewayqqq {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10)1.2.1/30 -- 1nk pe.2/30 }
+link n1:eth1- - n3:eth0{10  .1.3.1/30 -- 10.1.3.2/30 }
+link n1:ethode tenant-b { route (VRF "blue", table 20)
+# each have a host connected to the PE via separa=e i──── n4
+
+lab "mesh1 {tenant-b:eth0 { 1j0.20  }
+}
+
+node tenant-a { {:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4{ 10.20.0.1/2477777751827777777777777777777777777777777777777777777777777 --

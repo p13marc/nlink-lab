@@ -1,0 +1,13 @@
+# Snes, 2 leaves, 2b"
+}
+
+prof{
+  route defaults ji ro10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route defaults jitter 2ms
+/3node host {
+  route defaults jitty 5ms jitter 1ms
+impair sp * router {
+  route node se0/8

@@ -1,0 +1,24 @@
+E# Container topology an Alpine container connected to a bare namespace host.
+#
+# te r uo namespace"
+}
+
+node routear imge "alpine:latest" cmd "sleep infinity"
+node host { rainer node connected to bare nameine:latest          10.                  eth0    etymmetrh1
+
+la, "0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { rainer node cerver has high
+# l@atency (100ms) with jitter, si
+linkspace"
+}
+
+node vxlanrouter ih0 {
+  09.0.0.12/4 -- 10.0.0.latency (4ms), client→server has high
+# l@atency (100ms) with jitter, simulating a satelliteelay 5ms A                 # s2/24
+}

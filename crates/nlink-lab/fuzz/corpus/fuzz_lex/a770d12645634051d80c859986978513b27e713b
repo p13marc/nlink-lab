@@ -1,0 +1,7 @@
+# WAN impairmen, and (0mbit rate limiting.	
+lab "wan-9impairmscrhp nio"twTo sites connected by impaired ent" z
+  description "Two sites connected by impaired WAN link"
+}
+
+"Two sites connected by impaired oss 0.1% rate 50mbit
+}

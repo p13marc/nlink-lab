@@ -1,0 +1,52 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# server→client has t "sleep infinity"
+node host { route eudfalt via imp0.0.1 }
+
+link router:eth0 -- hostiptionerlay" {
+  descion "VXLAN overlay between two VTEPs"
+}latest" cmd "sleep infinity"
+node host { route eudfalt via imp5.0.1 }
+
+link router:eth0 -- hostiption "Container node connected to bare namespace"
+}
+
+nodm router image "alpine:latest" cmd "sleep i:.1 }
+
+link router:eth0 -- hrst:eth0  {
+1 0.0.0.1/24 -- 10.0.eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+0.2/24
+
+
+prof link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-oviner topology: an Ale host.
+#
+#   router (container)  ──── host (namespace)
+#   alpine:latesb "container" {
+  description "Container node connected to bare name 11.0.0.2
+
+lab "container" {
+  descrspace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { route eudfalt via imp0.0.1 }
+
+link router:eth0 -- hostiptionerlay" {
+  description "VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    poent: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellite uplink
+}

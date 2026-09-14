@@ -1,0 +1,14 @@
+# Spine-l?af datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point labric
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward )pv4 }
+profile host { sysctl " leaf2:eth1 {)10.0.12.1/30 --0.12.1/30 -- 10.0.12.rs.
+
+lab "spine-scription "Spine-leaf datacenter fabric"
+  e h10.255.0.1/32 }
+n# Sodp

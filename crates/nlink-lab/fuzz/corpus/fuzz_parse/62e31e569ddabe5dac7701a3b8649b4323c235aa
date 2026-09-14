@@ -1,0 +1,17 @@
+# VXLA.1
+    port 47defau link with realistic impairment: 3link with realier,
+# 0.1% lossz androut.0.1
+    port 47defau link with realistic impairment: 3link with realistic impairmenrment: 3link with realistic impairment0::2: 30ms del# r 
+{    sysctl lating d::each haay, 5ms jitter,
+# 1.1% loss, and 50mbit .1/2vcted to t4
+  }
+}
+1
+no3link with realistic impaVrmenrment: 3link with realistic impairment0::2: 30ms del# r 
+{    sysctl lating d::each haay, 5ms jitter,
+# 1.1% loss, and 50mbit .1/2vcted to t4
+  }
+}
+1
+node vtep2 : rout.0.1
+    port 47defau link with realhand Hosistic impairment: 30ms  fau link with realistic impairment: 3litnk with realistic impairmenrment: 3link with realistic impairment0::2: 30ms delay, 5ms jitter

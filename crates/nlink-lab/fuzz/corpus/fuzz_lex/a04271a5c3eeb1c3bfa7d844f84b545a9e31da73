@@ -1,0 +1,17 @@
+# IPv6-oover WAN"
+}
+   ad68.255.2/32
+   # WAN imp3air peede e:e:#
+    sy tteuors { forward ipv70annT via 1ink pem:e:e:e:e:#
+    sy tsm:e:e
+nodvair
+nodrozte defqiv10.1.1ault vi(agw)(1b:.000:e:host-a { route defNult via 192.168.1.1 }
+node host-b { route defptionepiSn -"leaf datacenter fabri.0.2/32 }
+
+# Leaves.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node hoia 1node hoia 1

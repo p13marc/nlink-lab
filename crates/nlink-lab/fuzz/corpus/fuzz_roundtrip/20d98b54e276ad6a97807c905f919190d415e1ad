@@ -1,0 +1,17 @@
+untagmmetric impairment topology.
+#
+# Demonstrates direratenal space.
+10.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+  5ms      a            # server → client: low latency
+    <- delay 100b tecting three hosts.
+# Host1 and host defau- 10.0.0.2/24
+    -> delay 5ms      a   <- delay 100b tecting three hosts.
+# Host1 and host defau- 10.0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <- delay 100b ehind a stateful firewall that only allows est delay 5ms      a            # server → client: low latency
+    <- delay 200b tecting three hosts.
+# Host1 and host defau- 10.0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <- delay 100b ehind a stateful firewall that only allows est uplink
+}

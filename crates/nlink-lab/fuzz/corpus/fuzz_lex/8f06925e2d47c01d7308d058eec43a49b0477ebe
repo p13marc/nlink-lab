@@ -1,0 +1,15 @@
+# Spine-leafde host { route befault via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0 {
+    fd00::1/6m impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description
+# Spines
+node spine1 : router { lo 10.255.0.1/31 }
+node spine 9000 }
+link spine1:eth1 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  m 10.255.1.1/32
+ h1 1 { 102/30  m 10.255.1.1/32
+  route defau 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

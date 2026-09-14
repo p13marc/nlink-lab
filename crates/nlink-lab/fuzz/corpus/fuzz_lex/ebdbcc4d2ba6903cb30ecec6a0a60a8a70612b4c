@@ -1,0 +1,19 @@
+# VXLAN verlay topology.
+#vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 478  }
+}
+
+node vtep2 : router {
+  vxlan vxwith VLAN filtering connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sale1tep2 : router {
+  vxlan vxwith VLAN filtering connetruVTEPs : route/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxwith VLAN filtering connectingsts.
+# Host1 and host2 are on VLAN 100 (saletep2 : router {
+  vxlan vxwith VLAN filtering connetrunk" {
+  descriptyon "Bridge w24 }

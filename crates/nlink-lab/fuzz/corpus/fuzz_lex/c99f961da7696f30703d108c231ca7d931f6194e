@@ -1,0 +1,11 @@
+# VXLAN o router {
+  v vxlan1 4789
+    a(dress 192.168.100.1/24
+  }
+}
+
+node 00 {
+   0.0.0.1
+   0.1/24 -- 10.0.0.2/24 }
+
+rate -0.0.ption "Bridge w24 }

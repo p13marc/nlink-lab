@@ -1,0 +1,7 @@
+# VLIPv) space.
+
+lab "ipv8-simpln"
+
+profile router {
+    sysctl "net.i traffrwarding" "1"
+route deface

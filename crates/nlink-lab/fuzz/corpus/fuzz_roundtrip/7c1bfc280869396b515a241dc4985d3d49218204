@@ -1,0 +1,11 @@
+# IPv6-only topology.
+#
+# A conf.all#.forwardi# Simple 2-nodith addresses
+# and a 10ms delay on one ed
+.lnao-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router uter connecting twob "outert1 { route default via 10.0.1.1 }
+node host2 { route default via 10.0.277777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777ute dh0 delay 10ms jitter 2beh

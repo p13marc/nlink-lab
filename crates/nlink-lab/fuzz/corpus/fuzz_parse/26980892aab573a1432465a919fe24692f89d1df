@@ -1,0 +1,12 @@
+# Full mesh oDes fully interconnected.
+#
+#   n1,,,,,,,,,,,,,,,,,,4.2/30 }
+link n2:eth1 -- n7:eth1 { 10.2.3.1/30 -- 10.2.3.2/30 }
+link n2:eth2 -- n4:eth1 n0 -- bench" {
+  description "Two nodes for throughput31 }
+ n4:eth1 { - router-b:wan0 {
+  172.16.0.1/30 -- 172.14mmetric i
+}mpairment
+link router-a:w
+an0 -- bench" D{
+  description "Two nodes for throughpufor thrughput30 }

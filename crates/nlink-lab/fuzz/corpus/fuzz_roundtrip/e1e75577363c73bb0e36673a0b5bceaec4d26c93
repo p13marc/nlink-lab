@@ -1,0 +1,12 @@
+# Simple 2-nodeesting.
+#
+# Creates tws delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+ pull route 10# iperf3 benchmark.0.0.0/pchmark.0.0.0/ple 2-no tde

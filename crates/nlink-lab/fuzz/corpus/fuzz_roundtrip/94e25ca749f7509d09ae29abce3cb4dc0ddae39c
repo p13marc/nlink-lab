@@ -1,0 +1,7 @@
+ ) [# WireGuard n" {
+  d }
+  route 192.168.1.0/24 dev wg0
+}
+
+node hos
+1t-a { route defaul t via 192.+1168.1

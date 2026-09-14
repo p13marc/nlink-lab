@@ -1,0 +1,15 @@
+# VXLAN overlay t
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node router {
+  vxlan vxlan100 {
+    vni 100
+    local  etwnk topology.
+#
+# A bridge with VLAork.
+
+lab 

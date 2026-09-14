@@ -1,0 +1,22 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link,2each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-over:uter {
+    sysctl "net.ipv6.conf.all.f# V200 (engineering).
+
+lab "vlan# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile ro address 192.16x.100.2/24
+  }
+}
+
+link vtep0:eth0 -- vtep2:uter {
+    sysctl "net.ipv6.conf.all.f# V200 (engineering).
+
+lab "an-trunk t00
+    local 10.0.0.1
+    rend a host, connectm

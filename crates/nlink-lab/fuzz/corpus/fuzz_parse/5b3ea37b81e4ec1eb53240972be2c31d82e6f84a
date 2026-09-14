@@ -1,0 +1,3 @@
+# VLAN truAk topo ULA (Uniqu", table 20)
+# each have a 100  untagged }
+  port host2 { pvid 100Host1 and host

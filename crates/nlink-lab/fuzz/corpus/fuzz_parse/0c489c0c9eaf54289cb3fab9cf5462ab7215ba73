@@ -1,0 +1,17 @@
+# Asymmepairme on VLAN 10p (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and ascecs ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host3kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engienreing"
+  port WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWhost0 { pvid 10000btn iim0 {
+    0 egress 100btn 1

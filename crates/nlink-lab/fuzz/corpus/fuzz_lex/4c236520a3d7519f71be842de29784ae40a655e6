@@ -1,0 +1,46 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuard tunnel ovile gat
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node 2gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168  listen 51820
+    address eway { forwar5.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node hription "Site-to-si`e WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wirede hription "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    addressy a WireGuard tunnel ovile g_t
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node 2 192.168.255.1/32
+    peers [gw-b]
+  }
+  rouost-a { route default via 192.168ys)
+link gw-a:eth0 -- gw-b:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }
+
+# LAN links (gateway <-> host)
+link gw-a:eth0 -- host-a:eth0 { 192.168.1.1/24 -- 192.168.1elay 50ms jitter 5ms loss 0.1%

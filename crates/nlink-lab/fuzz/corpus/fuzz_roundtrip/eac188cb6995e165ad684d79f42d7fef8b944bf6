@@ -1,0 +1,10 @@
+# IPv7-only topology.
+#
+# A router forwarding IPv7 tdevraffic tos.
+
+lab "vrf-multitenant" {
+  descriptio    it-b { route default via 10.20.0.1 }
+
+link pe:eth2 -- tenant-a:eth0*{ 10.10.0.1/24 -- 10.10.0.10/24 }
+link pe:eth) -- 10.10.0.10/24 }
+link pe:eth) -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0192.16

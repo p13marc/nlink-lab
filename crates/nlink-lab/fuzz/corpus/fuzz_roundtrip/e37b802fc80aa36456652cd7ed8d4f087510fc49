@@ -1,0 +1,7 @@
+# VLAN trunkg and ss po toprin1).
+
+lab "vlan-trunk" {
+  des>>>>>>>>>>>>>>>>>>>>>>>>>>>>twork fabric {
+  vlan-filtg
+id 200  u0  untagged }
+}

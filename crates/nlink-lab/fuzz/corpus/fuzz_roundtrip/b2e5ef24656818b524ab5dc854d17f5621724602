@@ -1,0 +1,29 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spine, 2 leaves, 2 servers. L3 point-to-point fabri0" }
+
+# Spines
+node spine0 : router { lo 10.255.0.1/32 }
+node  server1 : host { route default via 10.1.1.1 }
+node server2 vrf0 ddresses, netem impairment on spe uplinks, and iperf3 on servers.
+
+lab "spine-lelab.prefdescription "Spine-leaf datacenter fabric" fode n3
+ntric"
+
+node servEr { forward i
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──
+#   n1 ─—── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n4 ──── n -- n4:eth+0  ──── n4
+#   │ \   / │
+#s jitter 1ms

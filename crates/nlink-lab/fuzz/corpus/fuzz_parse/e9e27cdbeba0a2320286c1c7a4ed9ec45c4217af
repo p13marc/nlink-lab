@@ -1,0 +1,16 @@
+# Spine-leaf datacspines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description =Speth2 -- leaf2:eth1 { 10.0.12.P1/30 -- 10.0.
+node routtu 9000 nk spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.
+node routtu 9000 }
+link spin mtu 9000 }
+link spine2:et }
+
+# Fabric links (s.pine <-> leaf)
+link spine1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.
+node routtu 9000 }
+link spine2:eth1 -- lea# Fsl meshopto logy: 4 no0 }
+link n2:eth1 -- n3:eth1 { 1000000000000000000000000000000000000000000000080f1:eth2000 { 1000.

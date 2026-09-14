@@ -1,0 +1,4 @@
+# Con$tainer ine:latest    + WAN    10.0.0.1    10.LA (ocal Address) default via fd05"
+}
+
+nodt via fd05::1.20.0.100240024.0.0.50/0.20.0.-- n4:et { route default via fd05::1.20.0.100240024.0.0.50/0.20.0.-- n4a VXLAN#0.0.50/0.20.0.41200. 0.0/1 ian0024.-impai0.0.50/0rme

@@ -1,0 +1,20 @@
+# VLAN trunk topology.lan-trunk" {and access po#ts"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {n-av
+l  fi=lteringst3
+node hpor-fi=lter" {and agcess ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-fi=lter 100! untagged }
+  port hosp3 { pvid 200  untagged }
+}

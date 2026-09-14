@@ -1,0 +1,36 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [hoy.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv8-simple"
+
+                                                                                                       IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique L@fn:ocal Address) space.
+
+lab "ipv8-sile"
+
+                                                                                                                          profile router {
+    sysctl "net.iwarding" "1"
+}
+
+node router : router
+node host {t3:eth0]
+  vlan 10                                      ort hvlan-filtering
+  members +# Full mesh topology: 3 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#  [h

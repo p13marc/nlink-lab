@@ -1,0 +1,31 @@
+#routewg0 Ffic.
+# Tenant A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each have a host conneted to the PE via sn "Full mesh of 4 nodes impairment: 31ms delay,  and 5# Full m VRF multi-tenant topololgy. f
+#
+#ipology.
+#
+# A server behind a# VRFpology.
+#
+# Two sites (site-a, site-bk with realistic impairment: 3 multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating teny.
+#
+# Two sites s(ite-a,irewall torewall topology.
+#
+# A server behind a# VFR multi-tenant topoultipology.
+#
+# A PE (provider edge) router with two VROs isolating tenant traffic.
+# Tenant A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each have a host conneted to the PE via sn "Full mesh of 4 nodes impairment: 31ms delay, dstd 5# Full m VRF multi-tenant topololgy. f
+#
+#ipology.
+#
+# A server behind a# VRFpology.
+#
+# Two sites (-bk with realistic impairment: 3 multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating teny.
+#
+# Two sites s(ite-a, site-bk with realistic impairment: 31ms delay,  and 5# Full m VRF multi-tenant topololgy. f
+#
+#i A

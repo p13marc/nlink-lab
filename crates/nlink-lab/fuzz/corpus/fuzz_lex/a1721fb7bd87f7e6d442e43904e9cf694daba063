@@ -1,0 +1,21 @@
+E router wit0.10.0.1 }
+node tenant-b { route default via 11.20.0.1 }d00::2/644444444444444444444444444444444444444444444444444444444444444
+}
+.0.1/24 - -- host:eth0 {
+    fd00444444444444   fd00::1/64 -- (d00::2/64
+}
+.0.1/24 -- 10.10.0.1024 v.ioute default via 11.20.0.1 }
+
+link pe:et64 ULA (Unique Loumer:eth0 -- host:eth0 {
+    fd0r:eth0 -- host via 11.20.0.1 }
+
+link pe:et64 ULA (Unique Loumer:eth0 -- host:eth0 {
+    fd0r:eth0 -- host:eth0 {
+-- # SimE0.   fd0r:eth0 -- hos:1-64 -- fd000.ple 2-node topolo}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link rost:eth0 {
+  10.0.0fd00::2/644444.1/2::

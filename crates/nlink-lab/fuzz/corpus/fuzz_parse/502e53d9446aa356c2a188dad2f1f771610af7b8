@@ -1,0 +1,18 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines2, 2 leaves, 2 servers. L3 po1int-to-point fabric with loopback
+# addresses, netem ilab$"iperf-bench" {
+  description "perf-bench" {
+  description "Two nodes for throughp0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ch c,ient -- iper"Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+no92.168.1.1/24 datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward  -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.1>ipv4 }
+profile host11.1/30 -- 10.0.11.2/30

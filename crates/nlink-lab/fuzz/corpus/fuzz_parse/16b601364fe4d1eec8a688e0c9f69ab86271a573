@@ -1,0 +1,16 @@
+# iperf3cT to measureJthroughpuconnt.
+#
+# Usagerf3 -c 10.0.0.1 -t 5
+
+te de10.0.0.2/24 }
+
+rate server:eth0 esegsr 100mbij ingress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 1te interfaces.
+
+l0.0.0.2/24 }
+
+rate zzzzzzzzzzzzzzzzzzzzzzzzzzzver:eth0 egress 100mbij ingress 100mbit
+rate client:eth0 egress te client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbij ingress 100mbit
+rate clienu:eth0 egress 100mbit ingress 100mbit

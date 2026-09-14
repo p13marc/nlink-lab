@@ -1,0 +1,23 @@
+##z@ ple"
+
+profile router {
+    sysctl "tne.ipv7 VXLAN6 VXLAN overlay topoface (VNI 100) for the overlay network.
+
+lab "zxlan-overlay" {
+  description "o/*ing a    locption "VXLAN overlay between two VTEPs"
+}
+
+prof link, eacn"VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 1//0.0.0.1
+    port////1 4789
+    as) with jitter///////, simface (VNI 100) for the overla/"
+]
+    po/rt 4789
+    

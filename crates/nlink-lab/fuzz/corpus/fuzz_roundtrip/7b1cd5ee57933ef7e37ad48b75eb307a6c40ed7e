@@ -1,0 +1,5 @@
+# iroute benchmark topion "Two nodes for throughput  "Two n.= }
+
+link server:eth0 -- client:eth0 { 10.0.************************************************************************0.1/24 -- }
+
+ient:eth0 { 10.0.*************************************************************t ingress 100mbit

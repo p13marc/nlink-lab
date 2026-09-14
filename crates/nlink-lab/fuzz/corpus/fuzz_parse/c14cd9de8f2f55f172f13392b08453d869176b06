@@ -1,0 +1,42 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}vlntde host1
+node host2
+node host3
+
+network {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 1LAN trunk topology.00g).
+
+l  untagged }
+  port host4 {-p host2
+node host3st2
+node host3, host2:eth0, host3:et:h0]
+  vlan 1LAN trunk topology.00g).
+
+l  untagged }descripti
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 1LAN trunk topology.00g).
+
+l  untagged  vlan 200 "engineering" [host1:eth0, host2:eth0, host3:et:h0]
+  vlan 1LAN trunk to# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, each e overlay network.
+ "b
+lvaxlan-overlay" {{ 10.1.3.1/30pology.00g).
+
+l  untagged }descriptiont4 { pvid 10 -- 10Host10.1 

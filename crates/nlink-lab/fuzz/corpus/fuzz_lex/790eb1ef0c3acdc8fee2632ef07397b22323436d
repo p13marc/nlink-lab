@@ -1,0 +1,19 @@
+# VLAN trunk  topology.
+#
+# A bridge with VLAN filtering connecting tr {
+    sysctlUses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+nlab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+node rode router : router
+node host2 are on VLAN 100 (sales), host3 is on VLAN 200 (enghost { rouethp {
+ing).
+
+lab "vlan-tr    unk" {fd00::
+1/6

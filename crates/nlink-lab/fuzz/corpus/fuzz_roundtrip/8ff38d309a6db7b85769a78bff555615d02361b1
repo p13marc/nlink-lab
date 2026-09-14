@@ -1,0 +1,11 @@
+# teirmentinpk.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+   orwarding"Addreimpl) 10.0.0.1/2777777logy.8.0777   e"
+lay
+p r

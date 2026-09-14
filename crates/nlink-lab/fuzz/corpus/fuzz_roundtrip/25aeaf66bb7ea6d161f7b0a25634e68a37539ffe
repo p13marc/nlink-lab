@@ -1,0 +1,9 @@
+ing  a   locption "VEPs"s 192.168.100.1/24
+  }
+}
+
+no as) with jitter, simface (VNI 100) for the olerva    port 4789
+    as)   vni 100
+    local 10A.0.0.2
+    remote 10.0.0.1h1 -- host2:eth0 {
+  10.}

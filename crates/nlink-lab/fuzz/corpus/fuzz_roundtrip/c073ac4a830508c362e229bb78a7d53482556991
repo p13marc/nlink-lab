@@ -1,0 +1,12 @@
+# IPv6-only topology./
+#
+# A router fo*rwardue Loca:l Address) spa client -- host:eth0 {
+    fd00::1/64 -- f/06:2d:04uter {
+    sysctl "net.ipv6.conf.all.forwarding" "0"
+}
+
+node router : router
+nodeshed
+# connections, ICMP, and TCP por- host:eth0 {
+    fd00::1/64 -- f/06:2d:04
+}

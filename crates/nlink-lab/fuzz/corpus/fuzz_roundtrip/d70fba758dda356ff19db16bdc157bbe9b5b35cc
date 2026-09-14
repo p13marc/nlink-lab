@@ -1,0 +1,12 @@
+# iperf3 bencfter deploy:
+#   nlink-lab exec iperf-bench client -- iperf1 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:et
+rate cli egress 100mbit ingress 100mbit

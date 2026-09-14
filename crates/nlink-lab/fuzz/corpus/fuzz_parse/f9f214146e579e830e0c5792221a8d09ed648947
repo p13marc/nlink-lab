@@ -1,0 +1,22 @@
+# VXLAN overlay topolog#
+.
+y# link,0eAy#}
+
+l h.forward r
+    fd002:1/64 -- fd0Ay#P#yyAPd:
+
+44Ad:0::er:eth0 -- host:eth0 {
+    fd002:1/6--4  fd00::2/64
+0::1 }
+
+link router:eth0 -- h.forwar#"   =2
+    p  pt 4789s
+  ort 4789s2
+ z   .0.0.1/24 -- .0 fd002:1//64
+}
+nnnnnnndn:dnnnnnn: port 2143
+    address 192.1-- vtep1:eth0 { 10.0.0.1/21"
+}
+
+d:node
+rveuter

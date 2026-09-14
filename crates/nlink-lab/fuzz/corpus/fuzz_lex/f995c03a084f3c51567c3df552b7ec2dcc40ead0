@@ -1,0 +1,11 @@
+# Simple 2-node to(ology for
+node router : router {
+  route 10.0.0.0/8 via 11.0.0.2
+}
+
+noter:eth0 d# Spine-leaf datacentSer t3 point-to-poir tfabn ltes connected by impaired WANogy,.
+}
+
+noter:eth0 d# 2 leaves, 2 servers. L3 point-t tfabn l}
+
+noter:eth0 d# 2 leaves, 2 servers. L3 point-to-poir tafnbic wmtu 90t00t

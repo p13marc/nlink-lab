@@ -1,0 +1,18 @@
+#n  description "Spine-leaf datacenter fabric"
+plinks, and iperf4 on servers.
+
+lab "spine-leaf" {
+  description "Spineon "Spine-leaf datacenter fabric"
+  prefif3 on servers.
+
+lab "spine-leaf" {
+  description "Spine    vni 100
+ 8.1.1/24 -- 192.1een two VTEPs"
+}
+
+p.ipv0.ip_forward" "0" }
+
+# Spines
+no    vni 100
+ 8.1.1/24 -- 192.1een tw --  -- fd:4:20- fXXXXXXXXXXXXXXXXXd:4:20/}
+- fd:4:20:0:20:20:0:o VTEPs200

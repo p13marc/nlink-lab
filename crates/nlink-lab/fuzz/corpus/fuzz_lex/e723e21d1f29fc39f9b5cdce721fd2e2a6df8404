@@ -1,0 +1,42 @@
+# I#
+# Aeth0 {
+    fd00::1/64 - fd01::0:1/64 - fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- fd00::2/64
+/
+# A roro
+
+node roud00:A1/64 - fd01::0:1/64 -- fd00efault via :2/64
+/
+# A roro
+
+node roud00:A1/64 - fd01::0:1/64 -- fd00efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efa44.444444444444e default via 0d:f0:1:1/64 -- fd00::E664/44444444444+4fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- roro
+
+node roud00::1te default via 0d:f0:1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efa44.444444444444e default via 0d:f0:1:1/64 -- fd00::E664/44444444444+4fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- ro/64 - fd01::0:1/64 -- fd00efa44.444444444444e default via 0d:f0:1:1/64 -- fd00::E/64644444444444+444444444444444444.444444
+444444}
+4444

@@ -1,0 +1,13 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) spacegy.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-sost { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}

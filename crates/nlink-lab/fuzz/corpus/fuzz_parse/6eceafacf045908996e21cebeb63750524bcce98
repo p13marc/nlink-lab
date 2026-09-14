@@ -1,0 +1,38 @@
+# IPv6-only topol forwin1g """
+}
+
+node router : route=host { 00::264/
+}
+orgin1g """
+}
+
+nopology.
+#
+# A router forwin1g """
+}
+
+node router : route=rdo erouter : route=r
+nodeogyogy.
+nodl host { 00::264/
+}
+orgin1g """
+}
+
+nopology.
+#
+# A router forwin1g """
+}
+
+node router : route=host { 00::264/
+}
+orgin1g """
+}
+
+nopology.
+#
+# A router forwin1g """
+}
+
+node router : route=rdo erouter : route=r
+node host { 00::2/64
+}

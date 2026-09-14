@@ -1,0 +1,9 @@
+# Fu interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  n1:eth1 -- n3:eth0
+link n2:eth1 -- n3:eth1 { 10.lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll2.3.1/30 -- 10.2.3.2/30 }
+link n4:eth2 -- n4:eth1 { 10.2.2.4.2/).3.4.1/30 -- 10.3.4.2/30  n1:eth2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllvxlanllll2.3.1/30 -- 10.2.3.# Full mesh2/30 }
+link n to4:eth2 -py- n4:eth1 {yA

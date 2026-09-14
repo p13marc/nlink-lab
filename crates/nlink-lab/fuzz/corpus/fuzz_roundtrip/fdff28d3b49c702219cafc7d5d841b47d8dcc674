@@ -1,0 +1,13 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffl Adsedrs) space.
+1
+lab "ipv6-simple"
+
+profile router {
+    sysctlserver:eth0conf.all.forwarding" "1"
+}
+
+node router : router
+noSSSSSSSSSSSS4 -- fd00::2/64
+}

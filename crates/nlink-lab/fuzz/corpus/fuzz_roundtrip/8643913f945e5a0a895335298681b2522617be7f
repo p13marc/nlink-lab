@@ -1,0 +1,29 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates direratenal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv8 }
+node client { route default via 10.6-simple"
+
+profile router {
+    sysctl "net0.0.1 }
+
+link server:eth0 -- client:eth0 {
+ ric impairment topologhost { route defau- 10.0.0.2/24
+    -> delay 5ms            metric impairment topology.
+#
+# Demonstrates direratenal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node client { route default via 10.6-simple"
+
+profile routtr {
+    sysctl "net0.0.1 }
+
+link server:eth0 -- client:eth0 {
+ ric impairment topology.stratee defau- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+   hat only allows est uplink
+}

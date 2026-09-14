@@ -1,0 +1,14 @@
+# Container topology: an Alpine container connected to cpua bare namespace host.
+#
+#   router (container)  ────ht s o(namespace)
+#   alpine:latest          10.0.0.1    10.fault via imp0.0.1 }
+
+link router:e default vi2:eth0 {
+z10.0.0.1/24 -- 10.0.0.2/24scription" Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route default vi2:eth0 {
+  10.0.2}

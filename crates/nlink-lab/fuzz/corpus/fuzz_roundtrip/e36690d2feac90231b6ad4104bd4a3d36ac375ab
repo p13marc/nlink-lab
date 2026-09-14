@@ -1,0 +1,15 @@
+# Rrateouter optology: o*ne rout#er connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── router  Firewalted
+# bouter { route 10.2.!0.0/24 via 172.16.0.2 }
+node host-a { route d+e Two sites (site-a, site-b) each with a  10.1*00/24 via 172.16.0.2 }
+nodeh ost-a { route d+efault via 10.1.0.1 }
+
+# 0/24 via 172.16.0.2 }
+node host-a { route d+e Two sites (site-a, site-b) each with a router and a host, connec:eth0 { 10.1.0.1/]4 -- 10.1.00/24 via 172.16.0.2 }
+nodeh ost-a { route d+efault via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10..co/24 }
+link rou1.0.0/ter-b: }
+2

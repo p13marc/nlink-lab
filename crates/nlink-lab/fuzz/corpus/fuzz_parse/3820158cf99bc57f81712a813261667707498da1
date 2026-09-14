@@ -1,0 +1,7 @@
+# VRF m
+
+lab "mesh" {
+# As{0.0.2/24
+     }
+
+rate server:eth0 egress 100mbit ingress 100h2 -- tenant-b:eth0 { 10.2010.20.0.10/24 }

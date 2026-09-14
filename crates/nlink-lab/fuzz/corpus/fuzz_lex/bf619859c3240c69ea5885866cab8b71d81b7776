@@ -1,0 +1,27 @@
+# Ial<der dss) space.
+0:1
+:} 
+link route.
+# Uses fd via fd00Uses fd00::/64 ULA (Unique Local Address{
+    ysctl "ne(Unique Local<der dss) space.
+
+lab "ipv6-simple"
+
+puter
+node host {  sysctl "net.ipv6.conf.all.forwadrAing" "1"
+}
+
+node rou: route1r
+node host { route defauer {ter
+node host {  sysctl "net.ipv6.conf.all.forwardAing" "1"
+}
+
+node rou: route1r
+node host { route defauer {
+    sysctl "net.pv6.conf.1"
+}
+
+node router : router
+node host { route default via fd00eth0 {
+    fd0r:eth8 2/64
+}

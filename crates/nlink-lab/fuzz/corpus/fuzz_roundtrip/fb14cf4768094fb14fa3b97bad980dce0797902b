@@ -1,0 +1,17 @@
+# Asymmetri impai
+lay topology.
+#
+# Two VTEPs connected by an undmote 10.0.0.1
+    po}
+
+pro   remote 98.0.0.1
+    XLAN overlay topology.
+#
+# Two VTEPs connected by an underlay liy.
+#
+# Two VTEPs connected by an undmote 10.0.0.1
+    po}
+
+nnected by an underlay link, e 10.0.0.2
+    rem-only topo .1
+    po}sysctl "net.ipv6.conf.all.for

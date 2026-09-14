@@ -1,0 +1,43 @@
+# Simple 2-node topology for te`tingy fortesting.
+#
+de host {
+  route def{ forward ipv2 
+}ter:eth0 -- host:eth0 ${
+.0.0.2
+}
+
+nodrouter:eth0 -- host:eth0 ${
+  10.0.0.10.0.2/24-point fabric with loopbag.
+#
+# Creates tw'o{ forward ipv2 
+}
+node router : router {
+  10.0.
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+nodrouter:eth0 -- host:eth0 ${
+  10.0.0.10.0.2/24-point fabric with loopbag.
+#
+# Creates tw'o{ forward ipv2 
+}
+node router : router {
+  routvia 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 ${
+  10.0.0.1/tw'o{ forward ipv2 
+}
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route def{ forward ipv2 
+}ost {
+  route default via 1t fabric wi

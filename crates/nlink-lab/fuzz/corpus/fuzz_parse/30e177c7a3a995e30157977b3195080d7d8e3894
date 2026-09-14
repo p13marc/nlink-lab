@@ -1,0 +1,15 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd15::/64 ULA (Unique Local Addressal Address) space.
+
+lab "ipv8-simple"
+
+profile route6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd15::/64 ULA (Unique Local r {
+    sysctl.conf.all.forwardin1g "nat}
+
+fd00::2/64
+}

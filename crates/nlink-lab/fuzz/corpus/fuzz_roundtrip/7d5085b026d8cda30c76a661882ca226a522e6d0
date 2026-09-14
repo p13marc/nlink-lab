@@ -1,0 +1,7 @@
+# IPv6-only topology.
+#
+# 2A router forwarding IPv6 traffic ult via fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd00::1/64 -- fd00::2/64
+}

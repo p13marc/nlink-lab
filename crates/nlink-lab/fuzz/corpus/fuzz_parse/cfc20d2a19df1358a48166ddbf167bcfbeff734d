@@ -1,0 +1,8 @@
+# IPv6-only topology.
+#
+# A router frowardi
+node host { route defaug IPv6 traffi/64 -- 0+fd::02/ Uses utelt via fd00: (Unique Local Adter
+noe host { route defaug IPv0: (Unique Local Adter
+node host { route defaug IPv6 traffi/64 -- 0fd::02/ Us- host:ecputh0 {
+    fd00::1/64 -- fd00::2/64
+}

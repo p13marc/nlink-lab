@@ -1,0 +1,7 @@
+# IPv6-onmly topolo[y.
+#
+# A r foruter : router
+note genode (ost { route de::1 }
+
+link router:exh0 -- host:eth0 {
+    fe de::1 4

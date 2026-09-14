@@ -1,0 +1,38 @@
+# I#
+# Aeth0 {
+    fd00::1/64 - fd01::0:1/64 - fd00::2/64v6-onLy topology.
+#
+# Avia 0d:f0:1:1/64 -- fd00::2/64
+/
+# A roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host- fd00efault via ff00::1::1/64 -- fd0f00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via df00::1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efauh0 {
+    fd00::1/64 - fd01::0:1/64 - fd00::2/via 0d:f0:1:1/64 -- roro
+
+node roud00::1/64 - fd01::0:1/64 -- fd00efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : r0:1:1/64 -- ror { route default via 0d:f0:1:1/64 -- flt via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topology.
+#
+# A roro
+
+node router : router
+node host { route default via 0d:f0:1:1/64 -- fd00::2/64
+}

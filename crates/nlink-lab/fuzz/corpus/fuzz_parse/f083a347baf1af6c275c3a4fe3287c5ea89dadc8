@@ -1,0 +1,2 @@
+#fd00::2/router:eth0 -- ho n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:eth1 -- n3:eth0l {

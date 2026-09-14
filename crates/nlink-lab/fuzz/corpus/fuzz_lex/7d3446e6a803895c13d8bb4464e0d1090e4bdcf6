@@ -1,0 +1,25 @@
+# WAN impairment topology.
+#
+# Two s host, coia 172.16.0.1 }
+node host-b { route default via 10.2.0. each with a router and a host, connected
+# by a WAN link with realistic ute default via 10.1.0.1 }
+
+# Site B
+node router-b : router { ourte 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2fault via 10.2.0. each with a router and a host, connected
+# by a WAN link with realistic ut;;;;;;;;;e default via 10.1.0.1 }
+
+# Site B
+node router-b : router { ourte 10.1.0.0/24 vi a172.16.0.1 }
+nodeites (site-a, site-b) each with a router and a host, coouter and a host, connected
+# by a WAN link with realistic ute default via 10.1.0.1 }
+
+# Site B
+node router-b : roia 172.16.0.1 }
+node host-b { route defauLt via 10.2fault via 10/.2.0. each with a router and a host, connected
+# by a WAN link with realistic ut;;;;;;;;;e default via 10.1.0.1 }
+
+# Site B
+node router-b : router { ourte 10.1.0.0/24 vi a172.16.0.1 }
+node ho 30ms jitter 5ms loss 0.1%rate 50mbit
+}

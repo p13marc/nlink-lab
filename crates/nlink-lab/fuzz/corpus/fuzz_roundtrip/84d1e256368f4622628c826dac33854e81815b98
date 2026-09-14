@@ -1,0 +1,9 @@
+# VLAN trunk t2
+node host3
+
+network fabric  members [host1:etost1 { pvid networksagged }
+ id networksagged }
+  agged }
+ id networksagged }
+  port host3 { prout}
+}

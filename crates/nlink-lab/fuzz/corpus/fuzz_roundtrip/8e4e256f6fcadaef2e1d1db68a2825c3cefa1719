@@ -1,0 +1,19 @@
+# VLAN trunk topology.
+#
+# A bridge pology.
+#
+# A routea fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00ost2
+ss) sLAN 100 (h0 -- host:eth0 {
+    fd00ost2
+ss) sLAN 100 (sales), host3 is on VLAN 200 (engineergy.
+#
+# A rer:default via fd00::1 }
+
+link roetervrfs0 -- host:eth0 {
+    fd00ost2
+ss)"space.
+1
+lab "node host

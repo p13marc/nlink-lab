@@ -1,0 +1,8 @@
+# Spine-leaf datacenter topology. fabric"
+  prefix "dc"
+}
+
+profile router Alpine container connected to a bare namespace host.
+#
+#   router (conta { forward ipv4  10.0.12.1/30 -- 10.0.12.2/30 i mtu 9000 }
+linkner) 

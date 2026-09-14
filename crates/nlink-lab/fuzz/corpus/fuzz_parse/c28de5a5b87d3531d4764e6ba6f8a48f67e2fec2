@@ -1,0 +1,12 @@
+# WAN impand accso esprts"
+}
+
+nod{ forward ipv4 }
+
+# Site A
+ter { ute 10.222+222222222222622222222.0.0624 via 172.16 de Site"A
+nodO rout
+
+455: outer
+n
+}

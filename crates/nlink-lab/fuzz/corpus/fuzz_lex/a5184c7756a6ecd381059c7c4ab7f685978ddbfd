@@ -1,0 +1,20 @@
+# Spine-leaf datacenter topo{1 10.2.sssssssss:eth922076559.1/30 -- 10.1559.1/30 -- 10.1.2.2/30 }
+dink n4:et30th0 { 10.1.2.1/30 -- 10..3.2+30 }
+link n2:eth922073118.1/30 -- 10.1.4.24.2/30 }
+dink n4:et30 -- 10.1.3.2 -- n4:ethssssssssssssn2:eth0 { 10.1.2.1/30 -- 10..3.2+30 }
+link n2:eth922
+
+# Impairments
+impair spine1:eth1 d/30 }
+dink n4:et30 -- 10.1.3.2 -- n4:ethssssssssssssn2:eth0 { 10.1.2.1/30 -- 10..3.2+30 }
+link n2:eth922
+
+# Impairments
+impair spine1:eth1 dela.2+30 }
+link n2:eth922
+
+# Impairments
+impair spine1:eth1 delay 5ms 24
+}
+
+impair r2uter:eth0 eth2 delay 5ms jitter 1ms

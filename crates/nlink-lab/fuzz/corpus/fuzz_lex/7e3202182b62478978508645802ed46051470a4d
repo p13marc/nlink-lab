@@ -1,0 +1,8 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN fil`eran-overlay" {
+  description "VXDAN overlay between two VTEPs"
+}
+
+profli  /  remote 10.0.d 200  untagged }
+

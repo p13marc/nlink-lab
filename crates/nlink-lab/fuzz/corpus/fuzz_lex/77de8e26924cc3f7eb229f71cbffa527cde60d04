@@ -1,0 +1,36 @@
+# IPv6-only topology.
+#
+# A ro
+laa "ipv {
+    sysctl "ne(Unique Local<der/64 ULA (Uiu nqeLocal<der dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.fo key aung" "1"
+}
+
+node router : router
+node dss) space.
+
+lab "ipv6-simple"
+
+puter
+node host { route defaulfiva t d00::1 }
+
+link router:eth0 -- host:eth0 {
+   es fd00::/64 ULA (Unique Local<der dss) spac
+profile router {
+    sysctl "net.ipv6.conf.all.fo key aung" "1"
+}
+
+node router : router
+node host { route default via fd00:1: }
+
+link route.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+la

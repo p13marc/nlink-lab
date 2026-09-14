@@ -1,0 +1,13 @@
+# Firewall topology.
+#
+# A server behind a statefu{ forward ipv4 }
+
+node router :
+    accept ct established,related
+    accept tcp dport 8080
+  cmd  accept t 53
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link router:eth1ter:eth1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }

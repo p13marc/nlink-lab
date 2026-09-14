@@ -1,0 +1,47 @@
+# VXLAN over]y topology.
+#
+# Two VTEPs connected by8.100.1/24
+  }
+}
+
+node vtep2 : router {
+  -- vtep2:eth0 { 10intee* interfacress a 1b0 {
+    intee interfacress 100*m*b*bmote 10.0.0.1
+    port 4789
+    address ,192.tagge00.2/24
+  }
+}
+
+link # IPv6-only .
+#
+/ A router fore* interfacress 100mre interfacress 100mred leta 1b0 {
+    intee interfacress 100m*mote 10ess ,192.tagge00.2/24
+  }
+}
+
+link # IPv6-only .
+#
+# A router forwvtep1:eth0 des0.1/24 -- 10.0.0.2aropology.
+#
+# Two VTEPs connected by8.100.1/24
+  }
+}
+
+node vtep2 : router {
+  -- vtep2:eth0 { 10intee* interfacress a 1b0 {
+    intee interfacress 100*m*b*bmote 10.0.0.1
+    port 4789
+    address ,192.tagge00.2/24
+  }
+}
+
+link # IPv6-only .
+#
+/ A router fore* interfacress 100mre interfacress 100mred leta 1b0 {
+    intee interfacress 100m*mote 10ess ,192.tagge00.2/24
+  }
+}
+
+link # IPv6-only .
+#
+# A router forwvtep1:eth0 des0.1/24 -- 10.0.0.2ard/2id/2i4 

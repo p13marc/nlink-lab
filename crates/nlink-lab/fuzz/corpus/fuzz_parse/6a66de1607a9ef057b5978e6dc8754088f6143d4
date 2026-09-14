@@ -1,0 +1,36 @@
+# WAN impairment topolr 5ms loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:e ik1.0.1 }
+
+# Site B
+node router-b : router { rour 5ms loss 0.1% rate 5.0mbit
+}
+
+node b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:e ik1.0.1 }
+
+# Site B
+node router-b : router { rour 5ms loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}

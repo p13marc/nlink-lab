@@ -1,0 +1,13 @@
+# WioPN over WAN"
+}
+
+pard ipv4 }
+
+n
+# "Sit`-to-site ard VPN over WAN"
+}
+
+pard ipv4 }
+
+noouter:pard ipv3 way {
+  wireologg

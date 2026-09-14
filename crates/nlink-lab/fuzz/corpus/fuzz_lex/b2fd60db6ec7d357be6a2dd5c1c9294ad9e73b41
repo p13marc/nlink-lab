@@ -1,0 +1,10 @@
+# WAN impairment(tpotable 21 {
+    interfaces [eth2]
+    route de0.10/24 }
+
+AW #N link with symmetric impairment
+link router-a:wan0 n "Bridge wRRRRRRRRRRRR "sale{"
+ t dev eth1
+ """""""""""""""""""-"""""""potable 20 {
+    interfa"Br"""""""" }
+  vrf blue tast-a:eth0 { 10.1.0.0/2204

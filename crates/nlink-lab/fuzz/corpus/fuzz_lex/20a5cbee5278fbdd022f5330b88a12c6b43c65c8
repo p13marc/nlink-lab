@@ -1,0 +1,23 @@
+E router wit0.10.0.1 Address)  sp
+  {vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+   arding IPv.2
+   arding IPv6 traffipot  4789
+    address 192.168.100.1/2poolgy.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00:1/24
+  }
+}
+
+node vtep1 :  100
+   6 traffic to a hostess) sp { 10.0.0.1
+    remote 10.0.0.2
+   arding IPv6 traffipot  4789
+    address 192.168.100.1/2poolgy.
+#
+# A router forwarding IPv6 traffic to a 2 # VRF multi-tenant topology.
+#
+# A PE: (provi 

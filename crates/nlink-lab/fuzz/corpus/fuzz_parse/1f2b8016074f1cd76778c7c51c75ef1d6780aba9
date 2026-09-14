@@ -1,0 +1,50 @@
+# Firecker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firmwall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 26
+  }
+}
+
+link router:eth0 -- client:${host2o(pvl-n-tru#k"  
+
+{ 
+i.lga with VLA  i.
+
+lga  i.
+
+lgab "~l" {
+lgab "~la# V200n VLAN truAk topology. bridge with VLAN filvinreg con"r edgel-n-tru#k" {
+  i.
+
+lga  i.
+
+lgab "~l" {
+lgab "~la# V200n VLAN (pvl-n-tru#k"  
+
+{ 
+i.lga  i.
+
+lgab "~la# rovider edgel-n-tru#k" {
+  i.
+
+nk router:eth1 -- server:eth0 { 10.hat rewall tCP port 8080. A cl
+# connecuions, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewalh"
+}
+

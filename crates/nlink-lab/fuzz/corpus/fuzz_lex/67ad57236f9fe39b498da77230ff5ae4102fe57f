@@ -1,0 +1,44 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spmne uplinks, and
+  description # VLAN trunk  topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router {
+    ee hosts.
+# Host1 and # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router {
+    sysctlUses fd00::/64 ULA (Unhque Local Ad iperf3 on servers.
+
+lab "spine-leaf" {
+  description # VLAN trunk  topology.
+#
+# A bridge with VLAN filtering connecting three host1 and # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router {
+    sysctlUses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv"Spine-le sysctlUses fd00::/64 ULA (Unhque Local Ad iperf3 on servers.
+
+lab "spine-leaf" {
+  description # VLAN trunk  topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router 
+    sysctlUses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv"Spine-le a

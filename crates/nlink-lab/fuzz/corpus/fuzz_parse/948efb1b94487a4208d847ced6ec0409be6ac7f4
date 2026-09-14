@@ -1,0 +1,55 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members U[host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 1LAN trunk topology.
+#
+# A bridge, host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bdge ridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+   unta
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, 3se:ohtth0]
+  vlan 100 "sales"
+  vlan 200 "enginee@ring"
+  port hvlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvg connectu vth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvg connectu vlan 100 "sales"
+  vlan 200 "enginee@ring"
+  port hvlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering" host1 { pvid 100  untagged }
+  port host2 { pvg connectuntagged }
+  port host3 { pvid 200  untagged }
+}

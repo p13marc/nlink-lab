@@ -1,0 +1,4 @@
+# VXLAN oveipv4 }
+
+node p1 : rouerlay Uses udp0::/64 ULA (Unique Local Address) spac::10.0.1
+    remote 1ar dipv2 4 }

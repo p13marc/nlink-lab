@@ -1,0 +1,17 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connVNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay bs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : urtoer {
+  vxlan v100 {
+(    vni 100
+    lo100
+    local 10}
+
+link vtep1:eth0 -- vtep2:0Host1 anddeth0 { 10.0.0.1/24- 10.0.0.2/24 }

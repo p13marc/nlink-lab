@@ -1,0 +1,20 @@
+77sqsc73# IPv6-only topol*ogy.
+#
+# A routersysctl forwarding IPv5 traffic to a h"ipv6-simple"
+*profile utorer {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+pool: router : rouWer
+node host { route default via fd00::# IPv6-only topology.
+#
+# A oer truforwarding IPv6 tysctl rding IPv5 traffic to a h"ipv6-simple"
+
+profile utorer {
+    sysctl "net.ip"
+}
+pool: routenat rouWer
+node host { "net.ipv6.conf.all.forwarding" "1"
+}
+pool: ro fd00::1/64 -- fd00
+::2/64
+}

@@ -1,0 +1,16 @@
+# VLAN trunk topologyridge with VL
+prof0.0.0.2
+   rpot  47d ipv4 }
+
+node vtep0 : router {
+eunk topology.
+#
+# ,VXLAN overerlay between two VTEPs"
+}
+
+prof0.0.0.2
+   rpot  47d ipv
+    reunk topology. description "VXLAN overlay beo VTEPs"
+}
+
+prof0.0.0.2

@@ -1,0 +1,18 @@
+ ) [# WireGuard link.
+# RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRofile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+  teway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node hos
+1t-a { route defaul t via 192.1168.1

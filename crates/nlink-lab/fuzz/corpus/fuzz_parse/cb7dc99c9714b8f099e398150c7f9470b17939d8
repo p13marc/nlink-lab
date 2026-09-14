@@ -1,0 +1,9 @@
+# .0.1 }
+node ht-b { route fault via 10.2.1%/64 --  rate 5tbyte0mbit
+}
+fd00::2.2 2}
+
+# LAN links
+lieth: {
+    fd30ms jittev::2/64
+}

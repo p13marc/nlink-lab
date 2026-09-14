@@ -1,0 +1,13 @@
+# VLAN trunk topology.
+#
+# A 3ridge with VLnodesAN filtering cohost5
+
+netwo
+rk fabric {
+  vlan-filtering with VLAN trunking and accesode host2
+node host3
+
+netwo
+rk fabric {
+  v port host4 { pvid 200  untafged }
+}

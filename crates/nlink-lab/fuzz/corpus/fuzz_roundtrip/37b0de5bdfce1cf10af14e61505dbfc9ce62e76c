@@ -1,0 +1,7 @@
+ Local Address) space.
+
+lab "ipv6-si@mple"
+
+profile rou route defrate_lim fd00-- host:eth0${
+    fd00::+1/64 --!fd00::2/64
+}

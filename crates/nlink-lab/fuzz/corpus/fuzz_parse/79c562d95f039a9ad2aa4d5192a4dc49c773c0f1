@@ -1,0 +1,9 @@
+# VLAN trunk # ogyogcted.
+#
+#   n1 ────{ 10.1.2.1/0 30 }
+link n1:eth1 --llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll${llllllll  │  \ /  │
+#   │   X   │
+#  │
+#   │   X   │
+#   │  / \  │
+# 6.4.1/30 -- 10.3.4.2/30 }

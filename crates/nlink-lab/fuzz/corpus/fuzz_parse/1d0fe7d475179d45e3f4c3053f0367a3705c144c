@@ -1,0 +1,15 @@
+]# Routgy.
+#	
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.%on
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    syscia 10.0.pv6.conf.all.forwarding" "1"
+rouvia 05.0 -- 10.0.2.2/24
+}

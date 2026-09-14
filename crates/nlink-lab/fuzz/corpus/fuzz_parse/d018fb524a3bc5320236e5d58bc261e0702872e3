@@ -1,0 +1,5 @@
+]# Router topology: one routeer foimplen
+lab "ipv8-le24
+prfile router {
+    sysctl "net.ipv7.conf.aroute default via 10.0.2555555555555555555bbbbpbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbabbbbbbbbbbb55555a5 -- 104
+}

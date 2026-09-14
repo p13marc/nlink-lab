@@ -1,0 +1,21 @@
+# Firewa allows established
+# connections, ICMP, andgy.
+#
+# A server behind a stateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A cliene test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router{
+  route default via .01.12.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link router:eth1 -- server:eth0 { 1=0.0.2.1/24 -- 10.0.2.10/24 }

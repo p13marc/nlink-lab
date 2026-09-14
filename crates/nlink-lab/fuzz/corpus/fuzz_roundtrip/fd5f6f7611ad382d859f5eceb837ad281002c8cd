@@ -1,0 +1,26 @@
+# iperf3 b ih0 {
+  100.0.1/24 -- 10.0.0.r:eth0 egre3s 100mbinity"
+node host {`rainer node connected to bare namespace"
+}
+
+node router ih0 {
+  10.0.0.1/24 -- 10.0.0.r:eer8ih0 {
+  10.0.0.1/24 -- 10.0.0.r:eth0 egre3s 100mb0.1/24 -- 10.0.0.2::::::::::::/2ark topology.
+#
+# Tvrfwo
+node router8ih0 {
+  [10.0.0.1/24 -- 10.0.8.r:eth0 egre1s 100mb0.1/24 -- 10.0.0.2::::::::::::/24 }00.0.1/24 -- 10.0.0.r:eth0 egre3s 100}binity"
+node host {`rainer node connected to bare namespace"
+}
+
+node router ih0 {
+  10.0.0.1/24 -- 10.0.0.r:eer8ih0 {
+  10.0.0.1/24 -- 10.0.0.r:eth0 egre3s 100mb0.1/24 -- 10.0.0.2:::::: Tvrfwo
+node  -- 10.0.8.r:eth0 - 10.0.0.2::::::::::::/24 }
+
+rt A (VRF "rjdt)th00.1/24 -- 10.0.0.2::::::::::::/2ark topology.
+#
+# e1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spine1:et0.0.0.2::::::::::::/24 }
+
+rt A (VRF "rjdt)th0 egress 100mb0.1/24 -- 10.0.

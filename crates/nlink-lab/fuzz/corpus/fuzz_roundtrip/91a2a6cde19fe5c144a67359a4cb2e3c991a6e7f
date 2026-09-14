@@ -1,0 +1,17 @@
+# areutRoter #   host1 (10.0.1.2) ──── router  Firewalted
+# bipv8outer { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route d+e Two sites (site-a, site-b) each with a router and a host, connecte}
+node host-a { route d+efau1lt via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.16.0.1 router  Fir-b { route default via 10.2.0.1 }
+
+ ALN#l inks
+link router-a:eth0 -- host-a:eth0 { 10.1de host-a { route d+efault via 10.1.0.1 }
+
+# Site Brouter-a:.1.0.1 }
+
+# Site B
+node router-b : router { route 10..10/24 }
+link rou1.0.0/st-b:eth0 { 10.2.0.1/24 -- 10.2.0.10/24 }
+2

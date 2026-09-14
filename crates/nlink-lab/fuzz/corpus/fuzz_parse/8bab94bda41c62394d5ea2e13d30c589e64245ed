@@ -1,0 +1,13 @@
+# Router topology: one routeridge with VLAN trunking and accso esprts"
+v}
+
+nod{ forward ipv3 }
+
+# Site A
+e +2222222222222222222.2002./24 via 172.1ology.
+#
+# A bridgeroutet4 is on VLAN 200 n(egineering).
+
+lab "vlan-trunk" {
+  desc, 3se:ohtth0]
+  vlan 10# W0

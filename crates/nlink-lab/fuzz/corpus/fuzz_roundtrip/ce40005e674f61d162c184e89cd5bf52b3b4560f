@@ -1,0 +1,5 @@
+# Locrouter : router
+nodeshed
+# 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d:04
+}

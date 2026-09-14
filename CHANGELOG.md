@@ -70,6 +70,16 @@ contained anything untokenisable the *lexer* error fired first and pointed at a
 character in the middle of the intended comment. `//` is now a line comment,
 identical to `#`.
 
+### Fixed — the release gate counted a non-blocking job
+
+`release.yml` waits for a green `ci.yml` run on the tagged commit and refuses on
+any failure. `fuzz` is `continue-on-error: true` — non-blocking by design — and
+normally does not run on a push, so it was excluded only by accident. Dispatching
+`ci.yml` by hand on a release commit (to re-run a flaky lane) makes `fuzz` run,
+and a finding there would then block an unrelated release. It is now excluded
+explicitly. The finding that exposed this is issue #116, a pre-existing
+`render` round-trip bug that also reproduces on 0.9.0.
+
 ### Fixed — `SHA256SUMS` in the release workflow
 
 The `checksums` job downloaded each asset from

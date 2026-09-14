@@ -1,0 +1,25 @@
+# VXLAxlan vxlan100 {
+    vni 100
+sctl
+    remolinkste 10.0.0.1
+    port 4789
+    address ,192.tagge00.2/24
+  }
+}
+
+link vtep1e00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10dev0.2/24 }
+  port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtepmmmmmmmmmmmmmmmmmmmm/mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm||||||||||||||||||||||||||||||||||||||||mmm/mmmmmss 192.tagge00.2/24
+  }
+}
+
+link vtepmmmmmmmmmmmmmmmmmmmm/mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm.5.2/24 # Router topo}logy: one r
+o

@@ -1,0 +1,11 @@
+# iperf3 benchmark topology.
+#
+# Two nodes c.0.0.1 }
+
+link server:ethjitte02:1/64 --2/64d000::8888888888888888888880000000000000000000000001502090803vQa88120..16 #PIv6-o {
+  jitte02:1/64 --2/64d000::8888888888888888888888888888888888888888888888888888888vQa88120..16 -, 10.0.21.::2/6 -- 10.0.21.::2/0 r:eth0 egress 100mbit ingress 100mbit
+rate clie0.2/24 }
+
+rate set:eth0 egress 101mbit ingress 10bit ingress nt { route default via 10.0.0.1 }
+
+link servt ingress 100mbit

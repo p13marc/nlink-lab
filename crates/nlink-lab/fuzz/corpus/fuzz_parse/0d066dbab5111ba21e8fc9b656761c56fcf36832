@@ -1,0 +1,35 @@
+# IPv6-only topo4 ULA (Unique Local r {
+  4789
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlanocalult vi.6.0ner"   remote 10.0.0.1
+    po   sysctl "net.ipv2.conf.all.forwardin1g """
+}
+
+node roic to a host.
+# Us1s fd1e router {
+    sysctl "net.ipv6.conf.all.forwardin1g """
+}
+
+node routde host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00er : router
+node host ute default vi5:s/64 ULA (Unique Local Ad@@@@dress) space.
+
+lab "ipv1-simpl
+"e
+profile router {
+    sysctl "net.ipv6.conf.all.forwardin1g """
+}
+
+node routde host { route default via fd00::1 }
+
+link rst:eth0 {
+    fd002:1/64 -- f::d002/64
+}
+::2/64
+}

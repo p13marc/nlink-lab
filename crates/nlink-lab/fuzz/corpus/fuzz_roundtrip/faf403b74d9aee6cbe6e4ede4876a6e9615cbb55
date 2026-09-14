@@ -1,0 +1,14 @@
+# IPv6-only topology.pace.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link routerexec0 -- host:eth0 {
+   0fd00::1/6464
+}

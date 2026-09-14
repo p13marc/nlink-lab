@@ -1,0 +1,7 @@
+#outer
+node host { route default viaf d01::1 }
+
+link0router:af d00::1 }
+
+lin2/64
+}

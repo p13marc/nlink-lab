@@ -1,0 +1,37 @@
+# VXLAN ovEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.
+    local 10.0.0dress 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24333333333333.3333333333333333333333" {
+  description "VXLAN overlay between two VTE4ddress 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24333333333333.333333333333Ps"
+}
+
+prof lisysctlch hosting a VXLAN
+# interface (VNI 100) for thd overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 333333333333333333330.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24333333333333.3333333333333333333333" {
+  description h0 -- vtep2:eth0 { 10.0.0.1/24333333333333.333333333333Ps"
+}
+
+OOOOOOOOOOOOOOOOOgge00.2/24
+en two VTEPs"s 33333333333333333333333333333~3333&3333333333333333333333333 -- 10.0.0.2/24 }

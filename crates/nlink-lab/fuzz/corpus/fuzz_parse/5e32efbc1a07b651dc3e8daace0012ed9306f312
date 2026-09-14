@@ -1,0 +1,15 @@
+# Firewall topoless.
+
+lab "firewall" {
+  description "Sezver with stateful nftables firewall"
+}
+
+profile router {  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,relat ed 
+  accept tcp dport 8080
+   .52
+  }
+}
+
+link router:et0 -- host:

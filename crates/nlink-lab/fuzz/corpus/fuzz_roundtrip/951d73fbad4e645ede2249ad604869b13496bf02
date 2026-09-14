@@ -1,0 +1,19 @@
+# VRF multi-tenant topology.
+#
+# A Ps.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table tenant" {
+  description "PE rou3er wprofile router { forward ipv4 }
+
+node pe : router {
+  vrf redst.
+# Uses fd00::/64(ULA (Unique Localouter sysctl "net.ipv6.conf.all.fory topology.
+#
+# A routen "PE router fo

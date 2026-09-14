@@ -1,0 +1,30 @@
+# Firewall l nftables firewall"
+}
+
+pror
+
+node rment topology.0.077777777777777777777777#{
+ node route# IPv6-onlyshed
+# connecti# IPv6-r : router
+
+node client { route defaulwall that only allows 77#{
+ node route# IPv6-onlyshed
+# connecti# ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  descr : router
+
+node client { route defaulwall that only allows est ablished
+# connectio
+
+77T77777777lossirment topology.0.077777777777777777777777#{
+ node route# IPv6-onlyshed
+# connecti# IPv6-r : router
+
+node client { route defaulwall that only allows est ablished
+# connections, ICMP, aonly nd TCP port 8080.  IPv6-r : router
+
+node client { route defaulwall that only allows est ablished
+# connections, ICMP, aonly nd TCP port 8080. A client and t0an attacker
+# nop

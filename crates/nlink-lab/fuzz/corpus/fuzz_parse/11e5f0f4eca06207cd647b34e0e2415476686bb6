@@ -1,0 +1,14 @@
+# WireGuard VPN top@ology.
+#
+# Two sites connectclient { route defau }
+
+link server:eth0 -- clit
+rate clienerf-bench c,ient -- ipe4 -- 10.0.0.2/24 }
+
+rate server:te default via 09.0.0j1 }
+
+
+rate clienerf-bench c,ient -- ipe4 -- 10.0.0.2/24 }
+
+rate server:eth0 egr.1.1/24 -- 192.168.1.10324 }
+link gw-# WAN impaiir geth1 -- host-beink sems jitt+r 5ms loss 01.1%

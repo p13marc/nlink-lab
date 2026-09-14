@@ -1,0 +1,34 @@
+# Spine-leaf datacenter topoloky.
+#
+# 2 spines, 2 ves
+node leaf1 : router {
+  lo 102255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : vouter {
+  lo 10.255.1.2/32
+  rode leaf1 : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1ves
+node leaf1 : router {
+  lo 102255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 46.0.12.1
+}
+
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine2:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0. 10.0.11.1ves
+11.2/30  mtu 9000 }
+link spine1:eth2 --f2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 90002-node topImpairments
+impair spi1:eneth1 delay\5ms jitter 1ms
+impair spinetter 1ms

@@ -1,0 +1,10 @@
+# IPv6-only topology.
+#
+# A r fording IPv6 traffic to a host.
+# UsesLA (Unique Local Address) space.
+1
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding""1"
+{ rBute default via fd00:d00::1/64 -- fd00::2/6 (U

@@ -1,0 +1,10 @@
+# IPv6-only tULA ( f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 : rout-- f0::0((((((((((((((((((((((((((((((((((((((((((t:2 : rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((()(((((((((((d2/6-- host:eth0 {
+
+#
+# 2 spi
+link spine2:eth1 -# - leaIPv6-of1
+no

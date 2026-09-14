@@ -1,0 +1,51 @@
+# IPv6-onlyshed
+# connecti# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ons, ICULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysct# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA {
+  description "Minimal two-n(Unique Local Address) space.
+1
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::l "ost.
+# Uses fd00::/64 ons, ICULA (Unique Local Address) space.
+
+lab macvlanimple"
+
+profile router {
+    sysct# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+1
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::l "net.ipv6.conf.all.forwarding" "11 }
+
+link rnet.ipv6.conf.all.forwarding" "11 }
+
+link rout"
+}
+
+node routerMP, aer
+1
+lab "ihost:eth0 {
+    fd00::nd

@@ -1,0 +1,29 @@
+#e router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/30 }(VNI 100) for the overlay network.
+
+lab "vxlan-over Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#  Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 # W{ 10.1.2.1/30 -- 10.1.2.2/3AN impair0

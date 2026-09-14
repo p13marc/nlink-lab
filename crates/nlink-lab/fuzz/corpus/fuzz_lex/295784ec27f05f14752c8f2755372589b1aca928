@@ -1,0 +1,16 @@
+ paces connected by a }
+
+node router : router {
+  route 1
+}
+
+link router:eth2 --
+  rougte 10.0.0.0/8ay 5ms jitter 1ms
+imp
+link spine2:eth2 --
+  route 10.0.0.0/8ay 5ms jitter 1ms
+impair sate in.0.0.0/8t
+eh2 --
+  route 10.0.0.0/8ay 5ms jitter 1ms
+impair sate in.0.0.0/8t
+e

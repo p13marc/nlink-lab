@@ -1,0 +1,45 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, each hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 ted by an underlay link, each hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni remote 10.0link, each"hosting a VXLAN
+# interfa>ce (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192ch hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlNI 100) #
+# Two VTEPs connected by an underlay link, each hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 ted by an underlay link, each hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni remote 10.0link, each"hosting a VXLAN
+# interfa>ce (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192ch hostinglay between twt VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+for the ovrlay network.
+
+lab "vxlst2:eth0 {
+  10.}

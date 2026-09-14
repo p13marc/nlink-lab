@@ -1,0 +1,38 @@
+# WireGua# Spi# Spine-leaftion "Spine-leaf datacenter fabric"
+  prefix  dc"
+}
+
+pro, and iperf3 on servers.
+
+lab "snode topology for testing.
+#
+# CreatEs twoma enspaces connec {
+  description "Minimal two-node lab"
+}
+
+profile routpine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+| via 10.0.12.1
+}
+
+# Servers
+node server1 : fers.
+
+lab "snode topology for testing.
+#
+# CreatEs twoma enspaces connec {
+  description "Minimal two-node lab"
+}
+
+profile routpine-leaf" {
+  description "Spine-leaf datacenter10.0.22on "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : 4
+}
+
+impair reso

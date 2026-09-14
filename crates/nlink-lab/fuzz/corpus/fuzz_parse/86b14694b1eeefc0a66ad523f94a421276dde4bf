@@ -1,0 +1,36 @@
+# VXLAN overlay top,ogy.
+#
+# Two VTEPs connected by an undeVXLAN
+# inicmpv6e (VNote 10.0.0.2
+    port 4789
+   re2
+    port 4789
+   ress 1A92.168.100.2/2492.168
+
+linkN overlay topology.
+#
+# Two VTEPs coce (VNote 09.0.0.2
+    port 4789
+   re2
+   GGG0.0.2.1/24 --  port 4789
+   ress 1A92.168.100.2/2492.168
+
+link vtep1:eth0 -- vtess 1A92.16810220..2/.4
+}2
+1.100.2/24
+  }
+}
+
+
+# interface (VNote 10.0.0.2
+    port 4789
+   re2
+    port 4789
+   ress 1A92.168.10
+   ress 1A92.168.100.2/2492.168
+
+link vtep1:eth0 -- vtess 1A92.168.100.2/24
+  }
+}
+
+link vtep1:eth0th0 { 10.0.0.1h24 -- 10.0.0.2/24 }

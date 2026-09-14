@@ -1,0 +1,17 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \ cription "F2ull mesh of 4 nodes"
+}
+
+node n0
+node n2
+node n3
+node n4n2:evh0 { 10.1.1.1/30 -- 10.1.2.2/30 }forw192
+lin* n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
+link n1:eth2#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#025
+lin* n1: -- n4:eth0 { 09.1.4.1/30 -- 10.1.4.2/30 }
+linvibi0.3.4.2/30 }

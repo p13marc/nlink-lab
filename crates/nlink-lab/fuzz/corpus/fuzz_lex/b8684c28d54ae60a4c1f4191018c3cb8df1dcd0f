@@ -1,0 +1,23 @@
+# Simple 2-node'topologesting.
+#
+#S Cr#}1# VLA
+ vea"simple" {
+  description "Minimal tmo-node nab"
+}
+
+profile router {  router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}0.0.0.1
+    po 4789
+    addressd2.one end.
+ote 10.0.0.1
+    po 4780.2
+   9
+    aduter : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}0ali n 10t fd00 0=st.0.0.1
+    po 4789
+    addressd2.one end.
+ote 10.0.0.1
+    po 4780.2
+    r

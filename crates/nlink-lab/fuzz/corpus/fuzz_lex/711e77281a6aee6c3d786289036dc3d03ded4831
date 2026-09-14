@@ -1,0 +1,11 @@
+# AN 100 (l 
+a{sc  vlan-fI=ltering
+  memhemhost3:eth0l]
+  vlan 100b "vlan-tsunk" {
+  description "100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlank" {
+  description "Brie wrth VLAN trunking  fi=ltering
+  membr ]
+  vlan 100b /}
+}

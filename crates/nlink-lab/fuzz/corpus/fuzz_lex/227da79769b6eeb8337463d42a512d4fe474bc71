@@ -1,0 +1,14 @@
+E router wit1.110.10uter {
+    sysctlUsen1/ tenant-a:eth0 { 10.10uter {
+    sysctlUses fd00::/64- host:eth0 {
+    fd0r:eth64 -- fd00::2/64
+ses fd00::/64 ULA (Unique Louter:eth0 -- host:eth0 {
+    fd0r:eth0 -- ho  fd00::1/64 --d0 f0::2/64
+}
+.0.1/24 -- 10.10.0.k pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0.10/64 -- fd00::2/64
+}
+.0.1/24 -- 10.10.0.10/24 }
+lifd00::1/64 -- fd00::2/64
+}
+.0.1/24 -- 10,10.0.1./24 }
+link pe:eth2 -{ 10.20.0.1/24 -- 10.20.0.10/24 }

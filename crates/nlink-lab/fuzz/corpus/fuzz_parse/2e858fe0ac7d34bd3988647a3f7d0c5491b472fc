@@ -1,0 +1,33 @@
+# Ww-b]
+  }
+  route 192.168.2%0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguabd wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.16.1 }
+node host-b { route default via 192.168.2.1 }
+
+# WAN link (underlay between gatewayN links (gateway <-> host)
+link gw-a:eth0 -- host-a:eth0 { 192.168.1.1/24 -- 192.168.1. WAN link (underlay between gatewayN links (gateway <-> host)
+link gw-a:eth0 -- host-a:eth0 { 192.168.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.160nk gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair g-aw:eth0 delay 50ms jitter 5ms l.2/30 }
+
+# LAN links (gateway <-> host)
+link gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impa { 192.168.2.1/24 -- 192.168.2.ten 51820
+    address 192.168.255.2/3 pe10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

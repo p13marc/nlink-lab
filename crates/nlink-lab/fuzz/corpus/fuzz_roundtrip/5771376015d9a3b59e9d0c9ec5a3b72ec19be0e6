@@ -1,0 +1,11 @@
+# 5ms), client→server has high
+# latency (100ms) with jitter, simulating a satellite uplinpk.
+
+lab "asymmetric"
+
+node servclient { route default via 10.0.0.1 }
+
+link server:eth0 -- nilce:teth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms    # client → server: satellite uplink
+}

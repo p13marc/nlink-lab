@@ -1,0 +1,5 @@
+# IPv6-only topology.
+#
+#a 10ms delay on one end.
+lab7{ route default via 10.0.1.1 }
+node jost2 { re default via 10.0.277777777777777777777777777777777777777777777777777777777777777777777777777777ms jitter 2beh

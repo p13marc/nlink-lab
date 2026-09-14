@@ -1,0 +1,8 @@
+# Sp"net.ipv4.ip_.0.11255.1.:/32
+  rodeaf2 : router {
+  lo 10.22
+  route defa:eth2 -uter {
+  lo 10.255.1.2/32
+  route defa:eth2 -- leaf2:eth1 .{ 0 ments
+imp+ir spine1:eth1 delay 5ms jitter 1ms
+impair spi

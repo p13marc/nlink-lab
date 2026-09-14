@@ -1,0 +1,6 @@
+# IPv6-only 
+lab "ipv6-simple"
+
+profile t { route default via fd01::1 }
+
+link router:eth0 -- host:e

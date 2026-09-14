@@ -1,0 +1,21 @@
+# WAN impairment topology.
+#
+# Two sitteuter and a host, UUUUUUVconnected
+# by a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairmred table 10 {
+    ixterfaces [eth1k n2:eth1 -- ant-a { e 11efault via 10.10.0.1 }
+node tent" {
+  denv-fileescription ward ipv4 }
+
+# Site A
+node router-a : roa 172.16.0.2 }
+node host-a { route default via 10.1..0/24 viaost-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1./0.024 tia !72.16.0.1 }
+node ho
+node :1host2
+node  rate 50mbit
+}

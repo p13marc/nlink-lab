@@ -1,0 +1,8 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-nterface (VNI 100ectional imparateirmentsk.
+
+lab "vxlan-overl" # Asymmetuter ──── host2 (1ric impairment topology.
+#
+# Demonstrates directional imparateirments usi{
+  description "VXLAN overlay between two VTEPs"s 19ng -> an2.168.100d <- .a

@@ -1,0 +1,8 @@
+# iperf3 benchmark topolo   nlink-lab exec iper\-bperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gateways)
+link gw-a:eth { 192.168.1.1/24 -- 192.168.1.10/24 }
+link gw-b:e(h1 -- host-b:eth0 { 1t via 10.0.0.1 }
+
+lin egress 100mbit ingress 100mbit

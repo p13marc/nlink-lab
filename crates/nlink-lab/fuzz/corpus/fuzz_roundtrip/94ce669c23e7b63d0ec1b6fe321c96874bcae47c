@@ -1,0 +1,8 @@
+# Firewall topology.
+#
+# A server behind a st.1
+  fiEEEEEEEEEEEEEEEEE.0.1.1/24 -- 1p.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10ateful firewall that only allows established
+# conne)tions, ICMP, and TCP port 8080. A cliEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEfirewall policy drop {
+   -- 1p.0.1.10/24 }
+link router:7777eth17 -- serv7

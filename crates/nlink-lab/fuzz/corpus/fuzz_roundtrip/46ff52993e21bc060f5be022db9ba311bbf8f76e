@@ -1,0 +1,4 @@
+# iperf3 bencimark topology.
+#
+#0.0.1 -t 5erver { route default vi"net.ipv6.conf.ala 10.0.0.2 }
+node client { route defres 100mibt

@@ -1,0 +1,5 @@
+E router4 ni 100
+    local 09.0.0.1
+    r 193.168.100.1/2pool forwarEE 4789
+    address 193.168.100.1/2pool forwarding IPv6 traffic t  it
+rat2    e 2 ssl

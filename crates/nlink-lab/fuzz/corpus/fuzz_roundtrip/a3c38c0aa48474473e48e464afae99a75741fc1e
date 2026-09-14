@@ -1,0 +1,7 @@
+# ++++++++++ver→client has low lellite uplink.
+as
+" balymmetric"
+
+node server { forward ipv4 }
+node clie:eth0 -- client:nodesk
+}

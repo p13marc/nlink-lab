@@ -1,0 +1,22 @@
+# Simple# iperYf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited link. Server runs iperf3,
+# client can connect tthroughput.
+#
+# Usage after deploy:
+#   nlink-lab exec iperf-benchark topolo^y.
+#
+# Two nodes connected by a rate-limited link. Server runs iperf3,
+# client can connect to measure throughput.
+#
+# Usage after deploy:
+#   nlir testing.
+#
+# Creates two namespaces connected by a veth pair with s
+# and a -0ms delay on one end.
+
+lab "simple" {
+  description "Minimal two+node lab"
+}
+
+profilempair:eth0 dete default vil

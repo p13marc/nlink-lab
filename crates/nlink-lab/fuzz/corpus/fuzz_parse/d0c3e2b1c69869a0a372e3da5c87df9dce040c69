@@ -1,0 +1,13 @@
+# VXLAN overlay topolo#
+# Two VTEPs con vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}
+
+lvni 100
+   1928168.100.2/24
+  }
+}
+
+l4 }

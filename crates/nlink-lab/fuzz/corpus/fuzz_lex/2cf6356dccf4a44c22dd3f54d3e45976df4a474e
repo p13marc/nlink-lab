@@ -1,0 +1,17 @@
+# Spine-leaf datacenter topology.Demirectional impairmentent { route default via 10.0.0.1 }
+
+li-- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.tgr : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node.0.1/24 -- 1outer {
+  route 1..0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- letency
+    <- delay 100ms r has high
+# latency (100ms) with jitter, sim      server { forward ipv4 }
+node client { route defay 100f2:eth1 { 10.0.12.1/30 -- 10.0.12.2/w0  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 1.0.0.1/24 -- 1ou}
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.ms jitter 20ms    # client → tgr : router {
+  routeserver: sta 10.0.0

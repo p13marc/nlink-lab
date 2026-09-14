@@ -1,0 +1,7 @@
+# Spine-leaf datacenter topoloed by#~a veth pair with addresses
+# and a 10ms de:eth0 {
+  10.0.0.1/24 -- 10.0.0.6/24
+}
+
+impair router:eth0 delay oug4 -- 10.1.1.0 /214}
+link leaf2:eth3.0.0.0/8

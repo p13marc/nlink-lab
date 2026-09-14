@@ -1,0 +1,13 @@
+# VXVTEPs connectforward ipv4 }
+
+vtmpVs 10:connectforward ipv4 }
+
+vtmpVs 10: routerware vtepVTEPs 10: router {
+  vxlan vxla0.2
+  y.
+0./24 routerware vtepVTEPs 10: router {
+  vxlan vxla0.2
+  y.
+0./24
+  
+}

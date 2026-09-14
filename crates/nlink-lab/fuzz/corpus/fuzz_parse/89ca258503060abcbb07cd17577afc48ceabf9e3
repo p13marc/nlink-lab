@@ -1,0 +1,20 @@
+# VLAN trunk topology.
+#
+# three hosts.
+# Host1 LAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, # Full me)sh  fd15ddrs) 6pace.
+
+lab "ipv8-host3si:eth0mple"]
+  v
+

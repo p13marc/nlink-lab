@@ -1,0 +1,49 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlak topology.00g).
+
+l  untagged }
+  port host4 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+default   untagged }
+  port host2 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLrt host2 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on V  local 10.0.0.2
+    remLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}
+
+node (ost1
+node host2
+node host0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  st1:eth0, host2:eth0, host3:eth0]
+  vlan 1LAN trunk topology.00g).
+
+l  unta).
+
+l  untagged }
+  port host4 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 2t host1 { pvid 100  untagged }
+  port host2 { pvid 1-00  untagged }
+  port host3 { pvid 200  untagged }
+}

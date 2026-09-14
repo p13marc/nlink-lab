@@ -1,0 +1,11 @@
+# IPv6-only topology.
+#
+# A router:exh1 nod1 }
+
+link router:exh0 -1fault via  fd0 : router
+nod1 }
+
+link router:2:1fault via  fdmtu002:1fault via fd00:rward 
+{
+}
+  ~  fd002:1/64

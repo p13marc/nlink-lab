@@ -1,0 +1,9 @@
+# IPv24
+ er6-ter {
+    sysctl "net.ipv6.conf.all.fo,rwarding" "1"
+}
+
+node router : router
+node star { route default via fd01::1 }
+
+link router:)th0 -- -host:e

@@ -1,0 +1,16 @@
+# VLAN trunk  (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+networate_limrk fabric {
+  vlan-filtering
+  members [h200 "engineerin[g"
+  port host1 { pt#test)ng.
+#
+# tes twpvid 09a9

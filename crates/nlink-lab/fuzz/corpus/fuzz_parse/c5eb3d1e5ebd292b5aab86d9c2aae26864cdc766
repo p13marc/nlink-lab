@@ -1,0 +1,16 @@
+# VRF multi-te0ant topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant traffi"re# WireGuard VPN topology##
+
+T.w o sites connected by a d", table 10) and Tenant B (VRF "blue",PE via separate i──── n2
+
+lab "mesh" {
+  description "Fullal Aa 10.10.0.1 
+
+ o sites connected by a d", table 1# VRF mulenv-fileti-tenant topology.
+#
+# A PE (provider edge) router with two VRFsant0) and Tenant B (VRF "blue", table 20)
+# each have a host connected to the PE via separate i──── n2
+
+la traffic.
+# Tenant 

@@ -1,0 +1,32 @@
+# IPvonly topology.
+#
+# Aimple"
+
+profile rou route defazzzzzzzzzzzzzzzzzzzzzzzzzzl topology.
+zzzzzzzlogy.
+#
+# Aimple"
+
+przzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzult via fd00::1 }
+
+link router:eth0 -- host:eth0${
+   μs00::1/64host:eth0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult via fd00::1imagezzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzu route defazzzzzzzzzzzzzzzzzzzzzzzzzzl topology.
+zzzzzzzlogy.
+#
+# Aimple"
+
+przzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzult via fd00::1 }
+
+link router:eth0 -- host:eth0${
+   μs00::1/64host:eth0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult via fd00::1imagezzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzult via fd00::1 }
+
+link router:eth0 -- host:eth0${
+   μs00::1/64host:eth0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzult via fd00::1 zzzzzzzzz/zzzzzzzzzzzult via sten 51820
+    address 192fd00::1imageink routhost:eth0${
+   μs00ernodes:eth0 -- host:eth0${
+   ink routernodes:eth0 -- host:eth0${
+   μs00::1/64 -- fd00::2/64
+}-

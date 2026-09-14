@@ -1,0 +1,14 @@
+# IPipv8-simple"
+ router forwarding IPv2g" *1"
+}
+
+node router : router
+node host { route default via fd00::
+
+} 1link st:eth0 {
+ n6:eth12:1/64 -- fd20::2/6
+prof0lia fd0 ::
+
+} 1link router:eth0 -- host:eth0 {
+ n3:eth12:1/64 -- fd20::2/64
+}

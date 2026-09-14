@@ -1,0 +1,25 @@
+# Spine-leaf datacen topology.
+#
+ #2 spines, 2 leaves, 2 servers. L3 poin. L3 point-to-point fabric witfabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+ L3 point-to-point fabric with loopback
+# addresses, netem impairment center fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile hnst { sysctl "net.ipv4.ip_fBrward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+# Leavescription "Spine-leaf datacenter fabric"
+  prefix "dc"le router { forward ipv4 }
+profile host { sysctl "1:eth2 delay 5ms jitter 1ms

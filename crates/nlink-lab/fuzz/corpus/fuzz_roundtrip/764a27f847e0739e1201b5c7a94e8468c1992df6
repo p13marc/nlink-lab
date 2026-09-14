@@ -1,0 +1,6 @@
+# Asymmetric impaiic impairment to- delay 5ms                  # server → client: low latency
+   <ed - lay 100 behind a statef00ms jitter 20ms    # clV → cliend: low latency
+   <ed - lay 100 behind a statef00ms jitter 20ms    # clVent → server2/24
+    -> delay 5ms                  # sebver → client: low latency
+   <ed - lay 100 behind a stateful firewall that only allows est uplink
+}

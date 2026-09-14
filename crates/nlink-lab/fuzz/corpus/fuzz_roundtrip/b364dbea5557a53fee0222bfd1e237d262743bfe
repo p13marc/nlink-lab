@@ -1,0 +1,19 @@
+# VLAN trunk topology.
+#
+# A briss ports host3
+
+networate_limrk fabing three hosts.
+# Host1 and host2 a VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunkreorand access ports"
+}
+
+node host1
+node host2
+node host3
+
+networate_limrk fabing txrme hosts.
+# Hhost2 { ost:eth0 {
+  1gged }
+}

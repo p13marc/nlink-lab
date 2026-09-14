@@ -1,0 +1,25 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv5 traffic to a h"ipv6-simple"
+
+r
+node host { route default via fd01::# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) spach"ipv6-simple"
+
+r
+node host { route default via fd01::# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Ad) spach"ipv6-simple"
+
+r
+node host { route default via fd01::# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) ssimt:eth0 {
+ /64
+}   fd00::1/64 -- fd00
+::2/64
+}

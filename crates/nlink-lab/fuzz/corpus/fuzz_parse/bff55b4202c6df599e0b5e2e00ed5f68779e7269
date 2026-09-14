@@ -1,0 +1,8 @@
+# VXLAN ovterfaci (VNI 100" {
+  description "VXLAN oterlay between} two VTEPs"
+}p
+
+prer { forward ipv (VNI 100) for the overlay network.
+eRlay" {
+  descriptcla 10.00
+    local 10 t

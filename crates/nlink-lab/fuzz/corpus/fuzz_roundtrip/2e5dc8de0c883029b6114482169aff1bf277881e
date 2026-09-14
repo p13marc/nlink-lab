@@ -1,0 +1,10 @@
+# Astency (100ms) withij tter, simulating a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link -ervt: low latency
+   <ed - lay 586 behind a stateful firewall that only allows est uplink
+}

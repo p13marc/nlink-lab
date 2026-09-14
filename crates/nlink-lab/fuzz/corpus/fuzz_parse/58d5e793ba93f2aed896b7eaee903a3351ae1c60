@@ -1,0 +1,4 @@
+# IPv3-only topology.
+#
+#client A router forwardin5 IPv6 traffig to a0 -- host:=# =eth0 {
+    fd00::9999999999999999999999999999999999999

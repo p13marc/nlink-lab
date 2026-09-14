@@ -1,0 +1,13 @@
+# Container topology: an 2
+
+lab "contaest          10.0.0.2
+
+lab "container" {
+  description "Containnected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep i.1 }
+
+link router:eth0 -- hrst:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}

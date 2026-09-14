@@ -1,0 +1,12 @@
+#nant topology.
+#
+# A PE (provider edge) router with.0.1 }
+node tenant-b { route default via 20.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/24 -- 09.10.0.20/24 }
+link pe:eth2 -- tenth1
+  }
+  vrfant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
+link pe:eth2 -- tnant-B:eth0 { 10.20.0.1/24 -- 10.40.0.10/24 }

@@ -1,0 +1,12 @@
+# Router t─ router ──── host2 ( eth0    eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route default via 1 benchmark topology.
+#
+# Two nodes0

@@ -1,0 +1,19 @@
+# Full 
+  deScriptiondescription "Full mesh of 4 nodes"
+}
+
+neth0 {
+    fd002:1e n3
+node }
+
+
+link n1:eth0 -- n2:eth0 { 10.-- 10.1.2A.2/WA## VXLr64 --::2eµsstthdelaxy0 0 {
+    d00o V# VTEPs"}
+
+profile rouTeiptionte:h1 { 10.2.4.1/30  {
+    fd002:1e n3
+node }
+
+
+link n0:eth0 -- n2:eth0 { 10.1.2.1/30 -- d002:1e n3
+nod0 -- 10.3.4.2/30 }

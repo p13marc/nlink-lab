@@ -1,0 +1,16 @@
+# Asymmetric impairment nt has low latency (5ms), client→server has high
+# ng -> and <- arrows.
+# server→client has low latenr has high
+# latency (100ms) with jitter, simulating a satellite uplink.
+
+lab "asymmetriX"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    12/300.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms          latency (100"Bridge with VLANhost1:eth0and access ports"
+}
+
+node host}

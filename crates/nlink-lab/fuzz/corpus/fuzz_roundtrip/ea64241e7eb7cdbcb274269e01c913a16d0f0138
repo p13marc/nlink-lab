@@ -1,0 +1,28 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) spa.c
+1e
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host {ology.
+#
+# A router A (Unique Local Address) spa.c
+1e
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipvwarding" "1"
+}
+
+node router : router
+node hos route default via 0df0::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}

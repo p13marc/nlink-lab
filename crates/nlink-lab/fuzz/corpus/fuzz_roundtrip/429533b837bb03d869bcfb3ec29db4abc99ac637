@@ -1,0 +1,51 @@
+# IPv# VXLAN ovEPs"s00.1./2-4
+  .0.0.2
+    remot6-only topology.
+#
+# A cooverlay betwee ovEoverlay between two VTE4789
+    addresse 10.0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+} 192.ta"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or"throughputtwo VTE4789
+    address 192.tagge433333333333300::1/64 -- fd00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- vgge00.2/24
+  }
+}
+
+link vtep1:e for throuegy.
+#
+# A route:/6 Le (VNI 10r 0 {
+   a 10.0.0.1 -t 5
+
+lab 0"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or"throughputtwo VTE4789
+    address 192.tagge433333333333300::1/64 -- fd00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- vtep2:eth0 {n two VTE4789
+    addresse 10.0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+} 192.tagge00.2/24
+  }
+}
+
+link vtep1:e for throuegy.
+#
+# A route:/6 Le (VNI 10r 0 {
+   a 10.0.0.1 -t 5
+
+lab 0"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or"throughputtwo VTE4789
+    address 192.tagge433333333333300::1/64 -- fd00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- vtep2:eth0 { p2:eth0 { 10.0.0.1/243333333

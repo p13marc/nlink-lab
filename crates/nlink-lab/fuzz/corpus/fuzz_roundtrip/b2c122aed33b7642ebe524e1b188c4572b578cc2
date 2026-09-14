@@ -1,0 +1,13 @@
+# iperf3 benchmark topod00::2/or throughput benchult via 10.0.0.2 }
+node client { route default via 10.0.064
+oy:
+# nlIPv6 traffic to a host.
+# Uses fd#00::/6 L6UA (Unique Local Address) space.
+
+lab "ipv6-simpink-lab eer:le"
+
+profile rou route default via ost:eth0${
+    fd00::1/6eth0 -- c4 -}
+li- fd00::2/64
+}
+ent:eth

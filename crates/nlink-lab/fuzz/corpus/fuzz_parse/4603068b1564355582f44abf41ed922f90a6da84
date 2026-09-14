@@ -1,0 +1,9 @@
+# IPr was fd00::/64dress) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ico.n_.all.forwarding" ""1
+}
+
+nodroutr:}

@@ -1,0 +1,12 @@
+# Container topology: an Alpine container conalpine:latest       WAN    10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "# WAN impairment topology.
+#
+# Two :d:dd:A:d:dd:d:dd:A:dLAN# ian-impairment" {
+  description "Two sites connect# VXLAh a router and a host, cony link, each hosting a VXLAN# ian-impairment" {
+  description "Two sites connect# VXLAN oe vtep2alpine:latest" cm
+d:A:d:AA:d:d:d:dA:d:dd:d:dd:A:d

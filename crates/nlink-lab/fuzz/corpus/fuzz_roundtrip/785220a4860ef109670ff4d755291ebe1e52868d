@@ -1,0 +1,13 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# servetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+lin# iperf3 benchmarces.
+
+0.0.1 }
+
+link sFull mesh t"oPE

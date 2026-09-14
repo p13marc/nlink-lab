@@ -1,0 +1,11 @@
+# iperf3 benchmar { route default via nt { route deault via 10.0.0.1 }
+
+link server:eth0 m- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 10mbit ingress 100mbit
+rate clienh0 egress 100mbit ingress 100mbit

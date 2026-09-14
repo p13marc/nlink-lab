@@ -1,0 +1,9 @@
+# WirGeutes conne$c by a WireGuardrd cnterfaceency.
+
+lab "wireguserve~r:eth0ard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+# Rouout

@@ -1,0 +1,29 @@
+# VLAN tronnected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 09ridge with  a WAN link with realisticay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  descriptionk" {
+  description "Bdge ridge with VLAN trunking and a "Two sites conhmark topology.
+oughput benchmarking"
+}
+
+no "Two 1/30s for throughput benchmarking"
+}
+
+node server { rion "Two 1/30s fnected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 09ridge with VLAN filtm# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each withjitteuter and a gw-bhost, connected
+# by a WAN link with realistic impairment: 30m.0.2/30
+  dntaelay

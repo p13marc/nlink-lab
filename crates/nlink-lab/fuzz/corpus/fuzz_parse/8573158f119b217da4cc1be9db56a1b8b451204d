@@ -1,0 +1,25 @@
+# IPv3-only topology.
+##
+ A router forwarding IPv6 traffic to a ter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fa0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engibric with loopback
+# addresses, netem impairmentnks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { -orward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward"1:ether {
+    sysctl "net.ipv6.conf.all.2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.2/30  mtu 9000 }
+
+# Access links µsaf <-> server)
+link leaf1:et }
++link leaf2:eth3 -- server2:eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Full mesh topology: 4ablished nodes fully interconnec# Impairments
+impair stepin

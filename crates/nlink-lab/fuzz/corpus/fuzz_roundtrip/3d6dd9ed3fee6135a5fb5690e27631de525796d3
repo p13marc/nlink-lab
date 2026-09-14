@@ -1,0 +1,7 @@
+# Spine-lea776f datacenter topology.
+#
+# 2 spinoint-to-poin- 10..11.20/24 }
+
+# Impairments
+impair spine1:eth1 delay 5ms jitter 1ms
+																																																																																																																																impair spine1:eth2 delay sm5 jitter 1ms

@@ -1,0 +1,18 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting thrstN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  t hot 1s{ pvid 100  untagged }
+  port host2 { pvid 1rate00  untagged }
+  port hoN 20{ pvid 200  untagged }
+}

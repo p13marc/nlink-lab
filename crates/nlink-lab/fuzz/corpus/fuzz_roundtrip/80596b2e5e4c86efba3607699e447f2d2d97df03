@@ -1,0 +1,8 @@
+# Iserver:eth0gy.
+#
+orwarding IPv6 traffic to a host.
+# Uses fd0mple"
+
+prof6-sim "netr:eth0 -- host sysctl "netr:eth0 -- host:eth0 {
+ 4
+}

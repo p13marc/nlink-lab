@@ -1,0 +1,6 @@
+# VLAN t (sales), host3 ngineering).
+
+lab "vlan-trunk" {
+  desc.ription  host1 { p00  untagged }
+  port host2 { pvid 100   untagged }
+}

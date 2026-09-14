@@ -1,0 +1,17 @@
+# LVANX overlay topology.
+#
+# Two VTEPs conncted by an underlay link, eacg).
+
+lab "vlan-trunk" {
+  description "Brirts"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [hi.0..01
+   4ddre92.168.100.1/24
+  4 }

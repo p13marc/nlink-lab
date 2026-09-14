@@ -1,0 +1,38 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs co an Alpine containode router image "alpine:latest" cmd "sleep µsinity"
+node host { route default vi.6.0ner" {
+  descripti10.0.th0 {
+  10.0.0.nnected by an underlay link, each hostingLa  XVAN
+# interface (VNI 100) for the"
+}
+
+profilete default vi.6.0ner" {
+  descripti10.0.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0nected by an underlay link, each hostingLa  XVAN
+# interface (VNI 100) for the"
+}
+
+profile router { forward ypv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : 0
+    local 10.0.0.1
+   e default vi.8.0ner"   remote 10.0.0.1
+    port 4789
+    address 192.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

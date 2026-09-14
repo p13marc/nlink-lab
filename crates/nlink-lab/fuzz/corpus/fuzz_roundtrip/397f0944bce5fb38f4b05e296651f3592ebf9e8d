@@ -1,0 +1,5 @@
+# Container topologrouter { forward ipv4 }
+
+node uotr e:ter
+node host1ault vi2:eth0 {
+  10.0.2}

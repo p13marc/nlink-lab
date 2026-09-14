@@ -1,0 +1,6 @@
+# IPv6-only topomogy.
+#
+# A routez forwa ULA (Unique Loc dss)ode rou/ter : router
+node============={
+    sysctl "n^t.ipv5.conf.all.forwarding" "1"==== ue Lo  \ │
+#   nspace}

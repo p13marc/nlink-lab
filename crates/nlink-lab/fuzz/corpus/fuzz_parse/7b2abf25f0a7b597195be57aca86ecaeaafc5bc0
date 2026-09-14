@@ -1,0 +1,53 @@
+# Spin-- /24 -2A10/4 }
+
+# Impairments
+impnir# WAN impairment topology.
+
+o#w #T sites (site-a, site-b) each with a route─ n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+# h topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+eth0 { 1# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnescted.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#
+#   n1 ──── n2
+#   │ \   / │
+ fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X#   │  \ /  │
+#   │   X 

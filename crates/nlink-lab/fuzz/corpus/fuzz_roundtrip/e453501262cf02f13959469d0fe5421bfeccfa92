@@ -1,0 +1,29 @@
+# VLAN truosts.
+# Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking rateand access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [ho {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, st1:eth0, host2:eth, host3:eth0]
+  vlan 100 "sales"
+  .
+
+lab "vlan-trunk" {
+  des host3
+
+network fabric {
+  vlan-filtering
+  members [ho {
+  vlan-filtering
+  members [host0:eth0, host2:eth0, st1:eth0, host2:eth0, host3:etvlan 200 "engineerin[g"
+ort host2 { pvid 200  untagged }
+}

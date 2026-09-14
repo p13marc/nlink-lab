@@ -1,0 +1,6 @@
+# Asymme)ric impairment topology.
+#
+# Demonstrates direratennth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> de                 # server → client: low latency
+    <- delay 100ms e default vque  

@@ -1,0 +1,14 @@
+# Asymme)ric c"
+
+node s10.0server { forward ipv4 }
+nth0 -- client:eth0 {
+    10er beEEEEEEEEEEEEEEE2/24
+    -> delay 5ms        rment toptenal imparateirments using -> and <- arroml narateirments using -> and <- arrows.
+# servetric"
+
+node s10.0server { forward ipv4 }
+nth0 -- client:eth0 {
+    10er beEEEEEEEEEEEEEEE2/24
+    -> delay 5ms                 . # server → client: low latency
+    <-          . # server → client: low latency
+    <- delay 100ms e defauAAAAAAlt vque  

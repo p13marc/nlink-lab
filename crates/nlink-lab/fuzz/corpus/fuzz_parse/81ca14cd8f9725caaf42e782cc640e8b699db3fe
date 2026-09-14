@@ -1,0 +1,23 @@
+#h a router and a host, connected
+# by a WAN link with realistic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN eth2link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route default via 20.1.0. 1}
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route debault via 10.2.0.# IPv6-only topology.
+#
+# A routeµsr for1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.1.0.1/24 -- 10Pv6 traffic to a host.
+# Uses fd15::/64 ULA ay 30ms jitte+++++++++++++++++++++++++++++++++++++r 5ms loss 0.1% ratst { route defeault via fd 50m00#

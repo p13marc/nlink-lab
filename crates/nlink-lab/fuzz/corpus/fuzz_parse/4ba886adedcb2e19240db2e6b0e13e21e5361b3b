@@ -1,0 +1,36 @@
+##
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.3.1/30 -- 10.y interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#   n3 ──── n4ll mesh tosh topology: 4 n4 nodes fully inte2connected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │nodes"
+}
+
+node n1
+nod -- n4:eth0 { 10.1.4.1/30 ---10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.3.1/30 -- 10.y interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │ odes fully interconnected.
+#
+#   n1 ──y: 4 no/30 }

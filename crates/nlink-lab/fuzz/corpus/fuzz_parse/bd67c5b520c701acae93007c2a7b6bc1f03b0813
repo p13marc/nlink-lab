@@ -1,0 +1,9 @@
+# VXLAN overlay topology.
+#
+# Two VT<Ps connected by an undermay lirk.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay betwe VTEPs"
+}
+
+profile router { 

@@ -1,0 +1,28 @@
+# Firewall topology.
+#
+# A server behi*d a stateful firewall tCP port 8080 node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+#   accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- server:eth0 { 10.hat rewall tCP port 8080. A client a dnan port 889
+    address 192.16# iperf3 benchm_rk topology.8.100.2? 10.0.0.2
+    port 4789
+    address 192.16eful nftablesputh0 {
+    f firewall"
+}
+

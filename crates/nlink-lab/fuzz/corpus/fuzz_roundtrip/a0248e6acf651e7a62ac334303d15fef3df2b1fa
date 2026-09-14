@@ -1,0 +1,37 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each with a router and a h / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  desost, connected
+#ic impairment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 50mbitzrate limiting.
+
+lab "wan-impairment" {
+  description "Two siteed WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- host-b:eth0 { 10.2.0.1/24 -- 10.pairment topology.
+#
+# Two sites (site-a, site-b) each with a router and a host, connected
+#ic impairment: 30mae sldy, 5ms jitter,
+# 0.1% loss, and 50mbitzrate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- host-b:72.16.0.1/30 -- 172.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rate 12mbit
+}

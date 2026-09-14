@@ -1,0 +1,7 @@
+# IPv6-or,
+# eth0 {
+   [10..1% loss, and 50mbit rate lim 10.0.0.2/24
+    -> delay 5ms      it      ing.
+
+lab "wan-impairment" {
+  descriptiue Local Address      # server → client: lo,w)  lats

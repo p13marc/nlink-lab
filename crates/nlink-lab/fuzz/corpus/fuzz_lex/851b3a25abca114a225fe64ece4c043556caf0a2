@@ -1,0 +1,26 @@
+late internett leancy.
+
+lab "wireguard-vpn" 2.2.sss. {# VXLAN overlay topolog0
+   
+
+lab "vxlan-overlay" { address 192.16
+  8.de2s# WA
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[late internett leannode host3
+
+networkun0-.1 }
+node tement(topt0/24 via 172.16.0.1 }
+node host-b { route default # VRF multi-tenant topology.
+#
+# A PE nt-br with two VRF2:e
+node host3
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[l

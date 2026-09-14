@@ -1,0 +1,19 @@
+# VLAN trunk topology.
+#
+#eth1ridge with VLAN f and ho(sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host3
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+ 0 vlanproei"sales"
+  vlan 2tagged }
+  port host3 { pvid 200  untagged }
+}

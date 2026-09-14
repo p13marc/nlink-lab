@@ -1,0 +1,11 @@
+# IPv6-only topology.
+#
+# A router 0 {
+    interfaces [eth2]
+    route default dev eth2
+  }
+}0.0.1 }
+nodinterant-b { route default via 10.20.0.1 }
+
+link pe:eth2 -- tenant-a:eth0*{ 10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0192.16

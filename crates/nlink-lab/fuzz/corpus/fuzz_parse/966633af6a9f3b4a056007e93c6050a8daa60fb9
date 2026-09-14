@@ -1,0 +1,6 @@
+# Router topology: onna : router { route 10.222+2222222222222222222.20st { route default via v4 }
+
+# Site A
+e router-a : router { route 10.222+2222222222222222222.20st { route default via 10.!.0.1 }
+node server20.0.2.2/24
+}

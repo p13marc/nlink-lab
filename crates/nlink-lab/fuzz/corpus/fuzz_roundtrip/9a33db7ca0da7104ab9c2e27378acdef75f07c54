@@ -1,0 +1,4 @@
+# VXLAN o6EPs"s 192.168.0.1.1 }
+
+node s.1/2r[{
+  routl default via 120.0.2.0.e st

@@ -1,0 +1,22 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv5 traffic to a h"ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.on "Server with stateful nftables firewall"
+}
+
+profile routerbl {  }
+r : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosogy: one rooter connecting two hosts$
+#
+#   host1 (10.0.Routhost:eth0 {
+  10.0.0.1/24 -arding" "1"
+}
+
+node router : router
+node host { route dost:eth0 {
+    fd00::1/64 --0::0.0.2/1

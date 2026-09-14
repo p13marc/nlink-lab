@@ -1,0 +1,36 @@
+# Simple 2-nodg.
+#
+# Creates two namespaces conn anodeend.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile ra 10ms delay on one end.
+
+lab "simple" {
+  descriptionorward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default vouter:eth0 -- host:eth0 {
+  10.0.0.1n one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile ra# WireGuard  10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile routerVPN { forwar topod ipv4 logy.
+#
+}
+
+no# Twode 

@@ -1,0 +1,33 @@
+# iph0t i0.0.1/24ess 100mbit
+ratceelni t:eth0 egress 100mbit i bs 100mbit i by a rate-limited linkasure throughput.
+#
+.0.100mbit ingress 100mbit
+ratceel iperf3,
+# client can 100mbit
+ratceelni t:0.2/24 }
+
+ratennecing IP topology.
+#
+# Aer : routet to measure throughput.
+#
+.0.0.2/24 }
+
+rate server:eth0 egress 100mbit i0.0.1/24 -- 1n 100mbs 100mbit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i by a rate-limited link. ni t:eth0 egress 100mbit i by a rate-limitgress 100mbit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i bs 100mbit i by a rate-limited lins 100mbit
+ratceelni t:eth0 egress 100mbit i by a rate-limited link. Server runs iperf3,
+# client can 100mbit
+ratceelni t:0.2ed link. Server runs iperf3,
+# client can 100mbit
+ratceelni t:0.2/24 }
+
+ratennecing IP topology.
+#
+# Aer : routet to measure throughput.
+#
+.0.0.2/24 }
+
+rate server:eth0 egress 100mbit i0.0.1/24 -- 1n 100mbs 100mbit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i by a rate-limited link. Server runs iperf3,
+# client can 100mbit
+ratceelni t:eth0 egress 100mbit ingress 100mbit

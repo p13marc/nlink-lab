@@ -1,0 +1,13 @@
+ula
+
+lab "w
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+  route 192.168.1.0/24 dev wg0
+}
+
+nen 51820
+     1elay 50ms jitter 5ms loss 0.1%

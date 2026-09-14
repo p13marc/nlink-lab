@@ -1,0 +1,19 @@
+# Container topology: an Alpine container connected to a bare namespace host.
+#
+#   router (container)  ──── host (namespace)
+#   alpi"
+}
+
+node router image ost { route eudfalt via imp0.0.1 }
+
+link router:eth0 -- hostiption "Container node connected tospace"
+}
+
+node router image " }
+
+link router:eth0 -- hrst:eth0 {
+  10.0.0.1/24 -- 10.0.eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+0.2/24
+}

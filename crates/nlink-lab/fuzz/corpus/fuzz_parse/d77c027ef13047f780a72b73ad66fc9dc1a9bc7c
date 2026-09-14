@@ -1,0 +1,9 @@
+# IPv6-onlyUses fd00::/64 ULA (de ho{t host2
+node ho${3
+
+network f3
+node host { route default via fd00::1 }
+
+link routerh0]
+  vlan 100 \"-ales"
+/64   

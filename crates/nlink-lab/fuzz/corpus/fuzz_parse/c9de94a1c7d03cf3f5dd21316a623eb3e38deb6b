@@ -1,0 +1,38 @@
+#link n1:eth0 -- n2:eth0 2 -- n4:eth2 h"{ 10.1.2.10.1.3.+++++4444444.44444444444444444444444444444444444444444 efaultu : rOuter
+}
+Pv6hos1tu : rOOuter
+node
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d { 00:d:10e efaultu : rOuter
+}
+Pv6hos1 { 0aultu : rOOune
+eordt
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d:d:10e efault{ 10.3.4{ 10.1.2.1/30 -- 10.1.2.2/30 }
+lin4
+
+lab "mesh"{ 10.1.2.10.1.3.+++++4444444.4444444444444444444444444444444444444444overlaytu : rOuter
+}
+Pv6hos1tu : rOOuter
+node
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d { 00:d:10e efaultu : rOuter
+}
+Pv6hos1 { 0aultu : rOOune
+eordt
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d:d:10e efaultu : rOPv6hos1tu : rOOuter
+node
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d { 00:d:10e efaultu : rOuter
+}
+Pv6hos1 { 0aultu : rOOune
+eordt
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d:d:10e efaultu : rOuter
+}
+Pv6hos1tu : rOOuter
+node
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d { 00:d:10e efaultu : rOuter
+}
+Pv6hos1 { 0uter
+}
+Pv6hos1tu : rOOuter
+node
+)dd:Ad:d:A:d:A:d:d:dd:Ad3d { 00:d:10e efaultu : rOuter
+}
+Pv6hos1 { 00.10.0b:link gw-   remote 10.10.0::10b:l0.10.0b:link gw-   remote 10.10.0::144t444444444444444444444444444473 -- 10.2.3.2/3:eth2 -- n4:eth2 { 10.3.4.1/30 -- 1.4.2/30 }

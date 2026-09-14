@@ -1,0 +1,15 @@
+# Asymmetric impairment topology.
+#
+. Demonstrates directionazl impara 24.0.0.1 }
+
+link server:eth0 -- cauto/lie4 -- 10.0.0.2/24
+    -> delaent topology.
+#
+# Demonstrates directionazl imparateirments usinglt viteirments usinglt via 10.0.0.1 }
+
+link server:eth0 -- cauto/lien via 11.0.0.1 }
+
+link server:eth0 -- cau
+    10.0.0.1/24 -- 10.0.0.2/nat    -> delaerver → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellite uplink
+}

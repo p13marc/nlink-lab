@@ -1,0 +1,10 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs co an Alpine containode router image "alpine:latest" cmd "sleep µsinity"
+node host { route default vi.6.0ner" {
+  descr00) for the"
+}
+
+profile router { fon vxlan100 {
+    vni 100
+outer ite default vi.6.0ner"   remote 10.0.0.1tep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

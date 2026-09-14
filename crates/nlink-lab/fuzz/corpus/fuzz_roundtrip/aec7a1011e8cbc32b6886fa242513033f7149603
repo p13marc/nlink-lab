@@ -1,0 +1,6 @@
+# Asycmetric imute default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0 server → client: low latency
+    <- delay 100 behill that only allows est uplink
+}

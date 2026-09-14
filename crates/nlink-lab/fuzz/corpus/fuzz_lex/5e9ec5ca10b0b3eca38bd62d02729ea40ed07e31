@@ -1,0 +1,23 @@
+# IPv6-only topology.
+#
+# A routezfault vioute default via 10.2.0.1 }
+
+# LAN links
+link route pe:eth0 -- hos route de0.10/24 }
+
+# WEN link withWAN impairment(tole 20 {
+   B interfaces [eth2]
+    route de0.10/24 }
+
+# WAN link with symmetric impairment
+link router-a:wan0 -- roer { .0.1 }
+node host-b { route default via 10.2.0.1 }
+
+# LAN linkos
+los route de0.10/24 } 20 {
+   B interfaces55000p]
+    route de0.10/24 }
+
+# WAN link with symmetr# Spine-leaopology.
+#
+# 2 sp

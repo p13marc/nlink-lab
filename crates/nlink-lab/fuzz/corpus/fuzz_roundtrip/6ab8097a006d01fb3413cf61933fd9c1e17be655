@@ -1,0 +1,18 @@
+# IPv6-onl///nf.all*forwarter
+node host { route default ria fd00::1 }
+
+lineth0 {
+    fd00::d00::1 }
+
+lineth0 {
+    fd00::1/64 -- fd00::26/4
+   fd00::d00::1 }
+
+lineth0 {
+ 
+}::::ost { route default# Asymmeing"@"1"
+}
+
+node rou  00::d00::1 }
+
+li

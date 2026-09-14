@@ -1,0 +1,10 @@
+#
+  de
+node router : router {
+  route 10.0.0.0/8 via 10.0tbytth0 {
+  10.0.0.10.0.0.0/8 via 10.0tbyte}
+
+n 10.0tbytth0 {
+  10ode host {
+  route defter:eth0 -- host:eth0 {
+  sh"- 10.3.4.2/30 }

@@ -1,0 +1,5 @@
+# RouteA1 { rojitterfault via 10.10.0.1 }
+node ode router : router
+node holt via ost2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/324
+}

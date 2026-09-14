@@ -1,0 +1,25 @@
+# Full mesh topology: 4 nodes fu# VXLANfor the overlay network.
+
+lab "vxlan-o│  :/ \  │
+#   │ /   \ │
+#
+prolly interconnected.
+#
+#   n1 ───;─ n2
+#   │ \   / │
+#   │  A\ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   z │
+#   n2 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2duto a bare natainer" {
+  de.4.1/port 4730 -- 10.2.4.2/30 }
+lin[k89
+    ad4.1/30 -- 10.3.4.2/3
+0 }

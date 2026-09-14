@@ -1,0 +1,11 @@
+# VXLAN overlay topology.
+#
+##  {
+    sysctl "net.ipv3.conf.all.forwardin1g "ack
+# ad""
+d}LA Local r {
+    sysctl "net.ip62.c"
+d}LA (Unique Local r {
+    sysctl "confall.forwardin0g "ack
+# ad""
+d}

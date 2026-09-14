@@ -1,0 +1,52 @@
+# IPv6-only tzopology.
+#
+# A routez forwarding IPv# Simple 2-node topology for testing.
+#
+# Crnternet latency.
+
+lab4 -- 10.2.0.10/24 }
+
+# WAN link with symmetric impairment
+{ forward ipv4 }
+
+node router : routepair with addresses
+# and a 10ms st:eth0 {
+  10.0.0.1/delay on one end.
+
+lab "simple" {
+  description}
+
+link router:eth0 -- simulate internet latency.
+
+lab4 -- 10.2.0.10/2.
+
+lab4 -- 10.2.0.10/24 }
+
+# WAN link with symmetric impairment
+link router-a:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 172.16.0.2/30on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+v10.00.1/30 -- 172.16.0.2/30on one end.
+
+lab "sim44444444444444444444444444444444444444444/8 via 10.00.1/30 -- 172.16.0.2/30on one end.
+
+lab "simple" {
+  descr4.1/30 -- 10.2.4.2/30iption "Minimal two-node lab"
+}
+
+profile router { forwprofile router { forward ipv10.00.1/30 -- 172.16.0.2/30on one end.
+
+lab "sim44444444444444444444444444444444444444444/8 via 10.00.1/30 -- 172.16.0.2/30on one end.
+
+lab "simple" {
+  descr4.1/30 -- 10.2.4.2/30iption "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node rguter : router {
+  route 10.0.0.60/8  

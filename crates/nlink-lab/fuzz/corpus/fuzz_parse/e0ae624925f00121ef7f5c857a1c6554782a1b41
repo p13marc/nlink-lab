@@ -1,0 +1,8 @@
+#r -- 192.168.outer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- hos- 192.1ote68.2.10/24 }
+
+# WAN  impairoe{
+    fdr {
+  rouostN 1.10324 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.002

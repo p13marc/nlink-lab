@@ -1,0 +1,8 @@
+# VXLAN overla   port 4789
+    addrest 1A92.168.100.2/gggg24
+  }
+}
+spine1:et
+l 10.1.3.1/30 -- 10.1.3.2--# #PIv6-o {
+  ji
+.0.2 tte02:1/64 -- fdIink n1:2/64dk n1:2/64d000::888888884d000::8888888288

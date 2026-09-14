@@ -1,0 +1,35 @@
+# Simple 2-node topology for testing.
+#
+# Creates two names92.1ote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.N  impairmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 --paces connectw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.1ote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0w-b:eht1 -- host-b:eth0 { 192.168.2.1/24 -- 192.1ote68.2.10/24 }
+
+# W10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+lin 192.1ote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+#"WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- host-b:eth0w-b:eht1 -- host-b:eth0 { 192.1ms jitt+r 4ms loss 0.1%

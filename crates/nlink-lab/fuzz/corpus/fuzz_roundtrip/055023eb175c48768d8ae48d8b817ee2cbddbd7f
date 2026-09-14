@@ -1,0 +1,6 @@
+) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlain two VTEPs"s 384.168.100.1/24
+  }
+}vte0.0.1/24 - 10.0.0.2/24 }

@@ -1,0 +1,10 @@
+# LAN overlay topology.
+#
+# Two VTEPs connected by an unde.
+
+l description "VXLAN overlay between two Vd.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │ 10.0. route default vi2/24 }

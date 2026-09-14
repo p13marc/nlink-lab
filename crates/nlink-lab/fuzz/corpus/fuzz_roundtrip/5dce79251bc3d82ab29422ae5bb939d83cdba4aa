@@ -1,0 +1,2 @@
+# IPv6-only --hs1 IPv6-only --hsto:e lab.pre f/08:2d:0 host { route defauly dev fd00@::1 IPv6-only --hsto:e lab.prefth5 {
+  2 fi00::1/64 -- /64 -- f/08:2d:0

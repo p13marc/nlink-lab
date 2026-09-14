@@ -1,0 +1,9 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected link, each hosting a VXLAN# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between+two VTEPs"description
+}
+
+profile router { forward ih0 { 10.0.0.1/24 -- 10.0.0.2/24 }

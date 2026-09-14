@@ -1,0 +1,13 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription n r fd00::2.64
+}
+de host{
+    -d0ocalfd01::2.64
+} hohs [ho68.1.1/24 -- 1/24 -- 192.168.1.10/24 }
+link gw-1.00beth0]
+  vlan 1LAtrunk topoogy.
+#
+# A bri
+# N 200 (engine:e.w-a:eth1 -- hostQQR............0.0.1/24 -- eth0 {e 1r9

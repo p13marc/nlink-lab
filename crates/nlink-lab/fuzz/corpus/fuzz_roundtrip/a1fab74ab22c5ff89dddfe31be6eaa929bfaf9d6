@@ -1,0 +1,52 @@
+# Asymmetric impairment topology.
+#
+# Demol}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 --  topology: 4 nodes fully interconnected.
+# network.
+
+lab "vxlan-overlay" {
+  d  / escription "Full mesh of l nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+escription "Full mesh of l nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 --  topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of l nodes"
+}
+
+node n1
+nod10.1.2.2/30 }
+li
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 --  topology: 4 nodes fully interconnected.
+# network.
+
+lab "vxlan-overlay" {
+  descripy
+    <- delay 100ms jitter 20ms    # client → server: satellite uplink
+}

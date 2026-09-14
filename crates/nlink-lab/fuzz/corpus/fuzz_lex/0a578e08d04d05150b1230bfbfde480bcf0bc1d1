@@ -1,0 +1,11 @@
+# IPv6 -yotnolpology.
+#
+# A :outez forwarding IPv"1"
+}
+
+node router ) space.
+
+lab "ipv {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}00::2/64
+}

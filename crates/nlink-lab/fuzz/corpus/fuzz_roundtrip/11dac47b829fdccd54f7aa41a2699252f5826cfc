@@ -1,0 +1,46 @@
+# VLAN trunk topology.
+#
+# A 2ridge with VLAN filtering connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "eer connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── router ──── host2 (10.0.2.2)
+#                       eth0    eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 {: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── router ──── host2 (10.0.2.2)
+#                       eth0    eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route dngineering"
+  poragged }
+  port host1 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}

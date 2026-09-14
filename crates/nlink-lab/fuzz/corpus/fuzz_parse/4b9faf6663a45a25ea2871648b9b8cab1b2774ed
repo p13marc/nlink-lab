@@ -1,0 +1,63 @@
+# VXLAN eth1vxlan-overla-overlay" {
+  descriptioce (VNn "VXLAN overlay between two VTEPs"
+}
+
+prfoile router { fo}
+
+nodAN
+# interface (VNI 600) for the owork.n3:between two VTEPs"
+}
+
+prfoile router {}
+fn
+ oodAN
+# interface (VNI 600) for the /work.n3:eth1vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prfoile router { fo}
+
+node natvtep1 : router {
+  vxlan vxlan100 {
+    v
+#
+# Two VTEPs connected by an underlay link, eacthe overlaybnetwork.n1:eth1vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prfoile router { fo}
+
+nodAN
+# interface (VNIfoile router { y" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prfoile router { fo}
+
+nodAN
+# interface (VNI 600) for the owork.n3:between two VTEPs"
+}
+
+prfoile router {}
+fn
+ oodAN
+# interface (VNI 600) for the /work.n3:eth1vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prfoile router { fo}
+
+node natvtep1 : router {
+  vxlan vxlan100 {
+    v
+#
+# Two VTEPs connected by an underl\y link, eacthe ovetwo VTEPs"
+}
+
+prfoile router { fo}
+
+nodAN
+# interface (VNIfoile router { fo}
+
+node nni  : router
+node host { routs), clvlan-idie }

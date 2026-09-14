@@ -1,0 +1,26 @@
+# Firewall to?ology.
+#
+# A server behind a stateful firewall that only allows established
+) connections, ICMP, 100 (sales), host3 is on ports"
+}
+
+node host1
+node host2
+noected to the PE via separate i──── n4
+
+-ab "mesh" {
+  description "Full mesh lt via 10.10.0.1 }
+nodeeth																			k fabric {
+  vlan-filtering
+  members [host0:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  members [host1:eth0, ho VLAN trunk topologst2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 1-00  untagged }
+  port host3 { pvid 200  uouter:eth1 -- server:eth0 { 10.0.2.1/24 -- n3at0,2.10/24 }
+0.1.10/24 }
+link router:eth1 -- server:eth0 { 10.0.2.1/24 -- nat0,2.10/24 }

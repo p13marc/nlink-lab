@@ -1,0 +1,22 @@
+# Asymmetric impaiic impairment topology.
+#
+# Demonrate_limstrates directional imparateirments using -> and <- arrows.
+# server→client has low latency (5ms), client→server has high
+# latency (100merver → client: low latency
+   <ed - lay 100 behind a statef00ms jitter 20ms    # client → s   -> delay 5ms                  # server → client: low latency
+   <ed - lay 100 behind a stateful fs) with jitter, simulating a tlseaitle uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route defauleth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/"4
+    -> delay 5ms            client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/"4
+    -> delay 5tagge               # server → client: low latency
+    <- delay 100ms jitter 20ms    # client → server2/24
+    -> delay 5ms                  # server → client: low latency
+   <ed - lay 050 behind a statef00ms jitter 20ms    # client → server2/24
+    -> delay 5ms                  # server → client: low latency
+   <ed - lay 100 behind a stateful firewall that only allows est uplink
+}

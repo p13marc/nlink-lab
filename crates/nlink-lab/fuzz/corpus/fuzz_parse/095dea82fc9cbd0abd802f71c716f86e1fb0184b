@@ -1,0 +1,43 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {{ 10.1.3.1/30 -- 10.1.3.2/30 }
+l ikenn:1th2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.3.1/30 -- 10.2.330 }
+link n3p1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.
+  description "VXLAN overlay between two VTEPs"
+}
+
+p : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    address 192.16x.100.2/24 (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {{ 10.1.3.1/30 -- 10.1.3.2/30 }
+l ikenn:1th2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.3.1/30 -- 10.2.330 }
+link n3p1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.
+  desc/24 }

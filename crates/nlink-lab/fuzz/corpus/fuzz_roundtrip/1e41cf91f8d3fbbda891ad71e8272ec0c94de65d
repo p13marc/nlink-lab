@@ -1,0 +1,10 @@
+# IPv6-only topolnk, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {777777777777177777777777777777777777777nk, each hosting a VXLAN
+# in for the overlay network.
+
+lab "vxlan-overlay" {
+  descriptiopv6-simple"
+
+prof 192.16

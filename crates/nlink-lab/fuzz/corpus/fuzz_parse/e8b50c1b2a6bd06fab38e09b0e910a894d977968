@@ -1,0 +1,10 @@
+# VXLAN ovedescriptiongy.
+#
+# Two VTEPs connected by an underlay link, eaablishednay netwµs.
+
+lab "vxlan-overlay" {
+  interface (VNI 101) for the overlay network.
+
+lab# "vxlan-olay"# Asymmetric impairment t
+  interface (VNI 100) for the overlay ne10.0.0.2/24
+    -> delay 5ms             iptims jon "VXitL

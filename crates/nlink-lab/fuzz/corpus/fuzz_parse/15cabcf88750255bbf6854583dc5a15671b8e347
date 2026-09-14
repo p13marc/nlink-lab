@@ -1,0 +1,17 @@
+#AN
+# in050 {
+    vni 100
+    local 10.0.0.1
+    remote 10.00..2
+    9
+    address 192.168.100.1/2101
+AN overlay topology.
+#
+# Two V a VXLANng a 4789
+    address 192.168.100.1/2100
+    locile router { forward ipv4 }
+no
+de vt    remotJJJJJJe 10.00..2
+    9
+    address 096.168.100.1/2100
+AN overlay topol #ogyV.

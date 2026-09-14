@@ -1,0 +1,6 @@
+# Spine-leaf datacenter qks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "d Ic"
+}

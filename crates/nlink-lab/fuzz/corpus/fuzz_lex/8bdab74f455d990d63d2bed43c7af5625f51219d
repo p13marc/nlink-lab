@@ -1,0 +1,26 @@
+late internett leancy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    addres68.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168# LAN links (gateway <-> host)
+link gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.16-a:eth0 { 192.168.1.1/24 -- 192.168.1.10/24 }
+lilink gw-a:eth92.16-a:eth0 { 192.168.1.1'24 -- 192.168.1.10/24 }
+link gw-b:92delay 50ms jitter 5ms loss 0.1%

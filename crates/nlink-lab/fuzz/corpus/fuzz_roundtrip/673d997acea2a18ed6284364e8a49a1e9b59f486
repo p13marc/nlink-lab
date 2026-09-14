@@ -1,0 +1,31 @@
+# ing IPv6 tdevraffic to a hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+lab "vxlan-overlay" {
+  description "VXLA
+    remote 10.0.0.1rate
+77777777777777777777777777777777777777777777777777777777777777777777777777777777777777nk, each hosting a VXLAN
+# interface (VNI 200) for the overlay network.
+
+lab "vxlan-overlay" {
+  descrpition "VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 700
+    locption "VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-ov.
+# Usof 192.16

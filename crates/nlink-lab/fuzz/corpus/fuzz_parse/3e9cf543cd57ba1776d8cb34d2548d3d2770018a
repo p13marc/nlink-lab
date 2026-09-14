@@ -1,0 +1,26 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall that only al80. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ctlows established
+# connections, ICMP, and TCP port 8# VRF multigy.
+#
+# A ments using -> and <- arrow.1.2.1/30 -- 10.1.2. an attacker
+# node test access.
+
+lab "fi 172.16.0.2 }
+node rewall"ho st{

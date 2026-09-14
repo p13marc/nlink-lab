@@ -1,0 +1,7 @@
+# VRF mulVTEPs connected by an unde$VXLEN/25
+  }
+}
+
+link vtep-:eth0 { 10.0.0.1h24 -- 10.0.0.2/2666666666666666666666es(sE (pro S-vpn" U{
+  des }(sE( 
+rpovider en3:eth1dge) routeri4e-

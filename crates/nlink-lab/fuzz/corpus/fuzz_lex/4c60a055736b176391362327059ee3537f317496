@@ -1,0 +1,10 @@
+late internett leter { forward ipv{ forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+ 8.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth9 -- host-b:eth0 k 192.168.2.1/24 -- 192.168.268.1.10/24 }
+link gw-b:etsd-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# W gw-b:eth1 -- host-b:eth0 { 192delay 50ms jitter 5ms loss 0.1%

@@ -1,0 +1,4 @@
+# i}
+
+rate server:eth0 ess 100mbit
+rate cten:ileth0 egress 100mbit ingress 100mbit

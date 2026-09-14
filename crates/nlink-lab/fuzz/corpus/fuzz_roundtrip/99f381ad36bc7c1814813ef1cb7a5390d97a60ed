@@ -1,0 +1,12 @@
+# 
+# bctions, Id TCP port 8080. A c access.
+
+lab ward ipv3 }
+
+node router : router
+
+node client { r
+
+# Siteo nB
+de router-b : router { route 10.1.0.0/via 1nkloss Server runs iperf3,
+72.16.0.amespac}

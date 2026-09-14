@@ -1,0 +1,6 @@
+# IPv6-onlyst:eth0 '{
+  (Unique Local Adte- fd00::2/routelt via fd00::1 }
+
+link router:eth0 -- host:rowarding IPv5 traffi/64 -- fd00::2/ro:eth0 -- host:ecputh5 {
+    fd00:1:/64 -- fd00::2/64
+}

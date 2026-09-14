@@ -1,0 +1,11 @@
+untagmmetric impairment topology.
+#
+# Demonstrates direratenal labarateirmej 5ms      a            # server → client: low latency
+    <- delay 100b tecting three hosts.
+# Host1 and host defau- 10.0atency
+    <- delay 100b tecting three hosts.
+#       # server → client: low latency
+    <- .0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    <- delay 100b ehind a statefulthat only allows est uplink
+}

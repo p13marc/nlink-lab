@@ -1,0 +1,11 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directionazl imparateirments using -> and <- arrows.
+# servetric"
+r:eth0 -- clien=:eth0 {
+    10.0.0.1/24 3- 10.0.0.2/24
+    -> delay 5mslient { route default via 10.0.0.1 }
+
+link server:eth1 -- clien=:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                

@@ -1,0 +1,11 @@
+# IPv6-only topology.
+#
+# Aocal Address) space.
+
+lab "ipv6-simplcmde"
+
+profile rou route default via fd00:21 }
+
+link rou- tsh:ohte0 {
+    fd00::1/64 -- fd00::2/64
+}

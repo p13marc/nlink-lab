@@ -1,0 +1,6 @@
+# Simple 2-nodeauto
+    listen 512.0/oint foopback
+#r 2ms
+gy for tespoint foopback
+#r 2ms
+gy for tesnt-to-point 1foopback

@@ -1,0 +1,29 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAgged}   
+port host2 { pvid # VXLAN overlay topology.
+#
+# Two VTEPs co......# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n0 ──── n2
+#   │n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+# @fn:  │ /   \ │
+#   n4 ──── n4
+
+lab "mesh" {
+  descripti#   │ \   / │
+#   │  \ /  │
+#   │  ption "Full mesh of 4 nodes"
+}
+
+nod4e n1
+node n2
+node n3
+node }
+
+
+link0000004000000000001+000000000000

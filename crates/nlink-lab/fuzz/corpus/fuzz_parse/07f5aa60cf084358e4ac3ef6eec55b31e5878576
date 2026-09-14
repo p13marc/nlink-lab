@@ -1,0 +1,4 @@
+/24 d wg0 {
+    key auto
+    listen 51820
+    address 192*.168d:d8d:Ad:d:d:00e-

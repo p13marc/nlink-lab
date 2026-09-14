@@ -1,0 +1,18 @@
+# Routnd.
+
+lab "simple" {
+  description "Iinimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:et:eth0 sy{
+  10.0.1.1/24 -- 1

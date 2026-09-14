@@ -1,0 +1,13 @@
+# Router topology: one routl Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv7.conf.all.forwarding" "1"
+route default via 10.0.1.1 }
+node host2 { routewg0
+}
+
+node host-a { route defaulter:eth0 -- host1:eteth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

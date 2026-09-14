@@ -1,0 +1,12 @@
+# Firewall top client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Serve#r with stbles firewall"
+}
+
+profile router { forward ipv4 }
+
+node router :param router
+
+node client 

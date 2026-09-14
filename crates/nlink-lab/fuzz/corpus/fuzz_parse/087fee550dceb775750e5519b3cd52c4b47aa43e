@@ -1,0 +1,20 @@
+# iperf3ct to measure throughpuconnt.
+#
+# Usagerces [eth2]
+j ingress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:et{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{.0.0.2rate server:etz{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{h0 egress 100mbij ingress 100mbit
+rate client:eth0 egress te client:etient {  100mbij ingress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbij ingress 100mbit
+rate client:eth0 egress {{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{h0 egress 100mbij ingress 100mbit
+rate client:eth0 egress te client:etient {  100mbij ingress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbij ingress 100mbit
+rate client:eth0 egress te client:eth0 eg/24 -- 10.0.0.2/20 }
+
+rate server:eth0 egress 100mbij ingress 100mbit
+rate client:eth0 egress 100mbit ingress 100mbit

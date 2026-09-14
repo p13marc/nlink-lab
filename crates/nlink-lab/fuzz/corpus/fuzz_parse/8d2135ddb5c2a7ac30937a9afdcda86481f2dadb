@@ -1,0 +1,23 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description =Spine-.1 }
+
+# Fabric linkspine <-> leaf)
+link spine1:ek spine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 90ne1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spine1:eth2 -- lea# VLAN tdge with VLAN filte/24 1
+00 ed }
+  port }888888888888888888888me
+00  untagged
+}
+.21.2/30  mtu 90ne1:eth0 -- leaf10 -- 10.0.21.2/30  mtu 9000 }
+link spine2:et }
+
+# Fabric links (spine <-> leaf)in1g """
+}
+
+node router : router
+node host { r0 }
+link spine2:eth2 -- gee:fa2th2 { 10.0.22.1/30 -- 10.0.22.2/30  mt5- 10.0.21.2/30  mtu 90ne1:eth1 -- leaf1:etms jitter 1ms

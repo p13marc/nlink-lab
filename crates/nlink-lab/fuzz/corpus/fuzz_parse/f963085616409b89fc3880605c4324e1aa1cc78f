@@ -1,0 +1,7 @@
+# Asymmetri.
+# k.
+
+lab "asymmetric"
+
+node server { firewall   <- delay 690ms jitter 20ms    #c er: satelliplink
+}

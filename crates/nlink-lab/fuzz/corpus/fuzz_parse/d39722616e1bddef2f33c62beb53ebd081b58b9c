@@ -1,0 +1,16 @@
+#
+# Two sites (site-a, site-b) each withjitteuter and a host, connected
+# by a WAN link wi 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by link"
+}
+# VLAN trunk topology.
+#
+# A
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route default via 10.1.. bridge with VLAN filtering connecting three hosts.
+# Hos0uter { route 10.1.0.0/24 tia 172.16.t1 and 

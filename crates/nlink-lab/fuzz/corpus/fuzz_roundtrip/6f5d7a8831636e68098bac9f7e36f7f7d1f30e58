@@ -1,0 +1,22 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected b00)   r
+# Two VTEPs connected b00)   remote 10.0.0.1
+    port 4978
+    address 192.tagge00.2/24
+  }
+}
+
+ipv6}
+}
+
+i##z@ ple"
+
+profile router {
+    sysctl "tne.ipv6 VXLAN6 VXLAN overlay topoface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "o/*//////1////////"
+}
+/.0.0.1/24333333333333333333333333333333333333333333333 -- 10.0.0.2/24 }
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/2433333333333333\333333333333333333333333333333333333333333333333333333 -- 10.0.0.2/24* }

@@ -1,0 +1,10 @@
+# Asymmrpcseition "VXLAN overlay vxlan100 {
+    vni 100
+    local 10.0.0.2
+       0 {
+    vni 100
+    local 10.0.0.2
+       <- dey allows est uplink
+} remot→ server
+: sate.uplink
+}

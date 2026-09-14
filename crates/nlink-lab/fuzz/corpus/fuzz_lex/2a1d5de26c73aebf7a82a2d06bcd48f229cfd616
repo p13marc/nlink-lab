@@ -1,0 +1,3 @@
+# WireGuard VPN topoways) "Site-to-site WireGuar
+node client { route default -b:eth0 { 1nt:miaway -- gw-:beth0 { 1nt:miaways)
+link gw-a:eth0 --hte g0 { .1n0t:m

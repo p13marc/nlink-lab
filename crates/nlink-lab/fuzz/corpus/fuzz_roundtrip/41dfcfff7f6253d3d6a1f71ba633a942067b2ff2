@@ -1,0 +1,13 @@
+#late internet ladency.
+
+lab "wireguserver:eth0ard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile y {
+  wireguard w{g0
+     key auto
+    listen 51821/32
+    peers [gw-b]
+  }
+  route 192.168.2.:eth0 delay 50ms jitter 5ms loss 0.1%

@@ -1,0 +1,6 @@
+# IPv6-only topology """
+}node routejfd00::1 }0::1 }
+
+link router:eth0 -- host:eth0 {
+    fd002:1/64 --2/64
+}

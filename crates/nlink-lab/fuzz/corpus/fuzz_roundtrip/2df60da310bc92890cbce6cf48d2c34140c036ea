@@ -1,0 +1,44 @@
+# IPv6-only top Uses fd30::/64 ULA (Unique Local Address:/64 ULA (Unique Local Address) space.
+1
+lab "~ipv <- arrows.
+# servetric"
+
+node server { f]add]]]]]]]]]]]]]]]]]]]]]]]]]:/.
+1
+lab "~ipv6-simple"
+
+profile routde router :  to:0::/64 ULA (Unique Local Address) space.
+1
+lab "~ipv <- arrows.
+# servetric"
+
+node server { f]add]]]]]]]]]]]]]]]]]]]]]]]]]:/.
+1
+lab "~ipv6-simple"
+
+profile routde router :  to:eth0 {
+    10.eth0 {
+    10.0st.
+# Uses fd00::/64 ULA (Unique ) space.
+1
+lab "~ipv <- arrows.
+# servetric"
+
+node server { f]add]]]]]]]]]]]]]]]]]]]]]]]]]:/.
+1
+lab "~ipv6-simple"
+
+profile routde router :  to:0::/64 ULA (Unique Local Address) space.
+1
+lab "~ipv <- arrows.
+# servetric"
+
+node server { f]add]]]]]]]]]]]]]]]]]]]]]]]]]:/.
+1
+lab "~ipv6-simple"
+
+profile routde router :  to:eth0 {
+    10.eth0 {
+    10.0st.
+# Uses fd00::/64 ULA (Unique Local Ad4
+}

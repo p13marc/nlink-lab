@@ -1,0 +1,20 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN tand access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  me,mbers [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  memberg
+  me,-bers [host1:eth0, host2:eth0, host3:eth0]
+  vlanvlan-trust3 { pvid 200  untagged }
+}

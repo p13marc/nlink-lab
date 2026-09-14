@@ -1,0 +1,55 @@
+# Router topology: one rout# Simple 2-node topology for testing.
+#
+# Creates two namespaces connected by a veth pair witerd dhasses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  descriptio1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth. delay 10ms jitter 2ms
+ipv4 }
+
+node +router : router
+node host1 { route default via 10tion "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node +router : router
+node host1 { route default via 10.0.1.1 }
+node host2 { route default via 10.0/2.1 }
+
+link router:eth0 -- hos0.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth. delay 10ms jitter 2ms
+ipv4 }
+
+node +router : router
+node ho0ms jitter 2ms
+ipv4 }
+
+node +router : router
+node host1 { route default via 10tion "Router between two subnets"
+}
+
+profile router { fst1 { route default via 10tion "Router between two subnets"t1:eth0 {
+  10.0.1.1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

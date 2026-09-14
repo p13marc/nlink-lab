@@ -1,0 +1,12 @@
+# Wer {
+  lo 10.255.1.2/32
+  route defaultVTEPs10.0.12.1
+}
+
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server2 : hos# { route default via 20.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine2:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spin1#la

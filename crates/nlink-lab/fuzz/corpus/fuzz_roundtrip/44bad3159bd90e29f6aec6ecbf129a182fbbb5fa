@@ -1,0 +1,22 @@
+# Simipv2 }
+
+node router : router {
+  route 10.0.0.0/8 vi 01a.0.0.2
+}
+
+node host {
+  route defaV# IPv6-ondenault via fd00:ric impairm24
+  }
+}
+
+noding.
+#
+# Create ent .2
+}
+
+node host {
+  route defaVVV3VVVVVVVVVVVVVV::62topology.
+#
+# De# Simp
+le 2-node topology for testmonstrates overlay be}tween two
+ VTEPs"

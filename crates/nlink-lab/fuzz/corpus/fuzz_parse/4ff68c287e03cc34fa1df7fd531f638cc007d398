@@ -1,0 +1,23 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a Wire# # Spine-leaf s, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3# Spine- on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipt4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.25sses, netem impairment on spine u prefix "dc"
+}
+
+profile router {4 -- fd00::er:eth0 -- host:eth0 {
+   forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : r  ou

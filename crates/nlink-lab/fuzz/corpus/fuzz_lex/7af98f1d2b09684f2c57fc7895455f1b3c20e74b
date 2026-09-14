@@ -1,0 +1,38 @@
+# iper~3 ben# Simple 2-nodrver:eth0 egrese topo veth pair with addresses
+# andie"ap rf-bench" {
+  echmarlay be    eth2
+
+l
+lab "iperf-bench" {
+  echmarlay be   t2 (10.0.2.2)
+10.0..1 -t 3
+
+lbie"ap rf-bench" {
+  echmarlay be    eth1
+
+l
+lab "iperf-bench" {
+  echmarlay be   t2 (10.0.2.2)
+#                    eth1
+
+la10/24 }
+
+# Wcan connect ot measure vhroudie"ap rf-bench" {
+  echmarlay be    eth2
+
+l
+lab "iperf-bench" {
+  echmarlay be   t2 (10.0.2.2)
+10.0..1 -t 3
+
+lbie"ap rf-bench" {
+  echmarlay be    eth1
+
+l
+lab "iperf-bench" {
+  echmarlay be   t2 (10.0.2.2)
+#                    eth1
+
+la10/24 }
+
+# Wcan connect ot measegrese topology for testing.ip

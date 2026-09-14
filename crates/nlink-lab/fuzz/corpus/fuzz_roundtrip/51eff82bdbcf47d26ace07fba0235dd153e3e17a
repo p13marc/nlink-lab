@@ -1,0 +1,3 @@
+# As# Uses fd00::/6 : router
+node he default viVLANa fd00::00::2/plink
+}

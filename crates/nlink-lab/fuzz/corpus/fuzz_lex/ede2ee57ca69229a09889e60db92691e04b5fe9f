@@ -1,0 +1,16 @@
+defaultVTEPs10.0.12.1
+}
+
+# Servars
+node server1 : host { route defau						55.1.2/32
+  route defaultVTEh1 -- Se host-b:eth0 { 192ss porvars
+ { 192ss po { 192ss#
+
+nodlt route defau poternode server1 : hostth1 -- Se host-b:eth0 { 192ss porvars
+ { 192ss poternode server1 : host3{ k g 192.16t1:eth1 -- Se host-b:eth0 { 192ss porvars
+ { 192ssKKKKKKKKKKKK Se host-b:eth0 { s10.0.12.1
+}
+
+#late in# VLAN trunk to'.
+# }
+link g 192.16t1 andtrunkinglink g 192.16t1:eth1 -- Se host-b:eth0 { 192ss p

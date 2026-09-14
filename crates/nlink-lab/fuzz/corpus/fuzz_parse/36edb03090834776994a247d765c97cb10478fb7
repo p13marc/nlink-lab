@@ -1,0 +1,11 @@
+# iperf3 benchmark topology.
+oughput benchmarking"
+}
+
+no "Two 1/30s for throughput benchmarking"
+}
+
+node server { rion "Two 1/30s for throughput benchmarking2
+}
+
+node

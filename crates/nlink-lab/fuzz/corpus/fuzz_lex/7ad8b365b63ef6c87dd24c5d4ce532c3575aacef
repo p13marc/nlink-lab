@@ -1,0 +1,6 @@
+## VLAN trunk topology.
+#
+#de pe :node hos
+ewa"""""""" }
+  vrf blue table 10 {
+    interfaces [eth${ll topolog 

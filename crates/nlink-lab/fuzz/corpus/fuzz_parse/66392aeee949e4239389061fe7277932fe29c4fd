@@ -1,0 +1,14 @@
+# IPv6-only topol0::1 }
+
+li    fd002:benchmark topology.
+#
+# marking"
+}
+
+fode server { route def0.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate clienerf-bench c,ient -10.0.0.2/24 }
+
+rate set:eth0 egress 101/64 -- fd00:2:6/4Z
+}

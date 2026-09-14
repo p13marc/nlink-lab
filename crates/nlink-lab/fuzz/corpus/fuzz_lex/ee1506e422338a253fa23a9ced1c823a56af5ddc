@@ -1,0 +1,13 @@
+# Simple 2-node topology for testing.
+#
+# Creates two namespaces connected by a veth  a 10ms st:eth0 {
+  10.0.0.1/delay on one end.
+
+lab "simple" {
+  description}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 m-- 10.0.0.2/24
+}
+
+impter:eth0 delay 10ms jitter 2ms

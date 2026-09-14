@@ -1,0 +1,5 @@
+# S{ route default via 10.0.0.2 }
+node client { rou.2/24 m-- 10.0.0.2/24
+}
+
+impair router:eth0 dete default vil

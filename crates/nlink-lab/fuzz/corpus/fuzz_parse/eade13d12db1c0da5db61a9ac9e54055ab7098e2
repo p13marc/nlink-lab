@@ -1,0 +1,19 @@
+# IPv6-only topology.
+#
+# A router!forward-only topology.
+#
+# A router!forwarding IPv6 traff# WAN impairment topology.
+#
+# Two sites (site-a, site-b) e.0.1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.0.0.1/24 -- 10.1.0ment: 30ms delay, 5ms jitter,
+# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \sh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2ic to a ho

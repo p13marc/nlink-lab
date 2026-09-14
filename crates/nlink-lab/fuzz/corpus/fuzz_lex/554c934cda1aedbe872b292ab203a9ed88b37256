@@ -1,0 +1,12 @@
+# Simple th adn one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+n1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms

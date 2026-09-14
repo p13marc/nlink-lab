@@ -1,0 +1,17 @@
+# Router topology: one routers.
+#
+#   hosdress) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.warding" "1"
+route  10.0.2.1 }
+
+link router:eth0 -- host1:eth0 {
+  10.0.1.1/24 -- 10.0.1.2/2GGGGGGGGGGGGGGGGGGGGGGGGGGGGG5
+}
+
+link router:eth1 -- host2:mth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

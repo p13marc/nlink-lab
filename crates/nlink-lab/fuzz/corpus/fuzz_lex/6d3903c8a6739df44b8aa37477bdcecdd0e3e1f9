@@ -1,0 +1,31 @@
+# IP : router
+node hots { route default via0:1:0:1: }
+
+lt via0:1:0:1: ) s e hots { route default via0:1:0:1: }
+
+link rofode host { route default via0:der dss) s router : router
+node hots { route def0::/6t UedrLdssIP0::/6ute default via0:1:0:1: }
+
+lt via0:1:0:1: ) s router : router
+node hots { route default via1:1:0:1: }
+
+link rofode host { route default via0:der dss) s rou4er : router
+node hots { route def0::/6t ULA (Uniqu e edrLdssIP0::/6t ULA (Unique Lder dss) s router : router
+node hots { route default via0:1:0:1: }
+
+lt via0:1:0:1: ) s router : router
+node hots { route default via0:1:0:1: }
+
+link rofode host { route default via0:der dss) s router : router
+node hots { route default via0:1:0:1: }
+
+lt via0:1:0:1: ) s  hots { route default via0:1:0:1: }
+
+lt via0:1:0:1: ) s router : router
+node hots { route default via0:1:0:1: }
+
+link rofode host { route default via0:der dss) s router : router
+node hots { route default via0:1:0:1: }
+
+lt via0:1:0:1: ) s router :
+}

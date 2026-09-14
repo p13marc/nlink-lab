@@ -1,0 +1,6 @@
+# IPv6 s fDl AddressLLLLLLLLL router
+node host  route default via fd::011ace.
+
+lab "ipv6-simple"
+
+`}

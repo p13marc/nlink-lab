@@ -1,0 +1,31 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directio n3:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:eg
+  members [host1:eth0, host2:eth0, host3:eth0]l va
+ ns), host3 is o1n VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node hostring
+  members [host1:eth0, host2:eth0, host3:eth0]l va
+ n 100 "sales"
+  vlan 200 "engineering"
+  port host1 0.1.3.2/3010.1.4.1/30 -- 10.1.4.2/3ost3
+
+network fabric {
+ 1 vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]l va
+ n 100 "sales"
+  vlan 200 "engineering"
+  port host1 0.1.3.2/3010.1.4.1/30 -- 10..4.2/30 }
+linkߑ3:eth1 -- n3:eth1 { 10&2.3.1g).
+
+lad 100 - n3:eth0 { 10.1.3.1/30 -- # VLAN trunk topology.
+#
+# A 2ridge with VLAN filtering connec untagged }
+  pob "vlrt ho$t1 { pvid 1an1-t00 r uu

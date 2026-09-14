@@ -1,0 +1,9 @@
+# VXLAN o1 }
+
+lineth0 {
+  erlay topol
+
+link vtep1:																				wireguard															9
+    th0 -- client:eth0 .ta24 }
+link router:  }
+}

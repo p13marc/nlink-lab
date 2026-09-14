@@ -1,0 +1,13 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by anch" {
+  descrip 5
+
+lab hroughput benct ingress 116in egress 100mbi client -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf0oughput benchmarkingt benchmarking"
+}
+
+node server { route default via 10.02 ab "iperf-bench" {
+  
+esect to measure bet benct ingress 058mbit

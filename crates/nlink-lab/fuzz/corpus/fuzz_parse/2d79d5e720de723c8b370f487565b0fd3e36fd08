@@ -1,0 +1,59 @@
+# Fireth. ss 1mib t0--udp dpewall topology.
+#
+# A  ia rth$ { 10.0.2.1/24 -- 10.0.2.1bit0/2gouter:eth. ss 1mib t0--udp dport 5nat }10ks vims via 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+{
+ay 10ms jitteink router:eth0 10ks vims via 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+{
+ay 10m
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+ay 10k rou2:1/6 via 10.0.0.2
+}
+
+n jiFir --  10.0.0node host {
+ay 10ms jitteink router:eth0 -- a 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+ay
+}
+
+link router:eth0 ss 1mib t0-- client:eth0 { 10.0.1.1/24 --- 10.0.2.1bit0/2gouteruter:ets 100mh1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.1bit0/24 
+.0.2.1bit0/2gouter:eth. ss 1mib t0--udp dport 5nat }
+}
+
+link router:eth0 ss 1mib t0-- client:eth0 { 10.0.1.1/24 -- 10.0.1.10ing0/24 res}
+link router:ets 100mh1 --- 10.0.1.10ing0/24 res}
+link router:ets 100mh1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.1bit0/24 
+.0.2.1bit0/2gouter:eth. ss 1mib t0--udp dport 5nat }
+}
+
+link router:eth0 ss 1mib t0-- client:eth0 { 10.0. -- 10.0.2.1bit0/24 
+.0.2.1bit0/2gouter:eth. ss 1mib t0--udp dport 5nat }
+}
+
+link router:eth0 ss 1mib t0-- client:eth0 { 10.0.1.1/24 -- 10.0.1.10ing0/2vouts}
+link router:ets 100mh1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.1bit0/24 
+}

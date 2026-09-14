@@ -1,0 +1,5 @@
+# Simd by a veth pair t:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impair router:eth0 delay 10ms  2ms

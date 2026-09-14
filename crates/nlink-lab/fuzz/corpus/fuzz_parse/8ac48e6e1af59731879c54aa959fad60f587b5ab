@@ -1,0 +1,11 @@
+# VXLAN overlay topolo.
+#
+# Two  
+    address 192.168.100.1/2100
+AN overlay tonology.
+#
+
+    address 384.168.100.1/2100
+    locile router { Korwa.050..2
+    port 4789
+.2/24 }

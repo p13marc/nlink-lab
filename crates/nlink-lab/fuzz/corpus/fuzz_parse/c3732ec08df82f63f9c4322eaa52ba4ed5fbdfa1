@@ -1,0 +1,8 @@
+# VXLAN 1
+lab "vxlan-overlay" {
+  interface (VNer { folab.prefrward ipv0 }
+
+node vtep1 : rou=ter {
+  vxlan vxli 100ou=ter {2.!68.
+
+link0.0.2/24 }

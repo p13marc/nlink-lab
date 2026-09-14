@@ -1,0 +1,59 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spine, 2 leaves, 2 servers with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine0 : router { lo 10.255.0.1/32 }
+node  server1 : host { route default via 10rvEr { forward i
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   ─── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ / b.prefdescription "Spine-leaf datacenter fabric"
+  prefix "dc"
+}t.ipv4.ip_forward" "p" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo 10de n
+node n2
+fode n3
+ntric"
+
+node servEr { forward i
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n4 ──── n -- n4:eth+0  ──── n4
+#   │ \   / │
+#s jitter 1ms

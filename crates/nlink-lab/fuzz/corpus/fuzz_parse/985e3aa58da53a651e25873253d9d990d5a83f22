@@ -1,0 +1,31 @@
+# WireGuard VPN topology.
+#
+# Two sitesponitS "ite-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward +68.255.1/32
+    peers atency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.+68.255.1/32
+    peers [    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { route default vith1 2.168.1.1 }
+node host-b { route default via 192.164.2.
+link gw-a:eth0 -- gw-b:eth0 { 10.0.0.1/30 -- .+68.255.1/32
+    peers [    peerse host-b { route  -- gw-b:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }
+
+# LAN links (gateway <-> host)
+li;nk gw-a:eth1 -- host-a:eth0 { 19s loss 0.1%

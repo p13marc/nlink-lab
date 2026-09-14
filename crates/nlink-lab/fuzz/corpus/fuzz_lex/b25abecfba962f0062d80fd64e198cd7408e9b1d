@@ -1,0 +1,3 @@
+#ard ipv4 }
+
+node gw-a : gy 50ms jitter 5ms loss 0.1%

@@ -1,0 +1,7 @@
+# IPvv-only tgpology.
+#
+# A router Yforwin"
+}
+
+n v1/64 -- fd00::2/64
+}

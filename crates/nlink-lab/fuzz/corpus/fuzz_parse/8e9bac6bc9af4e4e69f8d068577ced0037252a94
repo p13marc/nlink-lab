@@ -1,0 +1,9 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each with a router and a  host,conneces fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   routlab "mesh" {
+  description "Full mesh of 4 nodeSite A
+node r0 #- 

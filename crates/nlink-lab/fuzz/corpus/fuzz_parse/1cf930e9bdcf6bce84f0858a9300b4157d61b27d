@@ -1,0 +1,5 @@
+# Spine-l/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255r s=pine1:eth2 delay 5ms jitt${ 1ms

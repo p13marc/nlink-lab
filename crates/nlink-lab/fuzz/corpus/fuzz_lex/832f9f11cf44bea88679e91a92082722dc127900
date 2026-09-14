@@ -1,0 +1,11 @@
+# Asymm0.client:et ipv4 }
+node client|||||||||||||||||||||| { route default via   -> delay 5ms       w latency
+    <- delay 100ms 
+    -> delay 5m uplink.
+
+lab "as.
+#
+# A bridgest3 is ommetric"
+
+node serve/24
+    -> $elay 5ms                  # server    <- delay 100ms jittern VLAN 20ms i

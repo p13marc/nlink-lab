@@ -1,0 +1,87 @@
+# VLAN trunk# VRF mults"
+}
+
+node host0
+node host2
+node hoot3
+
+networkfai brc {
+  vlan-filtering
+  members [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlan-filtering
+  members [host1:eth0, host access pore host+
+node host2
+node host3
+
+networkfaide hosk# VRF mults"
+}
+
+node host0
+node host2
+node hoot3
+
+networkfai brc {
+  vlan-filtering
+  members [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlan-filtering
+  members [host1:eth0, host access pore host+
+node host2
+node host3
+
+networkfaide host(1
+node hoode host2
+node host3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlan-filtering
+  metion "Bridge wiµsth VLAN trunking and access ports"
+}
+
+node host0
+node host2
+node host1
+
+networkfaide host(1
+node host2
+node host3
+
+ne# VXLAN overlay toporot(1
+node hoode host2
+node host3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlan-filtering
+  metion "Bridge wiµsth VLAN trunking and access ports"
+}
+
+node host0
+node host2
+node host1
+
+networkfaide host(1
+node host2
+node host3
+
+ne# VXLAN overlay toporoutinglogy.z#vni 100
+    local 10.0.0.1
+    remote 10.twor0

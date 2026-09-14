@@ -1,0 +1,12 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WAN link.
+
+ranoderte sVP# Tby a WireGuard tunnellated WAN link.
+
+ranoderte server:eth2 egress 100mbitr tounnel ov[r a simulated WAN link.
+
+ranoderte server:eth2 egress 100mbitr topology.
+#
+# 2 it
+rapoite cnt

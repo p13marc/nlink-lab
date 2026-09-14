@@ -1,0 +1,33 @@
+# IP# VLAN trunk topology.
+#
+# g and access ports"
+}
+
+node host1
+node host2
+node host3
+
+networ															cpu)																																																															k faboverlayric {
+  vlan-filtering
+  metwor															cpu)																																																																																															k faboverlayric {
+  vlast2:eth0, host3:gth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvv6-o
+node vtep2 : routPv6-o
+node vtep2 : rout IP# VLAN trunk topology.
+#
+# g and access ports"
+}
+
+node host1
+node host2
+node host3
+
+networ															cpu)																																																																																															k faboverlayric {
+  vlan-filtering
+  metwor															cpu)																																																																																															k faboverlayric {
+  vlan-filtering
+  members [host0:eth0, host2:eth0, host3:er tte0z:1/640lan-filtering
+  members [host1:eth0, ho VLAN trufd -- 0:
+node vtep2 : router tte0z:1/640nk topologst2:f

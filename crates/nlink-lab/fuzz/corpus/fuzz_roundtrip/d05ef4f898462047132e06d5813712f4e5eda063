@@ -1,0 +1,14 @@
+# IPvonly topology.
+#.
+zzzzzzzlogy.
+#
+# Aimple"
+
+przzzzzzzzzzzzzzzzzzzzz# zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzult via fd00::1 }
+
+link router:eth0 -- host:eth0${
+   μs00::1/A
+64host:eth0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult via fd00::1imageink routernodes:eth0 -- host:eth0${
+   μs00::1/6p4 -- fd00r::2/64
+}-

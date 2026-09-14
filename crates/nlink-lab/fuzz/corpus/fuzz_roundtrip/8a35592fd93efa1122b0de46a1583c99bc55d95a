@@ -1,0 +1,14 @@
+# IPv6-oniqwe lLaoc Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctlv fd00::1 }
+
+link router:el policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    g -> d ipv4 }
+
+
+node rout

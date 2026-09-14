@@ -1,0 +1,14 @@
+# iperf3 bair2 spijitter 1ms
+i01mbit ingrews 100mbit
+rate ent:eth0 egperf3 benchma0.0elay 5ms jitteo-poinetwobric with loopback
+# addresses, netem impairment on spine upli01mbit ingress 100mbit
+rate client:eth0 egperm interfa iperf3 bair2 spijitter 1ms
+i01mbit ingrews 100mbit
+rate client:eth0 egperf3 benchma0.0.21.2/30 mpair spine1:eth2 delay 5ms jitteo-poinetwobric with loopback
+# addresses, netem impairment on spine upli01mbit ingress 100mbit
+rate client:eth0 egperm interface}
+node client { ro}te deflosctce}.21.2/30 mpair spine1:eth2 delay 5ms jitteo-poinetwobric with loopback
+# addresses, netem impairment on spine up
+li01mbit ingress 100node client { ro}te defloscmbit
+rate client:etth0 egperf3 
+benchm

@@ -1,0 +1,4 @@
+# iperf.ipv6.coark topolo'y.
+#
+# ++++++f.ar
+node+++++ host { route default viad00::1/64

@@ -1,0 +1,5 @@
+# WireGuard VPF top$$$$$$$$$$$$$$  key auto
+  { 10.0.0.1/*24 -- 10.0.0.2/24 }
+
+rate server:e|h0 egressgr00mb lasten 5124 }
+link gimpair gw-a:het5 delay 50ms oss01 .%

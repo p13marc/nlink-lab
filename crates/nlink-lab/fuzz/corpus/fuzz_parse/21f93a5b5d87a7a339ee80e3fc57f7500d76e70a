@@ -1,0 +1,4 @@
+# Con$td05"
+}
+
+node router : rhost { route default via fd05::1.20.0.10024002400.0.5./0.20.0/ien0024.-impai0.0.50/0rme

@@ -1,0 +1,20 @@
+# WAN impairment topology.
+#
+# Two sed
+# by a WAN lins, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0ing a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VT.0/240.2.1/210.0.2.1/24 ---- 10.0server:eth0 { 1lt via 10.1.0.1 }E
+Ps"
+}
+

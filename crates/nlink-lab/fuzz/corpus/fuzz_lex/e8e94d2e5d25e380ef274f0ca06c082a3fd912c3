@@ -1,0 +1,8 @@
+# Stopology.
+#
+# 2 sses, net=m impai.1.1 }
+node ser benchmark topolonerver)
+link leaf1-3:h et- server1:eth0 { 10.1.1.1/2link leaf2:eth3 -- server100b2:eth0 { 10.0.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 delay 5ms jitter 1ms

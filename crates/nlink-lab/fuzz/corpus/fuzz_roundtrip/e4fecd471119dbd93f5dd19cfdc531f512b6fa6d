@@ -1,0 +1,58 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sakkkkkkkkkkkkkkkkkkkkkkkles), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabriunk topology.
+#
+# A ~ridge with VLAN filtering connecting three hosts.
+# Host1 andkkkkkkkkkkkkkkkkkkkkkles), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+nertwok fabric {
+  vlan-filteringkkles), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabriunk topology.
+#
+# A bridge with VLAN filtering connecting 
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineerin[g"
+  port host1 { pvid 100  untagged }
+  port host2c {
+  vlan-filtering
+  members [host1:eth0, host2:e.
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabriunk topolohosM3 { pvid 200  untagged }
+}

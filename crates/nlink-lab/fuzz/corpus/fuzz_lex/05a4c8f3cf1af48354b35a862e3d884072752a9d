@@ -1,0 +1,30 @@
+# WAN impairment── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh"fault via 10.2.0.1 }
+
+# LAN links
+link rou fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n1 ──── n4
+
+lab "mesh"fault via 10.2.0.1 }
+
+# LAN links
+link router-a:eth0 -- hosta-0: teh{ 10.1.00 { {
+  nodes"
+}
+
+no 10.2.0.1/24 -- 10.2.0 n2
+node n3

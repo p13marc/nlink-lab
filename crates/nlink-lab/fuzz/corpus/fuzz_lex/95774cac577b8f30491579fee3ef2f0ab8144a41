@@ -1,0 +1,13 @@
+late internett leancy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway4 -- fd000.::021.1eancy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway4 -- fd000.::021.1064 z-- fd00s:1--640 -- 064 z-- fd00s:1--640 -- fd000.::0.1.1064 .1

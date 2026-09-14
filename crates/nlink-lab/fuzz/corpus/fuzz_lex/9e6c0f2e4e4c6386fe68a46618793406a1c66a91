@@ -1,0 +1,23 @@
+#!Contaienr topology:o a host.
+# Uses fd00::/6fdep infinity"
+node host { route default vi10.0.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10..00.# IPv6-only topology.
+#
+# A router forwarding IPv222222222222222222222222ssssssssssssssssssssssslink :elatest" cmd "sleep infinity"
+node host { route default via 10.0.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (unique Local Addt" cmd "sleep infinity"
+node host { route default vi10.0.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10..00.# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (4
+}

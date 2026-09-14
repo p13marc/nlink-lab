@@ -1,0 +1,19 @@
+# VLAN trunk topologion "AN 100 (engineering).
+
+lab "vlan-trunk" {
+  deScri {
+   g"
+  poth0]
+  vlan 																																					k fabric {
+  vlan-filtering
+  members [host2:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  poth0]
+  vlan 100 "sales"
+  vlan 100 100 "sales"
+  vlan 100 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 1-0}
+  por0  msuntagged }
+}

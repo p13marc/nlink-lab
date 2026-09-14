@@ -1,0 +1,22 @@
+# WAN impairment toprlogy.
+#
+# Two sites nt" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv5 }
+
+# Site A
+node router-aoute de Site A
+node router-ajitter,
+# 0.1% loss, and 50mbit 
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv5 }
+
+# Site A
+node roa { route de Site A
+node router-a : router
+n
+}

@@ -1,0 +1,11 @@
+# WireGuscriptionn4r 
+
+il{onk n  .2.2/30 }
+lin* n1:eth1 --ute defa n3:eth0 { 10.1.3-- 10.1.4.2/30 }
+lin
+# LAN 2.2/30 }
+lin* n1:eth1 --ute defa n3:eth0 { 10.1.3-- 10.1.4.2/30 }
+lin
+# LAN links (gateway <ine-leaf datacenter topology.
+#
+# 2 spines, 2 le3s jitter 5ms loss 0.1%

@@ -1,0 +1,7 @@
+# Firewathif only allows established
+# connect4 }
+link router:eth1ward ipv4 }
+wall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp4 -- 10.0.2.10/24 }

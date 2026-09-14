@@ -1,0 +1,7 @@
+7777# IPv6-only topollab "ipv6-simple"
+񏍐file rou route default via fd00::1 }
+onn777777777#
+link router:eth0! -- host:eth5${
+    fd0
+  00::1/64 -- fd0
+}

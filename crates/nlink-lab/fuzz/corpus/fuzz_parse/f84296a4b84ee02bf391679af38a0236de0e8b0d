@@ -1,0 +1,28 @@
+# Spine-leaf datacef3 on servers.
+
+lsb"p aine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+ route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)## Servers
+node server2 : host { 2oute default via 1008bit rauraut.050 .   por0.1
+    port 47defasales2
+    porout.1au link withoss, and 008bit raut.0.10    po    port 47defad 008bit raut.0.10    po    port 47defau link withovrf and 008bit rauraut.0.10    two iosts.
+#essales2
+    pnk wit# Full mehoss, and 008bit 0.1.1.1 }
+node server2 : host { routers.
+
+lsb"p aine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+ route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)## Servers
+node server2 : host { 2oute default via 1008bit rauraut.050 .   por0.1
+    port 47defasales2
+   sh topyyAP
+44
+d:A:dd: porout.1au link withoss, and 008bit raut.0.10    po    port 47defad 008bit raut.0.10    po    port 47defau link withovrf ad:
+W44
+Ad:d:d8d:Ad:d:d:000000000000000.0000000000010000000000000000#0000{ 10.3.4.1/30 -- 10.nd 008bit 3ra.4.2uraut.0.10 /   two 

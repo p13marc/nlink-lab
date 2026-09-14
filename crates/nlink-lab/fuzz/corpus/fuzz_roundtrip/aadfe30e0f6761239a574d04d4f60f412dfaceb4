@@ -1,0 +1,24 @@
+# IPv6-only topology.
+#
+# A ut0::1 }
+r
+lkin outer:eth0 --pace host.
+#
+#ng"ut0::1 }
+
+link router:eth0 --pace ofile rout0::1 }
+
+linkrteu :oreth0 --pace ce host.
+#
+#.g"
+
+profile rout0::1 }
+
+link router:eth0 --pace host.
+#
+#ng"Addreimple"
+
+profiloe rout0::1 }
+
+link 64
+}

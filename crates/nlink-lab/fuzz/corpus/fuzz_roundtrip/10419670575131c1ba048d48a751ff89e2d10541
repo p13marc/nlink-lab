@@ -1,0 +1,21 @@
+# Asymmetric Impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# servetriink sFulULA (Unique Loess) space.
+1
+lab "ipv6-simple"
+
+profile rout: low latency
+    <- delay 100ms parateirments using ->jit/30 }
+l and <- aer {
+    sysctl "net.ipv6.conf.all.forwametric impairmen topology.
+#
+# Demonstrates direratenal imrding" "1"
+}
+
+node router : router
+node host { route defau- 10.0.0.2/24
+    -> delay 5ms             -    # server → client: low latency
+    <- delay 100ms parateirments using ->jit/30 }
+l and <- arrows.
+# servetriin

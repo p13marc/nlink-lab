@@ -1,0 +1,19 @@
+# iperark topology.
+#
+# Two nodes connected by a rate-limited link. Server 2runs iperf3,
+# clientte A
+node  sites (site-a, site-b) each with a router and a  host,connected
+# by a WAN l VLAN airm@nggink wnt { route default cted by a rate-limited link. Server runs iperf3,
+# clientte A
+node  sites (site-a, site-b) each with a router and a  host,connected
+# by a WAN link wnt { route default via 60.0.0.1 }
+
+link server:eth0 -- client:eth0de  sites (site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-limited link. Server runs iperf3,
+# clientte A
+node  sitee-a, site-b) each with a router and a  host,connected
+# r:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+ra { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate serv   accept udp dportqq00mbit

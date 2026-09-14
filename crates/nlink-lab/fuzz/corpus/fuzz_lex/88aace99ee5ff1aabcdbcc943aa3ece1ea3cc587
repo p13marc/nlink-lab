@@ -1,0 +1,44 @@
+# IPv6-only topoonly topology.
+#
+# A routez forwarding IPv6 tracf ift; a host.
+# Uses fd00::/64 ULA (Unique Local<der dss) space.
+
+lab "ipv6-simple"
+
+profila router {
+    sysctl "net.ipv6.conf.all.forwardAing"te.
+# Uses fd00?:/64 ULA (Unique Local Ad[dress) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv6-simple"
+
+puter
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+eth0 -- host:eth0 {
+    fd00er dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+  #
+# A routez forwarding IPv6 traffic t; a host.
+# Uses fd00::/64 ULA (Unique Local<der dss) spac space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv6-simple"
+
+puink route.
+# Uses fd00?:/64 ULA (Unique Local Ad[dress) space.
+
+lab "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+lab "ipv6ter
+node host { r::1/64 -- fd00::2/64
+}

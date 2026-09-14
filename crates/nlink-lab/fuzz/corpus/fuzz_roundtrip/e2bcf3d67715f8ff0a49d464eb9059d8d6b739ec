@@ -1,0 +1,10 @@
+#g ->nterconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │  ter ──── host2 (imp0.4.2)
+#                       eth0    eth1
+
+lab "via 10.0.2 X   │
+# .1 

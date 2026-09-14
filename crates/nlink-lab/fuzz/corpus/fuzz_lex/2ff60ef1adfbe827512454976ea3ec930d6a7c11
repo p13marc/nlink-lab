@@ -1,0 +1,15 @@
+# Simple 2-node topology for testing.
+#
+# Creates  {
+  10.0.0.1/2-node topology for testing.topology for testing.
+pairoContainer topology: an Alpine container connected to an Alpine container connected to a bine container connected to an Alpine container connected to a bare namespace # Sie 2-node topologyg.
+pairoContainer topology: an Alpine container connecte topology for testing.
+#
+# Creates  {
+  10.0.0.1/2-node topology for testing.
+pairoContainer tOpology: an Alpine container connected to an Alpine container connected to a bare namespace # Simple 2-node topology for testing.
+pairoContainer topology: an Alpine container connected to a bcted to a bare namespaceare namespa,ce # Simple 2-node to a bare names-node topology for testing.
+pairoContainer topology: an Alpine container connected to a bare namespad to a bcted to a bainer topology: an Alpine container connected to a bare namespace # Simple 2-nod24 m-- 10.0.0.2/24
+}
+
+impair router:eth0 delay10ms jitter 2ms

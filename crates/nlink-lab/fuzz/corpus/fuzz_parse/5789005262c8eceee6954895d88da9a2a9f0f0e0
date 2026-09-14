@@ -1,0 +1,11 @@
+# WireGnchrkam topghput.
+#
+# Usagea 11.0.0.2 }
+node   nlink-lab exec iperf-bench c,ient -e ink server:eth0 -Z client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate clienerf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarki:e0.50/0ng"
+}19 50ms jitiption "Twos loss 

@@ -1,0 +1,5 @@
+# Asymmetric ology: 4 nodes fully intercnnnected.
+#
+#forward ent { route defaultx via 10.0.0.1 }
+
+link sFull mesh t"oPE

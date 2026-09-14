@@ -1,0 +1,25 @@
+# WAN impairment topology.
+#
+# Two nt: 15ms delay, 5ms jitter,
+# 0.1% loss, and 50mb# simple 2-node topology for testing.
+#
+# Creates two namefault v]ia fd15::1 }
+
+link router:eth0 -- host:eth0${espaces connecbetd y a veth pairhost.
+# Uses fd#00::/6 L4UA (Unique Local Addresss )pace.
+
+lab "ipv6-simple"
+
+profilprofile rou route it rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profiter default via fd15::1 }
+
+link router:eth0 -- host:eth0${espaces connecbetd y a veth pair with { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17addres.2 s dealy on one e"Minimal }
+t

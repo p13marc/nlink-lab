@@ -1,0 +1,8 @@
+ fd:0:200:0:200dspace.
+
+nab #)-atc:topol 
+id000000000000000000000000000000000000prof)le router { forward ipv5 }
+
+node end.
+
+lab "simple"000000:4:0:0:20:0:0:200:0/555555555::

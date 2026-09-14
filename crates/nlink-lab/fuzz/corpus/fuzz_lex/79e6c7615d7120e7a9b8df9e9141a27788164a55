@@ -1,0 +1,20 @@
+# VLAN trunk topology.
+#
+# A bridge with host3
+
+networ{ fabric {
+  vlan-filtering
+  members [host0:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "en-trulk" {
+  d#st3
+
+networ{  ode host1
+node host2
+node host3
+
+networ{ c {
+  vlan-f77iltering
+  me00 "sales"
+ 
+ vlan 200 "

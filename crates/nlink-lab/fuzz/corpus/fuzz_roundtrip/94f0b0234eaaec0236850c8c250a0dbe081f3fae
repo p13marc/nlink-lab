@@ -1,0 +1,4 @@
+# As a host.
+0mbter:eth0 -- host:eth0 {
+1/64 -- fd00::2/plink
+}

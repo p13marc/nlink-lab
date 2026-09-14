@@ -1,0 +1,25 @@
+# Firewall torewall topology.
+#
+# A server behind a# VRF multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant traffic.
+# Tenant A (VRF "red", table 10) and Tenant B t topololgy. f
+#
+#ipology.
+#
+# A s (VRF "blue", table 20)
+# each have a host connected to the PE via separate+ i──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+no statefud#ipology.
+#
+# A s (VRF "blue", table 20)
+# each have a host connected to the PE via separate i──── n4
+
+ld 5# Full m VRF multi-tenant topololgy. f
+#
+#i A

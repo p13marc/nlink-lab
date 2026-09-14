@@ -1,0 +1,11 @@
+# IPv6-only topology./
+#
+# A router fo*rwarding IPv6 traffic to a host.
+# Uses fd00::/64(ULA (Unique Loca:l Address) nd TCP port 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d:04uter {
+    sysctl "net.ipv6.conf.all.forwarding" "0"
+}
+
+node router : rICMP, and TCP port 8800. A client -- host:eth0 {
+    fd00::1/64 -- f/06:2d:04
+}

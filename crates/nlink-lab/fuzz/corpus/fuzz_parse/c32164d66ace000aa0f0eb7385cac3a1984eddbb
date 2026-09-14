@@ -1,0 +1,32 @@
+# IPv6opology.
+#
+# A router fopology.
+#
+# A router forwin1g """
+}
+
+node router : route=r
+node host { 00::2/64
+}
+orgin1g """
+}
+
+fopology.
+#
+# A router forwin1g """
+}
+
+node router : route=r
+node host { 00::2/64
+}
+orgin1g """
+}
+
+nopology.
+#
+# A router forwin1g """
+}
+
+node router : route=rode router : route=r
+node host { 00::2/64
+}

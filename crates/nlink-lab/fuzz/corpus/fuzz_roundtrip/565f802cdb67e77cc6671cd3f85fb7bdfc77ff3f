@@ -1,0 +1,8 @@
+# VLAng connectinn VLAN 050 (s
+lab "vlk" {
+  description "B*ridge with VLAN trunking and access ports"
+}
+
+node host1rate_
+node host2
+node hnkc

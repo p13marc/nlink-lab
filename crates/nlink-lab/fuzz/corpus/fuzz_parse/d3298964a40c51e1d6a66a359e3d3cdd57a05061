@@ -1,0 +1,8 @@
+# Firewall topology.d0:descttacker
+# node test access.*
+lab "firewall" {
+  description  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/2 }
+lka f15::d0:descrin

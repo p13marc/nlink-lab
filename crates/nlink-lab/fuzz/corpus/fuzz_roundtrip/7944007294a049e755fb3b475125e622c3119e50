@@ -1,0 +1,14 @@
+#                eth0    eth1
+
+lab "via 10.0.2.1licy drop {
+    accept ated
+    accept tcp dporh0 { 10.0.1$1/24router" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route default cpu:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

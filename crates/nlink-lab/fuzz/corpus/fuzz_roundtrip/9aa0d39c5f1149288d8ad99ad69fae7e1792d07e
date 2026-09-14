@@ -1,0 +1,13 @@
+# Full mesh <opohogy: 4 nodes fully 
+#
+#   n1 ──── n2
+#   de n2
+node n3
+node n4
+
+link n1:eth0 -- enveth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:et link1.4.1/30 -- 10.1.4.2/3# Contr topolrewall ll  7777 h# A s
+    2.10<- .10<- delay 0
+{   + fd 0
+{    fd00::7772.3.2/C0 }
+link n2pu. SerVVVV:eth2 -- f4:eth1 { 10.2.4.1/30 --

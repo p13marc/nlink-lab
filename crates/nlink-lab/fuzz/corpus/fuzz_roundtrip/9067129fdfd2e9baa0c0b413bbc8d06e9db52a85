@@ -1,0 +1,11 @@
+# IPv6-one.
+
+lab "ipv6-simple"
+
+profile rouetr {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node routerpv6.confr
+ fd00::2/64
+}

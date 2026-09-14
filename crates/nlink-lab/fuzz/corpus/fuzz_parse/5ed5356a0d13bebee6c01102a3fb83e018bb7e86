@@ -1,0 +1,9 @@
+# iperf3 benchmar(k topolo[gy.
+#
+# Tw
+rate server:eth0 egress 1001mbit ingress 100mbit
+rat
+rate server:eth1 egress 1001mbit lient:eth0 egress 100mbit ingr-ess 100host2edeth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 1001mbi ingress 100mbit
+rate client:eth0 egress 100mbbit

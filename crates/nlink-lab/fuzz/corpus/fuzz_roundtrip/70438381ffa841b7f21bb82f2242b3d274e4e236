@@ -1,0 +1,47 @@
+# WireGuard VPN topology.ay topology.
+#
+# Two VTEPs connected by8.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 1name   local 10.0.0.2
+    remote 1092.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 104 .0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- nk gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192 }
+link gw-}
+}
+
+n.2/24
+  }
+}
+
+link ode vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 - -nk gw-a:eth1 -- host-a:eth0 { 192.168.1.1/2b:eth1 -- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.168.2igh20.0.0.2/24 }
+  port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 104 -- 192.168.2.10/24 }
+
+# WAN impairm.0.0.1/24 --ent 10.0.0.2/2
+impair gw-a:4

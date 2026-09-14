@@ -1,0 +1,39 @@
+E router wit1.10.0.1 }
+node tesctlUses fd00::/64 ULA (Unique Lo# VLAN trunk  topology.
+#
+# A bridge with VLAN filterins 192.168.2perf355.2/32
+     bepeers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { route default via 192.1n}}}}}}}}}}}}}}}}}}}}}}}}}}}}nc}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}ode host-a { route defaul68  route 192.168.1.0/24 dev wg0
+}
+
+e host-a { route default via 192.1n}}}}}}}}}}}}}}}}}}}}}}}}}}}}nc}}}}}}}}}}}}}}}}}}}}}}}to
+    listen 5 -- 10.2.4.2/30 }
+link n1:eth2 -- n4:et auto
+    listen 51822
+    address 1}}}}}}}}}}}}}}}}}}}}nc}}}}}}}}}}}}}}}}}}}}}}}to
+    listen 5 -- 10.2.4.2/30 }
+link n1:eth2 -- n4:et auto
+    listen 51822
+    address 192.168.2perf355.2/32
+     bepeers [gw-a]
+  }
+ topology: 4 nodes keyme(sh topology: 4 nodes key auto
+    listen 5 -- 10.2.4.2/30 }
+link n1:eth2 -- n4:et
+link n1:eth2 -- n4:et auto
+    listen 51822
+    address 192.168.2perf355.2/32
+     bepeers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { route default via 192.1n}}}}}}}}}}}}}}}}}}}}}}}}}}}}nc}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}ode host-a { route defaul68  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { routLA (Unique
+node 

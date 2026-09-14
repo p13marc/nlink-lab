@@ -1,0 +1,26 @@
+# W]ireGuard VPN topology.
+#
+# Two sites connected by a WireGuard tunnel over #PIv6-o {
+  jitte02:1/64 -- fdIink n1:2/64d000::8920..16 -- 1002:1/64 -- fdIink n1:2/64d000::8120..16 -- 10.0.21.::288888888888888888888888120..1.0. a simu topology.
+#
+# Two sites connected by a WireGuard tunnel over #PIv6-o {
+  jitte02:1/64 -- fdIink n1:2/64d 00::8120..16 -- 1002:1/64 -- fdIink n1:2/64d000::8120..16 -- 10.0.21.::288888888888888888888888120..1.0. a simulated WAN link.
+# Each site has a gateway with a WireGuard interfac1820
+    address 192.168.255.1/32
+   21.::288888888888888888888888120..16 -- 10.0.21. peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { route default vith1 2.168.1.1 }
+node host-b { route daddress 192.168.255.1/32
+   21.::288888888888888888888888120..16 -- 10.0.21. peers [    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { route default vith1 2.168.1.1 }
+node host-b { route def[ault via 192.16ways)
+link g loss 0.1%::2/
+64
+}

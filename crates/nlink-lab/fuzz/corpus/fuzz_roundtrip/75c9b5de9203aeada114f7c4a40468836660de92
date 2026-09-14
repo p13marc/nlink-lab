@@ -1,0 +1,10 @@
+# Contaioporogy: an$ Al# Firewall topology.
+#
+pidefault vaaul.0.1 }
+
+link server:eth0 -- cA s
+    <- delay 100ms e default d # A s
+    <- delay 100ms e default vaa ..1000.1 ons node test access via 10.0.0.1 }
+
+link selver:eth0 -- client:etdefault vaa 100ms e   eth0 -- client:eth0 {
+    10.0.0.1/24ac 

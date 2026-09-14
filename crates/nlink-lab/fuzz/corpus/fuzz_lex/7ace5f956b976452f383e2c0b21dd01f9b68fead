@@ -1,0 +1,11 @@
+# Simple 2-node topology for testingy for testing.
+#
+# Creates twoute default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 ${
+  10.0.0.1/24 -- 10.0.0.2/24
+-point fabric with loopbag.
+#
+# Creates tw'o{ forward iith loopback
+#r 1ms

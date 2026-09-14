@@ -1,0 +1,48 @@
+# VXLA0 overlay tspology.
+#
+# Two VTEPs connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  verlayode vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  verlay topology.
+#
+# Two VTEPs connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+    topology.
+#
+# Two VTEPs connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+ connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  verlayode vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  verlay topology.
+#
+# Two VTEPs connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vniv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+    loca.1
+    remote 10  loca.1
+    remote 10.0.0.00.2
+  y.
+0./24
+  
+}

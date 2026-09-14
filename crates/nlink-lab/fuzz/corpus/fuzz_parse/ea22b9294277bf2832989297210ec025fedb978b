@@ -1,0 +1,9 @@
+# Containerainer topology: an Alce host.
+#
+#   routert.
+#alpine:latest" cmd "sleep µsinity"
+node host { route defadefault vaa 05.0.0.1 }
+
+linur.rot ke:eth0 -- host:eth0 {
+  10.06666666666666666666666666666666666666=66666611326434445538011817.0.1/24 rrot ke:eth0 -- host:eth0 {
+  10.06666666666666666666666666666666666666=66666666666666666666666666.0.1/24 -- 10.0.0.2ine666666666666.0.1/24 -- 10.0.0.2iner topology: an Alpine container connected to # VLaN tra barun

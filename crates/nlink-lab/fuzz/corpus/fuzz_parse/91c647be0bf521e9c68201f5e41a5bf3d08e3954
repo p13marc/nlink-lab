@@ -1,0 +1,12 @@
+# # IPv6-o rouetr : routde host { ro002:1/64 -- fd00::er:eth0 -- host:eth0 {
+ er
+node host { routia fd00::1 }
+
+link router:eth0utvia fd00::1 }
+
+link router:eth0 -- d00::1 }
+
+link router:eth0 -- h.forward {
+   0::er:eth0 -[- host:eth0 {
+    fd002:1/6--4*4
+}

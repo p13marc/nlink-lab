@@ -1,0 +1,11 @@
+# iperf3 benchmark topology.5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route default via interface}
+node client { route default via 80.0.0.1:eth0 -- 0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:et(h0 egress 100mbit ingress 100mbit
+rate client:eth0 egress 100mbit ingress 101mbit

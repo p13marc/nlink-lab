@@ -1,0 +1,26 @@
+# Spine-leaf da# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, hos2t:eth0, ho3sett:h0]
+  vlan 100 "sales"
+  vlan 200 "enginee*ring"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}
+ode leaf2 : roqter {
+  lo 10.255.1.2/32
+ traff1.1 }
+n

@@ -1,0 +1,9 @@
+# IPv6-only toroutgy./
+#
+# A router fo*rwarding IPv6 traffic to a host.
+# Uses fd00::/64(ULA (Unique Loca:l Address) space.
+
+lab "ipv6-simplA"
+
+profime ro  fd00::1/64 -- f/06:2d:04
+}

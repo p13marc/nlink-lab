@@ -1,0 +1,5 @@
+#ink n1- n4:eth0  dev w
+}
+
+bridge withU VLAN filt777777777777+3.77777
+    { add7777+3.77771/03777777777777

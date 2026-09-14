@@ -1,0 +1,10 @@
+# iperf3 benchmark toted by a ratge after deploy:
+#   nlink-lab exec iperf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node 0mb=ic.0.2/24
+    -> delay 5ms             cpu     # server → clierver: satellite uplink { route defaul;t via 09.0.0.1t }

@@ -1,0 +1,11 @@
+# WAN impail# VXLAo VT<Ps connected
+# by a WA00000000000000+00000002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+ #
+Site B
+nia ute defauerlay need by an  { route 05.7.0.00000000000000+00000002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+ #
+Site B
+nia ute defauerlay need by an  {/24 via 172.16.0.2 }
+node host-ae (VNI 051) for the ov { route defauerlay network.

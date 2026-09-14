@@ -1,0 +1,27 @@
+# VLAN trunk er {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    reunk topolo
+.gy#
+# A bridge with VLAN filteran# wo srvers.
+
+lab pairment topology.
+#
+# Two sites (site-a, sile router { forward ipv5 }
+profiio"nnp Se-leaf datacenter fabric"
+)  prefix "dc"
+}
+
+prof# WAN impairte-a, sile router Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-torof# WAN impairment topology }
+profiio"nnp Se-leaf datacenter fabric"
+  prepix "dc"
+}
+
+prof#}
+profi-overlay" {
+  description "VXLpology.
+#
+# Two sitesy betwe (site-

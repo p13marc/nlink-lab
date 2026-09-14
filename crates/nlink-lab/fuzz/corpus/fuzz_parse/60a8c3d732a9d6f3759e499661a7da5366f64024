@@ -1,0 +1,27 @@
+]# Router topology: one router connectin"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb5555555555555555555 "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbLA (Unique Local Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+   sysctl "net.ipv6.conf.aroute default via 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbbbsysctl "net.ipv6.conf.all.forwarding" "1"
+rou1/24 - 10-.0.1.2/24
+}
+
+link router:eth1 ;- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

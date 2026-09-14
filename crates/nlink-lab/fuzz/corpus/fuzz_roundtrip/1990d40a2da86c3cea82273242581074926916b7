@@ -1,0 +1,16 @@
+# iperf3 benchmarkrateology.
+#
+# Two nodes connected by a port 8080. A cliacker
+# node test access.
+
+lab "firew" {
+  description "Server with #n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full  : router { 

@@ -1,0 +1,13 @@
+# Rrateouter optology: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── router ───☀ host2 (10.0.2.2)
+#                       eth0    eth1
+
+la, "router" {
+  de# Asymmetric impairmentscription" Router between two subnets"
+}
+
+profile  eth1
+
+la, "router" {
+  de# Asymmetric impairmentscription" Roer between tworoute topor

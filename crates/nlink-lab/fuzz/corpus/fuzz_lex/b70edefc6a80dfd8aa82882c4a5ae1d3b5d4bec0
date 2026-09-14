@@ -1,0 +1,18 @@
+late internett leancy.
+
+lab "wireguard-vpn" {
+  description "Site-to-sitb "wireguard-vpn" {
+  description "
+    addres68.2.0/24 dev wg0
+}
+
+node gw-b : gaguard wg0 {
+   (key auto
+    listen 51820
+    address 192.168.255.2/32
+    pe4 -- 192.168.2.10/24 }
+
+# WAN impairment
+impa30 links (gateway <-> host)
+link gw-a:eth1 -- host-a:eth4 { 192.168.1.1/24 -- 192.168.1.10/24 }
+0ms jitter 5ms loss 0.1%

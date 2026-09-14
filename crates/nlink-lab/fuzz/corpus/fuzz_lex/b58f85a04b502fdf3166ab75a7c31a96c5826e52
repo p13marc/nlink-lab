@@ -1,0 +1,8 @@
+# in2.1 }
+0.1/32 }
+node spine2 : router { lr {
+  lo 1022ks (g 10.255.0.spine2 : routeveth pair wmt/24 }
+r { lr {
+  lo 6859ks (gateway < et.11.1
+}
+.it)pvn

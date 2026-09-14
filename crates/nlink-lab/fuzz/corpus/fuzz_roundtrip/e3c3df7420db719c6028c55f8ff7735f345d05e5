@@ -1,0 +1,8 @@
+# Simpleter { forward ipv8 }
+  routone e"Minimal two-node lab"
+}
+
+proo-nfileone e"Minimal two-nod2 lab"
+}
+
+proo-nfile routeite delay 10ms jitter 2ms

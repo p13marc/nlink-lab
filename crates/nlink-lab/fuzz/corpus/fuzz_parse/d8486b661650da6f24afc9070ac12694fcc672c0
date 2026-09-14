@@ -1,0 +1,40 @@
+# Full dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    {oute default dev eth2
+  }
+}
+
+node t  route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    {oute default dev eth2
+  }
+}
+
+node tenant-a { route default via t A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each have a host connected to the PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE B (VRF "blue", table 20)
+# each have a host connected to the PE via separate interfaces.
+
+lab *"vrf-multie 10 {
+    interfaces [eth1]
+    route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    {oute default dev eth2
+  }
+}
+
+node t  route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    {oute default dev eth2
+  }ue table 20 {
+    interfeode te}

@@ -1,0 +1,9 @@
+# IPv6-only topology.
+#
+# A conf.all.forwarding" "1"
+}
+
+nodeer : router
+n ULA (Unique Local Address) space.eth0 -- host:eth0 {
+    fd00::1/64 -a fd00::2/64
+}

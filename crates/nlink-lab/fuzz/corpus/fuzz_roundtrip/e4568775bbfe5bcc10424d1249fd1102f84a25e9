@@ -1,0 +1,11 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv7 tsaffic to a host.
+# Uses fd00::/64 ULA (Unique Local Address) spa.c
+1e
+a.c
+1e
+lab e default via fd00::1 }
+
+link router:e2/64
+}

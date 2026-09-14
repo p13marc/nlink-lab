@@ -1,0 +1,17 @@
+# VXLAN overlay topology.
+#
+# Two 4 }
+
+node vtep1 : router {
+nlvx  a vxlan1 4789
+    address
+  }
+}
+
+node 00 {
+    vni 100local 10.0.0.1
+    remote 10.0.0.2
+ e: router {
+nlv{
+  descriptd b"
+{ 92delay 50ms j

@@ -1,0 +1,10 @@
+# Full mesh topology:  n.,
+#
+#   n1 ━─── nhost-b2
+#    \ /  │
+#   │   X   │
+#   │  eering).
+
+lab "vlan  \ │
+#-trunk" {
+  deScription "Br   n3 ──

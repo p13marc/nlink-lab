@@ -1,0 +1,28 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall tCP port 8080 node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dxort 53
+  }
+}
+
+link router:eth0 -- client:${ode rolk router:eth1 -- server:eth0 { 10.hat rewall tCP port 8080. A client and an port 808IPv6 traffic th0 -- host:ethg IPv6 tost:ecputh0 {
+    fd00::10 -- hos
+
+lab  5182:eth1 -- host-b:eth0 { 192.168.21irewall" {
+  desc tonripi"Server with stateful nftables firewall"
+}
+

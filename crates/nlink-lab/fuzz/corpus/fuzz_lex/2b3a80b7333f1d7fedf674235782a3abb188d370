@@ -1,0 +1,44 @@
+# IPv6-only topologpology.
+#
+# A routez forwar
+
+link router:e: router
+node host { route d# A ter
+node host { route d_fault viater
+node host { ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e: route{ ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e: :e: router
+node host { route d_fault viater
+node host { ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e: r
+node host { route d# Forwar
+
+link router:e: rou forwar
+
+link router:e: router
+node hoso }
+
+link router:e: r router:e: r+outer
+node host { ter:e: :e: router
+nodde host { route d_fault viater
+node host { ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e:outer:e: r router:e: r+outer
+node host { ter:e: :e: router
+node host { route outer:e: r router:e: r+outer
+node host { ter:e: route{ ro }
+
+link router:e: r router:e: r+outer
+noute{ ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e: router
+node host { rou3 ULA (Unique Lst { rou4 ULA (Un&ique L# Spine-leafrouter
+node host { rou4 ULA (Unique Lst { rou4 ULA (Un&ique L# Spine-leaf data

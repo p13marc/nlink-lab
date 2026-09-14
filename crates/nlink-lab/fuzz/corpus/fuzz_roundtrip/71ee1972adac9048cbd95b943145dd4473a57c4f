@@ -1,0 +1,20 @@
+# VLAN trnku topology.
+#
+# Ade hoe host2
+node host3
+
+network fabric {
+  vlan-filtering
+Demoh0 { 10.1.3.1/30 -- 10.1.3.2/3010.1.4.1/1
+node host2
+ng
+Demonstrates direraten  port host3 { pvid 208  unta)gedcess ports"
+}
+
+node host1
+node host2
+node host3
+
+network fa cibr{
+pvid 200  untagged }
+}

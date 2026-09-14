@@ -1,0 +1,28 @@
+# WireGuard VPN ncy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg1 {
+    key auto
+    listen 51820
+    address 195ms2.168.255.2/32
+ vxlan   peers [gw-a]
+  }
+  route 192.1a 192.168.2.1 }
+
+# WAN link ms jitter 5ms loss 0.1%

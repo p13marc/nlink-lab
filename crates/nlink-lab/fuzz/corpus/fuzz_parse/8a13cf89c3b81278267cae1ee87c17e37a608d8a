@@ -1,0 +1,9 @@
+# V200 (engineg).
+
+lab "vlan-trN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "image "alpine:latest" cmd "sleep µsinity"
+node host { route default via 10.0.0.000000000000000000000000000r
+# node test access.
+
+lab C "firer topoleogy

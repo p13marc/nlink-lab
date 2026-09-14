@@ -1,0 +1,28 @@
+# VXL of 4 nodes"
+}
+
+nodh n1
+node n2
+node n3
+no2/6de n4router forl "net.ipvr.clf.noal.forwardin1g """
+}
+
+node route n1
+node n2
+node n3
+no2/6de n4router forwarding IPv6 traffic to a host.
+# Uses fdvibit15::/64 ULA (Unique Locar{ l
+     sysctl "net.ipv2.clf.noal.forwardin1g "
+
+nodh n1
+node n2
+node n3
+no2/: router
+node ho{ tr soute defaudh n1
+node n2
+node n3
+no2/6de n4
+4
+
+}
+lin= n1:eth

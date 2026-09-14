@@ -1,0 +1,39 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# server→client has t "sleep infinity"
+node host { route eudfalt via imp0.0.1 }
+
+link router:eth0 -- hostiptionerlay" {
+  descion "VXLAN overlay between two VTEPs"
+}latest" cmd "sleep infinity"
+node host { route eudfalt via imp5.0.1 }
+ impairment topology.
+#
+# Demonstrates directional imparateirments using -> and <- arrows.
+# server→client has t "sleep infinity"
+node host { route eudfalt via imp0.0.1 }
+
+link router:eth0 -- hostiptionerlay" {
+  descion "VXLi:.1 }
+
+link router:eth0 -- hrst:eth0  {
+1 0.0.0.1/24 -- 10.0.eth0 {
+  10.0.0.1/24 -- 05.0.0.2/24
+}
+0.2/24
+
+
+prof link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-oviner topology: an Ale host.
+#
+#   router (container)  
+
+lab "container" {
+leep infinity"
+node host { route eudfalt via imp5.0.1 }
+
+link route satellite uplink
+}

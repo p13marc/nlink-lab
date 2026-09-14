@@ -1,0 +1,27 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connecby a rate-limited link. Server runs iperf3,
+# cdefault via 10.0.0.1 }
+
+link server:eth1 -- client:eth0 { 10/0.0.1/24 -- t via nt { route default via 10.0k server:eth0 -- client:eth0 { 10/0.0.1/2server:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingre&&h0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0ss 100mbit
+rate 10.0.0.1 }
+
+link s/0.0.1/2server:eth0 -- client:eth5 { 10/0.0.1/24 -- 10.er:eth0 egre4 -- 10.0.0.2/24 }
+
+rate server:etherver:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egre 4-1. 0-0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate 10.0.0.1 }
+
+link server:et&&&.0.0.1 }
+
+link server:eth1 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate ser&&&&&&&&&&&&&&&&&&h0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate client:eth0 egress 100mbit ingress 100mbit

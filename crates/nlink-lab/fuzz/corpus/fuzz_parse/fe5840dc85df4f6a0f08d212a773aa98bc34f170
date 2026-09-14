@@ -1,0 +1,16 @@
+# Ir:e/h0# WAN imp+ir4
+++r 5ms oss l0.1% s0fd -- 0::2r 5ms oss l0.1% s# I-:eth0# WAN imp+ir4
+ r+5+ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v5)1%: rats l0.1% s0fd -- 0::2::2env-f00::2/64l00:: oss l0.1% start { routegdefe1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# I--++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v5)1% ratst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeaulecputh {
+    fd00::1/6- fd00::2/64tart { routst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { routegdefeault v0)1% ratst { route defeaulecputh {
+    fd00::1/6- fd15::2/64tart { route defeault v5)1% ratst { routeeth0++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v5)1% ratst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeaulecputh {
+    fd00::1/6- fd00::2/64tart { routst { route defeault via fd 50m00 defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeaulecputh {
+    fd00::1/6- fd00::2/64
+}

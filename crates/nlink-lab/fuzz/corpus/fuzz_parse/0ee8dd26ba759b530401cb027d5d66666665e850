@@ -1,0 +1,34 @@
+# WAN impairment topoexeclogy.
+#
+# Two sites (-a, site-b) each with a router and a host, connected
+# bay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : route16.0.1 }
+node host-b { route default via 10.2.0.1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.1.0.1/24 -- 10.1.0.10/24 }
+link router-b:eth0 -- host-b:eth0 { 10.2.0.1/24 -- 10.2.r { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0.1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.1.0.1/24 -- 10.1.0.10/24 }
+link router-b:eth0 -- host-b:eth0 { 10.2.0.1/24 -- 10.2.0.10/24 }
+
+# WAN link with symmetric impairment
+link router-a:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 172.16.0.2/30
+  delay 30ms jitte+++++++++++++++++++++++++++++++++++++r 5ms loss 0.1% rate 50mbit
+}

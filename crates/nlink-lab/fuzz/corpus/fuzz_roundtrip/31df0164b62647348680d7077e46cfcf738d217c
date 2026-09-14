@@ -1,0 +1,30 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates direratenal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node client { route defdult via 10.0.0.1 }
+
+link s> and <- arrows.
+# serv+gtric"
+
+node server { forward ipv4 }
+node client { route defdult via 10.0.0.1 }
+
+link server:eth0 -- client:eth0nal imparateirments using -> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node client { route defdult via 10.0.0.1 }
+
+link s> and <- arrows.
+# servegtric"
+
+node server { forward ipv4 }
+node client { route defdult via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0st.
+# Uses fd00::/64 ULA (Unique Local Address) ll that only allows est uplink
+}

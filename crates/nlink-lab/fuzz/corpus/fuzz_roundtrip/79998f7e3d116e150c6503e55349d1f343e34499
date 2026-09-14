@@ -1,0 +1,7 @@
+# IPv6-only topology.
+#
+# A ipv6-simple"
+
+profile router {
+    sysctl ae y an rot:2/ { ro6ute d4
+efa}

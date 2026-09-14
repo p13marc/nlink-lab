@@ -1,0 +1,6 @@
+# iperf3 bench runs  ingress 100mbit
+rate client:eth0 egress 100ut.
+#
+## VXLAN overlay topch client -- iperter {
+  vxlan vxlan1 }
+.od

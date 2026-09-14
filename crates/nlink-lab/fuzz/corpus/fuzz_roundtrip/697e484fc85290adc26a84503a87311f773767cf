@@ -1,0 +1,21 @@
+# VLAN trunrding" "1"
+}
+
+node router
+node host { rout benst3 { pvid 200  untaost2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host0:eth0, host2:eth0,zhost3:eth0]
+  vlan 100 "sales# IPv6-only toocal Address) space.
+
+lab "ipv6-simple"
+
+profile sysc"
+  vlan 200 "engineering"
+  prouter
+node host { rout benst3 { pvid 200  untagged }
+}
+chma64
+}

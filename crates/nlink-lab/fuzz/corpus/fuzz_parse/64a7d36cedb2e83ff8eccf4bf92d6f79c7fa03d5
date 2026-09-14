@@ -1,0 +1,6 @@
+# IPv6-only topology=.ter forwin1g """
+}
+
+node router st {${ost:etk0 {
+    fd002:1/
+}

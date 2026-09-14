@@ -1,0 +1,5 @@
+# IPv6-""
+}
+
+node rou rOs1 { 00::10e rodefaultu : rOuter
+node hos1 { 00::10e}

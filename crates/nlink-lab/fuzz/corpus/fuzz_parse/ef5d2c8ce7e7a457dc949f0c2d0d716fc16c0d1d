@@ -1,0 +1,5 @@
+# VRF multintane-t topology.
+#
+# A { 10# Asymm.0.0/2]
+    route s s.
+# serv!r→rosu)

@@ -1,0 +1,15 @@
+# Spine-lble 20) with loopback
+# addreent on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabudp"
+  prefix "dc"
+}
+
+profile Router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : ro1uter { lo 10.255.0.1/32 }
+node spine2 : router { lo 15.205.0.2/32 }# teAd to t6-o
+node vte

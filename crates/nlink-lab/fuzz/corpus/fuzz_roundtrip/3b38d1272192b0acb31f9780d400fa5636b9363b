@@ -1,0 +1,8 @@
+7777# IPv6-only topology.
+#
+# A router forwarding7777777777777fd00::1 }
+onn777777777#
+link router:eth0 -- host:eth0${
+    fd0
+  00::1/64 -- fd00::2/64
+}

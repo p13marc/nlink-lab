@@ -1,0 +1,45 @@
+# VXLAN ovEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : rout
+ { er vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/243333333333o VTEPs"
+}
+
+prof link, each hosting a VXLAN# i#
+ncli -net- hostth5 {
+    fd0nterface (VNI 100erlay between two VTEPs"s 10::1/64 -- f/06- f/06:2d2:0d00::1/64 { 10.0.0.1/24333333333333333333333vrfs3333333333" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN# i#
+ncli -net- hostth5 {
+    fd0nterface (VNI 100erlay between two VTEPs"s 10::1/64 -- f/06- f/06:2d2:0d00::1/64 -- f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:2d92.168.100.1/24uter
+
+node client { route default via 25.0.1.1 }
+
+node server {
+  -- f/06:2d2:04
+:2d2:0d00::1/64 -- f/06:2d92.168.100.1/24uter
+
+node client { route default via 25.0.1.1 }
+
+node server {
+  route default via 120.0.2.0.0.0.1
+    por10.2552:04
+}.0.1/32 }
+node 
+spine2 : router { lo 10.255.0.2/32 }
+
+# Leaves
+no

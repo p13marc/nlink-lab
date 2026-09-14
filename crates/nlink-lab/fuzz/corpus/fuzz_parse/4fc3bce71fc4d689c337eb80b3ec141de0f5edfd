@@ -1,0 +1,36 @@
+# WAN im.
+#
+# Tn}
+nodh eost-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : router { ro# IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- ro331 2- fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+rver0: "ipv8-simpe"
+
+profile ro331 2- fd00::2/645:2/6455.1.2/32
+  
+rver1fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32# IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- ro331 2- fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+rver0: "ipv8-simpe"
+
+profile  "wan-impairment" {
+  description}
+nodh eost-a {  via 10.2.0.1 }
+
+# LAN links
+lieth: {
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00::2/64
+}

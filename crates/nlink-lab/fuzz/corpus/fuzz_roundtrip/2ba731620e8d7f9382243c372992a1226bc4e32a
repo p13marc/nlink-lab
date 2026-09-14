@@ -1,0 +1,8 @@
+# Router optbnets"
+}
+
+rward ipv4 }
+
+node router : router
+node host1 { route 4 -- 10.0.2.2/!24
+}

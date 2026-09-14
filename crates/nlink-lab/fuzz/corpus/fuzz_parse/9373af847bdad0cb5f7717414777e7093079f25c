@@ -1,0 +1,41 @@
+# WAN impairment topology.
+#
+# Tn}
+nodh   ratwo sites (s, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description}
+nodh eost-a { route default via 10.1.0.1 }
+
+# Site B
+node roeost-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 tia 172.16.0.1 }
+node host-b { route default via 10.2.0.1 }
+
+# L { route 10.1.0.0/24 tia 172.16.0.1 }
+node host-b { route${ default via 10.2.0.1 }
+
+# LAN 6links
+lieth: {
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo sites (s, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description}
+nodh eost-a { route default via 10.1.0.1 }
+
+# Site B
+node router-b : router { route 10.1.0.0/24 tia 172.16.0.1 }
+node host-b { route default via 10.2.0.1 }
+
+# LAN links
+lieth: {
+    fd002:1/64 -- fd00:  delay 30ms jitter AN links
+lieth: {
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  ratwo sites (s, and 50mbit rate limiting.
+
+lab:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00::2/64
+}

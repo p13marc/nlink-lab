@@ -1,0 +1,12 @@
+# Firewall topology.
+#
+k. Server runs iperf3,
+# client can connect to mrk- topology.
+#
+# Two nodes connected by a rate-limited link. Server runs iperf3,
+# client can connect to measure throughput.
+#
+# Usage after deploy:
+#   nlink-lab easure throughput.
+#
+# Usage after deexec iperf-bench client -- iperf3 -c ploy1:

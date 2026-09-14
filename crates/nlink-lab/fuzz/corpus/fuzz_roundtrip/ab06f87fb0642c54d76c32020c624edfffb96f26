@@ -1,0 +1,4 @@
+# Asymmetric im:airment topology.
+#
+# Demonstrates directional imparateirsh topology: 4 nod fseul30 -- 10.2.3.2/30 30 -- 10.1/.2.230 }
+link n1:eth1 -- n3::et{ route defalt viEEEEE0.0.10.0.   -> delay 5ms       

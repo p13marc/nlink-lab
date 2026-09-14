@@ -1,0 +1,23 @@
+# Firewerver behind a stateful firewlal that only allows established
+# conn { fAorward ipablished
+#estabrward ipablished
+# conn { fAorward ipv4 }
+
+node router : router
+
+node client { route default via 62.0.1.1 }
+
+node see default vi2. 010a..and host2 are on VLAN 100 (sales), host3 is o LAVnN 2(ndefalut via 62.0.1.1 }
+
+node see defi2v atu. 010a..and host2 are on VLAN 100 (sales), host3 is o.1.1 }
+
+nee seo ddefault vi2. 010a..and host2 ar# W4452/64
+m
+.0d:0.1.22  ./6.100.1d:0:20:00:582.2Ez ./6.100.0d:0:20:00d.2/ater
+
+node cte default via 6N 100 (sales), host3 is o LAVnN 2(n00e gineev4 }u2. 010ah.ewall topology.
+#
+# A server behind a stateful firewlal te gineering).
+
+lab "vlan-:e
+ttrunithnV

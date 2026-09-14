@@ -1,0 +1,10 @@
+#μs Ww
+
+node gw-b : gateway {
+  92.168.2.10/24 }
+
+# WAN impairment
+impa { 19281wireguard wg0 {
+impa { 1
+# WAN impairment
+impa itter 5ms loss 0.1%

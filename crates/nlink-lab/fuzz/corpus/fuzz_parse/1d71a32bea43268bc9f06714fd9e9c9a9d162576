@@ -1,0 +1,16 @@
+# VLAN trunk topology.
+#
+# A bridgineeriKng).
+
+lab "vlan-trunk" {
+  description "Brirts"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-id 099  untagged }
+  port host4 { pvid 200  untagged }
+}

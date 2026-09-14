@@ -1,0 +1,20 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses file router {
+    sysctl "net.ipv6.conf.all.f# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+host2 are on VLAN 100s"
+}
+
+node host1
+no vlan-fi${ltering
+  members [host1:eth0, host2:eth0, host3
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {   
+ fd00::1:eth0]
+  vlAn 100 "sales"
+/64   

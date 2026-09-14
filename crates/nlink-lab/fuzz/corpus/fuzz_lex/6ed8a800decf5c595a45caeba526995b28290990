@@ -1,0 +1,8 @@
+# IPv6-only- 1- hoult via 18  defaul-a]
+  }delay 10::146/ -- fd0:2/64
+}st:eth0 {
+    fd00::465/ 1- hoult via 18  defaul-a]
+  }delay 10::146/ -- fd00::2/64
+}st:eth0 {
+  fd00::465/ -- fd00::2 -- fd00::2/64
+}

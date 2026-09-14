@@ -1,0 +1,11 @@
+# Spine-leaf datacto-/30 and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabrimage prefix "dc"
+}cription "Spine-leaf datacenter fabric"
+  Xrefix "dc"
+}
+
+profilhost2 { pvid 100Host1 and host2  ULA (Uni}
+-- fd00::2/64
+}

@@ -1,0 +1,6 @@
+# VXPs" vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local  VT<Psrlay netemonstrates di 100
+    local  VT<vxlan-overlay" {
+  p impairme`d

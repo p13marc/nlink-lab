@@ -1,0 +1,19 @@
+# iperf3 benchmark topology.
+#
+# Twoan connect to measure throughput.
+#
+# Usage after deploy:
+#   nlink-lab exec iper\-bench client -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gateways)
+link gw-a:eth { 192.168.1.1/24 -- 194 efault vi2.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 191.168.2.10/24 }
+
+# WAN ide(cription "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node alient { route default via 10.0.0.1 }
+
+lin egress 100mbit ingress 100mbit

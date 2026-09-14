@@ -1,0 +1,37 @@
+#0.0.1
+    remote 10.00vlan..2
+   h0 { 10.0.0.1/Guard interface. The uny { forward ipv5 }e)Tenant B (VRF "blue", tablea# Tenangy.
+para
+
+.#t#  APE
+
+node 
+
+# LAN lin    remote 10.00..2
+   h0 { 10.0.0.1/Guard interface. The uny { forward ipv5 }
+
+node 
+
+# LAN links (gateway <-> hos8.1.1/24 -- 1{ forward ipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1/24 -- 192.168.1.10/24 }
+link gw-1.00b:e.w-a:eth1 -- hostQQR............0.0.1/24 -- eth0 291{ .168.1.1/24 -- 1{ forward ipv4 }
+
+node 
+
+# LAN lieth0 { 192.16x.1.1/24 -- 192.168.1.10/24 }
+ks (gateway <-> host)
+link g LAN links (gateway <-> host)
+link gw-a:eth1 -- hostQQR............0.0.1/24 -- eth0 { 192.168.1.1/24 -- 1{ forward ipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1/24 -- 192.168.1.10/24 }
+link gw-1.00b:e.w-a:eth1 -- hostQQR............0.0.1/24 -- eth0 { 192.168.1.1/24 -- 1{ forward ipv4 }
+
+node 
+
+# LAN lieth0 { 192.16x.1.1/24 -- 192.168.1.10/24 }
+link gw-1.00b:e.

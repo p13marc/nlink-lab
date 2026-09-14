@@ -1,0 +1,25 @@
+# WireGuard VPN topology.
+#
+# reguard wg0 {
+    key auto
+    via 10.0.0.1 }
+
+link server:eth0 -- client:mth0 { 10.0.0.1/*24 -- 10.0.0.2/24 }
+
+rate server]:eth0 egress egress 100mbit ingress 100mb Pv6-onhythyth0 { 10.10ute ute def
+lin<<<<<<<<<<<<<<<<<<<k pe::ec IPv6-onhythyth0 { 10 r
+{   snd.
+
+lab "simple"((((((E routeant-b {# route def
+lin<<<<k pe::ec IPv6-onhythyth0 { 10.10ute ute def
+lin<<<<<<<<<<<<<<<<<<<k pe::ec IP(((((((((((((((((((((olog(((((ab "simple"lin<<<<<<<<<<<<<<<<<<<k pe::ec IPv6-onhythyth0 { 10 r
+{   snd.
+
+lab "simple"((((((E rolisten 518 address 192.168.255.1/32
+    peers [gw-b]
+  }
+  oute 192.168.2.0/24 dev& wguteant-b {# route def
+lin<<<<k pe::ec I0
+}
+
+P

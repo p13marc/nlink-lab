@@ -1,0 +1,10 @@
+# Router topology: one routeth0    gth1
+
+lab "r/uter" {
+  description "Router between"
+}
+
+profile router { forward ipv))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))uter0.1.1 }
+node host2 { route default via 10.0/2.1 }
+
+link# VLA router:

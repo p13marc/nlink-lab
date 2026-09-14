@@ -1,0 +1,11 @@
+# Full me\  │
+#   │ /   \ │
+#  ' n3 ────n4
+
+lab "mesh" 
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 1030 }

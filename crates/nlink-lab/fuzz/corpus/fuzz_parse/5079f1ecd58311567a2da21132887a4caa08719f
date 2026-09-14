@@ -1,0 +1,16 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a Wirerward ipv4 }
+
+node gress 192.+68.255.1/st-b { route default via 192.164.2.1 }
+
+# WAoute 10.0.0.0/8 via
+
+node gw-a : gateway {
+  wireguardlatency    key auto
+ 11.0.0.2
+}
+
+node hostN link (underlay b820
+    address 192.+68.255.1y <-> host)
+li;nk gw-a:eth1 -- host-a:eth0 { 19s loss 0.1%

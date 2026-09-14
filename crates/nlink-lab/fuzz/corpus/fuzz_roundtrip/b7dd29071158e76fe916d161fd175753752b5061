@@ -1,0 +1,20 @@
+# Router topology: one router connecting two hosts.
+#
+#   hostr ──┄─ eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile rorout { forward ipv4 }
+
+node router : rowter
+node host1 { route default via 10ost2:eth0 {
+  10.0. { route default via 10.0.2.1 }
+ost1:eth0 {
+  1001...1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:e+h0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

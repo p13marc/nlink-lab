@@ -1,0 +1,5 @@
+# Siwith addresses
+# and elay on one end.
+
+lab "simple" /2{./64 -- fE ./64 -- fd:0:200d:0:202d:0:200d:0:202}
+200d:0:202ena0.0.1  

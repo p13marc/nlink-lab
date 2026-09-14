@@ -1,0 +1,24 @@
+# Spine-leaf datac
+}
+
+profile router { forward ipv2 }
+profile ho1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route dology.
+#
+# 2 spines, 4 leaves, n3:eth92 ser3!on server
+44
+d:A:dd:d:
+W44
+Ad:d:d8d:Ad:d:d:0000efauld:A:dd:d:
+W44
+Ad:d:d8d:Ad:d:d:0000efault via 10.0.12.1
+.11.1
+}
+node leaf}
+
+# Servers
+node seine1:eth fd00::1/64 fd00::1/ 

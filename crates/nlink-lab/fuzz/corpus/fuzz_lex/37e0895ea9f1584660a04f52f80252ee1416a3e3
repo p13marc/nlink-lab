@@ -1,0 +1,35 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 900ink spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.ter : router {
+  route 10.0.0.0/8fault via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 1outer {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/3ault via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 1outer {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+imir spine1:eth2 delay 5ms jitter 1ms

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-09-14
+
+One fix: a `vxlan` block with no `vni` rendered to un-parseable `vni 0` (#118).
+No API or syntax change. With this and 0.10.1's #116, all three fuzz targets run
+clean.
+
 ### Fixed — a `vxlan` with no `vni` rendered to un-parseable NLL (issue #118)
 
 `ast::VxlanDef::vni` was a bare `u32` defaulting to **0**, and lowering wrapped

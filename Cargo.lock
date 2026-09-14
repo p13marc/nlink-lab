@@ -3510,7 +3510,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.23.1",
  "flate2",
@@ -3539,7 +3539,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-backend"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "libc",
@@ -3559,7 +3559,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-cli"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -3589,7 +3589,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3598,7 +3598,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-shared"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "schemars 1.2.2",
  "serde",
@@ -3607,7 +3607,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-topoviewer"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "iced",

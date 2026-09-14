@@ -122,12 +122,12 @@ side-by-side examples, and migration notes — lives at
 
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
-on [`nlink`](https://github.com/p13marc/nlink) 0.26 as of
-nlink-lab 0.8.0 (the unreleased 0.9 series carries the
-deep-analysis fix waves — see CHANGELOG `[Unreleased]`).
+on [`nlink`](https://github.com/p13marc/nlink) 0.27 as of
+nlink-lab 0.9.0.
 
-Current release: **0.7.0** (2026-07-15) — the "Plan 160 / nlink
-0.25" arc. WireGuard is fully declarative (device bootstrap via
+Current release: **0.9.0** (2026-09-14) — the deep-analysis
+series: six audit waves plus the `lsp`, `top`, IPv6, `qdisc`,
+snapshot/restore, events and FRR waves. WireGuard is fully declarative (device bootstrap via
 `WireguardConfig::ensure_devices`), rate limits reconcile instead
 of rebuild (`RateLimiter::reconcile`), teardown uses the typed
 `del_*_if_exists` helpers, and deploy self-heals a stale namespace

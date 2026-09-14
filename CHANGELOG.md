@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-14
+
+The deep-analysis series: six audit waves (issues #13–#86) followed by the
+feature waves #48, #56, #59, #63, #65, #67, #70, #71, #72, #75, #103 and the
+nlink 0.26 → 0.27 adoption. Highlights, newest first — every section below has
+the detail.
+
+- **New commands**: `lsp` (language server), `top` (live TUI), `events`,
+  `snapshot`/`restore`, `fmt`, `lint`, `doctor`, `verify`, `edit`, `scenario`.
+- **NLL**: first-class IPv6, `qdisc` blocks, typed and spanned AST values (parse
+  errors now carry a span), FRR dynamic routing, per-pair impairment matrices.
+- **Engine**: deploy is plan + execute, `apply` reconciles a running lab, and
+  every netlink resource commits through nlink's declarative reconcile paths.
+- **Breaking**: see the `(breaking)` and `Migration` sections below — the library
+  API, some CLI flags and a few NLL spellings changed across the series.
+
 ### Changed — nlink 0.27 (issue #107)
 
 - **`nlink` 0.26 → 0.27**, a declarative-configuration release. It needed

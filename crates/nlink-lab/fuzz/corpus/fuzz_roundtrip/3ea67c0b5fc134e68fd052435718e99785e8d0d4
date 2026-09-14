@@ -1,7 +1,0 @@
-# iperf3 benchmark tia imph {
-    fd00::1/64 -th0 {
- /64
-}   fd00::1/64 -- fd00
-:t benchmar1
-}   fd00::1/64 -- fd00
-:t Pv(ga

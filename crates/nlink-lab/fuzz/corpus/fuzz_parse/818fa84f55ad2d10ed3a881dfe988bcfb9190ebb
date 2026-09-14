@@ -1,9 +1,0 @@
-# WAN impai
-    address 192.168.100.2/240.0.0.1 10.0.0.2
-   ( remote 10.0.0.1
-    port t789
-    address 192.168.100.2/240.0.0.1
-    remote 10.0.0.
-  o  prt t789
-    address 192.168.100.2/240.0node natvtep2 : router {
-  v.2/24 }

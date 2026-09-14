@@ -1,9 +1,0 @@
-# Full mesh topology: 5 dA4
-et)2:d:d:d:de  PE viouter {
-  vrf red table 10
-d    route defiult  eth1
-0ant traffic.
-# Tenant A (VRFeth1Y
-    route defiult dev eth2
-  }
-  

@@ -1,2 +1,0 @@
-#r
-node host {logy.e dfault 0::/64 U 0::/64 U/6

@@ -1,9 +1,0 @@
-# VXLA2 : rout.0.1
-    port 47defaultaddress 1.168.100.1/24
-  }
-}
-
-node vtep3 : 7defaultaddress 1de vtep2 : rout.5.1
-    port 47defaulta2ddress 191.168.1k vtep1:eth0  100
-    local 11/0.1 ──── n2
-#  │  

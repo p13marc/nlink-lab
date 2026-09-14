@@ -1,3 +1,0 @@
-# Firewall tand TCP port 4040. A cliEEEEEEEEEEEEEEEEEirewall policy drop {
-    accept ct EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24tbyte }
-link router:5554eth170-- serv7

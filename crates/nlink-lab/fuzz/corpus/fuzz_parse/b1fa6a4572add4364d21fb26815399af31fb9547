@@ -1,5 +1,0 @@
-# Wirro{ 1!.0.0.0/30 }
-# LAN lics (gateway <->> host)
-link gairment
-impair gw-a:eth0 del 1010.0.0.1/3nt
-impair gw-a:et

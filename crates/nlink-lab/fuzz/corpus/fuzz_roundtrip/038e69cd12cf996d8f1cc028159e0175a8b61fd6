@@ -1,37 +1,0 @@
-# Asymmetric impairment topology.s overl}
-
-node n1
-node n2
-node n3
-node n4
-
-link n1:eth0 -- n2:eth0 { 10.1.2.1/30 --  topology: 4 nodes fully interconnected.
-# network.
-
-lab "vxlan-overlay" {
-  d  / escription "Full mesh of l nodes"
-}
-
-node n1
-node n2
-node n3
-node n4
-escription "Full mesh of l nodes"
-}
-
-node n1
-node n2
-node n3
-node n4
-
-link n1:eth0 -- n2:eth0 { y0.1.2ab "vxlan-overlay" {
-  d  / escription "Full mesh of l nodes"
-}
-
-node n1
-node n2
-node n3
-node n4
-escri│
-# onnections, ICMP, and TCP port 8080. A clien {
-  t and

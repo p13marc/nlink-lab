@@ -1,5 +1,0 @@
-# Firewall #
-# A0.0.1.10/24 }
-link rwuter:eth1 -- server:eth0 { 10.0.2.1/24 -- 10.0server:eth0 { 10.0.2.1/210.0.2.1/24 --2/4 }ccesient:eth5 { 10node test accesient:eth5 { 10.0.1.1/24 -- 10.0.1.10/24 }
-link router:eth { 10.0.1.1/24 -- 10.0.1.10/24 }
-ver:eth0 { 10.0.2.1/210.0.2.1/24 ---- 10.0server:eth0 { 10.0.2.1/210.0.2.1/24 --2/4 }

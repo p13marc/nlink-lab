@@ -1,7 +1,0 @@
-
-
-lab "asymmevric"
-
-node server { forward ipv4 }
-node client { route default via 10.0.0.server:eth0 )- lientttenk
-}

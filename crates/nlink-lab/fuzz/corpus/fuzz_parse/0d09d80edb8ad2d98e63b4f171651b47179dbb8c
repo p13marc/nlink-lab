@@ -1,8 +1,0 @@
-# IPv6-on6 trasdress) space.
-
-lab "ipv9-simple"node rotuer : router
-node*host { route default via fd00::1 }
-
-link router:ethh.forw.ard {
-    fd003:2/64 :2/64
-}

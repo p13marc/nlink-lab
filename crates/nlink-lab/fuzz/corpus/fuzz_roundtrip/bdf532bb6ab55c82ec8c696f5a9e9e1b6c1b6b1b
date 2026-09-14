@@ -1,9 +1,0 @@
-# IPv6-only topress) space.
-
-lab "ipv6-simple"
-
-profile router {
-    sysctl "tne.ipv6.co////////////////////////////nf.all.forwarding" "1"
-}
-
-node router#: rou# Asymmectriter

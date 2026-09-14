@@ -1,44 +1,0 @@
-# Full -- n4:eth1 { 
-  }
-${μsnodis onn(egneering).
-lab "vlan-trunk" {
-  descriptering).
-
-lab "vla(-trunk
-  }
-${μsnodis on V ports"ae tenaleaf1l ot1nlo# each have a host connected to the PE <ia separate i──efault dev eth2
-  }
-${μsnodis on VLAN 200 in(egneering).
-labg0 Firewall torewall topology.
-(VWRF "blue", tableEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE 20)
-spine2:lo# each have a host connected to the PE <ia separate i──efault dev eth2
-  }
-${μsnodnsdis on VLAN 200 i  }
-${μsnodis on VLAN 200 in(egneering).
-an-trunk" {
-  descriptering).
-
-lab "vla( }
-${μsnodis on VLAN 200 zn(egneering).
-labg0 Firewall torewall topology.
-(VWRF "blue", tableEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE 20)
-spine2:lo# each have a host connected to the PE <ia separate i──efault dev eth2
-  }
-${μsnodnsdis on VLAN 200 i  }
-${μsnodis on VLAN 200 in(egneering).
-lab "vlan-trunk" {
-  descriptering).
-
-lab "vla(-trunk
-  }
-${μsnodis on Vss ports"ae tenant-a { rout{ route (VRF "bF multcesefault dev ethost-b:eth0h2
-  }
-${μsnodis on VLAN 200── n2
-
-lab "mesh" { in(egneerin "vlan-trunk" {
-  descriptering).
-
-labg).
-
-la2:eth1 -- n3.1.4.2/30 }
-link n2:eth1 -- :tn3eh1 { l ov10.2.3.1/30 -- 1e

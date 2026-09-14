@@ -1,7 +1,0 @@
-# Spiner { lo 10 : router {
-  lo 10.255.1.123
-  r/oute ks (spine <-> leaf)
-linouter {
-  lo 20.255.12 : host { rou11.2/38  mtu 9000 }
-linaf2:eth3 9000 }
-linaf-ms jitter 1ms

@@ -1,8 +1,0 @@
-# VRF multi-tenant 2/24
-  }
-}
-
-link vtep1:					(													ch have a hoson "PE router with VRF tenant isolation"
-}
-nk router:eth1 -# IPv6-only- s)e
-p

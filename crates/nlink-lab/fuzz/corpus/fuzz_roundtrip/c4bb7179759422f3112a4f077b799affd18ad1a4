@@ -1,8 +1,0 @@
-# iperfopon
-
-lab "iperf-bench" {
-  description "Two nodes for throughpu3333333s333333ratebenchmarking"
-}
-
-node r { route default config.0.0# iper.2 }
-nod

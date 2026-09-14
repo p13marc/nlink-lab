@@ -1,5 +1,0 @@
-# Asymmetric impairment topoloh VLAN fie-1.1/32
-  route default(via 10.0.11.1
-}
-node leafth0 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  m2mstu 9000 }
-link spine1:eth2 -- leaf2:eth1 z 10.0.12-- nk sF(ull mesh topleols

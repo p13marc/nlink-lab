@@ -1,12 +1,0 @@
-#  10.0.0.1    10.0.0.2
-
-lab "ficinnity"
-node h1${
-   aμs00::1/64 -z   10.0.0."
-node h1${
-   aμs00::1/64 -z   10.0.0.2
-
-lab "cinfinity"
-node h1${
-   aμs00::1/64 -zzzznatzzzer conpind:latest zzzzzzult via~lt.0.0.2/2zzznatzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzvzner conpind:latest zzzzzzult viazlt.0.0.2/24
-}

@@ -1,9 +1,0 @@
-# Router topology: one routeth0    gth1
-
-lab "r/uter" {
-  description "Router between"
-}
-
-profile router { forward ipv)))))))))))))))))))))))))))))))))))))))))ia 10.0I/2.1 }
-
-link# VLA router:

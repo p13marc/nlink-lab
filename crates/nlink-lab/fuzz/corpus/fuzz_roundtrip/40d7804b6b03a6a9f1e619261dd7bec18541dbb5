@@ -1,4 +1,0 @@
-# iphcription "Two nodes for"
-sctl "pconf.{
-" "1"
-sctlf.all.f linkit ingress 050mbit

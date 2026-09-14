@@ -1,9 +1,0 @@
-# WireGua
-    vni 100
-    local 10./2b:eth1 -- sitesed by8.100.1+24
-  }
-0./2b:eth1 -- host-b:ethvtep1:eth0 { 1  local 10./2b:eth1(-- ho.10    local 10./2b:eth# VXLAN ovEPs"s 192.168.100.1/24
-  }
-}
-
-node vtep2 

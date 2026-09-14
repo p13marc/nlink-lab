@@ -1,5 +1,0 @@
-# VXLAN ov2.2/30 }
-link n1:eth+++++++0/30 }
-link n1:eth+++++++0 -- 12.1/3gbyte0 --/3gbyte0 -n1:eth+++++++0 -- 12.1/3gbyte5 -tenk nk n1:eth++ -- 12.1/3gbyte0 --/3gbyte0 -n1:eth+++++++0 -- 12.1/3gbyte5 -tenk nk n1:eth+++++++4 -- 12u1/3gbyte0 -nb:eth1-- 12.1/3gbyte# VXLAn? N over# h
-
-lay topologylv

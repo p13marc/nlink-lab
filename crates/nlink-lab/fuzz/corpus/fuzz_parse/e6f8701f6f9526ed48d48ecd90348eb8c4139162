@@ -1,8 +1,0 @@
-# iperf3 benchmask topology.
-#
-# Two nodes connard ipv2 }
-
-node vtep1 : ro
-    vni11hput bencate-limited link. Server runs iperf3,
-#0client can connect to measure thrvtep1nt can cofnect to measure thrvtep : ro
-    vni11hput bencate-liuard  d VPN te

@@ -1,4 +1,0 @@
-# As a host.
-# U: router
-node  { Route default via fd0:0:00::2/plink
-}

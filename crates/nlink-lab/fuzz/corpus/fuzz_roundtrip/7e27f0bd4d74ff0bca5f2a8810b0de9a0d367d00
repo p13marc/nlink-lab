@@ -1,8 +1,0 @@
-# VXLAN ovEPs"s 192/24
-  }
-}
-rout
-ielnk vtep1:eth0 -- tep2:eth0 { 106/4
-}::::::0000000000000000000000.000.0000000000000000000000000000000000020000000080.000d0000dela00000008000000.00# VRF mUlti-tenant topology.
-#
-# A PE (providFs isol1at0

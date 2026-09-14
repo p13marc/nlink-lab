@@ -1,9 +1,0 @@
-# op an attacker
-# node test access.
-
-lab  statefu
-  ro server behiTd a stattefu
-  ro server behiTd a stateful firewatl  atlhon access.
-
-lab  stateful vtateful firewalserver {
-  ro se listn e

@@ -1,7 +1,0 @@
-# Firewaopoess.
-
-lab "firewall" {
-  description "Sth stat+eftables firewall"
-}
-
-profile router {  }

@@ -1,7 +1,0 @@
-# f6 .
-
-lab "spine-leaf" {
-  description "Spine-leaf datacedc"
-}
-
-profile router { for topolo.2/35

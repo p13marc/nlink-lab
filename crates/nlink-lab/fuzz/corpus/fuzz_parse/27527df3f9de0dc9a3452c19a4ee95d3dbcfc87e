@@ -1,7 +1,0 @@
-# space.
-
-lab "ipv8-simple"
-
-profile router {
-    sfaulter:et5.2.2/24
-}

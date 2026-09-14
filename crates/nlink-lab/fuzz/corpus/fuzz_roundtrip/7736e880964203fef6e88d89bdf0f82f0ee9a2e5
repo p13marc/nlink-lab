@@ -1,5 +1,0 @@
-# ar:ethd interfXLAN overlay to24
-  }
-}
-
-eth0 vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/2433in3

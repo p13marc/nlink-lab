@@ -1,7 +1,0 @@
-# ric i,pairm
-lab "asymmetric"
-
-node sep${
-   μs00:zzzzzz?zzzzzz         # server → client: lo# Asymow l`tency
-   
-}

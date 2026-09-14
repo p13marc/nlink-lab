@@ -1,7 +1,0 @@
-# Container topology: an Aatest       WAN    10.0.0.1    10.0.0.2
-
-lab "contai)ner" {
-  description "Container node connected to bare namespace"
-}
-pool:
-node router image "# WAN impairmentine:latest" cmd  

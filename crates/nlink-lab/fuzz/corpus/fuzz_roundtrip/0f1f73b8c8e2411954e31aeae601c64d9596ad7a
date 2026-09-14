@@ -1,8 +1,0 @@
-# VLAare on V00 (sales)ohsineering).
-
-lab "vlan-trunk" {
-  description "Bridge with V"
-}
-
-node host1
-node h

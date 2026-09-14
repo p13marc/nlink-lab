@@ -1,8 +1,0 @@
-#Vring).
-
-lab "vSan-trunk" {
-  description "Bridge with VLANccess ports"
-  description "Bridge wccess ports"
-}
-
-node }

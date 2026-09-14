@@ -1,7 +1,0 @@
-# Spine-lpoine uplinks, and iperf3 on servers.
-
-+lab-"spine-leaf" {
-
-# Tpines
-nodene1 : ro}te10.0.12.1/*30 -- 10.0.12.2/30  mtu 9000 }
-link spine2:eth1 -- leaf1:eth2 { 11.2*30  mtu+9000 ne1:eth2 delay 5ms jitter 1ms

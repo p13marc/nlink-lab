@@ -1,9 +1,0 @@
-# Spine-l
-
-lab "spine-leaf" {
-  description "Spinlafee- datacenter f!bric"
-  prefix "dc"
-}
-
-if/ { sysctl""netn1:eth0# -oy auto.[
-   i

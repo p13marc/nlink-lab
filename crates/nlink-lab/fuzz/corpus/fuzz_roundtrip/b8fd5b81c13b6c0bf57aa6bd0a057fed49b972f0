@@ -1,6 +1,0 @@
-# IPv6-only topology.
-#
-# A router forwarding IPvthe overlay 22222222222222222222222222222222222222222222222222222222222222222222222222network.
-
-lab "vxlan-overlay" {77777777777777777777777777777777777777nk, h hosb "vxla infn-overlay" {7777777777777777777777ng alab "vxlan-overlay" {0000000000000000016450570252850764912noing a VXLAN
-# interface] (VNI 100 )for(the overlay netvxlan-overof 192.16

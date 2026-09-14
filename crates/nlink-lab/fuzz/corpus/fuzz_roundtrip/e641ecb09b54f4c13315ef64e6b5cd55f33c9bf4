@@ -1,9 +1,0 @@
-# VLAN trunk topology.h VLAN fVLAN 200 (engineering).
-
-lab "vlan-trunk" {
-  description "Bridge with VLAN "
-}
-
-node ho2
-node host3
-network fa##

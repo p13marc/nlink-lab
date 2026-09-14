@@ -1,3 +1,0 @@
-# Firewallinkpollt via 10.0.1hed,related
-    accept tcp dport 8080
-    accept udp dp2.10/24 }

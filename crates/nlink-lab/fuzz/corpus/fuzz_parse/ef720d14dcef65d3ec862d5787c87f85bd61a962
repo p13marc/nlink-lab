@@ -1,7 +1,0 @@
-# Asymmetri.
-# k.
-
-lab "asymmetric"
-
-node server { firewall   <- de ${ '#c er: satelliplink
-}

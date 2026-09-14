@@ -1,5 +1,0 @@
-# IXv6ulour t:e rouVer
-node*host { route default v fd00:}l 
-
-1: Uses fd00::Un/64
-}

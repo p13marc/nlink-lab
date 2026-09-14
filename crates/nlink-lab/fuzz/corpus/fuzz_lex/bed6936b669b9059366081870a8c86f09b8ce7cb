@@ -1,8 +1,0 @@
-# Costainer tology: bare namespace host.
-#
-#   router (container)  ──── host (namespace)
-#   alpine:matest ── hosmnt( aespace)
- #l  apil:neesatt          11.0.0.1  .0.0.2
-
-lab "coain{
-  descriptiest          t

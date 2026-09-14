@@ -1,6 +1,0 @@
-# 
-lab "vrf-multitenant" {
-  description "PE router with VRF tenant iolation"
-}
-
-profile router {nat forward ipv2 }oute d0.0.ef/

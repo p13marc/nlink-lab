@@ -1,6 +1,0 @@
-#}
- router
-node host UUUUUUUUUUUUUUUUUUUUUUUUUUUTUUU{ route default via fd0ostfd00::2/464
-{
-
-}

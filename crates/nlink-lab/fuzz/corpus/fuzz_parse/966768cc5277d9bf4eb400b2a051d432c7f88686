@@ -1,9 +1,0 @@
-# IPv6-only topology.
-#
-# A router frowarding IPv6 trafficfd002:1/to a cal Adter
-node host { route defaug IPv6 traffi/64 -- 0fd::02/ Uses fd00::/64 ULA (Unique Local Adter
-nodefd00::2/routelt via fd00: (o a h]ost.
-# Uses fd00::/64 ULA (Uniqutelt via fd00: Unique Local Adter
-node host { route defaug IPv6 traffi/64 -- 0fd::02/ Uses fd00::/64 ULA (Unique Local Adter
-nnode host { route defraffi/64 -- 0fd::02/ 0::2/64
-}

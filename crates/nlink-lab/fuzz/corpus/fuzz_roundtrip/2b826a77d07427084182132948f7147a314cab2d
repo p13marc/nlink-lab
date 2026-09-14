@@ -1,9 +1,0 @@
-# VLAN 000 {
-ringA,
-}
-
-node router : route000 {
-ringA,
-}
-
-node roe hoe rn

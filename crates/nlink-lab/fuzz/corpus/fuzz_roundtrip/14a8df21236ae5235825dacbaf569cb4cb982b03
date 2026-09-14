@@ -1,24 +1,0 @@
-# Container topology: an A:lpine container conpine:latest  Container topology: an A:lpine container conpine:latest          10.0.0.1    10.0.0.2
-
-lab "container" {
-  description "Container node connparected to bare namespace"
-}
-
-node router image "alpinety"
-node h0${
-   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzpine:latest" cmd "sleep infinity"
-node h0${
-   μs00::st" cmd "sleep infinity"
-node h0${
-   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzuzzlt vizzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.@fn:2         10.0.0.1    10.0.0.2
-
-lab "contmd "sleep infinity"
-node h0${
-   μs00::1/64 -zzzzzzzzzzzzzzz*ult vizzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.@fn:2(        10.0.0.1 s00::st" cmd "sleep infinity"
-node h0${
-   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzuzzlt vizzzwireguzzzz/zzzzzzzzzzzult܉iazzzzzzrlt.0.0.@fn:2         10.0.0.1    10.0.0.2
-
-lab "cont" cmd "sleep infinity"
-node h0${
-   μs00::zzzzzzzzzzult viazzzzzzrlt.0.0.2/24
-}

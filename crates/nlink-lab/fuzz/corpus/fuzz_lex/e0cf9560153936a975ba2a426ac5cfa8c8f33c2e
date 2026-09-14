@@ -1,5 +1,0 @@
-# I#
-# A routez f:2/64v6-only topd
-0r:eth0 -- hr {
-    syrctl   fd
-0r:eth0 -- hos:1-64 -- fd00::20.0.4444444444444444

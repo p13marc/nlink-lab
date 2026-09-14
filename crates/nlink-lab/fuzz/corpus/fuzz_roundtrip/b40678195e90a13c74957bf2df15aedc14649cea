@@ -1,7 +1,0 @@
-# VLAN trunk topology.
-3
-# A briVLAN 200 (engineering).
-
-lab "vlan-trunk" 00:26/4
-}::::::00000000001000000000.0000000000000000000000000000000000000000000000.00000000000000000000000,000000000:vlan-filtst4:et o0hhs,t2:eth0, host3:e00 "sal0  uUtagged }
-  port h { pvid 2200  s}

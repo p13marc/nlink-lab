@@ -1,9 +1,0 @@
-# Full mnod
-lab "ipv6-si"
-
-profile router {
-    sysctl "net.iarding" "1"
-}
-
-node router : router
-node host { route default  }

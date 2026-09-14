@@ -1,9 +1,0 @@
-ia 17000000000000route defau ltvia 10.1..0/24 via 70010000000000]]]]]]ipv4]]]]]]]]]]]000000z002.16.0.2 }
-node host-a { rebay 30ms jitter  17000000000000route defau ltvia 10.1..0/24 via 70010000000000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]000000z002.16.0.2 }
-node host-a { route default via 10 5ms loss 0.1.2/30
-  debay 30ms jitter  17000000000000route defau ltvia 10.1..0/24 via 70010000000ost1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]000000z002.16.0.2 }
-node host-a { route default via 10.1.0.1 }
-
-# Site B
-nloss 0.1%mbit
-}

@@ -1,21 +1,0 @@
-# Asymmetrth1
-
-lab "rou# Asymmetrth1
-
-lab "router" {ripstrates0overlay between two VTEPs"
-}
-
-prof link, eia 10.0.2b ter" {
-  descripttopolos0overlay between two VTEPs"
-}
-
-prof link, eia 10.0.2b ter"gy.
-#
-# De# Simple 3-node topology for testmonsdsttrates0overlay between two VTEPs"
-}
-
-prof link, eia 10.0.2b re throughput.
-#
-mgmt# Usage after deploy:
-#   nlink-lab exec iperf client -- iperf3 -c 10.0.0. "iperf-bench" {
-  dion "Twolt rver:eth0 -- client:eth0 { 10.0.0.1/24 -

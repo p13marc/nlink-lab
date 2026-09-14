@@ -1,6 +1,0 @@
-# VXLAfile # server → client: low late o hosts.
-#
-#   host0 (10.0.1.2) 0 -- h {
-    by a Wifd00::1/64 -- fd00::2.0.2.c/24 -- 10.0.2.2/24
- route default v 10  .0.2.2/ 24
-}

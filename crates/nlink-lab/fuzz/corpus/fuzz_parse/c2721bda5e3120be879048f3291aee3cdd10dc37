@@ -1,4 +1,0 @@
-10.0.2.2
-}
-
-node h : router { route 10.2.0.0ult via !lt 

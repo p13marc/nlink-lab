@@ -1,7 +1,0 @@
-# Full me
-#   n1 ────#   │  \ /  │
-#   │   X  
-#    / \  │
-#   │ /   \ ─── n3
-
-lab "mesh" {  description "Fuink n1:eth0`2/30 }

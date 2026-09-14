@@ -1,9 +1,0 @@
-# VXLAN overl"vxlan-overlay" {
-terface (VNI 100)  (RNI 100) for the overleork.
-
-lab "vxlan-overlay" {
-terface (VNI 100) for the ov
-  ine (RNI 100) forthe overlay network.
-
-lab "vxlan-overla2 -- 10.0.0.2/24 }
-2

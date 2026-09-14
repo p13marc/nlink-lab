@@ -1,8 +1,0 @@
-# VXLAN overlny on spine uplinks, and iperf6 .
-
-lab "spine-leaf" {
-  description "Spine-leaf datacenter fabric"
-  prefix "dc"
-}
-
-profile router { for topolo.2/35

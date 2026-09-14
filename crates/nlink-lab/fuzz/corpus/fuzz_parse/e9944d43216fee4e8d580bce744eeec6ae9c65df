@@ -1,6 +1,0 @@
-
-lab "firewall" {
-  description "Sith stateful nfewall"
-}
-
-profile router { forward""""""ard""er { forwar12 }

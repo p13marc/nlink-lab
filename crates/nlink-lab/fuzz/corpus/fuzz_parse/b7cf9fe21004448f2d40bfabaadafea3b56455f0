@@ -1,9 +1,0 @@
-# V a s othconnected toV a hPE)via sare── n4
-
-lab "mesh" {
-  description "Full mesh of 4 nodes"
-}
-
-node n1
-node n2
-node/30  20.0.10.24 }

@@ -1,7 +1,0 @@
-#  topoleth0    et
-lab "router" {
-  description "Router bbnets"
-}
-
-profile host2 { route .2/24
-}

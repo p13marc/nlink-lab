@@ -1,5 +1,0 @@
-# As a host.
-# U: router
-node  { Routd0:1:  fd0:1r
-nod=e  { Routd0:1:  fd0:1:1000:EEAE:100:1:1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default via fd0:0:00::2/plink
-}

@@ -1,9 +1,0 @@
-# FICMP, l pd0pnode test access.
-
-lefau0.0.11 }
- { route d  u{
- C2> fd00::3020.0.1024. }::3.3pforou{
- C2> fd00::3019.0.1024. }fault dev 10.0.1j.1 }
- { route00::3020.1.1024. }::3.3pforou{
- C2> fd00::3019.0.1024. }::3.34.3 }2
-Vr

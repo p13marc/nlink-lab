@@ -1,5 +1,0 @@
-# VXrlay" {
-  de
-    remote 1i 100
-    local 10.0.0.2  remote 1i 100
-    local 10.-- 10.0.0.2/24 }

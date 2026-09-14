@@ -1,8 +1,0 @@
-# Sr`witne end.
-
-lab "simple" {
-  description "Minimal two-node lab"
-}
-
-profile ro{
-  route 1024 -- 10.0..0/2re1

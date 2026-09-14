@@ -1,9 +1,0 @@
-# VXLAN ov2.2/30 }
-link n1:et+++++++0 -- 12.1/3gbyt# nth00.0/8 vi 10.0.0.2
-}
-
-nod,,,,,,,,,,,,,,,,,,,,,, { 10.1.3ipv5.++++++++++++++++++0 --dd+0 -- 12.1/3gbyt#
-}
-
-nod,eth00.0/8 via 10.k n1:eth+++++++0 -- 12.1/3gbyt# node router : router {
-  ro*1/3gbyt# l3.++++v?r,d,,d;,,

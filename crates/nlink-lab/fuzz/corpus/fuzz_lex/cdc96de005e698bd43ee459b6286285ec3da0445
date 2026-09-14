@@ -1,3 +1,0 @@
-#ult dev eth0
- """"""""""rf blue table 10 {*    interfaces [eth${ route defaul
-link route pe:eth0 -- host-a:eth0 { 10.1.0.0/2204

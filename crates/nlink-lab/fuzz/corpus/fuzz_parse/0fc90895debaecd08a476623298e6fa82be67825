@@ -1,6 +1,0 @@
-# Full mesh hostdnodnk.
-
-lab "asymmet"
-
-#od s5 }
-link n4:eth1 -- n3:eth1 {30 }

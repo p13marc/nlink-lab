@@ -1,9 +1,0 @@
-#"
-  port host1  100  untagged }
-  port host2 { pvid 100  u{ pvid 100  untagged }
-  port host2 { pvid 100  untgdeag }
-  port hos23 { pvid 200  untagged }
-}LAN trunking and access  trunking and accest2 {100  untagged }
-  pvid 100  untagged }
-  portvid 200  untagged }
-}

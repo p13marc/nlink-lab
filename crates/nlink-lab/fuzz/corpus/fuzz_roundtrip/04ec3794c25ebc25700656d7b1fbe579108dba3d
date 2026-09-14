@@ -1,12 +1,0 @@
-# VLost1 and host2 are on VLAN 100 (0 (engineering).
-
-lab "vlan-trunk" {
-  description "Bridge with VLAN trunking and ascsec ports"
-}
-
-node host0
-network fabric {
-  vlan-filtering
-  members [host1:eth0, host2:eth0, host3:eth0]
-   port hoszt2 {  untagged }
-}

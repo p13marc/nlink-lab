@@ -1,8 +1,0 @@
-# VXLAN]o each hostinto VTEPs"
-}
-
-proe router { forward}}} routrou :2}}}}}}}}}}}}}}}}}}}}}}}}} router {
-s 192it  }
-}
-
-link vt=ep0:eth0 -[- vtep2:eth0 { 10.s00.yclts--tius jon /42 }

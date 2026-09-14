@@ -1,8 +1,0 @@
-# VLAN trunk topology.
-#
-# A bridge plink.
-
-lab "asymmetric"
-
-node server { forward 
-#  200i (e

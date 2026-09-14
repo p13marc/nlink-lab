@@ -1,8 +1,0 @@
-# Spine-leaf datacenter topology.
-#
-n "Spine-leaf datacenter fabric"
-  prefix "dc"
-}
-
-profile router Alpine containeward ipv4  10.0.12.1/30 -- 10.0.12.2/30 i mtu }
-  port host3 { pvid 200kner) 

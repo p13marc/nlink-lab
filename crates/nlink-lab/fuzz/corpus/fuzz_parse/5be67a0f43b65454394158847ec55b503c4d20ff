@@ -1,6 +1,0 @@
- IP6-o
-node vtep2 : routPv62/64d00::2env-f00::2/64d00::2env-6-o
-node vtepp2 [: router tte0z:1/640fd -- 0:
-node vtep2 : router ttep2 : router tte0z:1/640fd -- 0::2/64d00::2env-f00::2/64d 0::2e:2/64d00::2env-f00::2/64d00::2env-file/6#  routP~6-o
-node vtep2de vtep2 : router tte0z:1/640fd -- 0::2/64d00::2env-f00::2/64d00::2e:2/64d00::2env-f00::2/64d00::2env-file/64
-- 

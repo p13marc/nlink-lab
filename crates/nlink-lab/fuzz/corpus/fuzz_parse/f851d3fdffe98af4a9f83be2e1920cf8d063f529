@@ -1,8 +1,0 @@
-# Spine-lewith loopback
-# addresses, netem impamon enst pine uplinks, and iperf3 on servers.
-
-lab "spine-leaf"/////////////////////////////////////////////////pault via 10.0.11./24 }
-
-# Impairments
-impair spine1:eth1 delay 4ms jitter 1ms
-impair spine1:eth2 delay 5ms jitter 1ms

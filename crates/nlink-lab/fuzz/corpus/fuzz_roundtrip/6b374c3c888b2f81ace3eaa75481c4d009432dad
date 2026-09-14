@@ -1,9 +1,0 @@
-# IPert1 { route default via 10.0.1.1 }
-node host2 [ route default via 10.0.27777777777777777777777777777777777777777777777honal imparateirments using -> and <- arrows.
-# serverver { forward ipv4 }
-node client { route de?ault via 10.0.0.1 }
-
-link server:eth0 -- client:eth0 {
-    10.0.0.1/24 -- 10.0.0.2/24
-    )> delay 5ms                  # servuter : vrfsrouter {
-  route 10.0.0.0/8 vt1 { rout    vi# a

@@ -1,8 +1,0 @@
-# IPv6-or : router
-node host {logy.e default 0::/64 ULA 
-    sysctl "net.iparding" "1"
-}
-
-node router : default 0::/64 ULA (link router:eth0 -- host:eth0 {
-    fd00::1/64 -- fd00::2/64
-}

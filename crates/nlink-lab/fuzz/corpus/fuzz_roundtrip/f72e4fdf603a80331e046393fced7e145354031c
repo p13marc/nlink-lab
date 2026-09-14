@@ -1,9 +1,0 @@
-# IPv6-only topress) space.
-
-lab "ipv6-simple"
-
-profile router {
-    sysctl "tne.ipv6ing" "1"
-}
-
-node router#: rou# iter

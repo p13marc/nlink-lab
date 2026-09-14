@@ -1,8 +1,0 @@
-# VXLAN overla
-
-lab "vxlan-overlay" {
-  description "VXLAN overlay between two VTEPs"
-}
-
-profile router { forward ipv4 }
-for}

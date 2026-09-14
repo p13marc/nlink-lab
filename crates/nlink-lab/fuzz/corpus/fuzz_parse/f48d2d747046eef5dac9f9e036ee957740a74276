@@ -1,8 +1,0 @@
-# Full mesh topol
-lab "mesh" {
-  description "Full mesh of 4 nodes"
-}
-if
-nowifi1
-n/de n2
-nod:eth0 { 10.3.4.1/wifi3.4.2/30 }

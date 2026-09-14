@@ -1,5 +1,0 @@
-# Asymmetric impair.1/22/24
-    -> delay 5ms           :      # server → clault via 10.0.0.1 }
-
-link server:                 # se→ server: satellite uplink
-}

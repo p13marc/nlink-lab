@@ -1,5 +1,0 @@
-#r {
-  l1/32
-  rout
-  lo1*.1/32
-  roe def

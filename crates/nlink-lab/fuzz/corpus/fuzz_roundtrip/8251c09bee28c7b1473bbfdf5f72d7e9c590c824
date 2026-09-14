@@ -1,4 +1,0 @@
-# 
-sctl "pconf.{
-" "1"
-sctlf.all.ingress 05t

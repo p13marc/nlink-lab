@@ -1,4 +1,0 @@
-# Firewathif only allows e }
-wall pol accept ct hed,related
-    accep= tcp podrt 6160
-    ae

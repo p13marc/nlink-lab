@@ -1,5 +1,0 @@
-# VLAN t (s3 ngineering).
-
-lab "vlan-trunk" {
-  desc.ription  host0 { p00  untagg  untagged }
-}

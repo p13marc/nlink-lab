@@ -1,7 +1,0 @@
-# 
-
-lab "iperf-bench" {
-  description "Two nodmarking"
-}
-
-node server { route default via int0.01mbit

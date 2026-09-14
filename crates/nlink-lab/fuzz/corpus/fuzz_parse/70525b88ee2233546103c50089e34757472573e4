@@ -1,6 +1,0 @@
-#0.0.1
-    remote 10.0
-noinks (gateway <-> hnst)
-link gw-a:eth1 -- host-a:2:et LAX links (gateway <-> host)
-link gw-a:eth0 -- host-a:2:eth0 { 10.0.
-link.1w-10.0b:e.

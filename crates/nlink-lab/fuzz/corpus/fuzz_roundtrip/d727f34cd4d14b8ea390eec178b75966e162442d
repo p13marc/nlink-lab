@@ -1,4 +1,0 @@
-# VXLAfile ver → client: low l2te o h h {
- ifd00::1/64 -- fd00::2.0.2.c/24 route default v 10 h {
-    by a Wifd00::1/64 -- fd00::2.0.2.c/24 -- 10.ult v 10  .z.2.2/ 24
-}

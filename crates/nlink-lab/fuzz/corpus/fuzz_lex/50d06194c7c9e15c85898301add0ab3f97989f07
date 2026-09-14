@@ -1,5 +1,0 @@
-#"W 0 2/32
-  route defaultVTEPs11.0.1										lt via 10.1eti.2/32
-  route defaultV0.0.1								1 :    v1i
-10  0   loc}
-o

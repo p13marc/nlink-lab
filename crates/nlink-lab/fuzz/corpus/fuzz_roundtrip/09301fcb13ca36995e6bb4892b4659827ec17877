@@ -1,5 +1,0 @@
-# VRF multi-t# Tena# }
-
-node hosk router4 hS:eo ULA (Unique Local A00::1/64 -- fd00::1:00::1/64 -- fd00::1:::::::::::::::::::rate::::::::::::::::::::::::::::::::::::::::1::::::::0.10.0.1 }
-node tenant-b { r::0.10.0.1 }
-0.0.1/2- tenant-b:eth0 { 10.200.0.10/24 }

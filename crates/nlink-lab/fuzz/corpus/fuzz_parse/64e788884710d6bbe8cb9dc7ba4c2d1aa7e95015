@@ -1,6 +1,0 @@
-#
-
-lab "ip"
-
-profile rr {route default via 11.0 via 10.0/24
-}

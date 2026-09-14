@@ -1,9 +1,0 @@
-# VLAast1
-node host2
-node host3
-
-netwkr{ fabriAN t:200:ruabae host3
-
-netwkr{ fabric {
-  vlan-filtering
- 202:20

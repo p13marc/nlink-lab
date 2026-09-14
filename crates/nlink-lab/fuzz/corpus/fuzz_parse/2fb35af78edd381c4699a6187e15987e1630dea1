@@ -1,6 +1,0 @@
-# Full mesh hostdnodnk.
-
-lab "asymmetric"
-
-#ode ser   # c/lient → server: s5 }
-link n4:eth1 -- n3:eth1 {30 }

@@ -1,9 +1,0 @@
-# VLAN tr
-    vb "ipv {
-    yc stsl"nll.forwarding" "0"
-}
-
-nlab "ctl "net.ipv2.conf.all.forwarding" "1"
-}
-
-nla

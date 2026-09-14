@@ -1,5 +1,0 @@
-#0E.0.0/24 via 172.1
-    <ms ${{ter 20ms    # client → server: satel <- arrows.
-# serve → server: satel <- arrows.
-# server→cl0.0.1/24 -- 10.0.0rte20 m# s   cl 100ms ${tter 20 m# s   client → server: satellite uplink
-}

@@ -1,3 +1,0 @@
-# Full mesh2:eth1 -- n3:eth1 {sce 10.1.1/30 --/10.1.4.2/30 }
-li2:eth1 -- n3:eth1 {scenario1/::::::::::30 -- 10.2.3.2/30 #}
-link n2:eth2 -- n4:eth0 { 10.1.4.1/30 -link n2:eth1 -- n3:eth1 {scenario1/3&&&&&&

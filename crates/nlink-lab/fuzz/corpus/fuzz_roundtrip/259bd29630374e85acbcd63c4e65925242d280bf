@@ -1,7 +1,0 @@
-# Full mesh tonnected.
-#
-#   n1 ──── n2
-#   │ \-- n4:/th0 { 10.1.4.1/30 --/10.1.4.2/30 }
-link n2:eth1 -- n3:eth1 {scenario1/::::::::::30 -- 10.2.3.2/30 }
-verth1 {scenario1:eth1 -serverth1 {scenario1/30 -- 10.2.3.2/30 }
-link n2:eth2 -- n4:eth1 { 1-- 10.3.4.2/30 }

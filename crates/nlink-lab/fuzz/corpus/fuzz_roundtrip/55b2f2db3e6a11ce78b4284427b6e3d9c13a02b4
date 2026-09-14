@@ -1,3 +1,0 @@
-# AsyAde clientnt { route defau default -> delay 5ms  ver { forward ipv4 }
-node client { route default -> delay 5ms    { route ualdfet -> delay 5ms  ver { forward ipv4 }
-node clientnt { route default -> delay 5ms    { route default -> delae default -> delalt -> delay 5ms    { route default -> delaute default -> delay 5ms  ver {  5ms           

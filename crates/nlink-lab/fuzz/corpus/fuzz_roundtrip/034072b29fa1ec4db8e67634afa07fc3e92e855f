@@ -1,8 +1,0 @@
- 10pull 10pull. -- DDDDDDDD vlan-fDDDD v#4
-}eth0 {/24 -- 10pull4 -- 10pull.0.2.2/24
-de ho {
-  10.0.2.1/20 {/24 -- 10pull4 -- 10pull.0.2.2/24
-de ho {
-  10.0.2.1/24 -- 10pull. -- DDDD-- 10pull.0.2.2/24
-de ho {
-  10.0.fime

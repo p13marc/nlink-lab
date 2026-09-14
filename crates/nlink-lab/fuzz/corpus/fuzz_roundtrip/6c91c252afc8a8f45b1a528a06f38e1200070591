@@ -1,7 +1,0 @@
-# IPv6-only topologroutersyswawdi
-node host { route defaultiv afire5::1 r
-node  { route defaultiv a fd15::1 }
-
-link router:eth0 -- h {
-    fd00::1/64 -- fd00::2ozt:eth0 {
- /6::2/6}

@@ -1,6 +1,0 @@
-# IPv6-only topology.
-#
-uate 50mbir-a:w
-an0 -- r72.16.0.2/30
-  delay 30ms jitter 5ms loss 0.1% rat
-}

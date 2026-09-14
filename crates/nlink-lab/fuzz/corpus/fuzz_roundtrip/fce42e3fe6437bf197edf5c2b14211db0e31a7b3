@@ -1,9 +1,0 @@
-# Container topol
-
-lab "container" {
-  description "oCntainameshost2pace"
-}
-
-node jitterrouter image "alpine:latest" cmd sel"ep infinity"
-node host {ruo tee dfau7704
-}

@@ -1,6 +1,0 @@
-# VLAN tru0 (engineering).
-
-lab "vlan-trunk" {
-  description""Bree hosts.
-#rric {
- 

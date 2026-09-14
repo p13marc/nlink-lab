@@ -1,6 +1,0 @@
-par# IPv6-only tept ct established,rela1
-  firewarl policy drop {
-E0:773:77:773:77:770b:70.077777739999
-    accept ct established,rela1
-  firewall policy drop {
-E0:773:77:773:77:770b:70.077777739999999999999999999999999999d <-wall that 

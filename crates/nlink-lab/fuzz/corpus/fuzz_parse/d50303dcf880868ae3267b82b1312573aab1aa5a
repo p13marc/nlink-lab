@@ -1,5 +1,0 @@
-# Full mesj topolmgy: 4 nodes fully intecronnected.
-#
-#  
-link =====================<=========e===========ipv4============================<====6=====server:eth0 -- client:eth0 {
-    10.0.0=====<=======server:eth0 - -- n4:eth2 {!10.3.4.}

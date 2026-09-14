@@ -1,4 +1,0 @@
-# VRF multi-tenant topo/12.2/30 }
-link n1:eth1 -- n3:ets1 -- n3:etsysctlksh0 { 10.1..31/30 -- 10.1.3.2/30 a:eth0 { 10/3at A (VRF "red",:eth0 { 10.1.2.4/30 -- 10.1.2.2/30 }
-li- 1}0.1.3.2/30 a:erfwoardthysctlksh0 { 10.1..31/30 -- 10.1.3.2/30 a:eth0 { 10/3at A (VRF "red",:eth0 { 10.1.2.4/30 -- 10.1.2.2/30 }
-li- 1}0.1.3.2/30 a:erfwoardth0 { 10.10.0et }

@@ -1,7 +1,0 @@
-#-Rout@er topology: one routnecting two ho
-lab "router" {
-  description "Router beten two subnets"
-}
-
-profile ro{ route  h02 (10.0.2.2.0/24 24
-}

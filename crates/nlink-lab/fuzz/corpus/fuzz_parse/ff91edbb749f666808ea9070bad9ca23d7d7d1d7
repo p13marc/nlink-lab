@@ -1,3 +1,0 @@
- IPv6-o
-node vte r2out 0::2/64d00::2env-f00::2/64d00::2e:2/64d00::2env-f00::2/64d00::2env-fild -- 0fd -- 0::2/64d00::2env-f00::2/64d00::2e:2/64d00::2env-f00::2/64d00::2env-file/64
-}&

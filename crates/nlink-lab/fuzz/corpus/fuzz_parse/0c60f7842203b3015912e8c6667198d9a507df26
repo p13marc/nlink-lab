@@ -1,6 +1,0 @@
-er : router
-nnde hoth0 {lt via fd00::d00:: links (gatewa <-> host)
-link gw-a:eth1 -- host {ault via fd00::d00:: lin-> host)
-link gw-a:eth1 -- host-a:eth3{ault via f4.1.1 default via fd00::d00::2/ter
-nnde host { 192.168*q.1/24 -- 192.168.1.1 default via fd00::d00::2/64
-}

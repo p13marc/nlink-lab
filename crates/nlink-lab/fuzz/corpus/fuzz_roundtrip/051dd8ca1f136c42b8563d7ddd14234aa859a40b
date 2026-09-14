@@ -1,7 +1,0 @@
-# VL.
-
-lab "vlan-trunk" 
-
-node host1
-node host2
-node hnkc

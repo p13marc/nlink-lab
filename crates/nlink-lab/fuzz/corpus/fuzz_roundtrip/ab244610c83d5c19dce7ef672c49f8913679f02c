@@ -1,5 +1,0 @@
-# Conug
-link router:eth0 -- host:eth0${
-    fd00::r st:et    eth0    eth1
-
-la,@"routeer → c0::/6 

@@ -1,4 +1,0 @@
-# IPv6-o????????forwipv5 }
-
-node rovia 1040g IPv6w{
-node client { route default via 1040g 9-sv

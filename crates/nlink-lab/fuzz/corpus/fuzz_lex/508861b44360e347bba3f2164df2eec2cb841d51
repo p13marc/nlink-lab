@@ -1,5 +1,0 @@
-# Spine-leaf datacen.0-- 10.0.21.2/30 0mti
-mink spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
-}
-
-impair router:eth0 deda0..22.pine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0mpair router:eth0 deda0..22.pine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0 ir spine1:eth2 del# Fulay 5msl  j

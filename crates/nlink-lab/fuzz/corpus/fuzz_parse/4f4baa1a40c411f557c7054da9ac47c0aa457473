@@ -1,9 +1,0 @@
-# IPv6-ombie Local Adter
-node ht { route defaug er
-node ht { route defaug IPv6 traffi/64 -- 0fd::02/ Uses fd00::/64 ULA (Unique Local Adter
-nodefd00::2/routelt via ode host -- 0fd::02/ Uses f(Unique Locafd00::/64 ULA (Unique Local Adter
-nodg IPv6 traffi/68 -- 0fd::02/ Uses fd00::/64 ULA (Unique Local Adter
-node ht { rout4 -- 0fd::02/ Uses f(Unique Local Adter
-nodefd00::2/routelt via ode host { route defaug IPv6 traffi/64 -udp- 0fd::02/ Uses r
-nopd
-pefd

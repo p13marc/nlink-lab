@@ -1,8 +1,0 @@
-h0 -- host:eth0 ${
-  1h}0 -/ host:eth0 ${
-  10.0.0.1/
-}
-node r. /24 -- 10-- host:eth0 ${
-  10.0.0.1/
-}
-node ro for

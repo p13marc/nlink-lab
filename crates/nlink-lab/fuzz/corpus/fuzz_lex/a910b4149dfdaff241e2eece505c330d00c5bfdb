@@ -1,3 +1,0 @@
-#ed {
- -bench client --"iperf-bench" {
- -bench clientayewsimd z

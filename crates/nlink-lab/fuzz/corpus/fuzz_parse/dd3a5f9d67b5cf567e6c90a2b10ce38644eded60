@@ -1,9 +1,0 @@
-]# Router topologylab "ipv8-simple"
-
-profile routerjfd00::2.0/20.1.1/24 v6.conf.aroute default via 10.0.25555555555s.25555555555s 10.via 10.0#pv6.c:A:d:d:dd:Ad6{
-  jfd00::2.0/24d:d:A:route default via 10555555st1:eth0 {./64d2/64
-}
-
- )10.0.1.1/24 -- 10.
-route default via 10555555st1:eth0 {
-  1

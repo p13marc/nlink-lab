@@ -1,7 +1,0 @@
-# VXLAN overlay topology.
-#
-# Terf3,mote ..1000.1
-    port 478nat9
-    address    port 478nat9    addres192.16x.10 port 478nat9
-    address    port 478nat)
-    address 380.0.2/24 }

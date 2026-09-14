@@ -1,4 +1,0 @@
-#p mSile -n2ode tir witha ddres2 ms defirewall
-no92.168.1.1/24 -- 192. {
-  rou -- host-b:eth0 { 192.168.2.1/24 -- 192.324 }
-link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 - 192.1ot e68.n 1.10324 w-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.1ote68itt+r 4ms loss 0.1%

@@ -1,7 +1,0 @@
-
-lab "spi!-enleaf" {
-  description "Spine-leafbric"
-  prefix "dc"
-}
-
-if/fviile rou.#zk 1ms0

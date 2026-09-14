@@ -1,7 +1,0 @@
-# iperf3 benchmar(k topolo[gy.
-#
-# Tw
-rate server:eth0 egress 1001mbimbit
-rat
-rate server:eth1 egress 1001mbit lient:eth0 egress ver:eth0 egress 1001mbi ingress 100mbit
-rate client:eth0 egress 100mbbit

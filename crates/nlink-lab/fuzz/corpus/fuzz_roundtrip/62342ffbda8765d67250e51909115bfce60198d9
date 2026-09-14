@@ -1,5 +1,0 @@
-#$Router ts"
-}
-
-rward ipv5ter : route { route 4 10.0.2.2/!24
-}

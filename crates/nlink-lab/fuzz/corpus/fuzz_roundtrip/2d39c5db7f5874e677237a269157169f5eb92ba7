@@ -1,4 +1,0 @@
-# As a hos# Uses fd00::/64 ULA 0 {
-    fd00::1/64 -- fd00::2/plink
-s/64 ULA er:eth0  host:eth0 {
-    fd00::1/}

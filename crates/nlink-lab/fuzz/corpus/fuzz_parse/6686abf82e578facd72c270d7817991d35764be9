@@ -1,6 +1,0 @@
-# I'Pv6-only to${orw3/30ardA (Unique Loc
-node host { route default via fd00::d003:1/ default via: fd00::d002:1/64 -- :eth04
-}
-al Address)uter
-node host { route default v02:1/ default via fd00::d002:1/64 -- :eth04
-}

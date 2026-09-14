@@ -1,7 +1,0 @@
-# VRF m
-
-lab "mesh" {
-# s{0.0.2/24
-     }
-
-rate server:eth0 egress# 100menant-b:

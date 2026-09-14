@@ -1,7 +1,0 @@
-# VXing a 
-# interface (VNI   }
-}
-
-zode v{ forward ipv4 }
-
-node vtep1 : rnode v{ forward ipv4 4 }

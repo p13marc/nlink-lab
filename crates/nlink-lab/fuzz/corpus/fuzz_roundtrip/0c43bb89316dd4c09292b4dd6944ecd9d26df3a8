@@ -1,5 +1,0 @@
-# Recting two hosts.
-#
-# {
-  1001.5.1/240.1/24 -- 11.0.+1.2link router:eth1 -- host  10.0.2.1/24 -- 1)nk r.2/24
-}

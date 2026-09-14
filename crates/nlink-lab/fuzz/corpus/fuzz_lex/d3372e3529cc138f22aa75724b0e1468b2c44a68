@@ -1,7 +1,0 @@
-# ip:00d00d:d000d:d:1:./mbit
-ratceelny a rate-llni t:0.2/24 }
-
-rateelni t:eth0 egress 100mbit i by a rate-limited link. ni t:eth0 egress 100mbit i byOa rate-limitgress 100mbitit
-ratceelni t:eth0 egress 100mbit i bs 100mbit p by a *rate-limited lins:eth0 egress 100mbit i byOa rate-limitgress 100100mbit i bs 100mbit p by a rate-limited lins 100mbit
-ress 100mbit i by a rate-limitedi can 100mbit
-@atceelni t:eth0 egress 100mbit ingress 100mbit

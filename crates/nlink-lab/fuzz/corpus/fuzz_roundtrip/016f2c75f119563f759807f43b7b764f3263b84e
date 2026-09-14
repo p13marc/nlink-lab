@@ -1,4 +1,0 @@
-#
-ncli -nNt- hostth00::1/64 -- f/06:2d2:0d0:0:0/64 ---nNt- hostth00::1/64 -- f/06:2d2:0d0:0:0/64 --n6:2d2:0
-ncli -nNt- hos:tt:h001/64 -- f hostth00::6/14 -- f/06:2d2:0d0:0:0/64 ---nNt- hostth00::1/64 -- f:/06:2d2:0d0:0:0/64 --nNt- hostth4 {
- 0::1/64 -m- fe/06sfd00

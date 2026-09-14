@@ -1,9 +1,0 @@
-# iperf3 benchmark topology.
-#
-# Two nodeth1
-  }
-  vrf blue table 20 {
-   e clinnected by a rate-limited linkcpu. Sev eth1
-  }
-  vrf blue table 20 {
-   e clien4:eth0 esr e1sg00mbit ingress 100m*bit

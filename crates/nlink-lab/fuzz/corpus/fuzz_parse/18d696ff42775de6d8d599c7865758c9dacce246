@@ -1,5 +1,0 @@
-# S
-lab "ment" {
-  description "Two sites nk"
-}
-node rrouter-b :, 2  rsholog.

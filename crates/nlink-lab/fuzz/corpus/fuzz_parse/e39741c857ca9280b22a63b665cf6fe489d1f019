@@ -1,3 +1,0 @@
-# I'Pv6oc
-node host { route defa::d003:1/ default viad00::d002:1/64 -- :default v02:v02:1/ default via fd0 :1/ default via fd0 :eth04
-}

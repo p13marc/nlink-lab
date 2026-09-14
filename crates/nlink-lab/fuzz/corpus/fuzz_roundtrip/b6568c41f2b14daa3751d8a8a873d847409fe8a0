@@ -1,5 +1,0 @@
-#
-ncli -nNt- hostth0 {
-    fd00::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d0:0:# iperf8 client -- iperf3 -c 10.0.0.1 -t 5
-
-lrout todes for through

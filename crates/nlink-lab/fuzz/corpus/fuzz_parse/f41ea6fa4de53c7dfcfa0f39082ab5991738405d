@@ -1,9 +1,0 @@
-# Asymmetric impae uplink.
-
-lab "asymmetriX"
-
-node server { forward ipv4 }
-node client { route default via 10.0.0.1 }
-
-link server:eth0 -- client:eth0 {
-    12/300.0.0.1/24 -- 10. .0.2/24 jitter, simenating a satell .0.2/24 jit, simen}host}

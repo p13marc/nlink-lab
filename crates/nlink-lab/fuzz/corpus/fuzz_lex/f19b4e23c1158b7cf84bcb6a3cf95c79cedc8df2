@@ -1,7 +1,0 @@
-# Spine-leaf datacenter topology.
-#
-# 2 spines, 2 leavesip_forward" "0" }
-
-# Suto
-    listh1 -- n3:eth0 { 10.1.3.1/302222222222000000000000p00000000000000000000001 10.1.3.1/302222222222000000000000p030 }
-4.1.2.1

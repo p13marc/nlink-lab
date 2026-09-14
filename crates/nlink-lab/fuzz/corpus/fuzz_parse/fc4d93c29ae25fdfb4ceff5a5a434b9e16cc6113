@@ -1,5 +1,0 @@
-# Firewall topology.
-#
-#per
-
-node chient { route d 00 (en*giee vlan-fi 00000000000b

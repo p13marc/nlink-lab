@@ -1,6 +1,0 @@
-#wo sites
-
-lab "wireguard-vpn"node gw-a : gateway {
-  vrf fd00::2/64D00::2/6
-4th0ks (gateway <-> host)
-w-a

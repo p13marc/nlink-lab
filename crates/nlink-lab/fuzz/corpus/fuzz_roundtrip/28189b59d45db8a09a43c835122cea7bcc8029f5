@@ -1,5 +1,0 @@
-#n servers.
-
-lab "spine-leaf" {
-  description "Spine-l#
-#"

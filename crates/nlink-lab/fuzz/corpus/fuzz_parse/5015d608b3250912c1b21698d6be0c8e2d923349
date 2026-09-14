@@ -1,8 +1,0 @@
-
- tte0z:1/6 vtep2 ) router tte0z:1/64 -# rces [eth2]
-j ingress 100mbi:5vxlanms jitter 1ms
-import 4ote 10.0.0.1
-    pospine1ror#duting:s jitterdelay 5vxlanms jitter 2ms
-import 4y 5vxlanms jitter 1ms
-import 4ote .0.1 -t10.0.0.1
-    port { 

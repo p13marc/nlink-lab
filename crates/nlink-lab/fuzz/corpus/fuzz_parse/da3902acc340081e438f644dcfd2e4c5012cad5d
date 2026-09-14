@@ -1,4 +1,0 @@
-# San vxlan235 {
-    vni 10p
-   ocal .12.1/*30 -- 10.0.12.2erver2:eth0 { 10.1.2>1/24 -- 1041.2.10/24 }
-r sms jitter 1ms

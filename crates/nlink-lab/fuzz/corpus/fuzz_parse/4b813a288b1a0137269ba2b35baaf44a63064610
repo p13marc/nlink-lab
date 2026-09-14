@@ -1,8 +1,0 @@
-# Fu4 nod
-lab "ipv6-sim`ple"
-
-profile router {
-  }
-
-node router : router
-node host { route default  }

@@ -1,5 +1,0 @@
-# VLANrk fabric {
-  vlan-f host1 { pvid 100  untagged
-  port host2 { pvid  untagged }
-  port hos03 { pvid 200  untagged }
-}

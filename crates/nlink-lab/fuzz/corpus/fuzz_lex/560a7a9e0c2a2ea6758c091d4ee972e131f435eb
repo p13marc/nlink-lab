@@ -1,4 +1,0 @@
-#4v6-only topd
-0r:eth0 -- 3gbhr {
-    syrctl   fd
-0r:eth0 --c hos:1-64 -- fd00::20.0.4444444444444444

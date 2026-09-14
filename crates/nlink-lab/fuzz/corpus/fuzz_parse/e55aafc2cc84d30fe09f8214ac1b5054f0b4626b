@@ -1,4 +1,0 @@
-er a 192.168.2.1 }
-pe:et -- 192.168.1.1 default via fd00::d00:: links (gateway <-> host)
-link gw-a:eth2  h0 { 192.168.1.1/24 -- 192.168.1.1 defa0::d00:: links (gateway lt via fd00::d00::2/64
-}

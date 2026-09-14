@@ -1,5 +1,0 @@
-# VLAN trunk topology.
-#
-# A bridge with VLAN filterine{
-  vxlan vxlan 0.0.1100 xlater {
-  vxlan vxlan 0.0.1100 xlan 0.0.115mrrrrrrp2:(eo  {10h0.0.0.1/24 -- 10.0.0.2/24 }

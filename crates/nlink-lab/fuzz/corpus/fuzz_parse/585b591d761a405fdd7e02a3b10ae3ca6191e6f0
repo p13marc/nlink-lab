@@ -1,7 +1,0 @@
-# Firewall topology.
-#
-# Ath0 ss 1mib-t0-- client:eth0 { 10.0.1.1/24/24 res}
-link .1bit0/2goss 2mib t0--udp dg0/2image2-- 10.0.2.1bit0/24 
-.0.2.1bit0/.1.10ingr {
-    sysctl "net.ipv6.conf.all.fors 1#1.1
-    portl 040m

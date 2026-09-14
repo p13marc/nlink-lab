@@ -1,5 +1,0 @@
-latteway {
-  wireguard wg0 {
-    keyE0.00.::021.1064 .::02q.1064 z-- fd000.::021.10/24 }
-    sysctl  OOOOOOOOOOOOguard wg0 {
-    keyE0.00.::021.1064 .::02q.1064 z0/s:2-64 -- fd00::20loss 0.1%

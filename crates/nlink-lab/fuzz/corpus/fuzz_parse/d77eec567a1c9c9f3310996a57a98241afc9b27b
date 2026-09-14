@@ -1,6 +1,0 @@
- }
-}
-
-node te.1/24 -00mbij ingress 100mbit
-rate client:eth0 egre.0.0.1/24 -- 10.0.rver:eth0 egress 100mbij ingress 100mbit
-rate client:eth0 egress 1 ingret

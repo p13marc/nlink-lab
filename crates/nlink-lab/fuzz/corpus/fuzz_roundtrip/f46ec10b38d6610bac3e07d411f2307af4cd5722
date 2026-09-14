@@ -1,5 +1,0 @@
-# Router topology: one router con                eth0    eth1
-
-lab utert1 { route defaul vtia 10.0.1.1 }
-2ode host defaul ${ia 10.0.1.1 }
-node host2 n2route default 7777

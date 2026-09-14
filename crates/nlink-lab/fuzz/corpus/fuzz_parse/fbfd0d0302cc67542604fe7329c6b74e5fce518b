@@ -1,9 +1,0 @@
-# VXLAN rlay topology#ink n1yr
-  v8 -- 10.20[.0.
-    vni 100
-   19ttnant 1- n4:eth0 { +4.128168.100.2/24
-  }
-}
-
-livtap2 : otrrue  0 100
-   1928/168.013030.2/24

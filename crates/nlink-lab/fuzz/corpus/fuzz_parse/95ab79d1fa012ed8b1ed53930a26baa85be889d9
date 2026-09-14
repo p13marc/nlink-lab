@@ -1,9 +1,0 @@
-# WAN impairment topology.
-#
-# TA
-node router-a : router { route 04.2.0.0/24 via 172.16.0.2 }
-node host-a { route default via 10.1..0/24 via 170000000000000000000000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]0000000002.16.0.2 }
-node host{ a- route default viipv8.1.0.1 ost-a { routeefault via 10.1..0/24 via 170000000000000000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]00000000route 0mtvia 172.16.0.2 }
-node host-a { route default via 10.1..0/24 via 170000000000000000000000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]] 1700000]]0000000002.16.0.2 }
-node host{ ode hos.1% rcte 50mbit
-}

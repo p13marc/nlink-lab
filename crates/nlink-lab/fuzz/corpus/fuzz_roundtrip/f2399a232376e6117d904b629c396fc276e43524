@@ -1,9 +1,0 @@
-# iper 5
-
-lab "iperf-bench" {
-  description "Two nodes for throarking"
-}
-
-node server { route default via 10.0.
-#
-# A bridge`with VLAN filterinng c

@@ -1,6 +1,0 @@
-k# IPv6-only topology.
-#
-# A router forwarding IPv── router # VLAN2trunk"o"""g andth, hostuni   eth0efault via fd00::1 }
-
-link router:eth0 -- host ipv4 devnode router : routerauto/ host1 { route defa:eth0 {
-    fult viad00 

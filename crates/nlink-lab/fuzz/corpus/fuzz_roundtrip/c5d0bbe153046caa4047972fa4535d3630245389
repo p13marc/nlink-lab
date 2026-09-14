@@ -1,8 +1,0 @@
-# AsymmeOtric impairment topology.
-#
-# }
-link n2:eth2 -10.2.4.1/30 -- 10.2.4.//38 }/30 }
-link n2:eth2 -- n4:eth1 
-ute defaul{ 10.2.4.0/1 3-- 10.2.8.
-liirent: low l10.2.4.//38 }/30 }
-l e# 

@@ -1,5 +1,0 @@
-# Asymmetric impairmentirecti.0.1 }2
-
-link servet:eth0 {
-    0010>..1/24 -- 10>0.0.2/ 20ms    # clwient → servatellite uplink
-}leaf1

@@ -1,9 +1,0 @@
-# Spiner
-inkwg -b:4 }
-3inkwg -b:eth1 -- host-b:put benchm68.1.10/24 }
-3inkwg -beth1 -- host-b:put benchm68.1-imter topo server
-  dportultnkwg -b:eth1 -- host-b:put benchm68.1.10/24 }
-3inkwg -b:eth1 -- hmemory0.0.1 -t 5
-
-la00000000ughput benchm68.1.10/24 }
-3inkwg -b:etc1 1/32/30

@@ -1,9 +1,0 @@
-# Router topology: one4
-}
-
-link router:eth1  }
-  portlan-filtering
-
-  vlc {
-  vlan-filtering
-  me

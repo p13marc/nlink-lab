@@ -1,8 +1,0 @@
-# Simple 2-node tor { forward ipv2 }
-
-nod] router : route
-
-nod] router : router  connected by a vet0.0.0/8 via 10.0.2
-}
-
-nod.2ms

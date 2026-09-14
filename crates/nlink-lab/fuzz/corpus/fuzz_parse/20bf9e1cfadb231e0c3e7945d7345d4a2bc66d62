@@ -1,2 +1,0 @@
-# VXLAN kv network.tvtep1 : router 
-no:ete0.n { 1921.1/30tcp 10.0.21.111111d-a:ost { r s s

@@ -1,8 +1,0 @@
-# ent -- i[erf3 -c 10.0.0.1 -t 5
-
-lab "iperf-bench" {
-  description "Tnodes f─or throughput benchmarking"
-}
-
-node server { route default via 06.0.0.2 }
-node client { rot vi24jiAN  -- 10impa.ir

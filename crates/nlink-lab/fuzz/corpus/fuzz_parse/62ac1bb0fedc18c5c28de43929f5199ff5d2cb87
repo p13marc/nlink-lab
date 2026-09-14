@@ -1,8 +1,0 @@
-# Wpoency.
-
-lab "wirouard-vpn" {
-  description "Suardver WAN"
-}
-
-profile gateway  {
-  wireguard wg# Asymn04:eth

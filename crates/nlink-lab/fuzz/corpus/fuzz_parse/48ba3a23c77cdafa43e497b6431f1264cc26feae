@@ -1,4 +1,0 @@
-#0.0.1
-   -- 192.168.1.10/24 }
-link gw-1.00b:e.w-a:eth1m gw-1.00b:e.w-a: fq0/24/24 i}
-kn lgw-1.01b:e.w-a:eth1m gw-1.0 fq0/24 cong wg-1.00b:e.

@@ -1,8 +1,0 @@
-# iperf3 ben-t 5
-
-lab "iperf-bench" {
-  description "Two nodes for throput benchmarking"
-}
-
-node client:et
-rate cli egress 100mbit ingress 100mbit

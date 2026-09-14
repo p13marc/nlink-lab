@@ -57,6 +57,56 @@ pub struct CreateOpts {
     pub labels: Vec<String>,
     /// Extra /etc/hosts entries in "hostname:ip" format (passed as --add-host).
     pub extra_hosts: Vec<String>,
+    /// `config HOST CONTAINER` pairs, mounted read-only (#111). Kept separate
+    /// from `volumes` because these are always host paths and get absolutised,
+    /// whereas a bare `volumes` entry may legitimately name a podman volume.
+    pub configs: Vec<(String, String)>,
+    /// Host file of `KEY=VALUE` lines, passed through as `--env-file` (#111).
+    pub env_file: Option<String>,
+    /// Kathara-style overlay directory: each top-level entry is bind-mounted at
+    /// the corresponding absolute path inside the container (#111).
+    pub overlay: Option<String>,
+}
+
+/// Make a host path absolute, resolving relatives against the current directory.
+///
+/// Docker and podman read a **relative** `--volume` source as the name of a
+/// *named volume*, not as a bind mount, so a relative `config`/`overlay` path
+/// would silently mount an empty anonymous volume instead of the file the
+/// topology names (#111).
+fn abs_host_path(p: &str) -> String {
+    let path = std::path::Path::new(p);
+    if path.is_absolute() {
+        return p.to_string();
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path).to_string_lossy().into_owned())
+        .unwrap_or_else(|_| p.to_string())
+}
+
+/// Expand a Kathara-style `overlay` directory into `--volume` arguments.
+///
+/// Each top-level entry of `dir` is mounted at `/<entry>`, so `overlay "cfg"`
+/// containing `etc/` yields `cfg/etc:/etc`. A missing directory is an error
+/// rather than a silent no-op -- the key used to be ignored entirely (#111).
+fn overlay_mounts(dir: &str) -> Result<Vec<String>> {
+    let path = std::path::Path::new(dir);
+    let entries = std::fs::read_dir(path)
+        .map_err(|e| Error::deploy_failed(format!("overlay directory {}: {e}", path.display())))?;
+    let mut mounts = Vec::new();
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| Error::deploy_failed(format!("overlay {}: {e}", path.display())))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let host = entry.path();
+        let host = host
+            .to_str()
+            .ok_or_else(|| Error::deploy_failed(format!("overlay path is not UTF-8: {host:?}")))?;
+        mounts.push(format!("{host}:/{name}"));
+    }
+    mounts.sort();
+    Ok(mounts)
 }
 
 impl Runtime {
@@ -239,6 +289,29 @@ impl Runtime {
             args.push(vol.clone());
         }
 
+        // `config HOST CONTAINER` is a read-only bind mount (#111).
+        for (host, container) in &opts.configs {
+            args.push("--volume".to_string());
+            args.push(format!("{}:{container}:ro", abs_host_path(host)));
+        }
+
+        // `env-file` maps onto the runtime's own flag, so docker/podman reads
+        // the file rather than us (#111).
+        if let Some(env_file) = &opts.env_file {
+            args.push("--env-file".to_string());
+            args.push(abs_host_path(env_file));
+        }
+
+        // `overlay DIR` mirrors DIR's contents onto the container root, so each
+        // top-level entry becomes one bind mount. Enumerating the directory is
+        // host I/O, which is why it happens here and not in the pure planner.
+        if let Some(overlay) = &opts.overlay {
+            for mount in overlay_mounts(&abs_host_path(overlay))? {
+                args.push("--volume".to_string());
+                args.push(mount);
+            }
+        }
+
         for host in &opts.extra_hosts {
             args.push("--add-host".to_string());
             args.push(host.clone());
@@ -356,6 +429,48 @@ fn parse_pid(raw: &str, id: &str) -> Result<u32> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn overlay_mounts_maps_each_top_level_entry_to_root() {
+        let dir = std::env::temp_dir().join(format!("nll-overlay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("etc")).unwrap();
+        std::fs::create_dir_all(dir.join("opt")).unwrap();
+        std::fs::write(dir.join("motd"), b"hi").unwrap();
+
+        let mounts = super::overlay_mounts(dir.to_str().unwrap()).unwrap();
+        let targets: Vec<&str> = mounts
+            .iter()
+            .map(|m| m.rsplit_once(':').unwrap().1)
+            .collect();
+        assert_eq!(targets, vec!["/etc", "/motd", "/opt"], "{mounts:?}");
+        assert!(mounts.iter().all(|m| m.starts_with(dir.to_str().unwrap())));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn overlay_mounts_errors_on_missing_directory() {
+        // A typo here used to be silent because the key was never read at all.
+        let err = super::overlay_mounts("/definitely/not/here").unwrap_err();
+        assert!(
+            format!("{err}").contains("overlay directory"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn relative_host_paths_are_absolutised() {
+        // podman reads a relative --volume source as a NAMED VOLUME, which would
+        // silently mount an empty anonymous volume instead of the file (#111).
+        let abs = super::abs_host_path("configs/web.env");
+        assert!(
+            std::path::Path::new(&abs).is_absolute(),
+            "not absolute: {abs}"
+        );
+        assert!(abs.ends_with("configs/web.env"), "{abs}");
+        assert_eq!(super::abs_host_path("/etc/hosts"), "/etc/hosts");
+    }
     use super::*;
 
     #[test]

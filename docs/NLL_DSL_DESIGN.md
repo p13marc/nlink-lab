@@ -395,11 +395,14 @@ Range `1..4` is inclusive: 1, 2, 3, 4.
 
 ```nll-ignore
 # Line comments (like TOML, Python, shell)
+// Line comments, C style -- identical to `#`
 
 /* Block comments for multi-line sections.
    Supports nesting: /* inner */ outer.
    Line numbers preserved for error reporting. */
 ```
+
+All three forms accept any text, including punctuation and non-ASCII.
 
 ---
 

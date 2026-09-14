@@ -4932,7 +4932,7 @@
     },
     "line_comment": {
       "type": "PATTERN",
-      "value": "#[^\\n]*"
+      "value": "(#|\\/\\/)[^\\n]*"
     },
     "block_comment": {
       "type": "TOKEN",

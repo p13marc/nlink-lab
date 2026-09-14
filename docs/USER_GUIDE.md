@@ -671,7 +671,36 @@ link router:eth0 -- host:eth0 {
 
 Nodes with `image` run as containers (Docker or Podman) instead of bare namespaces. Container nodes and namespace nodes can be mixed freely.
 
-See `examples/container.nll`.
+**Getting host files into a container**
+
+```nll-ignore
+node web image "nginx:alpine" {
+  config "configs/nginx.conf" "/etc/nginx/nginx.conf"  # one read-only file
+  overlay "configs/web"                                # mirror a tree onto /
+  env-file "configs/web.env"                           # KEY=VALUE lines
+  volumes ["/var/cache:/var/cache"]                    # raw runtime syntax
+  exec "nginx -t"                                      # one-shot after start
+}
+```
+
+| key | effect |
+|---|---|
+| `config HOST CONTAINER` | bind-mounts one host file read-only at `CONTAINER` |
+| `overlay DIR` | bind-mounts each top-level entry of `DIR` at `/<entry>` |
+| `env-file PATH` | passed to the runtime as `--env-file` |
+| `volumes [...]` | passed through verbatim as `--volume` |
+| `exec "CMD"` | runs once after the container starts (repeatable) |
+
+Relative paths in `config`, `overlay` and `env-file` resolve against the
+directory you ran `nlink-lab` from, and are made absolute before reaching the
+runtime -- a relative `--volume` source would otherwise be read as the name of a
+*named volume* rather than as a bind mount. A missing `overlay` directory is an
+error rather than a silent no-op.
+
+`volumes` is deliberately **not** rewritten, so a bare name there still selects a
+runtime-managed volume if that is what you want.
+
+See `examples/container.nll` and `examples/container-advanced.nll`.
 
 ### 11. Imports for Composition
 
@@ -1145,7 +1174,14 @@ sudo nlink-lab wait-for mylab server --file /var/run/service.pid
 ```
 
 All background processes (both `run background` in NLL and `nlink-lab spawn`)
-automatically capture stdout/stderr to log files.
+automatically capture stdout/stderr to log files -- on namespace **and**
+container nodes alike.
+
+> On a container node, `nlink-lab logs <lab> <node>` shows the container's PID 1
+> (it runs `docker|podman logs`). A process started with `run ... background`
+> is a *separate* process, so it has its own capture: use
+> `nlink-lab logs <lab> --pid <pid>`, which `nlink-lab ps <lab>` and the footer
+> printed by `logs <lab> <node>` both point you at.
 
 **Default log location:** `~/.local/state/nlink-lab/labs/{lab}/logs/`
 **File naming:** `{node}-{command}-{pid}.stdout` and `.stderr`

@@ -4,6 +4,62 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — container nodes honour the file-injection keys (issue #111)
+
+`config`, `overlay`, `env-file` and a container block's `exec` were lexed,
+parsed, lowered, round-tripped by `render` and checked by the validator, but
+**never read at deploy time**: `CreateOpts` had no matching fields and
+`build_create_opts` did not map them. A topology using them validated, deployed
+"successfully", and silently did nothing. All four now work:
+
+- `config HOST CONTAINER` bind-mounts one host file read-only.
+- `overlay DIR` bind-mounts each top-level entry of `DIR` at `/<entry>`. A
+  missing directory is now an error instead of a silent no-op.
+- `env-file PATH` is passed through as the runtime's own `--env-file`.
+- `exec "CMD"` runs once after the container starts, as a foreground exec op.
+
+Relative paths in the first three are made absolute before reaching the runtime.
+Docker and podman read a *relative* `--volume` source as the name of a **named
+volume**, so a relative `config` path would previously have mounted an empty
+anonymous volume rather than the file. `volumes [...]` is deliberately left
+verbatim, so a bare name there still selects a runtime-managed volume.
+
+`examples/container-advanced.nll` referenced a `configs/web.env` that did not
+exist; the file is now shipped, so the example does what its header claims.
+
+### Fixed — background process output on container nodes (issue #112)
+
+`docs/USER_GUIDE.md` promised that *all* background processes capture
+stdout/stderr. That held only for namespace nodes: container nodes took a
+separate `docker|podman exec -d` path, which detaches and discards both streams,
+so a service started with `run ... background` inside a container produced no
+recoverable output anywhere and a crash-on-startup was indistinguishable from a
+clean start. Both node kinds now share one path and one log location
+(`$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/`), so `nlink-lab logs <lab> --pid N`
+works for container nodes too.
+
+`nlink-lab logs <lab> <node>` still shows the container's PID 1 — that is what
+`docker|podman logs` reports — but now prints a footer naming each background
+process and the `--pid` invocation that shows it.
+
+### Fixed — `//` line comments (issue #113)
+
+NLL accepted `#` line comments and `/* … */` block comments but not `//`. Since
+C-style block comments work, `//` is a natural thing to try, and when the line
+contained anything untokenisable the *lexer* error fired first and pointed at a
+character in the middle of the intended comment. `//` is now a line comment,
+identical to `#`.
+
+### Fixed — `SHA256SUMS` in the release workflow
+
+The `checksums` job downloaded each asset from
+`GET /releases/{id}/assets/{id}`, which returns the asset's **JSON metadata**
+rather than its bytes, so 0.9.0 shipped a `SHA256SUMS` computed over ~280-byte
+JSON blobs (the published file was corrected by hand at the time). It now
+downloads `browser_download_url` and verifies every file against the size the
+API reports, failing the release instead of publishing bad sums.
+
+
 ## [0.9.0] - 2026-09-14
 
 The deep-analysis series: six audit waves (issues #13–#86) followed by the

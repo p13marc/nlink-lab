@@ -123,9 +123,13 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
 on [`nlink`](https://github.com/p13marc/nlink) 0.27 as of
-nlink-lab 0.10.1.
+nlink-lab 0.10.2.
 
-Current release: **0.10.1** (2026-09-14) — fixes NLL interpolation
+Current release: **0.10.2** (2026-09-14) — a `vxlan` block with no
+`vni` no longer renders to un-parseable `vni 0`, and the validator names
+it accurately (#118).
+
+Previous release: **0.10.1** (2026-09-14) — fixes NLL interpolation
 inventing a closing brace for an unterminated `${` and normalising
 whitespace inside `${ ... }`, which made `parse -> render -> parse`
 lose or duplicate entries (#116).

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-14
+
+One fix: interpolation was not idempotent, so `parse -> render -> parse` was not
+a fixed point. Found by `fuzz_roundtrip`. No API or syntax change.
+
 ### Fixed — interpolation invents braces and normalises whitespace (issue #116)
 
 `interpolate_once` scanned `${` to end-of-string without ever checking the brace

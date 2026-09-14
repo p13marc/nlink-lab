@@ -1,0 +1,136 @@
+# VLAN 000 {.nde router : router
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan00anu-b 10.20.nant-b { rout,
+}
+
+node router : router
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 10.20.nant-b { route 
+ringA,ter : route{
+ringA,
+}
+
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 {
+ringA,
+}
+
+e 
+ringA,ter : route{
+ringA,
+}
+
+node router : router
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {.20.nant-b { rout,
+}
+
+node router : router
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 10.20.nant-b { route 
+ringA,ter : route{
+ringA,
+}
+
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 {
+ringA,
+}
+
+e 
+ringA,ter : route{
+ringA,
+}
+
+node router : router
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 10.20.nant-b { route 
+ringA,ter : route{
+ringA,
+}
+
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 {
+ring
+ringA,
+}A,
+}wan0000 10.20.nant-b { route 
+ringA,ter : route{
+ringA,
+}
+
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 {
+ringA,
+}
+
+node router : router
+nA,
+}
+++7n

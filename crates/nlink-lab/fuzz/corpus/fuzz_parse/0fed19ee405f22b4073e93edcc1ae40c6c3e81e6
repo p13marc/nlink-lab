@@ -1,0 +1,11 @@
+# Ie Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.confrwarding" "1"
+}
+
+node rguter : router
+node ho9.s${t { route defa00::1/664
+}

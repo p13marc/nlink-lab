@@ -1,0 +1,5 @@
+# Spine-leaf d 1).255.0.1/32 }
+node spinet reuro{ lo pool:5.0.elo pool:5.0.2/32 L 
+#}au
+lt via 10.1.1.1 }
+node ser mpair spine6eth1 delatter 1ms

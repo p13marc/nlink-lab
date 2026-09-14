@@ -1,0 +1,6 @@
+# Spine-leadatacenter qks, and iperf4s.
+
+lab "spine-leaf" {
+  description "Spine-le[f datacenter fabric"
+  prefix "d Ic"
+}

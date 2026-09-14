@@ -1,0 +1,20 @@
+# WireGuard VPN topology.
+teway {
+  wireguard ug0 {
+    key auto
+    liselay 50ms jitter 5ms lo wg0 a:eth0 delay 50msw-b : gateway {
+  wireguard wg0 a:eth0 33333333333333333  wireguard wg0 a:eth0 delay 50msw-b : gateway {
+  wireguard wg0 a:eth0 delay 50ms jittnant topoloist33333333333333  wireguard wg0 a:et>hprofiles50msw-b : gateway {
+  wireguard wg0 a:eth0 dely 5333333333333333333333333333333333333333333333333333333333333333  wireguard wg0 a:eth0 delay 50msw-b : gateway {
+  wireguard wg0 a:eth0 delay 50ms jitter 5ms lo wg0 a:eth0 delay 50msw-b : gateway {
+  wireguard wg0 a:eth0 33333333333333333  wireguard wg0 a:eth0 delay 50msw-b : gateway {
+  wireguard wg0 a:eth0 delay 50ms jittnant topology.
+#
+# A PE (provider ay {
+  wireguard wg0 a:eth0 33333333333333644  wireguard wg0 a:etgy.
+#
+# A PE (provider ay {
+  wireguard wg0 a:eth0 33333333333333644  wireguard wg0 a:eth0 delay 50msw-b : gateway {
+ weug riard wg0 a:eth0 delay 50ms jittnant topology.
+#
+# .1%

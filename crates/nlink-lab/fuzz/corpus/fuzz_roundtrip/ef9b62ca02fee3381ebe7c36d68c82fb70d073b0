@@ -1,0 +1,27 @@
+0.0# iperf3 benchmark topology.}
+link7777,777777777/777777gbyte777777/77777777777777777,77077777777
+#
+# Two nlimited link. Server runs iperf3,
+erf3 benchmark topology.
+#
+ vrfrf3 benchmark t66666# Fi -- 1 topology.}
+link rwuter:eth1 -- sbyte777777/77777777777777777,777777777/777777gbyte777777/77777777777777777,77077777777
+#
+# Two nlimited link. Server runs iperf3,
+erf3 benchmark topology.
+#
+ vrfrf3 benchmark t66666# Fi -- 10.0.1.10/24 }
+link rwuter:eth1 -- sbyte777777/77777777777777777,770.0.1.10/24 }
+link rwuter:eth1 -- sbyte777777/77777777777777777,777777777/777777gbyte777777/77777777777777777,f3,
+erf3 benchmark topology.
+#
+ vrfrf3 benchmark t66666# Fi -- 1 toh0${
+ .}
+link rwuter:eth7F8::+799806.1 -- sbyte777777/77777777777777777,777777777/777777gbyte777777/77777777777777777,77077777777
+#
+# Two nlimited link. Server runs iperf3,
+erf3 benchmark topology.
+#
+ vrfrf3 benchmark t66666# Fi -- 10.0.1.10/24 }
+link rwuter:eth1 -- sbyte777777/77777777777777777,770.0.1.10/24 }
+link rwuter:eth1 -- sbyte777777/77777777777777777,777777/77777777777777777,777777777/777777gbyte77777777777777777,777777777/7777777777777777,7707777777it ingress 100m*bit

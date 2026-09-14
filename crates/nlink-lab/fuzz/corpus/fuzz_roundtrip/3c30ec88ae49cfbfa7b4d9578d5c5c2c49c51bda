@@ -1,0 +1,30 @@
+# WAN impairment topology.
+#
+# Two ted
+# by a WAN link with realistic impairment: 02ms delay, 5ms jitter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-ime host-b { route default via2 ..0.011 }
+
+# LAN links
+link router-a:eth- router-bp@airment" {
+  description "Two si#es connecauto/ted by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.16.0.2 }
+node h
+# Site B
+node router-b : router { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0.1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.1. 10.2.0.10/24 }
+
+# WAN link with s9mmetric impairment
+link router-a:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 172.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rate impair
+}

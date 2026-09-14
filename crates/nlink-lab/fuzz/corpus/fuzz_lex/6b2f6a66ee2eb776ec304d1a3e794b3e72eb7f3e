@@ -1,0 +1,23 @@
+ost2t3
+
+network fa
+
+network fabric {
+  vlan3
+
+network faJ
+network f0
+node host2
+o sodhent3
+
+network fa
+
+network f2
+o sodhent3
+
+network fa
+
+network fabric {
+  vl"
+  port 
+}

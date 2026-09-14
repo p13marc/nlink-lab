@@ -1,0 +1,26 @@
+# VNLXAfor the ov10.1 ──── n2
+#   ┊ \   / │
+#   │  \ /  │
+#   │  .0.0.2
+    port 4789
+    addreszs 192.168.100.1/24
+  }vtep2 : rout.0.1  }
+}
+
+link vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+l vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2ltank vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 {.0 .100100 {
+    vni 100
+    local 11/0.0.1
+    remote 10.1 ──── n2
+#  │  

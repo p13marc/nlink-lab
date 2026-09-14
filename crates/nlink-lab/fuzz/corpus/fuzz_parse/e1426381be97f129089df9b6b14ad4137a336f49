@@ -1,0 +1,6 @@
+# IPv6-only topology.
+#
+# A router frowarding IPv6 trafficfd002:1/to a cal Adter
+=ode host { route defaug - 0fd::02/ Uses fd00::/64 ULA (Uniqueost { route defaug IPv6 traffi/64 -- 0fd::02/ Uses fd00::/64 ULA (Unique Local Adter
+nnode host { route defraffi/64 -- 0fd::02/ 0::2/64
+}

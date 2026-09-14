@@ -1,0 +1,3 @@
+# IPv6ӑnlng IPvf/0ab ) s host:eth0 {
+    fd00::1/64 -- f/06:2d:09fig  fd::00::1/66:1/6jitter4 -- f/06:2d:09fig  fd::00::1/64 -- f/06:2d:04
+}

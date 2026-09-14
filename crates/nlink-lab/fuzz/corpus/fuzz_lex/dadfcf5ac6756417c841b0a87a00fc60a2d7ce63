@@ -1,0 +1,15 @@
+# WireG }
+
+linjjjjjjjjjjjjjjjjjjjk serveb:eth0 -- client:mth0 { 10.0.0.1/*24 -- 10.0.0.2/24 }
+
+rate serv0 egress egress 100m   address 192.168.255.1/32
+    peers fabric"
+  prefix  dc"
+ard interface. The underlay link
+# haw 50ms delay to simulate internet latency.
+
+lab "wireguard-vpn" {
+  dN"
+}
+
+profilsys

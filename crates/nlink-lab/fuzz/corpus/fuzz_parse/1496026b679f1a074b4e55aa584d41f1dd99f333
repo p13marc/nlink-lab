@@ -1,0 +1,14 @@
+# IPv3-only topnlogy.
+#
+#client A rout6 traffic to a host.
+# Uses fd/: ofile route router {
+   0 -- host:eth0 {
+    fd40::99999999999999999999999999999999999999999999999999999999{
+    s1 }
+
+link router:eth0 -- host:et9999999999999999999999999999999999description64 -- fd0999999990 -- host:eth0 {
+    fd00::99999999999999999999999999999999999999999999999999999999{
+    s1 }
+ink router:eth0 -- host:eth0 {
+    fd00::999999999999999999999999999999999999909999999desc router:eth0 0::2/64
+}

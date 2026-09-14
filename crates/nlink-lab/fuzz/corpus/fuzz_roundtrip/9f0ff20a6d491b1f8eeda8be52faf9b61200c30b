@@ -1,0 +1,14 @@
+# VLAN trunk topology.
+#
+# A briss ports host3
+
+netwoe host3
+
+networate_limrk fabing txrme hosts.
+# Hhost2 { ost:eth0 {
+  host2
+node host3
+
+networate_limrk Fabi{
+  1gged }
+}

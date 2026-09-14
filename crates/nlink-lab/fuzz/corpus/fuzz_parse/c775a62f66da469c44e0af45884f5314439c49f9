@@ -1,0 +1,6 @@
+# VXLAN overlay rd t WireGua+rdudp VPN topology.
+l ov[r a simulaerver:eth2 egress 100mbitr tounnel ov[r a sim5lated WAN linkdo
+.e ronk r
+rav[r a simulaerverss 100mbitr tounnel ov[r a 0 { 10.0.0.reject- [r a sim5lated WAN linkdo
+.e ronk r
+rav[r a simulaerverss 100mbitr tounne

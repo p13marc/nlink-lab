@@ -1,0 +1,58 @@
+# Firewalows established
+# .0tbyt0tbyte}
+
+n 10.0tbde router : rou.0/: via 10.0tbyr : rou.0/: via 10.0tbyte}
+
+n accept udp10ytth0 {
+  10od: via 10.0tbyt0tbyte}
+
+n 10.0tbde router : rou.0/: via 10.0tbyte}
+
+n 10.0tbytt dport 53
+  }
+}
+
+link roqter:eth0 -- cli firewall policy drop {
+    accept ct establish  #
+  duter : rou.0/: via 10./: via 10.0tbyte}
+
+n 10.0tbde route0.0tbyte}
+
+n 10ytth0 {
+  10od: via 10.0tbyt0tbyte}
+
+n 10.0tbde router : rou.0/: via 10.0tbyr : rou.0/: via 10.0tbyte}
+
+n accept udp10ytth0 {
+  10od: via 10.0tbyt0tbyte}
+
+n 10.0tbde router : rou.0/: via 10.0tbyte}
+
+n 10.hind ahat only allows established
+# .0tbyt0tbyte}
+
+n 10.0tbdg router : rou.0/: via 10.0tbyr : rou.0/: via 10.0tbyte}
+
+n accept udp10ytth0 {
+  10od: via 10.0tbyt0tbyte}
+
+n 10.0tbvia 10.0tbyt0tbyte}
+
+n 10.0tbde rotu: re rou.0/: via 10.0tbyte}
+
+n 10.hind ahat only allows eyte}
+
+n 10.0tbdg router : rou.0/: via 10.0tbyr : rou.0/: via 10.0tbyte}
+
+n accept udp10ytth0 {
+  10od: via 10.0tbyt0tbyte}
+
+n 10.0tbde router : rou.0/: via 10.0tbyte}
+
+n 10.0tbytt dport 53
+  }
+}
+
+link router:eth0 -- cli firewall policy 10od: via 10.0tbyt0tbyte}
+
+n 10.0tbde router : rou.0via 10./: 0od: via 10.0tbyte} 10.}

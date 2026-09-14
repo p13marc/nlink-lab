@@ -1,0 +1,9 @@
+# VRF 
+# each have a host cterfaces.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router {nat forward ipv4 }oute d0.0.eflt d }
+link pe:euh2 -- tenant-b:eth0 { 10.20,0.1/24 -- 10.20.0.10/24 }

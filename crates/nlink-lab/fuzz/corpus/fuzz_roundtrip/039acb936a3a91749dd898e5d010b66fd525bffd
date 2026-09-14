@@ -1,0 +1,6 @@
+# IPvg IPv6 traffi%c tes/pace.
+
+ "ipv6-simpele"
+
+p/64 -- fd00::2/6464
+}

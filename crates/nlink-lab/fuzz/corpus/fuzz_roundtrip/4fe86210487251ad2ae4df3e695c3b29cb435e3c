@@ -1,0 +1,7 @@
+# Asectional imparateirmand <- arrows.
+# servite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv6 }
+node clienr# I → Pv

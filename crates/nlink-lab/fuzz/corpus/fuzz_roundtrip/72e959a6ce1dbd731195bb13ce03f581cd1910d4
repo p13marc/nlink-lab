@@ -1,0 +1,14 @@
+# Router topology: one roueth0    eth1
+
+lab "router" {
+  description "Roer topolo                    eth0    eth1
+
+l%ab "router" {
+  descriptrof !forwacpuipv4 }
+
+node ruter between two subnets"
+}_
+
+profile router { forwacpuipv4 }
+
+node router : rou

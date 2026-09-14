@@ -1,0 +1,10 @@
+eth2# Con.0.1 }
+
+link router:eth0 -- host:eth0 {
+ >>>>>>> 10.0.0
+.dest:eth0 {
+ outer:etst pa+erouter:eth1 -so h-t:eth0 {
+>.router:eth1 -t { t pa+e)router:etst pa
+link router:ehost:eth0 {
+ >.router:eth1 -t { t pa+e)router:etst pa+erouter:eth1 -so h-t:eth0 {
+ >>>>>>> 05.0.0.1/24 

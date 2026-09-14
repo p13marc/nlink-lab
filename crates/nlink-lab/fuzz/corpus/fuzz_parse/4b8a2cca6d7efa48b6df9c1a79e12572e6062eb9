@@ -1,0 +1,8 @@
+# Asymm) space.
+
+lab "ipv8!-simple"
+
+profile router {
+    sysctl "neg" "1"
+route de07::/6r-- n4:.1024.
+#

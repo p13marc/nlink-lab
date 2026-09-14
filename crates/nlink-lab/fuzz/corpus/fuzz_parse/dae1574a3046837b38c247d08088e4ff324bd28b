@@ -1,0 +1,74 @@
+ Local Address) space.
+
+lab "ipv6-simple" dns5: rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jitte/00::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 :tcput-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:e1th0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/6ipv6 fd00::2/6
+
+pro
+
+pth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jtite-leaf datacenter topol:eth1 -# host:eth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jitte/00::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 :6-- host:e1th0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/6ipv6 fd00::2/6
+
+pro
+
+pth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jtite0002::/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6
+
+pro
+
+profe-leaf datacenter topol:eth1 -# - leaIPv6 "ipv6-simple" dns5: rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 :tcput-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:e1th0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 --dfvip 50z:1/6ipv6 fd00::2/6
+
+pro
+
+pth0 {
+  jitte000::2/6host:2 : rout-- f0::0 - leaIPv6 "ipv6-simple" dns5: rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/64 -- fd00::2/6 f0::0d2/6-- host:eth0 {
+  jitte000::2/6host:2 :tcput-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:e1th0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 -- fdipv50z:1/6ipv6 fd00::2/6
+
+pro
+
+pth0 {
+  jitte000::2/6host:2 : rout-- f0::0d2/6-- host:eth0 {
+  jitte000::2/6-- host:eth0 {
+  jitte0z:1/eth0 {
+  jitte0z:1/64 ---of1
+no

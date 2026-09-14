@@ -1,0 +1,12 @@
+# VLp eineering).
+
+lab "vlan-trunk" {
+  description "Br {rts"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+}

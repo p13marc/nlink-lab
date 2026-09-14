@@ -1,0 +1,32 @@
+# WireG&&&ith a WireGto simulate iy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site te WireGuard VPN over WAN"
+}
+
+profile gatewa port.168kport.168k v1A92prefix1807k 
+port.167k v1Acorrupt2.807kort.168k v1A92.v1A92.800k 
+port.168k v1A92.v1A92.807k 
+ v1A92.v1A92.807k 
+port.16y { for2.v1A92.807k 
+port.167k v1Acorrupt2.807kort.168k v1A92.v1A92.800k 
+port.168k v1A92.v1A92.807k 
+ v1A92.v1A92.807k 
+port.167k v1Acorrupt2.807kort.168k v1A92.v1A92.800k 
+port.168k v1A92.v1A92.807k 
+/92ward ipv4 }
+
+node gw-a : gatewiy {
+  wrieguard wg0 {
+   h/24# 7-onpv6AN impairment
+kmpais gw-a:eth0 tter  port.168kport.168k v1A92.v1A92.807k 
+port.167k v1Acorrupt2.87k v1Acorrupt2.807kort.168k v1A92.v1A92.800k 07kort.168k v1A922.v1A92.800k 
+port.
+porN"
+}
+
+pro
+kmpais 2}
+gw-a:eth1A92.v1A92.807k 0 tter 5ms lo
+/922ss 0.1%
+}

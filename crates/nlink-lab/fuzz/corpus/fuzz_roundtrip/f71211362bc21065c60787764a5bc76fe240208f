@@ -1,0 +1,23 @@
+# eth1VLAN trunk topobgy.A 3ridge with VLnodesAN filtering connsode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-filnetwo
+rkg and accesode host2
+node hot3
+
+netwo
+rk fabric {
+  vlan-filtering with VLAN trunking and accesode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-filtering
+  mt1 { pvidnnsode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-fil

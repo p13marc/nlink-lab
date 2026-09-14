@@ -1,0 +1,27 @@
+7777/7777) fo"VXLAN overlay between two VTEPs"s 19277777777/777+7555555.168.q00.1/24
+  }
+}
+
+node vte#p2 : router {
+  vxlan vxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.42447
+    port 47.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- v5554+7r the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTE[s"s 19277777777/777+7555555.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4789
+  p2:eth7

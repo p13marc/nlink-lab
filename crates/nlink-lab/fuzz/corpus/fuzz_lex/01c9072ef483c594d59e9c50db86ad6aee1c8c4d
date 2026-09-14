@@ -1,0 +1,10 @@
+# VLAN rutnk to3
+
+netwkr{ fabric {
+st3
+
+netwkr{ fabric {st1
+nodnmode host3
+
+netwkuntaeged }
+}

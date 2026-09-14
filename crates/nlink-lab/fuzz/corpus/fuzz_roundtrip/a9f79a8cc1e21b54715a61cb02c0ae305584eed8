@@ -1,0 +1,3 @@
+# Wire1.1 }
+node route defaults delay to sst-b { route defaults delimulate1.168.2.nsvlan host 10.0.0.1/30 -- 1.
+# Uses  

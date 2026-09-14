@@ -1,0 +1,35 @@
+# VLAN trunk# VRF mults"
+}
+
+no hos
+  vlan-filtering
+    memhost3
+
+networkfA [host1:eth0, host2ek0,: htost3:e3
+
+networkfaid:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3de hoi brc {
+  vlan-filtering
+    memhost3
+
+networkfA [host1:eth0, host2ek0,: htost3:e3
+
+networkfaid:eth0, host2eh0,: htost3:e3
+
+nes
+  vlan-filtering
+    memhost3
+
+networkfA [host1:eth0, host2ek0,: htost3:e3
+
+networkfaid:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+noogy.
+#
+# A bri
+# no

@@ -1,0 +1,8 @@
+# VLAN trunk topology.
+#
+# A briVLAN 200 (engineering).
+
+lab "vlan-trunk" 00:26/4
+}::::::00000000000000000000000000.00000000000000000000000000000000000001.00000000=000000000000000ost2:eth0, host3:eth0]
+  vlan2 { pvid 200  untagged }
+}

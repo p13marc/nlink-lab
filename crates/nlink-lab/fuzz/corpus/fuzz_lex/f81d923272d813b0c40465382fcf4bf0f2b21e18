@@ -1,0 +1,18 @@
+# VLAN trunk towo VTEPs"
+}
+
+prof0.0.0,.2
+   -rpot  47t
+
+prof0.0.0.2
+   rpot  47d ip{ topology.
+#escription "VXLAN ovtw
+prof0.0.0.2
+    two VTEPs"
+}
+
+prof0.0.0.2
+ VTEPs"
+}
+
+prof0.tworn0.0.2

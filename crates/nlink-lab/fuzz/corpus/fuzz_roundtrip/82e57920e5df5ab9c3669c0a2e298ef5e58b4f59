@@ -1,0 +1,23 @@
+# Router topology 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:et:eth0 {
+  10.0.1.1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 -- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

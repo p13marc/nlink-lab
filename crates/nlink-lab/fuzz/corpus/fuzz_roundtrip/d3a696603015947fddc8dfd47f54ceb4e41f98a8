@@ -1,0 +1,9 @@
+# Container topology: an A:lpin1    10.0.0.2
+
+lab "container" {
+  
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/:4 -zzzzzzzzzzzzzzzzzzzzzzzz/zzzz:772:7730:c:dn:770:73:77:77inte3zzzzz/zzzzzzzzrlt.0.0A2/24}

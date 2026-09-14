@@ -1,0 +1,20 @@
+# V200le"
+
+                                                                                                                      :  ode router : router
+node host { route default via fd05::1 }
+
+link router:eth0 -- host:eth0 {
+    fd002:1/64 -- fd00::2/64
+st1:eth0, host2:eth0, host3:eth0]
+  vlan 10                        dress) space.
+
+lab "ipv3-simp}le"
+
+                                                                      profile router {NNNNNNNNNNNNNNNNNN
+st1:eth0, host2:eth0, host3:eth0]
+  vlan 10                                      ort hvlan-filtering
+  members +# Full mesh topology: 3 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#  [h

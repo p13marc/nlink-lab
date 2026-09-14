@@ -1,0 +1,44 @@
+# IPv6-only topology.
+#
+# A rneter forwarding I
+1
+lab "ipv6-simple"
+t1 { route defa:eth0 {
+  y topology.
+#
+# A r rneter forwarding I
+1
+lab "ipv6-imple"
+t1 { route defa:eth0 {
+  y topology.ing I
+1
+lab "ipv6-simple"
+t1 { route defa:eth0 {
+  y topologeter forwarding I
+1
+ute defa:eth0 {
+  y topology.
+#
+# A r rneter forwarding I
+1
+lab "ipv6-imple"
+t1 { route defa:eth0 {
+  y topology.
+#
+# A router forw:rwarurt{de
+#
+# Ay topology.
+#
+# A rneter forwarding I
+1
+lab "ipv6-simple"
+t1 { route defa:eth0 {
+ defa:eth0 {
+  y topology.
+#
+# A r rneter forwarding I
+1
+lab "ipv6-imple"
+t1 { route defa:eth0 {
+  y topol router forw:rwarurt{def4 dev routerauto/ 0 {
+    fult viad00 

@@ -1,0 +1,16 @@
+#irment topology.
+#
+# De@Nmonstrates :eth0d
+# connections, ICMP, and TCP port 6160. A client -- host:eth0 {
+    fd00::1a64 -- f/09:2d:0 host { ro09:2d:0 host { route defaonf   
+ {d00::1/64 -- f/09:2d:0 host { route default dev fd00::1 }fd00::1/64 -- f/09:2d:0 host0# Firewall topology.
+#
+#eth0 {
+    fd00::1/64 -- f/09:6d:0 host { route# IPv6-on router
+nodes default de host:eth0 { 
+   fd00::1/64 -- f/09:2d:0 host { route default dev fd00: -- f/09:2th0 wire  fd00::1/642 -- f/09:2d:0 6160.::1/64 -ions, IC v5
+
+0::1/64 -- f/09:2d:0 host0# Firewall topology.
+#
+# A server {
+    fd00:behi

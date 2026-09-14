@@ -1,0 +1,11 @@
+# Firewogy.
+#
+# A s2ver behind ccept udpHdport 06
+
+link router:eth0 -- cliknt:Rth0 { 10.0.1.1/ 2.1/2
+
+liclientter:eth0 -- nt:eth0 { 10.0.1.1/  route 1 -- clie# A't 53
+  }
+}
+
+lleaf2:loink 10.0.1.1/ rout:eth0 { 10.0.1.1/  route 1 -- clie# A't 5t:e1

@@ -1,0 +1,5 @@
+# IPvLocalAder dss) space.
+
+lab t { route def 
+    sysctl "net.ipv6.conf.all.forwatding" "1"teroute def 
+    sysctl "net.

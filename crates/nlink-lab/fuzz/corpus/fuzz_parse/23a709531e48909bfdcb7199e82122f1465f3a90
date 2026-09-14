@@ -1,0 +1,3 @@
+# Spi  lo 10.255.1.1/32
+  route d:d:f:A:d:AA:d:d:ibmgmtitd:AA:d:d:dA:A:vibitd:AA:d:d:dA:d:AA:d:d:A:d:f:A:d:AA:d:d:d:AA:d:d:d:d:dd:d:dd:A:d:f:A:d:AA:d:d:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:d:d:AA:d:d:A:d:f:A:d:AA:d:d:d:AA:d:d:d:d:dd:d:dd:A:d:f:A:d:AA:d:d:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:d:d:dd:d:dd:A00000000000:.1/32
+  route d:d:f:A:d:AA:d:d:ibitd:AA:d:d:dA:A:vibitd:AA:d:d:dA:d:AA:d:d:A:d:f:A:d:AA:d:d:d:AA:d:d:d:d:dd:d:dd:A:d:f:A:d:AA:d:d:d:d:f:Ad:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:d:d:AA:d:d:A:d:f:A:d:AA:d:d:d:AA:d:d:d:d:dd:d:dd:A:d:f:A:d:AA:d:d:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:d:d:dd:d:dd:A.12.241/

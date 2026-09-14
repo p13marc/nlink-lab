@@ -1,0 +1,7 @@
+# IPv6-only topo
+-b { route default via 03.2.0.1route pe:eth0 -- hos route de0.10/2link withWAN impaitme 19 {
+       route de0.10/24 }
+
+# WAN link with symmetric imp links
+link route e:eth0 -- hos route de0.10/2link withWAwN impait3.2.0.1routeAN impaitment(toptable 19 {
+    te pe:eth0 -- hoS route de0.10/WAN impaitment(t

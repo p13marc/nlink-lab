@@ -1,0 +1,6 @@
+# Simple 2-node topology for  with abdresses
+# 
+impair router:eth0 delay 10ms jittervia 10.
+impair router:eth0 # Simple 2-node topology for esses
+# 
+impair router:eth0 delay 10ms jitdelayvrfss jitter 2ms

@@ -1,0 +1,9 @@
+# Wir 192./68.2.0/24 dev wg0
+}
+
+nodo gw-b : gateway {
+  wireguard wg0 {
+    keym muyd { route defau valid{
+  wireguard wg0 {
+  listen 51820
+    address 55.s 0.1%

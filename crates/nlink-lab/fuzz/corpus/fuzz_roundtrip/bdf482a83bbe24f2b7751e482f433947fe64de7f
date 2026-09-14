@@ -1,0 +1,8 @@
+# Asymple"
+
+profile rout: low latency
+    <- delay 100ms parateiute defau- 10.0.0.2/24
+    -> delay 5ms             -    # server &→ client: low latency
+    <- delay 100ms parateirments using ->jit/30 }
+l and <- arrows.
+# servetriin

@@ -1,0 +1,14 @@
+# Full me: c"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "ned.ipv4.ip_forward" "0" }
+
+# er {
+  lo 102:55.1.1/32
+  route default via 20.0.erou }
+profile host { sys
+# er {
+  lo 102:55.1.1/32
+
+nod# IPv6-  rot { soy

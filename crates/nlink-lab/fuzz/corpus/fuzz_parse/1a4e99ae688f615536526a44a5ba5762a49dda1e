@@ -1,0 +1,15 @@
+# Firewall t# node test .
+
+lab "firewall" {
+  description "rerS vstateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node routerver {
+  route default via 10.0.${2.1 udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -
+23 }

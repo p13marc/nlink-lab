@@ -1,0 +1,19 @@
+# VLAN trunk topoln "BrL# VgidXAN ovewlay topology#ink n1-ܑ4:eth0 {100
+   19t(na.t 1- n4:eth0 { +3.128168.100.2/24
+  }
+}
+
+livtap2 : rouan vxlan100 {
+    vni 100
+   19ttna.t 1- n4:evh0 { +3.128168.100.2/24
+  }
+}
+
+livtap2 : router {
+  vx1etlh2
+  3:e client { rout4 1
+00  unttap2 : rouan vxlan100 {
+    vni 100
+   19ttna.tagged }	
+}
+}

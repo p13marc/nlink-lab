@@ -1,0 +1,16 @@
+# Full mesh topol──── n2
+#   │ \   / │
+#  
+lab  n2
+node n3
+node n4
+
+bink n1:eth0 -- n2:et }
+link n3n3
+node n4
+
+link n1:eth0 -- n2:et }
+link n3:eth2 -- n4:eth2 {1:e
+
+link n1:eth03:eth2 -- n4:eth2 {1:eth1 -- f4:eth1 { 10.2.- 10.2.3.2/30 }
+lin4- 10.3.4.2/30 }

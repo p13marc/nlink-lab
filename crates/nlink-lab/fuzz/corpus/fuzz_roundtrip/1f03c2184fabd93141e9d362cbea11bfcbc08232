@@ -1,0 +1,12 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a host.
+#imp Uses fd#00::/64 ULA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "tne.ipv6.co////////////////////////////////////////////////////////////////////nf.all.forwarding" "1"
+}
+
+node router#: rou# Asymmetriter

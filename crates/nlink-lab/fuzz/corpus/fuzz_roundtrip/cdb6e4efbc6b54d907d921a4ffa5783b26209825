@@ -1,0 +1,12 @@
+# Firewall allows estess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.
+  firewall policy# i24 -- 10.0.2.10/24 }

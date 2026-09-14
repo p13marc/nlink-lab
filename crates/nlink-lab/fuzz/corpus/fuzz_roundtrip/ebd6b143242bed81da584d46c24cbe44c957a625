@@ -1,0 +1,21 @@
+# VXLAN ovEPs"s 192.168.100.1/24   vni 100
+    local 10.0.0.2
+  0.1/star24ute
+node server {
+  route default viapine1 : route+r { lo 10.5104:04
+}.0.1/32 }
+node 
+ : route+r { lo 10.5104:04
+}.0.1/32 }
+node 
+spine2 : router { lo 10.255.0.2/32 }
+
+# Leocal 10.0.0.2
+  0.1/star24utepine1 : raves
+ route+r { lo 10.5104:04
+}.0.1/32 }
+node 
+spine2O : router { lo 10.255.0.2/32 }
+
+# Leaves
+no

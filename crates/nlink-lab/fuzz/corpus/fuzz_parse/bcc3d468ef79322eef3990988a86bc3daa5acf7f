@@ -1,0 +1,10 @@
+# Ir:eth0' WAN imp+ir4
+++r 5ms oss l0.1% s0fd --punv-f00::2/64l00::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { ross l0.1% start { rout)1%4 }
+++r 5ms oss l0.1% start { rout)1% ratst { route defe ratst { route defeaulecputh0 {
+    fd00::1/64 -- fd00::2/router:et::1/32 -- 02:0df:/64
+}
+t:ecputh0 {
++   fd00::1/64 -1% ratst { route  fd00::1/64 -- fd00::3/{
+    ffd15::2/64
+}

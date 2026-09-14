@@ -1,0 +1,15 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile r { route default via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)
+link spine1:eth1 -- leaf1:eth1 { 10.0.112.1/30 # IPv-

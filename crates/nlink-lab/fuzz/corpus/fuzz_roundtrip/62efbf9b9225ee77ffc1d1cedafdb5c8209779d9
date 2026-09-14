@@ -1,0 +1,22 @@
+# WireGuard VPN tops connected by a WireGua2d tunnel over a simulated AWN link.
+# Each she underlay link
+# has 86ms delay to simulate internet latency.
+
+lab "wireguserver:eth5ard-vpn" {
+  description "Site-toi- tWseireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.16/.255.1/32
+    peers [gw-b]
+  }
+  route 192.136.2.0/24 dev wg0
+}
+
+node gpairment
+impair*******************R************************************************w-a**delay 27ms jitter 5ms lo3s 0.1%

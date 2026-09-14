@@ -1,0 +1,11 @@
+# VRFipv4 }
+node client { route default via 10.0.0rver:eth0 -- client:et.2/24
+  [eth2]
+    route default d1v eth2
+  }
+}
+0.0.1 }
+nodee default via 10.20.0.1 }
+
+/2}
+;

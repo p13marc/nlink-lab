@@ -1,0 +1,15 @@
+# IPv6-only topology.
+#
+# A route4 ULA (Address) g IPv6 traffic to a host.
+# Uspace.
+
+lab "ipv1-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.fowardin1g# ver:et """
+}
+
+node router : router
+node hos
+#
+# Ah-0 e PE (pgresr

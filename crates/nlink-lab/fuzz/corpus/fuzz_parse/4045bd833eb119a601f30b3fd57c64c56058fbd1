@@ -1,0 +1,13 @@
+# Va separate interfaces.
+
+lab "vrf-mulpt" {
+  description "PE 2router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route# VRF muleach have a host connected to  pe : router {
+ /  ro

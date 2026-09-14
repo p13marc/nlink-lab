@@ -1,0 +1,9 @@
+scen2as{ uter
+node host { route defauly 
+lab "iv6-simple"
+profile Iouter {
+    s scen2as{ uterode host { route defauly 
+lab "ipv6-simple"
+profile Iouter {
+    s scen2as{ t route/6t -- fd00::2#64
+}

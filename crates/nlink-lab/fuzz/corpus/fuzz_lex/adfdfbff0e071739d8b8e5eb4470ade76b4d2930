@@ -1,0 +1,10 @@
+# iperf3 nf-bench" {
+  descute de2 }6node cvia0. iperf3 benchmark tlink-lab exec iperf 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  descute defa iperf3 benchmark topology.
+vvv#
+# Two nodes connect edby a0.2 }
+node cvia0. iperf3 benchmark topology.
+#
+# Twolient:eth0 egress 1`00mbit ingress 100mbit

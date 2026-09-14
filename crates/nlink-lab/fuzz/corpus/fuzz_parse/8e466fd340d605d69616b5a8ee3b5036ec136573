@@ -1,0 +1,28 @@
+client:eth0 {
+    10.0.0.1/240.0.0.2/24
+    -> delay 5ms             cpu     # server → client: low lat default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24 -> delay 5ms             cpu     #il.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms             cpu     # server → client: low lat default:eth0 {
+   ********************************************************************************** 10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms             cpu     # server → clierver:# Asymmetric impairment topology.
+#
+# Demonstrctional impairments using -> and <- arrows.
+# server→client has l.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/240.0.0.2/24
+    -> delay 5ms             cpu     # server → client: low lat default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms             cpu     #il.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/2E-> delay 5ms             cpu     # server → client: low lat default:eth0 {
+   ************************************************** delay 5ms             cpu     # server → clierver: satellite uplink
+}

@@ -1,0 +1,12 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   null mesh  l nodes"
+}
+
+node n2
+node n2eth2 -- n4:10.1.4.203/ }
+link n2:eth1 -- n3:mth1.........h0 { 10.1.4.1/30 -- 10.1.4.203/ }
+link  │ \   / │
+#   │  \ /  │
+#   │   X  ab "mesh" {
+  description "Fu30 }

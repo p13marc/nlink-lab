@@ -1,0 +1,22 @@
+# IPv6-onby t{{{{{{{{{{)))))))))))))))))
+pr# iperf3 benchmark topology.
++++++++++++7777777774 -- 10.0.0.2/24 }
+
+rat4
+ : router
+ostr++++++77577++++++++++++77.7777774 -onby t{{{e defauhost2:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hosstr++++++77577++++++++++++77.7777774 -- 10.0.0.2/24 }
+ostr+++++++++++777777777.5777ode hostr++++++77577++++++++++++7777777774 -- 10.0.0.2/24 }
+
+rat4
+ : router
+ostr+42+++77577++++++++++++77.7777774 -onby t{{{{{{{{{{)))))))))))))))))
+pr# iperf3 "enchmark topology.
+#
+#0.0.1 `-t 
+}
+
+n+
+er

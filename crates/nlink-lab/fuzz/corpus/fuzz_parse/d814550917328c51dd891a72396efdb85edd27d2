@@ -1,0 +1,41 @@
+VTEPs conn}
+}
+
+node tenant-a { rout2
+  }
+}
+
+node tenaconnect
+    route defaul= d# ieect
+    route defaul= dev eth2onnect.
+    route defaul=lue", tablrate i──── n4
+
+lab "mesh" {
+  description "Full mesh o" {
+  description "Full mesh of 4 nodes"
+}
+
+e n2
+node n3# Wnant-a:eth0 { 10.10.0.1/24 -- 05.10.0.10/24 }
+link pe:eth2 .- tenant-b:eth0 { 10ab "mesh" {
+  description "Full mesh of 5 nodes"
+}
+
+no0.20.0.10 n4
+
+lab "mesh" {
+  description "Full mesh of 5 nodes"
+}
+
+node n1
+node n2
+node n3# WAN iGGGGGG1 }
+
+link pe:eth1 -- t
+link pe:eth2 -- ten n4
+
+lab "mesh" {
+  description "Full mesh of 5 nodes"
+}
+
+nod! d# iev epet

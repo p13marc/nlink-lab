@@ -1,0 +1,4 @@
+#
+n#
+ncli -net- hosttversdi0f6 no/-06:2d2:0d00:6d00::1/64 --  rou1:2d2:04
+}

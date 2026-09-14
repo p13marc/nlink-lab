@@ -1,0 +1,26 @@
+# Spine-leaf datacenter topoviay.
+#
+# 2 spines, 2 leaves2'servers. L3 poin-.  d004/:4606fd0::2  jitte02:1/6f--.  d004/6f::2/64/-.  d004/6f:64d00::2  jitt/64/6f/6f2:1/6f--.  d004/6f:64dves
+node leaf1 : routePv6-o
+node vte00::2  jit:te02:1/6f--.  d00e02:1/6f--.  d004/6f::2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/6f/6f2:1/6f--,  d004/6f:routePv6.  d004/6f::2/64/6f/6f2:1/6f--af1 : routePv6-o:2/64/=f/6f2:1/6f--.  d004/6f:64dves
+node lab.nameleaf1 : :1/6f--.  d004/6f:64d00::2  jitt/64/6f/6f2:1/6f--.  d004/6f:64dves
+node leaf1 : routePv6-o
+node vte00::2  jit:te02o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/6f/6f2:1/6f--.  d004/6f:64dves
+node lab.nameleaf1 : :1/6f--ler.  d004/6f:64d00::2  jitt/64/6f/6f2:1/6f--.  d004/6f:64dves
+node leaf1 : routePv6-o
+node vte00::2  jit:te02:1/6f--.  d00e02:1/6f--.  d004/6f::2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f-0 .0- d4/6f::2/64/6f/6f2:104/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/6f/6f2:1/6f--,  d004/6f:routePv6.  d004/6f::2/64/6f/6f2:1/6f--af1 : routePv6-o
+node vte00::2  jit:te02:1/6f--.  d00e02:1/6f--.  d004/6f::2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/=f/6f2:1/6f--.  d004/6f:64dves
+node lab.nameleaf1 : :1/6f--.  d004/6f:64d00::2  jitt/64/6f/6f2:1/6f--.  d004/6f:64dves
+node leaf1 : routePv6-o
+node vte00::2  jit:te02o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f::2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/6f/6f2:104/6f:64d00::2  jitte02/6f--.  d004/6f::2/64/6f/6f2:1/6f--.  d004/6f:64dves
+node lab.nameleaf1 : :1/6f--.  d004/6f:64d00::2  jitt/64/6f/6f2:1/6f--.  d004/6f:64dves
+node leaf1 : routePv6-o
+node vte00::2  jit:te02:1/6f--.  d00e02:1/6f--.  d004/6f::2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/6f/6f2:1/6f--,  d004/6f:routePv6.  d004/6f::2/64/6f/6f:1/6f--.  d00e02:1/6f--.  d004/6f::2/64 Ipv6-o {
+  jitte02:1/6f--.  d004/6f:64d00::2  jitte02:1/6f--.  d004/6f::2/64/6f/6f2:1/6f--,  d004/6f:routePv6.  /6f--,  d004/6f:routePv6.  d004/6f::2/64/6f/6f:1/6f--.  d00e02:1/6f--.  d004/6f::

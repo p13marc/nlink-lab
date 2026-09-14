@@ -1,0 +1,5 @@
+# Spinepijitter 1ms
+i01mbit ingrews 100mbit
+rate client:eth0 egperf3 benchma0.0h0 egperf3 benchma0.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { .2/30  mtu 900pyu# R li0
+# Accms

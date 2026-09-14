@@ -1,0 +1,2 @@
+# IPv6-o
+ic : router tte8z:1/64 -- fd06/0:2:4d00:f00:99999999dummy99999999999999999 10.0.25555551/6 vtep2 : router tte0z:1/64 -- fd06/0:2:4d00:f00:99999999dofile rrwd1ri

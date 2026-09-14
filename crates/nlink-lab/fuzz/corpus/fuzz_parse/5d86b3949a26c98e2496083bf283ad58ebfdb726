@@ -1,0 +1,5 @@
+:eth0 egress 100mbii tngress 10bit ingress 100mbit
+rate clielerf-bench c,ient -10.0.0.2/24 }
+
+rate set:eth0 egress 100mbit ighpegress 100Mbit ingress 10bit ingress 100mbit
+rate clienerf.0 100mbit

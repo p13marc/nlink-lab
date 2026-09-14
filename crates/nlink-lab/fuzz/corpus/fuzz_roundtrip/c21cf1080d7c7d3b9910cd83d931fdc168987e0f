@@ -1,0 +1,2 @@
+# IPv# VXLAN ovEP00::1/649 -- fd0+throu!ghputtwo VTE478
+link vtep1:eth0 -4- vtep2:eth0 { p2:eth0 { 10.0.0.1/243333333

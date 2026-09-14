@@ -1,0 +1,4 @@
+# Simple 2-node
+link router:eth0 -- hosnt-thhhhhh.rout Spine-64 -d:0:6024 0:200d:0:2020:200d:02:2.0.0.0/
+}
+/8

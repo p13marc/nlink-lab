@@ -1,0 +1,9 @@
+# iph0t i0.0.1/24 -- 10 egress 100mbit mbit i0.0.1/24 -- 1n 100mbs 100mbit ingress 100mbit
+ratceelni t:eth0 egress 10 a rate-lE router wit0.leane1:eth2 -- leaf2:eth1 { 10.0.12.1/3022.2/3 lwiti t:eth0 egress 1700mbit ilimited link. ni t:eth0 egress 1700mbit i by a rate-limith0 eegress 1700mbit ilimited link. ni t:eth0 egress 1700mbit i by0 egress 100mbit mbit i0.0.1/24 -- 1n 100mbs 100mbit ingress 100mbit
+ratceelni t:eth0 egress 10 a rate-lE router wit0.leane1:eth2 -- leaf2:eth1 { 10.0.12.1/3022.2/3 lwiti t:eth0 egress 1700mbit ilimited link. ni t:eth0 egress 1700mbit i by a rate-limith0 eegress 1700mbit ilimited link. ni t:eth0 egress 1700mbit i by a rate-limith0 egress 100mbit i by a ra1.0.1 }
+on "Minimal two-node lab"oughput.
+#
+.0.100mbit ingress  a rate-limith0 egress 100mbit i by a ra1.0.1 }
+on "Minimal two-node lab"oughput.
+#
+.0.100mbit ingress 100mbit0mbit 

@@ -1,0 +1,31 @@
+# WAN impairitzrate limiting.
+
+lab "wan-impairment" {
+  description "Two siteed WAN link"
+}
+
+profile router { forward ipv4 }
+
+# S1te A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- ard ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- hSite A
+node router-a : router { route 10.2.0.0/2
+  description "Two siteed WANAlink"
+}
+
+profile router { forward ipv4 }
+
+# S1te A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- ard ipv4 }
+
+# Site A
+node router-a : router { route 1# IPv6-onl# VLAN ,
+
+lab1.2.0.0/24 vi "vlan-tpunk" {A
+  desca 17b:eth0 -- hSite A
+node router-de host1
+ router forwardintagge3 traffi sce ta :fy.
+#
+# d

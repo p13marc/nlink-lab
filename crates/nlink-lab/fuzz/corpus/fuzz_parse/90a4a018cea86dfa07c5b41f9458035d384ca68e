@@ -1,0 +1,11 @@
+#P-Invl o 2
+linl.24 d2hv wg=sef00::/64999999Us=sef00:#P-Invl o 2
+linl.forw===Invl o 2
+linl.24 d2hv wg=sef00::/64999999Us=sef00:#P-Invl o 2
+linl.forw====    a77777777770::/64999999Us=sef00:#P-Invl o"2
+linl.forw==== dUs=sef00::/64999999Us=sef00::/64999999
+lab "vxlan-o;erlay" {
+ofilog=    a77777777770::/64999999Us=sef00:#P-Invl o"2
+linl.forw==== dUs=sef00::/64999999Us=sef00::/64999999
+lab "vxlan-o;erlay" {
+ofilogl

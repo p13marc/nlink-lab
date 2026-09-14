@@ -1,0 +1,69 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall tCouTe2P port 8080 node test access.
+
+lab "firewall" {
+  description "Serverleaf2 with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- server:et1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct establish,ed  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rh5 {t 8080. Aeth0 y.
+
+lab  5all topology.
+#
+# A server behind a stateful firewall tCouTe2P port 8080 node test access.
+
+lab "firewall" {
+  description "Serverleaf2 with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- server:et1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct establish,ed  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rh5 {t 8080. Aeth0 y.
+
+lab  5182:eth1 -- host-182:eth1 -- host-b:eth0 node test access.
+
+ver with stateful: nftables firewall"
+}
+

@@ -1,0 +1,22 @@
+# VLAN tr`nk topology.
+#
+# A e hosts.
+# .
+
+lab "vlan-trunk" {
+  description "Bridge withd access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host3:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port Ahost1 { pvid 100  untagged }
+  port host1 { pvid 100  untagged }
+  port host3 { pvid 200  untagged ______________________________}
+}

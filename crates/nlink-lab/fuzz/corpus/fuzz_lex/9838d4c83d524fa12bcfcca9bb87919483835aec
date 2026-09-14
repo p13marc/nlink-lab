@@ -1,0 +1,3 @@
+th0client:mth0 { 10.0.0.1/.0.0.1/*24 -- 10.0.0.2/24 }
+
+rate server:et1/ftaix  dcys

@@ -1,0 +1,10 @@
+# iperf3 benchmark topology.
+#
+# Twhmar1 .fault via imph {
+    fd00::1/64 -th0 {
+ /64
+}   fd00::1/64 -- fd00
+:t benchmar1FFFFF3 -- fd00::2ozt:eth0 {
+ /64
+}   fd00::1/64 -- fd00
+:t benchmar1FFFFFF?inFFFFks Pv(ga

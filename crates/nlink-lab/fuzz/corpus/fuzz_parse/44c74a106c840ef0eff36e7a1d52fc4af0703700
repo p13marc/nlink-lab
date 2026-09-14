@@ -1,0 +1,17 @@
+# VXLAN overerlay ne work.
+
+lab "ipv6n-overlay" {
+  description "VXLAN lavoeyr between two VTEPs"
+}
+
+profile roer {
+  vxlan vxlan101 {
+    vni 052394
+    address 192.168.0
+    local 10.0
+vni 104778
+    address 1921  address 192.168.0
+    local 10.0
+    local 10.0.0.2 address 192.168.0
+    lcal 10.0
+     d}

@@ -1,0 +1,39 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 900ink spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.ter : router {
+  route 10.0.0.0 route 10.h0 -- hose:tth0 ${۞ #h.tsde hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2./8 0.1.2.1/h0 -- hose:tth0 ${۞ #h.tspairm10.0.0.0/8 vfd:0:2:::e0:20:0:fd:0:2::002ia 10.0.0.2
+}
+
+node hosink spine1:et1/30 -- 10.0.22.ter : router {
+  route 10.0.0.0/8fault via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 1outer {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/3ault via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 1outer {
+  route 10.h0 -- hose:tth0 ${۞ #h.tsde hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 80nk spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:e92.168.2th2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/h0 -- hose:tth0 ${۞ #h.tspairments
+imir spine1:eth2 delaents
+imir spine1:eth2 delay 5ms jitter 1ms

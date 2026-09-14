@@ -1,0 +1,14 @@
+# WireGuard VPN topology.
+#
+# 50ms delay to simulate internet late.cy.
+
+lab "wireguard-vpn" {
+  description "WAN"
+}
+
+profile gateway{ forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen Ps  10.0.0.6

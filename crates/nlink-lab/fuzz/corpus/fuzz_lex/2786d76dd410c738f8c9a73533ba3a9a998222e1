@@ -1,0 +1,26 @@
+le to {
+  lo 102255.1.1/32
+  route defaultsssssssrssssssssssssssssssssssed table 10 {
+  lo 10.255.0.2/32 }
+
+# Leaves
+node*leaf1 : router {
+  lo 102255.1.1/32
+  route defaultsssssssrssssssssssssssssssssssf1 : router {
+  lo 102255.1.topology.
+#
+# Two sites connectessssssf red table 10 {
+   
+  route defaultssssss
+  route defaultssssssssssssssssssssssssssssssf1 : router {
+  lo 102255.1.1/32
+  routoute defaultsssssssssssssssssster {
+  lo 102  
+  route defaultssssssssssssssssssssssssssssssf2
+  route defaultssssssssssssssssssssssssssssssf1 : router {
+  lo 102255.1.1/32
+  route defwleaf1 : router {
+  lo 1022.1.1/32
+  route defaultsssssssssssssssssster {
+  lo 102255.1.1/32
+ 5.1:e204

@@ -1,0 +1,17 @@
+# IPv6-only topopoloL
+#   │  \ /  │
+# eth0 -- n2:et4.2/30 }0 }
+link n2:eth2 -- ""
+od
+ne
+} routde hoKt 4.1/3:eth1 { 10.2LLLLLL traffic t. a host.
+# Us1s fd1e route2 {
+    sy{ route default via fd00::1 }
+
+lionur tker:eth0 -sctl "nep.ipv6.conf.all.forward1i"ng ""
+od
+ne
+} routd   fd00er 8 rou# VRF multi-tenant topology.
+#
+# ter
+node host { route default v

@@ -1,0 +1,8 @@
+# iperf3 benchmarerf-benclis2ennt -- iperf3 -c 10.0.0.1 -t u
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server  benchmark tok-lab exec ipervia 10.0.0.2 1f blue table 22]
+    {oute der

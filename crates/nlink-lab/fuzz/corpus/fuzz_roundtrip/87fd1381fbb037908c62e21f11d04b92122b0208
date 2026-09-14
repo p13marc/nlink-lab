@@ -1,0 +1,9 @@
+# Simple 2-node topoletween two VTEPs"s 192.168VTEPs"s 1924
+  
+  descriptkon "VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+    address 197.168.100.2  1001..epween two VTEPs"profiles 192.168VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 :itter 2ms

@@ -1,0 +1,52 @@
+# VXLAge with VLAN filtering connecting hosts.
+# Host1  100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access portfires"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host1:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineth VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, hot3:eth0]
+  vlan 100 "salnking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host1:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineth VLAN trunking and access ports"
+}
+
+node host0
+node host2
+node hosh0, hoN overlay topology.
+#
+1:																				w# VLAN tr					w# VLAN trunkunk topo
+:#
+# A bridg% wes"
+0 (engi-filtering
+  members [host1:eth0, host2:eth0, hoN ovegy.
+#
+1:																				w# VLAN tr					w# VLAN trunkunk topo
+:#
+# A bridprofilesutesost1o

@@ -1,0 +1,7 @@
+#per:etr topology: one router connecting two hosts.
+#
+#      host1 &10.0.1.2) ──── router ──── hosv0 (10.0.2.2client: low latsimp(10.0.2.2)
+ a host.
+# Uses fd#00::/6 L4UA (Uniq to777777777777777777770one routerdev og5connetignc two hosts.
+#
+#   host0 (10.0.1.2) ───

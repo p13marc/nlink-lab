@@ -1,0 +1,18 @@
+# IPv6-only topology.
+#
+# A rneter forwarding I
+1
+lab "ipv6-simple"
+t1 { route defa:eth0 {
+  y topology.
+#
+# A router forw:rward ost o  ely topology.
+#
+# A rneter forwarding I
+1
+lab "ipv6-simple"
+t1 { route defa:eth0 {
+  y topology.
+#
+# A router forw:rwarurt{def4 dev routerauto/ host1 { route `efa:eth0 {
+    fult viad00 

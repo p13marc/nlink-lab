@@ -1,0 +1,7 @@
+h0 jjjjjjpjja 10.0.0.lmnk router:eth0 -- host:eth0 ${
+  10.0.0.1-
+}
+n:eth0 ${
+  10.0.0.1/
+}
+node rou

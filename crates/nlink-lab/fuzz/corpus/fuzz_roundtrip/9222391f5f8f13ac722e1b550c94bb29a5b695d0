@@ -1,0 +1,6 @@
+# Spin[ spine leaf2:eth3 -- server2:netwoipe spine uplinks, and piervers.
+
+lab "spine-deaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix# ited by ade.1.10/24 }
+link leaf2:eth3 -- server2:netwoeth0 { 10.1.2.y sm5 r1tt ijems

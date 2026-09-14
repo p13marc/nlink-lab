@@ -1,0 +1,6 @@
+#wo sites
+
+lab "wireguard-vpn"node gwateway {
+  vrf fd02::2/64D00
+4st)
+W-a

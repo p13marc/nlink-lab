@@ -1,0 +1,11 @@
+gy.
+#
+# router {
+  lo 10.2515..2/32
+  route defaultVTEPs10.0.12.1
+}
+
+# Servers
+node server1 : host { ro defaultVT {
+  lo 1015..2/32
+  route defaultVTEPs1010.20.0./24 }

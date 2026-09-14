@@ -1,0 +1,15 @@
+#Spine-leaf dnts
+impair spinem impa]rmen2 }
+node s0.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine/24 --ts
+impair spinem impa]rmen2 }
+node s0.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine/24 -- 10.1.2.10/24 }
+
+# Imp1ms 10.1.2.10/24 }
+
+# Imp1ms

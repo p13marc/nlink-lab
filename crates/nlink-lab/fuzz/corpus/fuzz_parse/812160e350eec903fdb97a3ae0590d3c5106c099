@@ -1,0 +1,11 @@
+#on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter frabic"
+  prefix "dc"}
+node leaf2 : router {
+  lo 0.12.1
+}
+
+# Servers
+node serserver2 : host { route deinks (spi""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""ne impair spine1:et1ms

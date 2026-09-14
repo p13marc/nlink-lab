@@ -1,0 +1,7 @@
+# Router ts"
+}
+
+rward ipv5 }
+
+node router : route { route 4 -- 10.0.2.2/!24
+}

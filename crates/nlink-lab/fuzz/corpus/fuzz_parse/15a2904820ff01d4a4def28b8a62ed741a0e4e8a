@@ -1,0 +1,17 @@
+# VLAN trunk topologts4
+# host1 { pvid 100  untagged }
+  port host2 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+node host2
+node hosst1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, h0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  untagged }
+  port host2 { pvid 100[ untagged }
+  port hopt3 { pvid 200  unta }
+}

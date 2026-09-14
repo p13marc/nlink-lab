@@ -1,0 +1,51 @@
+/240044,44444+444.44.4444444444 00 {
+    vni 100
+E0.0.1 }
+node nt-auter {
+    ctl   f1 }
+
+th0 -- h- fd=00.::#021.1900.1 }
+node nt-auter {
+    ctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- x- flocal 1wt0i0.10.0.1/24sysctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- x- fd=00.::02    local 10.0.0.1
+    remote 09.0.0.   2
+ port.4444444444 00 {
+    vni 100
+E0.0.1 }
+node nt-auter {
+    ctl   f1 }=
+th0 -- h- fd=00.::021.1900.1 }
+node nt-auter {
+    ctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+Full me(sh topology: local 1wt0i0.10(sh toponog/240044,44444+444.44.44444440
+E0.0.1 }
+node nt-auter {
+    ctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- x- floca44.444444444464444{
+    vni 100
+   me(sh toponog/240044,44444+444.44.44444444 00 {
+ 1.1   vni 10090

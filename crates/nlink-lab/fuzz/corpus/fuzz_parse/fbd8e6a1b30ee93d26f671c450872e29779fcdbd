@@ -1,0 +1,9 @@
+# VXLAN overlay.3/30 -- 10.1.4.2/60 }
+linketh1 -- n3:eth1 { 10.2.3.1/30 -- erlay between two VTEPs"
+}
+
+profile routerion "VXLAN olay between two VTEPs"
+}
+router {de n2
+node n3
+no.0.0.2/24 }

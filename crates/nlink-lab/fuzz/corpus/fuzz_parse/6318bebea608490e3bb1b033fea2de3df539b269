@@ -1,0 +1,6 @@
+#. r WAN"
+}
+
+pfile ga au 
+to   listen 55910
+    addr&0ss 1leaves,98.255.1',31

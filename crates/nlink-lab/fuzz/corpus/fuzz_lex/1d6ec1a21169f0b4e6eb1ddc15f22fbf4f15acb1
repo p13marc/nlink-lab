@@ -1,0 +1,45 @@
+# VRF multi-tenant topology.
+#
+# A PE (provider iption "PE router wit0.10.0.1 }
+node tentban- { route default via 10.20.0.1 }
+
+link pe:et }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", ta route default via 10.20.0.1 }
+
+linnaknt-a { route default via 1eedge) router with two VRFs isolating ten
+  }
+  vrf blue table 20 {
+terfaces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", tabth2
+  }
+}
+
+node tenant-a { route default   default via 1e 1dev eth2
+E router wit0./0tenant-b ulT via 10.20.0.1} 
+l
+ink pe::e#  
+l
+ink pe::e# IPv6-o10ute1} 
+l
+ink pe::e#
+    sy osdefault  { route default via 1e 10) and Tenant B (RRF "blue", tablultitenant" {
+  description "PE router wit0.10.0.1 }
+node tentban- { route default via 10.20.0.1 }
+
+link pe:et }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", ta route default via 10.20.0.1 }
+
+linnaknt-a { route default via 1e 10) and Tenant B default vi route defaulIIIIIIIIIIIIIIIIIIIIIIIIIIIt dev eth2
+  }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", table 20)
+# each24 }

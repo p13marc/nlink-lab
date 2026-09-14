@@ -1,0 +1,12 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a N"
+}
+
+profile gateway { forwroutingard ipv3 }
+
+nodede gw-a : gateway {
+  wireguard wg5 {
+    key autefault dev eth1
+  }
+  vr2.168.2.0/24 dev 8.1.1/24 -- 192.168mbit

@@ -1,0 +1,15 @@
+# Sitw'o{ forward oefault via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 ${
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+int-t {
+  route default via 10.0.0host:eth0 ${
+  10.0.0.1/24 -= 10.0.0.2/24
+}
+
+int-to-2 
+}
+node router 08 /via 10.0.rout Spine-leafter topolspine1 : roe 10.0.0.0/8

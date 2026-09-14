@@ -1,0 +1,15 @@
+# Firewall topology.
+#
+# A server behind a statess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+site.# WAN impairment topology.
+#
+#
+#
+# Two Vnected

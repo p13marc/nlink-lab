@@ -1,0 +1,29 @@
+# iperf3 benchmark topology.
+#
+# Two nod777777777777777777777777777777777#{
+  077777777777777777777777777,7777777777777#{
+  0777777777777777777777777777777G{
+  0777777777777777777777.2/24 }
+
+rate server:eth0 eegs1 0sr0mbit ingress 100mibt
+rate client:ethb "iperf-bench" {
+  description "Two kodes for throughput benchult via 10.0.0.22.168.100.1/24
+  }
+}
+
+node vtep2 : ${routrouter {
+  vxiperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-benchv" {
+  descriptionT" wo n.1 }
+
+link ser-- clt ingress 100mibt
+rate client:ethb "iperf-bench" {
+ient:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 eegs1 0sr0mbit ingress 100mibt
+rate client:eth0 egress 100ut.
+#
+## VXLAN ovdeploy:
+# nlink-ln1 }
+nod

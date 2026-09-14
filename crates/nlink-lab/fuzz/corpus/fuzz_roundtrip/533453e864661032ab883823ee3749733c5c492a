@@ -1,0 +1,14 @@
+# IPv6-only topo#00::/64 ULA (Unique Locaspace.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "tTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTJJJJJJJJJJTTTTTTTTTTTTTTTTTTTne.ipv6.conf.all.forwarding" "1"
+}
+
+node routenv-fileer : router
+node host { route default via fd00::1 }
+
+link royyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyuter:eth0 -- o:thseth0 {
+    fd00::1/64 -- fd00::2/64
+}

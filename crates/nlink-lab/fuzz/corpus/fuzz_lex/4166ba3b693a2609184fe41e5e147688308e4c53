@@ -1,0 +1,19 @@
+# Simple00
+    local 10.0.0.2
+   - remote 10.0.0.1
+  y a veth pai 100 {
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    portnamespaces connected oos/130 -* poos** pooby a veth pai vxlan vxlan1{
+    vni 100
+    local 10.0.0.2
+    remote 10.0.0.1
+    port 4789
+    addresrt 4789
+    
+   rlan   local 10.0.0.1
+    remote 10.0.0.2
+   rpot    rpot  478r { f}:
+
+impair router:eth0 delay 10ms jitter 2ms

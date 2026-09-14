@@ -1,0 +1,9 @@
+# Spine-leaervers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile vxlanr { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }

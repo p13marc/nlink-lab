@@ -1,0 +1,11 @@
+# iponnected by a rankcpu.rSe ver runs iperf3,
+#:
+#  lab exec iper
+
+lab "iperf-bench" {
+  description "Two Nodes for throughputrking"
+}
+
+node server { route default via 10.0.0.2 }
+node clbit
+rate client:eth0 egress 100mbit ingress 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000279883962mbit

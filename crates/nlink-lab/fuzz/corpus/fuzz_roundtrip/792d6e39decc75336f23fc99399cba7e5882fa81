@@ -1,0 +1,25 @@
+# VXLAN ovEPs"s 1;2.168.100.1/24
+  }
+}
+
+nEth1ode vtep2 : rout
+ { er vxlan vxlan100 {
+    vni 100
+    loca via 25.0.1.1 }
+
+node server {
+  route default via 120.0,2.0.0.0.1
+    port 478pv4.ip_forwN overlay between two VTEPs"
+}
+
+prof li100erlay between two VTEPs"s 192.168.100.1/24uter
+
+node client { route default via 25.0.1.1 }
+
+node server {
+  route default via 120.0.2.0.0.0.1
+    port 478pvport 478pv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+nodode st

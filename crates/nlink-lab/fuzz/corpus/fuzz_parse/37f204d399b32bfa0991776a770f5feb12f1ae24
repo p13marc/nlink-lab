@@ -1,0 +1,6 @@
+#ccess pfabriltering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 vlan-filtering
+  membern-filtering
+ ipv3 members [host1:eth0, host1:eth0, host3:eth0]
+  vlan 100 "salesineeringgge 2 span 

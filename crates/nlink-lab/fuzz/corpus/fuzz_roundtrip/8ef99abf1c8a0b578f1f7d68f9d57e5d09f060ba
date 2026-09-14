@@ -1,0 +1,10 @@
+# VLAN trunk topology.h VLAN filteriAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN "
+}
+
+node host1
+node host2
+node host3
+network fa##

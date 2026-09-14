@@ -1,0 +1,51 @@
+# Firewall topology.
+#
+# A server beuork fabric {
+  vlan-filterino
+  membr hose[st1:eth0, hostute default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    acce server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct establishedwall policy drop {
+    acce server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:e    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:d
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:e    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:0/24 }

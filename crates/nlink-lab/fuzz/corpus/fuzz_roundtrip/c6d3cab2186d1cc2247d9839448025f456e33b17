@@ -1,0 +1,19 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile utorer { forward ipv4 }
+profile host {  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+ }
+node server2 : host { route default via 10.1.2.1 }
+
+# Faair spine1:eth2 delay sm5 jitter 1ms

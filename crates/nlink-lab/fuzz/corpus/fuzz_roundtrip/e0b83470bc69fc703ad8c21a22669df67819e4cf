@@ -1,0 +1,4 @@
+# IPv6-onby t{t via 10.0.0.1 }
+
+link server:eth0 -- clie fd00t:1n6/::eth04 --  fd00::1/64 -- fd00::dummy2/6 { 10.0.0.1/24ie fd00t:1n6/::eth04 --  fd00::1/64 -- fd00::dummy2/6 { 10.ed }
+ clie fd00t:1n6#/::eth04 --  fd00::1/64 -- fd0:/0:26 { 10.0.0.1/24 -- 10.0.0.2/:eth04 --  fd00::1/64 -- fd00::2/mark 

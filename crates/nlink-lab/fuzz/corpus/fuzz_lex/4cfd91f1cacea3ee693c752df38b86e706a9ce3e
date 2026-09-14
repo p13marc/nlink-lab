@@ -1,0 +1,17 @@
+ -- fdA roro
+
+node router : router
+node host { rou -- fd00e:2d:4:20lt via ::0d10:f1/64 -- roro
+
+node roud00::1/64 - fd00::0:1/64 -- fd00efault via fd00::1::1/64 -- fd00::2/64
+ fd00::2/64v6-onLy topolo}
+E200 -20:0:40:f0:1:1/64 -- fd00::2/64
+/
+# A rorv
+
+node roud00::1/64 - fd01::0:1/64 -- fouter
+node host { route default via ::0d10:f1/64 -- roro
+
+node roud00::1/64 - :40:f0:1:1/64df- - 00:de tn Alpine coftainer cvia ::0d10:f1/64 -- onnected to an roro
+
+nodeA

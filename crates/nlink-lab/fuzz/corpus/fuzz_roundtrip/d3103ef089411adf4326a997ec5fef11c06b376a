@@ -1,0 +1,10 @@
+# VX
+
+lab "vxlan-overlay" {
+  description "Vtwo VTEPs"
+}
+
+profile router { for/
+nf3 b}
+
+prcol i}

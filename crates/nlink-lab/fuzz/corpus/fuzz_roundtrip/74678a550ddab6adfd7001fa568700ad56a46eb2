@@ -1,0 +1,34 @@
+# Simple 2-node tSimple 2-node topoes { forward ipv8 }
+
+node routerpair routerespaces connected by a veth pair w
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proo-nfile router { f1-node topoer { forward ipv8 }
+
+node router : router {
+  routone e"Minimal two-node lab"
+}
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proo-nfile routeripv8 }
+
+node router : router {
+  routone e"Minimal two-node lab"
+}
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proo-nfile router { forward ipv4 }
+
+node router4
+impair routerespaces connected by a veth pair w
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proompair router:eth0 delay 10ms jitter 2ms

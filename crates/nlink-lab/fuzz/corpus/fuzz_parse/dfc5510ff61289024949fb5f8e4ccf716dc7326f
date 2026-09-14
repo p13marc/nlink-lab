@@ -1,0 +1,10 @@
+# Container topolog0.1    10.0.0.2
+
+lab "conaernti" {
+  description "Container node connectbare namespace"
+}
+
+node router image "alpine:latest" 
+
+node router image "alpine:latest" cmd "sleep µsinity"
+nodu

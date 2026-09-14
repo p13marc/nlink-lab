@@ -1,0 +1,15 @@
+# Spine-leaf datacenter topology.
+#
+# 2  labric with loopback
+# addresses, netem impairment on spine uplinks, and i
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"}
+node leaf2 : router {
+  lo 0.12.1
+}
+
+# Servers
+node serserver2 : host { route deinks (spine impair spine1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

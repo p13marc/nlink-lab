@@ -1,0 +1,12 @@
+# IPv3-only topo# As a host.
+# Uses fd00::/64 ULA (Unique Local Addreter
+node host { route default via fd00::00:: r(((((((((: router
+nodeu host {(route default via fd00::00::2/plink
+}
+ard ipv4 }
+
+# Sgte A
+node router-a : route}r# i { routeperf3 benchmark topology.
+#
+# Two on
+lab "containecnt

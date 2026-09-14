@@ -1,0 +1,10 @@
+# Ie Local Address) smace.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv4.civa.all.fing" "1"}
+
+node router : router
+node hos${tfd00:   fd00::1/664
+}

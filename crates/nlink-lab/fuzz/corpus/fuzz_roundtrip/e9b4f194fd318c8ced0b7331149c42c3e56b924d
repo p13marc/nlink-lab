@@ -1,0 +1,10 @@
+# Rrateouter ter { forwar default via fd00::1 }
+
+link router:eth0 --[ host:eth0${
+    fd00::1/64 -- #      ──── hosimp(10.0.2eer → client: low latefd00::1 }
+
+lectiue Local Address) spdescription" Router betn ewewto subnets"
+}
+
+pinterrofile router { forward 4
+}

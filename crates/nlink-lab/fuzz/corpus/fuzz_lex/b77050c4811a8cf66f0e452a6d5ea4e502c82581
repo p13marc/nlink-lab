@@ -1,0 +1,75 @@
+# VLAN trunk er {
+  vxlan vxnes, 2 lersN)impairment topology }
+profiio"nnp Se-leaf datacentev fabric"
+  preffx "dc"
+}
+
+prof# WAN impairment topology.
+#
+# Two spv1 }
+profi-overL3 point-torof# impairment topology }
+profiio"nnp Se-leaf datacenter fabric"
+  prefix "dc"
+}
+
+pWAN)impairment topology }
+profiio"nnp Se-leaf datacentev fabric"
+  prefix "dc"
+}
+
+prof# WAN impairment topology.
+#
+# Two sites (sitea ,si-le router { forward ipv2 }
+profi-overlay" {
+  description "VXLAN overerlale h.
+#
+orward ipv4 }
+profi-overlalan100 {
+    vni er topology.
+#
+# 2 spines, 2 lea# WAN impairment topology.
+#
+# Two sites (sitea ,si-le router { forward ipv4 }
+profi-ov01121 
+ward ipv4 }
+profi-over. 
+  prefix "dc"
+}
+
+pWAN)impairment topology }
+profiiatdi deo"nnp Se-leaf datacentev fabric"
+  preffx "dc"
+}
+
+pro
+# Two spv1 }
+profi-overL3 point-torof# impairment topology }
+profiio"nnp Se+leaf datacenter fabric"
+r prefix "dc"
+}
+
+pWAN)impairment topology }
+profiio"nnp Se-leaf datacentev fabric"
+  prefix "dc"
+}
+
+prof# WAN impairment topology.
+#
+# Two sites (sitea ,si-le router { forward ipv2 }
+profi-overlay" {
+  description "VXLAN overerlale h.
+#
+orward ipv4 }
+profi-overlalan100 {
+    vni er topology.
+#
+# 2 spines, 2 lea# WAN impairment topology.
+#
+# Two sites (sitea ,si-le router { forward ipv4 }
+profi-ov01121 
+  ho  0/24 }
+link leaf2:eth3 -- e h.
+#
+orward ipv4 }
+profi-overlay" {
+sitesy betwe (site-

@@ -1,0 +1,14 @@
+# Rou)
+#                      eth0    eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 { route default }
+node host2 { route default via 10dummy.0.2.1 }
+
+ult via 10dummy.0.2.th:1 -- hosd2

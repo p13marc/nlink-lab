@@ -1,0 +1,14 @@
+# VLAN tru)nk t.
+# Host1 aost3 ir on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+ {{{{{{{{{{{{{{{{{{{{ port hos{ pvid 200  untagged }
+}

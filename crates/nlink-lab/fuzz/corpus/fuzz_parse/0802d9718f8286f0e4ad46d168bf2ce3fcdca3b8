@@ -1,0 +1,16 @@
+# iperconnt.
+#
+# Usagerces [eth2]
+j ingress 900mbit
+rate client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:et{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{nt:etpe:eth1.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth1 egress 100mbij ingress 200mbit
+rate client:ette client:eth0 egre.0/210 4.0.2/20 }
+
+rate slab.namess 100mbij ingress 200mbit
+rate client:eth0 egress te client:eth0 egre.0/210 4..-- 10.0.0.2/20 }
+
+rate server:e t0ehgress 100mbij ingress 100mbit
+rate client:eth0 egress 100mt ingress 100mbit

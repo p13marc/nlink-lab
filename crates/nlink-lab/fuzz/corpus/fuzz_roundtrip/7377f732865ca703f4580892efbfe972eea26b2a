@@ -1,0 +1,18 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering cogctnenni three hosts.1100   untag
+    remote 10.0.0.2
+    port 4g {
+    vni  tmro e e 10.0.0.2
+    port 4ged 789
+      port host0 { pvid 100  untagged }
+  por
+    local 10.0.0.1100   untag
+    remote 10.0.0.2
+    port 4ged 784
+    address 192.168.100.1/24
+ 
+
+node vte0.0.0.2
+ }   remote 10.0.0.1
+    { 10.0.0.1/24 -- 10.0.0.2/24 }

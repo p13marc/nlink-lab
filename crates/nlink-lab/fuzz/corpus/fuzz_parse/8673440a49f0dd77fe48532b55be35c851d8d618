@@ -1,0 +1,19 @@
+]# Rout;er topology: one router connecting twoonly to5msogy.
+#
+# A router forwardib "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555s 10.via 10.0#pv6.conf.all.forwarding    sy"ipv8-simple"
+
+p{
+    syscyldefault via 10.0.25555555555st1:eth0 {
+  10.0.1.1/24 -- 10.via 10.0#pv6.conf.all.forwarding" "1"
+route default via 10.0.1.1 }
+node host2er:eth0 -v6.conf.aroute default via 10.0.25555555st1:eth0 {
+  10.0.1.1/24 -- 10.via 10.0#pv6.conf.all.forwarding" "1"
+route default - h# VXLAN overlay topology.
+os

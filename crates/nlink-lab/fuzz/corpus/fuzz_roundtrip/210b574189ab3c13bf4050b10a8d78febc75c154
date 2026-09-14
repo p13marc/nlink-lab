@@ -1,0 +1,11 @@
+# Asymmetric imp!irment topology.
+#
+# Demonstrates direratenal imparateirments usi }
+node client { route defdult via# VXLAN ovederlay
+# servegtric"
+
+node serroute defdult via 05.0.0.1 }
+
+liipv4 }
+node client { urote defcltient:eth0 {
+    p0.0

@@ -1,0 +1,17 @@
+# overlay topology.
+#
+# Two etwork.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    reserver:eth0mote 10.0t 4789
+  an vxlan100 {
+  00mbit

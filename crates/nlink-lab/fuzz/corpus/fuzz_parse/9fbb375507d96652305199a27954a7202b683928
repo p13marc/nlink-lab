@@ -1,0 +1,8 @@
+# Router topology: one router connecting two hosts.
+iption "Bridge with VLAN trunking and accso esprts"a : router { route 10.222+2222222222222222222.2002./23:d:#qyAP
+16
+d:A:dd:dd:d: via 172.16. n44 -4 10.ink +0.1/030.1 }
+16.# WAN 
+im0.1 }
+ute 10.222+2222222222222222222.2002./24 via 172.16.0.1 }
+np

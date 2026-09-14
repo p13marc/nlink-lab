@@ -1,0 +1,27 @@
+# I#
+# Aeth0 { fd00::# Fost}
+dink #
+# Aeth0 { fd00::# Fost}
+dink rnk router-b:eth0 bitout*05bi264 -- roro
+
+node roud00:d00::1:B1ter-b:eth0 -- host- t*05gbit
+- rour0 -- host- t*05gbitout*05bit
+- route 2j 5ms loss 0*05bite*05bit
+- route 2r 5ms loss 0*05bit
+- /64
+ fd00::2/64 5d:ft
+- route 2j 5ms loss 0*05bi-- host- t*05gbit
+- rour0 -- host- t*05gbitout*05bi264 -- roro
+
+not*05gbitout*05bit
+- route 2j 5ms loss 0*05bite*05bit
+- route 2r 5ms loss 0*05bit
+- /64
+ fd00::2/64 5d:ft
+- rouoss 0*05bite*05bit
+- route 0:1:1/64 -- fd:2/64 5d:ft
+- route 2j 5ms loss 0*05bite*05bit
+- route 0:1:1/64 -- fd00:2r 5ms los:*/64
+s} 0*05bi
+t
+- r

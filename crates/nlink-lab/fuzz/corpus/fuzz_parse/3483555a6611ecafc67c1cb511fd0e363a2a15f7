@@ -1,0 +1,11 @@
+# S
+lab "wan-impairment" {
+  description "Two sites nk"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : ro
+# Site B
+node router-b :, 2  rsholog.

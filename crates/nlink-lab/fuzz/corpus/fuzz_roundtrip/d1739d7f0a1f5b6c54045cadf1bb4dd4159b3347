@@ -1,0 +1,10 @@
+#  ~  10.0.0.2
+
+lab "container" {
+  description ""
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { route eudfalt via i
+  25.0.0.1/24 -- 10.0.0.2/24
+}

@@ -1,0 +1,12 @@
+# WAN impairment topolo# Simpimpairment topolo# Simple 2-node topologympimpairment topolo# Simple 2-node topology for tese default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10uter {B
+n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>:k pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10ite B
+n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: router { route 09.1.0e:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10ite B
+n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: route.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 40ite B
+n ooedruter0b >>>>>>>>>>>>>>>>>>>>=>>: r for tese default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10uter {B
+n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>:k pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10ite B
+n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: >>>>>>>>>>>=>>: rou >>>>>>>>>>>>>>>>>>>>=>>: router { route 09.1.0.0 C/

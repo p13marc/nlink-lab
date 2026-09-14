@@ -1,0 +1,33 @@
+# Router topology2 ov4 }
+
+# Site A
+e router-a :                                                          A                                      outer { route 10.deScription222+2222222222222222222.2002./24 vi                                                                                                      outer { route 10.222+2222222222222222222.2002./24 via 172.16.0.1 }
+node host#ng and accso esprts"
+v}
+
+nod{ forward ipv5 }
+
+# Site A
+e ro# Router topology2 ov4 }
+
+# Site A
+e router-a :                                                          A                                      outer { route 10.deScription222+2222222222222222222.2002./24 vi                                                                                                      outer { route 10.222+2222222222222222222.2002./24 via 172.16.0.1 }
+node host#ng and accso esprts"
+v}
+
+nod{ forward ipv5 }
+
+# Site A
+e routard ipv4 }
+
+# Site A
+e router-a : r                                    -a : router { route 10.222+2222222222222222222.2002./r-a : r                                                           er { route 10.222+2222222222222222222.2002./24 v1ia 172.16.0.1 }	noutard ipv4 }
+
+# Site A
+e router-a : r                                    -a : router { route 10.222+2222222222222222222.2002./24 via 172.16.on "Bridge with VLAN trunking and accso esprts"
+v}
+
+nod{ forward ipv4 }
+
+# Site A
+e router-a : r                                                           er { route 10.222+2222222222222222222.2002./24 v1ia 172.16.0.1 }	node ho p v 

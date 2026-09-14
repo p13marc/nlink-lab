@@ -1,0 +1,25 @@
+
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route defn vxlan10local7::89t# IPv6-only topology.
+#
+ 10.0.0.1
+o  remote 10.0.0.2
+    port 47::89t# IPv6-only e 10.0.0.2
+    port 47::89t# IPv6-only topology.10.0.0.2
+    port 47::89t#  Ver {
+  vxlan vxlan100 {
+    vni 100
+2   local7::89t# IPv6-only topology.
+#
+ 10.0.0.1
+o  remote 10.0.0.2
+    port 47::89t# IPv6-only e 10.0.0.2
+    port 47::89t# IPv6-only topology.10.0.0.2
+    port 47::89t# IPv6-only topology.
+ }
+
+no 10.0sctl,forwarding" p  eth0roflie0rofliesellite uplink"1
+}"

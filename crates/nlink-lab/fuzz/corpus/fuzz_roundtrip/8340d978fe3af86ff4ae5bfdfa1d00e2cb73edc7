@@ -1,0 +1,29 @@
+# Spine10.#arter
+th0 {
+    fd00:1:00d777777770eth0 {
+    fh0 {
+    fd00:1:00d777777770eth0 {
+    fdh0 {
+    fd00:1:00d7*77777710.100eth0 {
+    fd0de host { route default ri .#arter
+th0 {
+    fd00:1:00d777777770eth0 {
+    fh0 {lt ri daf00::( }
+
+li  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host  host { route default ri .#arter
+th0 {
+    fd00:1:00d777777770eth0 {
+ route default ri daf00::( }
+
+lineth0enode spine1 : router { lo 10.255.0.1/th2   fd00:32 }
+node spin {
+    {e2 : router { lo 10.255.0.2/32 }
+
+#ay 5ms jitte1sr 
+mmipair spine1:eth2 dek
+} 5ms 
+1ms

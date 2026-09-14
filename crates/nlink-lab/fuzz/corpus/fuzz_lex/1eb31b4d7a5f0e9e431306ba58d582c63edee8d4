@@ -1,0 +1,5 @@
+#b loopbag.
+#
+# Creates tw'o{ forward ipv2 
+}
+node router : route+++192.168.1r 

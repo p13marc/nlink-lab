@@ -1,0 +1,11 @@
+# Ie Local Addmace.
+
+lab "ipv6-smple"
+
+profile router {
+    sysctl "net.ipv4.civa.all.forwarding" "1"
+}
+
+node router : router
+node hos${||||||||||||||va.a@fn:orw:   fd00::1/664
+}

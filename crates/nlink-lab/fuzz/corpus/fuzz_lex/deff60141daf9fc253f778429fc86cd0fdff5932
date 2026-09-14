@@ -1,0 +1,8 @@
+#acener topology.
+# route.0.2
+}
+
+node hostM{
+  route defaults :itter route defaults jittuter { forward ipv4 }
+e defaults }te d:eft {
+  route defaults j ou

@@ -1,0 +1,31 @@
+#g" "1"
+}
+
+node router : router
+node host { route def 
+    syne def 
+    sys}
+
+node router : router
+node hose def 
+    s def #g" "1"
+}
+
+node router : router
+node host { route def 
+    syne def 
+    sys}
+
+nod
+    syne def 
+    sys}
+
+node router : router
+node hose def 
+    s def 
+    sysctl "net.ipv6.cofn.all.forwarding" "1"
+}
+
+node router : router
+node host { routsctl "net. fd00::1/64 :2/64
+}

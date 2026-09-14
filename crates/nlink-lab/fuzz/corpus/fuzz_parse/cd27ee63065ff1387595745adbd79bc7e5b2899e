@@ -1,0 +1,6 @@
+# Spine-leaf datacenter topoloter 1ms
+importpt 2
+    r
+importrt 2
+    
+-l..r 1ms

@@ -1,0 +1,21 @@
+# VLAN trunk
+
+nodh sot1e
+node host2
+node host3
+
+network fa
+
+network fabric {
+  vlan-filteri VLAN tr5nk topology.
+#
+# A on
+
+node host0
+n
+network fa
+
+network fabric {
+  vlan"
+  port 
+}

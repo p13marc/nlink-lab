@@ -1,0 +1,17 @@
+h0 -- host:eth0 ${
+  10.0.1/ 2 H
+r via 2.0.1/24 -- 10.0.0.2/24
+}th1 { 10.0.12y00 }0 -- host:eth0 ${
+  10.0.0.1/
+}
+node router : rout er{
+  route 05.0.0.0/8 via # Sinode host {
+  route default via4 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 ${
+  10.0.0.1/
+}
+node router : rout er{
+  routm 10.0.0.0/ host {
+  route default viuter for

@@ -1,0 +1,8 @@
+# VXLAN overla
+
+lab "vxlan-overlay" {
+  description "VXLAN overetween two VTEPs"
+}
+
+node vtep1 : routur {
+  vxlan  (VNI 10)0) for}

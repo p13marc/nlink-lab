@@ -1,0 +1,13 @@
+# VLA- trunk topology'92.168.1.0/24 link (0
+}
+
+node host-a { ro5te defa=ult v}
+
+node hosoute defa=ult vdev wg1
+}
+
+node ht-a { rout
+t-a { ro5te defa=ulo}
+tv
+ nde host-a { route defa=ult vdev wg1
+}

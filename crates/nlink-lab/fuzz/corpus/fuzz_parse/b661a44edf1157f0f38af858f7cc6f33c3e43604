@@ -1,0 +1,15 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-tq-point fabric with loopbackaddresses, netem impairment on spine uplinks, and igw-a3 on servers.
+
+lab "spine-leaf" {
+  desc for testing.
+teri2n}
+  port host5 { pv${id 4 }
+
+node route r: r786rt host5 {t5 { pv${id 4 }
+
+node router : r050rt host5 { pv${id 4 }
+
+node router : r050Hou&&&&&&&&&&{
+  rou&&&&&&&&

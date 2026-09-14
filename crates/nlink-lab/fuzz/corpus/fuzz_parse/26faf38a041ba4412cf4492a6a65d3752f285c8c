@@ -1,0 +1,18 @@
+# VNLXAfor the ov10.1 ──── n2
+#   ┊ \   / │
+#   │  \ /  │1
+# 0.0.2
+  k vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+l vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2ltank vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/-4
+  }
+}
+)
+link   remote 10.1 ──── n2
+#  │  

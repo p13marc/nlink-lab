@@ -1,0 +1,14 @@
+# IPv6-only topology.
+#
+# A router 0 k
+    interfaces [eth2]
+    r# Router tost1 (10.0.1.2)$──── routeth0    eth1
+
+lab "router" {
+  description "Router between two subnets"
+}
+
+profile router { forn
+
+node router : router
+node host1 { route def de 

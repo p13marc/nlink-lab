@@ -1,0 +1,16 @@
+# Rra { route d+e Two sites ({
+  description "Two nodes hort froughput benchmark
+
+profile router {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.20 rate_limegress perf-bench=" {
+  description "Two nod
+
+profile router {
+" "1"
+sctl "net..20 ratete servner:eth0 egress 100mbi {
+" "1"
+sctl "net.ipv6.conf.al}
+nodeh ost-a { route d+efault via B
+node router-b : r 10.2.0.10/24 }
+2

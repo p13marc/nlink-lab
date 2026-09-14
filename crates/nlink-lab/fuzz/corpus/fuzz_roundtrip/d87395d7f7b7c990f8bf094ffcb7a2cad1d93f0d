@@ -1,0 +1,12 @@
+77777777777777777777777,77# Rrateouter ter { forward ipv4 }
+
+node roptology: one router connecting two hosts.
+#
+#   hos ──── hoou route default via fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd00::1/64 -- #                       eth0    eth1
+
+la,@"routeer → # Router topology: one router3:2d connecting tw3:2do hosts.
+:#
+#   host1 (10.0.1.2) ──

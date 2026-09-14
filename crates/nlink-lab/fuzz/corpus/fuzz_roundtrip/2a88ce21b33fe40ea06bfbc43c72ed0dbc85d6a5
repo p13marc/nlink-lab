@@ -1,0 +1,17 @@
+# WireGuard VPN topology.
+#
+# Two sites connect.255ernet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peey {
+  wire-a:eth0 { 192.168.1jitter 5ms loss 0.1%

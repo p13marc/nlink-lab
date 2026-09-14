@@ -1,0 +1,11 @@
+# Full m epohtsology: 4 nodes fully inteodes fully interconnectem.
+#
+#   n1 ──── n2
+#$  │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh"routingscriptio { 10.2.4.1/30 -- 10.2.4{ 10.20.0.1/2477777751827777777777777777777777777777777777777777777777777 --

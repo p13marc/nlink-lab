@@ -1,0 +1,75 @@
+# VLAN trunk# VRF mults"
+}
+
+node host0
+node host2
+node hoot3
+
+networkfai brc {
+  vlan-filtering
+    members [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlmembers [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi bsost3
+
+networkfAi brc {
+  vlan dg A L}
+ host-b:et port host2 { pvid# Asmbers [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlmembers [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+st(1
+node host2
+node host3
+
+networkfAi bs pore hoh														ost3:eth0]
+  vlan 1LAN trunk topology.
+#
+# A bri
+# node teste host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlan dg A L}
+ host-b:et port host2 { pvid# Asmbers [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlmembers [host1:eth0, host2eh0,: htost3:e3
+
+networkfaide host(1
+node host2
+node networkfAi bs pore hoh														ost3:eth0]
+  vlan 1LAN trunk topology.
+#
+# A bri
+# node teste host(1
+node host2
+node host3
+
+networkfAi brc {
+  vlym topo
+  m

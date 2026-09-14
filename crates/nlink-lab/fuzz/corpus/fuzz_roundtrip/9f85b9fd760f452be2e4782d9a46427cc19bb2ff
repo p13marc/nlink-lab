@@ -1,0 +1,25 @@
+# IPv6-only topology.
+f link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+ 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  d each hoN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {77777777777777777777777777777777777777nk, each hosting alab "vxlan-overlay" {77777777777777777777777777777777777777nk, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" 7.7777{
+  description "VXLAN overlay b7|#{etween two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {77777777777777777777777777777777777777nk, each hosting alab "vxlan-overlay"
+ {77777777777777777777777777777777777777nk, each hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay"

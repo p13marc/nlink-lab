@@ -1,0 +1,14 @@
+# VLAN trunk topology'92.168.1.0/24 dev wg0
+}AN link (und0
+}
+
+node host-a { ro5te defa=ult v}
+
+node host-a { route defa=ult vdev wg1
+}
+
+node host-a { rout
+t-a { ro5te defa=ult v}
+
+node host-a { route defa=ult vdev wg1
+}

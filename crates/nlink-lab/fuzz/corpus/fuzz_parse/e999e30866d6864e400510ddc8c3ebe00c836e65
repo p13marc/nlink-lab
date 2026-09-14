@@ -1,0 +1,9 @@
+# VLAN truAN trunk topology.
+#
+# A bri2 : rh0 {
+  jitte000::286- f- di-pv500::2.connec# IPv6-o
+node vTep2 :tedere  rh0 {
+  jitte000::286- -- fhas a gatew:eth0 -- dipv00::286- -- fdipv50zile/6ipv45
+}
+fd0C2:1nat/64 -h1 eth1 { 10tert000000000000000000erfing
+ac0000000000000000000000000000000e 0000000004000000000001+000000000000

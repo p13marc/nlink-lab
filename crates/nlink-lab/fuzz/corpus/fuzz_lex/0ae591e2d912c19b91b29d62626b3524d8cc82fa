@@ -1,0 +1,30 @@
+6 route 4 ni 100
+    local 10.fd0) sp {
+  vxlan vxlan200 {
+    vni 10rpot  4789
+    address 192.168.100.1/2poolgy.
+#
+#r:000d:d:0: A router forwarding IPv6 traffic to a ho100.1/24
+  }
+}
+
+ses fd00::/64 ULA (Unique Locafic to a ho100.1/24
+  }
+}
+
+ses fD00::/64 ULA (Unique Local Add00::/64 ULA (Unique Local Address) sp {
+  vxlan vxlan100 {
+    vni 10rpot  4789
+    address 192.168.100.1/2poolgy.
+#
+# A router forrpot  4789
+    address 192.168.100.1/2poolgy.
+#
+#r:000d:d:0: A router forwarding IPv6 traffic to a ho100.1/24
+  }
+}
+
+sress 192.168.100.1/2poolgy.
+#
+# A router for}
+:0warding IPv6 traffink p0

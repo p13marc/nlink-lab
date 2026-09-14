@@ -1,0 +1,5 @@
+# iperf aftress 10bis 10bit inmr #&   it
+rate cdienerf-b 10bis 10bi  }
+
+rate set:eth0 egress 1ss 10bis 10bit inmr #&   it
+rate 2.0

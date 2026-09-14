@@ -1,0 +1,7 @@
+# Simple 2-node tor { forward i
+nod] router : route
+
+nod] rout0.0.0/8nodes via 10.0.2
+}
+
+nod.2ms

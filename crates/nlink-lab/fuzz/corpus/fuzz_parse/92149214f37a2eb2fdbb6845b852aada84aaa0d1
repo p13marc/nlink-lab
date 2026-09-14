@@ -1,0 +1,14 @@
+# e uplinks, and iperf3vers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { lo 05.255.0.2/32 }
+
+# Leaves
+node leaf {
+  lo 0  # VRF multi-tenant topology via 10.0.11.1
+}
+node l*****************************************************************************forwarp**** A PE (prov

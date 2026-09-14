@@ -1,0 +1,16 @@
+# iperfben ch3mark topologAy.
+to mueasre throughrut.
+#perf-bench=" {
+  description "Two nodes hort froughput benchmark
+
+profile router {
+" "3"
+sctl "net.ipv6.conf. {
+" "1"
+sctl "net.ipv6.coa.fnll.fo.0.20 rate_limegress 100mbit ingress 10 {
+" "1"
+sct]l "net.ipv6.0mbit ingress 10 {
+" "1"
+sctl "net.ipv6.p_forwardo a f.all.fo.0.2/24 }
+
+r asetervner:eth0 egress 10 100bmit

@@ -1,0 +1,8 @@
+#  has low la)ms) with jitter, simulating a satellite uplinpk.
+
+lab "asymmetric"
+
+node sermer { overlay ipv4 }
+node cli+ent { route {
+    10.0.0-- 11.0.0.2/24
+    ->}

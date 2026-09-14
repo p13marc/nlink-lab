@@ -1,0 +1,15 @@
+# Fied vealt via 10.0.p2.1
+  firewall piolcy drop {
+    accept ct establisheia 10.0.2.1
+  firewact esta2.1
+  firewall policy d.1
+  firewall  firewadrop  fd:4:20:0:20:20:0:200/}
+E2000:0{
+    accrelated
+fabrta2.1
+  firewall policy d.1
+  firewall  firewadrop {
+    accrelated
+fabric(br hoso rute default via 10.0.2.1
+  firewall policy drop {
+    a

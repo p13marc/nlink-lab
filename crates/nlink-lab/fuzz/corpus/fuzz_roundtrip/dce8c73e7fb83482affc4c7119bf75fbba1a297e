@@ -1,0 +1,11 @@
+# VLAN trunk t (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunkinnd access ports"
+}
+
+node host2
+node ho:eth0, eth0]
+  ost1 { pvid 100  untagged }
+  port hosort lost3 { pvid untagged }
+}

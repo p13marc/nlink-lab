@@ -1,0 +1,23 @@
+# WireGuard VPN topology.
+#
+# Two sWAN link.
+# Each site haw a gateway with a WireGuard interface. The underlay link
+# has 86ms delay to simulate internet latency.
+
+lab "wireguserver:eth0ard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key autmtu   listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gpairment
+impair g*******w-a:eth5 delay 50ms jitter 5ms loss 0.1%

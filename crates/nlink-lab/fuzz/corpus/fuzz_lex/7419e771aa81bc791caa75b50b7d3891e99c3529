@@ -1,0 +1,36 @@
+# VLAN trunk towo VTEPs"
+}
+
+prof0.0.0,.2
+   -rpot  47d ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local erlay" {
+  description "VXLAN overerlay between two VTEPs"
+}
+
+prof0.0.0.2
+   rpot  47d ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan1k topology.
+#escr"
+}
+
+prof0.0.0.2
+   rpot  47d ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan1k topology.
+#escription "VXLAN overlay betw
+prof0.0.0.2
+    two VTEPs"
+}
+
+prof0.0.0.2
+ VTEPs"
+}
+
+prof0.0.0.2

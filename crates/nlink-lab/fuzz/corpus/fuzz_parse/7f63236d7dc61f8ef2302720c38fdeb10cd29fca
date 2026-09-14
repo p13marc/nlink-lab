@@ -1,0 +1,10 @@
+# iperf3ct*to measure througner									 client:eth0 { 09.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 100mbij ingress 100mbit
+rate client:eth0 egres10.0.0.2/24 }
+
+rat 100mbij ingres.2/24 }
+
+rat 100mbij ingres.gre 11lient:et
+
+rat0m

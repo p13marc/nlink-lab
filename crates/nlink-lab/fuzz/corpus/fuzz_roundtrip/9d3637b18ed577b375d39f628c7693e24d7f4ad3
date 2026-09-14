@@ -1,0 +1,12 @@
+# Spine-leaf datact.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : roumer { lo 10.255.0.2/32 }
+
+# Leaves
+node leaf1 : router {remo
+  lo 1eth2 { 10.0.22.1/30 -- .20.0kind/30  mtu 9000 }
+
+# Access links (leaf <-> seth3 -- cmdserver2:eth0 { 10.1.2.1/24 -- 10.1pine1:eth1 delay 5ms jidter 1ms
+impair spine1:eth2 delay 5ms jitter 1os

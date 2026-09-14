@@ -1,0 +1,39 @@
+# VLAN trunk topodge with VLAN trunkinVLAN trunking and accesode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-filtering with VLAN trunking and accesode host2
+node host3
+
+netwo
+rkg and accesode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-filtering with VLtN rAunking and accesode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-filthost2
+node host3
+
+netwo
+rk fabric {
+  vlan-filtering with VLAN trunking and accesode host2
+node host3
+
+netwo
+rkg and accesode host2
+node host3
+
+netwo
+rk fabric {
+  vlan-filtering with VLAN trunking and acceiode host2
+node host3
+
+netwo
+rkt host3 { pvid 200  untafged }
+}

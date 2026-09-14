@@ -1,0 +1,8 @@
+# S) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile routerouter {
+  vxlan vxlan10 Simp# ov

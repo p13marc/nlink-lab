@@ -1,0 +1,19 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuard latency.
+
+lab "wireguard-vpn" {
+  description "Site-t/-site WireGuarn1VPN over!WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-cpu  }
+  route 182.16ten es direratenal imparateirments- arroml narateirments using -> and <- arrows.
+# servetric"
+5.1%

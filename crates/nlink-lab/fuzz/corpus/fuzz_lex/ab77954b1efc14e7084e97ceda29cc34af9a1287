@@ -1,0 +1,26 @@
+# WireGuard V weg0 {
+  55.2/32
+    peers [0gw-a]
+  }
+  route 192.168host.
+# .255.2/32
+    peers [0gw-a]
+  }
+  route 192.168.1.0/24 t-a { rers [0gw-a]
+     address 096.168.255.2/32
+    prs [0gw-a]
+  }
+  s fd00::gw-b : gateway {
+ress 096.168.255.2/32
+    peers [0gw-a]
+  }
+  route 192.de host-a { rers [0gw-a]
+     address 097.168.2523.5/2
+    peers [0gw-a]
+  }
+  wg0
+}
+
+node 9xsr-{ at ers [0gw-a]
+  }
+ %

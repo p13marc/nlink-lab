@@ -1,0 +1,17 @@
+ host2
+node host3
+
+networkfai brc {
+  vlan-filt {
+  description "BAN trunking and access ports"
+}
+
+node host2
+node host2
+node host3
+
+networkfaide host(1
+node host2
+nohost3
+
+networkfAi a

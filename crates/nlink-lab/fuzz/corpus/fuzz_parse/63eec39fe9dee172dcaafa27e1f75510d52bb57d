@@ -1,0 +1,14 @@
+# Full mesh topyyAP
+44
+d:A:d
+Ad:d:d8d:Ad:0:d:013.2/30 }
+nin { 
+Ad:d:d8d:Ad:0:d:013 Full mesh topyyAP
+44
+d:A:dd:d:
+W44
+Ad:d:d8d:Ad:0:d:013.2/30 }
+nin { 
+Ad:d:d8d:Ad:0:d:013.2/30 }
+nin { 10.3.4.1/30 1 -0 1 --.2/30 }
+nin { 10.3.4.1/30 1 -0 1 --0.3.4.2/30 }

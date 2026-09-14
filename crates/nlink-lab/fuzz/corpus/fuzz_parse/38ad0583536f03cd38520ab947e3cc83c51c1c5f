@@ -1,0 +1,21 @@
+# Asymmetric imco an Alpine containode routeragp)erbetween vxlan200 {
+    vni  0port 4789
+   n address 192.168.100.1/24
+# VXLAN overlay topology.
+#
+# Two pology.
+#
+# Two VTEPs co an Alpine containode router imagp)erbetween׉xlan050 {
+    vni  0port 4789
+    address 192.168.10#top=k10/24 }
+0.1/24
+  }
+}
+
+node natvtep2 :forw192  local 10.0.0.1
+    remoteouo:s 10.0.0.2
+   0pnrt 4789
+    address 192.168.1   vni  0port 4789
+    address}
+}
+g - 2.> 1akn

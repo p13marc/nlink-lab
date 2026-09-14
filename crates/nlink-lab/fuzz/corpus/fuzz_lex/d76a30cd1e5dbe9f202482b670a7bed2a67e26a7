@@ -1,0 +1,28 @@
+# WAN mpairment(tpotable 20 {
+    intth symmetric impairment
+link router-a:wan0 n "Bridge with VLAN trunking and a "sal vlan 200 "engineerijg"
+  port h  interfaces [eth1]
+    route default dev eth1
+ """"""""""""""""""""""""""po""""""""""""""""""" }
+  vrf blue tast-a:eth0 { 10.1.0.0/22"""""""""""" }
+  vrf blqe tast-a:eth0 { 10.rfaces [eth1]
+    route default dev eth1
+ """"""""""""""""""""""""""potable 20 {
+    interfaces [eth2]
+    route """""""""""""""""""""""""""""es"
+  vlan 200 "engineerijg"
+  port"""""""""""potable 20 {
+    interfaces [eth2]
+    route """"""""""""""""""""""""""""" }
+  vrf blue tast-a:eth0 { 10.1.0.0/22"""""""""""" }
+  vrf blqe tast-a:eth0 { 10.rfaces [e""es"
+  vlan 200 "engineerijg"
+  port houte default dev eth1
+ """"""""""""""""""""""""""potable   route """"""""""""""""""""""""""""" }
+  vrf blue tast-a:eth0 { 10.1.0.affic t; a hoste default dev eth1
+ """"""""""""""""""""""""""po""""""""""""""""""" }
+"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwa0/22"""""""""""" }
+  

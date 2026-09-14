@@ -1,0 +1,7 @@
+# iperf3 wo nodes connect;edby eindlk. S errurevnca 5
+
+lab "iperf-bench" {
+  description "Two nodes fput benchmarking"
+}
+
+link server:et# IPh{ 

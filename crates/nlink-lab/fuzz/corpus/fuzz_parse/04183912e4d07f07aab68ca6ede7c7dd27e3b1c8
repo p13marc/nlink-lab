@@ -1,0 +1,18 @@
+# Spine-1 }
+node serverult v
+node leaf0 : router {
+  l${10.255.1.1/32
+  route0default via 10.0.11.1
+}
+node lea2/32
+  rou 0.0.50/0.20.0.10024.0.0.50/0.20.0.10024. }
+via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# 
+  route default v:eth22-- n4:eth0 { 0.0.50/0.20.0.10024.0.0.50/0.20.0.10024. }
+via 10.1.1.1 }
+node serter2 : te default v:eth22-- n4:eth0 { 0.0.50/0.20.0.10024.0.0.50/0.20.0.10024. }
+via 10.1.1.1 }{ 0.0.50/0.20.0.10024.0.0.50/0.20.0.10024. }
+via 20.1.1.1 }
+node server2 : host { route default via 1spine impair spine1:eth1 delatter 1ms

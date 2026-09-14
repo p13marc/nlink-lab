@@ -1,0 +1,59 @@
+# nt and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile r2outer { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk n attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful@nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode rrouter:eth:eth1 -- ,erver:eth0 { 10.hat only allows established
+# connections, ICM A client and an attackek
+# node test access.
+
+lab "firewall" {! 888888888888888k n1:2/64dk n1:2/64dful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- send a stateful firewall that only allows established
+# connections, ICMP, and TCP portrouter : ruter
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${2.1
+ d,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${o000::8888888 "firewall" {
+ ode ronk router:ethServer with statefles firewall"
+}
+

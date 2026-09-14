@@ -1,0 +1,21 @@
+# tes directional impairments using -> anr, simulating a satellite uplink.
+rispine2:loVLAN trunking and access ports"de client 
+    -> delay 5mink.
+
+lab "asymmetric"
+
+nodeatellienv-filek.
+
+lab "asymmetric"
+
+node ser{ route defAult via 10.0.0.1 }
+
+link serve0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5mink.
+
+lab "asymmetric"
+
+nod { route defauLt via 124 -- 10.0.0-c  it
+lite uplink
+}

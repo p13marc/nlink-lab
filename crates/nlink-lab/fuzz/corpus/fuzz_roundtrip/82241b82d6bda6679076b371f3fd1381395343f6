@@ -1,0 +1,32 @@
+# IPv# VXLAN ovEPs"s00.1./2-4
+  .0.0.2
+    remot00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- vgge00.2/24
+  }
+}
+
+link vtep1:e for throuegy.
+#
+# A route:/6 Le (VNI 10r 0 {
+   a 10.0.0.1 -t 5
+
+lab 0"iperf-b^ench{
+ "  de89
+    address 192.tagge433333333333300::1/64 -- fd00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- ess 192.tagge00.2/24
+  }
+} 192.tagge00.2/25
+  }
+}
+
+link 4 -- fd00::200.2/24
+  }/6
+}
+
+descripintolink vtep1:eth0 -4- vtep2:eth0 { p2:eth0 { 10.0.0.1/243333333

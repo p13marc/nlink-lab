@@ -1,0 +1,47 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, router {
+  route 10.0.0.0/8 via 10.0.0.th2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/30 -- 10.0.22.ter : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10r : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 1outer {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+ink spine1:1th2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 1.0.0.1/24 -- 1o {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine0.0.21.2/3autl via 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 1outer {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- ink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 0.1.210.1.2.10/24 }
+
+# Impairmet
+snimir spine1:eth2 delay 5ms jitter 1ms

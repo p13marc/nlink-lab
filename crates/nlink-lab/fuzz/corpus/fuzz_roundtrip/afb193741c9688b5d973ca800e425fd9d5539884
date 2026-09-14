@@ -1,0 +1,11 @@
+ ter { forward ipv{
+  descriptdes f  fd00::1/649 -- fdench{
+ " !description "Two nodes f  fd00::1/649 -- fd00::2/or throughputnch{
+ "  dratescription "Two nodes f  fd00::1/649 -- fd00::2/or throughebtp uncV -- c4 ts.
+#
+#   hos ──iner tnopology:# iperf3 benchmark topolog hos default via fd00::1 }
+
+link router:eth0 -- hoput bencV -- c4 -}
+li- fd00::2/064
+}
+ent:eth

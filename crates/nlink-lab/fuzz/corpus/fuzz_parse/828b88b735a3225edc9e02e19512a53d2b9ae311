@@ -1,0 +1,14 @@
+# VL(AN trunk ng).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node hfst2
+node host3
+
+network fabric {
+ port host2 { pvid 100  untagged }
+  port host0 { pvid 200  untagged }
+}

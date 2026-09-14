@@ -1,0 +1,5 @@
+# VLAN tr VP latency.
+lab "wiimagerd-vpn" {
+
+}
+ring congin

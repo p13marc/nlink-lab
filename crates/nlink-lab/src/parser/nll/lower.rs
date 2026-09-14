@@ -1365,6 +1365,7 @@ fn interpolate_once(template: &str, vars: &BTreeMap<String, String>) -> String {
             chars.next(); // consume '{'
             let mut expr = String::new();
             let mut depth = 1;
+            let mut closed = false;
             while let Some(&c) = chars.peek() {
                 if c == '{' {
                     depth += 1;
@@ -1372,11 +1373,26 @@ fn interpolate_once(template: &str, vars: &BTreeMap<String, String>) -> String {
                     depth -= 1;
                     if depth == 0 {
                         chars.next();
+                        closed = true;
                         break;
                     }
                 }
                 expr.push(c);
                 chars.next();
+            }
+
+            // An unterminated `${` is not an interpolation -- emit it verbatim
+            // (#116). Without this the loop above runs to end-of-string and
+            // `expr` is handed to `eval_expr`, whose unknown-variable fallback
+            // is `format!("${{{expr}}}")`: that *synthesises a closing brace the
+            // input never had*, so `"a${b"` silently became `"a${b}"` on the
+            // very first parse. Terminated-but-unknown `${foo}` is still
+            // preserved as written by that same fallback, so this just makes the
+            // unterminated case agree with it.
+            if !closed {
+                result.push_str("${");
+                result.push_str(&expr);
+                continue;
             }
 
             // If expr contains nested ${}, recursively interpolate the inner part first
@@ -1386,7 +1402,23 @@ fn interpolate_once(template: &str, vars: &BTreeMap<String, String>) -> String {
                 expr
             };
             let value = eval_expr(&resolved_expr, vars);
-            result.push_str(&value);
+
+            // When nothing resolved, `eval_expr` falls back to
+            // `format!("${{{expr}}}")` built from the *trimmed* expression, so
+            // `${ x }` comes back as `${x}` and `${\n x}` loses the newline.
+            // That makes interpolation non-idempotent: render writes the
+            // normalised spelling, the next parse sees a different string, and
+            // `parse -> render -> parse` stops being a fixed point (#116).
+            // Emit the expression as it actually stands instead -- still with
+            // any *nested* interpolation resolved, so `${a${b}}` keeps its
+            // inner substitution.
+            if value == format!("${{{}}}", resolved_expr.trim()) {
+                result.push_str("${");
+                result.push_str(&resolved_expr);
+                result.push('}');
+            } else {
+                result.push_str(&value);
+            }
         } else {
             result.push(ch);
         }
@@ -5848,6 +5880,69 @@ qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum
         let (msg, span) = parse_err_span(src);
         assert_eq!(&src[span], "0");
         assert!(msg.contains("cpu"), "{msg}");
+    }
+
+    #[test]
+    fn unterminated_interpolation_is_literal() {
+        use super::interpolate;
+        // #116: the `${` scan used to run to end-of-string without checking it
+        // ever closed, then hand the text to eval_expr, whose unknown-variable
+        // fallback is `format!("${{{expr}}}")` -- synthesising a closing brace
+        // the input never had. `"a${b"` silently became `"a${b}"` on the first
+        // parse, so parse -> render -> parse was not a fixed point.
+        let vars = BTreeMap::new();
+        for input in ["a${b", "a${", "${", "a${b${c}", "${b", "x${y z"] {
+            assert_eq!(
+                interpolate(input, &vars),
+                input,
+                "unterminated `${{` must be left verbatim"
+            );
+        }
+    }
+
+    #[test]
+    fn unresolved_interpolation_keeps_its_original_spelling() {
+        use super::interpolate;
+
+        // Also #116: `eval_expr` trims before rebuilding `${...}` for an
+        // unknown variable, so `${ x }` came back as `${x}` and `${\n x}` lost
+        // the newline. Interpolation has to be IDEMPOTENT or render writes one
+        // spelling and the next parse produces another.
+        let vars = BTreeMap::new();
+        for input in [
+            "a${ x }",
+            "a${x }",
+            "a${ x}",
+            "a${\n x}",
+            "${ a }${ b }",
+            "a${x + }",
+        ] {
+            let once = interpolate(input, &vars);
+            assert_eq!(once, input, "unresolved `${{...}}` must keep its spelling");
+            assert_eq!(
+                interpolate(&once, &vars),
+                once,
+                "interpolation must be idempotent"
+            );
+        }
+    }
+
+    #[test]
+    fn terminated_interpolation_still_resolves_or_is_preserved() {
+        use super::interpolate;
+        // The fix must not touch the cases that already worked.
+        let mut vars = BTreeMap::new();
+        vars.insert("x".to_string(), "5".to_string());
+        vars.insert("iface".to_string(), "eth9".to_string());
+
+        assert_eq!(interpolate("a.${x}.b", &vars), "a.5.b");
+        assert_eq!(interpolate("i.${iface}", &vars), "i.eth9");
+        assert_eq!(interpolate("v${x + 1}", &vars), "v6");
+        // An unknown but *terminated* variable is preserved as written --
+        // which is exactly the behaviour the unterminated case now matches.
+        assert_eq!(interpolate("a${unknown}", &vars), "a${unknown}");
+        // A lone `$` was never an interpolation.
+        assert_eq!(interpolate("a$", &vars), "a$");
     }
 
     #[test]

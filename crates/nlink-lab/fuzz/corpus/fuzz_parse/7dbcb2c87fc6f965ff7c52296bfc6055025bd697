@@ -1,0 +1,9 @@
+#!Full h topcoarCe tens 
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {config
+  rou0 -- 10.3.4.2/30

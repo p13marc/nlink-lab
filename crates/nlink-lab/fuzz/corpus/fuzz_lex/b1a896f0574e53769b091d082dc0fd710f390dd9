@@ -1,0 +1,100 @@
+# WAN impairment(tovtep2:e
+node host3
+
+networkun0.1 }
+node tenable 21 {
+  .
+#
+# A PE (provider ede) goruter with two VRF2:e
+node hsst3
+
+networkvtep2:e
+node host3
+
+networkun0.1 }
+node tenable 21 {
+  .
+#
+# A PE (provider ede) goruter with two VRF2:e
+node hsst3
+
+networkun0.1 }
+nod8.900.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:est3
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tenant-b ({ ro00.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tenable 2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tena- vtep2:est3
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tenant-b ({ ro00.2/24
+  }
+}
+[link un0.1 }
+nod8.900.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:est3
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tenant-b ({ ro00.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tenable 2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tena- vtep2:est3
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+node host3
+
+networkun0.1 }
+node tenant-b ({ ro00.2/2a:eth0 { 10.1.0.0/2204

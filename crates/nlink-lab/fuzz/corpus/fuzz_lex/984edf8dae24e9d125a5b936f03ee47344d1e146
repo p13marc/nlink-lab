@@ -1,0 +1,17 @@
+# Siult via 10.0.0.1
+}
+lt via 10.0.0.1
+}
+t:eth0 ${
+  124 -= 10.0.0.2/24
+}
+
+int-to-2 
+}
+nAt:eth0 ${
+  124 -= 10.0.0.2/24
+}
+
+int-to-2 
+}
+nAmde$router 08 -/via 10.

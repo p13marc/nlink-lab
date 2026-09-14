@@ -1,0 +1,16 @@
+# Full me(sh topology: 4 nodes keyme(sh topology: 4 nodes key auto
+    listen 51820
+    address 192.168.255.2/32
+- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
+li n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:e1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.sssssssssssssss3./30 -- 10.2.3.2/30 }
+link n2:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4.2/30 }
+link n3:eth2 --en 51822
+   .4.1/30 -- 10.1.4.2/30 }*linkh2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4.2/30 }
+link n3:eth2 -- n4:et auto
+    ls 192.168.255.2/32
+    peers[gw-a]
+  }
+  route 192.168.1.0/2/30 }

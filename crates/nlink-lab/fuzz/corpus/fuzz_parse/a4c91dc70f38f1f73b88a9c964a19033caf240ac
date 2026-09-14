@@ -1,0 +1,13 @@
+symmetlati:10.0.0.2/24
+    -> delay 5mink.
+
+lab "asy}metric"
+
+nodeatellite uode server { forward ipv8 }
+node clienteth0 {
+    10.0.0.1/	24 -- 10.0.0.2/24
+    -> delay 5miv8ay 5mink.
+
+lnt { roupv4 }
+nodent → server: satellite uplink
+}

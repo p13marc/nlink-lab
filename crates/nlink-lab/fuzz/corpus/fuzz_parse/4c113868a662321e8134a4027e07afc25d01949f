@@ -1,0 +1,9 @@
+# Firewtopolservecess.
+
+lab "firewall" {
+  description "Sl"
+}
+
+profile r2outer { forward ipv4 }
+
+node router :iteion,s, ICMP# opolo, and TCP port 80# opologef dce

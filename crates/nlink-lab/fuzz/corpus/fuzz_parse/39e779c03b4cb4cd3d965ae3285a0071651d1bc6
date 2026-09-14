@@ -1,0 +1,20 @@
+# Firewal lotpoloode test access.
+
+lab "firewall" {
+  description "SerUUUUUUUUUUUUUUUUUUUUUUv nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default   route default via 10.0.${//////////////////////////////////+///////+///////////////////////ished,  accept udp dportclient 13
+  }
+}
+
+link router:eth0 -- client:${ode er:eth1 --  --r:eth1 -- seRver:eth0 { 10irewall"
+}
+

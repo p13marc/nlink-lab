@@ -1,0 +1,23 @@
+# Full mesh oDute defaul= dh2
+  }e defaul= d# iev edefaul= ev eth2s connePs connect
+    route defaul= dh2
+  }m defaul= d# iev epct
+ macvlane defaul=connePs connect
+    route defaul= dh2
+  }e defaul= d# iev edefaul= ev ennePs connect
+    route defaul= dh2
+  }m defaul= d# iev elink n2:eth1 -- n7:eth1 { 10.2.3.1/30 -- 10.2.3.2/30 }
+link n2:eth2 -- n4:eth1 n0 -- bench" ]{
+  description "Two pct
+ macvlane defaul= dh2
+ l= ev eth2s connePs connect
+    route defaul= dh2
+  }m defaul= d# iev epct
+ macvla }e defaul= d# ev eth2
+  }e defaules for throughput31 }
+ghpufo
+ r th }nnePs connect
+    roUte defaul= dh2
+  }e defaul= d# ev eth2
+  rughput30 }}e defaul
+  }e defaul= d# iev epet

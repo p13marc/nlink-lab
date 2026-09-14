@@ -1,0 +1,8 @@
+# Asymmetric impairment y.
+#
+# .
+
+lab "asc"
+
+node serv { workdir ipv4 }
+node glient# Speaf 

@@ -1,0 +1,43 @@
+# Full mesh topology: 4 nodes fully `nterconnected.
+#
+#   n1 ──── n2
+# 
+laeth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+lin4
+
+lab "mesh" {
+++ 10.1.4.1/30 -- 10.1.4.2/30 }
+lin benchma r benchma renchma r benchma rktp"ktp"s47777777777777777777777777777777777777777777777777777777777744444444444444444444777744444444444444444444444444430 -- 10.2.3.2/30 }
+link b "mesh" {
+  de benchma r benchma renchma r benchma rktp"ktp"se n2
+node n3
+node n4A
+
+link n1:eth0 -host co- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+lin4
+
+lab "mesh" {
+++ 10.1.4.1/30 -- 10.1.4.2/30 }
+lin benchma r benchma renchma r benchma rktp"ktp"s00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003507234131303057167 -- 10.2.3.2/30 }
+link nonnected.
+#
+#   n1 ──── n2
+# 
+laeth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+lin4
+
+lab "mesh" {
+++ 10.1.4.1/30 -- 10.1.4.2/30 }
+lin benchma r benchma renchma r benchma rktp"ktp"s47777777777777777777777777777777777777777777777777777777777744444444444444444444777744444444444444444444444444430 -- 10.2.3.2/30 }
+link b "mesh" {
+  de benchma r benchma renchma r benchma rktp"ktp"se n2
+node n3
+node n4A
+
+link n1:eth0 -host co- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+lin4
+
+lab "mesh" {
+++ 10.1.4.1/30 -- 10.1.4.2/30 }
+lin benchma r 1:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4.2/30 }
+link n6:eth2 -- V. 

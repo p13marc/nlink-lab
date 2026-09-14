@@ -1,0 +1,8 @@
+# iper 5
+
+lab "iperf-bench" {
+ }
+
+node server { route default via 10.0.
+#
+# A bridgf`witAN filterinng c

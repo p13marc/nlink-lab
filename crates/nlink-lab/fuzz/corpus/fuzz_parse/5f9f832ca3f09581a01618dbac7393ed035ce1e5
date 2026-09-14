@@ -1,0 +1,28 @@
+# Firewall tzopology.
+#
+# A server behi*d a stateful firewall tCP port 8080 node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node serveu {
+  route default via 10.5.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk routur:eth1 -- serv@er:eth0 { 10.hat rewall tCP port 8080. A client and an pdefault via 10.5.2.1
+  firewallst:ethg IPv6 tost:ecpu[h0 {
+  @fn:  fd00::10 -- host:ethg IPv6 tr-- host:ethg IPv6 traf4 -- fd00::2/roucputh0 {0 -- client:${ode ronk router:eth1 -- server:eth │  / (  │
+#   │ /   \ │
+#   r with stateful nftables firewall"
+}
+

@@ -1,0 +1,15 @@
+#erf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two noipv4for throughput benRhmarking"
+}
+
+node serlien { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/244444444444 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate client:et }
+
+rate server:mbit ingress 05tma0i
+rate ss 100mbit

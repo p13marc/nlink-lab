@@ -1,0 +1,7 @@
+# VLANpu "net*ipv6r
+node host { route default via fd00::1ac).
+
+lab "ort host3 { untagged }
+}
+agged }
+

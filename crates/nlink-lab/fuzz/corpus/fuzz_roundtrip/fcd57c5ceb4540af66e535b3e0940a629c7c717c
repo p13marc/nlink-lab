@@ -1,0 +1,10 @@
+# IPv6-onl///j
+
+profile ra 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { f/0000000000by a veth pair with a/nodesses
+#i an

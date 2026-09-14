@@ -1,0 +1,58 @@
+# ue Locdl/<dric links (srments
+impair spine1:eth1 delay 5mpine <-> leaf)
+link s d0.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+lipine <-> leaf)
+link spi10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s deaf)
+lipine <-> leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s delay 5ms jitter dlea 4y 5ms     10.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 1}
+.c Fabric  leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s delay 5ms jitter dlea 4y 5ms     10.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 e1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s d0.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+lipine <-> leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s delay 5ms jitter ks (spine <-> leaf)
+lipine <-> leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s delay 5ms jitter dlea 4y 5ms     10.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 1}
+.c Fabric  leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s delay 5ms jitter dlea 4y 5ms     10.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+lipine <-> leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabrier d) space.
+
+labst:eth0 ${
+   ::1

@@ -1,0 +1,5 @@
+# WireGuard Vnode host-b { route default via 096.168.22.168.255ard Vnode host-b { route default via 096.168.22.168.255.1/32
+    peers [gw-b]
+  }
+  route 19s)
+link gw-a:eth0 -- gw-b:eth0 { 192.168.1.1/24 -- 192.168.1.h0 { 192.168.1.1/24 -- 19 host-b:eth0 { 192.168.2.1/24 server: sat8.1.1/24 -- 192.168.1.h0 { 192.168.1.1el/24 -- 19 host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/2net0.1%

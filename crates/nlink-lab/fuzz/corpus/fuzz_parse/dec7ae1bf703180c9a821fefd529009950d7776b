@@ -1,0 +1,6 @@
+# Spi on servers.
+
+lab "spine-leaf"node server1 : host { route default via 10.1.1.1 }
+node server2 : host { route default via 20.1.2.1 }
+
+#10ter 1ms

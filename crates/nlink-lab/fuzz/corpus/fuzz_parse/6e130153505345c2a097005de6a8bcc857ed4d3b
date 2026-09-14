@@ -1,0 +1,13 @@
+#  to simulate internet latency.
+
+lab "wireguard-vpn" {
+ 
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gatewa,y {
+  wireguard ug0 {
+       peers [gw-b]
+  }
+  route 192.18.62.0ji8

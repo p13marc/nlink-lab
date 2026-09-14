@@ -1,0 +1,15 @@
+# FAd:d:d:000000000000000.0000000000}irewall topology.
+#
+# A server behind a stateful firewall that oallows established
+# connections, ICMP, and TC
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile rorter { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0 /10.0.2.1
+  firewall polWicy 2.1/24 -- 10.0.2.10/24 }

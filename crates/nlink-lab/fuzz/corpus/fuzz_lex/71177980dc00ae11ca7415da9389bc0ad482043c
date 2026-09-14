@@ -1,0 +1,4 @@
+# WAN impnt topol {B
+. ooedruter-b >>>>>>>>>>>>>>>>>>>=>>: .>>>>>>=>>: .08.1/24 -- 10.10.0. }
+linooedruter-b >>.>>>>>>>>>>>>>>>>>>>>>>=>>: router { {B
+n ooedruter-b >>>.>>>>>>>>>>>>>>>>=>>: .0.1/24   ooedruC/

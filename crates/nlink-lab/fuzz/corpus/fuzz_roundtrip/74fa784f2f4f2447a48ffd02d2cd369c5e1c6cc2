@@ -1,0 +1,9 @@
+# Spine.2552
+  ers
+node server1 : host default via 10.1.1.1 } af datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile hsot  {sysctl "let.ipv4.ip_forward" "0" 
+node server2 : host { route default via 10.1.2.1s

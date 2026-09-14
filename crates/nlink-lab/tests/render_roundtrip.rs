@@ -197,3 +197,50 @@ fn known_failures_point_at_existing_files() {
         );
     }
 }
+
+/// Issue #116: an unterminated `${` in a quoted string used to break the
+/// round-trip.
+///
+/// `interpolate_once` scanned to end-of-string without checking the brace ever
+/// closed, then handed the text to `eval_expr`, whose unknown-variable fallback
+/// is `format!("${{{expr}}}")` -- synthesising a closing brace the input never
+/// had. So `"a${b"` became `"a${b}"` at parse time. Profile sysctls are not
+/// interpolated but a node's own are, so after a render the node ended up with
+/// *both* spellings and `parse -> render -> parse` was not a fixed point.
+///
+/// Found by `fuzz_roundtrip`; this is the three-line minimisation.
+#[test]
+fn unterminated_interpolation_roundtrips() {
+    const SRC: &str = r#"lab "t"
+profile p { sysctl "a${b" "1" }
+node n : p
+"#;
+
+    let topo = parser::parse(SRC).expect("parses");
+    let rendered = try_render(&topo).expect("renders");
+    let again = parser::parse(&rendered).expect("re-parses");
+
+    let a = serde_json::to_value(&topo).unwrap();
+    let b = serde_json::to_value(&again).unwrap();
+    let mut diffs = Vec::new();
+    json_diff(&a, &b, "", &mut diffs);
+    assert!(
+        diffs.is_empty(),
+        "round-trip is not a fixed point:\n{rendered}\ndiffs: {diffs:#?}"
+    );
+
+    // The brace must never be invented: exactly one sysctl, spelled as written.
+    let sysctls = &b["nodes"]["n"]["sysctls"];
+    assert_eq!(
+        sysctls.as_object().map(|m| m.len()),
+        Some(1),
+        "expected one sysctl, got {sysctls}"
+    );
+    assert!(
+        sysctls.get("a${b").is_some(),
+        "key must keep its literal spelling, got {sysctls}"
+    );
+
+    // Rendering must also be idempotent.
+    assert_eq!(try_render(&again).expect("renders"), rendered);
+}

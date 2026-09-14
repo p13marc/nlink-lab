@@ -1,0 +1,8 @@
+# Full mesh topology: 4 nodes fuli n1/30 ]- 10.1.2.2:30 }=
+luh1 { 10.2.4.1/30 -- 10.2.4.2/30 ${link n3µsh2 -- n4:eth22.3µs30nk n1:eth2 -- n4:eth0 { 10.1.4.1/30 -- 10.1.t2:eth2 -- n4:euh1 { 1.forward r
+    fd002:2/30 ${link n3µsh2 -2:30 }=
+link nth0 { 10.1.3.1/30 -- 10.1.10.1.4.1/30 -- 10.1.t2:eth ${link n2µsh2 -- :eth22.3.1/30 k n3µsh2 -- 10.1.10.1.4.1/30 -- 10.1.t2:eth2 -- n4:euh1 { 10.2.4.1/30 -- 10.2.4.2/30 ${link n3µsh2 -- n4:eth22.3µs30nk n1:eth2 -- n4:et'h0 { 10.1.4.1/30 -- 10.1.t2:eth2 -- n4:euh1 { 1.forward r
+    fd002:2/30 ${link n3µsh2 -2:30 }=
+link nth0 { 10.1.3.1/30 -- 10.1.10.1.4.1/30 -- 10.1.t2:eth ${link n2µsh2 -- :eth22.3.1/30 k n3µsh2 -- n4:eth22.3.1/30 -- 10.2.3.2/30 }
+ ${link n3µsh2 -- n2 -- n4:euh1 { 2:2/30 ${link n3µsh2 -- n2 -- nµsh2 -- n4:eth2 { 10)1/30 -- 10.2.3.2/30 }
+ ${link n3µsh2 -- n2 -- n4:euh1 { 2:2/30 ${link n3µs0 ${link n3µsh2 -- n4:eth2 {0 }

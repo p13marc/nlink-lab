@@ -1,0 +1,12 @@
+# iperf3 benchmark topology.
+#
+#ant t}
+
+node pe : router {
+h1
+  }
+  vrf blue table 20 {
+   t B (VR[
+  vrf red ta.ble 10 {
+    interfaces [eth1]
+    )route default dev elien4:eth0 egrs00e1s mbit ingress 100m*be clien4:eth0 egressth0 egress b0 m11000m*bit

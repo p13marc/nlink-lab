@@ -1,0 +1,48 @@
+# IPv6-on{
+  description  d a onnecteimple"
+
+profi<<<<<<<<<{
+  descriptio:  d a state  "vxlan-overvxlan025 {
+    vni 100
+    local param10.0.0.2
+    reipv4 }
+
+noouterte:h0 delay 10ms jitter 2be.
+#
+# A server behind a state  "vxlan-overvxlan100 {
+    v-ovni 100
+    local param10.0.0.2
+    remo050 {
+  Z  vni 100
+    local param10.0.0.2
+    reipv4 }
+
+noouterte:h0 delay 10ms jitter 2be.
+#
+# A server behind al parni 100
+    local param10.0.0.2
+    remo050 {
+    vni 100
+    local param10.0.0.2
+    reipv4 }
+
+noouterte:h0 delay 10ms jitter 2be.
+#
+# A server behind a state  "vxlan-overvxlan100 {
+    vni 100
+    local param10.0.0(2
+    remote 10.0.0.1
+     vni 100
+    local param10.0.0.2
+    reipv4 }
+
+noouterte:h0 delay 10ms jitter 2be.
+#
+# A server behind a state  "vxlan-overvxlan100 {
+    vni 100
+    local parni 100
+    local param10.0.0.2
+    remo050 {
+    vni 100
+    local param1 port 4789
+    ah

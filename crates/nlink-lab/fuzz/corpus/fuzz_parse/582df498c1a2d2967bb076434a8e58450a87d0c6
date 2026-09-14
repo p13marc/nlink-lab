@@ -1,0 +1,10 @@
+# VXLAN ovk.
+lab "vxlaerlay" {
+}
+
+node vtep1 : router {macvlan
+  vxlan vxl
+lab "vxlan-overlay" {
+}
+
+}

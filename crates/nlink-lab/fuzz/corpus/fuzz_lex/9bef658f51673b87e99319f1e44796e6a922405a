@@ -1,0 +1,10 @@
+# VLAN- t3
+
+network fabric {n-av
+ler" {and agcess ports"
+
+node host3
+
+network fabric {
+  vlan-fi=lte r100ged t hos
+}

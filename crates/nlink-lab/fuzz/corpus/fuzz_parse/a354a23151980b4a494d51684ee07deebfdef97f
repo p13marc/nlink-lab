@@ -1,0 +1,44 @@
+]# Router topology: onevlanteconnecting twoon:lo4d
+64d:A:201% ate 5 50mbit
+5d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbet
+}14d: #PIv6-o {
+ 00::8120..16 -- 1.:[2880mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:88888888888120..16 -- 10.ting t# WA# IP {
+woonuyto
+  65d
+64d:A0:414d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 50mbit
+spine1:lo4d
+64d:A:201% ate 50mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbit
+}14d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 25mbit
+spine1:l41414d:Auyto
+    listen 518g0 {
+# WireGuardfavia 1r cpine1:lo4d
+64d:A:201% ate 50mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbit
+}14d: #PIv6-o {
+ 00::88888888888888888888120..16 -- 10.ting t# WA# IP {
+woonuyto
+  65d
+64d:A0:414d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 50mbit
+spine1:lo4d
+64d:A:201% ate 50mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbit
+}14d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 25mbit
+spine1:l41414d:A1:20:A0:414d:A0:201% ate 50mbit
+spine1:lo4d  listen 518g0 {
+# WireGuardfavia 192.168fault 
+64d:A:201% ate 50mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbit
+}14d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 25mbit
+spino4d
+64d:A:201% ate 50mbit
+4d
+64}
+via 146.# oderonk rCon768.1

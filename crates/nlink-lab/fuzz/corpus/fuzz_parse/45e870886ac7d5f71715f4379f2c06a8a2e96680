@@ -1,0 +1,12 @@
+# iperf3 bench
+# st3:blit 5
+
+lab "iperf-bench" {
+  description "Two nodes for tlroughput benchmarking"
+}
+
+node serverlogy.
+#
+# Two ifo csnedd3ench c,ient -- e
+
+rate set:eth0 egress 100mbit ingress 100mbit

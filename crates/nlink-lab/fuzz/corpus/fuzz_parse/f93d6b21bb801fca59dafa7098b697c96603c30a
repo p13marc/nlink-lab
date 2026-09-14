@@ -1,0 +1,121 @@
+# VX "VXLAN orlay between two VTEPs"
+}
+
+pr  mote 10.0.0.2
+    port 4789
+    addresLAN overter { forwar#eway <-> host)two VTEPs"
+}
+
+pr  rem# WAN impairment topology.
+#
+#lay" {
+  description "VVXLAN orlay between two VTEPs"
+}
+
+pr  mote 10.0.0.2
+    port 4789
+    addresLAN overter { forwar#eway <-> host)two VTEPs"
+}
+
+pr  rem# WAN impairment topology.
+#
+#lay" {
+  description "VXLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer { forwsysctlv4 # VXLxla"VXLAN overlay between two VTEPs"
+}
+
+pr  remote 10.0..0 2
+   port # cess.
+
+lab "firew&ll" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward"""""""""""""""""""""""""""""""""""""""""""""""""verlay between two VTEPs"
+}
+
+pr  remote 57.0.0.2
+    port 4789
+    addresLAN overter { forwar#eway <-> host)two VTEPs"
+}
+
+pr  rem# WAN impairment topology.
+#
+# Tow sites (site-a, site-b) each wi$thjitteuter and a host, cimpaired WAN link"
+}
+
+profile roN link"
+}
+
+profile roverlaverlay" {
+  description "VXLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer { forwsysctlv4 # VXLxlan-overlay" {
+ iption "VXLAN overlay between two VTEPs"
+}
+
+pr  remote 10.0..0 2
+   Zort # cess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""XLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer { forwsysctlv4 # VXLxla"VXLAN overlay between two VTEPs"
+}
+
+pr  remote 10.0..0 2
+   port # cess.
+
+lab "firew&ll" {
+  description "Serveray between two VTEPs"
+}
+
+pr  remote 57.0.0.2
+    port 4789
+    addresLAN overter { forwar#eway <-> host)two VTEPs"
+}
+
+pr  rem# WAN impairment topology.
+#
+# Tow sites (site-a, site-b) each wi$thjitteuter and a host, cimpaired WAN link"
+}
+
+profile roN link"
+}
+
+profile roverlaverlay" {
+  description "VXLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer { forwsysctlv4 # VXLxlan-overlay" {
+ iption "VXLAN overlay between two VTEPs"
+}
+
+pr  remote 10.0..0 2
+   Zort # cess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""4789
+ """""   

@@ -1,0 +1,14 @@
+# Sinple 2-nodg.
+#
+# Creates two nameon "Minimal two-node lab"
+}
+
+profile ra 10ms delay on one end.
+
+lab "simple" {overla  description "Minimal two-node lab"
+}
+
+profile ra# WireGuard  10ms delay on one end.
+
+lab "simple" {
+  description "# Ase  tl@0a bo

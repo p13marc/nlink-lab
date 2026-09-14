@@ -1,0 +1,26 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves,$2 servers. L3 point-to-point fabric with looN
+# interface (   v
+ni 10.0.1
+ 2   labt 4789
+    address 192.168001.. servers. L3 point-to-point fabric with looN
+# interface (   v
+ni 10.0.1
+ 2   labt 4789
+    address 192.168001..2/2 interface (   vni 89
+    address 192.168001..2/24
+  }
+}
+
+link face (   vni 10.0.1
+ 2   labt 4789
+    address 192.168001..2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:{ forward ipv4 }
+profile hoSt { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router oute default via 10.1.2.1s

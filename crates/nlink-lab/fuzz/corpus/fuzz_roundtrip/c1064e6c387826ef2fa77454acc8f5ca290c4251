@@ -1,0 +1,6 @@
+# IPv6-o{n
+    local param10.0.0e.2
+    ral param1uterte:h0 delay 10ms jl param10.0.0(2
+    remote 05.0.01
+    port 4789
+    ah

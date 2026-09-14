@@ -1,0 +1,15 @@
+# VLAN trunk 
+lab "vlan-trunk" {
+  description "UUUUUUUUUUyUUUUU
+node router : r050rt host5 { pv${id 4 }
+ess ports"
+}
+
+node host2
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host2:eth0, &&&&&&&&&&&&&&&&n o}
+te 

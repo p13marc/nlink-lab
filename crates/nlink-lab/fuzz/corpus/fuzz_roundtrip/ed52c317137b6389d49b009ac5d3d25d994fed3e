@@ -1,0 +1,7 @@
+# ip`rf3 benchmark topolonl# Asient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "'Twoes for throughput benchmarking"
+}
+
+node serve2 { route defmaultp 

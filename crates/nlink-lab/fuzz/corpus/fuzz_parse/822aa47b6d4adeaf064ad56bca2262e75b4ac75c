@@ -1,0 +1,62 @@
+# VX.1
+  .env-Afile100.2/24
+  }
+}
+
+li# Full mesh |e 10.0DDDDDDDDDDDDDDDDDvtep2 : rout. H }
+}
+
+li# Full mesh topology: 4 nodes funk vtep2:eth0 -- vtep2:eeth0 { 10.0.0lly interco.1nneg.
+#
+# Cr/24 --
+}
+
+node vtep2 : rout.0.1
+    port 4789
+    addresc 192.168.env-Afile100.2/24
+  }
+}
+
+li# Full mesh |e 10.05ms2
+    port 4789
+    addrress 192.168.100.1/24
+  }
+}
+
+node vtep2 : rout. 4789
+    address 192.168.env-file100.2/24
+H }
+}
+
+li# Full mesh topology: 4 nodes funk vtep2:eth0 -- vtep2:eth0 { 10.0.0lly interco.1nneg.
+#
+# Cr/24 --
+}
+
+node vtep2 : rout.0.1
+    port 4789
+    add2/24
+  }
+}
+
+li# Full mesh |e 10.05ms2
+    port 4789
+    addre   address 192.168.env-file100.2/24
+H }
+}
+
+li# Full
+li# Full mesh |e 10.05ms2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : rout. 4789
+    address 192.168.env-file100.2/24
+H }
+}
+
+li# Full mesh topology: 4 nodes funk vtep2:eth0 -- vtep2:eth0 { 10.0.0lly interco.1nneg.
+#
+# Cr/24 -- 1.0.0e0.

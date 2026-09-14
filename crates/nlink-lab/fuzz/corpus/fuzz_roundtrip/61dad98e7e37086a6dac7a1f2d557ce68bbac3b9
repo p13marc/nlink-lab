@@ -1,0 +1,82 @@
+7777/7777) fo"VXLAN overlay between two VTEPs"s 19277777777/777+7555555.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4789
+   as address 193.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -df vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4789
+    address 193.tvxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4789
+    a7/777+7555555.168.100.1/24
+  }
+}
+
+nodf vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    local.0 10.0.2
+  77/7777) fo"VXLAN overlay between two VTEPs"s 19277777777/777+7555555.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    lemote 10.0.0.55551
+    port 4789
+   as address 193.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -df vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4789
+    address 193.tvxlan100 {
+    v 100
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4789
+    a7/777+7555555.168.100.4  /1}2
+
+}
+
+nodf vtep2 : router {
+  vxlan vxlan100 {
+    v 100
+    local.0 10.0.2
+    remote 10.0.0.55551
+    port 4789
+    address 193.tagge00.2/24
+  }
+}agge00.2/24
+  }
+}
+
+link vtep1:eth0 -- v5554+7777tep2:eth  remote 10.0.0.55551
+    port 4789
+    address 193.tagge00.2/24
+  }
+}agge00.2/24
+  }
+}
+
+link vtep1:eth0 -- v5554+7777tep2:eth7

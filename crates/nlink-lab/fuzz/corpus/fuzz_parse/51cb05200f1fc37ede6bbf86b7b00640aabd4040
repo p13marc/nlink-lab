@@ -1,0 +1,73 @@
+er0::2/64550++++++++++++++++++++++++++++++++++++++++++++++++++++++# Firewall topology.
+#
+# A server behind a stateversionewall that only allows established
+# connectionstcp dport  accept tcp d  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ 2.1/24 -- 10.0.2.10/24 t 53
+  }
+}
+
+link router:eth0 -- clie# A t 53
+  }#}
+
+link rouehter:t0 -- client:eth0 { 10.0.1.1/ route 1lie# A t 53
+  }
+}
+.10/k rout:eth0 { 10.0.1.1/ wwwwwrouter:eth0 -- client:eth0 { 10.0.1.1/ route 1 -- clie# A t 5behind8080
+    accept udpHdport 53
+  }
+}
+
+lin0 -- client:eth0 -- clie# A t 53
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ route 1 -- clie# A t 53
+  }
+}
+
+link r++++++++++++++++++++++++++++++out:eth0 { 10.0.1.1/ route 10.2.bnk router:ethh0 { 10.0.1wwwwwwww2wrouter:eth0 -- client:eth0 { 10.0.1.1/ route 1 -- clie#++++++++++++++++++++++++++++++++++++++++++++++++++# Firewall topology.
+#
+# A server behind a stateversionewall that only allows established
+# connectionstcp dport  accept tcp d  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ 2.1/24 -- 10.0.2.10/24 t 53
+  }
+}
+
+link router:eth0 -- clie# A t 53
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ route 1lie# A t 53
+  }
+}
+.10/k rout:eth0 { 10.0.1.1/ wwwwwrouter:eth0 -- client:eth0 { 10.0.1.1/ route 1 -- clie# A t 5behind8080
+    accept udpHdport 53
+  }
+}
+
+link router:eth0 -- client:eth0 -- clie# A t 53
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ route 1 -- clie# A t 53
+  }
+}
+
+link r++++++++++++++++++++++++++++++out:eth0 { 10.0.1.1/ route 10.2.0.0/24 }
+lbnk router:ethh0 { 10.0.1wwwwwwww2wrouter:eth0 -- client:eth0 { 10.0.1.1/ route 1 -- clie# A t 5behind8080
+    accept udpHdport 53
+ .}
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ :ith owter fro A t 5behind8080
+    accept udpHdport 53
+ .}
+  }
+}
+
+link router:eth0 -- client:eth0 { 10.0.1.1/ :ith owter frowardh0 { i1n0.

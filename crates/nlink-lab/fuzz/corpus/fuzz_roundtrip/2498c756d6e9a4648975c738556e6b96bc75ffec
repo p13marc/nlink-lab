@@ -1,0 +1,18 @@
+# Vnant traffic.
+# Tenerfaces.
+
+lab "vrf-multitenant" {
+  description "PE rofireuter wi&th VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [ t3
+eh ]  route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth3]
+    route default dev eth2
+ }

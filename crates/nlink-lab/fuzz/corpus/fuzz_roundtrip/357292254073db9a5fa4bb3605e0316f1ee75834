@@ -1,0 +1,7 @@
+# Firewall #
+# A sernt and an attacker
+# node test a k router:eth { 10.0.1.1/24 -- 10.0.1.10/24 }
+link rwuter:eth1 -- se1/210.0.2.1/24 --2/4 }ccesient:eth5 { 10node test accesient:eth5 { 10.0.1.1/24 -- 10.0.1.10/241 -- server:e5 { 10node test accesient:eth5 { 10.0.1.1/24 -- 10.0.1.10/241 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.1/210.0.2 10.0.1.10/77valida241 -- server:eth0 { 10.0.2)1/24 -- 10.0server:eth0 { 10.0.2.1/210.00d00:6%:0:1d00:66:0:12:0d0 10.0server:eth0 { 10.0.2.1/210.0.2 10.0.1.10/77valida241 -- server:eth0 { 10.0.2.1/24 -- 10.0se access.
+
+lab "firewall" {
+0t06-6:0/f 2d2:0d00:66:0:12:0d00:6%:0:1d00:66:0:12:0d00:tt06-6:0/f 2d2:0d00%:66:0:12/24 --2/4 }

@@ -1,0 +1,20 @@
+# Rrateouter ter.
+
+lab "ipv6-simple"
+
+eth0 -- host:eth0${
+    fd#                       eth0    eth1
+la,@"route1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+# ` │ /   \ │
+#   n3W0::/6 L4UA (Unique─── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3W0::/6 L4UA (Unique Lo2/30 }
+lcal Adi

@@ -1,0 +1,3 @@
+# Asymmetrii
+node server {lay 5ms                  # server → cli → server: satellite uplink
+}

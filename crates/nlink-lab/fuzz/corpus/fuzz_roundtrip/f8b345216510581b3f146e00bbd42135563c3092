@@ -1,0 +1,13 @@
+# Asyode vtep2       0 {
+vrfsvni 100
+    local010.0.0.2
+       <- dey alenvs est uplink
+} remot   poent: lent: low l10.0.0.2
+       0 {
+vrfsvni 100
+    local 10.0.0.2
+   l10.0.0.2
+       0 {
+vrfsvni 100
+    local 10.       <-    <- dey tellite.uplink
+}

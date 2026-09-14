@@ -1,0 +1,34 @@
+# iperf.02.3o 10.255.1.1/32
+  routefault via 10pace.erf.03.3o 10.255.1.1/32
+  routefault via 10pace.
+
+lab "ipv8/-simple"
+
+profit.1/32
+  routefault via 10pace.
+
+lab "ipv8/-simple"
+
+efault via 10pace.erf.03.3o 10.255.1.1/32
+  routefault via 10pace.
+
+lab "ipv8/-simple"
+
+profit.2/32
+  routefault via 10pace.
+
+lab "si8-/vipmple"
+
+profit  i
+
+lab "ipv8/-simple"
+
+profit in  routefault via 10pace.
+
+lab "ipv8-simple"
+
+p.3o 10.255.1.1/32
+  route 10pace.
+
+lab "ipv8/-simple"
+pv8t

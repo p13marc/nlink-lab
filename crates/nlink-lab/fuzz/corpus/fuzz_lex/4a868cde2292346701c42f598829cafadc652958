@@ -1,0 +1,19 @@
+# VLAN trunk topology.
+#
+ {
+  vlan-filtere host1
+nodeh ost2
+node host3
+
+networ# A bridge wh tihost3
+
+networ{ fabric {
+  vlan-filtere host1
+nodeh ost2
+node host3
+
+networ{ c {
+  vlan-f77iltering
+  me00 "sales"
+ 
+ vlavlan0 "

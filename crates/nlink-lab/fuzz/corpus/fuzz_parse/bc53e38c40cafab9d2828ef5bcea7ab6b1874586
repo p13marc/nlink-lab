@@ -1,0 +1,2 @@
+IPv6-o2 : routPv6-o
+neod vtep2 :2/64d00::2env-f00::2/64d00::2env-e:2/64d00::2env-f0::2/64d00::2env-6

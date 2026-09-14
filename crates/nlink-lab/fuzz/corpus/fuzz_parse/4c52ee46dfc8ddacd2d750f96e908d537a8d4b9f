@@ -1,0 +1,8 @@
+# Sping-l
+
+lab "spine-leaf" {
+# WA# imtion "Spinla prefix &dc"
+}
+
+if/ { sysctl""netn1:eth0# -oy auto.[
+   i

@@ -1,0 +1,35 @@
+# Asymme)ric impairment topology.
+#
+# Demonstrates direarateirments using -> and <- arro#
+nI#
+ncli -net- mme)ric impairment topology.
+#
+# Demonstrates direarateirments using -> and <- arro#
+nI#
+ncli -net- hostt06- n/.06:2d2:0d00:66/4d2:04
+}cli -net- li -net- hostt06- n/.06:2d
+n#
+ncli -netnstrates direratenal i2d2:0d00:66/4d2:04
+}cli -net- li -net- env-file n. # server → cliepology.
+#
+# Demonstrates direarateirmen4s using -> and <- arrows.
+# servetric"
+
+node s10.0server { forward iusing -> and <- arrows.
+# servetric"
+
+node cli -net- ci -net- hostt06- n/.06:2s10.0server { forward ipv4 nt: low latency
+    <-      2d2:0d00:66/4d2:04
+}cli -net- li -net- hostt06- n/.06:2d
+n#
+ncli -netnstrates direratenal i2d2:0d00:66/4d2:04
+}cli -net- li -net- env-file n. # server → cliepology.
+#
+# Demonstrates direarateirmen4s using -> and <- arrows.
+# servetric"
+
+node s10.0server { forward iusing -> and <- arrows.
+# servetric"
+
+node cli -net- ci -net- hostt06- n/.06:2s10.0server { forward ipv4 nt: low latency
+    <-         R . # sy 200ms e defauAAAld i1

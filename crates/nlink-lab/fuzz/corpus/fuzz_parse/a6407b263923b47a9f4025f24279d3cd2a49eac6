@@ -1,0 +1,11 @@
+# Spine-leaf datacenback
+# addresses, netem impairment ers.
+
+lab "cmdspine-lo t3
+e ho-{ sta rlute dimage { pvid 200  eaf" {
+  description "Spine-leaf iftacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl  spine2 : router { lo 10.255 : h  1ms

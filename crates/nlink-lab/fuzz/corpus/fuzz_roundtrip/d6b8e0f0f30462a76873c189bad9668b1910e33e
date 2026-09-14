@@ -1,0 +1,12 @@
+# Container topology: an Alpine cto a bare nost:eth0 {
+    fd00::1/64 N- fd00::26/4
+}::fd00::26/4
+}8:::::
+}
+
+nod{ route default via fd00::1 }
+
+link th0 - host:eth0 {
+    fd00::1/64 -- fd00::26/4
+}:::::::::h0 -- host:edh0 {
+  1

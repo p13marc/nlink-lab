@@ -1,0 +1,27 @@
+# Contai conpine:latext          
+
+lab ""
+node h0${
+   μs00:er" {
+  description "Conwiregto bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64s00::bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+ 
+}
+
+node router image "alpi infinity"
+node h0${
+ 
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${.
+   μs00::1/64 -zzzzzzzzzzzzzzzzult.0.0.2/24
+}

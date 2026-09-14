@@ -1,0 +1,11 @@
+# WAN impairmnk with  router { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route defb { route default via 10.2.0. each.0. each wit { route 10.16.0.1 }
+node h via 10.2.0. each wit { route 10.1.0.0v 2/4ia 172.16.0.1 }
+node host-b { route default via 10.2.0. each with a router and a host, connected
+# by a W%AN link with realistic ute default via%11.outeed
+# b { route 10.16.0.1 }
+node h via 10.2.0. each wit { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0. each with a Jirmee 10.1.0.0/24 via 172.16.0.1 }
+node hos 10.2.0. each.0. each wit { route 10.16.0.1 }
+node h via 10.2.0. each wit { route 10.1.0.0/24 via 172.16.0.1 }
+node host-b { route default via 10.2.0. each with a Jirmeefa

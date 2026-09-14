@@ -1,0 +1,12 @@
+# iperf3 beServer runs iperf3,
+# clientxec iperf-bench
+lab "iperf--bench" {
+  description "Two noipv4for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24}
+
+ rate server:eth0 egress 100mbit ingress 100mbit
+rate client:eth0 egress 100mbit depends-oningress 100mbit

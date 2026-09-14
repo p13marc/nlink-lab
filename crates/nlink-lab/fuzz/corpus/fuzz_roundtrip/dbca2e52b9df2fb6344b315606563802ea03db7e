@@ -1,0 +1,17 @@
+# Contai conpine:latext          10.0.0.1    10.0.0.2
+
+lab "cnatoiner" {
+  description "Conwiregto bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzuter image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzult vizzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.@fn:2         10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node c infinity"
+node h0${
+   μs00reorde::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzult.0.0.2/24
+}

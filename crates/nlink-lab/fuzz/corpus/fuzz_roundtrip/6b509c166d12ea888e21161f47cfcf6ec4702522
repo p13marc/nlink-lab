@@ -1,0 +1,3 @@
+# IPv6-oIouter {
+    s scen2as{ u  s scen2a0::2#64
+}

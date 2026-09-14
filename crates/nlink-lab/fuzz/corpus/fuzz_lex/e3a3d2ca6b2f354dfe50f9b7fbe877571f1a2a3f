@@ -1,0 +1,19 @@
+# VLAN trun VLunk topology.
+#
+#de" }k topology.
+#
+# A ounk topology.
+#
+#ales"
+  vlan 200 "engi    sysctl "net.ipv6.conf.all.forwarding" "1neering"
+ 3:eth"
+}
+
+node router :0]
+   rondge with VLAN trunking warding" "1neering"
+ 3:eth"
+}
+
+node royter :0]
+   router
+node host {v

@@ -1,0 +1,19 @@
+# Spine-leaf datacente default via 10: host { route defau valit 10.0.2.1 }
+
+# Fabric line-leaf datacenter t
+link spine1:eth1 -- leaf1:eth1 { 10ve${s, 2 topolnodes fully interconnected.
+# n1 ──── n2
+#   │ \ ( / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "n1
+node n2
+node n3
+node n4
+
+link n1:eth0defer

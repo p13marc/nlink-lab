@@ -1,0 +1,8 @@
+# Router topolono: yeg ro.1.2/24
+}eth0 {
+  10.0.2.1/24 -- 10pull. -- h# VLAN trunkng connecting three hosking and access ports"
+}
+
+no0.0.2.1/24 -- 10pull.0.2.2/24
+de ho {
+  10.0.2.1/24 -- 10pull. -- h# VLAN trunkDDDDDDDDDD vlan-fime

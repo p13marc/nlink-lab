@@ -1,0 +1,28 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each withjitteudc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwv6-only# VRe }
+  vrf be:F muP  }
+  vrf be:F1
+PPPater and a host, conneer,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  description "Spiaf tatacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4" rp
+ efix "dc3
+}lp
+ri
+ofe router { foPPPP  }
+  vrf be:F mu.0m1drward ipv4 e}p
+ }profairment" {
+  descri
+ption

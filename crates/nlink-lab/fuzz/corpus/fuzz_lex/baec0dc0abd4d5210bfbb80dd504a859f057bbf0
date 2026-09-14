@@ -1,0 +1,21 @@
+# Spine-leataf d
+node seropology.ses, netem impai
+node seropology.
+node seropology.
+#
+# 2 spines, 2 lerf3 benchmark topolonected by a ra@e-l leaf*
+link sp<-> 1# 2 speaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 serveesses, netem impairment a 10.1.1.1 }
+node 1 }
+node tem impai
+node seropology.
+node seropology.
+#
+# 2 spines, 2 lerf3 benchmark4.222222222222222222222222222222222222222222222222222222airment a 10.1.1.1 }
+node seropology.ses, netem impai
+node se by ines, 2 lerf3 benc
+link leaf2:eth3 -- server1:eth0 { 10seropology.ses, netem impai
+node se by ines, 2 lerf3 benchmark topolonected by a rate-l leaf*
+link sp<-> 1erver)
+link leaf2:eirment on spinr { forward ipelay 5ms jitter 1ms

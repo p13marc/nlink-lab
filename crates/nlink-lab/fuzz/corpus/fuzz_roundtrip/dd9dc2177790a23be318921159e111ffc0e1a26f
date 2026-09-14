@@ -1,0 +1,14 @@
+# Container topology: an Alpine container conpine:#atest          09.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connparected"
+}
+
+node router image "a:latest" cmd "sleep$infinity"
+node h0${
+   rejectμs00::1/64 -zzzzzzzzzzz}
+
+node router image ""
+node h0${
+-
+}t

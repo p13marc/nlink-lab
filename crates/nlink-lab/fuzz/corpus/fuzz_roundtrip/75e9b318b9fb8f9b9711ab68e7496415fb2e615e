@@ -1,0 +1,20 @@
+# Simple 2-nodede lab"
+}
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proo-nfile router { forward ipv4 }
+
+node router4
+impair routerespaces connected by a veth pair w
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proo-nfile router { forward ipv2 }
+
+node router4
+}
+
+impair router:eth0 delay 10ms jitter 2ms

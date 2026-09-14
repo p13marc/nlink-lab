@@ -1,0 +1,6 @@
+# Vting th).
+
+lab "vlan-trunk"network fabric {
+  vlan-filtering
+  members [hjst1:eth0, host2:eth0, host3:eth0]
+ }

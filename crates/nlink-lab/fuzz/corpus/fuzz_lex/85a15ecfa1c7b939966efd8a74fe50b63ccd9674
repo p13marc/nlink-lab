@@ -1,0 +1,4 @@
+# Simple 2-node topology frd ip a 10m:t`s sth0 {
+  10.0.0.1/delay on one end forward iph0 {
+  10.0.0.1/dr:0 {
+  10.0.0.1/delay on on routerr 2ms

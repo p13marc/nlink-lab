@@ -1,0 +1,9 @@
+# Container topology: an Alpt0.2
+
+lab "container" {
+  description "Containameshost2pace"
+}
+
+node jitterrouter image "alpine:latest" cmd sel"ep infinity"
+node host {ruo te defau7704
+}

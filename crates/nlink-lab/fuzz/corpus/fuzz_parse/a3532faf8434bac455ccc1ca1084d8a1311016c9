@@ -1,0 +1,47 @@
+# Iology.
+#
+# A router fopology.
+#
+# A router forwin2g """
+}
+# Spine-leaf datacenter toppv4
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server2 : host { route defa Iia 10.0.12.1
+}
+
+# Servers
+node server1 : host { route default via 10.1.1.1 }
+node server2 : hosu { route defa IPv6-oult via 10.
+nogy.
+node host { 00::264/
+}
+orgin1g """
+}
+
+nopology.
+#
+# A r2.ter forwin0g """
+}
+
+node router : route=rdo erouter : route=r
+node host { 01.1.1 }
+node server2 : host { route defa IPv6-onlyt opoloes fd15r2:eth0 { 10.1.2.01/24 -- :10.1.2.10/24 }
+
+# Impairmentsorgin1g """
+}
+
+nopology.
+#
+# A router forwin1g """
+}
+
+node router : route=rdo erouter : route=r
+node host { 01.1.1 }
+node server2 : host { route defa IPv6-onlyt opoloes fd15r2:eth0 { 10.1.2.01/24 -- :10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 delay 5ms jit:2/64
+t}
+er 1ms
+impair spine1:eth2 d may5les jitter 1ms

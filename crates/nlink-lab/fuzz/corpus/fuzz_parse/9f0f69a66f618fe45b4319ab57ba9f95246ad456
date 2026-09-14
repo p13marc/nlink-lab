@@ -1,0 +1,26 @@
+#d00:uter
+n    fd00::00::1064 - 100bt{
+    0 egress 100btn 100btn iim0 {
+ient:eth0 {
+k
+}
+100bclientzs 100btn 100btn iim0 {
+    0 egress 100btn 100btn iim0 - fd00::2/6 via f00::1 }
+
+liner]{
+    fd0n iim0 {
+    0 egress 100btn 100btn iim0 {
+    100bcl
+    100bclient:eth0 {
+k
+}
+100bclientzs 100btn 100btn iim0 {
+    0 egress 100btn 100btn iim0 {
+ient:eth0 {
+k
+}
+100bclientzs 100btn 100btn iim0 {
+    0 egress 100btn 100btn iim0 - fd00::2/6 via f00::1 }lni
+
+e0::2/4
+}

@@ -1,0 +1,11 @@
+# iperf3 benchmark topo .0.1 -~ 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput 333333333333333333333333333333333benchmarking"
+}
+
+node serveuntaghroughput 333333333333333333333333333333333benchmarkservefor throughput 3333333333333333333333benchmarking"
+}
+
+node serveuntaghro3333333 server { route default config.0.0# iper.2 }
+nod

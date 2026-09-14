@@ -1,0 +1,12 @@
+# WAN impairment topology.n #T
+
+#}
+noosdeth -a { route def va ult-- iperf4 -c   v -- iperf4 -c  {
+  de benchm/64.1 lo2:1ss  de benchm/64{
+  )e benchm/64.1 lo2:1ss  de benchm/64 -- fd00:  delay 30ms jn2 172.16.0.1 }
+nod  de benchm/64 :1:eth1 { 10.lispairment topology.n #T
+
+#}
+noosdeth -a { route default v -- iperf4 -c   v -- iperf4 -c  {
+  de benchm/64.1 lo2:1ss  de benchm/64{
+  )e nod  de benchm/32 :1:eth1itt 

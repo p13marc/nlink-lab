@@ -1,0 +1,4 @@
+# IPv6-only topo}
+
+node t {${ost:etk0 {
+    }

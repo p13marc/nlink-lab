@@ -1,0 +1,12 @@
+#  topology for testing.
+#
+# Creates tw router { forward ipv4 }
+
+node router :de router : router
+node host { roe router :de router : router
+node host { r {
+  ry for testing.
+#
+# Creates tw routeorrd ipv4 }
+
+node router :de router : rir router:eth. delay 10ms jitter 2ms

@@ -1,0 +1,29 @@
+# Simple 2-node topology for testing.
+#
+# Creates two names92.1ote68.2.10/24 }
+
+# WAN  impai                                           rmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 --paces connected by  }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- hostn 1.10324 1.10324 }
+link gw-b:e}
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1.2.1/24  -- 3eplink gote68.2.10/24 }
+
+# WAN  impairmer {
+  rouostn 1.10324 }
+link gw-b:eth1 -- h #PIv6-o {
+  jitte02:1/64 -- fdIink n1:2/64ost-b:etdk n1:2/64dh0w-b:00eht1 -0:- hos:88t

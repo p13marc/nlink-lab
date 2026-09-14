@@ -1,0 +1,34 @@
+# Firewalss.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router {
+  route default via 0.0.2.1
+  firewall policy drop {
+    accept ct established,  as asin*  }
+}
+
+link router:eth0 -- client:${s.
+
+lab "firewa&l" {
+  descreful kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkknftables n1 ──── n2
+#   │\   / │
+#   lab "mesh" {
+  descr { 10.1.2.1/30o
+
+
+
+
+
+
+
+
+
+
+
+
+24 }

@@ -1,0 +1,27 @@
+# VX.
+1  .env-Afile100.6/24
+  }
+    address 192.168.100.1/22/24
+H }
+}
+
+li# Fde vtep2 : rout.0.1
+    port 4789
+    addresc 192.168.env-Afile100.2/24
+  }
+}
+
+li# Full mesh |e 10.05ms2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : rout. 4789
+    address 192# IPv6-only topology.
+#
+# A.168.env-file100.2/2 rort 4
+H }
+}
+
+li# Full m47

@@ -1,0 +1,3 @@
+# iperf.ipv6.coark topolo'y.
+#
+route default viad00::1/64

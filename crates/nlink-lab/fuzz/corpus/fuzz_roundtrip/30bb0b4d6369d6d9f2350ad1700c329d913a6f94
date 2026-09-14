@@ -1,0 +1,7 @@
+# iperf3 benchmark tombit ingress 100mibt
+0mibtLAN ovdeploy:
+# nlink-ln0 }  077777777777777777777777777,7777777G{
+  07server:eth0 eegs1 0sr0mbit ingress 100mibt
+0mibtLAN ovdeploy:
+# nlink-ln0 }
+nod

@@ -1,0 +1,11 @@
+# WAN impailimiting.
+
+lab "wan-imdeh2
+  }
+node ten   │  / \  │
+#   │ /   \ │
+#   n4
+
+lab "mesh" {
+ on"Twmbit
+}

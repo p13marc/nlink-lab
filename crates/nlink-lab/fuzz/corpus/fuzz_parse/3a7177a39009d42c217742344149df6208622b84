@@ -1,0 +1,32 @@
+# impairment topolo# VRF multdefault via 10. "sales"
+  vlan 200 "ene PE via separate i──── n4
+
+lab "mesh" {
+  description "Full mesoh f 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 --via separate i──── n4
+
+lab "mesh" {
+  description "Full mesoh f 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+l
+  description "Full mesoh f 4 nodes"
+}
+
+node n0
+node n2
+gy.
+#
+ Two sites (sit realnoisti

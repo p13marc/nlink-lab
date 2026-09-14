@@ -1,0 +1,60 @@
+# Spine-1 ia 10.1.1.1 }
+node server2 : hostter {0.0.10024. }
+via 10.1.1.1 }
+node servevia 10.0.55.1
+}
+node feal2 : router {0.0.10024. }
+via 10.1.1.1 }
+node servevia 10.0.11.1
+}
+node feal2 : router {0.0.10024. }
+via 10.1er {0.0.10024. }
+via 10.1.1.1 }
+t v4
+m (lt via 10.0.55.1
+}
+node feal2 : router {0.0.10024. s
+via 10.e servevia 10.0.55.1
+}
+node feal2 : router {0.0.10024. }
+via 10.1.1.1 }
+node servevia 10.0.11.1
+}
+node feal2 : router {0.0.10024. }
+via 10.1er {0.0.10024. }
+via 10.1.1.1 }
+t v4
+m (lt via 10.0.55.1
+}
+node feal2 : router {0.0.10024. s
+via 10.1.1.1 }
+node servevia 10.0.11.1
+}
+node feal20.10024. }
+via 10.1.1.1 }
+node servevia 10.0.11.1
+}
+node feal2 : router {0.0.10024. }
+via 10.1er {0.0.10024. }
+via 10.1.1.1 }
+t vfffffffffffffffffffffffffffffffffffffffffffffffffffffeal2 : router {0.0.10024. }
+via 10.1er {0.0.10024. }
+via 10.1.1.1 }
+t v4
+m (lt via 10.0.55.1
+}
+node feal2 : router {0.0.10024. s
+via 10.1.1.1 }
+node servevia 10.0.11.1
+}
+node feal20.10024. }
+via 10.1.1.1 }
+node servevia 10.0.11.1
+}
+node feal2 : router {0.0.10024. }
+via 10.1er {0.0.10024. }
+via 10.1.1.1 }
+ servult v4
+m
+ia 1spin0:
+e impair spine1:

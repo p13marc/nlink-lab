@@ -1,0 +1,11 @@
+#77:77 Router topolo0    eth1
+
+lab "r/uter" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node rmuter : router
+node host1 {workdir rout/24
+}

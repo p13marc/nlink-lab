@@ -1,0 +1,18 @@
+# VXLoverlay network.
+
+lab "vxlan-overlayu" {
+}
+
+profile router { forward ipv4 }
+
+node ver {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.00..2
+    port  192.16801.1.0/24
+  }
+}
+
+no.0.2
+    remoct

@@ -1,0 +1,9 @@
+# I Addr.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ardin1g """
+}
+
+node r# VXLAN overlagtdneh

@@ -1,0 +1,11 @@
+## Spine-lnt on spine upip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 1 leap2:eth3 -- server2:eth0 { 10..10/24 }
+
+# Impairments
+impair spine1: 
+lab "ipv6-sieth1 delay 5ms jitmple"
+profilefile Iouteter Iouter {
+    s sce n2as{ u  s 1ms
+sc

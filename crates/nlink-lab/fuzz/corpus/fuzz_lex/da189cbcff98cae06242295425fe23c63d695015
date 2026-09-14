@@ -1,0 +1,15 @@
+# VLAN trunk topology.
+#
+# A bridge wree hosts.
+# Host1 and host2 # WAN impairment(topPE routt isolationtable 21 {
+ {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node hostd ijv0 }
+
+node pe : rru r {t e
+vrf red table 10 {
+    interfaces [ePE ros [eth${ route defaul
+l&nk routth0 -1
+noee host- h0, host3:eth00.0/2]

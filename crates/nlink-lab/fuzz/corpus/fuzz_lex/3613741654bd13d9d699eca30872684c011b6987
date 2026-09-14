@@ -1,0 +1,16 @@
+# Spin
+
+# Leavne1:eth1 y 5ms jitter 1ms
+impair spine2:eth2 delments
+impair sWWWWWWWWWWWWWWWWWWWWWW jitter 1ms
+impair sp Spin
+
+# Leaves
+node ts
+impair spine1:eth1 delay 5mtter 1ms
+impair spine1:eth2 delments
+impair sWWWWWWWWWWWWWWWWWWWWWWWWWWWWWirments
+impair spine1ter 2ms
+impair s54n
+  }
+  vrf blue ces [   inter

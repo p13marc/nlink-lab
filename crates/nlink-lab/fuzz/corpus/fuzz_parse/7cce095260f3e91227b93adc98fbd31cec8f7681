@@ -1,0 +1,13 @@
+# WireGuard V VRF multi-t20)
+# eac)
+# each h
+leti55.1/32
+    peers [gw-b]
+ * o
+ 
+# each h
+leti55. h
+leth1  ss 192*8.255.2/32
+    peers [gw-a]
+  }
+ !

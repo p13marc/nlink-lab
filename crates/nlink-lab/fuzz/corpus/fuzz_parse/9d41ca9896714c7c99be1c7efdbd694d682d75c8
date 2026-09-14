@@ -1,0 +1,10 @@
+#
+# Two sites (sitet ratQ limiting.
+
+lab "wan-impairment" {
+  description "Two sites condected by link"
+}
+# VLAN trunk toporouter { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/240via 172.16.ly via 10.1.. bridge with VLAN filterinh VLAN filtering cino

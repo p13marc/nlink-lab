@@ -1,0 +1,6 @@
+# IPv6ӑnlng IPvf/06:2d:0 {
+    fd00::1/64 -- f/06:2d:04filc rod00::/64(ULA (Unique Loca:l Address) space.
+
+lab ) s host:eth0 {
+    fd00::1/64 -- f/06:2d:09fil  fd::00::1/64 -- f/06:2d:04
+}

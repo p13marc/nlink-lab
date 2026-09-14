@@ -1,0 +1,45 @@
+# VLAN trunk  topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# (Unique Locad Aderlss) space.
+
+lab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+nlab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+node rode router : rout2r VLAN filtering connectispace.
+
+lab "ipv {
+    sylab "ipv {
+    sysctl "net.ipv5.conrouter : rout2r VLAN filtering connectispace.
+
+lab "ipv {
+    sylab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+nlab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+node rof.all.forwarding" "1"
+}
+
+nlab "ipv {
+    sysctl "net.ipv5.conf.all.forwarding" "1"
+}
+
+node rode ruter:eth0 -d # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router {
+    sysctlUses fd00::/64 ULA eth0 --ineer host:eth0 {
+ing).
+
+lab "vlan-tr    unk" {fd01::
+1/6

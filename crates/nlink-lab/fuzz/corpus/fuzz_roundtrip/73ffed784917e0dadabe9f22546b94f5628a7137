@@ -1,0 +1,23 @@
+# IPv# VXLAN ovnlpology.
+#
+# A cooverlay between two VTE478d00::1/649 -- fd00::2/or"throughputtwo VTE4789
+    address 192.333333333300::1/64 -- fd00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- vtep2:eth0 {n two VTE4789
+    addresse 10.0.0.1
+    port 4789
+    address 192.tagge00.2/24
+  }
+} 192.tagge00.2/24
+  }
+}
+
+link vtep1:e for throuegy 192.tagge00.2/24
+  }
+} 192.tagge00.2/2ep1:e for throueg333333300::1/64 -- fd00::200.2/24
+  }/6
+}
+
+link vtep1:eth0 -4- vtep2:eth0 { p2:eth0 { 10.0.0.1/243333333

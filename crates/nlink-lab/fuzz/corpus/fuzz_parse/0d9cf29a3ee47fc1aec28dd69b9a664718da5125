@@ -1,0 +1,12 @@
+# WAN impairment topology.
+#
+# Tn}
+noosdeth -a { route default via 10.1.0.1 }
+
+# Site B
+n:1 clienerf-bench c,ientient -- iperf3 -c  {
+  de benchm/64.1 }
+n.0.0/2 172.16.0.1 }
+nod  de beleaf1:lonchm/64 -- fd00:  delay 30ms jitter 5ms1 { route 10.1.0.0/2 172.16.0.1 }
+nod  de benchm/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss  de benchm/64 -- fd00:  delay 30ms jn2 172.16.0.1 }
+nod  de benchm/64 -- fd00:  delay 30ms jitter 5ms lo2:1:eth1 { 10.lished n2/itt 

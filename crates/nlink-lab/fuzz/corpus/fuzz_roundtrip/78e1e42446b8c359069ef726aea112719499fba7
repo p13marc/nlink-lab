@@ -1,0 +1,15 @@
+# impai
+lab "ipv6-simplepv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route defau- 10.0.0.2/24
+    -> delay 5ms             -    # se
+
+node router : router
+node host { route defau- 10.0.0.2/24
+    -> delay 5ms             -   router
+node host { route defau- 10.0.0.2/24
+    -> delay 5ms             -    # server → client: lms    # client → see.
+1
+l2ab "et.ver: i

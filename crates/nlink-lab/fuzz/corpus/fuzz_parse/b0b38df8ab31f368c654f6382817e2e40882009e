@@ -1,0 +1,46 @@
+# Firewall topology^.
+#
+# A serveripv1 behind a stateful firouter { fov4 }
+
+node router : router
+
+n ocelder behind a stateful firouter { fov4 }
+
+node router : router
+
+n oceldyent { route defa:ul4 via 10.0.1.1 }
+
+on "Minimal two-node lab"
+}
+
+prrouter { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ms jitteink router:et0h --  10ver {
+  route defainkyent { route defa:ul4 via 10.0.1.1 }
+
+on "Minimal two-node lab"
+}
+
+prrouter { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ms jitteink router:et0h*--  10ver {
+  route defaink router:et acc route defa:ul4 via 10.0.1.1 }
+
+on "Minimal tweway <-> host)
+link g LAN links (gateway <-> host)
+link gw-a:eth1 -- hostQQR............0.0.1/24 -- eth0 { 192.168.1.1/24 -
+node# VXLAN overlay topology.
+#
+# Two VTE 
+
+# LA

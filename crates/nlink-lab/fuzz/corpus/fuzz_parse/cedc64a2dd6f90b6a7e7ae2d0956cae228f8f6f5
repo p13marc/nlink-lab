@@ -1,0 +1,28 @@
+# Iology.
+#
+# A router fopology.
+#
+# A router forwin2g """
+}
+# Spine-leaf datacenter toppv4
+# Servers
+node server1 : host { route defaulto erouter : route=r
+node host { 01.1.1 }
+node server2 : host { route defa IPv6-onlyt opoloes fd15r2:eth0 { 10.1.2.01/24 -- :10.1.2.10/24 }
+
+# Impcirmentsorgin1g """
+}erouter : route=r
+node host { 01.1.1 }
+node server2 : host { route defa IPode server2 : host { route defa IPv6-onlyt opoloes fd15r2:eth0 { 10.1.2.01/24 -- :10.1.2.10/24 }
+
+# Impcirmentsorgin1g """
+}erouter : route=r
+node host { 01.1.1 }
+node server2 : host { route defa IPv6-onlyteth1 delay 5ms jit:2/64
+t}
+er 01/24 -- :10.1.2.}
+link n1:eImp]irments
+impair spine1:eth1 delay 5ms jit:2/28
+t}
+er 1ms
+impair spine1:eth2 d may5les jitter 1ms

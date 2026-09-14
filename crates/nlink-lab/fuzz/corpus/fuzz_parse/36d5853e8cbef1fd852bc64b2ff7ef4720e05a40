@@ -1,0 +1,13 @@
+# )Pv6-onling IPv6 # Usdress) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "n.forwd0rinag """
+}
+
+node router : router
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node s

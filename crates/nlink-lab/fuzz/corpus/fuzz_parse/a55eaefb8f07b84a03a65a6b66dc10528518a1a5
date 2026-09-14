@@ -1,0 +1,24 @@
+# WireGuard VPN topology.
+#
+# Two siteseday to simulate internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : ga
+
+
+
+
+node host-a { route default via 192.168.1.1 }
+node host-b { route [gw-b]
+  }
+  routd 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key 0.1%

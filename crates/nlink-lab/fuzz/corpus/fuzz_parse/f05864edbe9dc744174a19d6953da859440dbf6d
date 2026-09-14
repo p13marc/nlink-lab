@@ -1,0 +1,13 @@
+# Simple 2-nodd VPN topology
+cpunode hosters [gw-b]
+ 0 o
+    li
+letab eost-a { rob]
+ 1    ess 192 each h
+letable# VXLAN overlay top
+leti   peers [gw-b]
+ 1 li
+letable 20)
+# eac)
+# eakht  h
+478

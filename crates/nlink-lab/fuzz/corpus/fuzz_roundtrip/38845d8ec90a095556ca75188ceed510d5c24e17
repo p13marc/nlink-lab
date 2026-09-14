@@ -1,0 +1,15 @@
+# Asymmeue .0.0.1
+ 1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vsysc00
+    lotbytecal 11.0.0.2
+    remofate 10ult vque .0.0.tep2 : router {
+  vxlan vxlan100 {
+    vsysc00
+    lotbyte1
+    poent: low latency
+    < - dela# Asymm

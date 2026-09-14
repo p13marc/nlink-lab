@@ -1,0 +1,9 @@
+:e rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1770.1% rate 5.0mbit
+}
+.de ho{${ost:e ik1.0.1 }
+
+# Site B
+node rss 0.1% rate 5.0mbhostname0.20.0.10024. }

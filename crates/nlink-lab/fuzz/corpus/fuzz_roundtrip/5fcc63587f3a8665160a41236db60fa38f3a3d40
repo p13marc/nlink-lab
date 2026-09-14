@@ -1,0 +1,7 @@
+#2
+    port 4789t# IPv6-only #NLA  links
+lin 4789t# IPv6-only topology.
+#
+# A     remote 10.0.0.2
+    port 4789t#serve-only #NLA  links
+lin 4789t# Iv6-only topology.

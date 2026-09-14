@@ -1,0 +1,21 @@
+# As a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:100# t.
+# U:via fd0:0:00::2/plinAs a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default via fd0:0:00::2/plin1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default via fd0:0:00::2/plinAs a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:1000::EEA0:E router
+node  { Routd0:1:000:EEAE:100:1:100# As a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:100# t.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:100# As a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default via fd0:0:00::2/plinAs a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default via fd0:0:00::2/plin1000::EEA0:EEAE:10e:1000:EEAE:100:1:1000::EEA0:EEAE:10e 0::EEA0:EEAE:10o1st.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1:1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default via fd0:0:00::2/plink
+}

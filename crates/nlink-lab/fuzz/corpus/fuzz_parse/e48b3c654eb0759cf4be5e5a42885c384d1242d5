@@ -1,0 +1,55 @@
+#"VX.1
+    r 4789s2
+    port 4 n464 -- .  port 4 VX.1
+    remote   port 4789s2
+  ort 4789s2
+  05ms2
+    port 4789s2
+  ort 4789s2
+  drop 1
+    remote   port 4789s2
+  ort 4789s2
+  05ms2
+    port 4789s=
+  ort 4789s2
+  drop  port 4 VX.1
+    remiva 10.05os2
+    port 4 p2:eth0 { 10.0.0   port 4789s2
+  ort 4789s2
+  05ms2
+    port 4789s2
+  ort 4789s2
+  drt 4789s2
+  05ms29s2
+  ort 4789s2
+  drop  port 4 VX.1
+    remote 10.05os2
+    port 4 p3:eth0 { 10.0.0.1/64 -- .  port 4 VX.1
+    remote   port 4789s2
+   remote   port 4789s2
+  ost 4789s2
+    port 4 VX.1
+    r 4789s2
+    port 4  port 4 VX.1
+    remiva 10.05os2  port 4 VXt 4 VX.1
+    remote   port 4789s2
+  ort 4789s2
+  05ms2
+    port 4789s2
+  ort 4789s2
+  drt 4789s2
+  05ms2
+    port 4789s2
+  ort 4789s2
+  drop  p
+    port 4789s2
+  ort 4789s2
+  drop  port 4 VX.1
+    remote 10.05os2
+    port 4 p3:eth0 { 10.0.0.1/64 -- .  port 4 VX.1
+    remote   port 4789s2
+   remote   port 4789s2
+  ost 4789s2J     or4tp VX.1
+    r 4789s2
+    port 4 V1/6te   port 4789s2
+  o} 

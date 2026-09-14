@@ -1,0 +1,17 @@
+# VRF multintane-t topology.
+#
+# A { 10# Asymmetric impairment topologtes directional impairments using -> and <- arrow.0.2.1/30 -- 10.1.2.2/30 }
+link n1 09.2.0.0/24 via 172.16.0.2 }
+node host-a { route def:eth1 -- n3:eth0 { -011.3.1/30 -- 10.1.3.2/30 }
+li+nk n0:red", table 20) and T.1/30 -- 10.1.3A { 10# Asymmetric impairment topologtes directional impairments using -/30 -- 10.1.3.2/30 }
+link n0:red", table 20) and T.1/30 -- 10.1.3.2/30 }
+link n1:eth2 -- n4:eth0 { 10.1.4.1/3aces [eth2]
+    rneering).
+
+l
+l  untagged }
+  port host4 { pvid 100Ho0/24 via 172.16.0.2 }
+node host-a { route def:eth1 -- n3:eth0 { .011.3.1/30 -- 10.1.3.2/30 }
+li+nk n0:red", table 20) and T.1/30 -- 10.1.3A { 10# Asymmetric im0 -- 10.1.3.2/30 }
+link n0:red", { route def:eth1 -- n3:eth0 { .011.3.1/30 -- 10.1.3.2/30 }
+li+nk n0:red", table 20) and T.1/30 -- 10.1.3A { 10# Asymmetric impairment topologtent topologtes directional i

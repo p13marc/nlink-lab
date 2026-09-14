@@ -1,0 +1,13 @@
+# IPv6-only topology.
+#
+# A routeµsr forwar : router
+node host { route de::1 }
+
+link de host { route de::0 }
+
+link router:{
+    fPv6-o router : router
+node host { route de::0 }
+
+link router:{
+    fd002:1fault via fd002:1/64

@@ -1,0 +1,10 @@
+# remalisitc impaiiment:and 50it rate mitin
+
+lab "wan-impairmenp" {
+  description "Two sites env-fink"
+}
+
+profile u {
+  lo 56
+  routn
+}

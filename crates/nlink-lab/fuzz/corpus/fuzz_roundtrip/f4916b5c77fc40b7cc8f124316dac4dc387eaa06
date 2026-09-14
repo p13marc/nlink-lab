@@ -1,0 +1,21 @@
+# Spine-!eaf datacenter topology.
+#
+# 2 spineon servers.
+
+lab "abric"
+  prefix "dc"
+}
+
+profile router Alpine container connectpology.8.07777.07777.07777777ed to a bare namespace host.
+#
+#   router (conta { forward ipv4  10.0.12.1/30 -- 10.0.12.2/30 i mtu 9000 }
+lknmembers [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 e router Alpine container connectpology.8.07777.07777.07777777ed to a bare namespace host.
+#
+#   router (conta { pvid 100  untagged }
+  port host777777777777777logy.8.07777.0.0777772 { pvid 100  st777777"sales"
+  vlan 200 "engineering"
+  prun host1 { pvid 100  untagged }
+  port host777777777777777logy.8.07777.0.0777772 { pvid 100  st777777777777777logy.8.07777.0.0777772 { pvid 100  untagged }7777777
+  port host3 {777777777777777# pvid 200kner) {
+  0

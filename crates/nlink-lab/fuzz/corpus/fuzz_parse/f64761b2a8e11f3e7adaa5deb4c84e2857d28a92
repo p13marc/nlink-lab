@@ -1,0 +1,8 @@
+]# Router topology: router {
+    sysctl "nehet:d: fR
+iostnamet.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf0.25555st3:555555st1e default via 10.0/24 -- 10.via 10.0#
+}

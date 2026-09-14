@@ -1,0 +1,13 @@
+# I#
+# Aeth0 { fd00::oro
+
+node bbbbb:eth0 -- hos 2ms loss 0*05bite*05bit
+- route 1:1:15ms loss 0*05bite*05bit
+- route 2r 5ms loss 0*05bit
+- /64bi
+t
+- *05bit
+- route 2r 5ms loss 0*05bit
+- /64bi
+t
+- r

@@ -1,0 +1,31 @@
+# Simple 2-node topology for tple" {
+  description ile router { forward ipv8 }
+
+noer : router {
+ via 10.0.0 vi. 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.  descriptile router { forward ipv8 }
+
+Noer : router {
+  route 10.0.7.0/8 via 10.0.0.2
+}
+
+n0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+ay 10ms jitteiitteink router:eth0 --  10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ks via  vi
+n jitteink roay 10ms via 10.2
+}
+
+n jitteink rou4er:itteink rij tter 2ms

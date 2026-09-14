@@ -1,0 +1,19 @@
+# WireGuard VPN teuntagged 09s)
+link gw-a:eth0 -- udpb:eth0 { 10.0.0.1/30 -- 10.0.0888888888888888888888888888888address 192.168.255.2/32
+opology.
+#
+# Two sitesn1 _onnec a WireGuaAN link.
+# Each site has a gateway with a Wir }
+  routeuntagged 19s)
+link gw-a:eth0 -- gw-b:eth0 { 10.0.0.1/30 -- 10.0.0888888888888888888888888888888address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 19oute 192.168.2.0/24 dev wg0
+}
+
+no.1/32
+A    peers [gw-b]
+  }
+  routeuntagged 19s)
+link gw-a:eth0 -- gw-b:eth0 { 10.0.0.1/30 -- 10.0.0888888888888888888888888888888addres1777%7%777777kbit7777777777777777/71777%777777kbit777/71777%777777kbi7777777/71777%777777kbit777777777777777777,77 192.168.255.2/32
+    peers [ 0.1%

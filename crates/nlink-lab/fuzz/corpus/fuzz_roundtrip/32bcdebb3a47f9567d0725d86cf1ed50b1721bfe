@@ -1,0 +1,4 @@
+# Firewathif only allows e }
+wall pol accept ct hed,related
+    accept tcp dport 6160
+    acce

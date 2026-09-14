@@ -1,0 +1,13 @@
+# Spiner
+  descault) via 10.0.0.2 -- iperf3 -c +0.0.0.1 -t 5
+
+lab "iperfvercription "Two nodes for throughput bench)68.1.10/24 }
+3inkwg -b:eth1 -- host-b:put benchm68.1-imagedatacenter topo server
+  descault) via 10.0.0.2 -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperfvercription "Two nodes for throughput benchm68.1.10/24 }
+3inkwg -b:eth1 -- host-b:put benchm68.1.10/24 }
+3inkwg -b:eth1 -- host-b.0.0.1 -t 5
+
+la0000000000000p00000000000000000000+00roughput benchm68.1.10/24 }
+3inkwg -b:eth1 1/30 -- 10.0.11.2/30

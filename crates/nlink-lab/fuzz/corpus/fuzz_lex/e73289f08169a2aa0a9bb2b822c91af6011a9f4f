@@ -1,0 +1,13 @@
+# Spinece.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all# IPv6-only topology.
+#
+#.2/3ng" "1"
+}
+
+node router : router
+node host e router : router
+node h{ routost { route dee defau

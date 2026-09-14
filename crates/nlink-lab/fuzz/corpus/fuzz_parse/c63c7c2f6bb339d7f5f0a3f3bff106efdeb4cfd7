@@ -1,0 +1,11 @@
+# etwork.
+
+lab "" {
+  description "VXLoverla byetween two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100 vtep1:ethvtep2:e }

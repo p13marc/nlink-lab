@@ -1,0 +1,16 @@
+# Full mesh t 4 nodes ─── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1*eth0 -- n2:eth0 { 76.1.2.1/30 -- 10.1.2.2/30 }
+link 3pairment topoexeclogy.
+#
+# Two sites (site-a, site-b) each 0 }
+l30 }

@@ -1,0 +1,42 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each withjitteudc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, conneer,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  description "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+profairmen}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, conneer,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  description "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+proia 172.16.0.2 }
+niode hos t-{a route default via   delay 30ms jitter 5ms loss 0.1% rate 50mbit
+}

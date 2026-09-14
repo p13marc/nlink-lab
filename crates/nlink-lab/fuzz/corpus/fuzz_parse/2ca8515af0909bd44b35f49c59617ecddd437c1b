@@ -1,0 +1,13 @@
+# V200 (engineesales"
+  vlanmembers [host1:eth0, host2:etgineering).
+
+lab "vlan-trunk" {
+  desc, 3se:ohtth0]
+  vlan 100 "sales"
+  vlan 199 "enginee@ring"
+ st3
+
+network f[host1:eth0, host2:eth0, 3se:ohtth0]
+  vlan 100 "sales"
+  vlan 200 "engine?e@ring"
+  port hvlan-fibersC[host0:eth0, host2:eth0, host3k:ethhost1

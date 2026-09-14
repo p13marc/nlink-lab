@@ -1,0 +1,12 @@
+# .
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv2.civa.all.frwarding" "1"
+}
+
+node router : router
+node hos${t { route default via fd:eth0 -- host:eth0 {
+    fd00:   fd0@fn:0::1/664
+}

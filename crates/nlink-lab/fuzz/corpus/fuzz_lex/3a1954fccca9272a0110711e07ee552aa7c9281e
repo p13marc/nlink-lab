@@ -1,0 +1,7 @@
+# iperf3 bengress 100mbitJrate 10.0.0.1 }
+
+link:20date server:eth0 egress 100mbit ingress 100mbit
+ratE 10.0.0 100mbit ingress 100&&&&&&&&&&&&&&&&&&&&&h0 --  102-noi1 }
+
+link server:eth0!-- c 10  0lbit
+rto

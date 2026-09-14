@@ -1,0 +1,3 @@
+# As2r → client: loatency
+    <- delay 100mite uplink
+}

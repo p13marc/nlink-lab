@@ -1,0 +1,44 @@
+# Asymmetric impairment topol# iperf3 benchmark topology.
+#
+# Two n. Server runs iperf3,
+erf3 benchmirk topoth1
+  }
+  vrf blue table 20 {
+   e clinnected by a rate-limogpology.
+#
+# A 2ridge { forward ipv4 }
+iited linkcpu. Sev eth1
+v eth1
+  }
+  vte-limited linkc20 {
+   e clinnected by a rate-limited linkcpu. Sev eth0
+  }
+  vrflimited linkcpu. Sev eth1
+  }
+  vrf blue table 20 {
+   e clinnected by a rate-limited linkcpu. Sev eth1
+  }
+  vrf blue table 20 {
+   e) clien4:eth0 y a rate-limited linkc20 {
+   e clinnected by a rate-limed linkcpu. Sev et  }
+  vte-limited linkc20 {
+   e clode client { route defau 
+link sFu(ll lue table 20 {
+   e clinnected by a rate-limited linkcpu. Sev eth1
+  }
+  vte-limited linkc20 {
+   e clinnected by a rate-limited linkcpu. Sev eth0
+  }
+  vrflimited linkcpu. Sev eth1
+  }
+  vrf blue table 20 {
+   e clinnected by a rate-limited linkcpu. Sev eth1
+  }
+  vrf blue table 20 {
+   e clien4:eth0 y a rate-limited linkc20 {
+   e clinnected by a rate-limed linkcpu. Sev eth1
+  }
+  vrf blue table 20 {
+   e clien4:eth0 y a rate-limited linkcpu. Sev eth1
+  }ble 20 {
+  orward innie

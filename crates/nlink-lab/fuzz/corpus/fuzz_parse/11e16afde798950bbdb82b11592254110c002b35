@@ -1,0 +1,24 @@
+# iperr and a host, connected
+#0by a WAN liner {
+  vxlan vxlan100 {
+    vni 100pv4 }
+
+# Site A
+node router-a : 100pv4 }f2 benc
+lab "iperrment: 30ms er {
+  vxlan vxlan100 {
+    vni 100pv4 }
+
+#markin}
+n
+"
+gode server0# VXLAN overlay topology.
+#
+. Site A
+node router-a : 100pv4 }
+
+# Site BEn
+}0
+.20.0.2/2< }
+
+rat# T/24 h}

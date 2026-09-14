@@ -1,0 +1,10 @@
+# .
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between twO VTEPs"
+}
+
+profile router{
+  vxlan vxlan100 {
+ 
+    addreszs 19}

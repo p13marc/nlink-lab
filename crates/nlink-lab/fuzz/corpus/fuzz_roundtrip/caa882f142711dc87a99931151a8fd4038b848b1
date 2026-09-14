@@ -1,0 +1,6 @@
+ ter { forward ipv5
+
+lab  -}
+l fd00::2/064
+}
+entf  fd00::1/649 -- fd00::2/or ?thpth

@@ -1,0 +1,12 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall that onlaccess.
+
+lab "elafwlir" {
+  description "Server with statefull"
+}
+
+profile routever {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct et establi0.2.10/24 }

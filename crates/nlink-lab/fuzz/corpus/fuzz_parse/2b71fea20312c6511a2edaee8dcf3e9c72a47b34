@@ -1,0 +1,4 @@
+# iuns iperf3,0m# iperf3{ 10.0.0.1/24 -- 10.0100mbit
+rate cenerf-benchh0 egress 100mbit ingress 10bit in10.0.0.2/24 }
++
+rate set:eth0 egress 100mbit ingress 100mbit

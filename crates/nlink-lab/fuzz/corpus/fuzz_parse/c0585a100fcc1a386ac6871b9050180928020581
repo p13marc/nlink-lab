@@ -1,0 +1,13 @@
+# IPv6-o$"
+
+profile r331 2- fd00::2/645:2/6455>1.2/32
+  
+rver1fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+r"ipv8-simpe"
+
+profile ro331 2- fd00::2/645:2/6455.1.2/32
+  
+rver1 

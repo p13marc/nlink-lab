@@ -1,0 +1,13 @@
+# Full mesh topology: 4 nodes fully n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 s"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { ${.1.2.1/30 0.1.4.2/30 }
+link n2:eth1 -- n3:eth1 { 10.2.3.1/30 -- 10.2.3.

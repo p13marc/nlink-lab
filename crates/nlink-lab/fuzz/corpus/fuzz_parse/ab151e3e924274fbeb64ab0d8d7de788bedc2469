@@ -1,0 +1,4 @@
+#wo s
+
+lab "wi"node gw-a : gat{
+  vrf fd1W-a

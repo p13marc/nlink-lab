@@ -1,0 +1,78 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  dehost3
+
+network fabric {
+  vlan23  lieth0 { 192.16x.1.
+link gw-1.00b0 (engi 
+
+# LAJ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.00beth0 {
+  dehost3
+
+network fabric {
+  vlan23  lieth0 { 192.16x.1.
+link gw-1.00b0 (engipv4 }
+
+node 
+
+# LA' lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.00beth0]
+  vlan 1LAN unk topology.
+#
+# A b200 (engineering).
+
+lab "vlan-trunk" {
+  d  lieth010/292.16x.1.
+link gw-1.00b0 (engipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.00beth0] }
+
+node 
+
+# LAJ lieth0 { 192.1- 192.168.1.10/24 }
+link vlan23  lieth0 { 192.16x.1.
+link gst3
+
+network fabric {
+  vlan23  lieth0 { 192.16x.1.
+link gw-1.00b0 (engipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.00beth0 {
+  dehost3
+
+network fabric {
+  vlan23  lieth0 { 192.16x.1.
+link gw-1.00b0 (engipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.00beth0]
+  vlan 1LAN unk topology.
+#
+# A b200 (engineering).
+
+lab "vlan-trunk" {
+  dehost3
+
+ne.2
+   h0 { 10.0.0.1/Guard interface. Jhe uny { forward ipv3 }
+
+node 
+
+#/24deJ#
+L  A
+ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00w-1.00b0 (engipv4 }
+
+node 
+
+ {e 1r9

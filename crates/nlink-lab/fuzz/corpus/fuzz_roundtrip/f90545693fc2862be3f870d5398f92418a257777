@@ -1,0 +1,9 @@
+ ) [# WRRRRRRRRRRRRREach s  
+  address 192.168.255.1/32
+    peers [gw-b
+  }
+  route 192.168ute 192.168 wg0
+}000000dress 192.168.255./32
+    peers [gw-a]
+  }
+ ra { route def192.1168.1

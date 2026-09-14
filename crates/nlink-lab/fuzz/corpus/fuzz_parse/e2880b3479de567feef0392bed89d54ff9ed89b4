@@ -1,0 +1,5 @@
+# WireGuar-b:e3.10/24iAN impairment
+impair gw-a:eth0 del-a:et(0 delay 5nat
+
+#"WAN impairment
+impair gw-a:eth1 delay 5naay 5nasubnett0ms jitter 5ms loss 0.1%^

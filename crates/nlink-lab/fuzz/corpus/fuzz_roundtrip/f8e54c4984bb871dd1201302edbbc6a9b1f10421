@@ -1,0 +1,19 @@
+# VLAe hoering).
+
+lab "vlan-trunk" {
+  description "Bridgeiw th VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eteth0, h:t3soeth0]
+  vlan 100 "sales"
+  vlan 200 "engineerin[g"
+  port host2 { pvid 100  untagged }
+  port host2 { pvid 100  untagged }
+  port host2 { pvid 200  untagged }
+}

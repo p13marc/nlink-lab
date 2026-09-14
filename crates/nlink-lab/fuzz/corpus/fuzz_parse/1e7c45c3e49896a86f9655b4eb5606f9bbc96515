@@ -1,0 +1,2 @@
+#:osdeth -a72.1{
+  localde benchm/  de benchm/ -- fd00:  delay 30ms jnk n1:eth1 -- benchm/64 -s 00 

@@ -1,0 +1,6 @@
+# WAN l.ing
+
+lab "mdnt" {
+  }
+
+profile ip 

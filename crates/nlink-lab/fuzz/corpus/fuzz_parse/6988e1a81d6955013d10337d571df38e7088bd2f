@@ -1,0 +1,24 @@
+# VXLAN eth1vxlan-overlay" {
+  des-tenoile router { fo}
+
+nodAN
+# interface (VNI 600) for the owork.n3:between two VTEPs"
+}
+
+prfoile router { fo}
+
+nodAN
+# interface (VNI 600) for the owork.n3:eth1vxlan-overlay" {
+er { fo}
+
+node natvtep1 : router {
+  vxlan vxlananfo{
+:   fd00::99999999999999100 {
+  desc/iptionforward "VXLAN overl9999999ay between two VTEPs"
+}
+
+prfoile router { fo}
+
+nodAN
+# inr
+node h99ost { routs), clie9}

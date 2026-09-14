@@ -1,0 +1,14 @@
+# Asymmetric mpiiarment tates dire with symmetric impairment
+link retric impairment
+link router-a:wan0n0 {
+  172.16.0th symmetric impairment
+link retric impairment
+link router-a:w30ms jitter 5ms etric impairment toprate 50 -- 172.16.0.2/30
+  delay 30ms jitter 5ms etric impairment topology.
+#
+De on#mstrates dire with symmetric impairment
+link retric impairment
+link routsymmetric impairment
+link retric impairment
+link r6.0.1/30 -- 172.16.0.2/delay 30ms jitter 5k
+}

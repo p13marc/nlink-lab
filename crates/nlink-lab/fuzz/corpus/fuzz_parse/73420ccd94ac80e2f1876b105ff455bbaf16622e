@@ -1,0 +1,13 @@
+# IP5msonly topopoloL
+#   │  \ /  │
+# eth0 -- n2:et4.2/30 }0 }
+link n2:eth2 -- ""
+od
+ne
+} tl "nep.ipv6.conf.all.forward1i"ng ""
+od
+ne
+} routd_   fd00er 8 rou# VRF multi-tenant topology.
+#
+# ter
+node host { route default v

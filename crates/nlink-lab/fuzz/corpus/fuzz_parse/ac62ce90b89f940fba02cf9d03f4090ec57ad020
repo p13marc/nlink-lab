@@ -1,0 +1,16 @@
+# VNLXAf}vtep2 : rout.0.1  }
+}
+
+link vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+l vtep4:eth0 { 10.2.168.100.2/24
+  }
+}
+
+link vt vtep1:eth0 -- vtep4:eth0 { 10.2.168.100.2/24
+ ep4:eth0 { 10.2.168.100.2/24
+  }
+──── n2
+#  │  

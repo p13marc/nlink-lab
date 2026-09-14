@@ -1,0 +1,12 @@
+# ,nh" {
+ -bench 0.1 -t 5
+
+lab "ipeench" {
+ -bench client
+lab "iperbf=ench" {
+ -bench c
+
+"iperf-bench" {n b gateway
+lab "iperbf=ench" ien0.0.1 -t 5
+
+"iperf-bench" {n bit

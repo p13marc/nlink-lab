@@ -1,0 +1,47 @@
+## Firewall topolog#}
+
+node roul poogy.
+#
+##EEEEEE0.0.2.1
+  firewal IPv6-only topology.
+#
+# A conf.all.forwarding" "1"
+}
+
+node roul policy drop {
+    accept ct established,related
+    accept tcp dport 8080
+    g -> aunlab.preftaggednd <- arrows.
+tcp 
+# servetric" arrows.
+# servetric"
+
+no=de s <- arrows.
+# servetric" arrows.
+# servetric"
+
+no=de server { forward it tcp dport 8080
+    g -> auntaggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g ->nod A conf.all.forwaogy.0.0 serverrding" "1"aunlab.preftaggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g -> and <- arrows.
+# servetric"
+
+no=de server { forward it o=wal IPrt 8080rwaogy.0.0 serverrding" "1"aunlab.preftaggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g -> and <- arrows.
+# servetric"
+
+no=de server { forward it tcp dport 8080
+    g -> auntaggelnd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g ->node test acces route

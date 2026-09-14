@@ -1,0 +1,19 @@
+# VRF mulr
+profile host11.1/30 -- 10.0.11.2/30  maizment20.0.10s
+impopol# S
+profile host11]1/30 -X 1zment20.0.10s
+impopol# S
+profile host11.1/30 -- 10.0.11.2/30  maiumeny20.0.10s
+impopol# l# S
+profile hnt20.0.10w
+impopol# S
+profile host11.1/30 -- 10.0.11.2/30  maiumeny20.0.10s
+impopol# Spine-le jitter 1ms
+impair0.0.11.2/30  maizmeny20.0.10s
+impopol#e host11.1/iumeny20.0.10s
+impopoe-le jitter 1ms
+impair spine1:eth0 0elay 5ms jitter ipv4Spine-le jitter 1ms
+impair0.0.11.2/30 20.0.10s
+impopol# Spine-le jitter 1ms
+impair spine1:eth0 0elay 5ms jitter ipv4 }
+profi

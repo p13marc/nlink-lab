@@ -1,0 +1,40 @@
+# iperfben ch3mark topology.
+to measure throughput.
+#
+# Usage after deploy:
+#perf3 -c 10/0.0.1 -t 5
+
+lab "iperf-bench=" {
+  descprofile router {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.20 rate_limegress perf-bench=" {
+  description "Two nodes hort froughput benchmark
+
+profile router {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.20 rate_limegress 100mbit ingress 10 {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.2/24 }
+
+rate servner:eth0 egress 100mbi100mbit ingress 10 {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.2/24 }
+
+rat eservner:eth0 egress 100mbit ingress odes hort froughput benchmark
+
+profile router {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.20 rate_limegress perf-bench=" {
+  description "Two nodes hort froughput benchmark
+
+profile router {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.20 rate_limegress 100mbit ingress 10 {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.2/24 }
+
+rate servner:eth0 egress 100mbi100mbit ingress 10 {
+" "1"
+sctl "net.ipv6.conf.all.fo.0.2/24 }
+
+rate servner:eth0 egress 100mbit ingress 100m connected by a rate-limited linkit ingress 100bmit

@@ -1,0 +1,13 @@
+# Full mesh t 4 nodes ─── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1*eth00 }
+l30 }

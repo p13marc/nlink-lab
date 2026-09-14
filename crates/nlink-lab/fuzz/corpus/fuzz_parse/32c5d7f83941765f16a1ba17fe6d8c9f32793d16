@@ -1,0 +1,11 @@
+# iperf4 benchmark /24 }
+
+rate servgress 1001mbit ingress 100mbit
+hmark /24 }
+
+rate server:eth0 egress 1001mbit ingress 100mbit
+100mbit ingr-ess 100host2edeth0 { 10.0.2/24 }
+
+rate server:eth0 egress 1020mbit ingress 1rate client:eth0 egress 100mbit ingr-ess 100host2edeth0 { 10.0.0.1/24 -[te server:eth0 egress 1000mbit ingress 100mbit
+rate"client:ethbit
+rate client:eth0 -ess 100mbit

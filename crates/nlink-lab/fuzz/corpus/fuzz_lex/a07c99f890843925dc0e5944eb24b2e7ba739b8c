@@ -1,0 +1,8 @@
+# VLAN trunk topology.
+#les"
+  vlan- 10.2.0 impairm0, host3:eth0]
+ val
+#  3:eth0]
+ val n 100 mmetric impai eth0, host3:eth0]
+ val n 10 impairm0, host3:eth0]
+ val n 100- 10d 

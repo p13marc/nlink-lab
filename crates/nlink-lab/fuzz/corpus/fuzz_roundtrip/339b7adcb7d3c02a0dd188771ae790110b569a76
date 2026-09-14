@@ -1,0 +1,11 @@
+# Rout@er topology: one routnecting two hosts.
+#
+#)
+#                       eth0    eth1
+
+lab "router" {
+  description "Router beten two subnets"
+}
+
+profile ro{ route  h02 (10.0.2.2.0/24 24
+}

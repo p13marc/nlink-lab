@@ -1,0 +1,15 @@
+# VLAN trunk topol
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN s ports"
+}
+
+node host0
+node host2
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 1000"sales"
+
+  port host3 { pvid 200  untagged }
+}

@@ -1,0 +1,4 @@
+]# Router topology: onrouter connecting two hosts.
+#
+${#   host1 (10.0.1.2) ────  IPv6-only to5msogy.-- 09.0.2.2/24
+}

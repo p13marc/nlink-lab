@@ -1,0 +1,17 @@
+E ./:201d:0:2:10-le-#dodede host2
+no
+netw - le:2 0d01d:0:200dt2
+no
+netw ./64 -- de host2
+no
+netw - le:2 0d01d:0:200dt2
+no
+netw. /64 --:0:E 0d01d:0:200dt2
+no
+netw ./6netd:0:200dt2
+no
+netw. /64 --:0:E 0d01d:0:200dt2
+no
+netw ./64 -10w - le:200d:0:201d:0:E 0d01d:0:200dt2
+no
+netw ./64 -- fle-:200d:0:101}

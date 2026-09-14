@@ -1,0 +1,3 @@
+# IPv6-only topology.
+ode host { route defaug IPv7 ::02/ Used0route defaug IPv0: (Unique Local Adter
+node host { route defaug IPv3 traffi/64 -- 0fd::02/ Us-e ho rost

@@ -1,0 +1,2 @@
+# Firewallinkped,related
+    accept tcp dpodp dp2.10/24 }

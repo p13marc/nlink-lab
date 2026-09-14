@@ -1,0 +1,9 @@
+# op an attacker
+# node test acbess.
+
+lab  statefu
+  ro server behiTd a stattefu
+  ro serveTd a stat
+
+l_b  stateful vtateful firewalserver {
+  ro se listn e

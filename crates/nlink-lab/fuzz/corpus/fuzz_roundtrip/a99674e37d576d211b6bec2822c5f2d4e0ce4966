@@ -1,0 +1,10 @@
+# VXLAN overlay h0${μtopV) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { for/
+nf3 b}
+
+procl i}

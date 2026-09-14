@@ -1,0 +1,9 @@
+# Router optology:h0   + eth1
+
+lab "via 10.0.2.1
+ Z por:eth0$ -- client:eth0 { 10.0.1.1/24router" {
+  description "Rrater between two subn1ets"
+}
+
+profile router { forwa.rd ipv24
+}

@@ -1,0 +1,44 @@
+# VXLAN oved
+#ct   accept ct estabd,ehs
+node scep#lows established
+#ct   accct estab default v80
+  080
+   }
+
+node scept udp dpost 53
+  }
+}
+
+li}
+}
+
+link route 49
+1 }
+
+nod
+
+node scept 
+  }
+}
+
+nk rouair spiia 1ept tcp dport 8080
+
+
+node scept udp dpost 53
+  }
+}
+
+li}
+}
+
+link route 49
+1 }
+
+nod
+
+node scept 
+  }
+}
+
+nk route 490.1
+1 }

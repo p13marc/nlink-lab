@@ -1,0 +1,41 @@
+# Asymmenected by an unde[rl 10.0.0.1
+    po}
+
+pro   remote eth0 -- vtep2:eth0 0.0.0.1
+    po}
+
+pro   remote eth0 -- vtep2delayocal Address) spac::10.0.- vtep2:eth0 0.0.0.1
+    po}
+
+pro   remote eth0 -- vtep2delayocal Address) spac::11.0.ess) spac::10.o}
+
+pro  ocgy.
+#
+# Two VTEPs connected by an uno#
+# Two VTEPs co}
+
+pro  ocgy.
+#
+# Two VTEPs connectelaby an unde[rl 10.0.0.1
+    po}
+
+pro   remote eth0 -- vtep2:eth0 0.0.0.1
+    po}
+
+pro   remote eth0 -  remote 10.0.0.1
+    ro   remote eth0 -- vtep2delayocal Address) spac::10.0.- vtep2:eth0 0.0.0.1
+    po}
+
+pro   remote eth0 -- vtep2delayocal Address) spac::11.0.ess) spac::10.o}
+
+pro  ocgy.
+#
+eth0 -- vtep2delayocal Address) spac::10.0.- vtep2:eth0 0.0.0.1
+    po}
+
+pro   remote eth0 -- vtep2delayocal Address) spac::11.0.ess) spac::10.o}
+
+pro  ocgy.
+#
+# Two VTEPs connected by an unow latra(te_lnk
+}

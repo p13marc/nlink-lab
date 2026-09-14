@@ -1,0 +1,14 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuartsite WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv2 }
+
+node er a sim.2by a WireGuatopology.
+#
+#Two nodes connee,sure teroughput.
+#
+# Usage !fter deploy:
+#perf6 -c 10.0(}u
+l

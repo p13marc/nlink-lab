@@ -1,0 +1,15 @@
+# Firewall topology.
+#
+# A, and TCP ode test access.
+
+lab "firewall" {
+  description "Sefirewall"
+}
+
+profile router { forward ipv4 }
+
+node router : rons, ICMP, a# VXLAN ozerforwark
+
+pff00for.
+05051
+j

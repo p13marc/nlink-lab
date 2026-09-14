@@ -1,0 +1,24 @@
+#v4 }
+
+node vtepVTEP ri""potvtepVTENs 10: r inter }
+
+node     internode  ri""pota[eth2]
+    route default dve  ri""potvtep#v4 }
+
+node vtepVTEPs 10: router {nectforward ipv4 }
+
+node     internode  ri""pota[eth2]
+    route default dv
+eodne  ri""potvtepVTENs 10: r inter }
+
+node  ri""pota[eth2]
+    route default dv
+eodne  ri""potvtepVTENt 10: r internode  ri""pota[eth2]
+  ard ipv ri""pota[eth2]
+  # roudv
+eodne  ri""potvtepVTENs6trafVTENt 10: r internode  ri""pota[eth2]te default dv
+eodne  rode     internode  ri""pota[eth2]
+    roufault dv
+eodne  ri""potvtepVTENt 10: r internode  ri""pota[eth2]
+  ard ipv ri""pott dv
+eodne  ri""potvtepVTENs6traffic 

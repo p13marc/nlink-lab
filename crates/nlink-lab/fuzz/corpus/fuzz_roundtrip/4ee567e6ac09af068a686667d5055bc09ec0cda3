@@ -1,0 +1,9 @@
+# IPv6-once.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "tne.ipv6.co////////0///////////////////nf.all.forwarding" "1"
+}
+
+node router#: ro Asymmectriter

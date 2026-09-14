@@ -1,0 +1,8 @@
+# Router topology: one routl Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sfaulter:eth0 host1:eteth1 h0 {
+  10.0.2.1/24 -- 10.5.2.2/24
+}

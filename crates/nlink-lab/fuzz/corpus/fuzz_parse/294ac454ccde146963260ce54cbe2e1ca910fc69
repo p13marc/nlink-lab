@@ -1,0 +1,6 @@
+# IPv6-only topo
+#
+# A router fon1lab "ipv8-simple"
+
+pr7 benchmak t rourf3 benchmak truns  "sales"
+/64   

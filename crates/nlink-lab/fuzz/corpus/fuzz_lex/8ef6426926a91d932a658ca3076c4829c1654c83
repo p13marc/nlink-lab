@@ -1,0 +1,50 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 serveesses, netem impairment a 10.1.1.1 }
+node seropology.ses, netem impa R/8ink leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.0 { 10.1.1.1f2:e3 leaf2:eth3 pa server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ 1msha 10.1.1.1 }
+node seropology.ses, netem impa R/8ink leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ 1msh0 { 10.1.1.1f2:e3 leaf2:eth3 pa R/8ink leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingressveesses, netem impairment a 10.1.1.1 }
+node seropology.ses, netem impa R/8ink leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.0 { 10.1.1.1f2:e3 leaf2:eth3 pa server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ 1msha 10.1.1.1 }
+node seropology.ses, netem impa R/8ink leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ 1msh0 { 10.1.1.1f2:e3 leaf2:eth3 pa R/8ink leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 12faul0/24 }
+link leaf2:eth3 -- server100obit {ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 050mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ R/8 via 10.0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:e 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 leaf2:eth3 -- server100obit {ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ R/8 via 10.0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb4:eth0 { 10.it1.
+2 100mb2:eth0 { 10.it1.
+2.1/24 -- 12faul0/24 }
+link leaf2:eth3 -- server100obit {ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 050mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ R/8 via 10.0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:e 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 leaf2:eth3 -- server100obit {ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ R/8 via 10.0.0.2faul0/24 }
+link leaf2:eth3 -- server100obit ingress 100mb2:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/ ingress 100mb4:eth0 { 10.it1.
+2.1/24 -- 10.1.2.10/24 }
+ 1ms

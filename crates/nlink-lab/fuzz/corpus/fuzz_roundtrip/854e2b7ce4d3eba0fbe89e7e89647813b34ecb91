@@ -1,0 +1,4 @@
+# Spine- s" "0" }5ward" "0" }55.0.2/32 }
+
+#ay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms 1ms

@@ -1,0 +1,30 @@
+# VLezho VLezhonodmzhost3
+
+netwkr{ fabric {
+  valn-filhost3:eth0nth0, host1:eth0n st3
+
+netwkr{ fabric r  members [host1:eth0, host2:e
+  vlanfiltelast1
+node host2
+nodezhost3
+
+netwkr{ fabric {
+  valn-filteghost2
+nodmzhost3
+
+netwkr{ fabric {
+  valn-filhost3:eth0nth0,{
+  valn-filhost3:eth0nth0, host1:eth0n 100 "sales"
+  vlabric {
+  valn-filteg
+nir  membershost3:eth0nth0, ho:eth0n 100 "sales"
+  ost1:eth0n 100 "sales"
+  vlabric {
+  valn-filteg
+nir  membershost3:eth0nth0, ho:eth0n 100 "sales"
+  vlabric {
+  valn-filteg
+nir  membershlate invlabric {
+  valn-filteg
+nir  membershlate internet latenc, host2:e
+  vlanfiltelye a

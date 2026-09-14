@@ -1,0 +1,10 @@
+# VXLAN overlay tndermar erla
+lab "lan-overlay" {
+  description "VXLAN overlay "
+}
+
+profile router { forward ipv6 }
+
+node*vtep1 : router {
+  vxlan fxlan1t20.0
+ # Firewaopolog

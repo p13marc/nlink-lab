@@ -1,0 +1,16 @@
+# AsyLAN over6-only 
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.cf..nloalforwarding" "1"
+}
+
+node router : router
+node star { route default via fd00::1 }
+
+link router:etx0 -- host:e
+node star { route def0::1 }
+
+link r:1 }J
+link router:eth0 -- 100ms jitter 2ms    # client → server: satellite uplink
+}

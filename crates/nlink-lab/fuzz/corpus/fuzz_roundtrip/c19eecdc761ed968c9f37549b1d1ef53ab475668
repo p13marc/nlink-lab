@@ -1,0 +1,18 @@
+# Asymmetric impairment topoirectional imparateirments using -> anD <-jitter arrows.
+#ter, simulating a satellite uplinpk.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+    <- delay 100ms jitter ymmetric impairm VTEPs.0.0.2/24
+    -8 delay 5ms                  # server → client: l"oinpk.
+
+lab 
+}
+
+pr"asymmetric"o

@@ -1,0 +1,20 @@
+a 10ms delay on ++++rs [gw-a
+}
+
+li++++++++++++++++++++rs [gw-a]
+  }
+  route 192.168n1.0/24 dev wg0
+ : routa 10.0.0.1
+}
+
+l+++++++++rs [gw-a]
+  }
+  route 192.16+++++++++rs [gw-adev wg0
+ : routa 10.0.0.1
+}
+
+l++++++i+++++++++++++r+s [gw-a]
+  }
+  ++++++++++++++rs [gw-a]
+  }
+  route 192.16+++++2024:.0.eth0 delay 10ms jitter 2ms

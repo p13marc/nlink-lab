@@ -1,0 +1,16 @@
+# WAN impairment topo# Simple 2-node topology for testing.
+#
+# Createlogy.
+#
+# Two sites (site-a, site-b) each with a router and a a WAN link 8ith realistic impairment: 30 in(egneering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network, h
+d:A:d:AA:d:d:ddd::osd:d:dt2:eth0, host3:ethd:

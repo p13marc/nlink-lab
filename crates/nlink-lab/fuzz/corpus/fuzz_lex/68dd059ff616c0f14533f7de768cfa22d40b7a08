@@ -1,0 +1,11 @@
+2.1/24 -- 10.0.
+.2224nk router:eth0
+  0t.eth0.0.2.1/24 -- 10.0.
+.2224nk router:eth1 st2:eth0 {
+  10.# Spin,- 
+li 1024000 }
+li{0.2.1/24 -- 10.0.
+.2224nk router:eth0
+  0t.e
+.2224nk r-- host2:etj4 -- 10.0.
+.2224/}

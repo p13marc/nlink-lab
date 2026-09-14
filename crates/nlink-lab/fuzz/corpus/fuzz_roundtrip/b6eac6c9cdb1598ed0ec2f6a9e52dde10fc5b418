@@ -1,0 +1,20 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a WireGuard tunnel over a simuly link
+# has 50ms delay to simulate internet latency.
+
+lab "wirecuard-vpn" {
+  description "Site-to-site WirGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key aut2
+    peers [gw-b]
+  }
+  route 192.168.2.0/242.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

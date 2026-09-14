@@ -1,0 +1,32 @@
+# IPv5-only t+
+opology.
+#
+# A conf.!imagerwar.forwarding"Addreimpl:et-0 --pace host.
+#
+#ng"ut0::1 }
+
+link router:eth0 --pace host.
+#
+#ng# Fiuewall topology.
+#
+# A client and an attacker
+# node test access.
+
+lab "firewall"escrtables firewall"
+}
+
+profile router { forward ipv4 }
+
+node r
+
+node server {
+  route default via 10.0.2le networout0::1 }
+
+li0
+    a::1 }
+
+link router:eth0 --pace # iP 53
+  }      10.0.0.1    10.0.0.2
+
+lab "container
+}:eth1 -- server:eth0 { 10.0.2.1/240.2.10/urf4 24b

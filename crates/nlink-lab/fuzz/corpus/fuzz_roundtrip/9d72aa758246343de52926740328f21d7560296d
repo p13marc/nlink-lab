@@ -1,0 +1,8 @@
+# iperfopon
+
+lab "iperf-bench" {
+  description "Two nodes fong"
+}
+
+node r { route default config.0.0# iper.2 }
+nod

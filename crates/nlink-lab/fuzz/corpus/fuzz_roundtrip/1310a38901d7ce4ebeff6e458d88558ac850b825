@@ -1,0 +1,12 @@
+# iperfate-lim -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchlt via 10.0.0.2marking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- clie# VLAN trunk topology.
+#
+# A bridge with VLAN filterinng c

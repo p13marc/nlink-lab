@@ -1,0 +1,6 @@
+# IPv# VXLAN ovEPs"s00r 0 {
+   a 10.0.0.1 -t 5
+
+lab 0"iperf-bench{
+ "  description "Two nodes f  fd00::1/649 -- fd00::2/or"throughputtwo VTE478
+link vtep1:eth0 -4- vtep2:eth0 { p2:eth0 { 10.0.0.1/243333333

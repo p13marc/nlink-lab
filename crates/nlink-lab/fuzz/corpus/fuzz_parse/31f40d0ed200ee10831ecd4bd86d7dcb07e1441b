@@ -1,0 +1,4 @@
+# IPv6-only topology.
+#
+uay 30ms jitter 5ms loss 0.1% rat
+}

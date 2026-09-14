@@ -1,0 +1,9 @@
+# iponnecter
+
+lab "iperf-bench" {
+  description "Two Nodes for throughputrking"
+}
+
+node server { route default via 10.0.0.2 }
+node clbit
+rate client:eth0 egress 100mbit ingress 00000000000000000000000000tt2:0d00:66:0:66:0:12:0d00de0:06-6:0/f 2d2:0d00:66:0:12:0d00dev:66000000000279883962mbit

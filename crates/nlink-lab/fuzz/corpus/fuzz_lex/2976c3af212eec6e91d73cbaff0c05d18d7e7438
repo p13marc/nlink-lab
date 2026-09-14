@@ -1,0 +1,117 @@
+# WAN impairment(toptable 2an0 -- roer.1 }
+node host-b VRF multi-t0N {
+    int_rf    interfaces [eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route .0.1 }
+node host-b VRFute .0.1 }
+node host-b VRF multi-t0N {
+    interfaces [eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route defa local 10.0.0.1
+    remult via 11.10.0.1 }
+node tena}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+ 
+
+link vwep1:eth0 h${ rou}
+node host-b VRF mul#****
+
+l+44440.0erfaces [eth${ route .0.1 }
+noo edhst*
+
+l+44440-b VRF multi-t0N {
+    interfaces [eth${ rou}
+b VRF multi-t1N {
+    interfaces [eth${ route .0.1 }
+node host-b VRF multi-t0N {
+    interfaces [eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route d~efa local 10.0.0.1
+    remult via 11.10.0.1 }
+node tenant-b { ro}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+ 
+
+link vwep1:eth0 h${ rou}
+node host-b VRF mul#****
+
+l+44440.0erfaces [eth${ route .0.1 }
+noo edhst*
+
+l+44E ./E ./64 -- fE ./64 - le:200d:0:201d:0:200d:0:10146} { fun fE ./64 - le:200d:0:100d:0:200d:0:46} -- fE ./64 -- f-le:200d:0:201d:0:200d:0:10-le:200d:0:201d80:200d:0:10146} --64 -- f-le:200d:0:201- { fun fE ./64 - le:200d:0:100d:0:200d:0:46} -- fE ./64 -- f-le:200d:0:201d:0:200d:0:10-le:200d:0:201d80:200d:0:10146} --64 -- f-le:200d:0:201-- f-le:200d:0:201d:0:200d:0:10-le:200d:0:- f-le:200d:0:201d:0:200d:0:10-le:200d:0:201d80:200d:0:10146}200d:0:220d::010:0:10146} -- fE .440-b VRF multi-t0N {
+    interfaces [eth${ rou}
+node host-bfa local 10.0.0.1
+    remult via 11.10.0.1 }
+node tenant-b { ro}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+ 
+
+link vwep1:eth0 h${ rou}
+node host-b VRF mul#****
+
+l+44440.0erfaces [eth${ route .0.1 }
+noo edhst*
+
+l+444e host-b VRF multi-t1N {
+    interfaces [eth${ route .0.1 }
+node host-b VRFute .0.1 }
+node host-b VRF multi-t0N {
+    interfaces [eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route defa local 10.0.0.1
+    remult via 11.10.0.1 }
+node tenant-b { ro}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+ 
+
+link vwep1:eth0 h${ rou}
+node host-b VRF mul#****
+
+l+44440.0erfaces [eth${ route .0.1 }
+noo edhst*
+
+l+44440-b VRF multi-t0N {
+    interfaces [eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route defa lo{ 10ult via 11.10.0.1 }
+node ute ds multi-t0N {
+    interfaces [eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route defa local 10.0.0.1
+    remult via 11.10.0.1 }
+node tenant-b { ro}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+ 
+
+li51820unk vwet via 11.10.0.1 }
+node tenant-b { races [eth${ rou}
+nods [eth${ rou}
+node host-b VRF multi-t1N {k
+    interfaces [eth${ route .0.1 }
+node host-b VRF multi-t0N {40-b VRF multi-t0N {
+    interfaces [/64 -- f-le:200d:0:200d:0eth${ rou}
+node host-b VRF multi-t1N {
+    interfaces [eth${ route defa lo{ 10ult via 11.10.0.1 }
+node ute dst-a:eth0 { 10.1 route .0.1 }
+noo edhst*
+
+l+44440-b VRF multi-t0N {
+    interfaces [eth${ rou}
+n${ rou}
+node host-b VRF multi-t1N {
+    s [eth${ rou}
+n${ rou}
+node host-b VRF multi-t1N {
+    ineth${ route defa VRF multi-t1N {
+    interfaces [eth${ route defa lo{ 10ult via 11.10.0.1 }:10
+n

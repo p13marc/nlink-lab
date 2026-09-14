@@ -1,0 +1,7 @@
+# Couter r)  ─ 
+lab "iner" {
+  description "Cablce"
+}
+
+node router image "a1lpiy"
+node - 10.0.0.

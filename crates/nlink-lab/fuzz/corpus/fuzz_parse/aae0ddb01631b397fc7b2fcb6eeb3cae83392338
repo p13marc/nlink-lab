@@ -1,0 +1,16 @@
+#-
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node nx2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1/30 -- 10.1.2.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3#fV XN#= W.──── n │   X   │
+#  
+0.0.2
+    :eth0 -- vt0 ep2:eth0 {.0 .100100 {

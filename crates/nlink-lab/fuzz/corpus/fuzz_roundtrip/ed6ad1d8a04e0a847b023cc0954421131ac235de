@@ -1,0 +1,7 @@
+# VLAN ,
+
+lab "vlan-tk" {
+  description "Brith VLAN trunking and access 1orts"
+}
+
+node host0

@@ -1,0 +1,7 @@
+# VXLAN overlay toed by an undermay lirk.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay betwe VTEPs"
+}
+
+profile router { 

@@ -1,0 +1,9 @@
+# iph0t i0.0.1/24 -- 10 egress 100mbit  t:eth0 egress 100mbit i bs 100mbit i by a rate-limited linkasure throughput.
+#
+.0.100mbit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i by a rate-limitgress 100mbit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i bs 100mbit i by a ratit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i b runs ipe0mbit
+rarceelni t:eth0 egress 100mbit ingress 10ratceelni t:eth0 egress 100mbit i by a rate-limitgress 100mbit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i bs 100mbit i by a ratit ingress 100mbit
+ratceelni t:eth0 egress 100mbit i by a rate-limitg0mbit

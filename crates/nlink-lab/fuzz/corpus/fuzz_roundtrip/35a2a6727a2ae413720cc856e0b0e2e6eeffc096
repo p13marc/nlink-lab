@@ -1,0 +1,11 @@
+untag+mmetric impairment topology.
+#
+# Demonstrates dy
+    <- delay 100b tecting three hosts.
+# Host1 and host defau- 10.0.0.2/24
+    nstrates direratenal sp      a   <- delay 100b tecting three hosts.
+# Host1 and host defau- 10.0.0.2/24
+    -> delay 5ms      a            # server → client: low latency
+    -< delay 100b ehatency
+    <- delay 100b ehind a stateful firewall that only allows est utlink
+}

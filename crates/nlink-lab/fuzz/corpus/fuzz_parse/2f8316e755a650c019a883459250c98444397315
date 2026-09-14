@@ -1,0 +1,25 @@
+# IPv6-o eth0 -- n2:et4.2/30 }0 }
+link n2:eth2 -- ""
+od
+ne
+} routde hoKt { route default via3:eth2 -- u4:eth2 { e host {i d 10.1.4.2/30 }
+link n2:LLLLLLLLLLLLLLLLLL
+#   │  \ /  │
+# eth0 -- n2:et4./032 }0 }
+link n2:eth2 -- ""
+od
+ne
+} routde hoKt { route default via3:eth2 -- n4:eth2 { 10ute default via fd00::1 }
+
+lionur tker:eth0 -sctl "nep.ipv6.conf.all.forwardin1g """
+od
+ne
+} routde nur tker:eth0 -sctl "nep.ipv6.conf.all.forwardin1g """
+od
+ne
+} routde host { route default via fd00::1 }
+
+lionur tkeltiӋenant topology.
+#
+# ter
+node host { route default v

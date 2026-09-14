@@ -1,0 +1,50 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an undeVXLAN
+# interface (VNote 23.0.0.2
+    port 4789
+   rt 4789
+   re2
+    port 4789
+   ress 1A92.168.100.2/2492.168
+
+link vtep1:eth0 -- vtess 1A92 port 4789
+   ress 1A92.168.100.2/2492.168
+
+link vtep1:eth0 -- vtess 1A92.168.100.2/24
+  }
+}
+
+
+# interface (VNote 10.0.0.2
+    port 4789
+   re2
+    port 47# VXLAN overlay tor89
+  8.100.2/2492.168
+
+lort 4789
+   ress 1A92.168.100.2/2492.168
+
+link vtepology.
+ 4789
+   ress 1A92.168.100.2/2492.168
+
+link vt.168.100.2/24
+  }
+}
+
+
+# interface (VNote 10.0.0.2
+    port 4789
+   re2
+    port 47# VXLAN overlay tor89
+  8.100.2/2492.168
+
+lort 4789
+   ress 1A92.168.100.2/2492.168
+
+link vtepology.
+ 4789
+   ress 1A92.168.100.2/2492.168
+
+link vtep1:eth0 -- vtess 1A92.16ch 

@@ -1,0 +1,10 @@
+# VXLAN overlay topology.d by an underlay link, each hostirlay network.
+
+lab "vxlan-overlay" {
+  descriptioroutewg vo0erlay between tw}
+ch hostirlay nVXLAN over1lay between two VTEPs"
+}
+
+profile rou  add ep1 :"ro VXLAN overlay between two VTEVs vtuter {
+  vxlan vxlaen100 {
+    vni 10pϿeth0

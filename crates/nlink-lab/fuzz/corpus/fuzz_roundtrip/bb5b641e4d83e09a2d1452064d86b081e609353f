@@ -1,0 +1,3 @@
+# WAN impairment topology.
+ 10.2.0.0/scrnia 34b: via 18b:% rate 12mbit
+}

@@ -1,0 +1,14 @@
+# IPv6-only topomemorylogy.
+#
+# A routeUUUUUUVr forwin1g 0 h1 -- host-b:eth0 { 1d2090.168.2.1/24192.168.2.10/24 }
+
+# WAN impairment
+impair uard wg0 {
+    key a+to
+    listen 59820
+    aw-b]
+  }
+  route 384.168.2.0/24 dev 8.1.1/-- 192.168.1.10- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms jitter :0:2:0/d:0:22:0:y 0:v6-onlyt via ly 0:d:0:y 0:d:0:22:0/st {logy 0:d:0:2:0/d:0:22:0/st {logy 5:d:/st {logy 0:d:0:2:0/6:2:0/d:0:22:0:y 0:v6-onlyt via ly 0:d:0:y 0:d:0:22:0/d:0:2:0/d:0:22:0/0:v6-onlyt via ly 0:d:0:y 0:d:0:22:0/st {log/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.16820 -) 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 1d2090.168.2.1/24 -- 1gw-a:eth0 delay 5nat0ms jitter :0:2:0/d:0:22:0:y 0:v6-onlyt via ly 0:d:0:y 0:d:0:22:0/st {logy 0:d:0:2:0/d:0:22:0/st {logy 5:d:/st {logy 0:d:0:2:0/6:2:0/d:0:22:0:y 0:v6-onlyt via ly 0:d:0:y 0:d:0:22:0/d:0:2:0/d:0:22:0/0:v6-onlyt via ly 0:d:0:y 0:d:0:22:0/st {logy 0:d:0:2:0/d:0:22:0:y 0w-b:et68.1.10/24 }
+link 

@@ -1,0 +1,22 @@
+# )Conttopology: an A:lpine container co   10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Conparected to bare namespace"
+}
+
+node router image "alpin6e:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/:4 -zzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzzzzzzzzzzzpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzul tvizzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.@fn:2         10.0.0.1    10.0.0.2
+
+lab "containEr" {
+ parected to bare namespace"
+}
+
+node router image "alpine:latst" cmd "sleep infinity"
+node h0${
+   μU00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzz0.0.2
+
+lab /24
+}

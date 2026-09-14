@@ -1,0 +1,16 @@
+  fd00:2# # ipe.
+Asymmetric impolotsimageairenvnnected by.
+#
+#i default vr
+
+node c { rou.0.1.1 }
+
+node server {
+ 
+#
+# Two  ipe.
+Asymmetric impolotsimageair# # ipe.
+Asymmetric impolotsimageairenvnnected by.
+#
+#i default via 10mpairmwall policy drop {
+    accept ct e

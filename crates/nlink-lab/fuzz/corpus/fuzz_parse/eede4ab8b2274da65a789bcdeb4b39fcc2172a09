@@ -1,0 +1,8 @@
+# Cto 0.0.2
+
+lab "container" {
+  description "Continected %"
+}
+
+node router image /12
+}

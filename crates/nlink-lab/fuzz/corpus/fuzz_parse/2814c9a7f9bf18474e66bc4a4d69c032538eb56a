@@ -1,0 +1,17 @@
+# Spine-leaf datacenter topcks, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv\\\\\\\\\\\\\\\\\\\2\\\\\4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2opology.
+#{ lo 10.255.0.1/32 }
+node spine2opology.
+#
+#

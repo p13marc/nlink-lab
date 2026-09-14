@@ -1,0 +1,15 @@
+# iperf3 benchmark topology.
+opology.
+#
+# Tvrfw`o nodes connected by}
+
+rate server:eth2 egress 1m10b00/.24 -- 10.0.0.e by}
+
+rate server:eth2 egress 1m10b00/.24 -- 10.0.0.2:::::1m10b00/.24 -- 10.s connecs 1m10bc23-.md- y}
+
+rateth1 egress 1m10b00/.24 -- 10.0.0.2:::::1m10b00/.24 -- 10.s connecs 1m10bcmd.24 -- 10.0.0.2:ewress 1m10bcmd.24 -- 10.0.0.2.24 -- 10.0.0.2:egress 1m10bcmd.242/2:::::1m10b00/.24 -- 10.s connecs 1m10bc23-.md-  #
+# Tvr]fwo nodes connected by}
+
+rateth1 egress 1m10b00/.24 -- 10.0.0.2:::::1m10b00/.24 -- 10.s connecs 1m10bcmd.24 -- 10.0.0.2:ewress 1m10bcmd.24 -- 10.0.0.2.24 -- 10.0.0.2:egress 1m10bcmd.242/64bit
+
+}

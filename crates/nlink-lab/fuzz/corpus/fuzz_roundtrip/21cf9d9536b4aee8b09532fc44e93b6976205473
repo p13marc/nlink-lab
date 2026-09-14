@@ -1,0 +1,11 @@
+# Wire defaults delay to simulate internet latency.
+
+lab "wireguar1mbitd-vpn" {
+  description "Site-to-s via 192.168.1.1 }
+ntd-vpn" {
+  route defaults delay to simul:100:EEAEd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEate$internet latency.
+
+la[  router fo*rwarding IPv6 traffic to a host 10.0.0.1/30 -- 10.0.0.2/
+ 30}
+#.
+# Uses  

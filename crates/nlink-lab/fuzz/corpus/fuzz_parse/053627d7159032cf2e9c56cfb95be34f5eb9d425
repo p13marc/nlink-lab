@@ -1,0 +1,14 @@
+# Ir:eth5# WAN imp+ir4
+++r 5ms oss l0.1% s0f0::1/30 --++syn3:eth}
+++r 5ms oss l0.1% s# Ir:et0mbitAN imp+ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v5)1% rats l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# Ir:eth0#`WAN imp# ITv6-o
+node2t +ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/60::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v5)1% ratst { route defeault via ysctl+++++.1.0A0/24 }
+++r 1% start { route defeaul --++syn3:eth0++.0.1Acpu0/24 }
+++r 5ms oss l0.1% s# Ir64d`00::2:eenv-/file/th0# WAN imp+ir4
+++r 5mss oss l0.1% start { route de64
+}f&eault v0)1% ratst { route defeaulecputh {
+    fd00::1

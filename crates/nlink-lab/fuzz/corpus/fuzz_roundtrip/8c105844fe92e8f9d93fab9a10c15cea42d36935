@@ -1,0 +1,17 @@
+# VXLAN overlopologrlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.4.2
+    port gy.
+#
+# Two VTEPs connected bx an underlay link, each hosting a VXLAN
+# inte0.2/24 }

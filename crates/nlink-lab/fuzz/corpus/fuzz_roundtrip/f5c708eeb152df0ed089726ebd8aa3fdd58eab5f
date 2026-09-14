@@ -1,0 +1,13 @@
+# VLAN 000 {
+ringA,
+}
+
+node router : router
+nA,
+}
+
+node router :000 {
+ringA,
+}
+
+node roe hostr++c++++++++++++++ode   +7777777775 b7n

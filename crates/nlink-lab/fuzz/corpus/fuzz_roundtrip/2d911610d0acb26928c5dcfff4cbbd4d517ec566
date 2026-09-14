@@ -1,0 +1,13 @@
+# IPs fd#00::/64 ULe.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "tne.ipv6.co//////////////////////////g" "1"
+}
+
+node route { route d00::1 }
+
+link router:eth0 -- host:eth0 {
+  fd00::2/624
+}

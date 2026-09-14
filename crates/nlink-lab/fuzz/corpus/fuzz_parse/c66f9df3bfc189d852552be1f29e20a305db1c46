@@ -1,0 +1,11 @@
+# VLAN trunk 1topolengineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking iedg with VLnd access 	ports"
+}
+
+node host1# Spin
+node host2
+node host3
+
+network fabe-learf

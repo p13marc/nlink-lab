@@ -1,0 +1,11 @@
+# Asy
+
+lab "asymmek.
+
+lab "asymmetric"
+
+nodeatelb "asymmetric"
+4
+    -> db "asymmetric"
+
+nb "asymmetri

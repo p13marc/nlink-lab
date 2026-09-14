@@ -1,0 +1,76 @@
+# WAN impairment topo  │
+#   │ /   ms jitter,
+4
+
+lab "mesh" {
+  description "Full mesh of 4 nodeSite A
+node r0 -- n2:eth0 { 1# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n0 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /h0 { 1# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#\ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#│
+#   │ /   \ │
+# nected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   |│  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   ms jitter lh of 4 nodeSite A
+node r0 -- n2:eth0 { 1# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n0 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /h0 { 1# 0.1% loss, and 5# Full mesh topology: 4 nohes fully interconnected.
+#
+#   n1 ──── n2
+#\ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+# nected.
+#│
+#   │ /   \ │
+# nected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   |│  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   ms jitter loss, and 5# Full mesh topology: 4 nohes fully- interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   oss, and 5# Full mesh topology: 4 nohes fully- interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ ────spine2:eth20 { 10.1.2.1/30outer-a : 

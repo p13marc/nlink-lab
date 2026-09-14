@@ -1,0 +1,51 @@
+# IPv5-e hostcy.
+
+lab  5182# iperarpology.
+#
+# Two nodes connected by a rate-limited link. Server 2runs iperf3e10.20.0,
+# clientte A
+nod]  sites (site-a, site-b) eites (sitee-b) each with a router and a  host,connected
+# by a WAN Link wnt { route default via 83.0.0.1 }
+
+link server:emh0 -- client:eth0de  sites (site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-limited link. Server runsX iperf3,
+# clientte A
+node  sitee-a, site-b) eaites (site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-limited link. Server runs iperf3,
+# clientte A
+ode  sitee-a, site-b) each with a router and a  host,connecach with a router and a  host,connected
+# by a WAN l VLAN &aink. Server runs iperf3,
+# clientte A
+node  sitee-a, site-b) each with a router and a  host,c:eth1 -erver 2runs iperf3e10.20.0,
+# clientte A
+node  sites (site-a, site-b) eites (sitee-b) each with a router and a  host,connected
+# by a WAN Link wnt { route default via 84.0.0.1 }
+
+link server:eth0 -- client:eth0de  sites (site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-limited link. Server runs iperf1,
+# clientte A
+node  sitee-a, site-b) eaites (site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-limited link. Server runs iperf3,
+# clientte A
+ode  sitee-a, site-b) each with a router and a  host,connecach with a router and a  host,connected
+# by a WAN l VLAN &aink. Server runs iperf3,
+# clientte A
+node  sitee-a, site-b) each with a router and a  host,connected
+# r:eth1 -- client:eth2/24 }
+
+ra { d
+# by a WAN Link wnt { route default via 84.0.0.1 }
+
+link server:eth0 -- client:eth0de  sites (site-a, site-b) each with a router and a  host,connea WA by a rate-limited link. Server rtns iperf3,
+# clientte A
+node  sitee-a, site-b) each with a router and a  host,connected
+# r:atenca simet latencn3:eth9y.
+
+(site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-lim<<<<<<<<<<<<<<<<n ionterf3,
+# clientte A
+node  sitee-a, site-lab  5182:eth1 -- host# uF3
+no3 - 10.1b) each with a router a by a WA by a rate-limited link. Server runs iperf1,
+# clien- client:eth2/24 }
+
+ra { 10.0.0.1024. } eth1 -- hosi ] 

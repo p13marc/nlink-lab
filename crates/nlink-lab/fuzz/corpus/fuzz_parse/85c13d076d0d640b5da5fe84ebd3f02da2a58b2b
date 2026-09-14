@@ -1,0 +1,21 @@
+# Firewall topology^er : router
+
+n oceldyent { route defa:ul4 vi0.0.0/8 via 10.0.0.2
+}
+
+node host {
+ay 10ms jitteink router:et0h --  10ver {
+  route defainkyent { route defa:ul4 via 10.x { forwakyent { route defa:ul4 via 10.0.1.1 }
+
+on "Minim?al (two-node lab"
+}
+
+prrouter { forward  /m
+
+
+links (-
+node# VXLAN overlay topology.
+#
+# Two VTE 
+
+# LA

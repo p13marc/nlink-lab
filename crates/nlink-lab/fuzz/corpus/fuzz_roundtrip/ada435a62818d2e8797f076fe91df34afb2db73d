@@ -1,0 +1,9 @@
+# # Coll topology.#
+p
+5
+t
+netorost1:eth0 {
+  1001...1/23 -- 1k routePv6 traffic to a( host.1001...1/24 -- 1k r...1/24 -- 1k rter:nodeshed
+# connecti# IPv2-only topology.
+#
+# A routeethno ur2rt0.2.1/24 /24 -- 

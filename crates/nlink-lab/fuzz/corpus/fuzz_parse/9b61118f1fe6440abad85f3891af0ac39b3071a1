@@ -1,0 +1,16 @@
+# WAN impairment topology.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:e ik1.0.1 }
+
+# Site B
+node router-b : router { rour 5mloss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}

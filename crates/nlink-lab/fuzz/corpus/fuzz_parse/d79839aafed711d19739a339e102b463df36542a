@@ -1,0 +1,22 @@
+# V200 (engring).
+
+lab "vlanLAN trunkieth2ng and access ports"
+}
+
+im:::::::::::::::::::::::::::::::::::::::::::::::::::::agehost2
+)
+link gw-a:eth0 -- gw-b:eth0 { 10-- 10.0.8.2/30 }
+
+#d access portsv%rsion"
+}
+
+nod
+
+im::::::::::::::::::::::::::::::nsde host2
+node host3
+
+network fabric bric {ss ports+
+}
+
+im::::::::::::n2:eth2::d 200  untagged }
+}

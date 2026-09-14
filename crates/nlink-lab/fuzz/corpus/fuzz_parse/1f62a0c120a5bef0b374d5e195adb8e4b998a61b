@@ -1,0 +1,69 @@
+]# Router topology: one router connecting tile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {"net.ipv6.con
+lae "ipv8-simple"
+
+profile  sysctl "net.ipv6.conf.aroute default55555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555e Local Address)l "net. via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile routeenvr {
+    sysctl "net.ipv6.conf.aroute default via 10.0.255555555555555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.conf.all.f0::/64 ULA (Unique Local Address)l "net. via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile routeenvr {
+    sysctl "net.ipv6.conf.aroute default via 10.0.255555555555555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.conf.all.f0::/64 ULA (Unique Local Address)l "net. via 10.0.25555555555555555555555555555555555555ddress)l "net. via 10.0.2555555555555555555555ddress)l "net. via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.1 }
+
+link rout    sysctl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile routeenvr {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+et.ipv6.conf.all.f0::/64 ULA (Unique Local Address)l "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {"net.ipv6.con
+lab "ipv8-simple"
+
+pl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555e Local Address)l "net. via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile routeenvr {
+    sysctl "net.ipv6.conf.aroute default via 10.0.255555555555555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.conf.all.f0::/64 ULA (Unique Local Address)l "net. via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.connet.ipv6.con
+lab "ipv8-simple"
+
+profile routeenvr {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.conf.all.f0::/64 ULA (Unique Local Addrrofile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    syscvia f.all.forwarding" "1"
+route default via 10.0.pv6.conf.all.f# Spine-leaf ordwa

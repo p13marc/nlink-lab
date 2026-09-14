@@ -1,0 +1,20 @@
+# .
+
+lab "wireguserver:eth0ard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    fwmark 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 191.168.2.0/24 dev wg0
+}
+
+node nt
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

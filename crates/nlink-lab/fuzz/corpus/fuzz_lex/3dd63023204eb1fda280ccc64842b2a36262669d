@@ -1,0 +1,11 @@
+# WAN impairment(topPE routt isolationtable 20 {
+    interfaces [eth2]
+    route de0.10/24 }
+
+AW #N link with symmetric impairatPE$via separate interfaces.
+
+lab "vrf-multitenant" {   route default dev eth0
+ """""""""""""""""""""""""""""""""""""" }
+  vrf blue table 10 {
+    interfaces [eth${ route defaul
+link route pe:eth0 -- host-a:eth0 { 10.1.0.0/2204

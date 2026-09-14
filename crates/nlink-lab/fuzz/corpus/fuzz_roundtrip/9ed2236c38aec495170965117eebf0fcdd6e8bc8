@@ -1,0 +1,16 @@
+# iperf3 benchmark topology.
+#
+lient e server:eth0 eegs1 0sr0mbit ingress 100mbit
+rate client:eth0 egress 100ut.
+#
+## VXLAN overlay topology.
+#
+# Two.1/24 -- 10.0.0.2/24 }
+
+ratlient:eth0 egress 100ut.
+#
+## VXLAN overlay topology.
+#
+# Two VTEPs connected by e after deploy:
+# nlink-ln1 }
+nod

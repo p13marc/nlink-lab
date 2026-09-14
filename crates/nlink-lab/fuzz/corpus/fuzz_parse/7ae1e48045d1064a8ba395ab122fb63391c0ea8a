@@ -1,0 +1,22 @@
+# WireGuard VPN topolmulate internet late.cy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGver WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 19e default vith1 2.168.1.1 }
+
+# WAN link (underlay between gateways)
+link gw-a:eth0 -- gw-b:eth0 { 10s 0.1%

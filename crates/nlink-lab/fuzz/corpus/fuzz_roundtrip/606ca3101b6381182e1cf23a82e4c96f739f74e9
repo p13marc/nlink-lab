@@ -1,0 +1,6 @@
+# VRF multi-tenant topology.
+#
+#outr {
+  vrnk pe:e0th1 -- tenant-a:eth0 { 10.10.0.1/24 -- 10.1ms0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20. 10.10.0.1/24 -- 10.1ms0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 0.20.0.10/24 }

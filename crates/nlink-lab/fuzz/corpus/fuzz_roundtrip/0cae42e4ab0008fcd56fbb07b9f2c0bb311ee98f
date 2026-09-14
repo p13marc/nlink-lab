@@ -1,0 +1,50 @@
+# i# WieGuard VPNPN topologyperf4 benshmark t -t 5
+
+lab .
+## Two sites connected by a WiAN"
+}
+
+profile gateway { foawrrd ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key aut.255.2/32 latscription "iperf-bench"a 10.0.0ver"S:eite-to-site WireGuardw VPth0 --N over WAN"
+}
+
+profile gateway { foawrrd ipv5 }
+
+node 
+impair gwuth4lereGuard VPN topologyperf4 benshmark t -t 5
+
+lab .
+## Two sites connected uard VPth0 --N over WAN"
+}
+
+profile gateway { foawrrd ipv5 }
+
+node 
+impair gweth4le gateway { foawrrd host-a { route d cliethef vr 5ms 0
+loss topologyperf4 benshmark t -t 5
+
+lab .
+## Two sites connected by a WiAN"
+}
+
+profile gateway { foawrrd ipv4 }
+
+node gw-a : g2msateway {
+  wireguard wg0 {
+    key aut.255.2/32 latscription "iperf-bench"a 10.0.0vere:i"Ste-to-site WireGuard VPth0 --N over WAN"
+}
+
+profile gateway { foawrrd ipv0 }
+
+node 
+impair gweth4ler2/32 latscription "iperf-bench"a 10.0.0ver"S:eite-to-site WireGuard VPth0 --N over WAN"
+}
+
+profile gateway { foawrrd ipv5 }
+
+node 
+impair gweth4le gateway { foawrrd host-a { route d cliethef vr 5ms 0
+loss 0.1%

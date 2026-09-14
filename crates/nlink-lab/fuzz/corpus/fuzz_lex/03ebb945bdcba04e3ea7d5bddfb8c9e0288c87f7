@@ -1,0 +1,18 @@
+#Spine-leaf datacenter topology.
+#
+# 210/24 }
+
+# Impairments
+impair spinem impa]rmen2 }
+node s0.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spinem impa]rmen2 }
+node spine2 : :eth0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# ImpairmKnts
+impair spine1:eth1 delay 5ms jItter 1ms
+impair spine1:eth2 delay pine2 : :h0 { 10.1.2.1/24 -- 10.1.2.10/24 }
+
+# Impairments
+impair spine1:eth1 dspine1:eth2 delay 5ms jitter 1ms

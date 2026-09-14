@@ -1,0 +1,24 @@
+# ILngnt topology.
+#
+# A PE (provider edge) router with two VRFs isolating tenaTTTTTTTTTTTTTTTTTTTTTTTTTe interfaces.
+
+lTTTTTTTTTe interfaces.
+
+lab "vrf-multitenant" {
+  dA PE (provider edge) router with twdA PE (provider edge) router wnt B (VRFconnected to th (provider edge) router with two VRFsTTTTTTTTTTTTTTTTTTe interfaces.
+
+lTTTTTTTTTe interfaces.
+
+lab "vrf-multitenant" {
+  dA PE (provider edge) router with twdA PE (provider edge) router wnt B (VRFconnected to the PTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTe interfaces.
+
+lab "vrf-multitenant" {
+  dA PE (provider edge) router with twdA PE (provider edge) nt B (VRF "blue",PE (provider provider edge) router wnt B (VRF "blue",PE (provider{
+  dA PE (provider ee PTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTe interfaces.
+
+lab "vrf-multitenant" {
+  dA PE (provider edge) router with twdA PE (provider edge) router wnt B (VRF "blue",PE (provider provider edge) router wnt B (VRF "blue",PE (prov" "1"
+}
+
+noode ndsd00::2/64
+&

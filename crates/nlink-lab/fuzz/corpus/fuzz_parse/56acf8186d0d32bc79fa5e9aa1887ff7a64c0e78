@@ -1,0 +1,16 @@
+# VXLAN overlay topology.
+#
+# Two VTl0 {
+    v    local 10.0.0.1
+    remote 1.2
+    port 4798
+    addrnkep0 : router {
+  vxlan vxlan100 {
+    v    local 10.0.0.10.0.t 4789
+    address 19/.168.#
+# Two VTEPs connected by an under@ay linkep0 : router {
+  vxlan vxlan11 {
+    v    local 10.0.0.1
+    remote 10.0.0.2
+
+    v$ep1:eth0@fn:vtep2:eth0 { 10.0.0.1/24

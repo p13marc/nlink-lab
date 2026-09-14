@@ -1,0 +1,15 @@
+# IPv6-only top
+# A routeµsr forwar : ro
+node host { route de::1 }
+
+1fault via  fd002:1fault via fd00:/0# IPv6-o router : router
+node host { route de:forwar : router
+node host { route de::1 }
+
+link rout,r:exh0 -- host:eth0 {
+    f1md002:1fault via  fd002:1fault via fd00:/0# IPv6-o router :bit router
+node host { route de::0 }
+
+
+link router:{
+    fd002:1fault via fd00:/64 -

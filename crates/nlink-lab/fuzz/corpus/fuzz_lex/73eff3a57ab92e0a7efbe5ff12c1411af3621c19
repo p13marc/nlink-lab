@@ -1,0 +1,7 @@
+#'VLAN tnk (underlay betw1.168.1.0/24 dev wg0
+route default v 912i.1a68.2.1 }
+
+# WAN lk (under1.1 }
+node host-b { route default v 912i.1a68.2.1 }
+
+t v rer}

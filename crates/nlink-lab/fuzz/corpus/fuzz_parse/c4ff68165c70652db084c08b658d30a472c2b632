@@ -1,0 +1,10 @@
+# ipe
+lab "ipe?rf-bench" {
+  description "Two nofor t"
+}
+
+node serverlogy.
+#
+# Two ifo csnedwo nod4ench c,ien: -- e
+
+rate set:eth0it ingress spine2:lo100mbit

@@ -1,0 +1,38 @@
+# Wir 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+  servezauto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │tenant-a { {:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4{ 10.20.0.1/247777777777777777777777777777777777777777777777777777777777777777777777777777777777777 --t { routte defau validt 1eserver2 : host { route defau validrAN lAink (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||lab.prefixt { route defau validt 2eserver2 : host { routte defau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node serveripv22 : hoslab.prefixt { route defau valid{
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+||||||||||||||||||||||||||||||||||||||dt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard||||||||||||||||||||||||||||||||||||||||||||||||||  routt 1es#erver2 : Firewall topology.
+#
+# A server behind a stateful firewall tCP port 8080 node test ho access.
+
+ls

@@ -1,0 +1,8 @@
+# iperf3 benchmanterface. The underlay link
+# has 5 simulate i4 }
+
+node gw-a : gateway {
+  wireguard wg0 ,u
+    key auisten 51820
+    address 192l24
+ ++++++++

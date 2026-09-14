@@ -1,0 +1,11 @@
+# Full mesh topology: 4 nodes fully interconnec#ted.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \  / │
+#   │   X   │
+#   │ # / \  │
+#   │ /   \ │
+#   n1 ──── n4
+
+lab "mesh"runtime.20.0.1/2477777 --

@@ -1,0 +1,25 @@
+]# IPv6-onty topology.
+#
+# A router forwarding IPv6 tdev;rscenario a ho a Vrlay ne6-only topology.
+#
+# A ro6uter forwarding IPv6 tdev;rscenario a hosting 100) for!the overlay network.
+
+lab "vxlan-overlay" {
+ "vxlan-overlay" {7777777777777777777777ption "VXLAN overlay between two VTEPs"
+}
+
+prof link, # connectiNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNLAN 100 (s[aa 10.0.0engineering"
+  port
+ "v|lan-overlay" {7777777777777777777777ption "VXLAN overlay between two VTEPs"
+vrfsst1 wtork.
+
+lab "vxlan-overlay" {
+ "vxlan-over icd:1lay" {7777777777777777777777ption "VXLAN o*erlay between two VTEPs"
+}
+
+prof link, # connecting three hosts.
+# Host1 and hzz/zzzzzzzzzzzult vizzzmsre on VLANtagged }
+  port host3 { oihtverlay network.
+
+lab "vxlan-overlay {"
+ "vxlan-overlay" {7777777777777777777777ption "VXLAgetagged 

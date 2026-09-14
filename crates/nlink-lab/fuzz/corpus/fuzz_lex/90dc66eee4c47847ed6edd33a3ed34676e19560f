@@ -1,0 +1,23 @@
+/240044,44444+444.44.4444444444 00 {
+    vn4:i ctl   f1 }
+
+th0 -- h- fd=00.::021.3800.1 }
+node nt-auter {
+    ctl   f1 }
+
+th0 -- h- fd=00.::021.190/24sysctl   f1 }
+
+th0 -- h- fd=00.:1:20.190/24sysctl   f1 }
+
+th- h- fd=00.::021.190/190/24slocal 1wt0i0.10.0.1/24sys021.190/24s  -fd=00.::021.190/24sysctl   f1 }
+
+th0 -- x- f:=00.::021.190/24sysctl   f1 }
+
+th- h- fd=00.::s  -fd=00.::021.190/24sysctl   f1 }
+
+th0 -- x- f:=00.::021.190/24sysctl  }
+
+th- h- fd=00.::021.190/190/24slocal 1wt0i0.10.0.1/24sysctl  ::021.190/24sysctl   f1 }
+
+th-0/24sysct.190/24th- h- fd=00.::021.190/190/24slocal 1wt0i0.10.0.1/24sysctl  ::021.190/24sysd:0ct:2l 024}
+  

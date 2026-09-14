@@ -1,0 +1,10 @@
+# WAN impg.
+
+lab "n-imdeh2
+ │  / \  │
+#   │ /   \ │
+#   n4
+
+lab "mesh" {
+ on"Twmbit
+}

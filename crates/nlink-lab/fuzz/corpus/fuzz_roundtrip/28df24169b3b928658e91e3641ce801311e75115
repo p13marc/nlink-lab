@@ -1,0 +1,18 @@
+# VLAN trunk topology.
+#
+# A briVLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "bridge with VLAN trunking and access ports"
+}
+
+node host0
+node wist3
+
+network fabric {
+  vlan-filtering
+  members [host4:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"VLAN hi{ pvid 100  untagged }
+  port host2 { pvid 100 (untagged }
+  port host2 { pvid 200  untagged }
+}

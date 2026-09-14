@@ -1,0 +1,26 @@
+# Firecker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firmwall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 26
+  }
+}
+
+link router:eth0 -- client:${host2onk route access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewalh"
+}
+

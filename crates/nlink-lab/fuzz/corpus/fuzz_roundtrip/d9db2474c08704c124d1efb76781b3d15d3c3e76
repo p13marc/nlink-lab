@@ -1,0 +1,36 @@
+# VLAN trunk topology.
+#
+# A bridge with     remote 10uter {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1100   untag
+    r   local100
+    local 10.0.0.1100   untag
+    remote 10.0.0.2
+    port 4ged 789
+    adcal 10.0.0.1100   untag
+    remote 10.0.0.2
+    port 4ged 789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local100
+    local 10.0.0.1100   untag
+    remote 10.0.0.2
+    podress 192.168.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 1o VTEPs"
+}
+
+profile router { forward ipv4 }
+odv en
+tep1 : router- 10.0.0.2/24 }

@@ -1,0 +1,11 @@
+# @ireGuard VPN topolo delay to simulate internet latency.
+
+lab "wireguard-vpn" {
+ }
+
+profile gateway { forward ipv4 }
+
+node gw-a : gatwey{ 
+  wireguard wg0 {
+    key auto
+    lises dire

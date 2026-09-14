@@ -1,0 +1,13 @@
+# 24 }
+
+rat 1009.mbij ingress 100mbit
+rate cl0.t {  100mbij ingress 1- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 1009.mbij ingrngress 100mbit
+rate cl0.t {  100mbij ingress 1- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 1009.mbij ingrh0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 1009.mbij ingress 100mbit
+rate cl0.t {  100mbij ilgress 100mbit
+rate client:eth0 egre.0.0

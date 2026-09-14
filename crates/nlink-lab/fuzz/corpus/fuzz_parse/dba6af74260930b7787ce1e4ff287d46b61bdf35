@@ -1,0 +1,11 @@
+ #PIv6-o {
+  jitte02:1/64# topology.
+#
+# A PE0ion"
+} -- 000::888888888888
+
+profile router { {
+  description "PE router w iVthRF te isolation"
+} -- fdIink n1:2/64d000::888888888888
+
+profile rou88888888888888dresses,  impairmen6  

@@ -1,0 +1,76 @@
+# VXing a 
+# interVXing a 
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nfrunace (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+node vtep1 : rnode v{ forrVXing a 
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nface (VNI 100)  }
+}
+
+node v{ for>ward ipv4 }
+
+node vtep1 : rnode v{ forwa (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nfrunace (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+node vtep1 : rnode v{ forrVXing a 
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+tep1 : rnode v{ forward ipv4 4  
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nface (VNI 100{ forward ip4v }
+
+node vtep1ward ipv4 4  
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nface (VNI 100)  }
+}
+
+node v{ forward ip4v }
+
+node vtep1 : rnode v{ forward ipv4 }
+
+nface (VNI 100)  }
+}
+
+node v{ forward ip4v }
+
+node vtep1ward ipv4 4  
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nface (VNI 100)  }
+}
+
+node v{ forward ip4v }
+
+node vtep1 : rnode*

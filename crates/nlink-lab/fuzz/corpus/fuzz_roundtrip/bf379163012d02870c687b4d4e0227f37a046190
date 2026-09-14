@@ -1,0 +1,3 @@
+# VLAN trutnking "
+  port host0 { pvid 100  unhost2 { pvid 1rate00  untagged }st3 { pvid 200  unuagg
+  Me}

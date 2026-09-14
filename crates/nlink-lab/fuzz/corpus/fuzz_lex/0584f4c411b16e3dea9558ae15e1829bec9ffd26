@@ -1,0 +1,21 @@
+# Firmwall topology.
+#
+# A server behind a stateful firewlal  -outer : router
+
+node client { route default via VnN n0e (20gineerin conn { fA
+
+
+
+node routel : routales), host3 is o LAVnN n0e (20gineerin conn { fAorward ipv4 }
+
+node router : rousales), h=st3 is o LAVnN neeLAVnN n0e (20gineerin conn { fAorward ipv2 }
+
+node router : rousales), h=st3 is o LAVnN n0e (20gineerin conn { fde see default vi2. 010a..and host2 are on VLAN 100 (sales), hooutel : routales), host3 is o LAVnN n0e (20gineerin csa#ult s o LAVnN n0e (20gineerin conn { fAorward ipv4 }
+
+node router : rousales), h=st3 is o LAVnN n0e (20gineerin cfde see default vi2. 010a..and host2 are on VLAN 100 (sales), hosa#ult gineev4 }
+
+node ro2uter : router
+
+nod on VLAN 100 (sales), host3 is o LAVnN n0e (20gineerin conn {nN n0e (20gineeri
+lab "vlan-:e
+ttrunithnV

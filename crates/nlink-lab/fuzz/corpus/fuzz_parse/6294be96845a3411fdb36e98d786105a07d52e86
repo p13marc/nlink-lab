@@ -1,0 +1,26 @@
+# WAN impairmtote onplogy.
+#
+# Two a 10e host-b { route default via 10.2.1%/64 --  rate 50mbit
+}
+fd00::1.2.051 }
+
+# LAN links
+lieth:pre1   fd002:1/64 -- fd00:  delay 30ms j rate 50mbit
+}
+Fd00::2.2.051 }
+
+# LAN links
+liet -- 
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/ -6 - 4rate 50mbit
+}
+fd00::2.2.051 }
+
+# LAN links
+lieth:d00mbit
+}
+fd00::2.2.0.1 }
+
+# LAN links
+lieth: {#ifA5
+eth2O::Ad:yd::d:d:d:d:d:a 30ms jitter::2/64
+}

@@ -1,0 +1,10 @@
+# mitirg.
+
+labv "wan-impairme-t" {
+  descr
+}
+
+profile router { forward iy, 5ms jitter,
+# 0.1% loss, and 50mbit rate limitirg
+
+labv "wan-impa1, 2 serveos10.1.%0/24ring . L3 point-to-point fabrnnecting 

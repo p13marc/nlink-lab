@@ -1,0 +1,17 @@
+]# Router topolonnectin"
+
+profile router {
+    sysctl "net.ipv7.con
+lab "ipv8-simple"
+
+profile rou"net.ipv6.conf.aroute default via 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb5555 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbsysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+   sysctl "net.ipv7.conf.aroute default via 10.0.2555555555555555555bbbbbbbbbbbbbbbbbbbbbbsysctl "net.ipv6.conf.all.forwarding" "1"
+rou1/24 - 10-.0.1.2/24
+}
+
+link router:eth1 ;- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

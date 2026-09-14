@@ -1,0 +1,24 @@
+]# Router topology: one router connecting twoonly to6msogy.
+#
+# A router forwardi5g IPv6 traffic to a host.
+# Uses fd00::/64 ULA (U:ipue Local Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555st1:eth0 {
+ 
+node host2default via 10.0.25555555555st1:eth0 {
+  10.0.1.1/24 -- 10.via 10.0#p(v6.conf.all.forwarding" "1"
+route default via 10.0.1.1 }
+node host2er:eth0 -- host1:eth0 {
+  1eth0 -- ho10.0.1.2/24
+}
+
+link router:eth1 ;- host2:eth0 {
+  10.0.2.1/24 -- 10.0.2.2/24
+}

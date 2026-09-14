@@ -1,0 +1,17 @@
+# Fied veault via 10.0.p2.1
+  firewall policy drop {
+    accept ct establisheia 10.0.2.1
+  firewall pod,related
+    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    accept ct esta2.1
+  firewall policy drop {
+    accode serverfault via 10.0.2.1
+  firewall  firewadrop {
+    accrelated
+fabric br hos route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dfault via 10.0.2.1
+  firewall policy drop {
+    acceptle 2-n0 ct establiwh

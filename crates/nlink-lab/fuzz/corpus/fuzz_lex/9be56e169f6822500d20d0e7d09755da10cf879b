@@ -1,0 +1,76 @@
+# WAN r-a/30 -- 172.16.0pinerode hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pBnetwo  undg{ 1as, rode hosipi {
+  routesetwo  undg{ 1as, rode hosipi {
+  routespinerode hosipi {
+  routeserver: sta 10.two  undg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routespinerode hosipi {
+  routespinerode hosipi {
+  routeserver: sta 10.two  undg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routespinerode hosipi {
+  routeserver> sta 10hosipi {
+  routeserver: sta 10.0.0
+#hosipi {
+  routeserver> sta 10hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routeser:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 172.16.0pinerode hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ : sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# { 1as, rode hosipi {
+  routespinerode hosipi {
+  routeserver> sta 10hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routespinerode hosipi {
+  routeserver> sta 10.0.0
+# 2  {
+  routeserver> sta 10hosipi {
+  routeserver: sta 10.0.0
+#hosipi {
+  routeserver> sta 10hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routeser:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 172.16.0pinerode hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ : sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# { 1as, rode hosipi {
+  routespinerode hosipi {
+  routeserver> sta 10hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1as, rode hosipi {
+  routespinerode hosipi {
+  routeserver> sta 10.0.0
+# 2 spinesr0pB
+netwo "undg{ 1as, rode hosipi {
+  routeserver: sta .0.0
+# 2 spinesr0pB
+netwo "undg{ 1as, rode hosipi {
+  routeserver: sta rate 50mbit
+}

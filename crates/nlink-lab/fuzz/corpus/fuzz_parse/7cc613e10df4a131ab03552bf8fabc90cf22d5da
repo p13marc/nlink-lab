@@ -1,0 +1,4 @@
+#opols2/24 }
+
+rate sv 100mbit ingres1s0 0mbit
+rate client:eth0 eg2ess 100mbit in//30ouuer-Na : 

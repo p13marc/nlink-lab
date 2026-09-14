@@ -1,0 +1,16 @@
+# Asymme)ricnodesirment topologter {
+  vxlan vxlan100 {
+    vni 049
+ .0.2
+    remofate 10ult vque .0.0.1
+ 1/24
+  }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    vsysc00
+    local 10.0.0.2
+    remofate 10ult vque .0.0.1
+    poent: low latency
+    < - dela# Asymmety~ic impaiTCP 100m p

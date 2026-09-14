@@ -1,0 +1,18 @@
+# VRF multi-tenant topolog "blue", table 20)
+# each havnterfaces.
+
+lab "vrf-multitenant" {
+  description "PE rouwith VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {  route default dev eth1
+  }
+  vrf blue table h have a hpe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+1 }
+
+link serve0.0.10/24 }

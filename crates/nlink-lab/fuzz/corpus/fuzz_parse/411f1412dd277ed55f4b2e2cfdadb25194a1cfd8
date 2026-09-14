@@ -1,0 +1,24 @@
+# Firewall topology.
+#
+# A server behind a st behind a stateful firewall that only allows established
+# connections, ICMP, and TCP port 8080. A nt and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drpo {
+    accept ct established,rb "~l" {
+lg 
+i.lga  i.
+
+lg1 -- server:eth0 { 10.0.2.1/2}

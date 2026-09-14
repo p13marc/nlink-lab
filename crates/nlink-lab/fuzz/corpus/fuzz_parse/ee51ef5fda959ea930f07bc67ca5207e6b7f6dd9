@@ -1,0 +1,16 @@
+# VLAN trunk topbridgineeriKng).
+
+lab "vlan-trunk" {
+  description "
+
+nots"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-id ,99  untagged }
+  port hopvid 2a }
+}

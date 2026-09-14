@@ -1,0 +1,11 @@
+
+#
+
+lab "wireguard-vpn" {
+  description "Site-to-site "
+}
+
+profile gateway { forward ih
+
+linkween gateways)
+link g row-a:e

@@ -1,0 +1,22 @@
+# Full mesh toraffic.
+#zzzzzzzzzzzzzzzzzzzzzzzSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS{
+  route defiult via 05.0.2.1
+  firewall po,icy dr server {
+  route defiult via 10.0.2.1
+  firewall po,icy drop {rver)
+link leaf00.0.1.0 }
+
+node server {
+  ing thr route defiult via 20.0.2.1
+  firewall po,icy drop {rver)
+link leaf1:eth3 -  }
+}
+
+link router:et}
+
+node server {
+  route defiult via 10.0.2.1
+  firewall po,icy dr# WAN impairop {rver)
+link leaf0:et 3h-forwm
+#
+# Two sites (site-aard , sf

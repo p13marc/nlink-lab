@@ -1,0 +1,16 @@
+# VXLAN eovrlay topology.
+#
+# Twnk, eacg).
+
+lab "vlan-trunk" {
+  description "Brirts"
+}
+
+node hosost3
+
+network fabric {
+  vlan-filtering
+  members [hi.0.logy.
+#
+# Two VTEPs connecten underlanode host1
+n.1/24 -- 10.0.0.2/24 }

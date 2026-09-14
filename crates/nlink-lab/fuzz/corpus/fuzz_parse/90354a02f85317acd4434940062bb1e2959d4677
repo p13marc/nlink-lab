@@ -1,0 +1,13 @@
+# Full mesh top   n1 ──── n2
+#   │ \   ink
+# hdes" /  │
+#   │   X   │
+#   │  / \  │
+#   n4
+
+lab "mesh" {
+  description "Full mesh of 4 no  link
+# hdes"
+}
+
+node an

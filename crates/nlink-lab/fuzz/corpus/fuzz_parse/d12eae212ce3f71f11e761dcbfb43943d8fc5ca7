@@ -1,0 +1,7 @@
+# Asymmetrished,related
+    accept hind a stateful firoutful 0 {
+    12/300.0n0. dport 8080k r1/24 -- 10.0.0.2/2o4
+   uter:et -> dn1  accept ct tcp dport 8080k router:eth0 -- client:erouth0 {
+    12/300.0n0. dport 8080k r1/24 -- 10.0.0.2/2o4
+   uter:et -> dn1  accept c4/established,related
+    acce0t tcp dport 8080k routgr:etode client { route h0

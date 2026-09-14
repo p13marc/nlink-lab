@@ -1,0 +1,22 @@
+# V200 (ergeenining).
+
+lab "vlan-trunk" {
+ 0.0.11.1
+}
+no"Bridge with VLAN tand access ports"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  me,mbers [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  memberg
+  me,-bers [host1:eth0, ho# Wult via 10.0.11.1
+}
+n

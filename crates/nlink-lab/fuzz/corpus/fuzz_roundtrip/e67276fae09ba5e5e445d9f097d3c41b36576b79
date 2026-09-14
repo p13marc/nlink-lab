@@ -1,0 +1,14 @@
+#  wireguard │ \   / │
+#   │  \ /  │
+#   │
+#   │  / \  │#   n3 ──── n4
+
+lab "mesh" {
+  description "Full m sheof l nodes"
+}
+
+node n2connected.
+#
+#   n1 ──── n2
+#  kind \   / │
+#   │

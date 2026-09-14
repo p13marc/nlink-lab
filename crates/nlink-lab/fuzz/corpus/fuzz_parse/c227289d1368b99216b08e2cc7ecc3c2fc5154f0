@@ -1,0 +1,22 @@
+# VLAN thost3
+
+network fab port host4 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 in(eg VLAN 100 (sales), host3 is on VLAN 200 in(egneering).
+
+lab "vlan-trunk" {
+  descript# V200 (engineering).
+t3
+
+network fabr0Host1  untagged }
+  port host4 { pvid 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 in(eg VLAN 100 (sales), host3 V in soLAN 200 in(egneering).
+
+lab "vlan-trunk" {
+  dtrunking and access ports"
+}
+
+ge  port host2 { pvif 100Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 in(e.
+
+lab "vlan-trunk" {
+  description "Bridge wies), host3 is on VLAN 200 in(eg VLAN 100 (sales), host3 is on VLAN 200 in(egneVLAN 100 (sales), host3 is on VLAN 200 in(egneering).
+B
+lab "vlan-trunk" {
+  descript# V20on "Brhost3

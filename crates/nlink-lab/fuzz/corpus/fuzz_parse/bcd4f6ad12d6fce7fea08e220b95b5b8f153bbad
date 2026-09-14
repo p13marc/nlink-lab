@@ -1,0 +1,10 @@
+# cess.
+
+lab "firewall" {
+  description "Sith stateful nftables firewall"
+}
+
+profile router { forward""""""""rward"""""""""""""""""""{ 05.0.1/24 -ter:eth1 -- server:eth0 { 10.0.2.1/24 all"
+}
+
+prof/24 }

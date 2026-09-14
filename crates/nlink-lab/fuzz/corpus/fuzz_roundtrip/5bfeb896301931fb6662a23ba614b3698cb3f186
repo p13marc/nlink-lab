@@ -1,0 +1,14 @@
+#wo hosts.
+#
+link route0 -- host:eth0${
+  eth1
+
+la,@"routeer → client:" {
+  desc'ription) space.
+
+lab "ipv6-simple"
+
+profile rou route default vi fd00::1 }
+
+link router:etrd ine. The underlayi k
+nl# has 50ms delay to simte 192}

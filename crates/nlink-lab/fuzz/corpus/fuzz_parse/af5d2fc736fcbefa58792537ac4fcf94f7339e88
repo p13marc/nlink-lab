@@ -1,0 +1,6 @@
+#
+# A router frowarding IPv6 trafficfd002:1a cal Adter
+=o
+=ode hosroute defaug - 0fd::02/ Usost { routi/64 -2 0fd::02/ JUses fd00::/64 ULA (Unique Local Adter
+nnod::02/ 0::2/64
+}

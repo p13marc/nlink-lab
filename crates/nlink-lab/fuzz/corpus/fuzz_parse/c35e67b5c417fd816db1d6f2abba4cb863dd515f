@@ -1,0 +1,15 @@
+# iperf3 benchmark topoy
+o#de vtepr
+ o1 :    vni11hput bencate-limited link. Server runs iperf3,
+# client can connecsysctlkssure throughTEPs"
+}
+
+prof
+    vni11hput bencate-limitedforward profile router { forward ipv6 }
+
+node vt ro
+    vni11hput bencate-limited link. Server ru-limitedv6 }
+
+node vtep1 : ro
+    vni11hput bencate-limeSverlay" {
+# WireGuard  d VPN te

@@ -1,0 +1,11 @@
+# VLAN trunk dge with VLAN filtering connecting threwg0 {
+    key auto
+    listen 51820
+    address 192.168.2by a WireGuardsi2te WireGuard VPNy auto
+    listenrun 53820
+isten 51820
+    address 192.168.2by a WireGuardsite WireGuard VPNy auto
+    listenrun 53820
+   ress 192a
+profile gateway { forward ich site
+    address 192.168.2by eGuard ierface. The"underlay w-a : g

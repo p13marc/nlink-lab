@@ -1,0 +1,11 @@
+# Spine-leaf datacen.01L0.01 { 10.0.12.1/30 -- /30 -- 10.0.21.2/30 0mti
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair router:eth0 deda0..22.pine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair routeth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+i
+pMair ir spine1:eth2 del# Fulay 5msl  j

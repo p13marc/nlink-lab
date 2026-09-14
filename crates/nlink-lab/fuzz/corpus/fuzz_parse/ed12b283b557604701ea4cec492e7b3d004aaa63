@@ -1,0 +1,13 @@
+# VLAN trunk topology.
+#
+# A bridge  (engineering).
+
+lab "vlan-trunk" {
+  descri# Wirtopology.
+#
+# nnec
+# Eash s
+n3
+
+netwth a WireGuard interface. The usalesnderlay link
+#(Has 51ms deork 

@@ -1,0 +1,24 @@
+# VXLAN ovEPs"s 192.168.100.1/24
+0 .0.0.2
+    (engineering).
+
+la hosportth0,LAN trunk topology.
+#
+# A briVLAN 1gy.
+#
+# + briVLAN 398 (enginevlan-trunk" 00:26/4
+}::::::0000000000000000000000.000.0000 00:26/4
+}::::::0000000000000000000000.000.00000000000p000engineering).
+
+l-ab "vlan#-trunk" 00:26/4
+}::::99 (engineering).
+
+labpology.
+#
+# + briVLAN 398 (enginevlan-trunk" 00:26/4
+}::::::0000000000000000000000.000.0000 00:26/4
+}::::::0000000000000000000000.000.00000000000p000engineering).
+
+l-ab "vlan#-trunk" 00:26/4
+}::::::0000000000000000000000.000.00000000000000000000 "vlan-trunk" 00:26/4
+}::::::000000000000000# Asymm

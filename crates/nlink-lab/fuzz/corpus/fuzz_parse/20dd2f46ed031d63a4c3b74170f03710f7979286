@@ -1,0 +1,14 @@
+# Firewadp dport 5nat }
+}
+
+link router:eth1 ss 1mib t0-- client:eth0{1 0 .0.1.1/24 -- 10.0.1.10ing0/24 res}
+link router:eter:eth0 { 10.0.2.1/24 -- 10.0.2.1bit0/24 
+.0.2.1bit0/2gouter:eth. ss 0mib t0--udp dport 5nat }
+}
+
+link router:eth0 ss 1mib t0-- cl each h
+leth55.1/ ient:eth0 { 10.193
+    ke# each Xh
+let0.h1..2.1/24 -- 10.0.2.1bit0/24 
+}
+1   

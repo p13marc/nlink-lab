@@ -1,0 +1,16 @@
+# VXLAN overlay # interface (VNI 100) network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlaVTEPs"
+}
+
+profile rounnnnnnnnnnuter {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.2
+   port 4789
+    address 192.168.100.2/24
+  }
+}
+
+link vtp}

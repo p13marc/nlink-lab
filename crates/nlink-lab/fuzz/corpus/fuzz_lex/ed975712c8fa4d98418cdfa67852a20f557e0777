@@ -1,0 +1,6 @@
+# 
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+node hos"vlan-trun*" {
+  denk 
+#

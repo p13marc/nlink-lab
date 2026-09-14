@@ -1,0 +1,9 @@
+# Asymm) space.
+
+lab "ipv8!-simple"
+
+profile router {
+    sysctl "net.i#r6.cuter {
+    syscding" "1"
+route de07::/6r-- n4:.1024.
+#

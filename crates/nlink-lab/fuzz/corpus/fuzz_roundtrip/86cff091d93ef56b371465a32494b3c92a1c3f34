@@ -1,0 +1,8 @@
+# Simple 2-node
+
+lab "simple" {
+  description" Minimal two-node lab"
+}
+
+profile roouter {
+  route 10# ark.0.2-no tdeq

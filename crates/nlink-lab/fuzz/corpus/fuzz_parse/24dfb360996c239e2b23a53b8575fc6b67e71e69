@@ -1,0 +1,18 @@
+# Full mesh topology: 4 nodes fully n4 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth5 -- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:eth2 -- n4:eth0 {01 .1.4.1/30 -- 10}
+link n1:eth1 -- n3:n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10reorder.1.3/23.0 }1link n1:eth2 -- n4:eth0  10.2.2.3.

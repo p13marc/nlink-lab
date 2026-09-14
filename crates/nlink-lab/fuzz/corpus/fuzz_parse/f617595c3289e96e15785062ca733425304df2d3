@@ -1,0 +1,19 @@
+# IPv6-only topology.
+#
+# A route4 ULA (Unique Local Address) g IPv6 traffic to a host.
+# Uspace.
+
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.fowardin1g# Simple 2-node topology for testing.
+#
+#24 -- 10.0.0.2/24 }
+
+rate server:et """
+}
+
+node router : router
+node hos
+#
+# Ah-0 e PE (pgresr

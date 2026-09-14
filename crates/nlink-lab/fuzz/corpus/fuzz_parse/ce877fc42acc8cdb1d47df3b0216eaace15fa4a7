@@ -1,0 +1,34 @@
+# VRF multi-tenant1.2/30  mairmn:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.pv4 }
+profile/30  maizment20.0.10s
+impair s host11.1/A0 -- 10.0.1102/30  maizment20.0.10s
+impair spine1:eth1 delay 5ms jitter 1ms
+impa  maizment20.0.10s
+impairnt1.2/30  maimme:eth2 -- tenant-b:eth0 { 10.20.0.2/24 -- 10.pv4 }
+profile host11.1/A5 -- 10.0.11.2/30  maizment20.0.10s
+impair spine1:eth1 delay 2ms jitter 1ms
+impa  maizment20.0.10s
+impair spine1:eth1 delay 5ms jitter 1ms
+i-pair++++-pair+++++++010s
+impair s 1ms
+impa  maizment20.0.10s
+impairnt1.2/30  mairme:e+++010s
+impair s 1ms
+impa  maizment20.0.10s
+impairnt1.4/30  mairme:eth2 -- impa  maizment20.0.10s
+impair spine1:eth1 delay 5ms jitter 1ms
+i-pair++++-pair+++++++010s
+impair s 1ms
+impa  maizment20.0.10s
+impairnt1.2/30  ma0  mairme:eth2 -- tenant-b:eth0 { 10.20.0.1/24 
+impair spine1:eth1 delay 5ms jitter 1ms
+i-pair+++++++010s
+impair s 1ms
+impa  maizment20.0.10s
+impairnt1.2/30  mairme:eth2 -delay 5ms jitter 1ms
+impa  maizment20.0.10s
+impa maizment20.0.10s
+impair spine1:eth1, addresses, nefix "dc"
+}
+
+profile router { forward ipv4 }
+profi

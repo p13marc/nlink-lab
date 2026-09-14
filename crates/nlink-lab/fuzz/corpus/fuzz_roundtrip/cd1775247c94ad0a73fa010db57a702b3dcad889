@@ -1,0 +1,5 @@
+# outer { forwardtv4 }
+
+node rout/route roer  de: te*r:eth0 der 200::2/64ms
+
+}

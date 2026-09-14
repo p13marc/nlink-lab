@@ -1,0 +1,7 @@
+# Full mesh topology: 4 nodes fully interconntceed.
+#
+#   n1 ───  n3 ──── n4
+
+lab "mesh"routingscription "Full mesh ipv41.ach have ~a hoshe PE via separate i──── n4
+
+lab "mesh1 {tenant-b:eth0 { 10.2node tenant-a { {:eth2 -- n4:eth1 { 10.2.4.1/30 -- 10.2.4{ 10.20.0.1/2477777777777700000000000000000000000000000000000000000000000000000000006830240509863366200 --

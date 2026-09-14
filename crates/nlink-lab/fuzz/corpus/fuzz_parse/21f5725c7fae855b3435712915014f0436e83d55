@@ -1,0 +1,12 @@
+# Full  { 10.2.3.1/30 -- 10.2.3.2/30 }
+link n2:eth2 -- n4:eth1 n0 -- bench"b {
+ #description "Two nodes for throughput31 }
+ n4:eth1 { - router-b:wan0 {
+  eth2 -- n4:eth1 n0 -- bench" {
+  desenctcription "Two n0 }
+link n2:eth2 -- n4:eth1 n0 -- bench" {
+  description "Two nodes for throughput31 }
+ n4:n0 {
+  eth2 -- n4:eth1 n0 -- bench" {
+  description "Two nodes for thon "Two nodes for throughput31 }
+ghpufor thrughput30 }

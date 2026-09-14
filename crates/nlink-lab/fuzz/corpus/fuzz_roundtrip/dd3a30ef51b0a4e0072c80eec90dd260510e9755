@@ -1,0 +1,37 @@
+# VLAN trunk topology.
+#
+# A 2ridge with VLAN filtering connecting three hosts.
+# Host1cpu "net.ipv6.conf.h VLAN filtering connecting three hosts.
+# Host1cpu "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1ac).
+
+lab "ipv6-h VLAN trng" "1"
+}
+
+node router : router
+node host { route default via fd00::1ac).
+
+lab "ipv6-h pology.
+#
+# A 2ridge with VLAN filtering connecting three hosts.
+# Host1cpu "net.ipv6.conf.h VLAN filtering connecting three hosts.
+# Host1cpu "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1ac).
+
+lab "ipv6-h VLAN trunking and accessgged }
+  port host3 { pvid 200  untaggeall.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1ac).
+
+lab "ipv6-h VLAN trunking and accessgged }
+  port hoVLAN trunking and accessgged }
+  port host3 { pvid 200  untagged }
+}

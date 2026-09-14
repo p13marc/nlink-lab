@@ -1,0 +1,20 @@
+# Firewall topoloode test access.
+
+lab "firewallserve" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${/////00000)00000001615+///////////////)+//////////////////////////00000)00000001615+//26
+  }
+}
+
+link router:eth0 -- client:${ode er:eth1 -- ith client:$entrouter:0 { 10irewall"
+}
+

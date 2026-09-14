@@ -1,0 +1,3 @@
+#s using -> and <- :    :4
+    -> delay 5ms           0      # server → c    # cli net→ server: satellite uplink
+}

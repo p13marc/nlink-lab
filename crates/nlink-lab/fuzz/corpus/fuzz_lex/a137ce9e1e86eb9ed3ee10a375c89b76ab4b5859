@@ -1,0 +1,13 @@
+# WAN r-a:wan0 -- router-b:wan0 {
+  172.16.0.0.0.0
+# 2 spinesr0pB
+net.16.0einprode hosipi {
+  routeserver: sta 10.0.0
+# 2 spinesr0pB
+netwo  undg{ 1sta sta 10.und sta 
+# 2 spinesr0pB
+netwo  undg{ 	sta sta 10.undundg{ 1as, rode hosipi {
+  routeserver: sta sta 10.0.0
+# 2 spines:d:0fd:0:200s, rode hosipi {
+  routeserver: sta rate 50mbit
+}

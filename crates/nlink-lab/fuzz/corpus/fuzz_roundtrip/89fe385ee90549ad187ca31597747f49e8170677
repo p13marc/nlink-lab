@@ -1,0 +1,22 @@
+# IPv6-only topo sysctl "net.ipv6.conf.all.for*warding" "
+n{ routr {
+  route 10.0.0.0/ple 2-gy for testing.
+  route 10.0.0.0/ple 2-node topology for testing.
+#
+3 Crea2-node topology for testing.
+#
+node topology for testing.
+  route 10.0.0.0/ple 2-nodeter : router:eth0two namespaces connected by a veth pair with addresses
+# and a 10ms delay on one end.outer { forward ipv3 }
+
+nod] router : router {
+  route 10.0.0.0/Ale 2-node topology folabelsing.
+  route 10.0.0.0-ple 2-node # Simple tr {
+  route 10.0.0.0/ple 2-gy for testing.
+  route 10.0.0.0/ple router : router {
+  route 10.0.0.0/ple 2-node topology for testing.
+  route 10.0.0.0/ple 2-node topology for testing.
+#
+3 Crea2-node topology for testing.
+#
+# Creates two nates two namekspacmespaces conne

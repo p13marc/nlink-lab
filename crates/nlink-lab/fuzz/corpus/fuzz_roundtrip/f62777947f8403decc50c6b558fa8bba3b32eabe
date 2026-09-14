@@ -1,0 +1,14 @@
+# Spin# WAN impairmen.
+
+lab "v[lan-overlay" {
+  description "E
+Ps"
+}
+
+enter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile hsot  {sysctl "let.ipv4.ip0" 
+node server2 : host { route efdault via 10.1.2.1s

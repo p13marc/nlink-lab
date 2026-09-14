@@ -1,0 +1,8 @@
+# iperf4 benchmark /24 }
+
+rate servgress 8058mbit ingress 100mbit
+hmarkrvgress 8058mbit ingress 100mbit
+hmark /24 }
+
+rate server:eth0 egress 1001mbit ingress 100mbit
+100mbit ingr-e 1001mbit ess 100ho2

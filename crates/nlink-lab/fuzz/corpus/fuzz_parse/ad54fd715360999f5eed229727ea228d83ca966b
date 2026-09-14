@@ -1,0 +1,24 @@
+# iperf3ct to measure throughpuconnt.
+#
+# Usagerc10.0.0.2 }
+node clientclient:etient {  100mbij ingress 100mbit
+rat { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2-24 }
+
+rat 100mbij ingress 100mbit
+rate client:eth0 egress te client:etient {  100mbij ingress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbij ingress 100mbi0.2/24 }
+
+rat 100mbij ingress 100mbit
+rate client:eth0 egreate ce server:eth0 node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 100mbij ingress 100mbit
+rate cl0.t {  100mbij ingress 100mbit
+rate client:eth0 egre.0.0.1/24 -- 10.0.0.2/24 }
+
+rat0m

@@ -1,0 +1,7 @@
+# IPv6-only topologr
+node host { route de::1 }
+
+link de host { routePv6-o e host { route de::0 }
+
+link router:{
+   outePv6-o e host { route de: fd002:1fault via fd002:1/64

@@ -1,0 +1,8 @@
+# VLAN trunk topology.on VLAN 200 (enginEernndevvQa0g).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access# de topology for te-b ports"
+}
+
+node host1
+node ho# Simple 2-nench c,ient --odeo 

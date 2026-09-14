@@ -1,0 +1,8 @@
+#ted -t 5
+
+lab "iperf-bench" {
+  description "Twomnng"
+}
+
+node rver { route default via 10.0.0.2 }
+node client { route default 

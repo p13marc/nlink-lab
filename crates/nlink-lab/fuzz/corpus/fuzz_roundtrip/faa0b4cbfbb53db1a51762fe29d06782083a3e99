@@ -1,0 +1,16 @@
+# IPv6-onby t{{{{{{{{{{logy.
+#ed }
+ clie fd00:1tn6/::etd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e ::eth04 --  fd00
+
+rat4
+e s4 -- fd00::imp { 10.0.0.1/24 -- 10.0.0}./42 2
+
+rat4
+e ::eth00::1/64 -- fd00*:2/6 {  }
+
+rat4
+e server:eth0 eges 100mb 
+clB:ent:eth0 egperf- benchmark 

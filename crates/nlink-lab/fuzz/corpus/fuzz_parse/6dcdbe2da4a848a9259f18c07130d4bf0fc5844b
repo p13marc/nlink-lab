@@ -1,0 +1,12 @@
+# VXLAN overlay tble 20
+lab "vnt" {
+  description "PE router with VRF r wudp VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node peuter {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default dev eork fabrictagged }
+ t3 is ode n

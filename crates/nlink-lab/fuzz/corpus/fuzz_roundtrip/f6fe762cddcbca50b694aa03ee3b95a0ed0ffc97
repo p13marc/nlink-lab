@@ -1,0 +1,13 @@
+# Zouter tuter:et;h0 -- host1:eth0 {
+  1001...1/24 )- 1k routePv6 traer:eth0# iperf3 benchmughput.
+#
+# Usage after dep#perf6 -c 10.0.0.2 -t 5
+fire
+lab "iperf-bench="bit
+ter forwarouterh0 -- host1:eth0 {
+  1001...11k routePv6 traffic to a host.
+#er
+nodeshed
+# conne*cti# IPv6-only topoter forwarouter:eth0 -- host1:eth0 {
+  1001...11k routePv6 traffic to a host.24
+}

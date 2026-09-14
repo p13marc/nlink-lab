@@ -1,0 +1,9 @@
+# WireGuardernet latency.
+
+lab "wireguard-vpn" {
+ version dn "Site-to;-site WirGuard VPN over WAN"
+}
+
+profile 192.168.2.1 }
+
+# WAN links 0.1%

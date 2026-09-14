@@ -1,0 +1,5 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional impai
+node server { f  -> delay 5ms                  # server → cli → server: satellite uplink
+}

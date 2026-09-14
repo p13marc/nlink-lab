@@ -1,0 +1,6 @@
+# nt→server hanpk.
+
+lab "asymmetric"
+
+node servclienet.ipv4.i.ip_f { route defa# clite uplink
+}

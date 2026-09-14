@@ -1,0 +1,16 @@
+7#  client=:eth0 egress01 0mbit in ient:e>>>>>>>>>>>>>>>>>>tagg ded th0 egress 100mbit }}poia fd00::1 }
+
+link router:eth0 -- host:eta hosting a VXLAN
+# interface (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  d each hosb "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 200) for the overlay network.
+
+lab "vxlan-overlay" {77777777777777777777777777777777777777nk, each hosb "vxlan-overlay" {777777777d 100  bit ingress 755555#{
+1m00bit
+rate

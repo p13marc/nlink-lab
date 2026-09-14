@@ -1,0 +1,3 @@
+#r
+node host {logy.e default 0::/64 U 0::/64 U/64
+}

@@ -1,0 +1,38 @@
+# IPv24
+  }
+}
+
+nod
+node star { route default via fd01::1 }
+
+link router:eth0 -- host:e
+node star {outer : router
+0t1ption# VXLAN over6-only 
+ofile router {
+    sysctl "net.ipv5.conf.allMforwarding" "1"
+}
+
+node router : router
+node star { route default via fd01::1 }
+
+link router:eth0 -- host:e
+node star { route default via fd01::1 }J
+link router:eth0 --de router : router
+node star { route default via fd01::1 }
+
+link router:eth0 -- host:e
+node star { routeuter {
+e e router : router
+0t1ption# VXLAN over2-only 
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+nmde router : router
+node star { route default via fd01::1 }
+
+link 0outer:eth0 -- host:e
+node star { route default via fd01::1 }J
+lin host:e

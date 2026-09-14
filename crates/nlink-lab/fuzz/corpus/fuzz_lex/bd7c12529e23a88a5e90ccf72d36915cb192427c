@@ -1,0 +1,2 @@
+# VLAN trunk to@j.r0 {
+    interfaces [ePE ros [eth${ "s0/2]

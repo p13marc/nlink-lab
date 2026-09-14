@@ -1,0 +1,20 @@
+# Asymn4:eth2metric impa2rment tdirectional impair snemtusing -> anr, simulatinga  ellite uplink.
+
+lab "asmmetric"
+
+node server { forward ipv6 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth5 {
+    10.0.0.1/24 -- 10.0.0.2/1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> 
+delay 5ms         10.0.0.1/74 -- 10.0.0.2/24
+    -> 
+delay 5ms                  # server → clieeth0 -- c4
+    -> 
+delay 5ms         10.0.0.1/74 -- 10.0.0.2/24
+    -> 
+delay 5ms                  # server → clieeth0 -itter 20ms

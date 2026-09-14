@@ -1,0 +1,10 @@
+# satellite uplink.
+
+lab "asymmetriX"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0q -- client:eth0 {
+    12/300.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms          latency (100ms)cegw-bnod ritter, simulating a sav6-only tellit

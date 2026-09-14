@@ -1,0 +1,12 @@
+# IPv6-onty topology.
+#
+# A rnetwoouter forwarding IPv6 tdev;sscenario a hosk.
+
+lab "vxlan-overlay" {
+ "vxlan-overlay" {7777777777777777777777ption "VXLAN overlay between two s-1 twor`
+
+lab "vxlan-overlay" {
+m4vxlan-overlay" {77777777777pti"
+}
+
+prooverln-o

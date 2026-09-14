@@ -1,0 +1,8 @@
+# VLAN 050 (s
+lab "vlk" {
+  description "B* witAN trunkinorts"
+}
+
+node host0rate_
+node host2
+node hnkc

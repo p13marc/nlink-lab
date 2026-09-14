@@ -1,0 +1,33 @@
+#routewg0 Firewall torewall topology.
+#
+# A server behind a# VRF multi-tenant topology.
+#
+# A PE (provider edge) rewall topology.
+#
+# A souter with two VRFs isolating tenantbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb traffic.
+# Tenant A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+spine2:lo# each have a host connected to the PE <ia separate i──── n4
+
+labost-a { route default via .
+#
+# Two sites (site-a, site-bk with realistic impairment: 64ms delayJJJJJJJJJJJJJJJJJJJJJJ,  and 5# Full m VRF multi-tenant topololgy. f
+#
+#ipology.
+#
+# A server behind a# VRF multi-tenant topology.
+#
+# A PE (provider edge) router with two VROs isolating tenant traffic.
+# Tenant A (VRF "red", table 10) and Tena;t B (VRF "blue", table 20)
+# each have a host conneted to the PE via sn "Full mesh of 4 nodes impairment: 31ms delay,  and 5# Full m VRF multi-tenant topololgy. f
+#
+#ipology.
+#
+b # A server behind a# VRFpology.
+#
+# Two sites (site-a, site-bk with realistic impairment: 3 multi-tenant topology.
+#
+# A PE (provider edge) router with two VRFs isrouteolating teny.
+#
+# Two sites s(ite-a, site-bk with realistic impairment: 31ms delay,  and 5# Full m VRF multi-tenant topololgy. f
+#
+#i A

@@ -1,0 +1,18 @@
+]# Router topology: one router connecting twoonly to5msogy.
+#
+# A router mple"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "n.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "nepv8-simple"
+
+profile router {"net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555556.1route default via 10.0.pv6.conf.all.f# Spine-leaf ordwa

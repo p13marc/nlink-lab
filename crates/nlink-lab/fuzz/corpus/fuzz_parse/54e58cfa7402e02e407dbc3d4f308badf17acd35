@@ -1,0 +1,5 @@
+# Spine-leaf da servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix# F "dc"ereld ao

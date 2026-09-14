@@ -1,0 +1,5 @@
+1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu0 } 900
+li/{
+  0ment
+  delay 30ms jitter 5ms loss 0.1% rate 50mbit
+}

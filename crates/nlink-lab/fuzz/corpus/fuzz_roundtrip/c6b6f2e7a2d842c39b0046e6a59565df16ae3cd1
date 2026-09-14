@@ -1,0 +1,28 @@
+# Rrateouter ter { forward ipv4 }
+
+n
+# Uses fd#00::/6 L4UA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profile rou route default via fd00::1 }
+
+link routert:0- eh- host:eth0${
+    fd00::1/64 -- #                       eth0    eth1
+
+la,@"routeer → client: low latencyt.
+# Uses fd#00::/6 L4UA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+p0::1/64lient: low latency
+  r connecting two hosts.
+#
+#   hos ──── hosimp(10.0.2.2)
+ a host.
+# Uses fd#00::/6 L4UA (Unique Local Address) space.
+
+lab "ipv6-simple"
+
+profil/!24
+}

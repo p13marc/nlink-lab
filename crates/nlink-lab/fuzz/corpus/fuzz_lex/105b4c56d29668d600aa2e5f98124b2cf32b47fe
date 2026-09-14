@@ -1,0 +1,11 @@
+
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n# Full mesh topology: ode n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2{ 10.1.3.51

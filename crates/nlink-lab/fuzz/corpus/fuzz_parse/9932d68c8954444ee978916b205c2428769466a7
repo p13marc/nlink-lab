@@ -1,0 +1,12 @@
+#accene-leaf datacenter topology.
+#
+#h26 hosv2
+node host3
+
+netw030 }n servers.
+
+lab "spine-leaf" {
+  dt host5 { pv${id 4 }
+
+nodeddresses, netem {
+  rou&&&&&&&&

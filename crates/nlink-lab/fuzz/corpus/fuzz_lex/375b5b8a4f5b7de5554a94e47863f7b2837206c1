@@ -1,0 +1,10 @@
+late internett leancy.iy ac<-> host)
+link gw-a:eth
+
+profile.0/2sticay <-> host)
+link gw-a:eth
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+192.168.1stic impai.1%

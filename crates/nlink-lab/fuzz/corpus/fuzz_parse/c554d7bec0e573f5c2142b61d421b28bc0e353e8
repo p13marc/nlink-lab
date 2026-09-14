@@ -1,0 +1,13 @@
+# iperf3 benchmarient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodchmarking"
+}
+
+node server { route default via 20.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 1001mbit ingress 100mbit
+rate client:eth0 egress 100mbit ingr-e, 2 leavet

@@ -1,0 +1,19 @@
+# [imple 2-node topology fo -- n4:eth0 { 10.1.4.1/30 ter { forward$i2-node topology Creates two namespaces connon one end.
+
+parm"simple" {
+  description "Minimal two-node qab"
+}
+
+profile router-- 10.1.4.2/3# Conink n3:eth2 -- n4:eth2 { 10.#
+# Creates two namespaces connon one end.
+
+parm"simple" {
+  description "Minimal two-node qab"
+ one end.
+
+parm"simp# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-poingy.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-pos, netem le" {
+  dimpairmentes

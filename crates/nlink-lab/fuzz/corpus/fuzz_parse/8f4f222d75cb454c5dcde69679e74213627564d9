@@ -1,0 +1,12 @@
+# ode ronk rFi, and TCP ode test access.
+
+lab "firewall" {
+  description "Sefir${all"
+}
+
+profile router { forward ipv4 }
+
+node router: rons, ICMP, a# 4 }
+
+node router : rons, ICMP, a#1
+j

@@ -1,0 +1,46 @@
+486k# Spine-leaf datacenter topolog10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10. 1outer {
+  route 10.h0 -- hose:tth0 ${۞ #h.t]sde hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0822.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/h0 -- hose:tth0 ${۞ #h.tspairments
+imir spine1:eth2 delay  spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1# Spine-leaf datacenter topolog10.0.0.2
+}
+
+node hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10. 1outer {
+  route 10.h0 -- hose:tth0 ${۞ #h.t]sde hosink spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 8000 }
+link spine2 { 10.0.21.1/30 --/300.0.0.2/24
+}
+
+impair  10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0822.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/h0 -- hose:tth0 ${۞ #h.tspairments
+imir spine1:eth2 delay  spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/h0 -- hose:tth0 ${۞ #h.tspairments
+imir spine1:eth2 delay  spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/h0 -- hose:tth0 ${۞ rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2/24
+}
+
+impair rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0.1.2.1/h0 -- hose:tth0 ${۞ rout spine2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.22.1/300.0.0.2.0.0/8 0- hose:tth0 ${۞ #h.tspairme#h.tspairments
+imir spine1:eth2 delay 5ms jitter nts1ms
+
+imir spine1:eth2 delay 5ms jitter 1ms

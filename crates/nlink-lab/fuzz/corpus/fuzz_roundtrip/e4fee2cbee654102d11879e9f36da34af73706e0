@@ -1,0 +1,23 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs con0.2
+    remote 10.0.0.1
+    port 4789
+    address ,192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+  port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtup1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm100 {
+    vni 100
+    local 10.0.0.2
+ address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0mmmmmmmmmmmmmmmm.0.2/24 }

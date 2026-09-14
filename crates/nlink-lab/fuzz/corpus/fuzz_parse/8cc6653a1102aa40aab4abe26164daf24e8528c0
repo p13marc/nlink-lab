@@ -1,0 +1,18 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+ 1deScription fabric {
+  vlan
+
+                                                                                                       IPv7 traffic to a host.
+# Uses fd00::/64 ULA (Unique L@fn:ocal Address) space.
+
+lab "ipv8-sile"
+
+                                          ]                                                                                 sysctl "net.iwarding" "1"
+}
+
+node routr e: router
+node host {t3:eth0]
+  vlan 10                                      ort hvlan-filtering
+  members +# Full mesh topology: 3 nodes fully interc#  [h

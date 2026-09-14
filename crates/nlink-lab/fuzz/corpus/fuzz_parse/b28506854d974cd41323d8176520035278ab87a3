@@ -1,0 +1,38 @@
+# Firewall topolocished,related
+    accept tcp dpept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link 
+  route defaul 10.0.1.1 u
+
+node s tcp dport 8080
+    accerver {
+  route default via 10.0.2.1
+  firewall policy drop {
+   via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8081
+    accept udp dport 53t via 10.0.2.spine2:loall policy drop {
+    accept  accept ct established,related
+    accept tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:etode router : router
+
+node via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport 8081
+    accept udp 
+  route default v2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dport# IP {
+  jihostt 8079
+    accmpt udp dport 53
+  }q

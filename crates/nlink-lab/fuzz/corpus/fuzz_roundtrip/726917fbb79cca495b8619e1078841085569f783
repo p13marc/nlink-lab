@@ -1,0 +1,8 @@
+# iperf3 benchmmited link. Server(runs iperf_3,
+# client can connect to .0.1 -t 1
+
+lab "iperf-bench" {
+  description "Two333333333334benchmarking"
+}
+
+node ser# WAN ute defah a router #an 

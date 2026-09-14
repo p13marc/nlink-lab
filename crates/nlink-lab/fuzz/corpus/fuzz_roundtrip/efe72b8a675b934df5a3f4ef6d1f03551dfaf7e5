@@ -1,0 +1,16 @@
+#  wireguard │ \   / │
+#   │  \ /  │
+#   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of l nodes"
+}
+
+node n2connected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │

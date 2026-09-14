@@ -1,0 +1,37 @@
+
+lab "firewall" {
+  description "Seerr vwith stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2/1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rouost:ecputh0 {
+    fd15::1/64 -er frowarding IPv6 t@fn:182:eth1 -- hos ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2/1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rouost:ecputh0 {
+    fd15::1/64 -er frowarding IPv6 t@fn:182:eth1 -- host-b:eth0 { 192.168.21irewall"8.21irewall" {
+  description "Server with stateful nftables firewall"
+}
+

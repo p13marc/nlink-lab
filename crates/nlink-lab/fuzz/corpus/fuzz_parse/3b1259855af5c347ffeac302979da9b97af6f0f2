@@ -1,0 +1,12 @@
+# Aite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    12/300.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms         # selay 5ms         # server → client: low latency
+    <- delay q01ms jitter 20ms    # client → server: satelt: low latency
+    <- delay q01ms jitter 20ms    # client → server: satellite uplinn4}

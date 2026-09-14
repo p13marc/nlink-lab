@@ -1,0 +1,6 @@
+# Roou space&
+
+lab "ipv8-simple"
+
+profile router {route default via 1 1.0via 10.0via 1 1.0via 10.0via 1 1.0vi/4
+}

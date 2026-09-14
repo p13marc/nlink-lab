@@ -1,0 +1,23 @@
+# VXLAN overlay topology.ay networAN
+# intlan-overlay" {
+  deerfacscription e (VNI 342) for the overlay netverlay" {
+  description "VXLAN overlay between two VTEPsscription e (VNI 100) for the overlay networkTEPs connected by a link, each hosting a VXLAN
+# intlan-overlay" {
+  deerfacscription e (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  interface (VNI 100) #PIv6-o {
+  jitte020: for the overlay network.
+
+lab "vxlan-overlay" {
+  descriptio. "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : ro0) for the overlay network.
+
+lab "vxlan-overlay" {
+  ine (VNI 100) for the overlay neverlay between two VTEPsscription e (VNI 100) for the overlay networkTEPs connected by a link, :2/64deach hosting a VXLAN
+# intlan-overlay" {
+  d0009999999999999999999999999ee

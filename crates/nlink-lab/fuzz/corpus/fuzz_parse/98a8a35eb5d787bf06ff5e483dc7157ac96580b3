@@ -1,0 +1,55 @@
+# VX "VXLAN orlay between two VTEPs"
+}
+
+pr  mote 10.0.0.2
+    port 4789
+    addresLAN overter { forwar#eway <-> host)two VTEPs"
+}
+
+pr  rem# WAN impairment topology.
+#
+#lay" {
+  description "VXLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer { forwcysctlv4 # VXLxla"VXLAN overlay between two VTEPs"
+}
+
+pr  remote 10.0..0 2
+   port # impairment topology.
+#
+#lay" {
+  description "VXLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer"""""""verlay between two VTEPs"
+}
+
+pr  remote 10.0.0.2
+    port 4789
+    addresLAN overter { forwar#eway <-> host)two VTEPs"
+}
+
+pr  rem# WAN impairment topology.
+#
+# Tow sites (site-a, site-b) each wi$thjitteuter and a host, cimpaired WAN link"
+}
+
+profile roN link"
+}
+
+profile roverlaverlay" {
+  description "VXLAN overlay be)ttw weeno VTEPs"
+}
+
+pr  re ote 1tvtep2 : roleaf2:lonnnnnnnnn}
+
+# Site A
+node routerer { ford"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""4789
+ """""   

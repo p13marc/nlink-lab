@@ -1,0 +1,7 @@
+E router4 ni 100
+ss 193.168.100.1/2pool forwarding IPv6 traffic to apot2mote )sp {
+  vxlan vxl0 {
+   1ro0pt  4789
+    address 193.168.100.1/2pool forwarding IPv6 traffic to apot  4789
+    address 193.168.100.1/2pool forwarding IPv6 tra00.1/2pool forwarding IPv6 traffic t  it
+rat2    e 2 ssl

@@ -1,0 +1,13 @@
+# W n3 ── n4
+
+lab "mesh" {
+  description "llnodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+g.
+outer-a.  : }

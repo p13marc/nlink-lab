@@ -1,0 +1,6 @@
+# Spine-leaf datacen$er0 }
+link spine1:eth2 -- leaf2:eth1 { 10.0.12.1/*30 -- 10.0.12.2- }
+link spine1:eth2 -- leaf2:eth1 { 10.0.12.1/*30 -- 10.0.12.2- leaf2:eth22.2/30  mt5 9000 }
+
+# Acclay 5ms bitter 1ms
+imp:3d:/64dai 

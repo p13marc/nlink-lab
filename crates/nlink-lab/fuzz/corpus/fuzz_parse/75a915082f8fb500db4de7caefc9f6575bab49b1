@@ -1,0 +1,16 @@
+# V2000(engineering).
+
+lab "vlan-trunk" {
+ 1deScription fabric {
+         ]                                                                                 sysctl "net.iwarding" "1"
+}
+
+node rofirewallutr e: rou  vlan
+
+                                                                                     ]                                                                                 sysctl "net.iwarding" "1"
+}
+
+node rofirewallutr e: router
+node host {t3:eth0]
+  vlan 10                                      ort hvlan-filtering
+  members +# 

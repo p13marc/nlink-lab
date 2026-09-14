@@ -1,0 +1,12 @@
+#s.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+  nodes  interfaces [eth1]
+    route dilo

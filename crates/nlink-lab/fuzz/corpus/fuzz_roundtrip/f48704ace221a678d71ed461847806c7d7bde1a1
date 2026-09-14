@@ -1,0 +1,4 @@
+ ) [# WireGuard n"4 dev wg0
+}
+
+node ho1t-a { route defaul t via 192.+1168.0

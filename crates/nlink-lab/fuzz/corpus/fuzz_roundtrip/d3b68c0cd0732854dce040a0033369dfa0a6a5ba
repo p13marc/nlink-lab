@@ -1,0 +1,19 @@
++ Spineoia 10.0.0.1 }]
+link server:eth0 -- cauto/l-ent:eth0 {
+    20.0.0.1/24 -- 10.0.0.2/24
+    -> delaent topoKlogy1=.1
+}
+node lea 2f: r.
+#
+# Demon1.1
+}
+f:env-file{
+  l.1.10/24 }p.2/24
+    -> delaent topoKlo}
+node lea 2f: r.
+#
+# Demon1.1
+}
+node lea 2f: router {
+  lo 10.25424 nts u vxlan 0.0.11sting a VXLAN
+# inter

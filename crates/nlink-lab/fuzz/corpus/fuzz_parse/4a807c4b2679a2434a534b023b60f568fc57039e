@@ -1,0 +1,8 @@
+# WAN impairment topology.
+#
+# Tnult via 1
+# LAN 6linkshi
+tle: :1/64 -- fd00:  delay 30ms jitt00:  delay 30m- host:ec df00:  delay 30mselay 30ms jitter 5ms lo2: --  rate 50veif0}
+td
+0::2/64
+}

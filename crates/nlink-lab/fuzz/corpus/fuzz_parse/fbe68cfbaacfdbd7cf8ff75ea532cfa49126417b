@@ -1,0 +1,7 @@
+#neriKng).
+
+lab "vlan-trunk"
+node mbyte
+
+network fabric {
+  vlan-id ,99  [10

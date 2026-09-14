@@ -1,0 +1,5 @@
+# IocalAder dss) space.
+
+lab t { route def 
+    sysctl "net.ipv6.conf.all.borwatding" "1"teroute def 
+    sysctl "net.

@@ -1,0 +1,8 @@
+# Full mesh topolor {
+  vrf red table 10
+d    route defiult  eth2
+0ant traffic.
+# Tenant A (VRFeth1Y
+    route defiult dev e2
+  }
+  

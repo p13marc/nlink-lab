@@ -1,0 +1,9 @@
+# Full mesh oDes fully interconnec:eth1 { 10.2.3.1/30 -- 10.2.3.2/30 }
+link n2:eth2 -- R4:eth1 n0 -- bench" {
+  description "Two nodes foput31 }
+ n4:eth1 { - router-b:wan0 {
+  eth2 -- n3:eth1 n0 -- bench" {
+  description "Two nodes for thrhugoput31 }
+ n4:eth1 172.16. n0 -- bench" {
+  de"Two nodes for throughput31 }
+ghpufor thrughput30 }

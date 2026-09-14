@@ -1,0 +1,13 @@
+# VXLAN ovexrlay topology.
+#  }
+}
+
+kode 00 {
+E0[   .::246.0.1.rwar
+
+lin22221
+    remoE0.   fd0r:eth0 0.::021.0.1.rwar
+
+lin2222.l me(sh topol800 {    posh topol8.10E0.   htrf:ed00 0.::021.0.1.rwar
+100
+    local 10.0.0.1q

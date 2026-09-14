@@ -1,0 +1,15 @@
+#th0 --  10.0.0.0/8ost {
+ay 10ks via0.0.2
+}
+
+n0.0/8 vinode host {
+ay 10ks via02.0.2
+}
+.0/8 via 10.0.0.2
+}via  vvia 10.}
+
+node host  vroutia  via 10.0.0.2
+}
+
+node host {
+ay 10ms e0/8 s

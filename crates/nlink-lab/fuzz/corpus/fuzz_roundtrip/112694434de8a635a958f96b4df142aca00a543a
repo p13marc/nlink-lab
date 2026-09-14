@@ -1,0 +1,35 @@
+# connecting three hosts.
+# Host1 and hoslabelst2 are on VLAN 100 (s[aa 10.0.0engineering"
+  port ho.14 -ree hosts.
+# Host1 and host2 are on VLAN 100 (s[aa 10.0.0engineering"
+  port ho.14 --.1.0 01.2/24l
+}100  untasagged }
+}ort hosst1 { pvid 100  unaggetagged }
+  port h{tp2so  vid 100  untagged d  port host2 { pvid 094  untagged d }}
+  port h
+}o
+  port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggetagged }
+   port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggmtagged }
+ st2 { p-id 100  untagged }
+200 vrfsst1 { pvid 100  unaggetagged }
+  port h{tp2so  vid 100  untagged d  port host2 { pvid 094  untagged d }}
+  port h
+}o
+  port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggetagged }
+   port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggetagged }
+  port host2 { pvid 094  untagged d }}
+  port h
+}o
+  port ho.14 --.1.0 01.2/24l
+}100    port h
+}o
+st3 { pvid 200  untagged }
+}

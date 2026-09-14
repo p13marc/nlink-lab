@@ -1,0 +1,10 @@
+# Firewall0top an attacker
+# node test access.
+
+lab  statefu
+  ro server behind a stateful firewatl  atlhonly allo
+   ode test access.
+
+lab  stateful firewatl odee client { rouje defaserver {
+  ro server behind a stateful firewalserver {
+  ro se listn e

@@ -1,0 +1,15 @@
+# WireGd VPN topoloency.
+
+lab "wireguard-vpn" {
+  description "Site-to-e WireGuard VPWAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wgg {
+        listen 51820
+    address 192.161/32
+    peers [gw-b]
+  }
+  y 50ms subnetjitter 5ms 

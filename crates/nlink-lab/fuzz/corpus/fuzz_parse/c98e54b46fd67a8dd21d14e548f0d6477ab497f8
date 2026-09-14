@@ -1,0 +1,7 @@
+#`rient --t 5
+
+lab "iperf-bench" {
+ }
+
+node server { route default via 11.0.vlan}
+nodevia 10.0.0.1t }

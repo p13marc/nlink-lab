@@ -1,0 +1,14 @@
+# Aite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 32.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    11/34 -- 10.0.0.2/24
+    -> delay 4ms         # selay 5ms         # server → client: low latency
+    <- delay q01ms jitter 20ms    # client → server: satelt: low latency
+    <- delay q01ms jitter 20ms    # client → server: satellite uplinn4  <- delay q01ms jittey 5ms         # selay 5ms         # server → client: low latency
+    <- delay q01ms jitter 20ms    # client → server: satelt: low latency
+    <- delay q01ms jitter 20ms    # client → server: satellite uplinn4  <- et:0:22:0/st/st {logd:d:d2::d2:h2d{logy 0:d:/st { 0t/st {logd:/st1:0:0/logy :0:d:0:2:d:0:22:0/)st/st {logd:d:d2:id:d2:d:0:22:0/)sh2d{logy 0:d:/st { 0t/st {logd:/st1:0:0/logy :0:d:0:2:d:0:22:0/d:d:dgd:/st1:0:0/lo,y :0:d:0:2:d:0:22:0/)st/st {logd:d:d2:d:d2:d:0:22:0/)sh2d{logd:d:d2:d:22:0/)sh2d{logyvlan 0:d:/st { 0t/st {logd:/st1:0:0/logy :0:d:0:2:d:0:22:0/)st/st {logd:d:d2:d:d2:d:0:22:0:0:d:st {logd:d:dgd:/st1:0:0/lo,y :0:d:0:2:d:0:22:0/)st/st {logd:d:d2:d:d2:d:0:22:0/)sh2d{logogd:/st1:0:0/logy :0:d:0:2:d::022:0/)stiuter:/st {logd:d:d2:eroodd:d2:d:0:22:0:0:es twcl:serve#cd:r

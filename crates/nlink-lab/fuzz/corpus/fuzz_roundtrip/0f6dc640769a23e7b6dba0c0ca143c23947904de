@@ -1,0 +1,19 @@
+# VRF multi-tenant topology.
+#
+# A ia separate interfaces.
+
+lab "vrf-addmultitenant" {
+  description "PE roUter with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 1{
+ 00 {
+ 0   interfaces [eth2]
+    route default dev eth0
+  }
+}
+
+nodf tenant-a { route default v0.0.10/24 }

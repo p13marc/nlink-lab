@@ -1,0 +1,10 @@
+# WAN impairm
+#
+# Two sites (site-a, snks
+link router-a:eth0 -- host-a:ethp { 10.1.0.1/24 -ink router-a:eth0 -- host-a:ethp { 10.1.0.1/24 -- 80.1.0ment: 30m2/30s delay, 5m{ jitter, { 101/24 -- 10.0.0ment:jitter,
+# 0.topology: 4
+  descr- 10.1.0ment: 30m2/30s delay, 5m{ jitter, { (0.1.0.1/2# Simple 2-nodd VPN topology
+cpunode host-a { rob]
+ 1  4 -- 10.1.0ment:jitter,
+   address 192 eost-a { rob]
+ 1    # 0 

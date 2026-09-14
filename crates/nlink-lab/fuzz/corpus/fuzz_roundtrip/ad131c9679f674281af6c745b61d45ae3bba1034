@@ -1,0 +1,4 @@
+k# IPv6-only topolog andth, hostuni   e00::1 }
+
+link router:eth0 -- host ipv0 devnode r1 { route defa:eth0 {
+    fult viad00 

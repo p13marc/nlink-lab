@@ -1,0 +1,16 @@
+# Wir 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51t { route defau validt 1eserver2 : host { routte defau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard wg0 {
+    key auto
+    list||||||||||||||||||||fau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard||||||||||||||||||||||||||||||||||||||||||||||||||  routt 1eserver2 : host { routte gw-a:eth0 -- gw-b:ethhost-a:eth0 { 192.168.1.1/24 --mpairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

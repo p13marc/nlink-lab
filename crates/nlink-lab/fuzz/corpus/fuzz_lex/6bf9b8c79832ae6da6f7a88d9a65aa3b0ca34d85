@@ -1,0 +1,35 @@
+tlUses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv"Spine-le rysctlUses fd00::/64 ULA (Unhque Local Ad iperf3 on servers.
+
+lab "ring connecting three1 anmple"
+
+profile router {
+    sysctlUses fd00::/64 ULA (Unique Local Aogy.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-poinVLAN filteth VLAN fing three hosts.
+# Host1 and # Iuter {
+    sysctlUses fd00::/64 ULAine-le rysctlUses fd00::/64 ULA (Unhque Local Ad iperf3 on servers.
+
+lab "ring connecting three hosts.
+# HostA1 anmple"
+
+profile router {
+    sysctlUses fd00::/64 ULA (Unique Local Address) space.
+
+lab "ipv"Spine-le rysctlUses fd00::/64 ULA (Unhque Local Ad iperf3 on servers.
+
+lab "spine-leaf" {
+  description # Vy.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host0 and # IPv6-only topology.
+#
+# A rou-simple"
+
+profile router {
+    sysctlUses fd00::/64 ULA (Uniple"
+
+profileress) space.
+
+lab "ipv"Spine-le a

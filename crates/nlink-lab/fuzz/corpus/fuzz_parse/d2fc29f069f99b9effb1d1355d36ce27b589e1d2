@@ -1,0 +1,13 @@
+# Simple 2-e lab"
+}
+
+}
+
+node image
+ay 10ks via  via d:d:d:d:ddddde host 
+{ay000 10ks via  via 10.0.h12
+}
+
+node
+l2P
+v6-

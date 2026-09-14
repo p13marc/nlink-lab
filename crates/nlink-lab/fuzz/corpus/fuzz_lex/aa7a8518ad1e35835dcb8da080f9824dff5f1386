@@ -1,0 +1,59 @@
+E rout {
+    sy tsou wit0
+l
+in pe::e#r wit0
+l
+in pe::e# IPv6-ol: router {
+  route 10.0.0.04444444444
+  route 0
+l
+in pe::e# IPv6-o10uter {
+    sy tsou wit0
+l
+in pe::e#r wit0
+l
+in per {
+  route 10.0.0.
+  r.2
+444444uter {
+ter {
+  r.2
+}
+
+nodde h 10.er {
+  route 0
+l
+in pe::e# IPv6-o10uter {
+    sy tsou wit0
+l
+in pe::e#r wit0
+l
+in pe::e# IPv6-ol: r wit0
+l
+i444uter {
+  nodde h 10.er {
+  route 10.0.0.044444444444444uter {
+  rit0
+l
+in pe10.0.0.044440
+l
+in pe::e# IPv6-o10uter {
+    sy tsou wit0
+l
+in pe::e#r wit0
+l
+i444uter {
+  r2
+}
+
+nodde h 10.er {
+  route 10.0.0.044444444444444uter {
+  rit0
+l
+in pe::e# IPv6-o10uter {
+    sy tsou wit0
+l
+in pe::e#r wit0
+l
+in pe::e# IPv6-o10uter {
+  

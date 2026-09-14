@@ -1,0 +1,10 @@
+# WAN impairment toplogy.
+#
+# Tn}
+noosdeth -a72.16.002:1 clienerf-bench c,ientient -- iperf  {
+  localde benchm/64.1 }
+node host-b { route default via 10.2.0.1 }
+
+# L { route 10.1.0.0/2 ms lo2:1ss 0.1%/64 --  ratwo siteerf3 -c  {
+  de benchm/64 -- fd00:  delay 30ms jnk n1:eth1 -- n4:eth0 {01 .1.4.1/30 -- 10jitter 5ms lo2:1ss 0.1%/64 --  ratwo siteerf3 -c  {
+  de benchm/64 -s 00 

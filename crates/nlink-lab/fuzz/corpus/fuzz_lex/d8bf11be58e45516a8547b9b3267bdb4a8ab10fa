@@ -1,0 +1,16 @@
+# I#
+# fd00::oro
+
+no*05bit
+-i
+t
+- *05bit
+- ms loss 0*05bite*05bit
+- route 2r 5ms loss 0*05bit
+-i
+t
+- *05bit
+- rour 5ms 0*05bit
+- /64bi
+t
+- r

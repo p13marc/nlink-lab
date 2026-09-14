@@ -1,0 +1,13 @@
+E2router4 ni010 
+    local 10.0.0.1
+    remotepot  4789
+    addres2 193.168.100.1/2pool f 100
+    local 10.0.0.1
+    remote )sp {
+  vx789
+    address 193.168.100.1/2pool fowarding I  4789
+    addres2 193.168.100.1/2pool f 100
+    local 1    relan vxl0 {
+   10rpot  4789
+    address 193.370.100.1/2pool fic to apot4789
+    addrerat2    e 2 s~ 

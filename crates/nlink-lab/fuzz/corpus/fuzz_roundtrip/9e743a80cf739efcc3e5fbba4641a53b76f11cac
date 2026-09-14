@@ -1,0 +1,15 @@
+#	v6-onPv6 traffic to a host.
+#imj Uses fd#01::/64 ULA (Unique Local e.
+
+lab "ipv2-simple"
+
+profile router {
+    sysctl ".iding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00:y:2/64
+}

@@ -1,0 +1,24 @@
+# Firewa 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server witftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- cliest:O${ode ronk n arewall" {
+  description "Servebles firewall"
+}
+
+profile routep { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:ethServer with statefles firewall"
+}
+

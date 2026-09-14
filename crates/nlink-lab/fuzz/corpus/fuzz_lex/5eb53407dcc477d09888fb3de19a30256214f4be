@@ -1,0 +1,27 @@
+# WireGuaPNr Vtopology.
+#
+arway {
+  w /32
+    peers [gw-a]
+  }
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .168.1.0/24 dev ient -c 10.0.0.1 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 50miolsfd e gateway { forward qpv4 }
+
+nodeWAN"
+}
+
+profile gateway { forward ie 192nected by .168.1.0/24uter:eth0 delay 10ne end.
+ dev wg0
+}
+
+node o.168.255.2/32
+    peers [gw-a]
+  }
+  route 192nected by .168.1.0hription "Site
+
+imp<

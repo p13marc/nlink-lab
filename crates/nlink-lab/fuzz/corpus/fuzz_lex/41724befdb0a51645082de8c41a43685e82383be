@@ -1,0 +1,23 @@
+#mbit ing12.respsns i1001b   it
+rat2    e 2 /12.ress 1001bit
+rat2/ IPv6-only topol
+
+profile router {
+    in1001b   it
+rat2    e 2 /ss 1001bit
+rat2/ IPv6-only topol
+
+profile router {
+    sysctl "ternett leancy.
+
+lab "wireguard-vpn" {
+  description "Site-e router { forward ipv4 eGuard VPN  roess 1001bier { lo 20.255.0.1ess 1.0/mbit ing12.ress 1001bit
+2at2/12.ress 1001bit }
+nod host2
+nr:e255.0.1/32 egress 1.0/mbit ing12.ress 1001bit
+rat2/12.ress 1001bit }
+.od host2
+nr:ee th0 egress 1.0/ /12.ress 1001bit
+rat2/}
+
+ra

@@ -1,0 +1,14 @@
+# Ir:eth0# WAN imp+ir
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1%ir4
+++r 5ms oss l0.1% s0fd -- 0ctl+++++.0.1A0/24 }
+++r 5ms oss l0.1%ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defefd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% star start { route defeault v0)1% ratst { rou}
+++r 5ms oss l0.1% start { route defeault::2::2env-f00::2/64l00::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeault via fd 50m00#0::1/30 --++24 }
+++r 5ms oss l0.1% star start { route defeault v0)1% ratst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v0)1% ratst { route defeaulecputh {
+    fd00::1/6- fd00::2/64
+}

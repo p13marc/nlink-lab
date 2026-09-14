@@ -1,0 +1,9 @@
+# ipv4.ip Spi5outer { lo 10.255.0.2/32 }
+
+# Leaves
+node*leaf1 :55.0.2/32 node*leaf1 : router {
+  lode*leaf1 : router {
+  lo 10225e 10.0.11.1
+}
+node leaf2 :- r0.0.10/outer {
+  lo 10.224; 

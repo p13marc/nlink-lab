@@ -1,0 +1,11 @@
+# VLAN trA briss ports host3
+
+netwoe host3
+
+networate_limrk0 {
+  host2
+node host3
+
+networate_limrk Fabi{
+  1gg }
+}

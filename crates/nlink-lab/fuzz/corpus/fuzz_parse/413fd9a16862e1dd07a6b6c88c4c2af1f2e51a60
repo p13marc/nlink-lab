@@ -1,0 +1,141 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each withsites (site-a, site-b) each withjitteudc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater andabw-a n"im# Spine-"sp]ne-l  description "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+profairmen}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, connee  description "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+profairmen}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, conneer,
+# 0.1% losr,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  description= "Spi!f datacenter fabric"ntir fabric"
+  prefix "dc1
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipjitteudc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, conneer,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  d
+ri
+ofe router { forwater andabw-a n"im# Spine-"sp]ne-l  description "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+profairmen}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+[[[[1ofe router { forwater and a host, conneer,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  description "Spi!f datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipjitteudc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, conneer,
+# 0.1% loss, and 50mbit raze limiting.
+
+labw-a n"im# Spine-"sp]ne-l  description "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+o(fe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+profaSirmen}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+r host, co
+
+labw-aescrip00tion "Spiaf datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p
+prom3faSirmen}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forwater and a host, co
+
+labw-a n"im# Spine-"sp]ne-l  description "Spi!f datacenter fabric"ntir fabric"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4"
+  prefix "dc3
+}lp
+ri
+ofe router { forward ipv4 }p

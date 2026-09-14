@@ -1,0 +1,16 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 ser0:77:70:772:773:707TEE1..02.1accepblI:e-lea fdatacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4  Leaves
+node leaf1 : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  l0:77:70:772:773:70:7:0.1.2.1 }
+7:7727
+# Fabenter 
+# Fabric links (spi15.124333#33 Wi}re1.1

@@ -1,0 +1,10 @@
+# VLAN thost3
+
+network fabric {J   uaggedntagged }
+ 100 (sales), host3 is on VLAN 200 in(e0 in(egneeHost1 and host2 are on VLAN 100 (sales), host3 L 0V0 in(egneering).
+
+lab "vlan-trunk" {
+  descrips on VLAN 200 in(egne ipv4 }
+
+node vtep1 : router {
+  vxipt# V20on"Brhost3

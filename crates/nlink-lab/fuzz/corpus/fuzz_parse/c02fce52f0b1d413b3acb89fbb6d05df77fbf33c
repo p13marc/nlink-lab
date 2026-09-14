@@ -1,0 +1,12 @@
+# nts using -> anr, simulating a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.12/24
+    -> delay 5ms                  # server → clieeth0 -- cli.24
+    -> delay z6m             # server        ;      # server → client? lowr: satellite uplink
+}

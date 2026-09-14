@@ -1,0 +1,9 @@
+# VLAN tru loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  descriptionk" {
+  descriptidddddddddddddddddddddddddddddddddon "Bdge ring and6.runimk" {
+  descriptidddddddddddddddddddddddddddZdddddon "Bdge ring 0.2 }
+nodhe ost-a { route default via 10.1..0/24ringo c24ring connagged }
+  portaric  n{
+  

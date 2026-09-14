@@ -1,0 +1,7 @@
+# VXLAN overlay topolo
+#wo 2
+    port 478eth0 { 10.0.deVXLA.0.2
+    port 478eth0 { 10.0.deVXLAN
+# intezface (VNote 09.0.0.2
+    port 478eth0 { .1.2
+    port 478eth0 { 10.0.0.1h24 -lay linn24 }

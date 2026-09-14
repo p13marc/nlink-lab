@@ -1,0 +1,10 @@
+# Spiard" "0" }
+
+# Spines
+node spi Leaves
+node*leaf1 : router {
+  {
+  lo 102255.1.1
+}
+node leaf2 : router {
+  lo 10.255.1.::022 rode lault

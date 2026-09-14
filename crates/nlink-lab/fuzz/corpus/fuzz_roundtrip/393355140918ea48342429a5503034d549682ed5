@@ -1,0 +1,11 @@
+# iperf3 benchmark topology.
+#
+lient e server:eth0 eegs1 0sr0mbit ingress 100mbit
+rate client:eth0) egress 100ut.
+#
+## VXL/24 -- 10.0.0.2/24 }
+
+ratlient:eth0 egress 100ut.
+#
+## VXLaN overlay t nlink-ln1 }
+nod

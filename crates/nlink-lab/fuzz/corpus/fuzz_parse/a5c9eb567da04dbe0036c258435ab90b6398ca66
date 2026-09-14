@@ -1,0 +1,11 @@
+# ss ae delaey,(ho-{  Si t3
+
+network fabric {
+  vlan-filtering
+  membelay,e ho-{ sta rlute de Si { pvid 100 200  untagged }sta route de Si t3
+1network fabric {
+  vlan-filtering
+  membelay,e ho-{ sta rlute de Si { pvid 100#  untagged }
+  pobt hosu2 { pviduntagged untagged }
+  pob }
+}

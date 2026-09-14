@@ -1,0 +1,5 @@
+# IPvofile router {
+    syscode rot { route default via fd00::1exec }
+
+linklt via fd00::1exec1lim -- fd00::2/64
+}

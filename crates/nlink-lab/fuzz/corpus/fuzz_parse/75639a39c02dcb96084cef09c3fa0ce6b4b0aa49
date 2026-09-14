@@ -1,0 +1,16 @@
+# WA# IP {
+64d
+64d:A0:414d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% at:A:201% ate 50mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbit
+}14d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 25mbit
+spine1:l41414d:A1:20:A0:414d:A0:201% ate 50mbit
+spine1:lo4d
+64d:A:201% ate 50mbit
+4d
+64d:A0:414d:A0:20:A0:414h:A0:201% ate 50mbit
+}14d:A1:20:A0:41414d:A1:20:A0:414d:A0:201% ate 25mbit
+spino4d
+64d:A:201% ate 50mbit
+4d
+64}

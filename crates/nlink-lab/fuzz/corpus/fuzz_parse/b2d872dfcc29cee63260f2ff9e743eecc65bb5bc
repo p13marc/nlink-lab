@@ -1,0 +1,26 @@
+#lows establis udp dport.1host.. }
+
+node scept udp dport 53
+  }
+}
+
+li}
+}
+
+link route 49
+  }
+}
+
+link r0.0.2 }
+noent:e
+
+efault via 10.0.1.1 }
+
+node scept udp dport 53
+  }
+}
+
+li}
+}
+
+link router:#eth0#

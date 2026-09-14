@@ -1,0 +1,12 @@
+# Contvrfsr  10.0.0sysctl.1 }
+
+lin: an A    <- delay 100ms e default via 10+0.nd # A   <- an`Al# F)rewall topology.
+#
+pind # A<<<<<<<<<<<< s
+    <0ms e default via 10+0.nd # A  A   <- an`Al# Firewall topology.
+#
+pind # A<<<<<<<<<<<< s
+    < via 10+0.nf # A   <<<<<<<< s
+    <1ms e default via 10+0.nf # A   <- y.
+#
+pin   -rtjac 

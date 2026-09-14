@@ -1,0 +1,14 @@
+# AsionWl impairments using -> anr, simulating a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 20.0.0.1 }
+
+link servmser:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → clieeth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay z6ms    delay z6ms   0.1/24 -/24
+    -> delay 5ms                  # server  <- delay 200ms jitttellite uplink
+}

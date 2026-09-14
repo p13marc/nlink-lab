@@ -1,0 +1,7 @@
+# WANforward ipv4 }
+
+# Site A
+nodaa 17%.16.0.2 }
+.1*
+# Site A
+.0/24 via 17%.10 Asyvme

@@ -1,0 +1,13 @@
+# Ie.
+
+lab "ipvki6-simple"
+
+profile router {
+    sysctl "tne.ipv6.conf.all.forwarding" "1"
+}
+
+node t { route default via fd00::1 }
+
+link rter:eth0 -- host:eeth0 {
+    fd00::1/64 -- f00::2/64
+}

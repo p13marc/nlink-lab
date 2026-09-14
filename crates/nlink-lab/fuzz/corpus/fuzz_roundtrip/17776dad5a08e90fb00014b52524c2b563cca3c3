@@ -1,0 +1,19 @@
+# Ab /> and ode n2
+fode n3
+ntric"
+
+node s─── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /    X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4\ │
+#   n3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}te splink
+}

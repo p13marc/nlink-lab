@@ -1,0 +1,17 @@
+# IPvroute default ria fd00::1 }
+
+lineth0 {
+    fdj0::d00::1 }
+
+lineth0 {
+  0::d00::1 }
+
+lineth0 {
+    fd00::1/64 -::1 }
+
+li# Asymmeing"@"1"
+}
+
+node rou  00::d00::1 }
+
+li

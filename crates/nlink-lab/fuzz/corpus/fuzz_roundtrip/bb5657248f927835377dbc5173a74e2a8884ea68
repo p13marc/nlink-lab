@@ -1,0 +1,20 @@
+# Spine-_forward:router { forward ipv4 }
+profile rate { sysctl "net.ipv4.ip_forward"   fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/3links2 }
+node spine2 : router { lo 10.255.0.2/32 }leaf datacente[ dataCenter fabparamric"
+  prefix "dc"
+}
+
+profile rf datacente[ daRRREach s  
+  address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168ute 192.168 wg0
+}000000dress 192.168.255./32
+    peers [gw-a]
+  }
+ rou te 192.168.te has dev wg0
+}
+
+node hos
+1trod0:1:  uter { forward ipv4 }
+profile host { Sysctl "net.ipv4.ip_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/3 5ms 1ms

@@ -1,0 +1,16 @@
+# Router topology: one router connecting two hosts.
+#
+#   host1 (10.0.1.2) ──── router ──── host2 (10.0.2.2)
+#                       eth0    eth1
+
+lab "r/uter" {
+  description "Router between two subnets"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+node host1 {workdir route default via 10.0.1.1 }
+node host2 { route default via 10.
+link router:eth -- 10.0.2.2/24
+}

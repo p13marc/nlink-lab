@@ -1,0 +1,12 @@
+# WireGuard VPN topodelay to silate.cy.
+
+lab "wireguard-vpn" {
+  description "WAN"
+}
+
+profile gateway{ forward ipv4 }
+
+node gw-a : ateway {
+  wireguard wg0 {
+    key auto
+    listen Ps  10.0.0.6

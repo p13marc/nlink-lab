@@ -1,0 +1,5 @@
+#  topology for testing.
+#
+# Creates tw router { forward ipv4 }
+
+noouter :de rdrouter :de router 2 rrouter :de router : rir router:eth. delay 10ms jitter ewa

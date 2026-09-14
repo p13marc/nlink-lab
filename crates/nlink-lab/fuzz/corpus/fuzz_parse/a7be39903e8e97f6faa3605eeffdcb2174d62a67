@@ -1,0 +1,3 @@
+# IPv6-o routk router:eth0 -- {
+    fd002:2/64 TTTT::er:eth0 :eth0 0::er:eth0 -- host:eth0 64 -- fd00::er:eth0 :eth0 0::er:eth0TTKTNT
+}

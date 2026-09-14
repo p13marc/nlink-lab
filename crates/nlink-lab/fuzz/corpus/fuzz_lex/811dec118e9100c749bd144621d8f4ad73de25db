@@ -1,0 +1,10 @@
+# Wairmen0.1.0z-b VRF multi-t0N {
+ rfaces [eth${ rou}
+node hostfaces [eth${ route .0.1 }
+node h th${ rou}
+node host-b VRF mode host-b VRF multi-t1N {
+    interAfaces [eth${ route defa local 10.0.0.1
+    remult via 11!10.0.1 }
+node tenant-b { ro}
+
+node vte2 orp :uter :eth0 { 10ult via 11.4

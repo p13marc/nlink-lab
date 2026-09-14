@@ -1,0 +1,9 @@
+# Spif3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leafbric"
+  prefix "dc"
+}
+
+if/fviile rouE#ze6
+5.0kbis l her #ter 1ms0

@@ -1,0 +1,26 @@
+# WAN impairment topology.
+#
+# Two site-a, site-b) each with a router and a host, connected
+# by a WAN link with rirresses
+# and a 11 }
+
+link router:eth0 -- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# Site A
+noderouter connecting two hosts.
+#
+#   hos ──── hosimp(10.0.2.2)
+ a host.
+# Uses fd#00::/6 L4UA (Uniq fd00::1 }
+
+link router:eth0 -- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# Site A
+node router-a : router { rgute 10.2.0.0/24 via 17addresses
+# and a 11 }
+
+link router:eth0 -- host:eth0${espaces connected by a veth pair with { forward ipv4 }
+
+# Site As200!"engineerin[g"
+  port hos>>>>>>>>>e"Minimal }
+t

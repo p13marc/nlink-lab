@@ -1,0 +1,14 @@
+# IPv3-only topology
+.#
+#clieses fd00t
+
+profile(route routnk router:eth0 -- host:eth0 {  
+  fd00::999999999999999999999999999999h0 -- host:eth1 {
+    fd00::99999999999999999999999999999999999999ce9999999999999999999999999999999999999999{
+    s1 }
+
+link 999999998999{
+    s1 }
+
+link router:eth0 0::2/64
+}

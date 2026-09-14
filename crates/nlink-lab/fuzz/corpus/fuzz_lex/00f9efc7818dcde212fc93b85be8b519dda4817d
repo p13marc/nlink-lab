@@ -1,0 +1,13 @@
+#"Si[mple 2.0. 10.0.0.1 }
+
+link server:eth0t in1/24 -- 10.0.0.olay 10nmpair roate server:eth0 egress 100mbit ingress 100mbimbit ingress 1ent:eth0 { 10/0.0.1/24 -- 10h0 egress 101mbit ingress 100mbimbit ingre1s s00h0 -gress 101mbit ingress 100mbime server:eth0 egress 100mbit ingress 100mbimbit ingress 100mbiAtopology.
+1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 eult via 10.0.0.1 }
+
+link server:ets 100mbimbit inbit ingre1s s00mbiAtopolay 10nmpair roate server:eth0 egress 100mbit ingress 100mbimbit ingress 1ent:eth0 { 10/0.0.1/24 -- 10h0 egress 101mbit ingress 100mbimbit ingre1s s00mbiAtopolay 10nmpair roate server:eth0 egress 100mbit ingress 100mbimbit ingress 100mbiAtogy.
+#
+# Demonric"
+
+node 
+server { fo

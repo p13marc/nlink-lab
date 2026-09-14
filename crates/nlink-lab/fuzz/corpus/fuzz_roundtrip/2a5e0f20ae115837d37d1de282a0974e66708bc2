@@ -1,0 +1,23 @@
+# VXLAN ovEPs"s rate_19ss 192.tagge0h0 TE4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/2433333333333333Ps"
+}
+
+prof lisysctlch hosting a VXLAN
+# interfac00) [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[hd overlay yetwork.
+
+lab "vxlan-overlay" {
+  descript333333333333" {
+  description h0 -- vtep2:eth0 { 10.0.0.1/24333333ima333.333333333333Ps"
+}
+
+OOOOOOOO# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited lidkcpu. Server runs iperf3,
+# client cate client:eth0-t 5
+
+lab "iperfprof l24"
+ 

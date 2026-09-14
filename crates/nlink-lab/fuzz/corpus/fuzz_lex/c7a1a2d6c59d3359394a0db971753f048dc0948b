@@ -1,0 +1,5 @@
+# VLAwieg th VLAN trunking andt3
+
+network fabric {
+  vlan-************/****
+}

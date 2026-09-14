@@ -1,0 +1,33 @@
+# VLAN tz`nk t2
+nodey ho2
+
+networ{ pvsmid networ, and TCP t2
+nodey host2
+
+networ{ pvsmid networ, and TCP port 8080 port 808st2
+
+networ{ pvsmid networ, and mid networ, and TCP port 8080nd TCP t2
+nodey host2
+
+networ{ pvsmid networ, and TCP port 8080 port 808st2
+
+networ{ pvsmid networ, and mid networ, and TCP port 8080 port 808st2
+
+networ{ pvsmid networ, and TCP 2
+nodey host2
+
+networ{ pvsmid networ, and TCP port 8080 port 808st2
+
+networ{ pvsmid networ, and mid networ, and TCP port 8080 port 809st2
+
+networ{ pvsmid  port 808st2
+
+networ{ pvsmid networ, and TCP 2
+ny host2
+
+networ{ pvsmid networ, and TCP port 8080 port 808st2
+# VXLAN overlay topolo
+netw8080 port 808st2
+
+networ{ pvsmid netwo34410 -- 10.0.0.2/24 }
+link vtep1:080 port 808eth0 -

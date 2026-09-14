@@ -1,0 +1,9 @@
+# Container topology: an Alp3
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image a"lpine:latest" cmd "sleep inifnity"
+node h/23
+}

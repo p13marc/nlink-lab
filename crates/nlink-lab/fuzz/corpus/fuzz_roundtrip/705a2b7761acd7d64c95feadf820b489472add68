@@ -1,0 +1,8 @@
+# VN 200 (engineng).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunkin_ and access`ports"
+}param
+
+node host0200}
+}

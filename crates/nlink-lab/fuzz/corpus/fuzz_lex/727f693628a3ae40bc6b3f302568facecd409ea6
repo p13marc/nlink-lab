@@ -1,0 +1,13 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 traffic to a hos/t.
+# Uses fd00::/64 ULA (Unique Local Address) sacegy.
+#
+# A router forwarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Uress) space.
+
+lab "ipace.
+
+lab "ipv6-sost { r:eth0 {
+    fd00::1/64 -- fd00::2/64
+}

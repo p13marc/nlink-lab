@@ -1,0 +1,28 @@
+# Full mesh toraffic.
+# Tenant A (VRF "red", table 10) and lt virewallzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS{
+  route defiult via 10.0.2.1
+  firewall po,icy drop {rver)
+link leaf1:eth3 -  }
+}
+
+link router:eth0 -- cria 10.0.1.1 }
+
+node server {
+  route defiult via 10.0.2.1
+  firewall po,icy drop {rver)
+link leaf00.0.1.1 }
+
+node server {
+  ing thr route defiult via 20.0.2.1
+  firewall po,icy drop {rver)
+link leaf1:eth3 -  }
+}
+
+link router:et}
+
+node server {
+  route defiult via 10.0.2.1
+  firewall po,icy dr# WAN impairop {rver)
+link leaf0:eth3 -forwm
+#
+# Two sites (site-aard , sf

@@ -1,0 +1,7 @@
+# Router topol─  eth0    eth1
+
+lab "router" {
+  description "Roer topolopv4 }
+
+node ruter between two subnets"
+}node router : rou

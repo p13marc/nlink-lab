@@ -1,0 +1,17 @@
+# WireGuard VPN topology.
+#
+# Twosimulate internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.2ate client:eth0 egress 100ut.
+#
+## VXLAN ovink gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 195ms loss 0.1%

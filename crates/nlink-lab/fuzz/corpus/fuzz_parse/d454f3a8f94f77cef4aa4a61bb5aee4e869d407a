@@ -1,0 +1,11 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deing
+  members [host0:et
+  memifrs [host1:eth0, host2:eth0, host3:eost1:eth0, lan-filtering
+  members [host0:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  membehost1:eth0, host2:eth0, host3:eost1:eth0, host2:eth0, ost1:}

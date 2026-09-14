@@ -1,0 +1,38 @@
+# Ir:eth0 -- th0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecpouter:eth0 -- host:ecputh0 {
+    fd}
+t:ecpouter:eth0 -- host:ecput {
+    fd00::1/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecputh0 {
+ 0 {
+    fd00::1/64 -- fd00::2/router:eth0 -- host8ecputh0 {
+    fd00:ut-1 }
+
+link router:eth0 -- host:emd	:A:d:A:d:d:dd:Ad:d:deR- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::h0 {
+    fd00::1/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+d	:A:d:A:d:d:dd:Ad:d:deR- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecpouter:eth0 -- host:ecputh0 {
+    fd}
+t:ecpouqer:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecputh0 {
+ 0 {
+    fd00::1/64 -- fd00::2/router:eth0 -- host8ecputh0 {
+    fd00:ut-1 }
+
+link router:eth0 -- host:emd	:A:d:A:d:d:dd:Ad:d:deR- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0df:/64
+}
+- host:ecputh0 {
+    fh0 -- host:emd	:A:d:A:d:d:dd:Ad:d:deR- fd00::2/router:eth0 -- ho- fd00::2/64
+}

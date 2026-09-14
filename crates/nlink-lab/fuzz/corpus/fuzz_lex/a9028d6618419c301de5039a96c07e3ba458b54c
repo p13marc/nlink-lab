@@ -1,0 +1,14 @@
+# VLostnd access ports"
+}
+
+ vlan 100b "vlcess ports"
+}
+
+12g -- lva34th0]
+  vlan 100b "vlan-trunk" {
+  dovider est3
+
+networs fabr:eth0,  vlan 100b "vlan-trunk" {
+th tth512g -- va3, host3:eth0]
+  vlan 100b "vla4
+n-intrkr

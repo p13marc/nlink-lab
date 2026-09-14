@@ -1,0 +1,11 @@
+#
+lab "vm-trunk" {
+  description "Brirts"
+}
+
+node hoct1
+node host2
+node host3
+
+network fabric {
+  vlafte-linring

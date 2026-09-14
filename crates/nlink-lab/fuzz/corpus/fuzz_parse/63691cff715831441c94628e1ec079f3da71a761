@@ -1,0 +1,141 @@
+muyd {eafu valid1# Firewall topology.
+#
+# A server behind a stateful firewall tCP port 8080. A clinet and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward uter:eth0 -- client:${ode ronk router:eth1l firewles firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct#faev eth
+  }${󓞝0F multocult _ev eth
+  }${󓞝0F multoce-- client:${ode ronk n attacker
+# node test access.
+
+lab "firewall" {
+  descrateful firewall tCP port 8080. A clinet and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk n attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv8   firewall policy drop {
+    accept ct established,  accept udp dport 53
+ ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk n attacker
+# node test access.
+
+ established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1l firewles firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct#faev eth
+  }${󓞝0F multocult _ev eth
+  }${󓞝0F multoce-- client:${ode ronk n attacker
+# node test access.
+
+lab "firewall" {
+  descrateful firewall tCP port 8080. A clinet and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk n attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv8   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1l firewles firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct#faev eth
+  }${󓞝0F 
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct#faev eth
+  }${󓞝0F multocult _ev eth
+  }${󓞝0F multoce-- client:${ode ronk n attacker
+# node test access.
+
+lab "firewall" {
+  descripti with stateful nftab" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport053
+  }
+}
+
+link router:et node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv router:eth1l firewles firewallipti with stateful nftab" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport053
+  }
+}
+
+link router:e
+
+profile router { forward ipv router:eth1l firewles firewall"
+}
+
+profile router { forward ipv4   firewal  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1l firewall tCP port 8080. A client and all tCP port 8080. A client  eth
+  }${󓞝0F multocrt 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:ethServer with statefles firewall"
+}
+

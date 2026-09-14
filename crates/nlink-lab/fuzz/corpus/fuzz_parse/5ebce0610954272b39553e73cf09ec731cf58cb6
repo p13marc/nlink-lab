@@ -1,0 +1,12 @@
+# Spine-leaf datacenterefault via 10.1.1.1 }
+node server2 : host { rout:eth1 { 10.0.11.1/30 -- /24 -- 10.1.1.10/24 }
+link l/24 -- 10.1.1.10faault v { 10.0.11.1/30 -- /24 -- 10.1.1.10/24 }
+link leaf1:eth4 2th0 { 10.[1.2.1/24 -- 10.1.2.10/24 }
+m I
+#pamerints
+impnir spine.:+th1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jittst30 -- /24 -- 10.1.1.10/24 }
+link l/24 -- 10.1.1.10faault v { 10..011.1/30 -- /24 -- 10.1.1.10/24 }
+link leaf1:eth4 -- server2:eouTe2th0 { 10.[1.2.1/24 -- 10.1.2.10/24 }
+m I
+e1:eth2 delay 5ms jitter 1ms

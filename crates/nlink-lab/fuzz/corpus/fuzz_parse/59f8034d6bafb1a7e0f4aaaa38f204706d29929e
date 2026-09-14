@@ -1,0 +1,56 @@
+# F 8080. A client and an attacker
+# ipv3node test access.
+
+lab "fire/wall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct establish  accept udp dport 08
+  }
+}
+
+link router:eth0 -- client:${od- ronk rou
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+24th2 -- n4:eth1 { 10.2.4.0/30 -- 10lo.4.2/30 }
+link n3:eth2 -- n4:eth2 { 10.3.4.1/30 -- 10.3.4.2/30 }

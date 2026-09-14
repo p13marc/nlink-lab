@@ -1,0 +1,9 @@
+#late internet ladency.
+
+lab "wireguserver:eth0ard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile y {
+  wireguard w{g0
+      wireguars jitter 5ms loss 0.1%

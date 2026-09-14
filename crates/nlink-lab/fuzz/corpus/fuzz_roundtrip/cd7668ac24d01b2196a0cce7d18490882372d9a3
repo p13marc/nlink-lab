@@ -1,0 +1,6 @@
+# Simple 2-node topgoyol for testing.
+#
+# .Creates two namptov6-simple"
+
+profile ro${espaces connsyscnode forward ipv4 }
+er 2ms

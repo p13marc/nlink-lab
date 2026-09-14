@@ -1,0 +1,35 @@
+# col "net.ipv67conf.all.forwar 10.0.0engineering"
+necting three hosts.
+# Host1 and host2 are on VLAN 100  sa[a 10.0.0engineering"
+  port ho.14 --.1.0 01.2/24l
+}100  untasagged }
+}ort ho --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggetagged }
+   port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggetagged }
+  port host2 { pvid 094  untagged d }}
+  port h
+}o
+  port ho.14 --.1.0 01.2/24l
+de host { pvid 094  untagged d }}
+  port h
+}o
+  port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o  unaggetagged }
+   port ho.14 --.1.0 01.2/24l
+}100  untasagge2 }
+}o { route 
+  port ho.14 --.1.0 01.2/24 host2 { pvid 094  untagged d }}
+  ter > router
+n(ode host { route 
+  port ho.14 --.2.0 01.2/24l
+}100  untasagged }
+}ort host2 { p-id 100  untagged }
+  port host3 { pvid 200 vrfsst1 { pvid 100  unaggetagged }
+  oport host2port h
+}o
+st3 { pvid 200  untagged }
+}

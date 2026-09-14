@@ -1,0 +1,54 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment oP port 8080 node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- server:eth0 { 10.hat rewall tCP port 8080. A client ann spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  descri9tion "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile rou0ter { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 1777777777777777777777777770.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+# Leaves
+node lees
+node leaf1 : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaaf1 : router {
+  lo 10.255.1.1/32
+  route default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Serves
+impair spine1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

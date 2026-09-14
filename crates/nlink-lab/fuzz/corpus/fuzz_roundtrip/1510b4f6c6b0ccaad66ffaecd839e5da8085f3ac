@@ -1,0 +1,20 @@
+#ing).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and acce$ss ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+ # Spine-lea776f.20/24+vlan-filter }
+
+# Impairments
+impair spine1:eth1 del/24 }
+
+# Impairments
+impair spine1:eth1 dela host2:ay sm5 jit2  untaggeter 1d }
+}ms
+

@@ -1,0 +1,5 @@
+# Router tone ro.1.2/24
+}
+
+link /24 -- 10pull. -- host2:eth0 10pull.0.2.2/+4
+}

@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — a `vxlan` with no `vni` rendered to un-parseable NLL (issue #118)
+
+`ast::VxlanDef::vni` was a bare `u32` defaulting to **0**, and lowering wrapped
+that as `Some(0)` — so "absent" and "zero" were the same state. Two consequences:
+
+- `render` emitted `vni 0`, which the parser rejects (it accepts only
+  1..=16 777 215). `render` could therefore produce NLL that `parse` refuses,
+  which matters because `export`, `fmt` and `diff` all sit on `render`.
+- the validator reported `VNI 0 out of range` instead of its dedicated
+  `VXLAN interface 'v1' has no VNI` message, which already existed for exactly
+  this case.
+
+`vni` is now `Option<u32>` from the AST through to `InterfaceConfig`, so absent
+stays absent, `render` omits the line, and the validator gives the accurate
+error. Parsing is unchanged: a missing `vni` is still accepted by the parser and
+rejected by `validate`, keeping syntax and semantics in their own layers.
+
+Found by `fuzz_roundtrip`. With this and #116 fixed, all three fuzz targets run
+clean (240 s each: 6.5M, 5.4M and 5.0M executions).
+
+
 ## [0.10.1] - 2026-09-14
 
 One fix: interpolation was not idempotent, so `parse -> render -> parse` was not

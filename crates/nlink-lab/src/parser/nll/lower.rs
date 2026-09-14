@@ -2925,7 +2925,9 @@ fn apply_node_props(
                     vx.name.clone(),
                     types::InterfaceConfig {
                         kind: Some(types::InterfaceKind::Vxlan),
-                        vni: Some(vx.vni),
+                        // Absent stays absent: the validator has a dedicated
+                        // "has no VNI" error for it (#118).
+                        vni: vx.vni,
                         local: vx.local.clone(),
                         remote: vx.remote.clone(),
                         port: vx.port,
@@ -4535,6 +4537,35 @@ node r1 : nonexistent"#,
         let fw = topo.nodes["server"].firewall.as_ref().unwrap();
         assert_eq!(fw.policy.as_deref(), Some("drop"));
         assert_eq!(fw.rules.len(), 4);
+    }
+
+    #[test]
+    fn vxlan_without_vni_lowers_to_none_not_zero() {
+        // #118: the AST defaulted `vni` to 0 and lowering wrapped it as
+        // `Some(0)`, so "absent" and "zero" were the same state. `render` then
+        // emitted `vni 0`, which the parser rejects (it only accepts
+        // 1..=16_777_215), and the validator reported "VNI 0 out of range"
+        // instead of its dedicated "has no VNI" message.
+        let topo = nll::parse(
+            r#"lab "t"
+node n {
+  vxlan v1 { local 10.0.0.1  remote 10.0.0.2  address 192.168.1.1/24 }
+}
+"#,
+        )
+        .expect("a missing vni is a semantic error, not a syntax one");
+        let vx = &topo.nodes["n"].interfaces["v1"];
+        assert_eq!(vx.kind, Some(types::InterfaceKind::Vxlan));
+        assert_eq!(vx.vni, None, "absent must stay absent, never Some(0)");
+
+        // ...and the validator names it accurately.
+        let result = topo.validate();
+        let msg = result
+            .errors()
+            .find(|i| i.rule == "vxlan-vni-range")
+            .map(|i| i.message.clone())
+            .unwrap_or_default();
+        assert!(msg.contains("has no VNI"), "unexpected message: {msg}");
     }
 
     #[test]

@@ -445,7 +445,14 @@ pub struct WireguardDef {
 #[derive(Debug, Clone)]
 pub struct VxlanDef {
     pub name: String,
-    pub vni: u32,
+    /// `None` when the block declared no `vni`.
+    ///
+    /// It used to default to `0`, which collided with the "absent" state:
+    /// lowering turned it into `Some(0)`, so `render` emitted `vni 0` --
+    /// un-parseable, since the parser only accepts 1..=16_777_215 -- and the
+    /// validator reported "VNI 0 out of range" instead of its dedicated
+    /// "has no VNI" message (#118).
+    pub vni: Option<u32>,
     pub local: Option<String>,
     pub remote: Option<String>,
     pub port: Option<u16>,

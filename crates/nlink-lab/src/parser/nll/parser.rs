@@ -1650,7 +1650,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
 fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef> {
     let name = parse_name(tokens, pos)?;
 
-    let mut vni = 0;
+    let mut vni = None;
     let mut local = None;
     let mut remote = None;
     let mut port = None;
@@ -1664,7 +1664,7 @@ fn parse_vxlan_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::VxlanDef>
             break;
         }
         if eat_kw(tokens, pos, "vni") {
-            vni = expect_int_range(tokens, pos, "vni", 1, 16_777_215)? as u32;
+            vni = Some(expect_int_range(tokens, pos, "vni", 1, 16_777_215)? as u32);
         } else if eat_kw(tokens, pos, "local") {
             local = Some(parse_cidr_or_name(tokens, pos)?);
         } else if eat_kw(tokens, pos, "remote") {

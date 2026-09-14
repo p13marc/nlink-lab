@@ -244,3 +244,39 @@ node n : p
     // Rendering must also be idempotent.
     assert_eq!(try_render(&again).expect("renders"), rendered);
 }
+
+/// Issue #118: a `vxlan` block with no `vni` used to render to `vni 0`, which
+/// the parser rejects — so `render` emitted NLL that `parse` refused.
+///
+/// The AST defaulted `vni` to 0 and lowering wrapped it as `Some(0)`, making
+/// "absent" and "zero" the same state. `vni` is now `Option` all the way
+/// through, so absent stays absent and `render` simply omits the line.
+#[test]
+fn vxlan_without_vni_roundtrips() {
+    const SRC: &str = r#"lab "t"
+node n {
+  vxlan v1 { local 10.0.0.1  remote 10.0.0.2  address 192.168.1.1/24 }
+}
+"#;
+
+    let topo = parser::parse(SRC).expect("parses");
+    let rendered = try_render(&topo).expect("renders");
+
+    assert!(
+        !rendered.contains("vni"),
+        "an absent vni must not be rendered at all:\n{rendered}"
+    );
+
+    // The whole point: what render emits must parse.
+    let again = parser::parse(&rendered).expect("rendered NLL must re-parse");
+
+    let a = serde_json::to_value(&topo).unwrap();
+    let b = serde_json::to_value(&again).unwrap();
+    let mut diffs = Vec::new();
+    json_diff(&a, &b, "", &mut diffs);
+    assert!(
+        diffs.is_empty(),
+        "round-trip is not a fixed point:\n{rendered}\ndiffs: {diffs:#?}"
+    );
+    assert_eq!(try_render(&again).expect("renders"), rendered);
+}

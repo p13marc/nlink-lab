@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-14
+
+Four bug fixes found by driving nlink-lab hard from outside: three filed as
+issues #111-#113 while building a multi-node zenoh reproduction lab on 0.9.0,
+plus the `SHA256SUMS` defect that shipped with 0.9.0 itself.
+
+The theme is **silent no-ops**. Two of the three issues were features that
+parsed, validated, deployed "successfully" and then did nothing at all, which is
+the worst way for a declarative tool to fail.
+
+### Migration
+
+- `CreateOpts` gains three public fields (`configs`, `env_file`, `overlay`). It
+  derives `Default`, so `CreateOpts { ..Default::default() }` keeps compiling;
+  an exhaustive struct literal needs the new fields.
+- A container node using `config`, `overlay` or `env-file` now really mounts and
+  reads those paths, so a topology that referenced a file which does not exist
+  used to deploy and will now fail. That is the point of the fix, but it is a
+  behaviour change worth knowing about before upgrading.
+
 ### Fixed — container nodes honour the file-injection keys (issue #111)
 
 `config`, `overlay`, `env-file` and a container block's `exec` were lexed,

@@ -192,14 +192,37 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           api="${FORGEJO_API}/repos/${GITHUB_REPOSITORY}"
           rid=$(curl -sf -H "Authorization: token $TOKEN" "$api/releases/tags/${RELEASE_TAG}" | jq -r .id)
-          mkdir -p sums && cd sums
-          curl -sf -H "Authorization: token $TOKEN" "$api/releases/$rid/assets" \
-            | jq -r '.[] | select(.name != "SHA256SUMS") | "\(.id) \(.name)"' \
-            | while read -r aid name; do
-                curl -sfL -H "Authorization: token $TOKEN" -o "$name" "$api/releases/$rid/assets/$aid"
-              done
+
+          # NB: GET /releases/{id}/assets/{id} returns the asset's JSON
+          # *metadata*, not its bytes. 0.9.0 shipped a SHA256SUMS computed over
+          # ~280-byte JSON blobs because of that. Download browser_download_url
+          # instead, and verify each file against the size the API reports so a
+          # regression here fails the release instead of publishing bad sums.
+          curl -sf -H "Authorization: token $TOKEN" "$api/releases/$rid/assets" > assets.json
+          jq -r '.[] | select(.name != "SHA256SUMS")
+                     | "\(.size)\t\(.browser_download_url)\t\(.name)"' assets.json > list.tsv
+
+          mkdir -p sums
+          # Read from a file, not a pipe: a `while` in a pipeline runs in a
+          # subshell and could not fail the step.
+          while IFS=$'\t' read -r size url name; do
+            curl -sfL -H "Authorization: token $TOKEN" -o "sums/$name" "$url"
+            actual=$(stat -c%s "sums/$name")
+            if [ "$actual" != "$size" ]; then
+              echo "::error::$name: downloaded $actual bytes but the API reports $size" >&2
+              exit 1
+            fi
+            echo "ok $name ($actual bytes)"
+          done < list.tsv
+
+          cd sums
+          if [ -z "$(ls -A)" ]; then
+            echo "::error::no assets downloaded; refusing to publish an empty SHA256SUMS" >&2
+            exit 1
+          fi
           sha256sum * > SHA256SUMS
           for aid in $(curl -sf -H "Authorization: token $TOKEN" "$api/releases/$rid/assets" | jq -r '.[] | select(.name=="SHA256SUMS") | .id'); do
             curl -sf -X DELETE -H "Authorization: token $TOKEN" "$api/releases/$rid/assets/$aid" >/dev/null

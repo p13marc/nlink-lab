@@ -1083,30 +1083,16 @@ fn exec_op(
     journal: &mut Journal,
 ) -> Result<()> {
     let handle = env.handle(node)?.clone();
-    if let Some(container_id) = handle.container_id() {
-        let rt = env
-            .runtime
-            .as_ref()
-            .ok_or_else(|| Error::deploy_failed("no container runtime available"))?;
-        let cmd_strs: Vec<&str> = exec.cmd.iter().map(|s| s.as_str()).collect();
-        if exec.background {
-            let mut args = vec!["exec", "-d", container_id];
-            args.extend(&cmd_strs);
-            let output = std::process::Command::new(rt.binary())
-                .args(&args)
-                .output()
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to exec in container '{node}' exec[{index}]: {e}"
-                    ))
-                })?;
-            if !output.status.success() {
-                return Err(Error::deploy_failed(format!(
-                    "exec[{index}] on container '{node}' failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                )));
-            }
-        } else {
+    let container_id = handle.container_id().map(str::to_string);
+
+    // Foreground commands just run to completion.
+    if !exec.background {
+        if let Some(container_id) = &container_id {
+            let rt = env
+                .runtime
+                .as_ref()
+                .ok_or_else(|| Error::deploy_failed("no container runtime available"))?;
+            let cmd_strs: Vec<&str> = exec.cmd.iter().map(|s| s.as_str()).collect();
             let output = rt.exec(container_id, &cmd_strs).map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to exec in container '{node}' exec[{index}]: {e}"
@@ -1119,13 +1105,10 @@ fn exec_op(
                     String::from_utf8_lossy(&output.stderr)
                 )));
             }
+            return Ok(());
         }
-        return Ok(());
-    }
-
-    let mut cmd = std::process::Command::new(&exec.cmd[0]);
-    cmd.args(&exec.cmd[1..]);
-    if !exec.background {
+        let mut cmd = std::process::Command::new(&exec.cmd[0]);
+        cmd.args(&exec.cmd[1..]);
         let output = handle.spawn_output(cmd).map_err(|e| {
             Error::deploy_failed(format!(
                 "failed to run command on '{node}' exec[{index}]: {e}"
@@ -1140,6 +1123,27 @@ fn exec_op(
         }
         return Ok(());
     }
+
+    // Background. Container nodes used to take a separate `exec -d` path that
+    // discarded both streams, so nothing a service printed was recoverable --
+    // `logs` only ever showed PID 1 (#112). Now both node kinds build a command
+    // here and share the logging and tracking below; only the spawn differs.
+    let mut cmd = if let Some(container_id) = &container_id {
+        let rt = env
+            .runtime
+            .as_ref()
+            .ok_or_else(|| Error::deploy_failed("no container runtime available"))?;
+        // No `-d`: we keep the pipes so the output lands in the lab's log dir,
+        // exactly like a namespace node's background process.
+        let mut cmd = std::process::Command::new(rt.binary());
+        cmd.arg("exec").arg(container_id);
+        cmd.args(&exec.cmd);
+        cmd
+    } else {
+        let mut cmd = std::process::Command::new(&exec.cmd[0]);
+        cmd.args(&exec.cmd[1..]);
+        cmd
+    };
 
     let log_dir = state::logs_dir(&env.lab);
     let fresh = !log_dir.exists();
@@ -1168,11 +1172,21 @@ fn exec_op(
     let stderr_path = log_dir.join(format!("{node}-{basename}-{index}.stderr"));
     cmd.stdout(std::fs::File::create(&stdout_path)?);
     cmd.stderr(std::fs::File::create(&stderr_path)?);
-    let pid = handle.spawn_detached(cmd).map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to spawn background process on '{node}' exec[{index}]: {e}"
-        ))
-    })?;
+    let pid = if container_id.is_some() {
+        // The container is already in its own namespaces; this runs the runtime
+        // binary on the host.
+        cmd.spawn().map(|child| child.id()).map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to spawn background process in container '{node}' exec[{index}]: {e}"
+            ))
+        })?
+    } else {
+        handle.spawn_detached(cmd).map_err(|e| {
+            Error::deploy_failed(format!(
+                "failed to spawn background process on '{node}' exec[{index}]: {e}"
+            ))
+        })?
+    };
     let started = crate::running::host_starttime(pid);
     journal.record(Undo::KillProcess {
         pid,
@@ -1185,7 +1199,8 @@ fn exec_op(
     env.exec_pids.insert(format!("{node}:{index}"), pid);
     // cgroup v2 limits for namespace nodes (#66); containers get theirs
     // from the runtime.
-    if let Some(n) = env.topology.nodes.get(node)
+    if container_id.is_none()
+        && let Some(n) = env.topology.nodes.get(node)
         && let Some(dir) =
             crate::cgroup::ensure_node(&env.lab, node, n.cpu.as_deref(), n.memory.as_deref())?
     {

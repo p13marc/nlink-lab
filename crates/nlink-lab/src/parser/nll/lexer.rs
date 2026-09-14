@@ -82,7 +82,10 @@ fn lex_block_comment(lex: &mut logos::Lexer<Token>) -> FilterResult<(), LexError
 #[logos(skip r"[ \t]+")]
 // Line comments run to end-of-line; the greedy `*` is bounded by `\n`,
 // so opt out of logos 0.16's unbounded-repetition lint.
-#[logos(skip("#[^\n]*", allow_greedy = true))]
+// `#` and `//` line comments (#113). NLL already accepts C-style `/* ... */`,
+// so people reasonably reach for `//`; without it the line is tokenised and the
+// error points at some arbitrary character inside the intended comment.
+#[logos(skip("(#|//)[^\n]*", allow_greedy = true))]
 // Block comments (`/* ... */`, nestable) are handled by a callback on the
 // `Newline` variant; see `lex_block_comment`.
 pub enum Token {
@@ -411,6 +414,33 @@ mod tests {
 
     fn lex_tokens(input: &str) -> Vec<Token> {
         lex(input).unwrap().into_iter().map(|s| s.token).collect()
+    }
+
+    #[test]
+    fn slash_slash_line_comments_are_skipped() {
+        // #113: `//` used to be tokenised, so the error landed on whatever
+        // character inside the "comment" the lexer could not handle first.
+        // The contract is that `//` behaves exactly like the existing `#`.
+        for body in [
+            "just a comment",
+            "trailing; punctuation: and \u{2500}\u{2500} box drawing",
+            "",
+        ] {
+            assert_eq!(
+                lex_tokens(&format!("//{body}\n")),
+                lex_tokens(&format!("#{body}\n")),
+                "`//{body}` should lex like `#{body}`"
+            );
+            assert_eq!(
+                lex_tokens(&format!("node //{body}\n")),
+                vec![Token::Node],
+                "trailing `//{body}` should be skipped"
+            );
+        }
+        // A single slash is untouched: CIDRs still lex.
+        assert!(!lex_tokens("10.0.0.0/24").is_empty());
+        // `/* ... */` is not shadowed by the new rule.
+        assert_eq!(lex_tokens("/* block */\n"), lex_tokens("# block\n"));
     }
 
     #[test]

@@ -4,6 +4,10 @@ use crate::container::CreateOpts;
 use std::collections::BTreeMap;
 
 /// Build container CreateOpts from a Node's fields.
+///
+/// `configs`, `env_file` and `overlay` are passed straight through for the
+/// runtime layer to expand: all three need host I/O (path absolutisation and, for
+/// `overlay`, a directory listing) and this planner is pure (#111).
 pub(crate) fn build_create_opts(node: &crate::types::Node, extra_hosts: &[String]) -> CreateOpts {
     CreateOpts {
         cmd: node.cmd.clone(),
@@ -19,6 +23,9 @@ pub(crate) fn build_create_opts(node: &crate::types::Node, extra_hosts: &[String
         workdir: node.workdir.clone(),
         labels: node.labels.clone(),
         extra_hosts: extra_hosts.to_vec(),
+        configs: node.configs.clone(),
+        env_file: node.env_file.clone(),
+        overlay: node.overlay.clone(),
     }
 }
 

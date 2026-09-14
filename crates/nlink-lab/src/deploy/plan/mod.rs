@@ -180,6 +180,25 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
                 exec: exec.clone(),
             });
         }
+        // A container block's `exec "..."` is a one-shot post-start command,
+        // i.e. a foreground `run`. It used to parse and then be dropped on the
+        // floor (#111). Indices continue after `node.exec` so the `exec:N:I`
+        // diff keys stay unique; these are never background, so they never
+        // produce a `KillExec`.
+        for (offset, cmd) in node.container_exec.iter().enumerate() {
+            let cmd = cmd.trim();
+            if cmd.is_empty() {
+                continue;
+            }
+            ops.push(Op::Exec {
+                node: node_name.clone(),
+                index: node.exec.len() + offset,
+                exec: crate::types::ExecConfig {
+                    cmd: vec!["sh".into(), "-c".into(), cmd.to_string()],
+                    background: false,
+                },
+            });
+        }
         if let Some(cmd) = &node.healthcheck {
             ops.push(Op::Healthcheck {
                 node: node_name.clone(),
@@ -223,6 +242,80 @@ node r : router
 node h { route default via 10.0.0.1 }
 link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
 "#;
+
+    #[test]
+    fn container_exec_becomes_foreground_exec_ops() {
+        // #111: `exec "..."` inside a container block parsed, validated and was
+        // then dropped -- the command never ran.
+        let p = plan_of(
+            r#"lab "t"
+node c image "alpine" {
+  cmd ["sleep", "1"]
+  run ["true"] background
+  exec "nginx -t"
+  exec "echo second"
+}
+"#,
+        );
+        let execs: Vec<(usize, &crate::types::ExecConfig)> = p
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::Exec { node, index, exec } if node == "c" => Some((*index, exec)),
+                _ => None,
+            })
+            .collect();
+        // one from `run`, two from the container-block `exec`s
+        assert_eq!(execs.len(), 3, "{execs:?}");
+        let from_exec_key: Vec<_> = execs.iter().filter(|(i, _)| *i >= 1).collect();
+        assert_eq!(from_exec_key.len(), 2);
+        for (_, e) in &from_exec_key {
+            assert!(
+                !e.background,
+                "container `exec` is a one-shot, never background"
+            );
+            assert_eq!(e.cmd[0], "sh");
+            assert_eq!(e.cmd[1], "-c");
+        }
+        assert_eq!(from_exec_key[0].1.cmd[2], "nginx -t");
+        assert_eq!(from_exec_key[1].1.cmd[2], "echo second");
+
+        // Indices must not collide with `run`'s, or the diff keys clash.
+        let keys: std::collections::BTreeSet<String> = p.ops.iter().map(|o| o.key()).collect();
+        assert_eq!(keys.len(), p.ops.len(), "op keys must stay unique");
+    }
+
+    #[test]
+    fn container_config_env_file_and_overlay_reach_create_opts() {
+        // #111: all three parsed and were then never read at deploy time.
+        let t = topo(
+            r#"lab "t"
+node c image "alpine" {
+  volumes ["/pre:/pre"]
+  config "/host/a.conf" "/etc/a.conf"
+  config "/host/b.conf" "/etc/b.conf"
+  env-file "/host/app.env"
+  overlay "/host/overlay"
+}
+"#,
+        );
+        let opts = process::build_create_opts(&t.nodes["c"], &[]);
+        assert_eq!(
+            opts.volumes,
+            vec!["/pre:/pre".to_string()],
+            "explicit `volumes` stay verbatim -- a bare name is a podman volume"
+        );
+        assert_eq!(
+            opts.configs,
+            vec![
+                ("/host/a.conf".to_string(), "/etc/a.conf".to_string()),
+                ("/host/b.conf".to_string(), "/etc/b.conf".to_string()),
+            ],
+            "config pairs reach the runtime layer, which mounts them read-only"
+        );
+        assert_eq!(opts.env_file.as_deref(), Some("/host/app.env"));
+        assert_eq!(opts.overlay.as_deref(), Some("/host/overlay"));
+    }
 
     #[test]
     fn plan_is_deterministic_and_stage_ordered() {

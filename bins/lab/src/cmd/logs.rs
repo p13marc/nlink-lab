@@ -101,5 +101,28 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             u8::try_from(status.code().unwrap_or(1).clamp(0, 255)).unwrap_or(1),
         );
     }
+
+    // `docker|podman logs` only ever shows PID 1. Background processes started
+    // with `run ... background` are captured separately, so point at them
+    // rather than leaving the user to conclude they produced no output (#112).
+    let bg: Vec<_> = running
+        .process_status()
+        .into_iter()
+        .filter(|p| p.node == node)
+        .collect();
+    if !bg.is_empty() {
+        eprintln!(
+            "\nnote: the above is PID 1 only. {} background process(es) on '{node}' \
+             log separately:",
+            bg.len()
+        );
+        for p in &bg {
+            eprintln!(
+                "  nlink-lab logs {lab} --pid {}{}",
+                p.pid,
+                if p.alive { "" } else { "   (exited)" }
+            );
+        }
+    }
     Ok(())
 }

@@ -1,0 +1,24 @@
+# Container tpoology: an Al
+
+lab "container" {
+  descr "alpine:latest" cmd "sleep infing a satellite uplink.
+
+lab "asymmetric"
+
+nodeity"
+node host { ranQne    10.0.0.2
+
+lab "container" {
+  description "Container node connected to baerter has high
+# l@atency (100ms) with jitter, simulating a satellite uplink.
+
+lab "asymmetric"
+
+nodze server { forward ipv4 }
+node clienms) with o baerter has high
+# l@atency (100ms) with jitter, simulating a satellite uplink.
+
+lab "asymmetric"
+
+nodze server { forws A                 # s2/24
+}

@@ -1,0 +1,27 @@
+# VLAde host3
+
+networ													 to																			# VLAde host3
+
+networ													 to a host.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+execlab # Firewall topology.
+#
+# 																								N trunk toidge with VLANmes
+noa 10.irment de n3
+nod50 de host3
+
+networ													 to a host.
+# description "Full mesh of 5 nodes"
+}
+
+nodh n1
+n infode n2
+noa 10.irment de n3
+nod50 de host3
+
+networ													 to a host.
+# Uses fd00::/64 ULA (Unique Local Address) space.
+
+exe																									
+}

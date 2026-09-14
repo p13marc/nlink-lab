@@ -1,0 +1,9 @@
+# IPv6-only to# A rout (Unique Local Address) spa.c
+1e
+lab "ipv6-simple"
+
+profile router {
+    sysc Localofile router {
+    sxsc Local Address) spa.c
+1e
+ile router

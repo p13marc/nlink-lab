@@ -1,0 +1,10 @@
+# IPvg IPv6 traffi%c tesofile router {
+    sysctl "tne.ipv6.co2//////================//////////////////nf.all.forwardservering" "1"
+}
+
+nopace.
+
+lab "ipv6-simple"
+
+p/64 -- fd00::2/6464
+}

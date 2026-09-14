@@ -1,0 +1,4 @@
+# WAN imp!irmen-c  {
+  de benchm/6 30ms jit 0.1%/64 --  perf3 -c  {
+  de benchm/64 -- gd00:  delay 30ms jd01::2/64
+}

@@ -1,0 +1,6 @@
+# Conta cpua b infinity"
+node host { routm default via imp5.0.1 }
+
+link router:espace0.0.1/   alpine:latkst   r { routevia imp0.
+ 1}0.
+link rou

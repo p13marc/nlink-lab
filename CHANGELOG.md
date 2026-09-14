@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — interpolation invents braces and normalises whitespace (issue #116)
+
+`interpolate_once` scanned `${` to end-of-string without ever checking the brace
+closed, then handed the text to `eval_expr`, whose unknown-variable fallback is
+`format!("${{{expr}}}")` built from the **trimmed** expression. Two consequences,
+both silent:
+
+- `"a${b"` became `"a${b}"` on the very first parse — a closing brace the input
+  never had.
+- `"${ x }"` came back as `"${x}"`, and `"${\n x}"` lost the newline.
+
+Either way interpolation was not idempotent, so `render` wrote one spelling and
+the next parse produced another: `parse → render → parse` stopped being a fixed
+point, and a profile's sysctls (which are not interpolated) plus a node's own
+(which are) could end up as *two* entries where the topology declared one.
+
+An unterminated `${` is now left verbatim, and an unresolved `${…}` keeps its
+original spelling — including whitespace — while any *nested* interpolation
+inside it is still resolved. Terminated-and-known interpolation is unchanged.
+
+Found by `fuzz_roundtrip`; the `fuzz` job only runs on `workflow_dispatch` /
+`schedule`, which is why it had not surfaced on push runs.
+
+
 ## [0.10.0] - 2026-09-14
 
 Four bug fixes found by driving nlink-lab hard from outside: three filed as

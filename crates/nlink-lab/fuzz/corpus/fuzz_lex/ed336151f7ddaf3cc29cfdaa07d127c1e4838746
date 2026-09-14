@@ -1,0 +1,5 @@
+# Spine-leaf dat [topol1gy.
+#via 10.0.0.2 }
+node client { route default va rate-limi { rolt via 10.0.0.2 }
+node client { route default va rate-link. 
+# client can ateing

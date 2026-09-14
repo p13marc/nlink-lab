@@ -1,0 +1,16 @@
+# WireGuard VPN:d:
+4W
+4Ad:d:d8d:Ad:d:d:00e-51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  rout 8d:Ad:d:d:00e-51820
+    address 192.168.255.1/32
+    proute 192.168.2.0/24 dev w10
+}ard VPN:d:
+4W
+4Ad:d:d8d:Ad:d:d:00e-51820
+ wg1 {
+    key aut20.o
+0.1024    l#i@.te% }
+

@@ -1,0 +1,13 @@
+# vvvvvvvvvIPv6-only tspace.
+
+lab "ipv8-"
+
+profile router {
+    sysctl "n.forwd0rinag """
+}
+
+node router : router
+node*host { route default via fd00::1 }
+
+link router:eth0 -- h.forward 2:1/64 -- fd00:2/64
+}

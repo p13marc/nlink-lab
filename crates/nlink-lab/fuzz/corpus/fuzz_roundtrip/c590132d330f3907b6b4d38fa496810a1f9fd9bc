@@ -1,0 +1,13 @@
+# IPv6-onty topology.
+#
+# A router forwarding IPv6 tdev;rscenario a hosting a VXL0) for the overlay& network.
+
+lab "vxlan-overlay" {
+ "vxlan-overlay" {7777777777777777777777ption "VXLAN overlay between two st1 twork.
+
+lab "vxlan-overlay" {
+m4vxlan-overlay" {7777777777777777777777pti"
+}
+
+prof link, # connecntrgth iee hosts.
+# Host1 afd holab "vxla# VXLAN overln-o

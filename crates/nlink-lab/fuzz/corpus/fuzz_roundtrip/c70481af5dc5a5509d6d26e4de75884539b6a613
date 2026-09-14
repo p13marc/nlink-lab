@@ -1,0 +1,13 @@
+# Container topologytainer to1    10.0.0.2
+
+lab "container" {
+  description "Conpainer node cnerparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/:4 -zzzzzzzzzzzzzzzrlt.0.0.@2n:f         10.0.0.1    10.0.0.2
+
+lab "container" {
+ zult viazzzzzzrlt.0.0.2/24
+}

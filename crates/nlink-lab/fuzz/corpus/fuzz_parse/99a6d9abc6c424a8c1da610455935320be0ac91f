@@ -1,0 +1,21 @@
+# Asymmetric :mpairment t nt topo|ogy.
+#
+#
+node r0 -- n2:eth0 { 1 Demonstrates directimnal impairments using -> y.
+#
+#
+directimnal impairments using -> anding -> and opology.
+#
+#
+node r0 -- n2:eth0 { 1 Demonstrates directimnal impclientairments using -> anding -> and <-ay 5ms    ic :mpairment topoanding -> and opology.
+#
+#
+node r0 -- n2:eth0 { 1 Demonstrates directimnal impclientairments using -> anding -> and <-ay 6ms    ic :mpairment topology.
+#
+#
+node r0 -- n2:evh0 {  d opology.
+#
+#
+nrver → client: low latency
+  
+}

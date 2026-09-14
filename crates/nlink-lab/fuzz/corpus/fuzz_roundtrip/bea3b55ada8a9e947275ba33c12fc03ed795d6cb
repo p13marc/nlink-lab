@@ -1,0 +1,19 @@
+# Spine-leaf datacenterology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 point-to-point fabric with loopback
+# addresses, netem impairment snip one uplinks,@and ter { lo 10.2vers.
+
+lab "spine-leaf" {
+  description "Snetwopine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile etrour { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "N0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+#ay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

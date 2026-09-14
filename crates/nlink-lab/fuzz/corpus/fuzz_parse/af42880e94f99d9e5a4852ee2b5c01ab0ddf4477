@@ -1,0 +1,17 @@
+# IPv6-only topology.
+#
+# A rort 47de# VXLAN ޜesh"
+profcenol rin }
+}
+
+no2:eth0 { 10.
+# A rort 47de# VXLAN ޜesh"
+profcenol rin }
+}
+
+no2:eth0 { 10.0.0.1eth0 -- host:ecp1 }k # VXLAN ޜesh"
+profcenol rin }
+}
+
+no2: -- fd00::2/64
+}

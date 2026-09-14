@@ -1,0 +1,10 @@
+# Full me(sh topology:   │  / │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "
+#   n6 ──── n4
+
+lab "mesn4:eth24
+
+link n1:eth0 --lab""mesn4- 1k n1:eth0 --

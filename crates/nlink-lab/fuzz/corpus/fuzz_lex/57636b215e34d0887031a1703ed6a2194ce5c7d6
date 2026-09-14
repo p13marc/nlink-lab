@@ -1,0 +1,47 @@
+#
+
+pa -- iperf1ce.
+
+la -c 10g.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between a -- iperf0ce.
+
+la -c 10g.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gatebways) "ipv6-simple
+link gw-a:eth {"
+
+ 192.168.4 -- .19 "iperf-bench" {
+ lab "iperf-bench" {
+  erlay bet erlay between gateBways) "ipvst2:eth0 {
+  10.0.-- host2:et
+"h {0 gatebways) "ipv6-simple
+lin+k gw-a:eth {"
+
+ .-- h0g.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erll)ay between a -- iperf1ce.
+
+la -c 10g.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gatebways) "ipv6-simple
+link gw-a:eth {9 2"
+4
+}
+
+link router:eth1 -- h
+a -t 5
+
+lab "iperf-bench" {
+  erlay between a -- iperf1ce.
+
+la -c 10g.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gatebwl)ays) "ipv6-simpost2:eth0 {
+  10.0.-- host2:eth0 {
+" gatellbways) "

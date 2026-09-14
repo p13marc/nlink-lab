@@ -1,0 +1,13 @@
+#	v6-onPv6 tr.
+#imj Ud#01::/64l e.
+
+lab "ipv4-sf 2d2:0d00:66imple"
+
+profile router {
+    sysctl ".iding" "1"
+}
+
+node router : router
+node host { route default cmd "sleep n:2    espace"
+}
+3node rlp"ne:latest" cmd rzzzzz:0:1:2z2zzzzz:/zzzz

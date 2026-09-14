@@ -1,0 +1,7 @@
+# Firewall tpar 
+
+rath. ss 1mib t0--udp dport 5nat }
+}
+
+link router:eth0 ss 1mib t010i4 
+}

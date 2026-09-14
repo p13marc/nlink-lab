@@ -1,0 +1,41 @@
+777777777# IPv6-only topology.
+#
+#0Aess) space.
+1
+lab "ipv6-simple"
+
+profile rout
+    fd00::1/64 -- fTd00::2/6777777777747777,77
+}uter
+node host { youte default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::-- fTd00::2/6777777777747777,77
+}uter
+node host { youte default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/677777777774777 "1"
+} "1"
+}
+
+ll topology0 "iperf-bench" {
+t { route default via fd00::1 }
+
+link router:eth0 -- ho {
+    fd00::1/64 -- fTd00::2/6777777777747777,77
+}uter
+7777777747777,77
+}uter
+node host { yonode host { youte default via fd00::1 }
+
+link router:eth0 -- host }
+
+link router fd00::2/677777777774777 "1"
+} "1"
+}
+
+ll topology0 "iperf-bench" {
+t { route default v:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/6777777777747777,77
+}

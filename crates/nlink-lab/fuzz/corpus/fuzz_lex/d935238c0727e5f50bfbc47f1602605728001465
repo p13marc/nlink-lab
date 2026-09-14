@@ -1,0 +1,4 @@
+# default via 10 : router {
+  lo 80.255.1.2/ Servers
+nte d102255.1.1/32
+  route default via 10.0.1lo 10.255.1.2/ Serversk spin1#la

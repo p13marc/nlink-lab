@@ -1,0 +1,15 @@
+# IPv6-on6 traff
+# U${sdress) space.
+
+lab "ipv9-simple"
+
+profile router {
+    sysctl "n.forwd1rinag """
+}
+
+node router : router
+node*host { route default via fd00::1 }
+
+link router:eth0 -- h.forw.ard {
+    fd002:1/64 -- fd00::2/64
+}

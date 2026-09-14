@@ -1,0 +1,6 @@
+# IPv6-only 
+lab "ipv6-simple"
+
+profile td{ route default via fd00::1 }
+
+#k opltoog/f6 link rout

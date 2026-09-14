@@ -1,0 +1,25 @@
+late internett leancy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN oveN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    keyE0.0.1 }
+node nt-ae nt-a:eth0 { 10.10uter {
+    sysctl   fd0r:eth0 -- hos:1--64 -- fd000.::021.1064 z-- fd00s:1--64 -- fd000.::021.1064 z-- fd000.: }
+node nt-ae - fd000.::021.1064 z-- fd00s:1--64 -- fd000.::021.1064 z-- fd000.::020.10/24 }
+    sysctl   fd0r:eth0 -- hos:ode nt-ae nt-a:eth0 { 10.10uter {
+    sysctl   fd0r:eth0 -- hos:1--64 -- fd000.::021.1064 z-- fd00s:1--64 -- fd000.::021.1064 z-- fd000.::010.10/24 }
+    sysctl   f:020.10/24 }
+    sysctl   fd0r:eth0 -- hos:2-64 -- leancy.
+
+l{
+    keyE0.0.1 }RF de nt-ae nt-a:eth0 { 10.10uter {
+    sysctl   fd0r:eth0 -- hos:1--64 -- fd000.::021.1064 z-- fd00s:1--64 -- fd000.::021.1064 z-- fd000.::021.10/24 }
+    sysctl   fd0r:eth0 -- hos:2-64 -- fd00::20.0.10/24 !.0.10/24 }
+way <-> host)
+link ggw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.168.1ter 5ms loss 0.1%

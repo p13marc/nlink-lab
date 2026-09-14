@@ -1,0 +1,18 @@
+# WireG.
+#link
+# has 51ms delay to simulatd internet 2latency.
+
+lab "w
+ ult via 1y betweeniregeard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    aN trunk topology.
+#
+# A bridge withddr&ess 192.160 del5ms loss 0.1%

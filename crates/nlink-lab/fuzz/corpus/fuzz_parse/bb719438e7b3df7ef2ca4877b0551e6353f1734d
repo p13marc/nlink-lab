@@ -1,0 +1,17 @@
+]# Router topology: on% route#
+# A roeth2uter mple"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555755555555.1 }
+
+link rout    sysctl "net.ipv6.conf"net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout    sysctl "net.ipv6.conf.all.forw router {
+    sysctl "net.ipv6.conf.aroute default via 10.0.25555555555555555555555555555555555555.1 }
+
+link rout  ter
+}

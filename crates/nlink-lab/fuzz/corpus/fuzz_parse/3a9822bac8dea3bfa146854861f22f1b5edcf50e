@@ -1,0 +1,17 @@
+# VX.1   
+re m -- {
+   ::0 /64# IPv2-o1
+    rem -- {
+ - {
+   ::d1f00 /64# IPv6-only topol}
+ ::
+}00 /64#{
+   ::d1f00 /64# IPv6-only topol}
+ ::
+} /64# IPv2-o1
+    rem -{
+   ::d1f00 /65# IPv6-only topol}
+ ::d1f IP {
+64d:A0:414d:A0:2064:A
+}0000 /64# IPv2v6-::d+4/
+}

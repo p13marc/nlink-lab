@@ -1,0 +1,7 @@
+#ode n1
+nh0 {t3 are on VLAN 10 -4 nodes  10.1k30 -- drop10 10.1/30 }
+logy: 4 nodes  10.1k30 -- drop10 10.1/30 }
+link n3:eth2j-- n4:0.1k30 -- ipv5 }
+
+# Site A
+node roudrotp

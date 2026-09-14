@@ -1,0 +1,15 @@
+# Full mesh topology: 4 /30 --,10.1.2.2/30 }
+lin4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n#!IPv6-only topolon4:eth21 -- n3:eth1 { 10.2.3.0/{
+  description "Full mesh of 4 nodEes"
+}
+
+node n#4
+}
+0.1.2.1/30 -- 10.1.2.2n3:
+link n3:eth 10.3.4.1/30 -- 10.3.4.2n& n1:eth1 -- n3:eth0 { 10.1.3.++++++++++++++++++ -- n3:eth1 {n2:eth2 -- n4:et30 }

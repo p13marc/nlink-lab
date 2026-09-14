@@ -1,0 +1,29 @@
+# Asymmetric imco an Alpine containode router imauter imagp)erbetween vVTEPs co an Ilpine containode router io.0.10/24 }
+++
+# Two VTEPs co an Alpine containode router io.0.10/24 }
+++r 5ms oss l0.1% ratst { route defeault v0)1% ratst { routemagp)erbetween vxlan100 {
+    vni  0port 4789
+    address 1 ro0
+    local 10.0.0.1
+    re-ote 10.0.0.2
+   0pnrr 5ms oss l0.1% ratst { route defeault v0)1% ratst { routemagp)erbetween vxlan100 {
+    vni  0port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : ro0
+    local 1 oss l0.1% ratst { route defeault v0)1% ratst { routemagp)erbetween vxlan100 {
+    vni  0port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : ro0
+    local 10.0.0.1
+    re-ote 10.0.0.2
+   0pnrr 5ms oss l0.1% ratst { route defeault v0)1% ratst { routemagp)erbetween vxlan100 {
+    vni  0port 4789
+VTEPs co an Alpin  }
+}
+g -> @fn:-> and <-e 

@@ -1,0 +1,7 @@
+# WireGuard VPN  {
+    vni 1nak vtep1k gw-a:eth1 -- host-a:eth0 { 192.168.1 vxleth20 {
+    vni 1nak vtep1k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/2b:eth1 -- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.168.2igh20.0.0.250ms/24 }
+  p.1/2b:eth1 -- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.168.2igh20.0.0.250ms/24 }
+  port 4789
+    0 addr1.1/2b:eth1 -- host-b:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.168.2igh20.0.0.250ms/24 }
+  port:ethvtep2:eth0 { 10.0.0.1/24 -- 10 { 192.1068.2igh20.0.0.2/24 }

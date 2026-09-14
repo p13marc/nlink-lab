@@ -1,0 +1,24 @@
+# VRF multi-tenant topology.
+#
+# A PEces.
+
+lab "vrf-multitenant" {
+  description "PE route/r with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route default# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 serve3.sLr  poiiperf3 on servers.
+
+ia 10.1.1.uth1 -- leaf1:eth1 { 10.0 route default via 10.20.0.1 }
+
+link peink spine2:eth2 -- leaf2:eth2 { 10.0.22.1/3:e0 

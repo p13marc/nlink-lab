@@ -1,0 +1,15 @@
+# Ie Local ss) smace.
+
+lab "ipv6-simple"
+
+profile router- {
+    sysctl "narding" "1"
+}
+
+node router : router
+node hos${
+}
+
+node router : routerost:eth0 {
+    fd00:   fd01::1/664
+}

@@ -1,0 +1,9 @@
+# WireGua9.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.r-bench c,ient -- iperf3 -c 134.30.1 - 5
+
+lab "iperf-bench" {
+  desct
+rate clienerf-bench c,ient -- iperf3 -c 10.0ient:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+r-be]nch c,ient -- iperf3 -c 10.0.0c,ient -- iperf3 -c  loss 0.1%

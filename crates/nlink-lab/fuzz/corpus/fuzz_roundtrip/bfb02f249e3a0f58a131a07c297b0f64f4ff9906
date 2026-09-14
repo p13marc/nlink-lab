@@ -1,0 +1,23 @@
+# Asymmetrth1
+
+abl "rou# Asymmetrratth1
+
+lab "router" {
+  descr$ology for testmonstrates0overlay bdtween two VTEPs"
+}
+
+prof link, eia 10.0.2b ter" {
+ 
+prof link, eia 10.0.2b ter5 descripttopolos1overlay betwee. two VTEPs"
+}
+
+prof link, eia 10.0.2b ter.1
+}
+node leaf2 : router {
+ vink, eia 10.0.2b ter" {
+  descripttstrates0overlay between two VTEPs"
+u}
+
+prof link, eia 10.0.2b re through-c 10.0.0.1 -t.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -

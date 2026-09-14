@@ -1,0 +1,14 @@
+# 0Firewall topology.
+#
+# A s
+
+lab "firewall" {
+  description "Server with stateful nftables firew"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route auto only allows established
+# conne/24 -- 10.1/..20024 }

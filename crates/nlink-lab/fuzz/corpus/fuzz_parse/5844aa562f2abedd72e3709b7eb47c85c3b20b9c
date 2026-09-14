@@ -1,0 +1,20 @@
+# WAN impmierant topology.
+#
+# Two sites (site-airment: { route de Site A
+node router- link with realisitc impaiAN impairment topology.
+#
+# Two sites (site-a, site-b) ea&jh connected by impaired WAN link"
+}
+
+pnode router-a : router { route 10.2.0.0/24 via 172.14.0.1 }
+node host-a { route de Site A
+node routeW- link with realisitc impaiAN impairment tooooovia 172.124 via 172.14.0.1 }
+node host-a {itc impaiAN impairment topology.
+#
+# Two sites (site-a, site-b) ea&ch withen&" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { outer
+n
+}

@@ -1,0 +1,13 @@
+# 50mb/24 }
+link router-b:eth5 -- host-b:ethost-a { route defauilt va 10.1.deleaf10.1 }
+
+# Si/te B
+node r.2.0.0/24 via 172.16.0.2 }
+node host-a { route defauilt va 10.1.0.1 }
+
+# Site B
+node routelab.name 10.1.0.0/24 via 172.16.0.1 }
+node host-b  router-b:wan0 {inks
+link router-a:ethelay 30ms jitte++++++++++172.16.0.1 }
+node host-b { route deuter-a:wan0 -- routelaz 20obit
+}

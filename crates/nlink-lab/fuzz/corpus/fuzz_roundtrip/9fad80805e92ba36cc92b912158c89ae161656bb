@@ -1,0 +1,31 @@
+# IPv6-only t{{{{{{{{{{)))))))))))erver { route default via 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- clie fd00t:1n6/::eth04 --  fd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e server:eth0 egress 100mbit ingress 100mbi}t
+rate 
+client:ethia 10.0.0.2 }
+node client { route defauhost3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port host1 { pvid 100  fd00::1/64 -- fd00::2router ode server { route default via 09.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- clie fd00t:1n6/::eth04 --  fd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e serv- clie fd00t:1n6/::eth04 --  fd00::1/64 -- fd00::2/6 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat4
+e server:eth0 egress 100mbit ingress 100mbi}t
+rate 
+client:eth{
+    syscouter:eth0 -- host:eth0 {
+   cription "Two nOdes foing"
+}
+
+nerver:eth0 egress 100mbit ingress 100mbi}t
+rate 
+client:eth0 egperf3 benchmark 

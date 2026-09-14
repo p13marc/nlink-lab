@@ -1,0 +1,25 @@
+# Asymaf datacenter fabric"
+  prefix "dc"
+}
+
+prrrrrrrrrrrr {
+  description "Spine-leaf datacenter fabric"
+  prefix "d}
+c"
+
+prrrrrrrrrrrrrrrr n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -m  topoNogy: 4 nodes fully interconnected.
+## Spine-leaf n serve
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+prrrrog0 "sales"
+  vlan 200 "engineering"
+  prun host1 {ology.8.07777.07777.0lan 200 "engineering"
+  prun host1 {:e 

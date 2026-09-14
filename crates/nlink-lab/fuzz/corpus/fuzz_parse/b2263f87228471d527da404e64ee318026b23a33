@@ -1,0 +1,19 @@
+# VLAN trunk topolare on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [hoskkkkkkkkkkkkkkkkkkk:eth0ht ,s:o3eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW{ pvid 100  untagged }
+  port host1 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}

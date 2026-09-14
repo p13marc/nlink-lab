@@ -1,0 +1,15 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay link, eachhe
+lab "vxlan-overlay" {
+  description "V overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan200 {
+    vni q00spine1:et
+    local 1    address 192.168.100.1/24
+  }
+ 10.0.0.2/24 g

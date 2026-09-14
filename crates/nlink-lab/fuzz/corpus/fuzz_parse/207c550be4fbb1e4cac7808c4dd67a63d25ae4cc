@@ -1,0 +1,14 @@
+# Spine-leaf datacef3 on servers.
+
+lsb"p aine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+ route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)## Servers
+node server2 : host { 2oute default via 1008bit rauraut.050 .   por0.1
+    port 47defasales2
+    porout.1audd: porout.1au link withoss, and 008bit raut.0.10    po pine <-> leaf)## Servers
+node server2 : host { 2oute default via 1008bit rauraut.050 .   por0.1
+    port 47defasales2
+    porout.1audd: porout.1au link withoss, and 008bit raut.0.10    po    por two 

@@ -1,0 +1,22 @@
+# WAN impairment topoexeclogy.
+#
+# ZZZZZZZZZZZ.
+
+lab "wan-impairment" {
+  description "Two sites connected link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+
+# Site K
+node router-b : router { route 10.1.0.0/24 via 14 via 172.16.0.2 }
+node host-a { route default via 10.
+
+#.10/24 }
+
+# WAN link with  0.1% rate 50mbit
+}

@@ -1,0 +1,5 @@
+# -b:wan0 {
+  172.16.0.1/30 -- 172.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rAte 502.06 11..}
+nod delay 30ms jitter 5ms loss 0.1% rate 502.130ms jitter 5ms loss 9.1% rate 50 -- 172.16.0-2/30
+  delay 30ms jitter 5ms loss 0.1% rate 50mbit}

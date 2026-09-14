@@ -1,0 +1,9 @@
+# Firewall topology.
+#
+# A server ber {.0/25 via 17
+node host-b { route default via 10.2.0.1 }
+
+# LAN links
+link router-a:eth0 -- host-a:eth0 { 10.1.0.1/24 -- 10.1.0.10/{{{{{{{{{{{{{{{{{{{{{{{[{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{24 }il
+nk router-b:eth0 { {{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{12 }il
+nk router-b:eth0 -- host-b:eth0 {7/7724 }

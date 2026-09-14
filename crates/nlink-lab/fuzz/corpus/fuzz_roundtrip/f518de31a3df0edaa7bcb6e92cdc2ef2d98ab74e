@@ -1,0 +1,20 @@
+# iperf3 benchmr-- clt ingress 100mibt
+rate c
+ 777770mibt
+rate client:ethb "iper
+link ser-- clt ingress 100mibt
+rate c
+ 77s 100mibt
+rate client:eth0 egress 100u0mibt
+rate c
+ 777770mibt
+rate client:ethb "iper
+link ser-- clt ingress 100mibt
+rate c
+ 777777- clt ingress 100mibt
+rate client:ethbeegs1 0sr0natmbit ingress 100mibt
+rate client:eth0 egress 100ut.
+#
+## VXLAN ovdeploy:
+# nlink-ln1 }
+nod

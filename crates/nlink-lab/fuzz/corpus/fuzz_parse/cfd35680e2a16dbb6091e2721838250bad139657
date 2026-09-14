@@ -1,0 +1,42 @@
+# WireGua9.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.2/24 }
+
+r-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput @benchmarking"
+}oress 1 client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+r-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput @benchmarking"
+}oress 1ard ipv4 }
+
+node router : router
+
+node c00mbit ingress 100mbit
+rate clienerf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  descs connectclient { route default via 09.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+r-bench c,ient -- iperf3 -c 10.0.0.1 -t 500mard ipv4 }
+
+node router : router
+
+node c00mbit ingress 100mbit
+rate clienerf-bench c,ient -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  descs connectclient { route default via 09.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.04 }
+
+r-bench c,ient -- iperf3 -c 10.0.0.1 -t 500mbit ingaress 100mbit
+rate clienerf-bench c,ient -- iperf3 -c 10.0.0.logy1 -t 5
+
+lab "iperf loss 0.1%

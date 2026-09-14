@@ -1,0 +1,25 @@
+# VXLANay topology.
+#
+# Two VTEPs connected by a link, each hosting a VXLAN
+# intlan-overlay" {
+  deerfacscription e (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  interface (VNI 100) for the overlay network.VTEPs connected by a link, each hosting a VXLAN
+# intlan-overlay" {
+  deerfacscription e (VNI 100) for the overlay network.
+
+lab "vxlan-overlay" {
+  interface (VNI 100) for the overlay network.
+
+lab "vxlqn-overlay" {
+  descriptionrd ipv4 }
+
+node vtep1 : ro"VXLAN over
+
+lab "vxlqn-overlay" {
+  descriptionrd ipv4 }
+
+node vtep1 : ro"VXLAN overlay between two VTEPs vtuter {
+  vxlan vxlaen100 {
+    vni 10p1>eth0

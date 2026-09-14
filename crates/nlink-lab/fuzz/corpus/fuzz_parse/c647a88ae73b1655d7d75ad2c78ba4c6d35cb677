@@ -1,0 +1,11 @@
+# VXLAN overlay tby an un).
+
+lab "vlan-trunk" {
+  description "Brirts"
+}
+
+
+network fabric {
+  vlan-filtering
+  members [hi.0.0.1
+    emote0.0.2/24 }

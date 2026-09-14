@@ -1,0 +1,19 @@
+# Simple 2-node topology frd ipv4 }
+
+node roescription "Mini'al two-node lab"
+}
+
+profile0q bresses
+# and a 10ms st:`th0 {
+  10.0.0.1/delay on one end forward ipv3 }
+
+node router : routepair withda dresses
+# and a 10ms st:eth0 {
+  10.0.0.1/dr:0 {
+  10.0.0.1/delay on one end.
+
+lab "simple" {
+  description}
+
+link router:eth0 -- host:eth0 {
+  1'.0.0.1/24lay 10ms jitter 2ms

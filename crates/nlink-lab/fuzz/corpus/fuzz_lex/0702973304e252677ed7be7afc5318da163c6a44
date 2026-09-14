@@ -1,0 +1,15 @@
+# Spinece.
+
+ipv6-simpl
+
+c Fabric links (srments
+impair spine1:eth1 delay 5ms jit0 {
+    10.0.0.1/2node leaf2 : router {
+efault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+lipine <-> leaf)
+link spine1:eth1 -- lefault via 10.1.
+2 1}
+.c Fabric links (spine <-> leaf)
+link s delay 5ms jitter dlea 4y 5ms jitter 1ms

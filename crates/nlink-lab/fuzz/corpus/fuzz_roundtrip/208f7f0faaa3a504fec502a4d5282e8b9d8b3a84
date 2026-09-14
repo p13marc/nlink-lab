@@ -1,0 +1,19 @@
+# WAN impairitzrate limiting.
+
+lab "wan-impairment" {
+  description "Two siteed WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- hSite A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0r { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- hSite A
+node router-a : router { roetween"
+}
+
+profile routeeth0 -- host-b:r 5ms loss 0.1% rate 12mbit
+}

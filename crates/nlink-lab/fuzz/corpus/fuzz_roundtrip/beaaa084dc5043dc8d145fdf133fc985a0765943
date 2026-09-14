@@ -1,0 +1,3 @@
+# IPv6-only topolelay on one end.
+lab7{ route default via 10.0P1.1 }
+node jost2 { re default via 10.0.277777777777777777777777777777777777777777777777777777777777777777777777777777ms jitter 2beh

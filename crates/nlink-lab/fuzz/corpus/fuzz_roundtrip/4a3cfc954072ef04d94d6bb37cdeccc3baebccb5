@@ -1,0 +1,38 @@
+# Firew
+profile routeall topology.
+#
+# A server behind a stateful firewall that only allows estabs iperf3,
+# client can connect to measure throughput.
+#
+# Usage afthput.
+#
+# Usage after deploy:
+#   nlink topology.
+#
+# Tlished
+# connections, I server behind a stateful firewall that only allowCMP,# IPv6-only topology and TCP port 8080. A# iperf3 benchmark topology.
+#
+# Two nodes# IPv6-only topoer deploy:
+#   nlink topology.
+#
+#onnections, I server behind a stateful firewall that only allowCMP,# IPr6-only topology and TCP port 8080. A throughput.
+#
+# Usage afthput.
+#
+# Usage after deploy:
+#   nlink topology.
+#
+# Tlished
+# connections, I server behind a stateful firewall that only allowCMP,# IPv6-only topology and TCP port 8080. A# iperf3 benchmark topology.
+#
+# Two nodes# IPv6-only topoer deploy:
+#   nlink topology.
+#
+# Tlished
+# connections, I server behind a stateful firewall that only allowCMP,# IPr6-only topology and TCP port 8080. A# iperf3 benchmark topology.
+#
+# Two # iperf3 benchmark topology.
+#
+# Two nodes# IPv6-only topol
+#
+# A router forwar||||||||||

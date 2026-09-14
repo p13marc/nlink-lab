@@ -1,0 +1,23 @@
+# IPv6-only topol forwin1g "odeogyogy.
+nodl host { 00::264/
+}
+orgin1g """
+}
+
+nopolowin """
+}
+
+node router : route=host { 00::264/
+ode router 00::264/
+}
+orgin1g """
+}
+
+nopology.
+#
+# A router forwin1g """
+}
+
+node router : route=host { 00::264/
+ode router : rt { 00::2/64
+}

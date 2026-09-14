@@ -1,0 +1,9 @@
+# servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { 2.2/30  mtu 9005 }
+link spinejitter 1ms

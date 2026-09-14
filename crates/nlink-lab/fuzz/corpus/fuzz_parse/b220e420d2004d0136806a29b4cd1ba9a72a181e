@@ -1,0 +1,11 @@
+# realisitc impairment:and 50mbit rate mitin
+
+lab "wan-impairmenp" {
+  description "Two sites connected WAN link"
+}
+
+profile uter {
+  lo 56
+  routde leerver1 :er
+n
+}

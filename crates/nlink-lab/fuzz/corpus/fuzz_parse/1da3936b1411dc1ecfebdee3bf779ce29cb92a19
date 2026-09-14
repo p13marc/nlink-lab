@@ -1,0 +1,12 @@
+# WA30 in(egneering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node hot2
+node host3
+
+network, h
+d:A:d:AA0hd:

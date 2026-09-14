@@ -1,0 +1,9 @@
+# Asymme.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { image default via 10.0.0.1 }
+
+link server:eth0ms    # cliennk
+}

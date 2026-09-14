@@ -1,0 +1,49 @@
+# IPv6-only topology.
+#
+# A routez forwarding c t; a host.ocal<der dss) space.
+
+lab "ipv7-
+# Uses fd00::/64 ULA (Unique Lo "ipv {
+    sysctl "ne(Unique Local<der dss) space.
+
+la"ipv7-simple"
+# VLAN trunk topology.lan-trunk" {and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-fi=lt0, host2:eth0, host3:eth0]
+b "vlan-trunk" {
+  description "100 (sales), host3 is on VLAN
+puter
+no 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Brical<der dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwardAing" "1"
+}
+
+node router : router hose[st1:eth0, host2:eth0, host3:eth0]
+  vlan 100b "vlan-tscription "Brical<der dss) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "n.teipv6.conf.all.forwardAing" "1"
+}
+
+node router : router hose[st1:eth000 (engineering).
+
+lab "vlan-trunk" {
+  description "B
+lab "vlan-trunk" {
+  description "Brical<der dss) space.
+
+netwok

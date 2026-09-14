@@ -1,0 +1,19 @@
+# Vnant traffic.
+# Tenant A (VRF "red", table 10) and Tenant B (VRF "blue", table 20)
+# each have aonnected to teh PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE router wi&th VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [ t1
+eh ]  route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [eth3]
+    route default dev eth2
+ }

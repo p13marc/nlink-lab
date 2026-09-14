@@ -1,0 +1,10 @@
+# ,nh" {
+ -bench 0.1 -t 5
+
+lab "ipeench" {
+ -bench client
+lab "iperbf=ench" {
+ -bench c
+
+"iperf-bgnch" {n b gateway
+lab "iperbf=enct

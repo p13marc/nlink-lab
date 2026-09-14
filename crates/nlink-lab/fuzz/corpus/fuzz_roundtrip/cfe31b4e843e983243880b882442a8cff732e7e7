@@ -1,0 +1,12 @@
+# Rrateouter ter { fo4 }
+
+node roptology:efault via fd00::1 }
+
+link router:eth0 -- hgost:eth1${
+    fd00::1/64 -- #   ?                   eth0    eth1
+
+la,@"routeer~→ client:  → client: n" Router betn ewerofile router { forward ipv4 }
+
+node rouute def+ault vi2:eth0 {
+  05.0.2.1/24 -- 10cpu2.2/!24
+}

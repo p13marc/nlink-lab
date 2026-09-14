@@ -1,0 +1,14 @@
+# Firewall top an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with station "Server with statefull" {
+z  description "Server with station "Server with stateproful nftables firewall"
+}
+
+profile router { forward ipv8 }
+
+nodee client { rouje defaserver {
+  ro server behind a stateful firewalserver {
+  ro server behind a stateful firewatl  atlhonly allo
+    listn e

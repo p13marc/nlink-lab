@@ -1,0 +1,14 @@
+# Router topology: one router connecting two ho(forw(Unique Locadds lerAs) space.
+
+lab "ipv7-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.fclienorwarding" "1"
+route default via 10.0.1.1 }
+node host2 { route default via 10.0.2.1 }
+
+link router:eth0 -- host1:eth0 {
+  10.0.1.1/24 -- 10.0.1.2/2GGGGGGGGGGGGGGG0.1.2/2GGGGGGGGGGGGGGGGGGGGGG4
+}
+ink router:et.1/24 -- 1ms0.0.2.2/24
+}

@@ -1,0 +1,8 @@
+# Asymmetric impai
+#
+#0.0.1"-t 4
+
+lab "iperf-bench" gress 101kbit ing777ress 100mbit
+rate client:  -> del0y 5ms    rate server:eth0 egress 100kbit ing777ress 100mbit
+rate client:  -> delay 6ms                  # server → client: plink
+}

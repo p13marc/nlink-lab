@@ -1,0 +1,4 @@
+# Firewall lt ria fd00::1 }
+
+lineth0 {
+    fd00:1:00d:.::::::::::hostname:::

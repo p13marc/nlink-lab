@@ -1,0 +1,10 @@
+# VLAN tru)nk t.
+# Host1 aos
+
+lab "vlan-trunk" {
+  ## Firewal EAd0#
+ncli -net- hostt06:1:2ows.
+# t0.0}.12.102
+}
+routerE:100:1s{ pvid 20E:
+E:EAE

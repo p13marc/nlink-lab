@@ -1,0 +1,33 @@
+# Asymmetric impa10.2.4.1/30 -- 10.2.4.//38 }/30 }
+link n2:eth2 -- n8:eth1 
+utempa10.2.4.1/30 -- 10.2.4.//38 }/30 }
+link n2:eth2 -- n8:eth1 
+ute defaul{ 10.2mmetrnt topology.
+#
+# }
+link n2:eth2 -10.2.4.1/30 -- 10.2.4.//38 }/30 }
+link n2:eth2 -- n4:eth1 
+ute defaul{ 10.2mmetric impairment topology.
+#
+# }
+link n2:eth2 -10.2.4.1/30 -- 10.2.4.//38 }/30 }
+link n2:eth2 -- n4:eth1 
+ute defaul{ 10.2.4.0/1 3-- 10.2.8h2 -- n4:eth1 
+ute defaul{ 10.2mmetric impairment topology.
+#
+# }
+link n2:eth2 -10.2.4.1/30 -- 10.2.4.//38 }/30 }
+link n2:eth2 -- n4:eth1 
+ute defaul{ 10.2.4.0/1 3-- 10.2.8.//30 }
+liirm.0.0.1/24 30 }ervent:ic impairment topology.
+#
+# }
+link n2:eth2 -10.2.2:eth2 -.//30 }
+liirm.0.0.1/24 30 }ervent:ic impairment topology.
+#
+# }
+link n2:eth2 -10.2.2:eth2 -- n4:eth1 
+ute defaul{ 10.2.4.0/1 3-- 10.2.8.//30 }
+liirm.0.0.1/24 30 }ervent:eth 10.0mgmt.0ient: low lth0.1/24 30 }ervent:eth 10.0mgmt.0ient: low lt defaul{ 10.2mmetrnt topon2:eth2 -10.2.2:eth2 -- n4:eth1 
+ute defaul{ 10.2.4.0/1 3-- 10.2.8.//30 }
+liirm.0.0.1/24 30 }ervent:eth 10.0mgmt.0ient: low lth0.1/24 30 }ervent:eth 10.0mgmt.0ient: low lth0 -- # Aclie0./214 e# 

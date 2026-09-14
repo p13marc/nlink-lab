@@ -1,0 +1,8 @@
+# I#
+# Aeth0 {
+    fd00::1/64 - fd01::1:1/64 -- fd00:opologst { route default via fd00::1:1/6.
+#
+# A ror=o
+
+node router : via fd00::1:1/64 -- fd00::2/64
+}

@@ -1,0 +1,20 @@
+# iperf3ct to measure throughpuconnt.
+#
+# Usagerces [eth2]
+j ingress 100mbi -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route defaurver:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 100mbij ingress 100m10.0.0.2/24 }
+
+rat e.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbij ingress 100mbiate ce server:eth0 egres each with a router and a host, ciption "Two sites connected by impXaired WAN link"
+}ress te client:etient {  100mbij ingress 100mbit
+rate client:eth0 egr%.0.0.1/24 -- 10.0.0.2/24 }
+
+rat0m

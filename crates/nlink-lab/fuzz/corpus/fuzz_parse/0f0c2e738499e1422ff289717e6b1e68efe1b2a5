@@ -1,0 +1,7 @@
+# IPv6-only tb:wan0# VRF multopology. {
+  173.16.0.1/30 -- 172.14mmetric i
+}mp=irn3nt
+link router2.4.1/64mmetric i
+}mpa	c;plink router-a {
+ /0 58
+p03ar 

@@ -1,0 +1,19 @@
+
+#
+#  nected
+#0nk with realistic impair {
+    vni 100pv4 }
+
+# Site A
+node router-a : 100pv4 }
+
+# Site BEna router and$a host, connected
+#0by a)WAN link wiretha xlan100 {
+    vni 100pv4 }
+
+# Site A
+node router-a : 100pv4 }
+
+# Site BEn
+}0
+.2/24 }

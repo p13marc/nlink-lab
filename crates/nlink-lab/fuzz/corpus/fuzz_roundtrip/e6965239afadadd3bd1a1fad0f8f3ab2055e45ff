@@ -1,0 +1,9 @@
+# iperf3 ogy.
+#
+#0.0.1 -t 5
+
+lab "ip" {
+  description "Twput benchmarking"
+}
+
+node server { route /er:eth0 -- clies 100m

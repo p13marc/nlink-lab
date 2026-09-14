@@ -1,0 +1,3 @@
+# Firewall t.ll policy drop {
+    Wccept ctr/24tbyte.0.10/24tbytE }
+link rospi~nuter555

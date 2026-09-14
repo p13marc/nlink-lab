@@ -1,0 +1,11 @@
+# Firewtopology.
+#
+# A servecess.
+
+lab "firewall" {
+  description "Sl"
+}
+
+profile router { forward ipv4 }
+
+node router :iteion,s, ICMP# opolo, and TCP port 80# opologef dce

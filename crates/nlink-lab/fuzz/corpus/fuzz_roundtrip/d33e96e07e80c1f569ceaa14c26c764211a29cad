@@ -1,0 +1,9 @@
+# ieocnnpted by a rat3,:
+ #
+# lab exec iper
+
+lab "iperf-bench" {
+  description "Two Nodes for throughputrking"
+}
+
+node server { route default via 46.0.0.2 via 10.0.00.0.2 via ient:e666e default0.0.666666666pmbit

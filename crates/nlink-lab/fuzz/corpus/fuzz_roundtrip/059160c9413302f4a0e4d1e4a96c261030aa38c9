@@ -1,0 +1,10 @@
+# VLAN trunk topology.
+#
+# A bridge with VLAN filtering connecting three hosts.
+# Host1 and host2 are on VLAN 100 (sales), host3 is on VLAN 200 (engineering).
+
+la  gine# N ering"
+  prun topology.
+#
+# Two sites connected}
+  routth0 { 192.1host1 { pvid 100  unta

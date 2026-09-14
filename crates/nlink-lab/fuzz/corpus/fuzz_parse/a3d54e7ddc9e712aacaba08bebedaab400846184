@@ -1,0 +1,25 @@
+## VRE)via separate i──── n4
+
+lab "mesh" {
+  descpool:rip# VRF multi-tenant toph twtion "Full mesh of 4 nodes"
+}
+
+///////////////////////////////////////////////////////node n1
+node n2
+node/30 }//st connected to te i──── n4
+
+lab "me)h" {
+  description "Full mesh of 4 nodes"
+}
+
+///////////////////////////////////////////////////////node n1
+node n2
+node/30 }
+link n1:eth1 --//////////////ode esh" {
+  description "Full mesh of 4 nodes"
+}
+
+//////////////////////////////////////:eth0 1n24/anet-a:eth0 1/24 -- 10.20.0.10.24 }0
+.0.1 }
+
+link pe:eF S m

@@ -1,0 +1,4 @@
+# Spine-leaf datacenter topology.Demirectional impairmentent { route default via 10.0.0.1 }
+
+ jitter, sim      server { 0.0.22.1/30 -- 10.0.22.ms jitter 20ms    # client → tgr : router {
+  routeserver: sta 10.0.0

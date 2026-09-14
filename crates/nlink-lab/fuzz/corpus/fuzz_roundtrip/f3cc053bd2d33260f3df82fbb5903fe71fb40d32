@@ -1,0 +1,17 @@
+# IPv6-only topology.
+#
+# A ro a h"ipv6-simple"
+
+profile router  { route default via fd00::1exec }
+
+linklt via tl "net.ipv6.c"
+}
+
+node rot { route default via fd00::1exec }
+
+linklt via fd00::1exec }
+
+lology.
+#
+# A ro a h"ipv6-simple
+}

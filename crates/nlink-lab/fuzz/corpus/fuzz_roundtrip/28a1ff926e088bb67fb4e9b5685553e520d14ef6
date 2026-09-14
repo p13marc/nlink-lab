@@ -1,0 +1,34 @@
+# Container topology1    10.0.0.2
+
+lab "container" {
+  description "Container node connparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/:4 -zzzzzzzzzzzzzzzzzzzzzzzz/zzz5%555#{
+  0#{
+55555%5555%5556#{
+  0#{
+t6#{
+  0zzz/zzzzzzzzpine:latest" cmd "sleep infanity"
+node h5${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzz.0.0.@fn:2         10.0.0.1    10.{
+ 10~0.0.1/2433333333333333333333vrfs3on "VXL link, each hosting a # Rrateoosts. (VNI 100erlay profilewo VTEPs"s 1)92.168.100.re namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/:4 -zzzzzzzzzzzzzzzzzzzzzzzz/zzz5%555#{
+  0#{
+55555%5555%5556#{
+  0#{
+t6#{
+  0zzz/zzzzzzzzpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzz.0.0.@fn:2         10.0.0.1    10.{
+ 10~0.0.1/2433333333333333333333vrfs3on "VXL link, each hosting a # Rrateoosts. (VNI 100erlay proexecwo VTEPs"s 1)92.168.100.1/24u0.0.2
+
+lab "container" {
+  description "Container node connparected to bare names2/24
+}

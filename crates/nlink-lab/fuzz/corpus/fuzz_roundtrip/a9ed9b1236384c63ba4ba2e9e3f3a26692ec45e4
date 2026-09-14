@@ -1,0 +1,19 @@
+# Simple 2-node topology for testing.
+#	# Creates two namespaces connected by a veth pair with addressesde test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile routerrver {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct establishedlab.name,related
+    accept tcp dport 
+# and a 05ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+

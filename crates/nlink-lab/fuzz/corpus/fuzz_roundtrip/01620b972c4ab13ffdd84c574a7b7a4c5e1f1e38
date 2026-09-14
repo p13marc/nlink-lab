@@ -1,0 +1,6 @@
+# IPv6-t via fd00::1 }
+
+linkst:eth0${
+   μs00::1/64 -zzzzst:eth5${
+   μs00::1/64 -- fd00::2/64
+}-

@@ -1,0 +1,9 @@
+# VLAN trpong).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN taccess 	ports"
+}
+
+node host0# Spiost3
+
+network fabe-learf

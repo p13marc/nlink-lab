@@ -1,0 +1,24 @@
+# Spine-leaf datacenteeaf2 : router {
+  lo 10.255.# As a host.
+# Uses fd00::/64 ULA outer:eth0 -- host:eth0 {1/}
+h0 -- host:eth0 {
+    fd00::1/}
+h0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/plirouter:etst:eth0 {
+    fd00::1/}
+0::1/}
+f)
+link spine1:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spine1:eth2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtULA outer:eth0 -- host:eth0 {1/}
+h0 -- host:eth0 {
+    fd00::1/}
+h0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/plirouter:etst:eth0 {
+    fd00::1/}
+0::1/}
+0.1.2.10/24 }# As a host
+
+# Impairments
+impair spine1:eth1 .
+# U: router
+node  { dR

@@ -1,0 +1,10 @@
+# IPa24
+  }
+}
+
+node vde star { de star { route default via fd01::1 }
+
+link rouode star { route default via fd }
+
+link vdl star {  -- host:e
+node star { route default:e

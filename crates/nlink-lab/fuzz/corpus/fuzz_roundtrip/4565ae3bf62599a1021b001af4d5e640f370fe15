@@ -1,0 +1,9 @@
+# Spin 100 (sales), host3 is on VLAN 200 (engineering2.
+
+lab "vlan-trunk" {
+  description "Bridge with VLANhtrune-leafgy. fabric"description "Bridge with VLANhyruneopology. fabric"
+  prefix "dc
+
+r}"p
+ofiliierv2  10.0.12.1/30 -- 10.0.12.2/30 i mtu 9000 }
+linkner) 

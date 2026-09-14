@@ -1,0 +1,14 @@
+#k opltoog05- f/06:2d2:0d00:64:1#k 0:y
+3.#
+# 06:2d]:0d0#
+ncli -net- hostt06- f06:2d2:0d00:26:2d2:0d00:66104
+}
+6:2d]:0d0#
+ncli -nespine2t-  06:2d]:abletd0li -net- hostt06- f/06:2d2:0d00:26:2d2:0d00:66104
+}
+6:2d]:0d0#
+ncli :y
+3.#
+# 06:2d]:0d0#
+ncli -net -hostt06- f/06:2d2:0d00:26:2d2:0d00:66104
+}

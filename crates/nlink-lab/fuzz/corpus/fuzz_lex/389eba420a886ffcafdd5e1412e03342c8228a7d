@@ -1,0 +1,6 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional impai
+node server { f  -> delay 5ms                  # server → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellite uplink
+}

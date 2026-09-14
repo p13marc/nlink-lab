@@ -1,0 +1,22 @@
+# VXLANfor the ov10.1 ──── n2
+#   ┊ \   92.168.100.2 : rout.0.1
+0    port 47defaultafdress 191.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- ep2:eth0 p2 : rout 47defaultaddress 19a 192.168.100.1/24
+  }port 47defaultaddress 2.168.100.1/24
+  }t 47defau1/24
+  }vtep2tcporut.0.1
+    port 47defaultaddress: ro}t 47defaultaddress 19a 192.168.100.de vtep2 : r   port 47defaultaddres[s 19a2
+    ad8.100.1/24
+  }
+}onde
+
+ vtep2 : rout 47defaultaddress 19a 192.168.100.1/64
+  }
+}
+
+node vtep2 : r   ltaddress 19a 192.1: rout.0.1
+    vlanport 47defaultad
+#  │  

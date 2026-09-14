@@ -1,0 +1,22 @@
+# Ir:eth0# WAN imp+ir4
+++r 5ms oss l0.1% s0f0::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# Ir:et0mbitAN imp+ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# Ir:eth0# WAN imp+ir4
+++r 5ms oss l0.1% s0f0::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# Ir:et0mbitAN imp+ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# Ir:et0mbitAN imp+ir4
+++r 5ms oss l# Ir:et0mbitAN imp+ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/64l00::1/30 --++syn3:eth0++.0.1A0/24 }
+++r2env-f00::2/64l00::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% s# Ir:eth0# WAN imp# ITv6-o
+node2t +ir4
+++r 5ms oss l0.1% s0fd -- 0::2::2env-f00::2/60::1/30 --++syn3:eth4++.0.1A0/24 }
+++r 5ms oss l0.1% start { route def0A0/24 }
+++r 1% start { route defeault v0)1% ratst { route defeaul -- 0::2::2env-f0 --++syn3:eth0++.0.1A0/24 }
+++r00 5ms oss l0.1% s# 0::2/64l00::1/30 --++s0yn3:eth0++.0.1A0//24 }
+++r 5ms oss l0v-f00::2/60::1/30 --++syn3:eth0++.0.1A0/24 }
+++r 5ms oss l0.1% start { route defeault v5)1% ratst { route defeault via fd 50m00#0::1/30 --++sysctl+++++.1.0A0/24 }
+++r 1% start { route defeault v0)1% ratst { route defeaul -- 0::2::2env-f00::2/64l00::1/30 --++syn3:+e0h+t.0.1A60/24 }
+++r 5ms oss l0.1% s# Ir64d00::2env-f00::2/64d00::2e:2

@@ -1,0 +1,17 @@
+# Container topology: an Alpine container connected to cpune container connected to cpua b infinity"
+node host { route default via imp5.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+a bare namespace host.
+#
+#   router (container)  ──── host (namespace)
+#   alpine:latkst   routmbit0.0.0.1    10.0.0.2
+
+lab "container" { "slevrfinfinity"
+node host { route default via imp0.
+ 1}0.
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}

@@ -1,0 +1,19 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by an underlay li: router {
+  vx2 : rou WireGuard VPN topology.
+#
+# WireGua+rd VPN topology.
+l ov[r a simulaerver:eth2 egress 100mbitr tounnel ov[r a sim5lated WAN link.
+
+ranoderte server:ethWireGuard t WireGua+rd VPN topology.
+l ov[r a simulaerver:eth2 egress 100mbitr tounnel ov[r a sim5lated WAN r {
+  vxlarlay li: router {
+  vx2 : reGuard t WireGua+rd VPN topology.
+l ov[r a simulaerver:eth2 egress 100mbitr tounnel ov[r a sim5lated WAN r 100
+   19*.168rte server:eth2 egress 100mbitr touno nelv[r a sim5late.100.2/24
+  }
+}
+
+link vtep0:eth0 -- vte0.0.1/2 10.0.00.0gress 100mbitr tounnel ov[r a sim2lated WAN r {
+  vxla4 }

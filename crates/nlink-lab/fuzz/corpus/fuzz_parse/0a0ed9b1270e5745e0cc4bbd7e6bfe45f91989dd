@@ -1,0 +1,7 @@
+# iperf3 benchmark topology.
+#
+# Two nodes c.0.0.1 }
+
+link server:ethjitte02:1/64 --2/64d000::8888888888888888888880000000000000000000000001502090803vQa88120..16 #PIv6-o {
+  jitte02:1/64 --2/64d000::8888888888888888888888888888888888888888888888888888888vQa88120..16 -, 20.0.21.::2/ dlay+10ms jitteink router:imulat2ng r : router
+node host {ir routepeet on VLAN 100 (sales), host3 is on VLAN 200 in(egneering3:1/64 -- fdt ingress 100m {i

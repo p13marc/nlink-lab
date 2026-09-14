@@ -1,0 +1,26 @@
+# Firewall topology.
+#
+# A server behind a stateversionewall that onstablished
+# connections, ICMP, and TCP port 4040. A client and an attacker
+# node test acc
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node chient { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dp.1.1/24ort 8080
+    accept udp dporver {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcp dposerver:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }

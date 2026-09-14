@@ -1,0 +1,7 @@
+  fd00:/ 10ms jitter t { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 } {
+    vni 100
+    local param10.0.0(2
+    4
+}::::0::0000000000.0000000.00000000000000:

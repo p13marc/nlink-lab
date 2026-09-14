@@ -1,0 +1,17 @@
+ IPv6-o
+nod2 : router tte0z:1/640fd -key- 0:
+node vt2e:2/64d00::2env-f00::2/64d00::2env-file/6# IPv6-o
+node vtep2 : routPv6-o
+node vtep2 [: router tte0z:1/640fd -- 0:
+node vtep2 : router ttep2 : router tte0Z:1/640fd -- 0::2/64d00::2env-f002/64d15::2e:2/24d00::2env-f00::2/64d00::2env -- 0:
+nodPv6-o
+node vtep2 : router tte0z:1/640fd -- 0:
+node vt2e:2/64d00::2env-f00::2/64d00::2env-file/6# IPv6-o
+node vtep2 : routPv6-o
+node vtep2 [: router tte0z:1/-d4fep2 : router tte0z:1/640fd -- 0::2/64d00::2env-f00::2/64d00::2e:2/64d00::2env-f00::2/64d00::2env-file/6# IPv6-o
+node vtep2 : routPv6-o
+novt deep2 [: router tte0z:1/640fd -- 0:
+node vtep2e vtep2 : router tte0z:1/640fd -- 0::2/64d00::2env-f00::2/64d00::2e:2/64d00::2env-fcted /64 
+d00::2e}nv-file/64
+
+}&

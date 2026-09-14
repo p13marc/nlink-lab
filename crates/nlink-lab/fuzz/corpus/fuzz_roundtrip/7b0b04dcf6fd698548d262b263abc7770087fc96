@@ -1,0 +1,74 @@
+# IPv6-onl fd00::1exec }
+
+linklt via fd00::1{
+    sysctl "net.ipv6.c"
+}
+
+node rot { route default via fd00::1exel fd00::1exec }
+
+linklt via fd00::1{
+    sysctl "net.ipv6.c"
+}
+
+node rot { route default via fd00::1exec }
+
+linklt via fd00::1exec y topology.
+#
+# A ro a h"nklt via fd00::1exec y topontlogy.
+#
+# A ro a h"ipv6-simple"
+
+profile router klt via fd-onl fd00::1exec }
+
+linklt via fd00::1{
+    sysctl "net.ipv6.c"
+}
+
+node rot { routult via fd00::1exel fd00::1exec }
+
+linklt via fd00::1{
+    sysctl "net.ipv6.c"
+}
+
+node rot { route default via fd00::1exec }
+
+linklt via fd00::1exec y topology.
+#
+# A ro a h"ipv6-simple"
+
+profile roc }
+
+linklt via fd00::1exec y topontlogy.
+#
+# A ro a h"ipv6-simple"
+
+profile router klt via fd00::1exec }
+
+lology.
+#
+# A ro a h"ipv6-sim`ple"
+
+profile 0::1exec }
+
+linklt via fd00::1exec }
+
+lology.
+#
+# A [o a h"ipv6-simple"
+
+profile 0::2/600::1exec }
+
+lology.
+#
+# A ro a h"ipv6-simple"
+
+profile 0::1exec }
+
+linklt via fd00::1exec }
+
+lology.
+#
+# A [o a h"ipv6-simple"
+
+profile 0::2/64
+}

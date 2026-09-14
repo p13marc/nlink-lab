@@ -1,0 +1,11 @@
+# Container topolog0&1  ~ 10.0.0.2
+
+lab "conaernti" {
+  description "Container node connected pace"
+}
+
+node router image "alpine:latest" 
+
+node router image "alpine:latest"22222222222222222222222222222222222222222222222222222 cmd "sty"
+node host { route de0.0.2/:4
+}

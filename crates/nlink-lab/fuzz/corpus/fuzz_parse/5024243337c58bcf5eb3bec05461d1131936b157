@@ -1,0 +1,4 @@
+muyd { route defau valid{
+  wireguard wg0 {
+  listen 51820
+  $ address 55.s 0.1%

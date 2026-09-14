@@ -1,0 +1,18 @@
+# Fire attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 11.0firewall.1.1 }
+
+node server {
+  route }
+
+link rer:eth0 -- host:eth0 {
+    0/24 }

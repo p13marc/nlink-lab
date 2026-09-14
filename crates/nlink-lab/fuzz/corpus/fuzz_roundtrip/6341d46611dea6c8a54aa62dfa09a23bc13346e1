@@ -1,0 +1,9 @@
+#Wri eGreGuar$d in dev wg0
+
+noda { route defa(gkeyway <-> /24 dev wg0
+}
+
+node host-a { route defa(gateway <-> host)
+li# VXLAN ng"Addovelogy.
+#
+#)" 

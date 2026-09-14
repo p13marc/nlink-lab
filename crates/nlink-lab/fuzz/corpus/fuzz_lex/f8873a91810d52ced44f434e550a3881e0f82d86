@@ -1,0 +1,14 @@
+E router8 ni 10.1
+    remote )sp {
+  vxlan vxl0 {
+   10rpot  4789
+    address 193.168.100.1/2pool forwarding IPv6 traffic to apot  4 79 
+8  address 193.168.1mote )sp {
+  vxlan vxl0 {
+   10rpot  4789
+    address 193.168.073.1/2pool forward89
+    ads 44kindress 193.168.073.1/2pool forwarding IPv6 traffic to apot  4789
+    address 193.168.100.1/2pool forwarding IPv6 tr9
+    address 193.168.100.1/2pool fo4789
+    ads 44kindress 193.168.073.1/2pool forwarding I0.1/2pool forwarding IPv6 tr9
+   d	 daress 193.168.100.1/2pool forwarding IPv6 tra00.1/2pool foult 93.168.100.1/2pool forwarding IPv6 tra2    e 2 ssl

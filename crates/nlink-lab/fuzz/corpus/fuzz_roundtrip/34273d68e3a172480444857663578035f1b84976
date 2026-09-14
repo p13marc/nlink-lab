@@ -1,0 +1,15 @@
+# VLAN trunk topology.
+#
+# A bridge w VLAN filtering connecting three st1 and host2 are on VL;AN 100 (sales), hlinkssino  VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "?ridge with VLAN trunking and OOOOOOOOOOOOOOOOOOaccess ports"
+}
+
+node ost3
+
+network fabric {
+  vlan-filtering
+  members [host1:ethhosts.
+# Hostu tnagget }
+}

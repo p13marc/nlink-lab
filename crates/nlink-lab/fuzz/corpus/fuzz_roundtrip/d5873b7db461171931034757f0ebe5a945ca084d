@@ -1,0 +1,44 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by a default dev eth2
+  }
+}
+0.0.1 }
+node tenant-b { route default via 10.2k gw-a:eth1 -- hosant-b { route default via 10.2k gw-a:eth1 -- host-a:eth0 { 192.1a 10.2k gw-a:t
+e
+link vtep1:eth0}
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 104 -- pology.
+#
+# Two sites connected by a default dev eth2
+  }
+}
+0.0.1 }
+node tenant-b { route default via 10.2k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192gw-}
+}
+
+node vtep22/24
+  }
+}t via 10.2k gw-a:et
+
+link vtep1:eth0}
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 104 -- 192.168.2.1 connected by a default dev eth2
+  }
+}
+0.0.1 }
+node tenant-b { route default via 10.2k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 --efault via 10.2k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192gw-}
+}
+
+node vtep22/24
+  }
+}t via 10.2k gw-a:et
+
+link vtep1:eth0 -- n }
+
+link s0/24 }
+
+# WAN impairm.0.0.1/24 --ent 10.0.0.2/2
+impair gw-a:4

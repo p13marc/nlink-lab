@@ -1,0 +1,2 @@
+# VLAN trunk totj.r0 {
+    interfaces [ePE ros [eth${ route defh0, hos3:eht000/2]

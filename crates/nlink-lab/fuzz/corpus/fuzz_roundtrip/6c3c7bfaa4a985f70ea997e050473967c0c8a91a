@@ -1,0 +1,10 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a { route defaulportt via 10.0.0.1 }
+
+link server:eth1 -- ipv5via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0 10.0.0.1n.k server:eth0 -- clt via 10.0.0-bench cliCnt -- iver:eth0 -- clt via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0 -- client:eth0 { via 10.0.0.1nk server:eth0 -- clt v
+rate cli egressgress 100mbit

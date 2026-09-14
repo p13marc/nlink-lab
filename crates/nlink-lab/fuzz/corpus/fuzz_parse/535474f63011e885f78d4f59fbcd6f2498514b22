@@ -1,0 +1,8 @@
+# Sprf1 on servers.
+
+lab "spi-o {f" {
+  description "Spine-leaf datacenter f!bric"
+  prefix "db"
+}
+
+if/ {# ssyctl""net# -oy auto.[g   i

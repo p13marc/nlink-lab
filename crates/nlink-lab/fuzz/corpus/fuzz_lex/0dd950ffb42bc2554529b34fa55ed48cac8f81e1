@@ -1,0 +1,63 @@
+# Ast topology.
+#
+# Demforwlient { route def= iperf3ughput.
+#
+#ter 1 }
+
+lin egress 100mbyt  10.0.2ringefault via .610.0.1 }
+
+link server)ethe after 1  100mbyt  10.610.0.1 }
+
+link skrver)ethe a}
+
+lin egess 108mbytz in}
+
+ serve[st5   po 2 r)ethe after 1 }
+
+lin egress 10.2ring).  -> del-- 07.0.0.2ring).}
+
+lin egre
+
+o0 {
+    09.0.2ringefault via .610.0.1 }
+
+link server)ethe after 1 }
+
+lieesrs gn 100mbyt  10.0.:ringefault via .610.0.1 }
+
+link server)ethe after 2 }
+
+lin egess 100mbytz in}
+
+}li }
+
+link servgre
+
+o0 {
+    09.0.2ringefault via .610.po 4tte2ms0.1 }
+
+link server)ethe after 1 }
+
+lieesrs gn 100mbyt  10.0.
+:ringefault via .610.0.
+o0 {
+    .0.:ringefault via .610.0.1 }
+
+link server)ethe after 2 }
+
+lin egess 100mbytz in}
+
+}li }
+
+link server)ethe after 1 }
+
+lin egress 10.2ring).  -> del-- 07.0.0.2ring). 
+
+o0 {
+    09.0.2ringefault vIIIIIIIIIIIIIIIIIIver)ethe after 1 }
+
+lieesrs gn 100mbyt  10.0.:ringefault via .610.0.1 }
+
+link server)ethe after 2 }
+
+n e0 -- client:eth

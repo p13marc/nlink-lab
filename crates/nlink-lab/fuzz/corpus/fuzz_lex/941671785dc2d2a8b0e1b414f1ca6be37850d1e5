@@ -1,0 +1,23 @@
+# Simple 2-node topology for te`tingyefault via 10.0.0.1
+}
+
+link roueth0 -- host:eth0 ${
+  10.0.0.0.0.1
+}
+h0 ${
+  10.0.0.0.0.1
+}
+
+elink router:eth0 -- host:eth0 ${
+  1.0.0.1
+}
+
+link router:eth0 -- host:eth1.1
+}
+
+link router:eth0 -- host:eth0 ${
+  10.0.0.1/24 -- 10.0.0.00.1
+}
+
+link router:eth  --0host:eth0 $ric with loopback
+#r 2ms

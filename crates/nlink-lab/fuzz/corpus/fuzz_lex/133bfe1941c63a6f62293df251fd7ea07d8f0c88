@@ -1,0 +1,4 @@
+# S8 via 10.0.5.2
+}
+
+nod-- 10.0.12.2/r0  mtu 800. }f2:eth2 { 10.0.22.1/300.0.0.2/9ne2:eth2 -- leaf2:eth2 { 10.0.19.1/300outer+:enimir 5ms jitter 1ms

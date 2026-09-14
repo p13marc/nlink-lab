@@ -1,0 +1,20 @@
+# VLAN trunk top filtering connecting th).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host4
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [hhost3:eth0]
+  vlan 100 "s ports"
+}
+
+node hgg r}e 
+dt host2   untagged }
+  port 1ost3 { pvid 200  untagged }
+}

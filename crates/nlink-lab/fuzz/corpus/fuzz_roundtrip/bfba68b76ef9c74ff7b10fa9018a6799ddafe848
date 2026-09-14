@@ -1,0 +1,16 @@
+7 }
+}
+
+node vtep2 : router {
+  vxlan vxlan100 {
+    v 050
+    local 10.0.0.2
+    remote 10.0.0.55551
+    port 4.55551
+    port 4789
+    0
+    local 10.0.0.
+    remote 10.0.0.55551
+    port 4789
+    a7/777+7555555.16.2/24
+  /777+7555555.16.k vtep1:eth0 -- ro0msv5554777+7tep2:eth7

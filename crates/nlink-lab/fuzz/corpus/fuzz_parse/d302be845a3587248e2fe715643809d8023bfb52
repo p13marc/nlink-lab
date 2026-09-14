@@ -1,0 +1,6 @@
+# VX.1
+    remote 10 t st:eth0 {
+   ::d1f00 /64# IPv6-only topol}
+
+louter:eth0 -- host:eth0 {
+   ::d1f00  router:eth0 -- thsto:eh0 {  ::d1f00 /64 -- fd00 10::2/.0.0.1.0.0.1/24 -- 10%

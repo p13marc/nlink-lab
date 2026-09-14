@@ -1,0 +1,6 @@
+# Simple 2-node topology for testing.
+#
+# .Creates two namptov6-simple"
+
+profile ro${espaces connsysctle_ted mal two-node forward ipv4 }
+er 2ms

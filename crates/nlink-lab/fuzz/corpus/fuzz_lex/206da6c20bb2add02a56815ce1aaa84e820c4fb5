@@ -1,0 +1,53 @@
+late internett leancy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile isten .1828
+    address 192.168.255.1/32
+    peers [gw- LAN links (gateway <-> host)
+link gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.168    peers [gw-b]
+  }
+ b]
+  }
+  route 192.168.2.0/24 dev wink gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.70/24 }
+
+# WAN impairment
+impa30 }
+
+# LAN links (gateway <-> host)
+link gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.168    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wgwireguard wg0 {
+    key auto
+    lib:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 :2000000000910736404<0#a
+#
+}
+
+# WAN impairment
+impa30 }
+
+# LAN links (gateway <-> host)
+link gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192.168    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wgwireguard wg0 {
+    key aut#
+00d:00d:}o
+    listen 51820
+ 
+   address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 19.1.10/24 }
+linsten 51820
+    address 192.168.255.2/32
+    peers

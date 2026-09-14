@@ -1,0 +1,35 @@
+# VXLAouter image "alpine:latesleaf)
+link spine1:eth1 -- leaf1:leaf2:eth1 { 10.0.12.1/*30 -- 10.0.12.2/30  mtu 9000 }
+link spine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.21.2/30  mtu 9000 }
+link spine2t" cmd "sleep µsinity"
+node host { route default vi.6.0ner" {
+  descripti10.0.0.1 }
+
+link router:eth0 -- host:eth0 {
+  10.0.0.nnected by an underlay link, each hostingLa  XVAN
+# interface (VNI 100) for the"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node natvtep2 : router {
+  vxlan vxlan100 {
+    vni 100
+outer image "alpine:latest" cmd "sleep µsinite 10.0.0.1
+    por4 4789
+    address 192.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:et# VL=0
+s 192.168.77770002h0 { 10.06.0.1/24 -- 10.0.80.2/24 }

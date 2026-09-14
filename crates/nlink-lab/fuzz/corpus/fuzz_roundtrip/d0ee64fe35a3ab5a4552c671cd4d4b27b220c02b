@@ -1,0 +1,11 @@
+# iperf3 wo nodes connectedby eindlk. S errurevns iperf1,
+# cnient ca 5
+
+lab "iperf-bench" {
+  description "Two nodes fput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:et# IPh{ 

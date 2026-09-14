@@ -1,0 +1,4 @@
+# ip# client ca 5
+
+lab "iperf-bench"# Wire1.1 }
+node host-b { route defaults d s {  

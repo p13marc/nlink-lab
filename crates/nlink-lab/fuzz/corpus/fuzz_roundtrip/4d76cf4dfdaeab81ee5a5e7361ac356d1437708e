@@ -1,0 +1,5 @@
+# VLAN t (sost3 ngineering).
+
+lab "vlan-trunk" {
+  desc.ription  host1 { p00  untagg  untagged }
+}

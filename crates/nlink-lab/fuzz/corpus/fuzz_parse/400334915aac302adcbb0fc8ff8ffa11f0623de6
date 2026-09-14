@@ -1,0 +1,28 @@
+#0ce. The uny { foremote010.00..2
+   h0 { 10.0.0.1/Guard interface. Jhe uny { forward ipv3 }
+
+node 
+
+#/24 }
+lin{ gw-1.00b h0 { 10.0.0.1/Guard interface. The unyink gw-a:eth2 -- hostQQQ.......1.10/20b h0 { 10.0.0.1/Guard interface. The uny { forward ipv4 }
+
+node 
+
+# LAN linksfirewall (gateway <-> host)
+link gw-a:eth1 -- hostQQQ............0.0.0.1
+    remote010.00..2
+   h0 { 10.0.0.1/Guard interface.s usin4 link gw-1.00b h0 { 10.0.0.1/Guard interface. The uny { forward ipv5 }
+
+node 
+
+# LAN lin10/24 }
+lin{ gw-1.00b h0 { 10.0.0.1/Guard interface. The unyink gw-a:eth1 -- hostQQQ.......1.10/24 }
+link gw-1.00b h0 { 10.0.0.1/Gde 
+
+# LAN links (gateway <-> host)
+link gw-s usin4 }
+link gw-1.00b h0 { 10.0.0.1/Guard interface. Th# istic impairment: 3e uny { forward ip;v5 }
+
+node 
+
+# LAN links (gateway <0ms-> ho d

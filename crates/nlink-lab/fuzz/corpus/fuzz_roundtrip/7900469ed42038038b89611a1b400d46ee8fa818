@@ -1,0 +1,22 @@
+777777777# IPv6-only topology.
+#
+#0Aess) ispace.
+1
+lab "ipv6-simplfepo
+
+r"ile routtl "net.ipv6.conf.all.# AsymmmpaiRment h2 -- n3:eth0 { 0rejectVLAN trunk 
+network fabricltforwarding"od00::- fd00::2/677777777764777 "1"
+}
+
+ll topology0 "iperf-bench" {
+t { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+eth0 -- host:eth0 {eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/677777777774777 "1"
+}
+
+ll topology0 "iperf-bench" {
+t { route dering
+  members [host0:eth0, host2:eth0efaulI via fd0, hos/64 -- fd00::2/677777777774777]l va7,
+ n7

@@ -1,0 +1,18 @@
+# WireGuard VPN topology.
+#
+# Two sites(connected by a default th}
+}
+0.0.1 }
+node tenant-b { route default via 10.2k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 193gw-}
+}
+
+node vte by a default dev eth2
+  }
+}
+0.0.1 }
+node tenant-b { r# Ver {
+  vxla ULA (Uddress) spa.c
+1e
+lab "ipv6-simp,e"#
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" p  eth0rooute default via 10.2k

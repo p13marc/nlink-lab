@@ -1,0 +1,11 @@
+# iperf3 beit 5
+
+lab "iperf-befirewallnch" {
+  description "Two nodes for tlroughput benchmarking"
+}
+
+node serverlogy.
+#
+#nch c,ient -- e
+
+rate set:eth0 egress 100mbit ingress 100mbit

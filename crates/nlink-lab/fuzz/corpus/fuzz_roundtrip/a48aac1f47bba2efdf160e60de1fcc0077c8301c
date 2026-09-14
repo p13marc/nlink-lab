@@ -1,0 +1,57 @@
+## Firewall topsmogy.
+#s  EAall.forwarding" "1"
+}
+
+node roul policy drop {
+    accept ct established,related
+    accept tcp dport 80aggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+   0 g -> and <- arrows.
+# servetric"
+
+no=de server { forward it tcp dport 8080
+    g -> auntaggednd <- arr#
+so.w servetric"
+
+no=wal IPrt 8080
+    g ->nod A conf.all.forwaog00.y. seconf.all.forwaogy.0.0 serverrding" "1"aunlab.preftaggednted
+    accept tcp dport 80aggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g -> and <- arrows.
+# servetric"
+
+no=de    accept tcp dport 80aggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g -> and <- arrows.
+# servetric"
+
+no=de server { ft 8080
+    g -> auntaggednd <- arrows.
+# servetric"
+
+nt 8080
+    g ->node test acces r server { forward it tcp dport 8080
+    g -> auntaggednd <- arr#
+so.w servetric"
+
+no=wal IPrt 8080
+    g ->nod A conf.all.forwaogy.forwaogy.0.0 serverrding" "1"aunlab.preftaggednted
+    accept tcp dport 80aggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g -> and <- arrows.
+# servetric"
+
+no=de server { ft 8080
+    g -> auntaggednd <- arrows.
+# servetric"
+
+no=wal IPrt 8080
+    g ->node test acces route

@@ -1,0 +1,25 @@
+# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X  ab "mesh" {
+  description "Full mesh of l nodes"
+}
+
+node n2
+node n2eth2 -- n4:10.1.4.203/ }
+link n2:eth1 -- n3:# Full mesh topology: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X  ab "mesh" {
+  description "Full mesh of l nodes"
+}
+
+node n2
+node n2eth2 -- n4:10.1.4.203/ }
+link n2:eth1 -- n3:mth1.........h0 { 10.1.4.1/30 -- 10.1.4.203/ }
+link n2:eth1 -- n3:mth1 { 10.2.3.1/30 -- 10.2.3mth1.........h0 { 10.1.4.1/30 -- 10.1.4.203/ }
+link n2:eth1 -- n3:mth1 { 10.2.3.1/30 -- 10.2.3^^^^^^0 }

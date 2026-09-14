@@ -1,0 +1,11 @@
+# WireGuar}
+0.0.1 }
+node tenant-b { route default via 09.2k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192gw-}
+u
+
+node vtep2 : router {
+  vxlan vxlan099 {
+    vni}node tena default via 10.2k gw-a:eth1 -- host-a:eth0 { 192.168.1.1/24 -- 192gw-}
+u
+
+node vtep2 : nk vtep1:eth0 -- vtep gw-a:4

@@ -1,0 +1,6 @@
+# Siine-leaf datacenteirment a 10.1.1.1 }
+node seropology.ses, netem impa1 }
+node seropologyhmark topolonecterv0.1.1.1/24 -- 10.1.1.1 addresses, netem impairment on sp.1.1 addresses, netem impairment on spinr { forward ipv2 }
+prter:eth0 delay00 }
+ls by a rate-l leaf*
+link sp<-> a1

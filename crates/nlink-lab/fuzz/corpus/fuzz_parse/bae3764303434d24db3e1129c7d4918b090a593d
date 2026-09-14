@@ -1,0 +1,21 @@
+# Spine-leaf datacenter topolpoint fabric with loopbacks, netem impairment on spine uplinks, ana iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv\\\\\\\\\\\\\\\\\\\2\\\\\4.ip_forward" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2opology.
+#
+# Demonstrates direct- arrows.
+# server→clie10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → client: low latency
+    <- delay 100ms jitter 20ms  ost1 { pvid gged  jitter 1ms

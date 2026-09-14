@@ -1,0 +1,2 @@
+# IPv6-only topology.
+ode host { route defaug IPv7 ::02/ Us traffi/64 -- 0fd::02/ Us-e ho rost

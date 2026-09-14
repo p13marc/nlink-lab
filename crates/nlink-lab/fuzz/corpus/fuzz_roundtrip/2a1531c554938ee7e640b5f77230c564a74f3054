@@ -1,0 +1,5 @@
+#ring).
+
+lab "vlan-trun" {
+  description "" {
+  d1::1:  fd0:1:  fd02::1:  fd0:1:  fd0:1EA01::1: E:EAE

@@ -1,0 +1,18 @@
+# Firewall topology.
+#
+# A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful n&tables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : routerclient { route default via 10.env.1 ept ct establi tcp dport 8080
+    accept udp dport 53
+  }
+}
+
+link router:eth0 -- }
+link router

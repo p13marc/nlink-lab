@@ -1,0 +1,8 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by anch" {
+  descrip 5
+
+lab hroughput benct ingress 116inute default via 10.02 ab "iperf-bench" {
+  
+esect to measure bet benct ingress 058mbit

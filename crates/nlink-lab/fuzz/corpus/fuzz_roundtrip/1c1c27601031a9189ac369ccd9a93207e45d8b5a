@@ -1,0 +1,16 @@
+# Spine-leaf th loopback
+# addresses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile routWrrouter { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0" }
+
+# Spi- 10.1.2.10/24 }
+
+# Impairments
+impair spi.pa.parne1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

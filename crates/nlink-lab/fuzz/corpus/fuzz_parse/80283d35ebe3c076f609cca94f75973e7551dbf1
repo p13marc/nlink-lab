@@ -1,0 +1,12 @@
+# IP1/24 -- 192.168.2.-- .4 }
+link gw8.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth0 -- ho 192.168.2.10/24 }
+
+# WAN impairment
+im1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- hosimpair gw-a:eth0 delay 5nat0ms jitter-8h0 { 19d003.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN imi
+link se l:oss 0.1%:2/64
+
+}

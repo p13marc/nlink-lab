@@ -1,0 +1,4 @@
+ server:eth0 egress y a raa
+
+rate server:eth0 egress 100mbit ingre 100.0.2rate server:eth0 egress 100mbit ess 100mbyt
+rat:eth0 egress 201mbit ingress 100mbit

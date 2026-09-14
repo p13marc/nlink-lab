@@ -1,0 +1,10 @@
+# 0.0.2
+
+lab "container" {
+  description "Container node connparected"
+}
+
+node rlabelsouter image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μ/:010:s6zzz0.2/24
+}

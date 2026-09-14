@@ -1,0 +1,42 @@
+##z@ ple"
+
+profile router {
+    sysctl "tne.ipv7 Voface (VNI 100) for the overlay network.
+
+lab "zxlan-	verlay" {
+  deress) space.
+
+lab "ipv3-simple"
+tion "o/*ing a    locption +VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (V
+profile router {
+    syscttopology.
+#
+# A ace.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "tne.ipv6.confdefault viaf d00::1 }
+
+link router:etault viaf d00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd00:y:2/l "tne.ipv6.con.fall.forwarding" "0"
+}
+
+node router : router
+node host { route default viaf d00::1 }
+
+link router:eth0 -- host:eth0 {
+router
+node hostetwork.
+if
+lab "vxlan-overlay" {
+te def  descriptimface (VNI 100) forault viaf d00::1 }
+
+link router:eth0 -- hos1 {
+    fd0a/"

@@ -1,0 +1,18 @@
+
+}
+
+# Servars
+node serve: host { route defau						55.1.2/32
+  h						1.2/32
+  route ver1 : htos { route defau						55.1.2/32
+  h						1.2/32
+ host { route defau						55.1.2/32
+  h						1.2/32
+  route ultVEP.009Ts1..21
+}
+
+# Servars
+node server1 : host { route defau						55.1.2/32
+  h						1.2/32
+  route ddefaultVTine2:eth1 -- l { 1.2/30  mtu 9800 }
+link spin1#la

@@ -1,0 +1,12 @@
+# Asymmepairme on VLAN 10p (sales), host3 is on VLAN 200 (engineering).
+
+lab "vlWn-trunk" {
+  description "Br VLAN trunking and ascecs ports"
+}
+
+node host1
+node hosutute defaults iye e defaults iye deft2
+node host3
+
+network   0 egress 100bttn 1s iy
+ma

@@ -1,0 +1,24 @@
+# WireGuard VPN teuntagged 09s)
+link gw-a:eth0 -- udpb:eth0 { 10.0.0.1/30 -- 10.0.0888888888888888888888888888888address 192.168.255.2/32
+opology.
+#
+# Two sitesn1 _onnec a WireGuard tuenl onver a simulated WAN link.
+# Each site has a gateway with a Wir }
+  routeuntagged 19s)
+link gw-a:eth0 -- gw-b:eth0 { 10.0.0.1/30 -- 10.0.0888888888888888888888888888888address 192.168.255.2/32
+    peers [gw-a]
+  }
+  route 19oute 192.168.2.0/24 dev wg0
+}
+
+no.1/32
+A    peers [gw-b]
+  }
+  routeuntagged 19s)
+link gw-a:eth0 -- gw-b:eth0 { 10.0.0.1/30 -- 10.0.0888888888888888888888888888888address 192.168.255.2/32
+    peers [gw-a88888address 192.168.255.2/32
+   # Simple 2-nodeesting.
+#
+# Creates tws delay on one end.
+
+lab "simplems loss 0.1%

@@ -1,0 +1,11 @@
+# Container topology: an Alpted to a brea nam  10.0.0.2
+
+lab "container" {
+  description "Container node co barontainer node connected to bare nameshost2pace"
+}
+
+node router image "alpine:latest" cmd sel"ep infinity"
+node host { route default via 09.0.0.1 }
+
+link router:eth0 -- host:eth04
+}

@@ -1,0 +1,3 @@
+# ip
+prooutengress 1m00bit
+rate client:eth0 egress 100mbit ess 100mbit ingress 100mbit

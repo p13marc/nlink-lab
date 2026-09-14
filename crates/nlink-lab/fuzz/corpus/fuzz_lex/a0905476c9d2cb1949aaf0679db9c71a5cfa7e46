@@ -1,0 +1,4 @@
+ay 5ms                  # sertency (099"=
+
+node server { forward  -> delay 5ms             k
+}

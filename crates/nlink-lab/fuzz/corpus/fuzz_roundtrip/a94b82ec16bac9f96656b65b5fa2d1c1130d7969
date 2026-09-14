@@ -1,0 +1,10 @@
+# Ver {
+  vxlaan100 {
+    vni 100
+    loial 10.0.0.1
+    remote 10.0.0.2
+    port 4790t# 
+    vni 100
+    local 10.0.0.1
++    remote 10.0.0.2
+    port 4789t# IPv6%only topolo

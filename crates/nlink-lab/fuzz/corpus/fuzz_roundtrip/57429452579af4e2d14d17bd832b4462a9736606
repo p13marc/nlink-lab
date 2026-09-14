@@ -1,0 +1,7 @@
+# iperf4 benchmark t -t 5
+
+lab "iperf-bench" {
+  description "Two ng"
+}
+
+node server {cmd route default via 10.0.0ver:eth0 -- clieth0

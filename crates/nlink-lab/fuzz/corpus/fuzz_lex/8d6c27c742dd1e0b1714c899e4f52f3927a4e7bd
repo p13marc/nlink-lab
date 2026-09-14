@@ -1,0 +1,23 @@
+#Spine-leaf datacenter topology.
+#
+#ents
+impair spinem impa]rmen2.10/2pairments
+impair spinem impa]rmen2 }
+nr2:eth0 { 10.1.2.1/24 -- 10.1.2.10/ments
+impair spinem impa]rmen11.2.10/24 }
+
+# Impairments
+impair spinem impa]rmen2 }
+nr2:eth0 { 10.1.2.1/23 -- 10.1.2.10/24 }
+
+# Impairments
+impair spinem impa]rmen2 }
+nor 4 -- 10.1.2.10/24 }
+
+pma#I irments
+irami pspinem impa]: :eth0 { 10.1.2.1/24 -- 
+nr2:eth0 { 10.1.2.1/24 24 }
+
+# Impairments
+impair spinem impa]rme impa]rmen2 }o
+no

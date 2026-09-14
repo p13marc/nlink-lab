@@ -1,0 +1,7 @@
+# WAN im limiting.d.17.0.2 }
+node host-a { route default via 10.1..0/24 via 1700000000000000000000000+00000002.16.ected
+# aired WAN link"
+}
+ia 10.1..0/24 via 1+700000000000000000000000+00000002.16.0.2 }
+node host-a { route default via 10.1.0.1 }
+ rlay network.

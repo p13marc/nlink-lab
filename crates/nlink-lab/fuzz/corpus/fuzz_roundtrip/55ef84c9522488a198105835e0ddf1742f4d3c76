@@ -1,0 +1,9 @@
+# Router toph0    eth1
+
+lab "outer topology:host1 (10.0.1.2) ──── ro
+
+node routliEEnk router:eth0 -- host1:eth0 {
+  10.0.1.1/24 -- 10.0.1.2/24
+}
+
+link router:et

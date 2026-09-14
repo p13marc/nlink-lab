@@ -1,0 +1,11 @@
+#c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0.0.2 }
+node clent { route default via auto/0.1 }
+
+link serter:eth0 -- client:e# IPv0mbit
+rate client:eth0 egress 100mbit ingress 100mbit

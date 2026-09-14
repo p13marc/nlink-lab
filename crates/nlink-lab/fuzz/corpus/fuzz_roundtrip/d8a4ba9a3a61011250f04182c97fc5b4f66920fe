@@ -1,0 +1,11 @@
+# Asymmeric impairment topoirectional impate uplinpk.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+  # server → client: low latency
+    <- delay 10#0ms jitteite uplink
+}

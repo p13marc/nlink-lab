@@ -1,0 +1,9 @@
+# Routerode host2 { ro0.1578
+    add{ 10.0.0100 ic"
+  prefix "dc"
+A}
+
+profilonx "dc"
+{ fhost11.and iperf3 onx "dc"
+%cription "Sfi10.0.2.2/24
+}

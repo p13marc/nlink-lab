@@ -1,0 +1,51 @@
+# Spine10.#arter
+th0 {
+    fd00:1:00d777777770ethe default ri .#arter
+th1 {
+    fd00:1:00d777777770eth0 {
+ route default ri daf00::( }
+
+lineth0enode spine1 : router { lo 10.255.0.1/th2   fd00:32 }
+n0 {
+    fh0 {
+    fd00:1:00d777777770eth0 {
+    fdh0 {
+    fd00:1:00d7*77777710.100eth0 {
+    fd0de host { route default ri .e router { forward ipv4 }
+profile host  host { route default ri .#arter
+th1 {
+    fd00:1:00d777777770eth0 {
+ route default ri daf00::( }
+
+#arter
+th0 {
+    fd00:1:00d777777770eth0 {
+    fh0 {
+    fd00:1:00d777777770eth0 {
+    fdh0 {
+    fd00:1:00d7*77777710.100eth0 {
+    fd0de host { route default ri daf00::( }
+
+lineth0eth2   fd0 fd00:1:00d77777777meth0 {
+    10-leaf datacente[ datacenter fabparamric"
+ daf00::( }
+
+lineth0eth2   fd0 fd00:1:00d77777777meth0 {
+    10-leaf datacente[ datacenter fabparamric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host  host { route default ri .#arter
+th1 {
+    fd00:1:00d777777770eth0 {
+ route default ri daf00::( }
+
+lineth0enode spine1 : router { lo 10.255.0.1/th2   fd00:32 }
+node spin {
+    {e2 : router { lo 10.255.0.2/32 }
+
+#ay 5ms jitter 1ms
+impair spine1:eth2 dela upliynk
+} 5ms 
+1ms

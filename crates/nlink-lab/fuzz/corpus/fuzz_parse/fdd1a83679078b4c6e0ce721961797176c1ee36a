@@ -1,0 +1,15 @@
+# Sr with addresses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description ""
+}
+
+pro
+  st {
+  route defa.0.1
+}
+.0.1/24 -- 10.0.0.2/26
+}
+
+impair router:eth0 delay 10ms jitter 2ms

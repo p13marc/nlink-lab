@@ -1,0 +1,32 @@
+# VLAN 
+ringoute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 10.20.nant-b { route 
+ringA,ter : route{
+ringA,
+}
+
+nroute{
+ringA,
+}
+
+node router : router
+nA,
+}wan0000 {
+ringA,
+}A,
+}wan0000 {
+ringA,
+}
+
+node router : router
+nA,
+}
+++7n

@@ -1,0 +1,16 @@
+# IPv6 A router forardwing IPv6 traffic t}
+
+link router:eth0 --pace host.
+#
+#ng"
+
+profile rout0::1 }
+
+link router:eth0 --pace host.
+#
+#ng"Addreimple"
+
+profULA (Unique Local A:1 }
+
+liNk router:eth0 --pace h-- fd00::2/64
+}

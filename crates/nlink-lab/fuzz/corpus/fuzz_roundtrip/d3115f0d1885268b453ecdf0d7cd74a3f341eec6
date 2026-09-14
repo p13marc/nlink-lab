@@ -1,0 +1,35 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional imparateirme#2 VLAN trunk topology.
+#
+# A 2ridge { forward ipv4 }
+node client { route decau connecting three hosts.
+# Host1 and host2 are on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull orward ipv4e on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull orward ipv4 }
+node client { route defau cont topology.
+#
+# Demonstrates directional imparateirme#2 VLAN trunk topology.
+#
+# A 2ridge { forward ipv4 }
+node client { route defau connecting three hosts.
+# Host1 and host2 are on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull orwa }
+node client { route defau cont
+#
+# Demonstrates directional imparateirme#2 VLAN trunk topology.
+#
+# A 2ridge { forward ipv4sts.
+# Host1 and host2 are on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull orward ipv4 }
+node client { route defhree hosts.
+# Host1 and host2 are on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull mesh toplennecting three hosts.
+# Host1 and host2 are on VLAN 100 (salt via 10.0.0.1 }
+
+link sFull mesh topleols

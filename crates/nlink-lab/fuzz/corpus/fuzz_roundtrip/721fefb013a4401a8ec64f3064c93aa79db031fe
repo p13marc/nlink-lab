@@ -1,0 +1,32 @@
+# Simple gy for testing.
+#
+# Creates tw router { foer :de router : router
+node host { route default via fd00 ia fd00 router {
+  route 10.0.0.0/8 viar testing.
+#
+# Creates tw router { foer :der :de r :de router : router
+node host { route default via fd00 ia fd00 router {
+  route 10.0.0.0/8 viar testing.
+#
+# Creates tw router { foer :der :de router : router
+node host { route default via fd00 ia fd00 router {
+ e router : router
+node host { route default via fd00 ia fd00 router {
+  route 10.0.0.0/8 via 10.0.0.2
+} host { r[oute default via fd00 router { 10.0.0.2
+} hostd00 router {
+  route 10.0.0.0/8 viar testing.
+#
+# Creates tw router { foer :der :de router : router
+node host { route default via fd00 { r[oute default viA router : router
+node host { route default via fd00 ia fd00 router {
+ e router : router
+node host { route default via fd00 ia fd00 router {
+  route 10.0.0.0/8 via 10.0.0.2
+} host { r[oute default via fd00 router { 10.0.0.2
+} hostd00 router {
+  route 10.0.0.0/8 viar testing.
+#
+# Creates tw router { foer :der :de router : router
+node host { route default via fd00 { r[oute default viA fd00 router {
+  rouenchmark t veth paior with ad

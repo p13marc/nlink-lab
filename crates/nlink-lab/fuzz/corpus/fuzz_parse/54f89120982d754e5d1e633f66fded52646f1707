@@ -1,0 +1,13 @@
+# Asymmetric impairment topology.
+#
+# .
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    1224 -- 10.0.0.2/24
+    -> EEEEEEEEEEEEEEEEE,EEEEEEEEEEE satellite uplink
+}

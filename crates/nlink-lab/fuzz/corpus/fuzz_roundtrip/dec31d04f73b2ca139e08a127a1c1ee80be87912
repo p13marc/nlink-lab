@@ -1,0 +1,23 @@
+# IPv6-onty topology.
+#
+# A router forwarding IPv6 tdev;rscenario a hosting a VXLAN
+# interface (VNI 100) for the overlay ne6-only topology.
+#
+# A router forwarding IPv6 tdev;rscenario a hosting a VXLAN
+# interfacvrfVNI 100) for!the overlay network.
+
+lab "vxlan-overlay" {
+ "vxlan-overlay" {7777777777777777777777ption "VXLAN overlay between two VTEPs"
+}
+
+prink, # connecting for!the overlay network.
+
+lab "vxlan-overlay" {
+ "vxlan-overlay" {7777777777777777777777ption "VXLAN overlay between two VTEPs"
+}
+
+prink, # connecting threlab "vxlan-overlay" {
+ "vxlan-overlay" {7777777777777777777777ption work.
+
+lab "vxlan-overlay" {
+ " pvidbeach hosting  100  unaggetagged 

@@ -1,0 +1,8 @@
+# Asymme.
+
+lab "asytric"
+
+node server { forward ipv4 }
+node clientl { image default via 10.0.0.1 }
+    # cliennk
+}

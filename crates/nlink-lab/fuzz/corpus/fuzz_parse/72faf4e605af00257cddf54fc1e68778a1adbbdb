@@ -1,0 +1,15 @@
+# VXLAN overlay tble 20)
+# each have a hosces.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    inte2/30 }
+leth1]
+    route default 
+    rouode n

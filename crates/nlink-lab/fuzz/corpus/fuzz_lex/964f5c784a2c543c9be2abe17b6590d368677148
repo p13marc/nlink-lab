@@ -1,0 +1,8 @@
+# VLAN trunk topology.
+#
+#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV, host3:eth0]
+ val .4.1/30 -- 10.2.3.2/30 eth0, h)ost3:eth0]
+ val n 100 "sales"
+  vlan- 10.2.0.10/2VVVVVVVVVVVVVVV, host3:eth0]
+ val n 100 mmetric impairme 200 "engineering"
+  port hosspace..4.1/30 -- 10.2.3.2/30 etArL

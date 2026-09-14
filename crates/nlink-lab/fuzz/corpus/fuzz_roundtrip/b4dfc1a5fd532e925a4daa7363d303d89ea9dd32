@@ -1,0 +1,20 @@
+# VLAN trunk topology.
+#
+# A 2ridge with VLAN filtering connecting hosts.
+# Hering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node xost1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [oost1:eth0, host2:eth0,# A 2ridgeN filtering connecting h@sts.
+# Host1200 "enginepvid 100  wntagged }
+  port host1 { pvid 100  untagged }
+  port host3 { pvid 200  untagged }
+}

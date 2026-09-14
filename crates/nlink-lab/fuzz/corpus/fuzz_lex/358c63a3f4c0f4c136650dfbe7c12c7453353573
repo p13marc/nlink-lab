@@ -1,0 +1,119 @@
+00:0:200dspace.
+
+nab #)-atc:toxol 
+id:4:0:0:20:0:0:200:0/200dspace.
+
+nab #)-atc:topol 
+i:20/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-atc:topol 
+id:44:0:0:20:0:55555555atc:topol 
+id:2:0:0:20:0:0:200:0/5 fd0:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:pace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0dspace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555atc:topol 
+id0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=atc:topol 
+id:4:0:0:20:0:0:200:0/555555l 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:pace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+:0:200:0:200dspace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:pace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0dspace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555amc:topol 
+id:4:0:0:20:0:0:200:pace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+:0:200:0:200dspace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-ce.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:::0dspace.
+
+nab #=-atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:55555555atc:topol 
+id:4:0:0:20:0:0:200:0/5 fd:0:200:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:d:0:200:0:200dspace.
+
+nab #=-atc:topol 
+iz:4:0:0:20:0:0:200:0/55555555atc:topol 
+id:4:0:0:20:0:0:200:0/555555555::
+5::

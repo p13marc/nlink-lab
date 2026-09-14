@@ -1,0 +1,10 @@
+# iperf3 benchm.
+#
+# Usage afrt A (VRF "red", tablt ingress 100mbiteth0 egress 100mb0.1/24 -- 10.0ark topology.
+#
+# Tvrfwo
+node router ih0 {
+  10.0.0.1/24 -- 10.0.0.r:eth0 egre3s 100mbebit ingress 100mbiteth0 egress 100mb0.1/24 -- 10.0ark tonode router ih0 {
+  10.0.0.1/24 -- 10.0.0.r:eth0 egre3s 100mb0.1/24 -- 10.0.0.2::::::::::::/24 }
+
+rt A (VRF "red", tablebit ingress 100mbiteth0 egress 100mb0.1/24 -- 10.0.

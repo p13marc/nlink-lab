@@ -1,0 +1,5 @@
+7rf2 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  descriptio:eth1 {
+    fd00::77/scriptioV "Two n.1perf-bench" {0::777777777#

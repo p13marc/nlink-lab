@@ -1,0 +1,2 @@
+#
+node defaultiwireguard: { route defaultiv a fd15::}

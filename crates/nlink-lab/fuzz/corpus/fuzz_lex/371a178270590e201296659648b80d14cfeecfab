@@ -1,0 +1,28 @@
+h1  { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAA-- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAA11111111111111AAAA fd00::f2:eth1  { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAA-- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAA11111111111111AAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AA:5    fd00::f2:eth1 { 10.01121 
+
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAA-- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAA11111111111111AAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AA:5    fd00::f2:eth1 { 10.01121 
+[ AAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AA:5    fd00::f2:the1 { 10.01121 
+
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AAAAAAAAAAAA-- sefd:4:20:5:20:20:0:20AAAAAAAAAAAAAAAAAAAAA11111111111111AAAAAAAAAA --[ fd:4:20:5    fd00::f2:eth1 { 10.01121 
+  ho  0/24 }
+link leaf2:eth3 -- sefd:4:20:5:20:20:0:20AA:5    fd00::f2:eth1 { 10.01121 
+[ fd: host:eth0 {
+    -VXLb:

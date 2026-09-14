@@ -1,0 +1,33 @@
+# WireGuard V weg0 {
+  55.2/32
+    peers [0gw-a]
+  }
+  route 192.168host.
+# Uses fd00::/64 ULA lUnique LocalAder dsrs)oe douter : router
+nodeo
+    listen 51820
+    address 192.168.255.2/32
+    peers [0gLA (Unique LocalAdrs[0gw-a]
+  }
+  rou2.168host.
+#.255.2/32
+    peers [0gw Uses fd0=# Spi====n8.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+ress 096.168.255.2/32
+    peers [0gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { rers [0gw-a]
+     address 096.168.255.2/32
+    peers [0gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node host-a { rers [0gw-a]
+  }
+ %

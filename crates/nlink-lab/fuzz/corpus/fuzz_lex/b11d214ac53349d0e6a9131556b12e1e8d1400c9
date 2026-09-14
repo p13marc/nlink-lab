@@ -1,0 +1,33 @@
+# IPv6-only topologpology.
+#
+# A routez forwar
+
+lter:e: r
+node host { route d# FoEwar
+
+link router:e: rou f(orwar
+
+link router:e: router
+node hoso }
+
+link router:e: r router:e: r+outer
+node host { ter:e: :e: router*nodde host { route d_faula1nter
+node host { ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e:outer:e: r router:e: r+outer
+node host { ter:e: :e: router
+node host { route outgr:e: r router:e: r+outer
+node host { ter:e: route{ ro }
+
+li{ ter:e: :e: router
+nodde host { route d_fault viater
+node host { ro }
+
+link router:e: r router:e: r+outer
+node host { ter:e:outer:e: r router:e: r+outer
+node host { ter:e: :e: router
+node host { route outer:e: r router:e: r router:e: r+outer
+noute{ ro }
+
+link router:e: r router:e: r+xuterr:e: ro

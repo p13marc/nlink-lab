@@ -1,0 +1,12 @@
+# iperf3 benchmarkooo1 -t 5
+
+lab "iperf-bench" {
+  description "Tking"
+}
+
+node server { route default via 10.0.0.2 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 eregss 100mbit intering with VLAN trunkin0mbit

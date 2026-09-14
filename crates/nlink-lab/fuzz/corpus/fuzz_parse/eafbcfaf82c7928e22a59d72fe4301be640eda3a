@@ -1,0 +1,18 @@
+# VLAN trunk ng).
+
+lab "vlan-truok" {
+  description "Brdewig ith VLAN[trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 201 "engineering"
+  port host1 { pvid 100  untagenv }
+ r :
+ router {

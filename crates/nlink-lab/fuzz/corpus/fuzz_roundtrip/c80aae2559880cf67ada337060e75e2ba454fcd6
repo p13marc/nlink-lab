@@ -1,0 +1,13 @@
+# ard interface. The underlay link
+# has 50ms delay to simulaard ipv4 }
+
+nte internet latene gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 , host-a { route deftauiv al 192.168.1.1 }
+
+pnode host-b { routeace. The unde}
+
+node host-a { route deftauiv al 192.168.1.1 }
+node host-b { routeace. The underlay link
+# has 50ms delay to simulatd interne j

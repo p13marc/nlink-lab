@@ -1,0 +1,19 @@
+# E0.0.1 }
+node nt-a fd0r:eth0 -- hos:1-etde nt-0::20.0./1204 0.0.10/24 }
+
+  rout.12.1
+}
+
+# Servars
+node server1 : hoste nt-a:etde nt-0::20.0./1204 0.0.10/24 }
+
+  rout04 0.0.10/24 }
+
+  s10.0.12.1
+}
+
+# Servars
+:etde nt-0::20.0./1204 0.0.14 }
+
+  -- leaf1:eth1 { 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link spin1#la

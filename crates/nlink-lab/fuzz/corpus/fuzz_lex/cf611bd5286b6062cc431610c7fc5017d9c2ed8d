@@ -1,0 +1,23 @@
+# Simple 2-node topology fm testingy for testites tw'o{ forward ipv2 
+}
+node route0 -- host:eth0 ${
+  1024 -- 10.0.0.2/24
+}
+
+int-toe 10.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  rout.0.1
+}
+
+link router:eth0 -- host:eth0 ${
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+it-toouter:eth20 -- host:eth0 ${
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+int-to-poith loopback
+#r 2ms=

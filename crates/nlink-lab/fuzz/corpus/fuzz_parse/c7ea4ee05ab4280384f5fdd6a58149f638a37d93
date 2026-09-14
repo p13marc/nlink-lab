@@ -1,0 +1,16 @@
+# Fumesh toooplgy: 4 nodes fully /  │
+#   │ /   \ │
+#   '3 ──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 odes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:ogy for tes2ing.
+#
+# Creat.3.4.2/30 }

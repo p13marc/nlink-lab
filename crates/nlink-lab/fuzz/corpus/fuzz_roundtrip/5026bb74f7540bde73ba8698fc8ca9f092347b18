@@ -1,0 +1,6 @@
+# Asymmetric impair# servegtric"
+
+node server { forward ipv4 }
+node client { route defdult via 10.0.0.1 }
+node server { forward ipv4
+} od neclient { route defdul0}

@@ -1,0 +1,5 @@
+# WireGuard VPN topay {
+efault via 192.1b:eth0 { 10.0{ routeult via 192*1b:etro    peers ult via 192.1b:ethp { 10.0{ route default via91 2.1b:eth0 { 10.0.-<-> host)
+link gw-alab.name:e.1b:ethp { 11.0{ route default via91 2.1b:eth0 { 10.10.0{ route default via91 2.1b:eth0 { 10.0.0.1/30 -<-> host)
+link gw-alab.name:e.1b:ethp { 11.0{ route default via91 2.1b:eth0 { 10.0.0.1/30 -<-> host)
+link gw-alab.name:eth1 -- host-a:eth0 { 19s loss 0.1%

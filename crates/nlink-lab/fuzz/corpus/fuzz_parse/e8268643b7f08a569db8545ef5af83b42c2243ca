@@ -1,0 +1,13 @@
+# IPv6-only toy.
+#
+# A router 
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding""1"
+}
+
+node router : router
+node host {logy.e defafd00::1 }
+
+link ro.ut}

@@ -1,0 +1,18 @@
+#%Asymm satellite uplnki.
+
+lab "asymmetric"
+
+node server { flrward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link seth0 
+  ] <- delay 10server: satellient: low latency
+    <- der and a host, con0.0.0.2/24
+    ->l adey 5ms        llite upient: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellient: low latency
+    <- der and a hoow latency
+    <- delay 100ms jittey
+    <- delay 100mer { forward i # server → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: ratellient: low latency
+    <- delay atellite uplink
+}

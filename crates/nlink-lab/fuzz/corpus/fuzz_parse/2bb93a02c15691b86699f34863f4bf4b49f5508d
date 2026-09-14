@@ -1,0 +1,14 @@
+# IPv6ce.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "n.all.forwarding" "0"
+}
+
+node router : router
+node h{ route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd(00::2664
+}

@@ -1,0 +1,15 @@
+# VL mesh ).
+
+lab "l
+   trunk" {
+  description "Bridts"
+}
+
+node host2
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:exh0, hos:eth0, host3:erh0]
+ }

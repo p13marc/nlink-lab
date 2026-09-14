@@ -1,0 +1,4 @@
+# Spine-_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/32 }
+node spine2 : router { lo 10.255.0.2/32 }leaf datacente[ dataCenter fabparamric"
+  pst { sysctl "net.ipv4.ip_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/32 }
+nodne1:eth2 delay 5ms 1ms

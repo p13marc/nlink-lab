@@ -1,0 +1,9 @@
+# Cotnainer topo.1    10.0.0.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "# WAN impairment to.
+#
+# Two sutwith realistic ie:latest" cmd  

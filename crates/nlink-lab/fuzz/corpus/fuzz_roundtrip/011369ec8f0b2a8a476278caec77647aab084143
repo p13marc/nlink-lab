@@ -1,0 +1,17 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates diopology.
+#
+# Two nodes connected by a rate-limited link.  connect to measure throughput.
+    sysctl "tne.ipv6 VXLAN overlay topoface (smtne.ipv6 VXLAN overlay topoface (VNI 100) for the ovtion "o/*//////1////////"
+}
+/nnaihmckrg"
+}
+
+    sysctl "net.ipv6.
+
+lin.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -/ 10.1.3.2/3010.1.4.1/30 -- 10.1.4.2/30 }
+lin { 10.2.3.1/30 -- 10.2.3.2/30 }ency
+    <-*delay 100ms jitter 20ms    # client → server: satellite uplink
+}

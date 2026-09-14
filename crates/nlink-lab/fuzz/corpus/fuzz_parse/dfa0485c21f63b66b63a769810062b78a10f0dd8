@@ -1,0 +1,7 @@
+#r
+node host {logy.e default 0::/64 ULA 
+    sysctl "net.iparding" "1"
+}
+
+node router : default 0::/64 U/64
+}

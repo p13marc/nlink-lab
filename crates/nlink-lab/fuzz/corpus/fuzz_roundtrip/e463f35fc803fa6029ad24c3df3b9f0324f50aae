@@ -1,0 +1,13 @@
+# VLAN ineering).
+
+lab "vlan-trunk" {
+  description "?ridge with VLAN trunking and OOOOOOOOOOOOOOOOOOaccess ports"
+}
+
+node ost3
+
+network fabric {
+  vlan-filtering
+  members [host1:ethhosts.
+# Hostu tnagget }
+}

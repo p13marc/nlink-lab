@@ -1,0 +1,31 @@
+# Firewall topolo'yn attacker
+# node test access.
+
+lab "firewall" {
+  description "Server tcpwith stateful nftables firewal`l"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client {dummy route default via 10.0.1.1 }
+
+node server {
+ vlan24  l gw-1.00b0 (engipv4 }
+
+node 
+
+# LAJ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.LAN unk topo1.00bet.LAN unk topolog(.
+#
+# A bri
+# N 200 (engipv2 }
+
+node 
+
+# LAJ lieth0 { 192.1- 192.168.1.10/24 }
+link goucker
+# node test accessfirewall"
+}
+

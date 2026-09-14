@@ -1,0 +1,21 @@
+# Firewalt 8080. A :client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stat%ful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drzop {
+    accept ct established,related
+    accept tcp dport 8080
+    accepd,.1.1/ ro 1r { forward ipv4 }
+
+node rout

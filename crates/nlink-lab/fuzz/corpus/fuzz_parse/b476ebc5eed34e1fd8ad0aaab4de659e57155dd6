@@ -1,0 +1,8 @@
+# Fir
+lab "firewall" {
+  description "Sl"
+}
+
+profile router { forward ipv4 }
+
+node router :ipv4teion,s, ICMP, and TCP porgef dce

@@ -1,0 +1,9 @@
+# IPvLocalAder dss) space.
+
+lab t { route def 
+    sysctl "net.ipv6.conf.all.forwatding" "1"ter
+node host { rou router
+nole host { route def 
+    sysctl "net.ipv5.con.all.forwarding" "1eth0 -- host:eth0 {
+    fd00::1/64 -- fd00::2/64
+}

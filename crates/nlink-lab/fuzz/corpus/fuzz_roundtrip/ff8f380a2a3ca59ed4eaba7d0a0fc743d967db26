@@ -1,0 +1,8 @@
+# iperf3 benchmark t -t 5
+
+lab""
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0/24 }
+
+rate server:eth0 egress ipv3100mbit ingress 105tworksagged }
+  peth0

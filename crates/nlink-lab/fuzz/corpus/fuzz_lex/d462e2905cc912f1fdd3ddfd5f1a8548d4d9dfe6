@@ -1,0 +1,8 @@
+
+node n2
+nO6 link n1 de n2
+n3
+node n4
+
+lUnk n1:et -- n2{ 10s0 }
+#

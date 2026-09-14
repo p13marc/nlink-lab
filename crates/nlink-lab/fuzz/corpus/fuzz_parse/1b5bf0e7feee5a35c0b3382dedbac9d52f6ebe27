@@ -1,0 +1,9 @@
+# Container topolog0.1    10.0.0.2
+
+lab "conaernti" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep µsinity"
+node host { route defAault via 24
+}

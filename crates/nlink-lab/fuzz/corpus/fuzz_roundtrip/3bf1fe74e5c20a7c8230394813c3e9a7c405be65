@@ -1,0 +1,12 @@
+# ult via 10.10.0.1 }
+node tenant-b { route default via 10.20.nant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.p.1)24 -- 10.10.0.10/24 }
+link pe:eth2 -- host connected to .0.1 }
+node tenant-b { route default via 10.20.nant-b { route default via 10.20.0.1 }
+
+link pe:eth1 -- tenant-a:eth0 { 10.10.p.1)24 -- 10.10.0.10/24h2 -- host connected to the PE via separa default dev eth2
+  }
+}
+
+node tenant-10.20.0.1/24 -- 10.20.0.10/24 }

@@ -1,0 +1,15 @@
+# VXLAN ovEPs"s 192.168.100.1/24
+0 .0.0.2
+    rem1/243333333[33333.3333333333333333333333" {
+  description "VXLAN overlay betb "vlan-trunk" 00:loss26/4
+}:>::::0000000000000000000000.000.000000000000000000000000000000000000000000000000.00000000000000000000000,000000000:vlan-filtering
+  members [host5:eth0, host2:eth0, host3:eth0]
+  vlan  [host4:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"VLAN hi{ pvid 100  untagged }
+     port 4789
+    address 192.tagge00.2/24
+  }
+}
+rout
+ieln/4
+}:>::::0000000000000000000000.000.000000000000000000000000000000000000000000000000.00000000000000briVLAN 398 (enginelVLAN 199 (engierneeri

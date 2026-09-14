@@ -1,0 +1,9 @@
+# IPv6-only topoloce.
+
+lab "ifv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.f# V200 (engineerinss ports"3
+
+net2work f5 {   vni=:
+UUun/64   

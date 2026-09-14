@@ -1,0 +1,16 @@
+# IPv# VRF multi-tenaa host connected to the PE via separate interfaces.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolatio# Full mesh opology: 4 nodes fully inten"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    rconnected.
+#
+#   n1 ──── n2
+## each have a host connected ute default deace s [eth2]
+ /

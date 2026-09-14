@@ -1,0 +1,11 @@
+# VXLAN overlay topollink, eachhe
+lab "vxlan-overlay" {
+  description "V overlay betws"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan200 {
+    vni q00spine1:et
+    local 1    address 192.10.2/24 g

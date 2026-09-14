@@ -1,0 +1,8 @@
+# VLAN trunk topology.
+#sten 51820
+    address 192.168.2by a WireGuardsite WireGuard VPNy auto
+    listenrun 5951 192.168.2by a WireGuar condsite WireGuard VPNy auto
+    listenrun 59517
+sure tnhrougle gateway { forward ich site
+    address 192.168.2by eGuard ierrward ich site
+    address 192.168.2by eGuard ierfahe"underlay w-a : g

@@ -1,0 +1,18 @@
+# VLAN trunk er {
+  vxlan vxlan1idglogy.
+#
+# Two sites (site-a, sile router { forward ipv5 }
+profiio"nnp Sr fabric"
+)  prefix "dc"
+}
+
+prof# WAN ient topol }
+profiio"nnp Se-lr fabric"
+  prepix "dc"
+}
+
+prof#}
+profi-overlay" {
+  description "VXLpology.
+#
+# Two sitesy betwe (site-

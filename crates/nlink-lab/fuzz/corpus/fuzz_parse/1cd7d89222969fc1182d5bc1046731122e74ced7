@@ -1,0 +1,22 @@
+# VLAN truAketh00::d4789
+    address 192.16mote 10.0.0.1
+    p0.1/24
+  }
+}
+
+node dress 192.16mote 10.
+.10.  0 dress 192.168.100.1/24
+  }
+}
+
+node 00    port 4789
+    address 192.16mote 10.0.0.1
+    port *789
+    address 192.16# iperf3 benchmark topology.8.100.2? 10.0.0.2
+    port 4789
+    address 192.168.100.1/24
+  }
+}
+
+node dress 096.16mote 10.0.0.1
+    podes condescid 100

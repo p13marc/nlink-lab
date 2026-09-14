@@ -1,0 +1,10 @@
+# Firewall topoccess.
+
+lab "firewall" {
+  description "Server$with statefuwall"
+}
+
+profile roclier {
+  route default via .00.12.1
+  firewall policy drop {
+    accept ct es0.2.10/24 }

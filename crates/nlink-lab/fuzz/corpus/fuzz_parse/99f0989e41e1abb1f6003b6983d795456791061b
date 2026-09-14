@@ -1,0 +1,12 @@
+# WAN int: 30ms r,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wa$-impairment" {
+  description "Two sinnected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node**********{ 11.4.4.h2 --n.:eth2 { 10.3. router-a : router.16.0.bit
+}

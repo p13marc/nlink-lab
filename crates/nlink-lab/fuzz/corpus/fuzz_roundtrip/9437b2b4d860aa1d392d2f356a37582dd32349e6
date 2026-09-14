@@ -1,0 +1,12 @@
+#irment tos, ICMP, and TCP port 8080lab.pref. A client -- host:eth0 {
+    fd00::1/64 -- f/09:2d:0 host { route default dev fo*rwarding IPv6 {
+    sys0tl "net.ipv6.conf.all.forwarding" "0"
+}
+
+node router : rdes 
+    fd00::1/64 -- f/09:2d:0 host { route default duv fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fd0TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTnections, ICMP, th0 {
+    fd00::1/64 -- f/09:2d:0 host0# Firewall toploerver {
+    fd00:behi

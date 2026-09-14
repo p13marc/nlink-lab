@@ -1,0 +1,13 @@
+# Sr with adresses
+# and a 10ms delay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile ro{
+  route 1024 -- 10.0..0/224
+}
+
+impair Hfn:er:eth0 ds jitter 2ms
+pre1

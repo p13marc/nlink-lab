@@ -1,0 +1,10 @@
+# IPvonly zzzzzzzzzzzzzzzzzzzzzzzzzzzzzult via fd15::1 }
+
+link router:eth0 -- host:eth0${
+   μs00::1/64host:eth0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzz-- host:eth0${
+   μs00::1/64host:eth0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult via fd00::1imageink rth0 -- host:eth0${
+   ink routernodes:eth0 -- host:eth0${
+   μs00::1/64 -- fd00::2/64
+}-

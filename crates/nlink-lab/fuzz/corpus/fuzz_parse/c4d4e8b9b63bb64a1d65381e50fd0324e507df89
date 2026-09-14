@@ -1,0 +1,26 @@
+# VLAN trunk topology.
+#
+# An VLAN 100 (sales), host00 (engin).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host3:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 2}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host2:eth0, host3:eth0, hd 200  uagtnegd }
+}

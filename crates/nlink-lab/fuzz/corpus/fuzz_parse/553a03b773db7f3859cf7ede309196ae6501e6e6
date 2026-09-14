@@ -1,0 +1,14 @@
+# Spinenter topology.
+#
+# 2 nt on spine upninks, and iperf3 on serv rs.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter f!bric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl""net.ipv4.ip_forward" "0" }rs.
+
+lab "spine-leaf" {
+  description "Spimtter 1ms0

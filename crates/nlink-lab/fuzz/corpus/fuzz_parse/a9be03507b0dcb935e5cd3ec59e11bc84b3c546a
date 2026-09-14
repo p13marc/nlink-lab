@@ -1,0 +1,47 @@
+# WAN impairment topology.
+#
+# Two sites (s, and 50mbit rate limiting.
+ router { route 10.1.0e default via 10e host-b { route default via 10.2.1%/64 --  rate 50mbit
+}
+fd00::2.2.051 }
+
+# LAN links
+lieth:pre1   fd002:1/64 -- fd00:  delay 30ms jitter 5ms l
+# LAN links
+lieth: {
+ #
+# Two sites (s, and 50mbit rate limiting.
+ router { route via 10.2.1%/server64 --  rate 50mbit
+}
+fd00::2.2.051 }
+
+# LAN links
+lieth:pre1   fd002:1/64 -- fd00:  delay 30ms jitter 5ms l
+# LAN links
+lie:th {
+    fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00::2.2.051 }
+
+# LAN links
+lieth:pre1   fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00mbit
+}
+fd00::2.2.0.1 }
+
+# LAN links
+lieth   fd002:1/64 -- fd00:  delayL30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00::2.2.051 }
+
+# LAN links
+lie.h:pre1   fd002:1/64 -- fd00:  delay 30ms jitter 5ms lo2:1ss 0.1%/64 --  rate 50mbit
+}
+fd00mbit
+}
+fd00::2.2.0.1 }
+
+# LAN links
+lieth: {
+    fd002:1/64 -- fd00:  delay 30ms jizt

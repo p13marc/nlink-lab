@@ -1,0 +1,48 @@
+# WireGuard VPN to
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.16to
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192*.168.255.2/32
+    peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+cpunode host-a { r
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.16to
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/2oute defaultN link (underlay between gsysctlksateways)
+link gw-a:e1/30 }
+
+# LAN links (gateway <-> host)
+link gairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

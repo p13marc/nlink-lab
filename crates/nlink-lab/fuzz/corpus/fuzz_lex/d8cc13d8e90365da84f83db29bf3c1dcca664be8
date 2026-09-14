@@ -1,0 +1,2 @@
+# VLAN trunk tot2las late.168lal net latj.r0 {
+    interfaces [ePE ros [eth${ route defh0, hos3:eht000/2]

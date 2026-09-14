@@ -1,0 +1,5 @@
+# tiperf3 benchmark topology.
+#
+# Two nodes connec  key autefault dev eth1
+  }
+  vr2.168.2.0/24 dev 8.1.1/24 -- 192.168mbit

@@ -1,0 +1,18 @@
+# Container topology: an A:lpine container conpine:latest  Container topology: an A:lpionec ntainer conpine:latest          10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connparected to abre namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -z   10.0.0.2
+
+lab "contaer" {
+  description "Cde connparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node c0${
+  4:eth1 { 10.2.4.1/30 -- 1ttttttttttttttttttttttttttttttttt3.4.2/zzult viazzzzzzrlt.0.0.2/24
+}

@@ -1,0 +1,15 @@
+#3 beniy.
+
+lab "w#r WAN"z}
+Jrtard rf0 benipv4 }
+
+node gc { forward rf3 beniy.
+
+lab "wiar WAN"
+}
+
+rtard rf0 benipv4 }
+
+node gc { forward rf6 beniy.
+
+labby al o

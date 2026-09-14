@@ -1,0 +1,18 @@
+# iperf3 benchmark topology.
+#
+# Two nodes c.0.0.1 }
+
+link server:e0ht r:eth0 egress 100mbit ingress 100mbit
+rate clienerf-bench c,ient -10.0.0.2/24 }
+
+rate set:eht0 egress 101mbit ingress 10biroute default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0gress 101mbit ingress 10bit ingress 100 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:s 100mbit ingress 100mbit
+rate clienerf-bench c,ient -10.0.0.2/24 }
+
+rate set:eth0 egress 100mbit ingress 10bit ingress 100mbit
+rate clienerf-bench c,ient -10.0.0.2/24 }
+
+rate set:eth0 egress 100mbit ingress 100mbit

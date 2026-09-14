@@ -1,0 +1,26 @@
+# Spine-leafpology.
+#
+# 2 spines, 2 leavesm impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacentdc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipard" "0" }
+
+# Spines
+node spine1 : router { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+# Leaves
+node leaf1 : router {
+route default via 10.0.11.1
+}
+node leaf1 : router {
+  lo 10.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# ServesJimpair spine1:eth1 delay 5ms jitter 1ms
+impair spine1:eth2 delay 5ms jitter 1ms

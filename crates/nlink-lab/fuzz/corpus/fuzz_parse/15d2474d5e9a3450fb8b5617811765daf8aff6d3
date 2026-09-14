@@ -1,0 +1,10 @@
+# V a s othconnected toV a hPE)via sarepate i──── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+}
+
+node n1
+node n2
+node/30 }
+link n1:eth1 -- n3:eth0 { 10.11-rou.20.0.10.24 }

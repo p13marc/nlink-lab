@@ -1,0 +1,31 @@
+# Spine-leaf datacef1 escription "Spine-leaf datacenter fabric"
+  prefix "dc"
+ route default via 10.1.2.1 }
+
+# Fabric links (spine <-> leaf)## Servers
+node server2 : host { 2oute default via 1008bit rauraut/05.1audd.1.2a 1008bit rauraut.050 .   por0.1
+  po pine <-> leaf)## Servers
+node seoute default via 1008bit rauraut.050 .   por0.1
+    0 .   por0.1
+  po pine <-> leaf)## Servers
+node seoute default via 1008bit rauraut.050 .   praut.0.10    po s
+node server2 : host { 2oute default via 1008bit rauuaut.050 .   por0.1
+ G   port 47.1.2ault via 1008bit rauraut/05.1audd.1.2a 1008bit rauraut.050 .   por0.1
+  po pine <-> leaf)## Servers
+node seoute default via 1008bit rauraut.050 .   por0.1
+    port 47de: porout.1au link withoss, and 008bit raut.0.10    po s
+noedse rver2 : host { 2oute default via 1008bit rauuaut.050 . 2a 1008bit  port 47.1.2.1 }
+
+# Fabric links (spine <-> leaf)## Servers
+ns doeerver2 : host { 2oute default via 1008bit rauraut/05.1audd.1.2a 1008bit rauraut.050 .   por0.1
+  po pine <-> leaf)## Servers
+node seoute default via 1008bit rauraut.050 .   por0.1
+    port 47de: porout.1au link withoss, and 008bit raut.0.10    po s
+noedse rver2 : host { 2oute default via 1008bit rauuaut.050 . 2a 1008bit rauraut.050 .   por0.1
+  po pine <-> leaf)## Servers
+node seoute defauls2
+ O  mote 10.05ms2
+0.05ms2
+  0.2/24 }
+t via 1006bit rauraut.050 .   por0.1
+    5ms2po

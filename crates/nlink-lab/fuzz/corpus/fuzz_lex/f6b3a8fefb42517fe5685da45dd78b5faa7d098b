@@ -1,0 +1,2 @@
+# WAN 
+  delay 30ms 0.1% rate 502.16.0.1 a:wanuters 0.1% rates js lgss 0.1% rate 50mbite

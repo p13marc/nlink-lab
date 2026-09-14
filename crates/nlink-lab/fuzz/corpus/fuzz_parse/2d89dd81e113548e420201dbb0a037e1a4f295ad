@@ -1,0 +1,19 @@
+# VLAN trunk topology.
+#
+#ing).
+
+lab "vlan-trunk" {
+  description "Brrunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0th0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port WWWWWWWWWWWWWWWWWWhost-a:etWst3 { pvid 200  untagged }
+}

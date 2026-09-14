@@ -1,0 +1,19 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates directional impairments using -> anr, simulating a satellite uplink.
+
+lab "asyimetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0./24 -- 10.0.0.2/24
+    -> delay 5mink.
+
+lab "asymmetric"
+
+nodeatellite uplink.
+
+lae uplink
+}

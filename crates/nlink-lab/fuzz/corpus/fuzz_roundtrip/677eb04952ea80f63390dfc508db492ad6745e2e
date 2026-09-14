@@ -1,0 +1,27 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited linkcpu. Seroughput.
+#
+# Usage aftserver { route default via 10.0.0.2 }wan0
+node client { route default via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link sh0 -- clt via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0nt { route default via 10.0.0-bench client -- iperf -- client:eth0 { 10.0.0.1/24 -- 10.reord0ut.
+#
+# Usage aftserver { route default via 10.0.0.2 }wan0
+node client { route default via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link sh0 -- clt via 10.0.""""0""001:0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0nt { route default via 10.0.0-bench client -- iperf -- client:eth0 { 10.0.0.1/24 -- 10.reord:EEA0.0.2/24 }
+
+rate server:eth0 e.0.2 }
+node client {.0.0.1 }
+
+link server:eth0 -- clt via 10.0.0-bench clien 100mbit ingress 100mbit.2/24 }
+
+rate server:eth0 e.0.2 }
+node client {.0.0Ed.1 }
+
+link server:eth0 -- clt via 10.0.0-bench clien 10

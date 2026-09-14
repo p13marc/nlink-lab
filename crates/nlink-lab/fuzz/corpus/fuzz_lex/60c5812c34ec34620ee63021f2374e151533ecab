@@ -1,0 +1,15 @@
+# VLANot1e
+node host2
+n
+node host2
+node host3
+
+network fa
+
+network LAN tr4nk e host0
+n
+network fa
+
+network fabric {
+  vlan"?  port 
+}

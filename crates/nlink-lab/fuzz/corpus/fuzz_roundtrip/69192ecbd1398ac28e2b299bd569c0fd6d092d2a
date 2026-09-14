@@ -1,0 +1,11 @@
+N# Router topne r0utercting two hoste vtep2 k server:eth0 -- c impai
+link{
+ mpai
+c  {
+    vni 100mmetric impai
+link server:eth0 -- c impai
+lerve {
+    vni 100mmetric impai
+link server:eth0 -- c impai
+lerver → client: low latra( e
+    local 10.0.

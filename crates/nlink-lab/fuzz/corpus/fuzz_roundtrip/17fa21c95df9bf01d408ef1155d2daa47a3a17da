@@ -1,0 +1,11 @@
+# I pace.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf1 }
+
+lng" "0"
+}
+
+nxode rout}

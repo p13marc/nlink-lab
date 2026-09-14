@@ -1,0 +1,21 @@
+# Firewall topology.
+#
+# A server b1t2rd ipv4 }
+
+node router :param router
+
+node client { ro allows established
+# connectio~s, ICMP, and TCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  descriptior { forward ipv4 }
+
+node router :param router
+
+node client { rour
+# node test acd ipv4 }
+
+node router :param router
+
+node-- 10.0.2.10/24 }

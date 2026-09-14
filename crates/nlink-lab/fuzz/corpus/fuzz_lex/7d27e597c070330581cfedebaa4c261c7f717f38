@@ -1,0 +1,5 @@
+# IPv6-only00::ite B
+node rout2 via 172.1tion node router-b : router { rou 58.24 via 172.1tion 0::1 }
+
+es
+nod

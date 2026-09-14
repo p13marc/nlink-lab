@@ -1,0 +1,15 @@
+# Conta00ms e default via 10.0
+n#
+ncli -net- hostt06- 66/4d2>04
+}cli -net- li -net- hostt06- n/.06:2d2:1:4:1:2d2:04.0.1 u
+
+lin: an Al# 1irewall topology.
+#
+pind n/.06:2d206- n/.06:2d2:1:4:1:2d2:04.0.1 .0.1/24>77777 de6- n/.06:2d2:1:4:1:2d2:04.0.1 }
+
+lin: an Al# 1irewall topology.
+#
+pind n/.06:2d206- n/.06:2d2:1:4:1:2d2:04.0.1 }rkt10.0.0# Routlsgy.
+#
+pind #  Container /24
+de ho.1

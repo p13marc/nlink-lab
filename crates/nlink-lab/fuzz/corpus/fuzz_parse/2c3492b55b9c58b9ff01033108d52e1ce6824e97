@@ -1,0 +1,3 @@
+#:d0000
+  vn vxlan100 {
+    vni 1pv4

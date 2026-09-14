@@ -1,0 +1,9 @@
+# Rou(teology: one route#.ss) space.
+lab "ipv9-simple"
+
+profile router {
+    sysctl "net.ipv3.conf.warding" "1"
+route  10.0.2.1 }
+
+h1 -- {
+  10.0.2.1/24 -- 1}

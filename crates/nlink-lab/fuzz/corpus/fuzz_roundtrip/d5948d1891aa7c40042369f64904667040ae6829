@@ -1,0 +1,6 @@
+# WireGuard VPN topoateway {
+  wireguard wg0 a:eth0 dedelay 5333:777777777#{
+  0#{  fd00::777777%77#{ host:eth0 {ateway {
+  wireguard wg0 a:eth0 delay 50ms jitter 5ms loss77777#{ host:eth0 {
+  gateway {
+  wireguard wg0 a:eth~ delay 50ms jitter 5ms loss 0.0%

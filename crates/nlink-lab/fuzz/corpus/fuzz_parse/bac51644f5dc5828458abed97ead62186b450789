@@ -1,0 +1,9 @@
+# VLAN trunk topology.
+#
+# A bridge with VLANnode host1
+node host2
+node host3
+
+networ															cpu																																																																																																k faoverla   accep0 -d }
+  t host3 { pvid 200  untagged }
+}

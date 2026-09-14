@@ -1,0 +1,8 @@
+# VLAN tst2image are on V00 (sales)ohsineering).
+
+lab "vlan-trunk" {
+  description "Bridge with V"
+}
+
+node host0
+node h

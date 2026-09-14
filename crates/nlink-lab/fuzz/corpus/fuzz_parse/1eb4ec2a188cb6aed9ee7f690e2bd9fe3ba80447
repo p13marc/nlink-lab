@@ -1,0 +1,7 @@
+# Con
+lab "containerty"
+node host { route default via 20.0.1.0 }
+
+link ror:eth0 -- host:eth0${
+  0.1 .0.1/24 -- 10.0.0.2/24
+}

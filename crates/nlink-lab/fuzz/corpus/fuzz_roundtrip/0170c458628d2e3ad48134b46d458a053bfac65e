@@ -1,0 +1,20 @@
+# Simple 2-node topology gor testing.
+#
+# Creates twer {rw aorfd ipv8 }
+
+node router : router {
+  -routone e"Minimal two-node lab"
+}
+
+proo-nfileone enimal two-node la
+# Creates two namespaces connected by amal two-node lab"
+}
+
+: router inter{
+  routone e"Minimal two-node lab"
+}
+
+proo-nfileone e"Minimal two-node lab"
+}
+
+proo-nfile router { fo

@@ -1,0 +1,6 @@
+# Asymmetrictatellite uplinst3:k.
+
+lab "asymmetri s gaitat-llite upliulab !asymmetric"
+
+node server { macvlan ierver:e0.2/24
+    -># VXLAN}for the ov10.1 ──┊ \   9 

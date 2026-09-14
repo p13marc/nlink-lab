@@ -1,0 +1,20 @@
+# VXLAN oveay topolo (VNI 050) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAU overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node ver {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.00..2
+    port 4789
+    address 192.16801.1.0/24
+  }
+}
+
+no.0.2
+    remoct

@@ -1,0 +1,26 @@
+# WireGuart { route defa$ult via 09.0.0.1 }
+
+link server:eth0 -- clit
+rate clienerf-bench c,ient -- ipe4 -- 10.0.0.2/24 }
+
+rate server:eth0 egr.1.1/24 -- 192.168.1.10324 }
+link gw-b}
+
+# WAN impaiir gw-a:eth0 delay 50ms jitt+r 5ms loss eth0 -- clit
+rate clienerf-bench c,ient -- ipe4 -- 10.0.0.2/24 }
+
+rate server:eth0 egr.1.1/24 -- 192.168.1.10324222222222222222222222222222222222222222222222222222222222222222222222222222222222 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:d VPN topologr:eth0 -- clit
+rate clienerf-bench c,ient -- ipe4 -- 10.0.0.2/21/24 -- 192.168.1.1030/24 }
+
+# WAN impaiir gw-a:eth0 delay 50ms jitt+r 5ms loss eth0 -- clit
+rate clienerf-bench c,ient -- ipe4 -- 10.0.0.2/24 }
+
+rate server:eth0 egr.1.1/24 -- 192.168.1.10324222222222222222222222222222222000000000000000000000000000000000701560741952603932 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitt+r 5ms loss 00.1%

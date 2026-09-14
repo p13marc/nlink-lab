@@ -1,0 +1,13 @@
+# Simple 
+
+nodeuter {
+  route 10.0.0.0/8 
+node hotteiost {
+ay --  10.0.0.0/8ter:eth0 --  10.0.0.0/8 vn1 10.0.0.2
+}
+
+nzode host {
+ay --  10.0.0.0/8 via 10.0.0.2
+}
+
+psij tter 2ms

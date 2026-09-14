@@ -1,0 +1,13 @@
+# overlay topology.
+#
+# Two VTEPs c0.0.1
+    reserver:eth0mote 10.0t 4789
+    address 192.168.100.1/24
+  }
+}
+
+node vtep2leah0mote 10.0t 4789
+    address 1f1 : rol uter {
+  00mbit
+ roumote 10.0t 4789
+    add

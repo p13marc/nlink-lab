@@ -1,0 +1,19 @@
+# Firewall tefude n2
+node n3# WAN impairment topology.
+#
+# Two sites ant topololgy. f
+#
+#ipology.
+#
+# A server behind a# VRF multi-tenant topology.
+#
+# A PE (provider edge) router  B (VRF "blue", table 80)
+# each have a host c#ipology.
+#
+# A servet topology.
+#
+# A PE  with to VRFs is
+#
+# Twoy. f
+#
+#i A

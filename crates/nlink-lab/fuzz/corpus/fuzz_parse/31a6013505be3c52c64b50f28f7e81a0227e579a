@@ -1,0 +1,5 @@
+# VXLAN ov2.2/30 }
+link n1:eth+++++++0 -- 12.1/3gbyte0 --client 10.1.2.2/30 }
+link n1:eth1 -- n3:eth0 { 10.ink nk n1:eth+++++++0 -- 12.1/3gbyte0 -n1:eth+++++++0 -- 12.1/3gbyte0 -te0 -n1:eth+++++++0 -- 12.1/3gbyte# VXLAN overlay topology.
+#
+# T0.v

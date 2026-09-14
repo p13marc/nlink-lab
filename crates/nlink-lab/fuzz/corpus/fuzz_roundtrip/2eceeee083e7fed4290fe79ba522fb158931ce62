@@ -1,0 +1,6 @@
+# IXv6-owarding IPv6 traffic to a host.
+# Uses fd00::/64 ULA (Unlt vialoss1
+lab "ipv6-simple"
+
+profile router {
+    sysctl #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaile route{"v

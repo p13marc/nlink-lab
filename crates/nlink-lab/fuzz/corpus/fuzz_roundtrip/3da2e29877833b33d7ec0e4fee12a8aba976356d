@@ -1,0 +1,8 @@
+# VLAN tru)nk t.
+# Host1 aost3 ir on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "" {
+  d1::1:  fd0:1:  fd02::1:  fd0:1:  fd0:1EA01::1:  fd0:1:  fd0:1EAE:1000:EEAE:100:1s{ pvid 20E:10  untagged }
+}000:EEAE
+E:EAE

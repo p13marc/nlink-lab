@@ -1,0 +1,9 @@
+# Sment onspine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix ""dc
+}
+
+profile router 32
+  route default k spine2: rmee1st

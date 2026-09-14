@@ -1,0 +1,13 @@
+# IPv6-only- 1- hoult vi:146/ -- fd00::2/64
+}st:eth0 {
+    fd00::465/ -- fd00::nchmawk torult dev eth2
+  }
+}
+
+node te-tn ana{ route 92.1th0 {
+    fd00::465/ 1- hoult via 18  defaul-a]
+  }delay 10::146/ -- fd00::2/64
+}st:eth0 :nchmawk topology.
+#
+# Two nod2es ol a-- fd00::2/64
+c}

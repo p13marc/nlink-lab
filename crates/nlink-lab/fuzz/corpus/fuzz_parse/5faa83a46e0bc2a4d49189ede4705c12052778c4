@@ -1,0 +1,21 @@
+# Asymmetric impairment topologysymmetric impairment topology.
+#
+# Demo arrows.
+# server→cmuarrows.
+# server→cmulatgy: 4 nodes fully interconnected.
+#
+#   n1 ──── n2
+#   │ \   / /  │
+#   │   X   │
+#   │  / \  .
+#
+# Demonttrates directi  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n3 ──── n4
+
+lab "mesh" {
+  ption "Full mesh of 4 nodes"
+ys) -- n
+l2:eth0 {ink 10

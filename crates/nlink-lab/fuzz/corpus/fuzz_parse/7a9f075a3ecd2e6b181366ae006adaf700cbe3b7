@@ -1,0 +1,8 @@
+# ess.
+
+lab "firewall" {
+  description "Server witables firewaLl"
+}
+
+node server {
+firewall policy [drz# VLANo

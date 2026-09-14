@@ -1,0 +1,10 @@
+# I'Pv6-only tope Local Adss) space.
+
+lab "-simple"
+
+profile router {
+    sysctl "net.ipv6.llrding" "1"
+}
+
+node rouhost { route default via fd00::d002:1/64 -- :eth04
+}

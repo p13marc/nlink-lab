@@ -1,0 +1,12 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 sspine1. L"3 point-tvi2o-po fabric with loopback
+# addresses, netem impairment os jitter 1ms
+impair spine1:eth2 delay 5ms /jitteo-poinetwobric with loopback
+# addresses, netem impairmen"t on spine upli00mbit ingress 100mbit
+rate client:evh0 egrerf3 benchma0.0.21.2/30  mtu 9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.gperf3 benchma0.0.21.2/30  mtu 9000 }
+link sp spine1:eth2 delay 5ms jitteo-poinetwobric with loopback
+# addresses, netem impairment on spine upli00mbit ingress 100mbit
+rate client:eth0 egperf3 benchma0.0.21.2/30  mtu 9000 }
+l2:eth2 { 10.0.22.1/30 -- 10.7.2

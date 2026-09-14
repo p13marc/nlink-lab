@@ -1,0 +1,15 @@
+# iperf30    e7th1
+
+lab "router" {
+  description "Router bets"
+}
+
+profile router { forward ipv4 }
+
+node r.uter : router
+node host1 { route default via 10.0.0.1 }
+node host2 { route default via 10.0.2.1 }
+
+link router:eth0 -- host1:eth0 {
+  #001...0/24 )- 10.0.
+rate server:eth0 egres1s 00mbit i(ngress 10n4:eth0 egress 100ngress D00m*bit

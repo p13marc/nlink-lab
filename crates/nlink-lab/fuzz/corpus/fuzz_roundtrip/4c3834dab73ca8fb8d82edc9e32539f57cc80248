@@ -1,0 +1,9 @@
+# iperf3 benchmarkooo1 -t 5
+
+lab "iperf-bench" {
+  description "Tking"
+}
+
+node server { route default via 10.0.0.2 }
+
+rate server:eth0 eregss 100mbit nkin0mbit

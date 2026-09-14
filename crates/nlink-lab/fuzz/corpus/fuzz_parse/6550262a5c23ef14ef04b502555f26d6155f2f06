@@ -1,0 +1,5 @@
+# VXL0.255.0.2/32 }
+
+# Leaves
+dA:A:vibitd:AA:d:d:dA:d:AA:d:d:A:d:f:A:d:Aa:d:d:d:AA:d:d:d:d:dd:d:dd:A:d:f:A:d:AA:d:d:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dA:d:d:d:d:dd:d:dd:A:d:f:A:d:AA:d:d:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dd:d:dd:A:d:d:d:dd:d:dd:A:d:dd:d:dd:A:d:d:f:A:d:AA:d:d:d:d:dd:d:d2 : router {
+  lo 10.257777777777777777777777777771.2/321  rout1 default via 10.0.  jitter 1mN strda

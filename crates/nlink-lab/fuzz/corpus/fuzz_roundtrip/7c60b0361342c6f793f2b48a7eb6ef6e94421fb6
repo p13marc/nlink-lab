@@ -1,0 +1,20 @@
+# Spine-leafsses, netem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc&
+}
+
+profile router { f~~~~~~~K~~~~~~~~~~~~~~~~//@fn:////////////////////9.255.1.2/32
+  route default via 10.0.12.1
+}
+
+# Servers
+node server1 : host { route d.1 }
+node }
+
+# Im"
+  prefix "dc"
+}
+
+profile router { fr spine1:eth2 delay 5ms jitter 1ms

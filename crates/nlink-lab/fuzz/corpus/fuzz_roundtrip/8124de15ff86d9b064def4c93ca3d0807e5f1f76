@@ -1,0 +1,16 @@
+# WAN impairment topology.ter,
+# 0.1% loss, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sitesy impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Sit via 39.2.0.1 }
+
+# LAN t
+link router-a:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 957.16.0.2/30
+  delay 30ms jitter 5m  nos3 0.1% rate 50mbit
+}

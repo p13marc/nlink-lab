@@ -1,0 +1,11 @@
+# Firewall TCA port 8080.n# node test access.J
+lab "firewall" {
+  description "es firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : r {
+  route [dicy drop {
+    accept ct established,r:lated
+  # Spine-le

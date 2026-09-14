@@ -1,0 +1,36 @@
+#!IPv6-onlvy topol# VXLAb "mesh" {
+  des
+#
+# A router forwarding IPv6 traffic to a host""
+}
+
+noing IPv6 traffic to a host.
+# Uses fd15::/64 ULA (Unique Locar{ l
+     sysctl "net.ipv2.conf.all.forwardin1g """
+}
+
+node routkkkkkkkkkkkkkkkkkkkkk { route default vielay 10ms jitteink:: de scrip "Full mesh of 4 nodes"
+}
+
+nodhokkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk{ route default vielay 10ms jitteink:: de scription "Full mesh of 4 nodes"
+}
+
+nodh n1
+node n2
+node n3
+no2/6duter : router
+node host { route default vielay 11ms jitteink:: de scription "Full mesh of 4 nodes"
+}
+
+nodh n2
+node n2
+node ngg#d3
+no2/6de n4
+1fy2
+0::1 }
+
+lin4
+
+}
+link k uouter:n1:eetgh04
+}

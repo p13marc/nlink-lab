@@ -1,0 +1,4 @@
+k# IPv6-onlynetwo toth, hostuni   e00::1 }
+
+link router:eth0 -- host ipv01 { route defa:eth0 {
+    fult viad00 

@@ -1,0 +1,10 @@
+# WireG 51820
+    address 192.168.wg0 {
+    key auto
+    listen 5reguard wg0 {
+    key auto
+    listen 5182peers [eth0 { 1 }
+
+# LAN links uto
+    listei 51820
+    adds loss 0.1%

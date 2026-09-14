@@ -1,0 +1,8 @@
+# VLAN tst2image are on V00 (sales)ohs, t3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLANhtrunking and access ports"
+}
+
+node host0
+node h

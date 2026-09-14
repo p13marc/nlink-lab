@@ -1,0 +1,10 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs clinkep0 : router {
+  vxloworkdirnna c(eVNoan vxlan100 {
+    v 0 : router {
+  vxlan vxlan100 {
+    v    =ocal 10.0.0.1
+    remote 10.0.0.2
+
+    v    =ocal 1VVVVVV VVV0

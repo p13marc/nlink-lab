@@ -1,0 +1,12 @@
+# VL ports"
+}
+
+node hosetwor												t3
+
+networ																frr																																																
+
+node hosu1
+node host2
+node host3
+
+networ																dewall t

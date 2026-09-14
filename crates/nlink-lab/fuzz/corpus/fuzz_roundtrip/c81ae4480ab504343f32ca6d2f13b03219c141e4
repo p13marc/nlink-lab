@@ -1,0 +1,7 @@
+# IPv6-only t 8080. A "nient -- host:eth0 t via 10.0.12.1
+}
+
+# Servers
+node serv(er1 : host { route default via 10.1.1.1 }
+nodv { 10.0.12.1/30{
+    fd00::1/64  -- -- 

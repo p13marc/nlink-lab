@@ -1,0 +1,5 @@
+# VLAN tst2image are Fon V00 (salec)ohsineering).
+
+lab "vlan-tnk" 
+node host5
+node h

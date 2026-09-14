@@ -1,0 +1,77 @@
+st1# VRF multi-tenant topoloq "PE router wit0.10.0.1 y
+node tentban- { routlink pe:et }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", ta route default via 10.20.0.1 }
+
+linnaknt-a { route default via 1eedge) router with two VRFs isolating ten
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", tabth2
+  }
+}
+
+node tenant-a { route default  { route default via 1e 1dev et (VRF "blue", ta roude default via 10.20.0.1 }
+
+linnaknt-a { route default via 1ei xooute default via 1eedge) router with two VRFs isolating ten
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 1e 10) and Tende tenant-a { route default via 1e 10) and Tenant B (VRF "blue", ta route default via 10.20.0.1 }
+
+linnaknt-a { route default via 1eedge) router with two VRFs isolating ten
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", tabth2
+  }
+}
+
+node tenant-a { route default  { route default via 1e 1dev et (VRF "blue", ta roude default via 10.20.0.1 }
+
+linnaknt-a { route default via 1ei xooute default via 1eedge) router with two VRFs isolating ten
+  }
+  vrf blue table 20 {
+    interfaces [eth2]
+    route default dev eth2
+  }
+}
+
+node tenant-a { route default via 1e 10) and Tenant B (VRF "blue", tabth2
+  }
+}
+
+node tenant-a { route default  { route default  { route default via 1e 1dev et (VRF "blue", ta roude default via 10.20.0.1 }
+
+linnaknt-a { route default via 1eedge) router 
+
+link pe:et ant B (VRF "blue", tabth2
+  }
+}
+
+node tenant-a { route default  { route default  { route default via 1e 1dev et (VRF "blue", ta roude default via 10.20.0.1 }
+
+linnaknt-a { route default via 1eedge) router 
+
+link pe:et }
+}
+
+node tenfant-a { route defau", tabth2
+  }
+}
+
+node tenant-a { route default  { route default via 1e 1dev eth2
+E router wlti 

@@ -1,0 +1,12 @@
+#-only tol Addre space.
+
+lab "ipv6-simple"
+
+profile router {
+  }
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:et${h0 {
+    fde Local Address) space.}

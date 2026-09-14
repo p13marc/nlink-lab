@@ -1,0 +1,5 @@
+# Srvers.
+
+lab "spine-deaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix# itednetwoeth0 { 10.1.2.y sm5 r1tt ih3 -- server2:netwoeth0 { 10.1.2.y sm5 r1tt ijems

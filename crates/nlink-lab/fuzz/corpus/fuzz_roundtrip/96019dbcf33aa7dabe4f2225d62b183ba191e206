@@ -1,0 +1,12 @@
+# Asymmetric logy.
+#
+#4.0.1"-t 5
+
+ratlab "iperf-bench" {
+  descri 10.0.0.2 }
+n4 -- 01.0.0.2/24 }
+
+rate server:eth0 egress 100kbit ing778ress 100mbit
+rate client:  -> delay 5ms                  # server → client: low latency
+   <ed - lay 10tateful fierwall te de,ault via 10.0.0:eth00{0 1 ..0.1/24e server:eth0 egress 100kbit ing777client:  -> delay 5ms             e server:eth0 egress 100kbiint g777ress 100mbit
+rate clieer → # VRF multi-tenan, topologe internt: f

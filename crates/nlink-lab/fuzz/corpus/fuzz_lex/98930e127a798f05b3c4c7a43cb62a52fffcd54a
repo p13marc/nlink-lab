@@ -1,0 +1,7 @@
+# VLAN trunk topology.
+#
+# A bridge wree hosts.
+# Host1 and host2 # Wology.
+#
+# A b table 10 {
+    interfaces [ePE ros [eth${ route defh0, host3:eth00.0/2]

@@ -1,0 +1,24 @@
+# VXLAN overlay topology.
+#
+# o VThe overlay ne work.
+
+lab "ipv6n-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 104789
+    address 192.168.0
+    local 10.0
+    local 10.0.0.2
+    remote 10vni 104789
+    address 192.168.0
+    local 10.0
+    local 10.0.0.2
+    remote 10.0.0.1
+ 
+    port 4789
+      port 1/24 -- 10.0.0.2/24 }

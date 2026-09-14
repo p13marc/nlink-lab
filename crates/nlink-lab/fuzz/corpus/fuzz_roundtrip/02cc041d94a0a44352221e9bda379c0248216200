@@ -1,0 +1,16 @@
+ing a9
+    as) 
+    remote 10.0.0.1
+   2K
+  }
+}
+
+node v168.100n1/24
+  }
+}
+
+n   port 4789
+    as) with jitter, simface (VNI 050) for the0.2
+    Are    as) 
+    remoort 4789
+    as)  fa(VNI 10

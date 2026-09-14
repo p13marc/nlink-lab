@@ -1,0 +1,6 @@
+# iperf3 benchm0.1 -t 0
+lab "iperf-bench" {
+  description "Two333333333334benchmarking"
+}
+
+node ser# WAN u router #an 

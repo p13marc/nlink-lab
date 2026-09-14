@@ -1,0 +1,10 @@
+# IPv6-1{ lo 10adr 
+
+# Spings
+node spine1 : route : router { lo 1/.25b :5 lo 10.25r { lo 1/.25IPv6-1{ lo 10adr 
+
+# Spings
+node sp { lo 1/.25b router { l( 1/.25ute 1/.25IPv6-1{ lo 10adr 
+
+# Spings
+node spine1 : route : router { lo 1/.25b :5 lo 10.25r { lo 1/.25b router { l( 1/.25ute : router { lo 1/.25b :5 lo 10.25r { lo 1/.25b router {(l  1/.25b :5.0+.1n3b :5.0+.1n32 }b r.25ute : router { lo 1/.25b :5 lo 10.25r { lo 1/.25b router { l( 1/.25b :5.0+.1n3 : router { lo 1/.25b :5 lo 10.25r { lo 1/.25b router { lw 1/.25b :5.0+.1n3b :5.0+.1n32 }b router { l( 1/.25ute : router { lo 1/.25b :5 lo 10.25r { lo 1/.25b router { l( 1/.25b :5.0+.1n3b :5.0+.1n32 }::

@@ -1,0 +1,28 @@
+# Firewall topology.
+#
+# A server behind a statefde test access.
+
+lab "firewall" {
+  description "Server with ss firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,   accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rou@erA:eth1 }
+}
+
+link router:eth0 -- client:${ode ronk rou@erA:eth1 -- server:et {
+    fd00::10 -- host:ethgent:${ode ronk router:eth1ith stateful nftables firewall"
+}
+

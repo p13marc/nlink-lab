@@ -1,0 +1,4 @@
+]# Router topology00::/64 ULA (Unique Local Address) space.
+
+a 10.0.25555555555555555555555555555555%55555.link rout  s  ysctl "net.ipv6.conf.a.2/24
+}

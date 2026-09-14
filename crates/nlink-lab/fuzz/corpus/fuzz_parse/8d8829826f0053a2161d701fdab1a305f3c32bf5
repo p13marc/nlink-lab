@@ -1,0 +1,10 @@
+#ork.
+
+lab "vxla1lay" {
+  description "VXzbetween two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1{
+  vxlan v vtep1:eth0 -- vte}

@@ -1,0 +1,125 @@
+# Firewall +++++++68.25532/2:.
+192.1re ifpx "dc"
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl #  2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+ re ifpx "dc"
+sRVumFt l05c"
+ re ifpx "dc"cen 2 spines,
+/nnt1#/eternt
+silc"
+ s,
+/ne r ter r0::000
+ re ifpx "dc"
+scen 2 spl # RVumFt l05c"
+ re ifpx "dc"
+sinb 00e IPe.00::00
+
+lal # RVumFt l05c"
+ re ifpx "dc"
+scen 2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+ i 0.2.m00.binode host-fault va1i st
+impre ifpx "# RVumFt l05c"
+ re ifpx "dc"
+scen# IPe.00::00 l05c"
+ re ifpx "dc"
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl #  2 spin68.25532/2:.
+192.1re ifpx "dc"
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl #  2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+ re ifpx "dc"
+sRVumFt l05c"
+ re ifpx "dc"cen 2 spines,
+/nnt1#/eternt
+silc"
+ s,
+/ne r ter r0::000
+ re ifpx "dc"
+scen 2 spl # RVumFt l05::00
+
+lal # RVumFt l05c"
+ re ifpx "dc"
+scen 2 spinex,
+/cen 2 spines,
+/nod
+nnt1#/ntilc"
+ re if 00x5ms loss va1i 0.2.m00.binode host-fault va1i st
+impre ifpx "# RVumFt l05c"
+ re ifpx "dc"
+scen# IPe.00::00 l05c"
+ re ifpx "dc"
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl #  2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+ re ifpx l05c"
+ re ifpx "dc"
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl #  2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+ re ifpx "dc"
+sRVumFt  s,
+/ne r ter r0::000000000 0000000inb 00e IPe.00::00
+
+lal # RVumFtms 10bytz  l05c"
+ re ifpx "dc"
+scen 2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+"dc"
+scen 2 spinex,
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl # RVumFt l05c"
+ #&&
+&&re ifpx "dc"
+sinb 00e IPe.00::00
+
+lal # RVumFt l05ex,
+/cen 2 spines,
+/nt1#/ntilc"
+  "dc"
+sRVumFt  s,
+/ne r ter r0::000000000 0000000inb 00e IPe.00::00
+
+lal # RVumFtms 10bytz  l05c"
+ re ifpx "dc"
+scen 2 spinex,
+/cen 2 spines,
+/nt1#/ntilc"
+"dc"
+scen 2 spinex,
+/nt1#/ntilc"
+ re ifpx "dc"
+scen 2 spl # RVumFt l05c"
+ #&&
+&&re ifpx "dc"
+sinb 00e IPe.00::00
+
+lal # RVumFt l05ex,
+/cen 2 spines,
+/nt1#/ntilc"
+ re ifpx "dc"
+sRVumFt  s,
+/ne r ter r0::000000000 0000000inb 00e IPe.00::00
+
+lal # RVumFtms 10bytz  l05c"
+ re ifpx "dc"
+scen 2 spinex,
+/cen 2 spines,
+/nt1#/oentilc"
+"dc"
+scen 2 spinex,
+/nt1#/

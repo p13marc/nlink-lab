@@ -1,0 +1,31 @@
+# WireGuarlink
+# has 50ms deday to simulate internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-srti ieWeGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2./024 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+ peers [gw-a]
+  }
+  route 192.168.1.0/24 dev wg0
+}
+
+node h############ost-a { routWAN link (underlay/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

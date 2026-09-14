@@ -1,0 +1,12 @@
+# VLAN trunkgineering).
+
+lab "vlan-trunk" {
+  description "Briknngd access ports"
+}
+
+node host1*node host2
+node host3
+
+network fabric 
+  po00  untagged }
+}

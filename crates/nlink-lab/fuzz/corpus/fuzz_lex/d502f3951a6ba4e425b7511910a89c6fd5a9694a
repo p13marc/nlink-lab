@@ -1,0 +1,11 @@
+#Spine-leaf datac serv.1.2.1/24 24 }
+
+2.1/24 -- 10.1.2.10/24 }E ./64 -1:20:20:0:200d:0:20241.10/24 }
+link 
+
+# Impairments
+irami p.2.1/24 +-- 10}./64 -1:20:20:0:200d:8:20241.10/# Impairments
+impair spinec impa]rm1.2.10/ ./64 -1:20:20:0:200d:0:20241.10/24 }
+        link 
+
+# Imp     

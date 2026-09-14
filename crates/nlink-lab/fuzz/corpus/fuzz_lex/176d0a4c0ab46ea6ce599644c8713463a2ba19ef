@@ -1,0 +1,16 @@
+# W
+  lo 102255.1.1/32
+  rodef*ault via 09.0.11.1
+}
+node leaf2 : router {
+  lo 30.25523/ 1.
+ rodede leaf2 : router {
+  lo 10.25523/ 1.
+ rode leaf1 : router {
+  lo 10.255.1.1/32  
+route ddr { lr {
+  lo 102255.1.1af2 : router {
+  lo 10.25523/ 1.
+ rode leaf1 9000 }
+link  10.25523/ 1.
+ rode leaf1 9000 }k spin1:2da

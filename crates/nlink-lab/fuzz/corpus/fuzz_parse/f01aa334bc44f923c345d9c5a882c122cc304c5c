@@ -1,0 +1,37 @@
+# Firewall topoloode test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewalh"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${/////00000000000000000000000000000400000000000000000000+/////////////////////////////////////ished,  accept udp dport 26
+ !}
+}
+
+link router:eth0 -- client:${ode er:eth1 --  -- client:${ode ronk clientrouter:eth1 -.0g Rver:eth0 { 10irewa# Firewall topoloode test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewalh"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${/////00000000000000000000000000000400000000000000000000+/////////////////////////////////////ished,  accept udp dport 26
+ !}
+}
+
+link router:eth0 -- client:${ode er:eth1 --  -- client:${ode ronk clientrouter:eth1 -.0g Rver:eth0 { ll"
+}
+

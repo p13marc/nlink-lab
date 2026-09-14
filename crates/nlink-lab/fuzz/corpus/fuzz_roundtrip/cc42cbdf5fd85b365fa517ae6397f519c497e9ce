@@ -1,0 +1,28 @@
+# IPv6-only topolog;connected by a veth pair with anodesses
+
+profile router { forward ipv4 }
+
+node rth. delayouter-, fd0ult via 10.0::0. : router {
+  route 10.0.0.0/8 viost2 (10.0      eth0    eth1
+
+# two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node rth. delayouter-- fd0ult via 10.0::0. : router {
+  route 10.0.0.0/8 viost2 (10.0      eth0 !  eth1
+
+lab "router" {
+  a 10.0.0.2.0.2/24
+},.
+impair router:eth. delay 10]ms jitterconnected by a ve 10ms 5 traffic to a hdescription" Router between two subnets"
+}
+
+proipv6-simple"
+
+pdelay onia fd00::1 }
+
+l- 10.0.0.2/file router { forouter rward ,pv4 }{
+ 
+ 

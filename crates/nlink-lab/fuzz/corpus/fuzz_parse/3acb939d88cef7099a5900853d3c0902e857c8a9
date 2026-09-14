@@ -1,0 +1,11 @@
+# WAN iss, g.
+
+lab "wan-imissit rate limitipairment" {
+  description "Ty imlink"
+}
+
+profile router { forward ipv4 }
+
+# Se itA
+node rrouter { route 09.2.0.50mbit
+}

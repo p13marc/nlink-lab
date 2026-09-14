@@ -1,0 +1,14 @@
+# VLAN trunk topology.
+#
+# A o
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1t3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, ho3sett:eth0, hoed }
+}

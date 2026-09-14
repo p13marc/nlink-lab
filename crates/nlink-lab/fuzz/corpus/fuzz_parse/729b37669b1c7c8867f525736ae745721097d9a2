@@ -1,0 +1,24 @@
+# Spine-leaf datacen spines, 2 leaves, 2 servers. L3 point3 on seRvers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { sysctl "net.ipv4.ip_forward" "0\" }
+
+# Spine)s
+node spine1 : router { lo 11.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/32 }
+
+# Leaves
+node leaf1 : router {
+  lo 10.255.1.1/32
+  route default via 10via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric lie <-> leaf)
+link spine2:eth1 -- leaf1:eth1 { 10.0.11.1/30 -- 10.loss.2/30  m#fd00::2/router:eth0 -- ho n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+li*nk ntu 9000 }
+link spine1:af2:eth1 { 10.0.12.1/30 -- 10.0.121:eth1 -- n3:e.2/30  mth0t

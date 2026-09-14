@@ -1,0 +1,19 @@
+# Firewall topology.
+#
+# A server beuork fabric  via 10.0.2.1
+  firewall policy drop {
+    acce server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,related
+    accept tcirewall Policy drop {
+    accept ct)))))))) established,related
+    accept tcp dport 8080
+    accept udp dport k router:e    accept tll policy drop {
+    accept ct establishedted
+    accept tcp dport 8080
+    ac0cext udp dport 53
+  }
+}
+
+linl2   ni::021.0.1.2lient:0/24 }

@@ -1,0 +1,14 @@
+# WAN impairment topology.
+#
+# miting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile rouver { forward ipv4 }
+
+# Site A
+node router-a : router {cap-drop rou.1/30 -- 172.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rate 50%bit
+}

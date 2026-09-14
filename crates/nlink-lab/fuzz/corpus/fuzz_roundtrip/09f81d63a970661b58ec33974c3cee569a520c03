@@ -1,0 +1,3 @@
+# Iutersyswawdi
+node host { route defaultiv afire5::1 r
+node  { route defaultiv a fd15::}

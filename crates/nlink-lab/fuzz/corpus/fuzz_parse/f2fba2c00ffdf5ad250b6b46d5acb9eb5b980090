@@ -1,0 +1,14 @@
+# VXLAN ovrk.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay ivaween two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 10.0.   remote 10.0.0.2
+   10.0.0.2/24 }

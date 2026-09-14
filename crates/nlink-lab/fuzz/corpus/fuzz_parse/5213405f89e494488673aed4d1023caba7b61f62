@@ -1,0 +1,9 @@
+# S
+lab "ment" {
+  description "Two sites nk"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node rrouter-b :, 2  rsholog.

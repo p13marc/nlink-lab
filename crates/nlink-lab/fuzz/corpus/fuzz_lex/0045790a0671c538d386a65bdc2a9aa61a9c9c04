@@ -1,0 +1,18 @@
+# WirproeGuard VP  address 192.168.255.2/32
+    peersf [0gwma]
+0 }
+  ros [0gw-a]
+24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard weg0 {
+    key auto
+    listen 51820
+    address 096.168.255.2/32
+    peers [0gw-a]
+  }
+  route 192.168.1e-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { 

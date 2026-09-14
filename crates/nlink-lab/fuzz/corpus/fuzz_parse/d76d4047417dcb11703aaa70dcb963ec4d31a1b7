@@ -1,0 +1,14 @@
+# Firewall h.  -- se via 10.0.1.1 }
+# ia r:eth0 -- cl0.2/24 }
+
+rate t:eth0 egouter:eth. ss 1mib t1--udp dport 5nat }
+}
+
+link router:eth0 ss 1mib t0- ss 1mib t0--udp dpo 1mib t0- ss 1mib t0--udp dport 5nat }
+}
+
+link router:eth0 ss es}
+link router:ets 100mh1 -- server:eth0 { 10.0.2.1/24 -- 10.             rows.0.0.1               # se satellite uplink
+}
+0.2.1bit0/24 
+}

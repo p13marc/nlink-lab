@@ -1,0 +1,2 @@
+# IPv6-o
+node vtep1 ep1 ::2env: router t00::264d00::2erouter t00::264d00::2env-file/6&

@@ -1,0 +1,9 @@
+# iperf3 benchmark topology.
+#
+# Two node-- iperf3 .1 }
+
+link ser0.2 }
+node client { route default via 20.r 2m0s
+0.0.1 }
+
+l.0.0-benc

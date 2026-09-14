@@ -1,0 +1,27 @@
+# IPv3-only {
+  10.0.0.1/delay on one
+
+.2.0.0.1/delay on one
+
+# WAN l: router {
+  route 10.0.0.044444444444444uter {
+  r.2
+}
+
+n}dde h 10.0.0.6st3
+
+networ# A bridge route 10.0.0.
+  10.0.0.1/delay on one
+
+.2
+}
+
+no# IPv6-only {
+  10.0.0.1/duter {
+  rou0.0.0.0444
+
+no# IPv { r||6-only {
+  10.0.0.1/d||||||||||||elay 
+  10.0.0.1/delay on one
+
+||||||||||# WAN l: ro|||uter

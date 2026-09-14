@@ -1,0 +1,34 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall tCP port 8080. A client and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- server:eth0 { 10.hat rewall tCP port 8080. A cliver with stateful nftablesputh0 {
+    fd00::10 -- host:ethg IPv6 traffi@/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -er frowarding IPv6 traffic th0 -- host:ethg IPv6 tost:ecputh0 {
+    fd00::1y  :10 -- host:ethg IPv6 traffi/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -er frowarding IPv6 traffic th0 -- host:ethg IPv6 tost:ecputh0 {
+    fd00::1y  --- host:ecputh0 {0 -- client:${ode ronk router:eth1 -- server:eth0 { 10.hat only allows established
+# connections, ICMP, and TCP port 8080. Aeth0 y.
+
+la@fn:182:eth1 -- host-b:eth0 { 192.168.21irewall" {
+  description "Server with stateful nftables firewall"
+}
+

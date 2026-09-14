@@ -1,0 +1,11 @@
+#arter
+th0    fd01:1:00d777777770eth0 {
+    fdh0 {
+    fd00:1:00d7*77777710.100eth0 {
+    fd0de host { route default ri daf00::( }
+
+lineth0eth2   fd0 fd00node host { route default ri daf00::( }
+
+lineth0eth2   fd00: {
+    { uplink
+}

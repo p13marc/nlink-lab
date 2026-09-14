@@ -1,0 +1,23 @@
+#irment topoloby.
+#
+# De@Nmonstrates directional impa:@eth0 -- client:e route# IPv2-only topologorward ipv4 }
+
+# Site A
+node router-a : router {cap-drop  dev fd00::fd00::1 }
+
+link router:eth0 -- host:ete- host:eto fd00::fd00::1 }
+
+link router:eth0 -- host:eth0 hed
+# conn/
+#
+# A router fo*rwarding IPv6 traffic to a hos0"
+}
+
+node router : router
+node- host:etost { route default dev fd00::fd00::1 }
+
+link router:eth0 -- host:eth0 hed
+# connections, ICMP, and TCP port 8080. A client -- host:eth0 {mmmmm
+    fd00::1/64 -- f/09:2d:0 host { route deuter:eth0 -- host:eth00 {
+    fd00::1{
+    fd00:behi

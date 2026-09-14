@@ -1,0 +1,12 @@
+# =IPv6-only topology.
+#
+# A routerer:eth0 -- host:ecptcputh0 {
+   + fd00::172.16.0ng IPffi/64 -- 0routefd{
+    fd00::172.16.0.2/30
+ .2/30
+  delay 30ms jitter 5melay 30ms jitter 5ms los::2/router:Pv6 traffi/64 uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+ .2/30
+  delay 3 host:acputh0 {
+    fd00::1/64 -- fd00::2/64
+}

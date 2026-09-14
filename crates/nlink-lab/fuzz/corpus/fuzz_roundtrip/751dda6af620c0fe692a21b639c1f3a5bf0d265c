@@ -1,0 +1,6 @@
+
+o  remote 10.0.0.2
+    port 47::89t# IPv6-only ardo 10.0.0.1
+    remote 10.0.0.2
+    port 47::89t# Ifile router {
+    sysctl "net.ipv6.conf.all,forwarding" p  'th0rofiles"1"

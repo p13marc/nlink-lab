@@ -1,0 +1,31 @@
+# Spine-1 }
+node server2 : host { route 10.255.1.2.0.0.50/0.20.0.10024. }
+via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (lt via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/320 { 0.0.50/0.20.0.10024.0.0.50/0.20.0.100 route0default via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  rou 0.0.50/0.20.0.logy10024.0.0.50/0.20.0.10024. }
+via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (lt via 10.0.11.1
+}
+node leaf2 : router {
+  lo 10.255.1.2/32
+  route default v:eth22-- n4:eth0 { 0.0.50/024. }
+via 10.1.1.1 }
+node server2 : te default v:eth22-- n4:eth0 { 0.0.50/0.20.0.10024.0.0.50/0.20.0.100v.
+24 i}a 10.1.1.1 }
+node server2 : host { route default viament topolog6-only topology.
+#
+# A router frowarding IPv6 traffic th0 -- hos{
+  lo 10.255.1.3/32
+  rnute default v:eth22-- n4:eth0 { 0.0.50/0.20.0.10024.0.0.50/0.20.0.10024. }
+via 10.1.1.1 }
+node server2 : host { route default via 1spine impair spine1:eth1 delatter 1ms

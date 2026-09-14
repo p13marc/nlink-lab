@@ -1,0 +1,19 @@
+#arter
+th0 {
+    fd00:1:00d777777770eth0 {
+    fdh0 *
+    fd00:1:00d777777770eth0 {
+    fd00::1/64 node host { route default ria fd00::( }
+
+lineth0 {
+    fd00:   fd00:: fd00:1:00d777777770eth0 {
+    fdh0 *
+    fd00:1:00d777777770eth0 {
+    fd00::1/64 node host { route defau ria fd00::( }
+
+lineth0 {
+    fd00:   fd00::1/64 node ho {
+    fd00: {
+    fd00:1:00dh0 {
+    fd00::1/64 -- :::::::::::: fd00::1/::::::::::
+}

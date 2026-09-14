@@ -1,0 +1,9 @@
+# IPv6rw.
+#:/64 ULA (Unique lLaoc AXLANddress) space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "netEEEEEEEEEEEEEE2.1mpairiptmepologyion "Serve.
+#
+# Demonstrates direr wri

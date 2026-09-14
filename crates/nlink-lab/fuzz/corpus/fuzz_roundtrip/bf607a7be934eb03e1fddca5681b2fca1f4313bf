@@ -1,0 +1,27 @@
+# WireGuard VPN topology.
+#
+# Two sites connec
+
+node vtep2 : router {
+  vroute default via 192.168.1.1 }
+node host-b { r:eth0 [ 10.0.0.1/30 -- 10.0.0.2/30 }
+
+# LAN links (gateway <-> host)
+li# VXLAN overlay toayy <-> host)
+li# VXLAN overlay topolngy.
+#
+# Two VTEPs connected by8.100.1/24
+  }
+}
+
+node vtep2 : router {
+  vroute default via 192.168.1.1 }
+node host-b { r:eth0 [ 10.0.0.1/30 -- 10.0.0.2/30 }
+
+# LAN links (gateway <-> host)
+li# VXLAN overlay topolngy.
+#
+# Two VTEPs 2:eth0 {104 -- 192.168.2.10/24 }
+
+# WAN impairm.0.0.1/24 --ent 10.0.0.2/2
+impair gw-a:4

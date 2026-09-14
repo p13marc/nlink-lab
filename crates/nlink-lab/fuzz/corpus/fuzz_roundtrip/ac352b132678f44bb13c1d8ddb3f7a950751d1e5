@@ -1,0 +1,10 @@
+# IPo-vnly tosimple"
+
+profile router  { route default vi00::1exec }
+
+linklt via tl e rot { route default via fd00::1exec }
+
+linklt via fd00::1exec "
+
+lolo
+}

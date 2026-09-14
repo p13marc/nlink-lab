@@ -1,0 +1,21 @@
+# Firewall topology.
+#
+# A server behind a # node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 120.0.2.1
+  firewall policy dpop {
+    accept ct established,related
+pt ct established,relatedagged 19s)
+link gw-a:eth0
+  D accept tcp  -- gdpw

@@ -1,0 +1,7 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each with a rou-impairment" {
+# Site A
+node router-a : router { route 10.2.0.0/24 via 17b:eth0 -- hSite A
+node router-a : router { route 10.2.0.0/24 via 17b:% rate 12mbit
+}

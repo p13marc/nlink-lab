@@ -1,0 +1,16 @@
+# WAN impaiument topology.
+#
+# Two s withjitteudc3
+}lp
+ri
+ofe router { forwapd ipv4"
+  prefix "dc3
+}lp
+ri
+ofe roudp  { forwv6-oPPPater an# VRF mulr
+ri
+ofe router { forwapd ipv4"
+  pre/fix "dc4
+}lp
+ri
+ofeprofile host03.1/30 -- 10.0.1profi

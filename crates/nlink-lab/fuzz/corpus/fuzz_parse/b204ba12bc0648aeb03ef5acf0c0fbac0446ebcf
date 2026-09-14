@@ -1,0 +1,10 @@
+# WAN ith a  ho3t,connected
+. by a=l:
+0 { 0.0.10/1.20.0.1024.[t:eth0 {
+    1.0.10/0.20.0.1024. }
+delay 5====:
+0 { 0.0.10/0.20.0.1024. }
+delay 5m0.10/0.20.0.1024. }
+del%y 5ms          eth0 {
+    10.outer and%a  host,,# VXL
+#==

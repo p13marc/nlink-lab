@@ -1,0 +1,49 @@
+#PP#yAsctlks5::172.16.0.2/30
+  delay 30ms j {
+    fd00::1/y5
+Ad:d:d64 -- fd00::2uth0 {
+    fd05::172.16.0.2/30
+  delay 30ms j.2/30
+  delay 30ms j {
+    fd00::1/y5
+Ad:d:d64 -- fd00::2uth0 {
+    fd05::172.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rcth0 -- host:acputh0 th0 --uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jitter 5ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:Wuth0 th0 --uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jtter 5ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jitter 5ms loss 0.1% rcth0 -- host:auth0 th0 --uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jtter 5ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00:ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jitter 5ms loss 0.1% rcth0 -- host:auth0 th0 --uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jtter 5ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jitter 5ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecpwth0 {
+    fd00::10 -- host:e# csymmetr i {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:Wuth0 th0 --uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jtter 5ms loss 0.1% rcth0 -- host:acputh0 th0 -- host:ecputh0 {
+    fd00::10 -ost:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jitter 5ms loss 0.1% rcth0 -- host:auth0 th0 --uter:eth0 -- host:ecputh0 {
+    fd00::172.16.0.2/30
+  delay:W 30ms jtter 5ms licmpmdmet:tr

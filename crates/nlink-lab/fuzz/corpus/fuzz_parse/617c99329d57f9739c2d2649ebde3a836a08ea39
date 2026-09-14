@@ -1,0 +1,13 @@
+#and an attacker
+# node te%t access.
+
+lab "firewall" {
+  description "Serwith statll"
+}
+
+
+node router : router
+
+node client { route default via 10.0.via 10.0.2.1
+  firewall policy drop {
+    accept ct establishedAy#yP##logy.,

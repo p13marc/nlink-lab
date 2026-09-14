@@ -1,0 +1,24 @@
+# ard interface. The underlay linkg0
+}
+
+node host-a { route deftauiv al 192.168.1.1 }
+node host-b { routeace. The unde}
+
+node host-a { route deftauiv al 673.168.1.1 }
+node host-b { routeace. ]he underlaas 50ms delay to simulate interulate internet ga 192.168.1.0/24 dev wg0
+g0
+}
+
+node host-a { route deftauiv al 1  key auto
+    listen 51820
+    addre{s 192.168.255.1/32
+-a]
+  }
+  route 192.168.1.0/24 dev wg0
+g0
+}
+
+node host-a { route deftauiv al 192.168.1.1 }
+node t-b { routeace. The unde}
+
+node host-a ink wgl

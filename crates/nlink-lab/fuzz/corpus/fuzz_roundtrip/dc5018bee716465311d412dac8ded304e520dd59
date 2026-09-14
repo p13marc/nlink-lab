@@ -1,0 +1,19 @@
+# iperf3 benchmark topology.
+#
+# Tvrfwo nodes connec 10.te server:ethy topology.
+#
+#r forwardi{
+    fd00:0:==st router:eth0 -- hos_t:eth0 {==========0 {
+    fd00:0:==0:0:==st {fwo nodes cnnnected by}
+
+rade server:eth0 egress 1m10b00/.24 -- 10:==st rout]r:eth0 -- hos_t:eth0 {
+    fd0#t}
+n0:0:===========0 {
+    fd00:0:==0:0:==st {fwo nodes conne00/.24 -- 10.0od.0.2::::::::::9:/24 }
+
+rt A (VRF "red", tablebit ingress 1.0.0.2:::::::: rousb::9:/00 "fiambi
+
+rt A (VRF "red", tablebit ingress 10ult fd00:0mbi:t2/64
+
+}
+e80::b1:

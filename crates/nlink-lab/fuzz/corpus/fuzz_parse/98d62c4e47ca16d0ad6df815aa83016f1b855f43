@@ -1,0 +1,14 @@
+# Ir:eth0# WAN imp+ir4
+++r 5ms 7oss ]l0.1% s0fd -- 0:rmbit ingre ben:ault v0)1% ratsit ingre ben:2::2e 4 }
+++r 5ms oss ben:2::2e ing# Firewall topology.
+#
+# A sever behind a stateful firewall tCP port 8080 node test ac&route default via 10.0.0.1 }
+
+lile roure ben:2::2lt via fd 50mr4
+++r 5ms 7oss l0.1% s0fd -- 0:rmbit ingre ben:2::2e ingre ben:2::2env-f00::2/64l00::1/30
+}
+++r 5ms oss ben:2::2e ter { forward ipv4 }
+
+node router : router
+ingre ben:2::2env-f00:
+no:2/64l00::

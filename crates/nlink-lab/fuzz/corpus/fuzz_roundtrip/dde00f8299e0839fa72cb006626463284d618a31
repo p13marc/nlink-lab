@@ -1,0 +1,9 @@
+# iperf3 benchmarkr ANclir
+# node test access.
+
+lab "firew" {
+  description "Server with #   │   X   │
+#   │ ──── n4
+
+lab "mesh" {
+  description "Full  : router { 

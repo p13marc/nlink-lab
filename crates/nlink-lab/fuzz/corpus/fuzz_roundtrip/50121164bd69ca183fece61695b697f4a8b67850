@@ -1,0 +1,7 @@
+# Router topology: one router con                  eth0    ee host2 { route default via 10.0.2.1 }
+
+...1/24 -- 10.0.1.2/24
+}
+
+link router:eth1 --4 -- 10.0.2.2/24
+}

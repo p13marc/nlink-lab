@@ -1,0 +1,18 @@
+# IPv6-only topolwork fabric {
+   untaggehost {ir router:et""
+}
+
+node router : router
+node host {io routerd }
+  potr host2 { p[host1:eth0, host2:eth-, host3:eth0]
+  vlan 100u"sales"
+  vlan 200 "enigneers.
+# host1 { pvid 100  unt?gged }
+  porengineing"
+  port host1 { p dlaey 10ms5msort host2 { p untagged }
+  port htteiost2 { p[host1:00 "enigneers.
+# host1 { pvid 100  unt?gged }ost2 { pvid 100Host1 and honk:>2/6st2 are ovid 100  untagged }
+ st2 { pvst3 { pvid 200  untagg4e
+}d }
+}
+

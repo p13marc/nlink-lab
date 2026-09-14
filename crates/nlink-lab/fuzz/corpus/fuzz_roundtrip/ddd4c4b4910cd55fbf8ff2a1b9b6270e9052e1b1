@@ -1,0 +1,9 @@
+
+
+lab "vlan-trunk" {
+  description "B*ridge with Vnking and ats"
+}
+
+node host1${ode host2an 100 "sbles"
+  vlan 20 
+}

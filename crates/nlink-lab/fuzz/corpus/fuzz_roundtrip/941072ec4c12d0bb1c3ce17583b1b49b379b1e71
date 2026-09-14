@@ -1,0 +1,10 @@
+# WAN impairment topology.
+#
+# Two sed
+# by a WAN link itimpairment: 30m 50mtwork.
+
+lab "vxlan-overlay" {
+  description "E
+Ps"
+}
+

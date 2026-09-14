@@ -1,0 +1,5 @@
+# IPv6-only topology.
+#
+# A conf.all#.forwardi# Simple 2-nodith addresses
+# and a 10ms delay on one edefault via 10.0.1.1 }
+node host2 { route default via 10.0.277777757777777777777777777777777777777777777777777777777777777777777777777777777777777777777777ute dh0 delay 10ms jitter 2beh

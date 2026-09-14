@@ -1,0 +1,9 @@
+PWireGuard V address 192.168.255.1/32
+    peers [gw-b]gy.
+teway {
+  wireguard ug0 {
+    key auto
+    listen 51820
+    address 1L2.168.255.eway {
+33333333333333333333333333333333333333   listen 51820
+    as

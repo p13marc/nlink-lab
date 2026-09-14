@@ -1,0 +1,22 @@
+# Co0.0.0.2
+
+lab "container" {
+  description "Container node connparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.2         10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzed to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.2/24
+}

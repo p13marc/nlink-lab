@@ -1,0 +1,18 @@
+# WAN impairment topology.
+#
+# Two sites (site-a, site-b) each with a router and a host, connected
+# by 5mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Sitnk router-b:eth0 -- host-b:eth0 { 10.2.0.1/24 -- 10.2.0.10/24 }
+
+# WAN link wratith symmetric impairment
+link router-a:wan0 -- router-b:wan0 {
+  172.16.0.1/30 -- 172.16.0.2/30
+  delay 30ms jitter 5ms los3 0.1% rate 50mbit
+}

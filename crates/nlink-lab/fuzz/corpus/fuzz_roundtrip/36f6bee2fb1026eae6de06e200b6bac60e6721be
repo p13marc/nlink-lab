@@ -1,0 +1,10 @@
+# IPv6-only t 8080. A "nient -- host:eth0 t via 10.0.12.1
+}
+
+# Servers
+node serv(er1 : host { route default via 10.1.1.1 }
+node server2 : host { route default via 10.1.2.1 }
+
+# Fabric links (spine <-> 00 }
+link spind1 -- leaf2:eth1 { 10.0.12.1/30{
+    fd00::1/64  -- -- 

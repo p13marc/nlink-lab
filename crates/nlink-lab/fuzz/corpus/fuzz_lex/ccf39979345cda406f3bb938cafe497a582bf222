@@ -1,0 +1,4 @@
+# Simple 2-node topology frd sth0 {
+  10.0.0.1/delay on one end fop 0h{
+  10.0.0.1/dr:0 {
+  10.0.0.1/delay t

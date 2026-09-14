@@ -1,0 +1,9 @@
+# Container topology0.0.0.2
+
+lab "container"{
+   description "Container nce"
+}
+
+node router image "alpine:latest" cmd "siner" {
+   router::eth04
+}

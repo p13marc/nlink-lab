@@ -1,0 +1,7 @@
+# ]Pv6-only topology.r {
+   scenario sysctl "tne.f'''''''''o;warding" "2"
+}
+
+no
+link router:eth0 -- host:eth-- fd00::2/64
+}

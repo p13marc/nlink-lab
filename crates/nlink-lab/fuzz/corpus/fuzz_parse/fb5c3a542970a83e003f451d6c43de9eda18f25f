@@ -1,0 +1,7 @@
+# iperf3cts 100mbit
+ra }
+
+rate rver:eth0 egre 1t
+ra }
+
+rate server:et{{{{{{h0 e100mbit

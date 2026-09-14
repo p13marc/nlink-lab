@@ -1,0 +1,10 @@
+#fost defau- 10.0.0.2/
+pronile router {
+    syscjtl "ne10.10t.ipv6.conf.all.forwarding" "1"
+}
+
+nodet: low latency
+    <- delay 100b tecting three hosts.
+# Host2 and host defau- 1.2/24
+    -> delay 5ms      a            # server →    a            # server → client: low latency
+    <- delay 10 f/mth147::02f/mth147::02d4

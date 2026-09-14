@@ -1,0 +1,41 @@
+# Asymmetri wg0 {
+   
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-Xiltering
+  members [host1:et0]
+  v# Spine-leaf datacente"
+}
+
+profilem 10.ith loopback
+# addresses, netem i1/30 -# Simple 2-node topology for testing>
+#
+# Creates odes"
+}
+
+
+profilem 10.0.21.2/30  mtu 9000 }
+linnode n1
+node nklan 1m 10.ith loopback
+# addresses, netem i1/30 -# Simple 2-node topology for testing>
+#
+# Creates odes"
+}
+
+
+profilem 10.0.21.2/30  mtu 9000 }
+linnode n1
+node nklan 1tacenter top{ 1tacenter top{ 10.0.11.1/30 -- 10.0.11.2/30  mtu 9000 }
+link -- lea77w777777777772 77ddresses, netem i1/30 -# Simple 2-node topology for testing>
+#
+# Creates odes"
+}
+
+
+profilem 10.0.21.2/30  m# V200 (enginee	 /24 }
+link tgu 

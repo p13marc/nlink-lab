@@ -1,0 +1,10 @@
+
+node n2
+node nde n2
+node n3
+node n4
+
+line n2
+node n n4
+
+link n1:eth0 -- k n1:eth0 -- n2{ 10.1.3.51

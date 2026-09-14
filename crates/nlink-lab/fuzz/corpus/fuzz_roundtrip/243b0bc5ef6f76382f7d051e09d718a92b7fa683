@@ -1,0 +1,9 @@
+# iperf3 benevns iperf3,
+# client ca 5
+
+lab "iperf-bench"# Wire1.1 }
+node host-b { route defaults delay to  {
+  des# Asymmetric imp1 }
+
+link s30 erver:et# IPh0 -- clie-- 1.
+nt:ethv6-o#n lyUse0 s {  

@@ -1,0 +1,32 @@
+# Spine-leaf datacenter topology.
+#
+# h spines, 2 leavesabric"
+  prefix "dc"
+}
+
+profile 2oute{ forwar" {
+  description "Full me# VLAN trunk topology.
+#shne-leaf datacenter topology.
+#
+# 2es, 2 leaves, 2 servers. L3 poin
+}
+
+profile route{ forwar" {
+  description F"ull me# VLAN trunk topology.
+#s`ne-opology.
+#
+# h spines, 2 leavesabric"
+  prefix "dc"
+}
+
+profile 2oute{ forwar" {
+  description "Full me# VLAN trunk topology.
+#shne-leaf datacenter topology.
+#
+# 2es, 2 leaves, 2 servers. L3 poin
+}
+
+profile route{ forwar" {
+  description F"ull me# VLAN trleaf datacenter topology.
+#
+# 2 ec tpuopol

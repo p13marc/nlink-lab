@@ -1,0 +1,12 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deh {
+  vlan24  l gw-1.00b0 (engipv4 }
+
+odne 
+
+# LAJ lieth0 { 192.16x.1.1.168.1.10/24 }
+link gw-1.00bet.LAN unk topo0.00bet.LAN unk1.10/24 }
+link gw-1.00be-1.00betn
+prof#routg 1r9

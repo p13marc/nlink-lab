@@ -1,0 +1,33 @@
+# Spin.0.0.1
+}
+
+link router-eth0 -- host:etin.0.0.1
+}
+
+lil!=ft.5.1
+}
+
+lil!=fth0 {
+  1etin.0.0.1
+}
+
+lil!=ft.0.1
+}
+
+lil!=fth0 {
+  10.0.0.1/24 - -10.0.0.2/24
+/30  mtu 9000 }
+link spyne0:eth2 --  }
+link spine03eth2 -- l!=fth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+/30  mtu 9000 y
+link spine0:eth2 -- l!=f2:eth2 { 10.0/via - 10.0.0.2/24m/000 }
+link spine03eth2 -- l!=fth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+/30  mtu 9000 }
+link spine0:eth2 -- l!=f2:eth2 { 10.0/24 }
+
+# WAN im
+
+:ethpairm0 dent
+i

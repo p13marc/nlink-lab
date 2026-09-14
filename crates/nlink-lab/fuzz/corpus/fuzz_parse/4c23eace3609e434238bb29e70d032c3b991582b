@@ -1,0 +1,10 @@
+# VXLANlinkwork.
+
+lab "vxlan-overlay" {
+  description "VXLAN overla8 between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node wardingvtep1 : router {
+image  2 : roucept- vtep20 {

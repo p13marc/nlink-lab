@@ -1,0 +1,4 @@
+route-192.16subnet8.2%0/24 d
+nisten ]52
+    peers [gw-a]
+ 192.168.2%0/2oss 0.1%

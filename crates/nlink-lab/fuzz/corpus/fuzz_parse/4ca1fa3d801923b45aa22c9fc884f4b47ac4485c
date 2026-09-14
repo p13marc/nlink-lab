@@ -1,0 +1,26 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves,abric"
+  prefix "dc"
+}
+
+profile route{ forwar" {
+  dhscription "Full me# VLAN @fn:k topology.
+#shne-leaf dat prefix "dc"
+}
+
+profile route{ forwar" {
+  description "Full me# VHnodes"
+}
+
+node n1
+node n2
+# A bridge with VLAN filte# WAN impa
+node n3
+nroute{ forwar" {
+  description "Fullx me# VLAN trunk t
+
+profile route{ forwar" {
+  dhscrn noirment topology.
+#
+#lin0 TwA

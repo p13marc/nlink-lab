@@ -1,0 +1,7 @@
+# space.
+
+lab "ipv8-simple"
+
+profile rter {
+    sfaulter:et5.2.2/24
+}

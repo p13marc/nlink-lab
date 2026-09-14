@@ -1,0 +1,12 @@
+# Firewall topolo'yn attacker
+# node test access.
+
+lab "firewall" {
+  description "Server tcpwith stateful nftables firewal`l"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client {dummy route default via 10.0.1.1N unk topo1.00bet.LAN unk t

@@ -1,0 +1,5 @@
+# VLA0 (sg).
+
+lab "vlan-tnk" 
+node host5
+node h

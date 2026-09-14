@@ -1,0 +1,9 @@
+#r? lo
+F mh0${
+  .0.@fn:2    espace"
+}
+
+node router import"alpine:latest" cmd "sleep n:3    espace"
+}
+
+node ro5ter import"alpie

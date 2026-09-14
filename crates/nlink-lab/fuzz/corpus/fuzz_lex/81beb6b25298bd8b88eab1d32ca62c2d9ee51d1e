@@ -1,0 +1,6 @@
+#ed by a rate-limited link. Server rufs 'perf3,nch" {
+ -bench client --"iperf-bench" {
+ -bench client -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperof-bench" {
+  erlay between gateways)rate-limited z

@@ -1,0 +1,12 @@
+# Simple 2logesting.
+#
+#S
+ route 05.0.0.0/8 via 10.0.0.2
+}0.0.0.1
+    po 4789
+n   remote 10.0.0.1
+    po 4789
+    address 192.oneh painected by a veth pa   po 4789
+    addre:02:2.0.0.ssde host {
+  r0/oute d
+e

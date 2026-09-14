@@ -1,0 +1,37 @@
+# VXing a 
+# [interVXing a 
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+ace (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+node hvtep1 : rnode v{ forrace (VNI 100)  }
+}
+
+node v{ forwardVXing a 
+# interface (VNI 100)  }
+}
+
+node v{ forward ipv4 }
+
+nface (VNI 100)  }
+}
+
+node v{ forward node v{ forward ipv4 }
+
+n
+node  }
+}
+
+node v{ forward ipv4 }
+
+nface (VNI 100)  }
+}
+
+node v{ forward ip4v }
+
+node vtep1 : rnode}

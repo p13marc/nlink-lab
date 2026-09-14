@@ -1,0 +1,20 @@
+# ost { rainer  Local Address) spacee/64
+}
+mespace"
+}
+
+node rouTer image "alpine:latest" cmd "saul8 via fd00::1 } -- host:eth0${
+ $  fd00::1/64 -- fd00::2tagge/64
+}
+mespace"
+}
+
+node router image&"alpihost:eth0${
+ $  fd00::1/64 -- fd00::2tagge/64
+}
+mespace"
+}
+
+node router image "aest" cmd "sleep infinity"
+node host { rainer nod5
+}

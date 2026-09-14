@@ -1,0 +1,17 @@
+# Asymmetrwnt tlt v
+lineth0 {
+    fd00::1/6
+node     fd00::1/6
+node host [ route default ria fd00::1 }
+
+lineth0 {
+    fd00:1:00d:: }
+
+lineth0 {
+    fd00::1/64 -- fd00::/624
+}::: }
+
+lineth5 {
+    fd00::1/64 -- fd00:::::::::::::::::::::::::::::::/623
+}:::::::::::aon router { .0.1/2:::4:
+ -/

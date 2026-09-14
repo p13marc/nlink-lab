@@ -1,0 +1,5 @@
+#.0.11.0.11.2/30  mt900 }u0 
+.1/*30u 9000 }
+link 
+impair spine0:eth1 delay 5m~ jitter 1ms
+impair stjitter 1m(

@@ -1,0 +1,13 @@
+# VLAon  VLring).
+
+lab "vltk" {
+  description "Bridge with king and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+    vlan 100 "sales"
+  vlan# WAN impair 2

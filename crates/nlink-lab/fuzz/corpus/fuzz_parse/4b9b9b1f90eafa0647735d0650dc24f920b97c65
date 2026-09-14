@@ -1,0 +1,42 @@
+# Simple 2-node topology for de host {
+ay 10ks vims via 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+{
+ay 10ms jitteink router:eth0 10ks vims via 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+{
+ay 10m
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+ay 10k rou2:1/6 via 10.0.0.2
+}
+
+n jiFir --  10.0.0node host u
+ay 10th0 -- a 10.0.0.2
+}
+
+node host {
+ay 10ks via  via 10.0.0.2
+}
+
+node host {
+ay 10k rou2:1/6 via 10.0.0.2
+}
+
+n jiFirewall topolt(toeign

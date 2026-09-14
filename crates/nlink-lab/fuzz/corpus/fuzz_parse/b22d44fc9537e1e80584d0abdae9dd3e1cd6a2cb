@@ -1,0 +1,14 @@
+# VRF multi-tenant d ipv4 }
+
+node pe : router {
+  cpu red param 10 {e 10 {
+    inte {
+    interfaces [etatewifis.
+
+le.0.10/ription "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  cpu red param 05 {e 10 {.10/2}

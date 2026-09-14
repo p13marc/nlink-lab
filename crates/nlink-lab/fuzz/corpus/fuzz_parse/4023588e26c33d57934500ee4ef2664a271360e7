@@ -1,0 +1,16 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  brid, host5 is on VLAN 200 (engineering).
+
+lab "vlan-trunk"IPv6t
+
+imp}
+
+  6thost2:eth0 {
+  desc, 3se:ering).
+
+lab "vlan-trunk" {
+  desc, 3se:ohtth0]
+  t0:eth0, 3seZ4 host2:eth0, srct3:eth0]
+ 

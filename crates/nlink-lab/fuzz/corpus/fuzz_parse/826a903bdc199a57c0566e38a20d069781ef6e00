@@ -1,0 +1,26 @@
+# Firewall topology.
+#
+# A server behind client and an attacker
+# node tttacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful n1nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -- ,erver:eth0 { 10.hat only allows estaateful nftables firewall"
+}
+
+profile rofirewalluter { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:ethServer with statefles fiarelwl"
+}
+

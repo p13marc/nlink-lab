@@ -1,0 +1,17 @@
+# Simple 2-e lab"
+}
+
+}
+
+node image
+ay 10ks via  via 10.teiitte10.0.0.0
+}
+
+node host 
+{ay 10ks via  via 10.0.0.2
+}
+
+node
+lsvo
+ay 10msin# via 10.0.0:# I.2P
+v6-

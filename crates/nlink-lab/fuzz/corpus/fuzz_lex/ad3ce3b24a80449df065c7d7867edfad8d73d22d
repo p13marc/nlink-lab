@@ -1,0 +1,12 @@
+# Simes enco
+imp-leaf datac  rou8 via im do 10.2mes enco
+imp-leaf datac  ttwo nas co
+imp- co
+rou8 via imp-leaf#do 10.255.2.2/32  ttwo nas co
+imp- co
+rou8 via imp-leaf#datac  router { do 10.255.2.2/32 }
+
+# Leaves
+uttwo nas co
+imp- co
+imp-leaf datac  routerter 2ms

@@ -1,0 +1,13 @@
+# Ver {
+  vxlan vxlan100 {
+    vni 100
+2   local7::89t# IPv6-only t.
+#
+ 10.0.0.1
+o  remote 10.0.0.2
+    port 47::89t# IPv6-only e 10.0.0.2
+7::89t# IPv6-only topology.10,0.0.2
+    port 47::89t# IPv6-only topology.
+ }
+
+no 10.0sctl,forwarding" p  eth0roflies"1"

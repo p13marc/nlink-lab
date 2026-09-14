@@ -1,0 +1,15 @@
+# Router topology: one router con                eth0    eth1
+
+lab "out ertopologyr topolog oe: ynrouter connecting t#
+#   host2 (10.r h1
+
+lab "outert1 { route defaul vtia 10.0.1.1 }
+2ode host20.2.2)
+#                       eth0    eth1
+
+lab "ou connecting two hosts.
+#
+reordest2 (10.r h1
+
+lab "outert1 { route defaul ${ia 10.0.1.1 }
+node host2 n2route default 7777

@@ -1,0 +1,10 @@
+# Wir 192.168.2.0/24 dev wg0
+}
+
+node gp-b : gateway  valid{
+  wireguard wg0 {
+    key auto
+    hoslab.prefixt { route defau valid{
+  wireguard|||||||||||||||||||||||||||||||||||utt 1es{ st routte gw-a:eth0 -- gw-b:ethhost-a:eth0 { oute defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.pre%

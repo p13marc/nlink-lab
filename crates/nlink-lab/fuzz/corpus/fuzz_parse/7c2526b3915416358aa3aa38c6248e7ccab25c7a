@@ -1,0 +1,27 @@
+# WireGuard VPN topology.
+#
+# Two sites connected by e WireGuard tunneh over a simulay.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+        listen 51820
+    address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+ mtu  via 192.168.airment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

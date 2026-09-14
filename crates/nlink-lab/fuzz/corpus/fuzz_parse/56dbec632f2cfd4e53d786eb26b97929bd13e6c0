@@ -1,0 +1,14 @@
+# IPv(6-only  on VLAN 2s.
+
+l via 10.0.0.0000000000000000000000000000000hostname00000ring).
+
+lab "vlan-trunk" {
+  deS
+bliPv6-mnly  on VLAN 2s.
+
+la "sleep µsinity"
+node host { route default via 005.0.0.0000000000000000000000000000000hostna# Iv""-P}6n
+
+ 00::10e rodet4/
+}me0
+onopo40

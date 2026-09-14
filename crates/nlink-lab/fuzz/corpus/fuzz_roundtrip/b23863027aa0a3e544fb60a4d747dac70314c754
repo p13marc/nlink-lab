@@ -1,0 +1,18 @@
+# Simp.
+#
+# A routde routwarding" "2"
+}
+
+node router : router
+node host { route router  de: router {
+  faultiv a fd0
+
+node router : router
+node host { route router  de: router {
+  faultiv a fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/64 -- fdroute 10.0.0.0/8  va0i.10.0.2
+outer:eth0 delay 10ms jitter 200::2/64ms
+
+}

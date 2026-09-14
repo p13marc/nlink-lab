@@ -1,0 +1,13 @@
+# iperr and {
+  vxlan vxlan100 {
+    vni 050pv4 }
+
+# Sn vxlan100 {
+    vni 050pv4 }
+
+# Site A
+node rorovter-a : 100pv4 }f2 benc
+laber
+
+raode ronk r
+mtu

@@ -1,0 +1,11 @@
+# WAN imp, and 50mbit rate limiting.
+
+lab "wan-impairment" {
+  description "Two sites connected by impaired WAN link"
+}
+
+profile routeR { forward ipv4 }
+
+# Site A
+node router-a : router { route 10.2.0.0/24 via 172.15.0.2 }
+node host-a { route default via 10.1.0. 10.0/20 via itingr-{ 10.2.4.1/30 -- 10.2oua fd 50m00#

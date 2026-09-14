@@ -1,0 +1,32 @@
+ia 170000000000000000000000000000.2 delay 30ms jitter 5ms loss 0.1% rcte 50te default via 10.1.0.1 }
+
+6.0.2/30
+  delay 30ms jitt 170000000000000000000000000000.2 delay 30ms jitter 5ms loss 0.1% rcte 50te default via 10.1.0.1 }
+
+6.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rcte 50te default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/30 -- 1 delay 30ms jitterB
+nrou2.16.0.1/30 -- 172.16.0.2/30
+  dela/30
+  delay 30ms jitter 5m/30
+  dte default via r 5ms loss 0.0% rcte 50te default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/30 -- cte 50te default via 10.1.0.1 }
+r 5ms loss 0.1% rcte 50mbiter 5ms loss 0.1% rcte 50te default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/30 -- 1 delay 30ms jitter 5ms loss 0.1% rcte 50te default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/30 -- 172.16.0.2/30
+  dela/30
+  delay 30ms jitter 5m/30
+  dte default via r 5ms loss 0.0% rcte 50te default via 10.1.0.1 }
+
+# Site B
+nrou2.16.0.1/30 -- 172.16.0.2/30
+  delay 30ms jitter 5ms loss 0.1% rcte 50mbit
+}

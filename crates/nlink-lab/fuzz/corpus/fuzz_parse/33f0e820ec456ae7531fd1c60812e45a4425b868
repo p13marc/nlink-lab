@@ -1,0 +1,12 @@
+# VXLAN overlay topold by an undermay, each hosting a VXLAN
+# interface (VNI 051) for the overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv6 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni1100 vtep1:}

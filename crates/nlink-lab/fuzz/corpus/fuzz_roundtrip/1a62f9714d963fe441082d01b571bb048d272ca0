@@ -1,0 +1,5 @@
+# IP }
+link Router:e[h0${μ[[[::1i -net- hIP }
+link Router:e[h0${μ[[[::1i -net- hostt0 }
+link Router:e[h0${μ[[[::1i -net- :2d2:0/64\5::lt 4
+}

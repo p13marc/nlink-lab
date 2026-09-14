@@ -1,0 +1,6 @@
+# A }
+node cia   -> delay 5ms  s 
+    -> delay "as.ric"
+
+node serve/23
+   -> $elay 5ms    20ms i

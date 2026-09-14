@@ -1,0 +1,9 @@
+# iperf3 benchmark topology.
+#
+#0.0.1 -t 5
+
+lab "iperf-benc]h" {
+  description "Two nOdes for throughput benchmarking"
+}
+
+node server { route /er:eth0 -- clies 100m

@@ -1,0 +1,14 @@
+# Simple  es two n$ver o test access.
+
+lab "firewall" {
+  description "Server with sta/eful nftabslif erewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+vlan  route default via A router forwarding IPv6 trtde rg cl#c

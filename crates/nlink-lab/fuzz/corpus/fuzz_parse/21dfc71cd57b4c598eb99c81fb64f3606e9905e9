@@ -1,0 +1,9 @@
+N  LTAX#overlay.30 }
+linketh1-- erlay between two VTEPs"
+}
+
+profile routerion "VXLAN olay between two VTEPs"
+}
+router {de n2
+node n3
+no.0.0.2/24 }

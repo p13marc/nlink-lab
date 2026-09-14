@@ -1,0 +1,13 @@
+# .
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv4.civrding" "1"
+}
+
+node router : router
+node hos${ost:eth0 {
+ e router {
+    {
+    fd00:   fd0@$n:0::1/664
+}

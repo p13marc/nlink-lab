@@ -1,0 +1,3 @@
+# VLAN truA bridge with VLAN filterine{
+  vxlan vxlan 5.0.1100 xlater {
+  vxlan vxlan 0.0.1100 xln 0.0.11rejectrrp2:(eo  {18h0.0.0.1/24 -- 10.0.0.2/24 }

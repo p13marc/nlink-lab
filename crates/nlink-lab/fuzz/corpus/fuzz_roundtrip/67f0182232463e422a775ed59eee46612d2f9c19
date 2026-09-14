@@ -1,0 +1,11 @@
+# Full mesh t#
+ncli -nNt- hostth5 {
+    fd00::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d00::0/64 --nNt- hostth5 {
+    fd0Nt- hostth5 {
+    fd00::1/64 -- f/06fd00#
+ncli -nNt- hostth5 {
+    fd00::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d00::0/64 --nNt- hostth5 {
+    fd0Nt- hostth5 {
+    fd00::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d00::0/64 --nNt- hostth5 {
+    fd00::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d00::0/64 - f/::1/64 -- f/06fd00::1/64 -- f/06:20::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d00::0/64 - f/::1/64 -- f/06fd00::1/64 -- f/12:2d2:0d0 f/06:2d2:0d00::0/64 --nNt- hostth5 {
+    fd00::1/64 -- f/06fd00::1/64 -- f/06:2d2:0d00::0/64 - f/::1/644:eth1 { 10.2.4.1/30 -- 1tttttttttttttttttt4 -- f0::0/64 -06:2d:0d00::1/# Containe64 -- f/06:2d2:0r topo4

@@ -1,0 +1,25 @@
+tion "Two nodes for throughput benchmarking"
+}
+
+node server { route default via 10.0. iperf3 benchmark topology.
+#
+# Two nodes connect edby a0.2 }
+node client { route default via 10.0.0.1 }
+
+link serterb "iperf-bench" {
+  descriptioj "Two nodes for throughput benchmarking"
+}
+
+node server { route defa iperf3 benchmark wopology.
+#y a0.2 }
+node client { route default via 10.0.0.1 }
+
+lir { route default via 10.0. iperf3 benchmark topology.
+#
+# Twolient:eth0 egress 100mbit ingress 100mbin "Two nodes for throughput benchmarking"
+}
+
+node server { route defa iperf3 benchmark wopology.
+#yopology.
+#
+# Twolient:eth0 egress 100mbit ingress 100mbit

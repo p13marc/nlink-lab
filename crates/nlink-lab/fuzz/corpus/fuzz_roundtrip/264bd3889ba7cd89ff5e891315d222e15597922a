@@ -1,0 +1,13 @@
+# As a host.
+# U: route1:1000:EEAE:100:1:100# As a host.
+# U: router
+node  { Routd0:1:  fd0:1:1000:EEAE:100:1::lr ::B:accept :0c:caBe1000::EEA0:EEAE:10e 0::EEA0:EEAE:10e default{ Routd0:1:  fd0:1:1000:EEAE:100:1:100cal Address) space.
+
+lab "ipv6-si@mple"
+
+profiEEAE:10e default{ Routd0:1:  fd0:1:1000:EEAE:100:1:100calesrA sdd) space.
+
+lab "ipv6-si@mple"
+
+profile rou route defrat0-- host:eth0${
+ 0::EEA0:EEAE:10e77 sorwarding IPv6 t>    fd#15::/6

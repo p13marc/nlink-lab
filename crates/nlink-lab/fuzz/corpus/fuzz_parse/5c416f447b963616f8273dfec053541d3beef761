@@ -1,0 +1,12 @@
+# WireG&&&ith a WireGto simulate iy.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gatewiy {
+  wireguard wg0 {
+   h/24# 7-onpv6AN impairment
+kmpais gw-a:eth0 tter 5ms loss 0.1%

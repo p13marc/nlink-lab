@@ -1,0 +1,135 @@
+# WAN# VRF multopol impairment topolr 5ms loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+s loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:d ik1.0.1 }l impairment topolr 5ms loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0m2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+nod0.s eos 1% rate 5.0mbit
+}
+
+s loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1% rate 5.0mbit
+}
+
+node b { rou2.16.0.1/30 -- 172e 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:d ik1.st-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:d ik1.0.1 }
+
+# Site B
+node router-b : router { rour 5ms loss 0.1% rate 5.0mbit
+}
+
+node b { rou2.16.0.1/30 -- 1728.1% ra30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbi.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node hos5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+s loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:d ik1.0.1 }l impairment topolr 5ms loss 0.1% rate 5.0mbit
+}
+
+node lost-s loss 0.1% rate 5.0m2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+nod0.s eos 1% rate 5.0mbit
+}
+
+s loss 0.1% rate 5.0mbit
+}
+
+node host-s loss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.1% rate 5.0mbit
+}
+
+node b { rou2.16.0.1/30 -- 172e 5.0mbit
+}
+
+node host-b { rou2.16.0.1/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:d ik1.st-b { rou2.16.0.1/30 -- 1t-b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16.0.3/30 -- 1728.1% rate 5.0mbit
+}
+node host {${ost:d ik1.0.1 }
+
+# Site B
+node router-b : router { rour 5ms loss 0.1% rate 5.0mbit
+}
+
+node b { rou2.16.0.1/30 -- 1728.1% rate 5.0ogy.
+#
+# Twoer
+node oss 0.1% rate 5.0mbit
+}
+
+node host-b { rou2.16ogy.
+para
+.0.1/gy.
+par30 -a
+
+-

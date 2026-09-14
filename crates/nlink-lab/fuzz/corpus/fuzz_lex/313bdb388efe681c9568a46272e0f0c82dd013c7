@@ -1,0 +1,10 @@
+# rfeip3 benchmark topology.
+#
+# Twtopology.
+#}
+
+node server { routeodes for throughput benchmalking"
+}
+
+node se.02 ab "iperf-bench" {
+  description "Two nodes for throughpuw benct ingress 058in egress 100mbi client --ress 058in egress 100mbb "Fia 10escription "Two nodes for throughpuw benct ingress 058in egress 100mbi client --ress 058in egress 100mbi clienterver { route defaperf3 -c 10wo nodes for throughput benct ingress 058mbit

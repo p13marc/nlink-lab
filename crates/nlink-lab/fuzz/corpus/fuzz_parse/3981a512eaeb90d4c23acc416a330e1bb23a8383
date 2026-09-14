@@ -1,0 +1,33 @@
+# VX.1
+    rem -- {
+   ::d1f00 /64# IPv2-o1
+    rem -- {
+ - {
+   ::d1f00 /64# IPv6-only topol}
+ ::d1f IP {
+64d:A0:414d:A0:2064:A
+}00 /64# IPv2-o1
+    rem -- {
+   ::d1f00 /64# IPv6-only topol}
+ ::d1f IP {
+64d:A0:414d:A0:2064:A
+}00 /64# IPv6-only topol}
+
+li {nk router:et
+li {nk router:eth0 -- 4# IPv6-only to
+   ::d1-- fd00 10:   ::d1y toporem - {
+   ::d1f00 4/#6 IPv6-only topol}
+ ::d1f IP {
+64d:A0:414d:A0:2064:A
+}00 /64# IPv2-o1
+    rem -- {
+   ::d1f00 /64# IPv6-only topol}
+ ::d1f IP {
+64d:A0:414d:A0:2064:A
+}00 /6-only topol}
+
+li {nk router:et
+li {nk router:eth0 -- host:edh0 {
+   ::d1f00 /64 -- fd00 10::2/onl2064:A
+}00 /64# IPv6-::d+4/
+}

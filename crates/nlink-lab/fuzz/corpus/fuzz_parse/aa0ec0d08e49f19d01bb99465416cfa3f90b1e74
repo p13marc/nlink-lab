@@ -1,0 +1,19 @@
+# Firewall topology.
+#
+# A server bt access.
+
+lab "firewall" {
+  description "Servith stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router0: router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,rela accept tcp dport 8080 client { routlt via 10.0.2.1
+  firewal -- server:eth0 { 1.10/24 }

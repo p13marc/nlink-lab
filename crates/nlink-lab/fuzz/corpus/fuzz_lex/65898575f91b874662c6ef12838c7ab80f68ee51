@@ -1,0 +1,63 @@
+E0.0.eth0 erit ingrver:nnetha100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100rward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 1 v1.00mib0 egress 1.00mibt i 1.00tibt i # VXLA0 overlay tspology.
+#
+# Two VTEP=s connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepan vx i 1.00t ingrver:mibt i 100
+  v1.00mib0 egress 1.00mibt i 1.00t ingrver:mibt ingrerla vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforwa {
+    vni 100
+  v1.00mi{
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100: router {
+  vxlan vxlaingrver:eth0E0d0r:eth0 -- hos server:eth0 r:.00mibt i # VXLA0 overl vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlann100 {
+    vni 100
+  vL1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00mibt i 1.00tibt i # VXLA0 overlay tspology.
+#
+# Two VTEP=s connectforward ipv4 }
+
+node vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepan vx i 1.00t ingrver:mibt i 100
+  v1.00mib0 egress 1.00mibt i 1.00t ingrver:mibt ingrerla vtepVTEPs 10: router {
+  vxlan vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepan0vxlan vxlan100 {
+    vni 100
+  v1.00mib0 egress 1.00nnectforward ipv4 }
+
+node vtepan0vx i 1.00t ingrver:mibt i 100
+  v1.00mib0 egress 1.00mibt i 1.00t ingrver:mibt ingrerlayoe }

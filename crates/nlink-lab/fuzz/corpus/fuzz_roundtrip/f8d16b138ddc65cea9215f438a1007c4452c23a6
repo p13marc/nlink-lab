@@ -1,0 +1,5 @@
+# IPvofile router {
+    syscode rot { r0::1exec }
+
+linklt via fd00::1exec1lim -- fd00:3
+}

@@ -1,0 +1,32 @@
+# Co# iperf3 benchma Serv
+link l deql for throughput benchultd7777773900.07tel deqghput benchu64 -- f:773:77:793:77:770b:40.0777777390.07777773900.0777700000t benchultd7777773900.07tel deqghput benchu64 -- f:773:77:793:77:770b:40.0777777390.07777773900.07777000000000000000000.0.1 390.07777773900.07tel deqghput benchu64 -- f:773:77:793:77:770b:40.0777777390.07777773900.07#st access.
+
+lab "firewall" {
+  description "Server wi777000000000000000000.0.th stateful nftables firIewall"
+}
+
+profile rout1er { f orward ipv4 }
+
+ne odrouter : router
+
+node client  { route default via 11.0firewall.
+lab bfirewa/.1 }
+
+73900.07tel deqghput benchu64 -- f:773:77:793:77:770b:40.0777777390.07777773900.07#st access.
+
+lab "firewall" {
+  description "Server wi777000000000000000000.0.th stateful nftables firIewall"
+}
+
+profile rout1er { f orward ipv4 }
+
+ne odrouter : router
+
+node client  { route default via 11.0firewall.
+lab bfirewa/.1 }
+
+node server {
+  rout
+lab bfie }
+
+lirewna

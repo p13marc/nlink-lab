@@ -1,0 +1,12 @@
+# Firewst access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile roient { route default }
+
+node server {
+  route  PE (provider edge) router with two Von "Server with stateewall"
+}
+

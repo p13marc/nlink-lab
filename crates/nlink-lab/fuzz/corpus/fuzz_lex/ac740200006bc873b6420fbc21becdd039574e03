@@ -1,0 +1,9 @@
+# VLAN trunk topology.
+#
+# A bdev eth0
+ """""""""""""""""""""""""""""" }
+  vrf blue table 10 {
+    interfaces [eth${ route defaul
+link rou {
+  vlan-filtering
+  members [host0:eth0, host2:eth0, host3:eth00.0/2]

@@ -1,0 +1,6 @@
+# Simple 2-node topology for testing.
+#
+# Creates
+node host { ltroute defaut via fd00 ia fd00 router {
+ } host { r[oute default via fd00 router {
+  rouenchmark t veth paior with ad

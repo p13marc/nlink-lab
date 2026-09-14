@@ -1,0 +1,11 @@
+# VRF multi-tenant tPE (provider solating tenant s.
+
+lab "vrf-multitenant" {
+ description "PE router with VRF tention"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  cpu red tab {
+   2}

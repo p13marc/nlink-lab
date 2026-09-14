@@ -1,0 +1,11 @@
+# I space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf1 }
+
+link pv6.conf.awarding" "0"
+}
+
+nxode rout}

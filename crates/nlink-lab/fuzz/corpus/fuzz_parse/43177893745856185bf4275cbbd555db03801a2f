@@ -1,0 +1,12 @@
+#y$network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay bs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : urtoer {
+  vxlan v100 {
+(    vni 100
+ 

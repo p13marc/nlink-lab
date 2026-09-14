@@ -1,0 +1,14 @@
+# iperf3 t2 are on VLAN 100 (sales), engineering).
+
+lab "vlan-trunk" {
+  description "e with VLAN trunking and acts"
+}
+
+node host2
+node host1
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host0:e
+  port host1 -le defades connult y

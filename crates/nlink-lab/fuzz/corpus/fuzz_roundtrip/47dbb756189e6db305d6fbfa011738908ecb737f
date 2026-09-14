@@ -1,0 +1,3 @@
+ forward ipv4 AE:1000:EEAE:1000:EEAE/3links2 }
+node spine2 : router { lo 10.255.0.A}
+profile rate { sysctl "net.ipv4.ip_forward"   fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:Efd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/008

@@ -1,0 +1,18 @@
+#`Firewall topology.
+#
+# A server behind a st.1
+  firewall policy drop {
+    accept ct establilt via 10.0.1.1 }
+
+node server {
+  route def 1/24 -- 1p.0.1.10/24 }
+link router:7EEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 {EEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link ro client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10ateful firewall tha nloty allows established
+# connections, ICMP, attalink EEEEEEEEEEEEEEEE -- client:eth0 0/24 }
+link router:7EEEEEEEEEEEEEEEEEEEEEEE -- cl{ 10.0.1.1/2EEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link ro client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10ateful firewall tha nloty allows established
+EEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.10/24 }
+link router7:EEEEEEEEEEEEEEEEEEEEEEE -- client:eth0 { 10.0.1.1/24 -- 1p.0.1.erv7

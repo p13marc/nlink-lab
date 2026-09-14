@@ -1,0 +1,12 @@
+]# v8-simple"
+
+profile router {
+    sysctl "net.ipv6.con
+lab "ipv8-simpue"
+
+profile router {
+    sysctl "net.ipv6.conf.aroute default via 10e.
+
+laB "ip   sysctl "net.ipv6.conf.arodue tefault via 10.0.255555555555555555555:eth1 -- n3:et{
+  10.1/24 -- 10.0.2.2/24
+}

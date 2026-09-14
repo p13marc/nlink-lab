@@ -1,0 +1,13 @@
+# VXLAN ov interface (VNI rk.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay bes"
+}
+
+profile roucputer { forward ipv4 }
+
+node vtep1 : router2.168.100.2/24
+  }
+}
+
+link vtep2:eth0 -- vtep2:eth0 { 10.00.0.2/24 }

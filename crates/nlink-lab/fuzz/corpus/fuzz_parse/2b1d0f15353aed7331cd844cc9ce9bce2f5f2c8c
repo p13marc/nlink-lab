@@ -1,0 +1,62 @@
+# Firewall topology.
+#
+# A server behind a statefde test access.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rou@erA:eth1 -- server:eth0 { 10.hat rewall tCP poran attacirewall" {
+  description "Server with stateful@fn: nftablesputh0 {
+    fd00::10 -- host:ethg(IPv6 traffi/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -er frowa
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rou@erA:eth1 -- server:eth0 { 10.hat rewall tCP poran attacirewall" {
+  description "Server with stateful@fn: nftablesputh0 {
+    fd00::10 -- host:ethg(IPv6 traffi/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -er frowarding IPv6 traffiescription "Server with stateful@fn: nftablesputh0 {
+    fd00::10 -- host:ethg(IPv6 traffi/64 -- fd00::2/rong IPv6 traffic th0 h0 -- host:ecputh0 {0 -- client:${ode ronk router:eth1ith stateful nftables firewalul fire default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rou@erA:eth1 -- se description "Server with stateful@fn: nftablesputh0 {
+    fd00::10 -- host:ethg(IPv6 traffi/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -er frowarding IPv6 traffiescription "Server with stateful@fn: nftablesputh0 {
+    fd00::10 -- hoswall"
+}
+

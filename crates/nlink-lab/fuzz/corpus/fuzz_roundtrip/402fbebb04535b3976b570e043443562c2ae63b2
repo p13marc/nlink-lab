@@ -1,0 +1,24 @@
+#g ->n   n1 ──── n2􋚍connected.
+#
+#   n1 ──── n2
+#   │ \ nodes  / │
+#   │  \ n1 ──── n2􋚍connected.
+#
+#  n2
+#   │ \ nodes  / │
+#   │  \ /  │
+#  . /  │
+#  .1#
+#   n1 ──── n2
+#   │ \ nodes  / │
+#   │  \ /  │
+#  􋚍connected.
+#
+#   n1 ──── n2
+#   │ \ nodes  / │
+#   │  \ /  │
+#  . /  │
+#  .1#
+#   n1 ──── n2
+#   │ \ nodes  / │
+#   │  \. 

@@ -1,0 +1,11 @@
+# A cliacker
+# node test access.
+
+lab "firew" {
+  description "Server with #   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n2 ──── n4
+
+lab "mesh" {
+  description "Full  : router { 

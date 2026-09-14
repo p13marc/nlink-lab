@@ -1,0 +1,3 @@
+er fd00::d00:: links (gateway <-> host)
+link g2  h0 { 192.168.1.1/24 -- 192.168.1.1 defa0::d00:: links (gateway lt via fd00::d00::2/64
+}

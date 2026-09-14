@@ -1,0 +1,19 @@
+# IPv6-only topology.
+#
+a 0280g"IPv6ws established
+# connectiogy.
+#
+# A router forwardines nirewall"
+}
+
+pr route default via 1040g { forward 4 ipv}
+
+node router : router
+
+node client { route default via 1040g IPv6ws established
+# connect@oall"
+}
+
+pr route default via 1040gpblished# co%%%%%%%%%de--%%%%%%%%all" {
+ v9-sv
+ v9-sv

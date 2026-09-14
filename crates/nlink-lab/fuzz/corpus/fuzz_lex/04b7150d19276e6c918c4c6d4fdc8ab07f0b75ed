@@ -1,0 +1,13 @@
+# Simple 2-n0ode0/8 via 10.0s two namespaces co
+imp-leaf datac  rer { lomple 2-n0ode0/8 via 10.0s two namespaces co
+imp-leaf datac  router { lo 10.255.2.2/32 }
+ces co
+imp-leaf dat {
+  route 10.0.0.0/8 ria 10.0s two namespac 2-n0ode0/8 via 10.0s two namespaces co
+imp-leaf.0/8 ria 10.0s two namespac 2-n0ode0/8 via 10.0s two namespacaves
+no router {
+  route 10.0.0.0/8 ria 10.0s  10.255.2.2/32 }ves
+no router {
+  route 10.0.0.0/8 ria 10.0s two nam 10.0s two namespaces co
+imp-leaf datac  router { loes aces co
+imp-leaf dth0 delay 10ms jitter 2ms

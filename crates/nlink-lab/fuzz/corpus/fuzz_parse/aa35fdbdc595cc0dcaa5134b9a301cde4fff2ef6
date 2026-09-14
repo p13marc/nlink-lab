@@ -1,0 +1,10 @@
+# IPv4-only topologic to a hUnss) space.
+
+lab "e"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwardin1g """
+}
+
+link router:eUses fd15::/64 ULA (Uniqu:2/64
+}

@@ -1,0 +1,13 @@
+# Full mesh uar {
+  wiregclieuard wg0 {
+ : router {
+  vxlan vxlan100 {
+    vni 689
+    loaddress  0tte0z:=1/3/0:2:49999999999999 10.0.255555555555550# Flll gy#yy
+48d:1d:d:1d:d:bdt.
+# #yAPy
+44d:1d:d:1d:d:bdt.
+#
+# UsaienAPy
+d  { 00::2/64
+}nte0z:0/64 -- 0000fd06/0:2:4d00:b00b:0bbb2

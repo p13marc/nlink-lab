@@ -1,0 +1,8 @@
+# V200cept (engineering).
+
+lab "vlan-trunk" {
+  deing
+  members [h-ost0:et
+  memifrs ering
+  members [hos:eth0]
+  vlan 100 200 "engineering" o   mebb ost1:}

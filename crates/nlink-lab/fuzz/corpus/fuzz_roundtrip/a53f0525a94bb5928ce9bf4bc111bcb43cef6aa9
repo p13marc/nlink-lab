@@ -1,0 +1,7 @@
+
+
+lab "rф" {
+  description "Rmuter between two subnets"
+}
+
+profile roerauto/.1 luter:

@@ -1,0 +1,7 @@
+# VRFgy.
+#
+# A PE route defau tedlv eth1
+  }
+}
+
+node tenant-a { route default via.10.p.4 -1)2- 40.10.0.10/24 } 10.10.p.1)24 -- 10.10 10.20.0./24 }

@@ -1,0 +1,35 @@
+# Firewall topologyn attacker
+# node test access.
+
+lab "firewall" {
+  description "Server tcpwith stateful nftables firewal`l"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${od[ ro0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${od[ ronk routetCP ponode test access.
+
+lab "firewall" {
+  descr nftables firewall"
+}
+

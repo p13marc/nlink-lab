@@ -1,0 +1,7 @@
+# 00::0ifpx "tc"
+scen 2 spi
+tn/1#tin/lc"
+ ri efpx "dc"
+scen 2 spl # IPe.00::0
+scen 2 "dc"
+scen 1#/etern00 000000000x

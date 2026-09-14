@@ -1,0 +1,7 @@
+# IPv6-only topolov fd00::1 }
+
+rink ost:et]v:3 }
+
+rink /st:et]h0 {
+    fd00::11::2/64
+}

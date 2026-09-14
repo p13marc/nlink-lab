@@ -1,0 +1,13 @@
+#  topogyge with VLAN filn VLAN 1ng).
+
+lab "vlannk" {
+  description "Bridgs ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members

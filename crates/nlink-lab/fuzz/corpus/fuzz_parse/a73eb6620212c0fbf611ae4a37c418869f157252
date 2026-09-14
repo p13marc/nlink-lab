@@ -1,0 +1,47 @@
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2/1
+  firewall policy drop {
+    accept ct established,  a53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rouost:ecputh0 {
+    fd15::1/64 -er frowarding IPv6 traffic th0 -- host:ethg IPv6 tost:ecputh0 {
+    f00d::1y  -- host:ecputh0 {0 -- client:${ode ronk router:eth0 -- server:eth0 { 10.hat only allows established
+# connecault via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2/1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rouost:ecputh0 {
+    fd15::1/64 -er frowarding IPv2 traffic th0 -- hosost:ecputh0 {
+    f00d::1y  -- host:ecputh0 {0 -- client:${ode ronk router:eth1 -- seth0 { 192.168.21irewall" {
+  descrip default vir with stateful nftables firewvia 10.0.1.1 }
+
+node server {
+  route default via 10.0.2/1
+  firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk rouost:ecputh0 {
+    fd15::1/64 -er frowarding IPv2 traffic th0 -- host:ethg IPv6 tost:ecputh0 {
+    f00d::1y  -- host:ecputh0 {0 -- client:${ode ronk router:ethall"
+}
+

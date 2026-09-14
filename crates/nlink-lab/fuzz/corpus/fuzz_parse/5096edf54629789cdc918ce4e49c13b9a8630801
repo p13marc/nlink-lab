@@ -1,0 +1,6 @@
+# pace&
+
+lab "ipv8-sie"
+
+profile router {route default via 11.0 via 10.0/2via 11.0 via 10.0/2411.0 via 10.411.0 via 10.0/24
+}

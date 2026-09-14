@@ -1,0 +1,110 @@
+r -no1.2/24
+}
+
+imp<ir router:eth8 delay 10ne[ end.
+
+i delay WWWWr:eth0 dedefault via 1 connected by mtu 9000 }
+mi/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+r:eth0 dedefault WWWWWWWWWWWWWWWWWlay 10ms jitter # Asymmeult via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10n2/24
+}
+
+imp<ir router:eth8 delay 10ne[ end.
+
+i delay WWWWWWWWlay 10ms jitter # Asymmetric ates0ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmper:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by m000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmp[air routeric imrouter:eth0 delne[ end.
+
+i delay WWWWr:eth0 dedefault via 1 connected by mtu 9000 }
+mi/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+r:eth0 dedefault WWWWWWWWWWWWWWWWWlay 10ms jitter # Asymmeult via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmp[air routeric imrouter:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0re imrouter:eth0 delcy 10ne end.
+
+i du 9000 }
+li/24r -no1.2/24
+}
+
+imp<ir router:eth8 delay 10ne[ end.
+
+i delay WWWWWWWWlay 10ms jitter # Asymmetric ates0ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmper:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+mi/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+r:eth0 dedefault WWWWWWWWWWWWWWWWWlay 10ms jitter # Asymmeult via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmp[air routeric imrouter:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0re imr:eth0 dedefault via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmper:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+mirouter:eth0 delcy 10ne eth0 dedefault via 1 connected by mtu 9000 }
+li/24
+}
+
+imp<ir router:eth0 delay 10ne end.
+
+i delay 10nmper:eth0 delay 10ne end.
+
+i delay 10nmpair router:eth0 dedefault via 1 connected by mtu 9000 }
+mirouter:eth0 delcy 10ne end.
+
+i du 9000 }
+li/24
+}
+
+imp<i
+
+imp<ir rou2ter:eth0 delay 10ne Createsmpa twi

@@ -1,0 +1,50 @@
+# Wir 192.168.2.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wireguard wg0 {
+    key auto
+    listen 51t { route defau validt 1eserver2 : host { routte defau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.way {
+  wireguard wg0 {
+    key auto
+    listen 51t { route defau validt 1eserver2 : host { routte defau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard wg0 {
+    key auto
+    listen 51820
+    address 192.168.255.2/32
+    peers [gw-a]
+  }
+||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||  rout2 se.1 }
+node server3 : host { route defau valit  sph2 se.1 }
+node 
+node server2 : hoslab.prefixt { rou servbr2 : host { route defau valit  sph2 se.1 }
+node ine1:eth2 se.1 }
+node server3 : host { route defau vaserver2 : hoslab.prefixt { route defau validt 1eserver2 : host { routte defau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard||||||||||||||||||||||||||||||||||||||||||||||||||  routt 1eserver2 : host { routte gw-a:eth0 -- gw-b:ethhost-a:eth0 { 192.168.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-t 1eserver2 : host { 255.2/32
+    peers [gw-a]
+  }
+||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||  rout2 se.1 }
+node server3 : host { route defau valit  sph2 se.1 }
+node 
+node server2 : hoslab.prefixt { rou servbr2 : host { route defau valit  sph2 se.1 }
+node ine1:eth2 se.1 }
+node server3 : host { route defau vaserver2 : hoslab.prefixt { route defau validt 1eserver2 : host { routte defau validt 1eserver2 : host { route defau validrAN link (underlay between gateways)
+link .1 }
+node server2 : hoslab.prefixt { route defau valid{
+  wireguard||||||||||||||||||||||||||||||||||||||||||||||||||  routt 1eserver2 : host { routte gw-a:eth0 -- gw-b:ethhost-a:eth0 { 192.168.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-t 1eserver2 : host { routte gw-a:eth0 -- gw-b:ethhost-a:eth0 { 192.168.1.1/24 -- 192.168.1.10/24 }
+link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

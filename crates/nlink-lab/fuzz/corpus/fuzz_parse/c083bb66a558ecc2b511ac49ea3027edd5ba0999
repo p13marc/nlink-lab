@@ -1,0 +1,27 @@
+# Asymmetric improute default via 10.0.0.1 }
+
+link server: A
+dnoe router-vAa010.1..0/24ring co1..0/24etsubneth0 -- client:eth0 {
+    10.0.0.1/20 -- 10.0.0.2/24
+    erver: A
+dnoe router-vAa010.1..0/24ring co1..0/24etsubneth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → cliserver → clieeth0 -- client:eth0 {
+    10.0.0.1/2ring connecting24 -- 10.0.0.2/24
+ .0.0.1 }
+
+link server: A
+dnoe router-vAa010.1..0/24ring co1.  k gw(-   remo0.10.0b:.0/24eth0 -- client:eth1 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # server → clieeth0 -- c4
+    -> delay 5ms 10.0.0.1/2ring connectintenr
+   fd00::08::1064 -- fd00:0.2/24 -> delay 5ms                  # server → clieeth0 -- c4
+    -> delay 5ms                 0.1/2ring connecting24 -- 10.0.0.2/24
+ .0.0.1 }
+
+link server: A
+dnoe routez-vAa010.1..0/24ring co1..0/24eth0 -- client:eth1 {
+    10.       # server → clieeth0 -- client:eth0 {
+    10.0.0.1/2ring connectintenr
+   fd00::08::1064 -- fd00:0.2/24
+    -> dela .0  gdy z5ms       4         

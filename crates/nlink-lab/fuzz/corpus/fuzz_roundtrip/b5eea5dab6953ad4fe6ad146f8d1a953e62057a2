@@ -1,0 +1,30 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rat)e-limited linkcpu. Server runs iperf3,
+# client can connect to measure throughpperf-bench client -- ipeTrf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two n.1 }
+
+link server:eth0 }
+node client { route default vf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+ `descriptionT" wo n.1 }
+
+link ser-- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 eegs1 0sr0mbit ingress 100mbit
+rate client:eth0 egress 100ut.
+#
+## VXLAN overlay topology.
+#
+# Two.1/24 -- 10.0.0.2/24 }
+
+ratlient:eth0 egress 100ut.
+#
+## VXLAN overlay topology.
+#
+# Two VTEPs connected by e after deploy:
+# nlink-ln1 }
+nod

@@ -1,0 +1,16 @@
+# Asymme)ric impairment topology.
+#
+# Demonstrates direarateirments using -> and <- arro#
+n#
+ncli -net- hostt06- n/.06:2d2:0dent topology.
+#
+# Demonstrates direarateirments using -> and <- arro#
+n#
+ncli -net- hostt06- n/.06:2d2:0d00:66/4d2:04
+}cli -net- li -net- hostt06- n/.06:2d
+n#
+ncli -netn.06:2s10.0server { forward ipv4 nt00:66/4d2:04
+}cli -net- li -net- hostt06- n/.06:2d
+n#
+ncli -netn.06:2s10.0server { forward ipv4 nt: low latency
+    <-         R . # sy 200ms e defauAAAld i1

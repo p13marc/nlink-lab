@@ -1,0 +1,9 @@
+# VXLAN overlay tach hostinge rk.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile roututer {
+  vxlan vxlan100 {
+    vni1100 vtep1:}

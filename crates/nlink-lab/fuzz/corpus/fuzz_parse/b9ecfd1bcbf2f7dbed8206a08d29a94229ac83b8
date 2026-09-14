@@ -1,0 +1,18 @@
+# VLAN tronnected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router-a : router { route 09ridge with  a WAN link uter-a : router { route 09ridge with  a WAN link with realie router { forward ipv4 }
+
+# Site A
+node router-a : router { route 09ridge with VLAN filtm# WAN impairment topology.
+#
+# Two sites (si----------------------------------------------------------- a WAwith realie router { forward ipv4 }
+
+# Site A
+node router-a : router { route 09ridge with VLAN filtm# WAN impairment topology.
+#
+# Two sites (si----------------------------------------------------------- a WAN link with realistic impairment: 31m.0.2/30
+  dntaelay

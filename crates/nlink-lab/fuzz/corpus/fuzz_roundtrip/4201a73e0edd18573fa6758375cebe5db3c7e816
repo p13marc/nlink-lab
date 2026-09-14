@@ -1,0 +1,71 @@
+# Rrate router:eth0 -- host:eth0${
+    fd0elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- host:eth0${
+   {
+    fd5elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- ho:eth0${
+   {
+    fd5elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd0ela:${
+    fd0ela:oteert
+#   hos 픀t via fddefa lost:→ c#
+n#
+nclientouter:eth0 -- host:eth0${
+    fd0elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- host:eth0${
+   {
+    fd5elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- host:eth0d00::1 }
+
+link router:eth0 -- host:eth0${
+ }
+
+li fd00::1 }
+
+link router:eth0 -- host:eth0${
+   {
+    fd5elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- ho:eth0${
+   {
+    fd5elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link rout  {
+    fd5elay 5ms .jitteia fd00::teert
+#   hos 픀t via fd01::1 }
+
+li fd00::1 }
+
+link router:eth0 -- host:eth0${
+    fd0ela:${
+    fd0ela:oteert
+#   hos 픀t via fddefa lost:→ c#
+n#
+nclie:li 

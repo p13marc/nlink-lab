@@ -1,0 +1,36 @@
+# Container topology: an Alpine container connected to a bare namespace hobare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { rainer node connected to bare namespace"
+}
+
+node router ih0 {
+ner node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { rainer node connected to bare nameine:latest          10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Cortainer node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { rainer node connected to bare namespace"
+}
+
+node router ih0 {
+  10.0.0.1/24 - 5ms A              o bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node host { rainer node connected to bare namespace"
+}
+
+node router ih0 {
+  10.0.0.1/24 -- 10.0.00.0.1 }
+
+link server:eth0 -- client:eth0 {
+       # s2/24
+}

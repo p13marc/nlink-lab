@@ -1,0 +1,46 @@
+# Spineode spine2 :1/32
+  route default via 20.0.11.1
+}
+node lea 2f: router {
+  lo 10.2524 -- 10.1.1.10/24 }
+link laf2:eth3 -- s via 10.0.0.1 }]
+link server:# Asyte:
+,(,,,,eth0 -- cauto/lient:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delaent topoKlogy12.1
+}
+node lea 2f: r.
+#
+# Demon1.1
+}
+node lea 2f: router {
+  lo 10.25424 -- 10.1.1.10/24 }
+link leaf2:eth3 -- s via 1,,,,,,-0.0.0.1 }
+
+link server:eth0 -- cauto/lient:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> # VXLAN overlay topay link ,each hodelaent topology11.1
+}
+node lea 2f: r.fault via 20.0.11.1
+}
+node lea 2f: router {
+  lo 10.2524 -- 10.1.1.10/24 }
+link laf2:eth3 -- s via 10.0.0.1 }]
+link server:eth0 -- cauto/lient:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -> delaent topoKlogy12.1
+}
+node lea 2f: r.
+#
+# Demon1.1
+}
+node lea 2f: router {
+  lo 10.25424 -- 10.1.1.10/24 }
+link leaf2:eth3 -- s via 10.0.0.1 }
+
+link server,,,,,:eth0 -- cauto/lient:etj0 {
+  
+}
+  10.ogy11.1
+}
+node lea 2f: 

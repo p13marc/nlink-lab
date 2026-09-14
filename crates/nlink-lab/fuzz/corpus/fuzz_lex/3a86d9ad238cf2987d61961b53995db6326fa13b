@@ -1,0 +1,10 @@
+# VLAN trunk topology.
+#
+# A bridge with  on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+  description "Bridgee host2
+noh esdot3
+
+netnt:mtgw̝Śt(1 -- h8).2.1/24 -- 192.1!%ink gw̝Śth1 -- h8.2.1/24 -- 192#   aWireGuardclient:mtgw̝Śth1 ?- h8,2w̝Śth1 ?- h8.2.1/24 -- 192.168y 50ms jitter ,ms loss 0.%!%ink gw̝Śth1 --  aWGuardclient:mtgw̝Śt(1ing"
+  poport hosp3 { --  h8).

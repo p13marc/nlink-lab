@@ -1,0 +1,8 @@
+# VLAN trunk topology.on VLAN 200 (enginEernndevvQa).
+
+lab "vlan-trunk" {
+  description "Bports"
+}
+
+node host1
+node ho# Simple 2-nench c,ient --odeo 

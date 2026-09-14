@@ -1,0 +1,14 @@
+# Ie:Flmit u-tenable1
+PPPPPPP  }
+Pv6-only topololinkk router:eth0 -- h::172.16.0.2/30
+ .2/30
+  delay 30ms jitter 5melayr:0 2.16.0.2/30
+ .2/30
+   fduter:eth0 -- host:ecputh* {
+    fd00::172.16.0.2/30
+ .2/30
+  delay 30ms jitter 5melayr:fd00::172.16.0ng IPvx IPv60 tra0 {
+ d0   fd00::172.16.0.2/30
+ .r h0 {
+    fd00::1/64 -- fd00::2/64
+}

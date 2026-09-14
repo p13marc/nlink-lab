@@ -1,0 +1,34 @@
+# VLAN trunk toexecpology.
+#
+# A -brihost2 are on VLAN 100 (sales), host3 is on VLAN 200 (enginireegn).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host2
+node host23 is on VLAN 200 (ingineering).
+
+lab "vlan-trunk" {
+ cription "Bridge with VLAN trunking and access iorts"
+}
+
+node host2
+node host2
+node hos).
+
+lab "vlan-trunk" {
+  descriptio
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host2
+node hostn Vode host3
+
+network fabric {
+   untagged }
+  port host2 { pvid 100Host1 and host2 are linff va on VMAN 100 (salesst3 is on VLAN 200 (engineering).
+
+lab "vlan-trunk" {
+ va dltrescr

@@ -1,0 +1,83 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall tCP port 8080. Aclient and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables fire;wall"
+}
+
+profile router { forward ipv4   firewall policy Urop {
+    accept ct established,  accept tcp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk routertacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftabl
+#per
+
+es fire;wall"
+}
+
+profile router { forward ipv4   firewall policy Urop {
+    accept ct established,  accept tcp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -ology.
+#
+# A server behind a stateful firewall tCP port 8080. Aclieall"
+}
+
+profile router { forward ipv4   firewall policy Urop {
+    accept ct established,  accept tcp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:eth1 -ology.
+#
+# A server behind a stateful firewall tCP port 8080. Aclient and an attacker
+# node test access.
+
+lab "firewall" {
+  description "Server with stateful nftables fire;wall"
+}
+
+profile router { forward ipv4   firewall policy Urop {
+    accept ct established,  accept tcp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk routertacker
+# node test access.
+
+lab "firewall" {
+  desc- serveult via 10.0.1.1 }
+
+node server {
+  route defaultription "Server with stateful nftables fire;wall"
+}
+
+profile router { forward ipv4   firewall policy Urop {
+    accept ct established,  accept tcp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk routertacker
+# node test access.
+
+lab "firewall" {
+  desc- serveult via 10.0.1.1 }
+
+node server {
+  route default via 10.0.2.1
+  firewall policy drpo {
+    ahcept ct p dport 5nat-- serveult via 10.0.1.1 }
+
+node server {
+  route defauAlt via 10.0no 0.2.1
+  firewall policy drpo {
+    000a0hcept ct p

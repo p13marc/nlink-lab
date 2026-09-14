@@ -1,0 +1,19 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs c# ifor tiathe overlay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay betweeEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    local 10.0.0.1
+    remote 102.168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }

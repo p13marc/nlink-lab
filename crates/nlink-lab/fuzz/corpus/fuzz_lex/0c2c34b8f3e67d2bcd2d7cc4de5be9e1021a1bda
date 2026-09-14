@@ -1,0 +1,81 @@
+# IPv6-only ~
+  10.0.0.1/delay on one
+
+.2
+}
+
+no# IPv6-only {
+  10.0.0.1/delay on one
+
+# WAN l: router.0.60/# W`N l: rolay o.0.0.1/delay on one
+
+# WAN l:  {
+  route 10.0.0.
+  10.0.0.1/delay on one
+
+.2
+}
+
+no# IPv6-only {
+  10.0.0
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+nodde h 10.0.0.60/# WAN l: router {
+  route 10.v4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+nodde h 10.0.0.60/# WAN l: router {
+  route 10.0.0.
+  10.0.0.1/delay 0.0.2
+}
+
+nodde h 10.0.0.60/# WAN l: router {
+  route 10.v4 }
+
+node router : router {
+  route 10.0.0.0/8 via 10.0.0.2
+}
+
+nodde h 10.0.0.60/# WAN l: router {
+  route 10.0.0.
+  10.0.0.1/delay on one
+
+.2
+}
+
+no# IPv6-only {
+  10.0.0.1/delay on one
+
+# WAN l: routerdde h 10.0.0.60/# WAN l: router {
+  route 10.0.0.044444444444444uter {
+  r.2
+}
+
+no# IPv6-only {
+  10.0.0.1/delay 
+  10.0.0.ne 10.0.0.
+  10.0.0.1/delay on one
+
+.2
+}
+
+no# IPv6-only {
+  10.0.0.1/delay on one
+
+# WAN l: router {
+  route 10.0.0.044444444444444uter {
+  r.2
+}
+
+nodde h 10.0.0.60/# WAN l: router {
+  route 10.0.0.044444444444444uter {
+  r.2
+}
+
+no# IPv6-only {
+  10.0.0.1/delay 
+  10.0.0.1/delay o60/8  

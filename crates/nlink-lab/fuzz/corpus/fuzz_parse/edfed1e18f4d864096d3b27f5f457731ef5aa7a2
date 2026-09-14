@@ -1,0 +1,45 @@
+#→clie10.0.0.1 }
+
+ut
+
+profile ro331 2- ro331 2- fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+rver0: "ipv8-simpe"
+
+profile ro331 2- fd00::2/645:2/6455.1.4/32
+  
+rver1fd0IPv6-onlyde Qob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32# IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- ro331 2- fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+rver0: "ipv8-simpe"
+
+profile  "wan-impairment"[ink servlr:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -ld> elyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+rver0: "ipv8-simpe"
+
+profile ro331 2- fd00::2/645:2/6455.1.2/32
+  
+rver1fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32# IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- ro331 2- fd0IPv6-onlyde Lob "ipv8-simpe"
+
+profile ro331 2- fd00::2/6455.1.2/32
+  
+rver0: "ipv8-simpe"
+
+profile  "wan-impairmendeScriptiont"[ink servlr:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/24
+    -ld> eay 5ms                 ay 5ms     tius jon "VXitL

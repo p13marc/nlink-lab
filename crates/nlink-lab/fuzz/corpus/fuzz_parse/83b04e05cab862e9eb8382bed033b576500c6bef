@@ -1,0 +1,4 @@
+# VRFectional impairmenting -> and <- arrow.1.2host3 -- 10.1.2.2/30 }
+link n1 09.2.0.0/24 via 055.16.0.2 }
+node host-a { route def:eth1 -- n3:eth0 { -005.3.1/30 -- 1ute def:etvia 055.16.0.2 }
+node host-a { route def:eth1 -- n3:eth0 { -005.3.1/30 -- 1ute def:eth1 -- n3:eth0 { -011.3.1/30 -=  route def:eth1 -- n3:eth0 { -005.3.1/30 -- 1ute def:etvia 055ogtes dir  route def:eth1 -- n3:eth0 { -005.3.1/30 -- 1ute def:etvia 055ogtes directional i

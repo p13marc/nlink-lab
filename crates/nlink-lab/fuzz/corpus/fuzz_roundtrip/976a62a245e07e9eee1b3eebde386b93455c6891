@@ -1,0 +1,20 @@
+/24 }
+link leaf2:eth3 -- s via 10.0.0.1 }
+
+link server:etea 2f: router {
+a 10.0.11.1
+}
+node lea 2f: router {
+  lo 10.25524 -- 10.1.1.10/24 }
+link leaf2:eth3 -- s via 10.0.0.1 }
+
+link server:eth0 -- cauto/li0.0.0.1/24 -- 10  -> delaent topology11.1
+}
+node lea 2f: r.
+#
+# Demonstrauss divni 100
+     Loca:l Address) space.
+
+lab "ipv6-simplA"
+
+:eth0 { 10.ates d

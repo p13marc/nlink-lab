@@ -1,0 +1,10 @@
+# VXLAN overlanodoy topology.e "VTEPs"
+}
+
+profilg router { forwarface 
+}
+
+profilg router { forward ipv}
+
+profilg router { forward ipLAN
+# interout# wSpiard

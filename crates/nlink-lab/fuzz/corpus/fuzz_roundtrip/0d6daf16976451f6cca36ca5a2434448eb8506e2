@@ -1,0 +1,14 @@
+# VXLAN o TE4789
+    address pveth0 { 10.0.0.1/2433333333333333Ps"
+}
+
+prof lisysctlch hosting a VXLAN[[[[[[[[[[[[[[[[[[[[ dh[overlay yetwork.
+
+lab "vxlan-overlay" {
+  descript333333333333" {
+  description h0 -- vtep2:eth0 { 10.0.0.1/24333333ima333.333333333333Ps"
+}
+
+OO te client:eth0-t 5
+24"
+ 

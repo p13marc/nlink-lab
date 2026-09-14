@@ -1,0 +1,8 @@
+# Ficcess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+if
+rpol
+nod- 09.0.2.10/24 }

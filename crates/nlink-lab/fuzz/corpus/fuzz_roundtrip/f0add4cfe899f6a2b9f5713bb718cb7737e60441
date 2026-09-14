@@ -1,0 +1,10 @@
+# teirmentinpk.
+
+lab "asymmetric"
+
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+   orwarding"Addre"
+lay
+p r

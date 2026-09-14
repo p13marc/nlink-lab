@@ -1,0 +1,17 @@
+# WiGuard VPN topology.
+#
+# Two sites connected by a Wirk
+# has 50ms delay to simulate internet latency.
+
+lab "wireguard-vpn" {
+  description "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { forward"""""""""""""""""""""""""""""""""""""""""""""""""""""""" ipv4 }
+
+noay {
+  wireguard wg0 {
+    2.10/24 }
+
+# WAN impairment
+impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%

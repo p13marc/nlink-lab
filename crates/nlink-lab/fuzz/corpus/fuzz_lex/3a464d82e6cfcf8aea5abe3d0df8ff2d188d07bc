@@ -1,0 +1,17 @@
+# WiN dAreede) goruteb with two VRF2:e
+node host3
+
+networkun0.1 }
+nod8.100.2/24
+  }
+}
+[link vwep1:eth0 -- vtep2:e
+none host3
+
+networkun0.r ede) goruter with two VRF2:e
+node host3
+
+networkun0.1 }
+nod8.e host3
+
+networkun0.gorute0.1.0.0/2204

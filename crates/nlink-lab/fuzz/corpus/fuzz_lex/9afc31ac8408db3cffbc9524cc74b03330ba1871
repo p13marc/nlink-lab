@@ -1,0 +1,20 @@
+#l that only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server 
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, andvia 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnkde server {
+  route default via 10%0.2.1
+ n "Server with stateful .1
+  fir  1 cion "Server with stateful nfht  i

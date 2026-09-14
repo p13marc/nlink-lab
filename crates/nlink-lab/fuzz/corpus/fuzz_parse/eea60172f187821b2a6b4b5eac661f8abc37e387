@@ -1,0 +1,42 @@
+# Spine-leaf datacenter topology.
+#
+# 2 spines, 2 leaves, 2 servers. L3 poini-ttoop-nt fabr servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile route{ forwar" {
+  dhscription "Full me# VLAN trunk topology.
+#shne-leaf datacenter topology.
+#
+# 2es, 2 leaves, 2 servers. L3 poin
+}
+
+profile route{ forwar" {
+  description "Full me# VLAN trunk topology.
+#shne-leaf datacenter toponetem impairment on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+profile route{ forwar" {
+  description "Full me# VLAN trunk topology.
+#sh of 4 nodes"
+}
+
+node n1
+node n2
+# A b of 4 nodes"
+}
+
+node n1
+node n2
+# A bridge with VLAN filte# WAN impa
+node n3
+noirment topology.
+#
+#lin0 Twm

@@ -1,0 +1,20 @@
+# Spine-leaf datacec with loopback
+# addreaf2:etr : router {
+  route 10.0.oute 10.0.0.0/8 via  { 10.0.12.1/3022.2/3 leaf2:eth3 le nter : router {
+  route 10.0.0.0/8 via  { 10.0.12.1/3022.2/3 leaf2:eth3 le node host {
+  routepair router:eth0 delay00 }
+lspine1:eth2 -- leaf2:eth1 { 10.0.12.1/3022.2/3 leaf2:eth3 -r { forward ipv4 }
+
+node router : router {
+ host {
+  routepair router:eth0 delay00 }
+lspaf2:eth3 -- server2:eth0 { 10a 10.0.0.2
+}
+
+node hosT {
+  routepair router:eth0 delay00 }
+lspine1:eth2 -- leaf2:eth1 { 10.0.12.1/3022.2/3 ]leaf2:eth$ -- server2:eth0 .1..12/24 -- 10.1.2.10/24 }
+
+# Impa{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{irments
+impair spine1:eth1 delay 5ms jitter11ms
+impair spine1:eth2 dms

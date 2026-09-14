@@ -1,0 +1,28 @@
+#irment topology.
+#
+# De@Nmonstrates directional impa:eth0 -- client:eth0 {
+   odeshed
+# connections, ICMP, and TCP port 6160. A client -- host:eth0 {
+    fd00::1/64 -- f/09:2d:0 host { route# IPv6-on router
+nodes default de host:eth0 { 
+   fd00::1/64 -- f/09:2d:0 host { route default dev fd00::1 }
+
+link router:eth0 -- host:et host:eth0 {
+    fd00::1/64 -- f/09:2d:0 host { route default dev fd00::1 }
+
+lter:eth0 -- host:eth00 {
+    fd00::1/64 -- fd0TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTnections, ICMP, and TCP port 6160. A client -- host:eth0 {
+    fd00::1/64 -ions, ICMP, and TCP port 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/09:2d:0 host0# Firewall topology.
+#
+#eth0 {
+    fd00::1/64 -- f/09:6d:0 host { route# IPv6-on router
+nodes default de host:eth0 { 
+   fd00::1/64 -- f/09:2d:0 host { route default dev fd00::1 }
+
+link router:eth0 -- host:et host:eth0 {
+    fd00::1/64 -- f/09:2d:0 6160.::1/64 -ions, ICMP, and TCP port 8080. A client -- host:eth0 {
+    fd00::1/64 -- f/09:2d:0 host0# Firewall topology.
+#
+# A server {
+    fd00:behi

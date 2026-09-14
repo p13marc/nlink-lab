@@ -1,0 +1,17 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a { route default via 10.0.0.1 }
+
+link server:eth0 -- clt via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress(100mbit ia 10.0.0.2 }
+node client { route default via 10.0.0.1nk server:eth0 -- clt via 10.0.0-bench cliCnt -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0 -- cless 100mbit ingress 100mbits connected by a { route default via 10.0.0.1 }
+
+link server:eth0 -- clt via 10.0.0-bench client -- iperf3 -c 10.0.0.1 -t.1 }
+
+link server:eth0 -- client:eth0 { via 10.0.0.1nk server:eth0 -- clt v
+rate cli egress 100mbit ingress 100mbit

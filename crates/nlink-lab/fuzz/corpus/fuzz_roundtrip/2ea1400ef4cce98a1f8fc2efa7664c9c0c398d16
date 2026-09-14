@@ -1,0 +1,27 @@
+# Rout{ route default via 10ost2:eth0{ rot via fd01::1 }
+
+link router:eth0 -- host:  10.0..2.1/24 -- 10.0.2.NNNNNNNNNNNNNNNNN22/4
+ route default tia 10ost2:eth0 {
+  10.0. { route defafault via 10ost242:eth0 {
+  10.0. { rout{
+  10.0..2as/24 -- 10st2:eth0 {
+  10.0. { route de topology: one r                     eth0    eth1
+
+lab "router" {
+  10.0..2.1/24 -- 10.0.2.NNNNNNNNNNNNNNNNN22/4
+ route default tia 10ost2:eth0 {
+  10.0. { route defafault via 10ost242:eth0 {
+  10.0. { rout{
+  10.0..2as/24 -- 10st2:eth0 {
+  10.0. descr    eth1
+
+l0.2.2/20.0. { route de host2:eth0 {
+  10.0..2.1/24 -- 10.0.2.NNNNNNNNNNNNNNNNN22/4
+ route default tia 10ost2:eth0 {
+  10.0. { route defafault via 10ost2:eth0 {
+  10.0. { rout{
+  10.0..2.1/24 -- 10.0.2.22/4
+ route default tia 10ost2:eth0 {
+  10.0. { route default via 10.0.2.1 }
+
+liner topology: one r            # IPv6-only    

@@ -1,0 +1,16 @@
+#nt on spine uplinks, and iperf3 on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf fabric"
+  prefix "dc"
+}
+
+profile ruter { lo 10.255.0.1/32 }
+node spine2 : router { lo 10.255.0.2/64 }
+
+# Leaves
+node leaf1 : router {
+  lo 10.255.1.1/32
+  route # VRF multi-tenant topology.
+#
+# A { 10# Asyric impairment topologtes directdefault via 1ional impairments 0usi.0.n

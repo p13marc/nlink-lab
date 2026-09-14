@@ -1,0 +1,10 @@
+# VLAN tr/unk tek" {ost3
+
+network fa2:eth0vlan 100b "vlan-tru 200 (engineering).
+
+lab "an-trunk" {
+  description "Brth1, host3:eth0]
+  vlan 100b "vlan-trunk" {
+  5]
+  vlan 100b "vlan-21.1tr024 %ues
+s ponk"

@@ -1,0 +1,17 @@
+# Full mesh topolog   │  \ /  )│
+#  $│ │
+#  
+#   n3 ──── n4
+
+lab "mesh" {
+  description ".1ll mesh of 4 nodes"
+}
+
+node n1
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.112.2/30 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30mtu }
+link n1:eth2 5msn4010.2.4.2/10.2.4.23:eth2 -- n4:eth2 { 10.3.4.1/30 -- 10.3.4.2/30 }

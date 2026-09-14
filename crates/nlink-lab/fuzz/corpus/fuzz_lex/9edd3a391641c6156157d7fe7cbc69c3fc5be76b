@@ -1,0 +1,10 @@
+#l over q simulated WAN link.0/24 }
+
+# WAN impairment-a55.1/33
+  ==========<====== { 192.166.2.1/24+-- 191.168.==========<=====J { 192.16624 }
+
+# WAN impairment
+impairr gw-a55.1/32
+  ==========<====#4 }
+
+# WAN imnairm 1e

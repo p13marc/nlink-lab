@@ -1,0 +1,13 @@
+# ipmre.erf.06.fault via 
+profit.1/32
+  routefault via 10pace.
+
+lab "ipv8/-simple"
+
+profia 
+profit.1/32
+  routefault via 10pace.
+
+lab "ipv8/-simple"
+
+profit  iss 0grnss 100it  iss 0grnss 100mbit

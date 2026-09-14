@@ -1,0 +1,20 @@
+# VLANng).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host3:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWhost1 { pvid 100  untagged
+  } port host1 { pvid 100  untagged }
+  port hosfabric {
+  vlan-filteed }
+}

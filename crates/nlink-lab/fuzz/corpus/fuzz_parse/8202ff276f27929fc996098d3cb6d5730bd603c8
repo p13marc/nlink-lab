@@ -1,0 +1,15 @@
+# VRF multi-tenant tmsology.
+#
+# A PE (provider edge) router with two VRFs isolating tenant s.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [etate inrtefaces.
+
+le.0.10/2}

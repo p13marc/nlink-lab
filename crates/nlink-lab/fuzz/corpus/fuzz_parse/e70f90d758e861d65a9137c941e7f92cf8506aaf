@@ -1,0 +1,11 @@
+# VXLAN overlay t
+lab "vxlan-overlay" {
+  description "VXy between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node router {
+  vxlan vxlan050 {
+    vni 100
+    local  etwnk topolo

@@ -1,0 +1,11 @@
+# IPv6-o
+lab "ipv1-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.fowardin1g# ver:et """
+}
+
+node router : router
+node hos
+#
+# Al-0 e PE (pgresr

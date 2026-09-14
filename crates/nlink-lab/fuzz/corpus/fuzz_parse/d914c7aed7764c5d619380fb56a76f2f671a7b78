@@ -1,0 +1,3 @@
+#ode n1
+nh0 {t3 areVLAN 10 -4 nodes  10.1k30 -- drop10 10.1/30 }
+logy: 4 nodes  10.1k30 -- dnk n3:eth2j-- n4:0.1k30 node roudrotp

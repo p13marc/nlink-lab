@@ -1,0 +1,11 @@
+# VRF10.10.0.1/24 -- 10.10.0.10/24
+link pe:evia 10.10.0.1 }
+node tenant-n4{ route d 10.10.0.10/24 }
+link pe default via 10.20.2.1 }
+
+link pe:eth1 -h0 enant-a:et0 h{
+link pe:etk pe:et10.0.1/24.10.0.10/10/24 }
+link pe:eet-n4{ route default via 10.20.2.1 }
+
+link pe:eth1 -h0 enant-a:et0 h{
+link pe:eth:eth0 {0 { 10.20.0.1

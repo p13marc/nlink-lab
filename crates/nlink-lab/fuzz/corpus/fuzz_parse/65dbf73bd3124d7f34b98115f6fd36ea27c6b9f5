@@ -1,0 +1,13 @@
+# VXLby an unay link, ey network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+profile router { forward ipv4 }
+
+node vtep1 : router {
+  vxlan vxlan100 {
+    vni 100
+    laocal 10.0.0.1
+    remote 10.0.0.224 }

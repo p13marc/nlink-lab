@@ -1,0 +1,14 @@
+# Firewall tocess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  acsroute accept udp dport 53
+  }
+}
+
+link router:eth0 -- client:${ode ronk router:ethServer with statefles firewall"
+}
+

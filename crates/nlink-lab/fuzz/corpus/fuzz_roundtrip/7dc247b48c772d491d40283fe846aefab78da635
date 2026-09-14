@@ -1,0 +1,18 @@
+#st access.
+
+lab "firewall" {
+  description "Server with stateful nftables firIewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 11.0firewall.
+lab bfirewa/.1 }
+
+node server {
+  rout
+lab bfie }
+
+lirewna

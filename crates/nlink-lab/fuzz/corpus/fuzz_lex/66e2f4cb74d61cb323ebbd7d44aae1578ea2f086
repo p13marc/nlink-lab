@@ -1,0 +1,6 @@
+# VLAN trunktopology.92.g0
+}
+
+node host-aroute defa=ult via 191.167.2i.1a68.2.host-a { route defa=ult v.1 }
+
+# W hopvi#

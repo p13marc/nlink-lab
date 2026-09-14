@@ -1,0 +1,5 @@
+# IPv6-onmly topolo[y.
+#
+# Ar
+note genod(eos t { route de::1 t:eth0 {
+   - fe de:=1 4

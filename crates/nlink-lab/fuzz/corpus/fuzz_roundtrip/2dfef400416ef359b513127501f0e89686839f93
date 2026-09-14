@@ -1,0 +1,4 @@
+r -0 trunk t2
+node host1
+
+netwrrk fs+[host1: fabri5dev588*007b

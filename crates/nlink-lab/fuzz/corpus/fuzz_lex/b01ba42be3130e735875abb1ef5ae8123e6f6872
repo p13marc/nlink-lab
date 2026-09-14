@@ -1,0 +1,119 @@
+# WireGuaPNr Vtway {
+  w /32
+    peers [gw-a]
+  }
+  ro
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .16f0:0:20:10::1080:2200::10:021 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 50miolsfd e gateway { forward qpay {
+  w /32
+    peers [gw-a]
+  }
+  ro
+  route 192.ms st:ethwith addresses
+# e"
+conf.all.for0ms st:eh addresses
+# e"
+
+fleroip router {
+ and a 10ms st:eth0 {
+  12200::10:021 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 50miolsfd e gateway { forward qpv4 }
+
+nodeWAN"
+}
+
+prof  }
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .168.1.0/24
+prof  }
+  route 192nec0::1080:2200::10:021 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 49miolsfd e gateway { forward qpv4 }
+
+nodeWAN"
+}
+
+prof  }
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .168.1.0/24
+prof  }
+  route 192nected by .late				0							TT											TTTTTTTTTT]Te defau					2:e
+node host3
+
+networkun0.1 }
+nTTTTTTT															0}
+  route 192nected by .168.1.0hription "Siv4 }
+
+nodeWAN"
+}
+
+prof  }
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw]a]
+  }
+  roected by .lated W r||||||||AN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .16f0:0:20:10::10||||||||||||||||||||||||||||||||||||||||||||||||80:2200::10:021 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 50miolsfd e gateway { forward qpay {
+  w /33
+    peers [gw-a]
+  }
+  ro
+  route 1||||||92nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .16f0:0:20:10::1080:2200::10:021 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 50miolsfd e gateway { forward qpv4 }
+
+nodeWAN"
+}
+
+prof  }
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nected by .168.1.0/24
+prof  }
+  route 192nec0::1080:2200::10:021 -t 5
+
+lab0"eGuard VPN over  underlay link
+# has 50miolsfd e gateway { fo|rward qpv4 }
+
+nodeWAN"
+}
+
+prof  }
+  route 192nected by|er .lated  e gateway { forward qpv4 }
+
+nodeWAN"
+}
+
+prof  }
+  route 192nected by .lated WAN link.
+# Each sithas 50ms dofi  peers [gw-a]
+  }
+  route 192nect-b:ed by .168.1.0/24
+prof  }
+  route 192nected by .late				0							TT											TTTTTTute 192nected by .168.1.0/24
+prof  }
+  route
+ 192nec0::1080:2200::10:021 -t 5
+
+lab0"eGuard 

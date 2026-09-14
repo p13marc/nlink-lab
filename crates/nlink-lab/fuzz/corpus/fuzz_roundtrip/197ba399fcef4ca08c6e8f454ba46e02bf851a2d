@@ -1,0 +1,4 @@
+# iphcription "Two nodes for"
+sctl "pconf.all.0.20 rate_limegress 100mbit ingress 10 {
+" "1"
+sctlf.all.f linkit ingress 050mbit

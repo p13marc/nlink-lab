@@ -1,0 +1,37 @@
+# Contai conphne:latext          10.0.0.1    10.0.0.2
+
+lab ""
+node h0${
+   μs00:er" {
+  description "Conwiregto baintere namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00:node connparected to bare namespa?ce"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzvrfzzz:1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzuzlzt.0.0.2.2uardtainer node connparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zt.0.0.2/2uardt4ainer node connparected to bare namespa?ce"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzvrfzzz:1/64 -zzzzzzzzzzzzzzzzzzzzzzzz:zzzz  μs00::1/64 -zt.0.0.2/~2uardtazzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzult.0.0.2.2uardtainer node connparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h5${
+   μs00::1/64 -zt.0.0.2/~2uardtainer node connparected to bare namespace"
+}
+
+node router image "aeep infinity"
+node h0${
+   μs00::1/64 -zzzzzzzz/zzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzult.0.0.2/24
+}

@@ -1,0 +1,14 @@
+# VXLAN ovEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep1 : rout
+ { er vxlan vxl1emoTeort 4789
+    address 19rate_ge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/24333333333333333333333vrs 10::1/64 -- f/06- f/06:2d2:0d00::1/64 { 10.0.0.1/24333333333333333333333vrfd2:0/{ route default via 25.0.1.1 }
+
+node server {ves
+no

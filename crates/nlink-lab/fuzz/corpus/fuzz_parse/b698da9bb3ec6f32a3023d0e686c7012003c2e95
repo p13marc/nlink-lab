@@ -1,0 +1,19 @@
+# Ir:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 fd00::1/64 -- fd00::2/route{
+    fd00:64 -- fd00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 fd00::1/64 -- fd00::2/route{
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecpouter:eth0 -- host:ecputh0 {
+    fd00::1/ d-4-6 f00::2/router:eth0 -- host:ecputh0 {
+    fd00::1/64 -- 02:0d-- 02:0df:/64
+}
+t:ecputh0 {
+ ecpuuth0 {
+    fd00::1/64 -- 02:0df:/64
+}
+t:ecpouter:eth0 -- host:ecputh0 {
+    fd00::1/64 -- fd00:::eth0 -- host:ecputh0 {
+    fd00::1/6- fd00::2/64
+}

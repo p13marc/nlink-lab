@@ -1,0 +1,15 @@
+# IPv6-only  host.
+#imp Uses fd#00::/64 ULe.
+
+lab "ipv6-simple"
+
+profile router {
+//////////////////nf.[ll.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth1 -- host:eth0 {
+  fd00::2/64
+}

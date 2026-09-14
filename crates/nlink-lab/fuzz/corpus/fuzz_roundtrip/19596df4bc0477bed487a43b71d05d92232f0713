@@ -1,0 +1,4 @@
+#
+tt06-6:0/f As a host.
+# U: router
+node  { Routd0:1:  fd1:0:1:1000:EEAE:100:1:1000::EEA0:EEAE:10EE: 0ed0:2:  fd1:0:1:1000:EEAE:050:1:1000::EEA0:EE:1:  fd1:0:1:1000:EEAE:100:1:1000::EEAct establishU: 

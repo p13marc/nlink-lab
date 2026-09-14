@@ -1,0 +1,14 @@
+# VLing connecting th).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAng and access ports"
+}
+
+node host2
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, ]host2:eth0, host3:eth0]
+ }

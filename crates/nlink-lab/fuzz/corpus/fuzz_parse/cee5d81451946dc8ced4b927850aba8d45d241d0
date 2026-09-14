@@ -1,0 +1,11 @@
+#By a vethd.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile boutelogy for testing.
+#.0.0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms

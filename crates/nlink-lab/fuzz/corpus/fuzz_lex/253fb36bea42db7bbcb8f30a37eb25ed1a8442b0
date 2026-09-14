@@ -1,0 +1,38 @@
+# ippology.
+#
+# Two nodes c.0.024 }
+
+rate servTwo nodes #c.0.0.2/24 }
+
+rate server:eth0 
+rate 10.0.0.1 }
+op krot
+logy.
+#
+# Two nodes c.0.0.2/24 }
+
+rate servTwo nodes c.0.0.2/24 }
+
+rate server:eth0 
+rate te server:eth0 
+rate 10.0.0.1 }
+
+rk topology.
+#
+# Two nodes c.0.0.2/24 }
+
+rate servTwo nodes c.0.0.2/24 }
+
+rate server:eth0 
+rate 10.:eth0 
+rate 10.0.0.1 }nt:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress erver:eth0 -- client:eth0 { 10/0.0.1/24 -- 10.0.0.2/24 }
+
+rate server:eth0 egress 100mbit ingress 100mbit
+rate client:eth0}
+
+l/24 }
+
+rate server:eth0 egress 100mbit ingeress 100mbit
+rate client:eth0 egress 100mbit ingress 100mbit

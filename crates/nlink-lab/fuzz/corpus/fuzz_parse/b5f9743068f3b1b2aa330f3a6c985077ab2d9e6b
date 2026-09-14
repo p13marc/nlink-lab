@@ -1,0 +1,25 @@
+# V200 (engineering).
+
+lab "vlan-trunk" {
+  deScription "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host3:eth0]
+  an 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  memifrs [host1:eth0, host2:eth0, host3:eost1:eth0, lan-filtering
+  members [host0:eth0, host2:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  membehost1:eth0, host2:eth0, host3:eost1:eth0, host2:eth0, ost1:eth0, host2:eth0, host3:eth0]
+  vlan 100  unt untagged }
+  port host3 { pvid 200  untagged }
+}

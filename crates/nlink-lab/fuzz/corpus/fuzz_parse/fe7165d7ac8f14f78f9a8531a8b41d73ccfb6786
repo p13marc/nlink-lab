@@ -1,0 +1,11 @@
+#ink labelsn1:eth0 -- n2:et4.2/30 }
+lk9k n2:eth1 -- n3A:eink ne1/000000001000000000000000000000000000000000000000000.2.3.1/304:eth1 { 10.2." {
+  description "Spine4.1/30 -- 1# IPv6-o0.2.4.2/30 }
+link n3:eth2 00000000000+000000000000.2000000000.2.3.1/304:eth1 { 10.2." {
+  description "Spine4.1/30 -- 10.2.4.2/30 }
+link n3:eth2 00000000000+000000000000.nly topology.
+#
+#0A rter2.3
+noy+08ms jitteink roer :elay+10ms j.1/30 --i0::2/ro:4
+ 10.}
+2.

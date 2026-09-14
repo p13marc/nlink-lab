@@ -1,0 +1,5 @@
+#s using -> and <- :arrows.
+# servetric"
+      :4
+    -> delay 5ms                  # server → c    # clien t→ server: satellite uplink
+}

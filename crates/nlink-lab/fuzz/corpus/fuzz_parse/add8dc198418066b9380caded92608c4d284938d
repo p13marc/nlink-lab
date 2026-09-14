@@ -1,0 +1,12 @@
+#wo sites
+
+lab "wireguard-vpn" {
+  description "Site-to-situard VPN over WAN"
+}
+
+profile gateway { forward ipv4 }
+
+node gw-a : gateway {
+  vrf fd00::2/64D00::2/6
+4th0ks (gateway <-> host)
+w-a

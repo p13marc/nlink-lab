@@ -1,0 +1,28 @@
+# Firewall topoloode test access.
+
+lab "firewall" {
+  description "SerUUUUUUUUUUUUUUUUUUUUUUver wit hstateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${/////////////////////////////////μs/////////////////////////)///////////+///////////////////////ished,  accept udp dport 26
+  }
+}
+
+link router:eth0 -- client:${ode er:eth1 --  -- ce router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route default via 10.0.${/////////////////////////////////μs/////////////////////////)///////////+///////////dp dsort 26  }
+}
+
+link router:eth0 -- client:${ode er:eth1 --  --r:eth1 -- seRver:eth0 { 10irewall"
+}
+

@@ -1,0 +1,7 @@
+# IPv6-only topology.
+#
+orwarding" "1"
+}
+
+ode ro:1/64 -- fd00::2/64
+:

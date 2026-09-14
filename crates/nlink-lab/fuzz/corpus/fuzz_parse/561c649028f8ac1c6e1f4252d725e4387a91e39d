@@ -1,0 +1,18 @@
+# Firewall topology.
+#d aha ipv3node test access.
+
+lab "fire/wall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router
+node server {
+  route default via 10.               0.2.1
+  firewall policy drop {
+    accept ct establish  accept udp dport 52
+  }
+}
+
+link router:eth0 -- client:${odG 24 }

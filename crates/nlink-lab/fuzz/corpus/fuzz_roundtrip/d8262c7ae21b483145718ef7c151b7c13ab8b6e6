@@ -1,0 +1,12 @@
+#
+
+lab "vlan-trun{" {
+  description "B*ridge with VLAN trurts"
+}
+
+node host1
+node host3
+node h***************ost3
+
+network fabric {
+  vl773:3:77:770:773:77:770:773:77:771:7730:777327

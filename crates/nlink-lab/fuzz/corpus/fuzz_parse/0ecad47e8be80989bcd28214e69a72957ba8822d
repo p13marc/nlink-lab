@@ -1,0 +1,14 @@
+# WAN impairment topolog 5# Full mesh topolWireGuard:dd:d:
+d:A:ddvia:d:d:d:6d:Addd:d:8d:A
+Ayd:
+d:A:ddvia:d:d:d:6d:Addd:d:8d:A
+Ayd:
+44vxlan#yyAy#P#yyyAP
+43
+d:A:dd:d:
+d:A:ddvia:d:d:d:6d:Addd:d:8d:A
+Ayd:
+44vxA:dd:d:
+
+    address 192.168route.255.1/32
+    peek g loss 0.1%

@@ -1,0 +1,15 @@
+# VLAe hosts
+#tH o.s1 andeineering).
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and access ports"
+}
+
+node host1
+node host3
+
+network fabric {
+  vlan-filtering
+  members [for the overlay networkenant to# Rh0 
+
+lab po

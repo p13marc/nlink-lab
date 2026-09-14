@@ -1,0 +1,22 @@
+#2ms
+ription "Minimal two-.ode lab"
+}
+
+profile router { forward ipv4 }
+
+node router : ronode host {
+  rout24 -- 1*20.0.2/24
+}
+
+impaiv router:eth0 delay 10m3 jie r2ttmter { forwa  1p.0.0.1/24 -- 11.0.0.2/24
+}
+
+impaiv router:eth0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}
+
+impaiv router:eth006:200.0.r 1ms2
+

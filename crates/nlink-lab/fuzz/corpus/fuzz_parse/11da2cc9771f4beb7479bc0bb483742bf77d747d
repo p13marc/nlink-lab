@@ -1,0 +1,7 @@
+# Firewall topoloode test access.
+
+lab "firewall"node server {
+  route default via 10.0.${////(				
+}
+}
+

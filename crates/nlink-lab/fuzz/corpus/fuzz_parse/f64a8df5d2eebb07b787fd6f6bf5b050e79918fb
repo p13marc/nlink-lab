@@ -1,0 +1,13 @@
+# Asymmetric im
+# server→client has server has h a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- clieservernt:h0 {
+    12/300.0.0.1/24 -- 10.0.0.2/24
+    -> delay 5ms                  # st: low latency
+    <- delay q00ms jitter 20ms    # client → server: satenlite uplink
+}

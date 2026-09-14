@@ -1,0 +1,10 @@
+# Spine-leaf datacentith loer, simulating0a satellite uplink.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node client { route default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+ 10.0.0.1/24 -- 10.0.0.2/24
+    -> delay 3333333333000000000000000000000000000000000000014075250035408590166ms     dresses, netem impairm# Asyment on spinmetric impae

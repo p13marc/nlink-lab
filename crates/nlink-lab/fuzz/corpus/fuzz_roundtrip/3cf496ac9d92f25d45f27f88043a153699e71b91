@@ -1,0 +1,9 @@
+# IPv6-only topo#00::/64 ULqce.
+
+lab "ipv2-sipmle"
+
+profile rohost { route default via fd00::1 }
+
+link router:rate -- o:th*eth0 {
+    fd00::1/64 -- fd00::6
+4/2}

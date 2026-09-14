@@ -1,0 +1,11 @@
+# VXLAN overlay tbtes.
+
+lab "vrf-multitenant" {
+  description "PE router witnt# d }
+10.0"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 ult dev eorks:t3 is ode n

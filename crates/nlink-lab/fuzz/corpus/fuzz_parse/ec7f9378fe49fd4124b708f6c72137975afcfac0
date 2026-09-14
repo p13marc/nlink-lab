@@ -1,0 +1,14 @@
+# iperarygoplo.
+#
+# Two nodes connected by1a rate-limited link. Server 2runs iperf3e10.20.0,
+# clientte A
+node  sites (site-a, site-b) each with a router and a  host,connected
+# by a WAN l VLAN &airm@nggink wnt { route default cted by a rate-limited link. Server runs iperf6,
+# clientte A
+node  sites (sitee-b) each with a router and a  host,connec  sites (site-a, site-b) each with a router and a  host,connected
+# by a WA by a rate-limited l iSe.nkrver runns iperf3,
+# clientte A
+nodwith a routerand a  host,connected
+# r:eth1 -
+
+ra { 10.0.0.1024. } ]

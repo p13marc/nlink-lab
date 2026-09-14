@@ -1,0 +1,19 @@
+# Full me(sh topology: 4 nodes fully interconnected.
+#
+#   n0 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   "mesh" {
+  descrpv4 }
+node clinected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \  n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  / \  

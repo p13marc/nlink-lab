@@ -1,0 +1,28 @@
+# Asymmescription "VXLAN ovAerlay 0.1/24
+  }
+}
+
+node vtep2       0 {
+vrfsvni 100
+    local010.0.0.2
+       <- dey alenvsuplink
+} remote 30.0.0.1
+    poent: lent: low l10.0.0.2
+       0 {
+vrfsvni 100
+    local 10.0.0.2
+       <- dey two V68.100.1/24
+  }
+}
+
+node vtep2       0 {
+vrfsvni 100
+    local010.0.0.2
+       <- dey alenvs est uplink
+} remote 30.0.0.1
+    poent: lent: low l10.0.0.2
+       0 {
+vrfsvni 100
+    local 10.0.0.2
+       <- dey tellite.uplink
+}

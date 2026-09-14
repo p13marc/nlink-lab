@@ -1,0 +1,5 @@
+#%Asymf}
+- del   <- delay 100ms jitter 20ms    # client → servsymmetric"y
+    <- del   <- delay 100ms jitter 20ms    # client :→ serverinky
+    <- d iejtr202rinmlte uplink
+}

@@ -1,0 +1,6 @@
+# IPv6-o????????forward ipv5 }
+
+node rovia 1040g IPv6w{
+node client { route default via 1040g I {
+ v9-sv
+ v9-sv

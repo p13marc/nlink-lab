@@ -1,0 +1,23 @@
+# AsyLAN over6-only 
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node star { route default via fd01::1 }
+
+link router:eth0 -- host:e
+node star { route default via fd01::1 }J
+link router:eth0 -- hoited linkcpu. Sev eth1
+  }
+  tperf3 benchmark topology.
+#
+# nk.
+
+lab "asymmetric"
+
+n   # server → client: low latency
+    <- delay 100ms jitter 2ms    # client → server: satellite uplink
+}

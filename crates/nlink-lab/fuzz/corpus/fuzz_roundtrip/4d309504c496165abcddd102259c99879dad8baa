@@ -1,0 +1,10 @@
+# Container topology: an A:lpine container czzzzzzzzzzzzzzzzzz/zzzzzzt viazzzzzzrlt.0.0.@fn:2         10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connparected to bare namespace"
+}
+
+node router image "alpine:latest"scenario cmd "sleep infinity"
+node h0${
+   μs00::1/64zzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.2/24
+}

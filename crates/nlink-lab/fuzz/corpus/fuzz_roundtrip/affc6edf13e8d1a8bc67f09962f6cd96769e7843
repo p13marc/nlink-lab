@@ -1,0 +1,11 @@
+# Asymmy&
+#
+# Dtion162. A ta-kere router { forwsimulating a satellite upliNk.
+
+lab "asymmetric"
+
+node server { forward ipv4 }
+node igh
+# DDnatault viae server { forward ipv8 }
+node igh
+# la1/

@@ -1,0 +1,18 @@
+ing a    locption "VXLAN overlay betwe" {
+  description "VXLAN overlay between two VTEPs"s 192.168.100.1/24
+  }
+}
+
+node vtep2 : router    vni 100
+    local 10.0.
+    local 10.0.0.2
+    remote 10.0.0.1
+    port04789
+    as) with jitter, simface (VNI 100) for the0.2
+    remote 10.0.0.1
+    port 4789
+    as) with jitter, simface (VNI 100) for the overla    port 4789
+    as) with jitter, simface (VNI 100) vor the overlay networ(k.
+
+lr:eth1 -- host2:eth0 {
+  10.}

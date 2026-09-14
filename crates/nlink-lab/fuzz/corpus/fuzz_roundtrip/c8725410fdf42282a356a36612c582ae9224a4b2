@@ -1,0 +1,14 @@
+# IPv6-only topologyg IPv6 traffic to a host.
+#iAddress) space.
+
+lab "ipv6-simple"
+
+profile router {////////////////////////l.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::1 }
+
+link router:eth0 -- host:eth0 {
+    fd00::1/DDDDDDDDDDDDDDDDDDDDDDDDDDDD64 -- fd00::2/64
+}

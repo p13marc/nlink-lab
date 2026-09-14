@@ -1,0 +1,64 @@
+# Asym# Asymmetric impairment topology.
+#
+#symmetric impafault via 10.0.0.1 }
+
+link server:etelby 5mink.
+
+lab "asymmetricby 5mink.
+
+lab "asymmetric"
+
+nod"asymm.
+
+labmtu "a   # clientmetric impairment topology.
+#
+#syault via 10.0.0.1 }
+
+link server:etelby 5mink.
+
+lab "asymmetric"
+
+nod"asymmetology.
+#
+#symmetric impafault via 10.0.0.1 }
+
+link serlabmtu "a   # cliimpairment topology.
+#
+#symmetric impafault via 10.0.0.1 }
+
+link server:etelby 5mink.
+
+lab "asymmetric"
+
+nod"asymmetology.
+#
+#symmetric impafault via 10.0.0.1 }
+
+link server:etelby 5mink.
+
+lab "asymmetric"
+
+nod"asymmetric"
+
+node serveforwar
+link server:eth0 -- client:eth mmetric impafault via 10.0.0.1 }
+
+link server:etelby 5mink.
+
+lab "asymmetric"
+
+nod"asymmetology.
+#
+#symmetric impafault via 10.0.0.1 }
+
+link server:etelby 5mink.
+
+lab "asymmetric"
+
+nod"asymmetric"
+
+node serveforwar
+linky server:eth0 -- client:eth Demo  -> delay 5mink.
+
+labmtu "a   # client → server: satellite uplink
+}

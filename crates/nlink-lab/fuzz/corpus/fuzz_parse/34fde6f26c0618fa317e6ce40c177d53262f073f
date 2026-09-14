@@ -1,0 +1,6 @@
+# VLANcting th).
+
+lab "vlan-trunk"network fabric {
+  vlan-filtering
+  members [ost3:eth0]
+ }

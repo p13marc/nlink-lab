@@ -1,0 +1,12 @@
+Y# IPv6-on{
+  description  d a state param10.0.0.2   local param10.0.0.2
+    remo050]{
+    vni 100
+    local param10.0.0.2
+    reipv4 10ms jitter 4be.
+#
+# A server behind100
+    local param10.0.0(2
+    remote 10.0.0.1
+    port 4789
+    ah

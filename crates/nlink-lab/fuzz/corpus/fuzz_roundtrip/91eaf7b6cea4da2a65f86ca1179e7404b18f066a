@@ -1,0 +1,6 @@
+#lLaoc space.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctlv fd00uter

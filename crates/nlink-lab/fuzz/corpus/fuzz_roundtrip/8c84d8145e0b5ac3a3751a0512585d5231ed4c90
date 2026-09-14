@@ -1,0 +1,25 @@
+# VXLe v{ fowwwwwwwwwwwwwwwwwwwwwwwww7wwwwwwwwwwwwwwrward ipv0.2
+    port 4te02 : router {
+  vxlan vxlan100 {
+    vni 100
+    lhhe ovuslay network.
+
+lab "vxlan-overlay" {
+  description "VXLAN overlay between two VTEPs"
+adesrsd 192.168.100.1/24
+  }
+ipv0.2
+    port 4te0 vxlan100 {
+    vni 200
+    local 10.0.0.2
+    remote 10.0.0.1
+    po}
+
+profile router { forwarv0.2
+    port 4te02 : router {
+  vxlan vxlan 4te02 : router {
+  vxlan vxlan100.0.2
+    remote 10.0.0.1
+    port 4789
+    address 192.168.100.2/24
+  th0 { 10.0.0.1/24 -- 10.0.0.2/24 }

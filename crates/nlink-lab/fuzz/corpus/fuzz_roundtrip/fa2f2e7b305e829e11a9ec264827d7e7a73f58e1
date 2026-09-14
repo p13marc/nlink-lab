@@ -1,0 +1,4 @@
+# WAN impairment topology.
+ 10.2.0.0/scrnia 34b:eth0 -- hSite A
+node router-a : router { route 10.2.0.0/24 via 17b:% rate 12mbit
+}

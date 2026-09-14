@@ -1,0 +1,14 @@
+
+
+lab "vlan-trunk" {
+  description "nd acc>ess ports"
+}
+
+node host0
+node host2
+node host0
+
+network fabric {
+  vlan-filtering#  membersric {
+  vlan-filtering#  members [ho
+}

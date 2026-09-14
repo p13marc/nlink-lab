@@ -1,0 +1,3 @@
+# IPv6ward ipv4 h2 -- leaf2:eth1 forwarter
+thult - 10.0.12.2/30  mpin  mtu 9000 }
+link spine2:eth2 - mtu 9000i o}

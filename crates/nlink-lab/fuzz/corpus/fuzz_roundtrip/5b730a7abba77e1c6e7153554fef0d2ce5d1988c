@@ -1,0 +1,13 @@
+# Simple 2-n one end.
+
+lab "simple" {
+  description "Minimal two-node| qab"
+}
+
+profile router { forward ipv4 }
+
+node routelogy for# -node qab"
+}
+
+profile router { ford00:ites (site-a, site-b)yyys
+}

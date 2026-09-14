@@ -1,0 +1,17 @@
+# iperf3ct*to measure througtuphconn.efault via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 100mbij ingress 100mbit
+rate client:eth0 egress te client:etient {  100mbij ingress 100mbit
+rate cliener:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+rat 100mbij ingress 100mbit
+rate client:eth0 egress te client:etient {  100mbij ingress 100mbit
+rate client:eth.0..1 }
+
+link server:et.0.2/24 }
+
+rat 100mbij1/24 -- 10.0.0.2/24 100mbiwifit depends-oningress 10lient:et
+
+rat0m

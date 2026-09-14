@@ -1,0 +1,25 @@
+# Firewall topology.ort 8080. A cnd an attauscker
+# ipv3node test acces!l t
+lab "fire/wall" {
+  description "Serveh sll"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default labels.t 0.u
+
+
+
+
+
+
+
+
+
+
+
+
+
+24 }

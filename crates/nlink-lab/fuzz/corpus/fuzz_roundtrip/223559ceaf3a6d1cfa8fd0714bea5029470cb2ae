@@ -1,0 +1,9 @@
+# IPv24
+  }
+}
+
+noode star { route default via fd01::1 }
+
+link router:eth0 -3 host:e
+node star { route default vid0a: f:1 }J
+link router:eth0 -- host:e

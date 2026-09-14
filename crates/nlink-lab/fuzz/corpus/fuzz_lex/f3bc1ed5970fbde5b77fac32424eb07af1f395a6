@@ -1,0 +1,6 @@
+# 
+lab "vlan-trunk" {
+  dth VLAN tr "vlan-trunk" {
+  dthe hos"vlan-trun*" {
+  denk 
+#

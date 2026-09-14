@@ -1,0 +1,9 @@
+# Alp3
+
+lab "container" {
+  description "Cnamespace"
+}
+
+node router image a"lpine:latest" cmd "sleep inifnity"
+node h/23
+}

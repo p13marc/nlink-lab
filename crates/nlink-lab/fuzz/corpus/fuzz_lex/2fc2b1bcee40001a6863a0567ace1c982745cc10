@@ -1,0 +1,7 @@
+# WAN impairment topolo# Sa:eth0 { 10.10uter {B
+n ooedruter-b >>>>>>>>>>>>>>>>>>>>=>>: ./24 -- 10ink pe:eth1 -- tenant-a:eth0 { 10>>>>>>>>>>>>>>>>>=>>: .0.1NNNNNNNNNNNNNNNNNNNNNNNNNNNNN/24 -- 10.1>>>>=> pe:eth1 -- tenant-a:eth0 { 10>>>>>>>>>>>>>>>>>=>>: .0.1NNNNNNNNNNNNNNNNNNNNNNNNNNNNN/24 -- 10.10.0.10/24 }
+link pe:etath0>>>>>>>>>>=>>: .0.1/24 -- 10ink pe:eth1 -- tenant-a:eth0 { 10>>>>>>>>>>>>>>>>>=>>: .0.1NNNNNNNNNNNNNNNNNNNNNNNN>>>>>>>>>>>>= pe:et/h2 --oedruter-b >>>>>>>>>>>>>>>>>>>nr10.0.10/24 }
+link p>>>>>>>=>>: route.10.0.10>>>>>>>>>>>>>>>>>>=>>: router { route 0>>>>>>>>>>>= pe:et/h2 --oedruter-b >>>>>>>>>>>>>>>>>>>n ooedrutruter-b >>>>>: .0.1/24 -- 10ink pe:eth1 -- tenant-a:eth0 { 10>>>>>>>>>>>>>>>>>=>>: .0.1NNNNNNNNNNNNNNNNNNNNNNNNNNNNN/24 -- 10.10.0.10/24 }
+link pe:etath0 { 10.20.0.1/24 -- 10ite B
+n ooedruker2b >>>>>>>>>>>>>>>>>>>>= pe:et/h2 --oedruter-b >>>>>>>>>>>>>>>>>>>>>>>>>=>>: route.10.0.10>>>>>>>>>>>>>>>> ss 0>>=>.1%># sit-b) each w router andpairment: 30ms d0.2/30
+  delay 30ms jitterlink p>>>>>>>=>>: route.10.0.10>>>>>>>>>>>>>>>> ss 0>>=>.1%>

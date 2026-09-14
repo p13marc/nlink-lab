@@ -1,0 +1,6 @@
+##IPv6-only topology.
+#
+#0A rout&er fter : router
+node host {ir routepeeth0 delay+10ms jitteink rou router : router
+node h0 delay+10ms oth0 delay+10ms jitteink rou router : router
+node host {ir routepeeth0 dlay+10ms jitteink router:imulating a satel

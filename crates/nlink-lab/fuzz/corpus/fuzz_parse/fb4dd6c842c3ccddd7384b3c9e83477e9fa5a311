@@ -1,0 +1,10 @@
+#on servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter frabic"
+  prefix "dc"}
+node leaf2 : router {
+  lo 0.12.1
+}# Servers
+node serserver2 : host { route deinks (spi""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""-> leaf)## Servers
+node seoute defaulter net via 1008bit rauraut.050.2r,bb 2

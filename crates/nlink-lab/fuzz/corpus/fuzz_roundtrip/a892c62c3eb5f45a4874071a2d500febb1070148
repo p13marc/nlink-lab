@@ -1,0 +1,26 @@
+#
+n#
+ncli -net- hostt06- f/06:2d2:0d00:6d00::1/64 -- f/09:2d:0 host { route# IPv6-only topology./
+#
+# A router fo*rwarding IPv6 traffic` to a hos0"
+}
+
+node router : router
+nodes default dev fd0e on VLAN 100 (sales), host3 vlan-trunk" g and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0, host2:eth0, host6:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+th0 hed
+# connections, ICMP, and TCP port 8080. A clien A client -- host:eth0 {
+    fd00::1/64 -- f/09ver {
+    fd6/4:1:2d2:04
+}cli -net- hostt06- f/06:2d2:0d00:66/4:1:2d2:04
+}

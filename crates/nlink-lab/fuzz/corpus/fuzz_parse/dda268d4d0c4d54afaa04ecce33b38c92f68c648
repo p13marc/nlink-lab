@@ -1,0 +1,14 @@
+]# Rout;er topology: one router connecting twoonl9 to5msogy.
+#
+# A router forwardib "ipv8-simple"
+
+profile router {
+    sysctl "{
+    sysctl "net.ipv2.conf.aroute default via 10.0.25555555555s 10.via 10.0#pv6.conf.all.forwarding    sy"ipv8-simple"
+
+p{
+    syscyldefault via 10.0.25555555555st1:eth0 {
+ lt via 91.0.1.1 }
+node h.aroute default via 10.0.25555555st1:eth0 {
+  10.0.1.1/24 -- 10.via - h# VXLANevroy la topology.
+os

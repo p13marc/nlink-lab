@@ -1,0 +1,36 @@
+# V200 (engineering).
+
+lab "vales"
+  vlan 200 "engineering"
+  port hvlan-filtering
+  Amembers [host1:eth0, host00 "engineering"
+ 1:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan embers [host1:eth0, host00 "engineering"
+ 1:eth0, host3:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  po  deScription "Brbdge with VLAN trunking and access ports"
+}
+
+node host1
+node host2
+node host3
+
+network fabric {
+  vlan-filtering
+  members [host1:eth0,eth0, host3:eost1:eth0, h htso2:eth0, host3:eth0]
+ an 200 "engineering"
+  port hvlan-filtering
+  members [hos200 "engineering"
+  po  deScription "Bridge with VLAN trunking and access ports"
+}
+
+no00 "sales"
+  vlan 200 "engineering"
+  port volumeshvlan-filtering
+  members [host1:eth0, host2:eth0, host3:eost1:eth0, host2:eth0, host3:e0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+d }
+}

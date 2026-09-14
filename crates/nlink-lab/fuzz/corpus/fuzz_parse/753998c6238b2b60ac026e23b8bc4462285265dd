@@ -1,0 +1,7 @@
+#0Esymmetroverlan underlay link,2.4..2mtunode via 172.1
+    <- delay 100ms ${tter 20ms    # client → server: satel <- arrows.
+# server→clie11.0./.1 }
+
+link server:eth0 -- client:eth0 {y 5ms                  met low latency
+    2- delay 100ms ${tter 20 m# s   client → seRver: satellite uplink
+}

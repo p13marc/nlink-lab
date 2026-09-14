@@ -1,0 +1,26 @@
+# IPv6-only topology.
+#
+# A routez Unique LocalAder dss) space.
+
+lab "ipv6-simple"
+
+profile}
+
+node router : router
+node host { route def 
+    sysctl "net. fd00::1/64 -- fd00::2/f.all.forwarding" "1"
+}
+
+node router : router
+node host { route def 
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : rhost { routeofile router {
+    sysctl "net.ipv6.conf.all.forwarding" "1"
+}
+
+node router : router
+node host { route def 
+   { ./64fd:020d{
+:

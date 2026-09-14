@@ -1,0 +1,138 @@
+#l that only allrofile rou{
+  rouTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTted efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode serves {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 20%0.2.1
+  fir  1 via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTserver {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 M  route default via 10%0.2.1
+  fir  1 via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pand TC1 }
+
+Pnode server {
+  route defau::0.64 -: hos.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  f 1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 via 06%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTted efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2 only allrofile rou{
+  routed efault via 05%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route defanode server {
+  route default via 10%0
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 criptefault via 10%0.2.1
+  fir  1 MP, and TC1 }
+
+Pnode server {
+  route default via 10%0.2.1
+  fir  1 cion "Server with s  i

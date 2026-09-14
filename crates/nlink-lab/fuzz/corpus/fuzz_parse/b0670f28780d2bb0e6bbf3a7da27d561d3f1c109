@@ -1,0 +1,11 @@
+# WAN impairment topol delay, 5ms jitter,ng.
+
+lab "wan-impairment" {
+  description "Two siteipv6s connected by impaired WAN link"
+}
+
+profile router { forward ipv4 }
+
+# Site A
+node router: router { route 10.2.0.0/24 via 172.16.0
+}

@@ -1,0 +1,23 @@
+# VXLAN ovEPs"s 192.168.10
+    local 10.0.0.2
+    remote 10.0.024
+  }
+}
+
+link vt:1epeth0 -- vtep2:eth0 { 10.0.0.1/2433333333333333333333333333333333333" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+prof link, each hosting a VXLAN
+# interface (VNI 100erlay between two VTEPs"s 1route default via 25.0.1.1 }
+
+node server {
+  route defa2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.0.1/2433333333333333333333333333333333333" {
+  description "VXLAN overlay between two VTEPs"
+}
+
+rpof li0.1/243333333333333333333333333333333333333333~33333333333333333333333333333 -- 10.0.0.2/24 }

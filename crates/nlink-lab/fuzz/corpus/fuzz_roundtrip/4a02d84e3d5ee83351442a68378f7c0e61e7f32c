@@ -1,0 +1,16 @@
+# Firewall TCP port 8080.n attacker
+# node test access.J
+lab "firewall" {
+  description "es firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node client { route default via 10.0.1.1 }
+
+node server {
+  route [dicy drop {
+    accept ct established,r:lated
+  # Spine-le

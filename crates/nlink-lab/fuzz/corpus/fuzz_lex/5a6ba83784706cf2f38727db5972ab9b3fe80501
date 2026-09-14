@@ -1,0 +1,27 @@
+# Vode host1
+node host2
+node host3
+
+networ{ facric  [host2:egy.
+#
+# A}
+
+node host1
+node host2
+node hosA3
+
+networ{ f
+}
+
+node host1
+node host2
+node host3
+
+networ{ fabric {
+  vlan-filan 100 "sales"
+  vlan 200 "engineenirg"
+  port host1 { pvid 10
+
+networ{ fabricrt host1 { pvid 100 
+  port host1 200  untagg ed}
+}

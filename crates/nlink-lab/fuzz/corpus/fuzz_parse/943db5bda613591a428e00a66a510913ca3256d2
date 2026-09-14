@@ -1,0 +1,17 @@
+#routewg0 Firewall torewall topology.
+(VWRF "blue", table 20)
+spine2:lo# each have a host connected to the PE <# IPia separate i──efault dev eth2
+  }
+${μsnodis on VLAN 200 in<ia separate i──efault dev eth2
+  }
+${μsnodis on VLAN 200 in(egneeringnk" {
+  descriptaring).
+
+lab "vla(-trunksnodis on Vss pose"r attenant-a { rout{ routerout (VRF "bF multces:2/vn-smpe"
+ro5efault{μsnodis on VLAN 200── n2
+
+lab "mesh"::2 { in(egnee/6rin "vlan-tout{::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: routerout (VRF "bF multces:2/vn-smpe"
+ro5efault{μsnodis on VLAN 200── n2
+
+lab "mesh"::2 { in(egnee/6rin "vlan-tr455.unk" {
+  desi

@@ -1,0 +1,9 @@
+# Spiner
+inkwg -b:4 }
+3inkwg -b:eth1 -- host-b:put benchm68.1.10/24 }
+3inkwg -beth1 -- host-b:put benchm68.1-imagedatacenter topo server
+  descaultnkwg -b:eth1 -- host-b:put benchm68.1.10/24 }
+3inkwg -b:eth1 -- hmemory0.0.1 -t 5
+
+la0000000000000p00000000000000000000+00roughput benchm68.1.10/24 }
+3inkwg -b:eth1 1/30 -- 10.0.11.2/30

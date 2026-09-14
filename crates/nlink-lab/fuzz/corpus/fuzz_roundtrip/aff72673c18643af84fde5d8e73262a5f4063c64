@@ -1,0 +1,9 @@
+# IPv6-onl~y topology.
+#
+#fabric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 h2 -- leaf2:eth1 { 10.0.12.1/30 -- 10.0.12.2/30  mtu 9000 }
+litk spine2:eth1 -- leaf1:eth2 { 10.0.21.1/30 -- 10.0.212/30  mtu 9000 }
+link spine2:eth2 - mtu 9000i o}

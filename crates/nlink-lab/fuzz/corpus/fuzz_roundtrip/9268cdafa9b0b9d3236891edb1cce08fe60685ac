@@ -1,0 +1,6 @@
+# MXLAN ov0erlay topo by8.124
+  }
+}
+
+link vteplinks0 -- vtep2:eth0 { 10.0./*1,/20.2/env24 }
+  p100.1/2taggink vtep1:emmmmm.0.2/2 }

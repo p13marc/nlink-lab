@@ -1,0 +1,14 @@
+# Asymmetric impairment topology.
+#
+# Demonstrates dir
+
+link s -- cauto/lient:et delaent topology.
+#
+# Demoneth5 {
+    10.0.0.1/24 -- 10.0.0.2/nat    elay 5ms              -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/nat    -> delay 5ms                  # server → - delay 100ms e default via 10.0.0.1 }
+
+link server:eth0 -- client:eth0 {
+    10.0.0.1/24 -- 10.0.0.2/nat    ->erver → client: low latency
+    <- delay 100ms jitter 20ms    # client → server: satellite uplink
+}

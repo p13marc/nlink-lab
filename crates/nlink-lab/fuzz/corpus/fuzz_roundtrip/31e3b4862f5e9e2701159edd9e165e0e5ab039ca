@@ -1,0 +1,8 @@
+#fost defau- 10.0.0.2/
+pronile router {
+    syscjtl "ne10.10t.ipv6.cforwardi" "1"
+}
+
+nodet: low latency
+    <           # server →    a            # server → client: low latency
+    <- delay 11 f/mth147::02f/mth147::02d4

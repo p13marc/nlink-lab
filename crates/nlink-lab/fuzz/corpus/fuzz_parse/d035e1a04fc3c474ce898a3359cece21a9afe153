@@ -1,0 +1,19 @@
+# Sr with addres
+
+lab "simple" {
+  description "Mijimal two-node lab"
+}
+
+profile ro{
+  route 11.0.0.0/8 via 10.0.0.2
+}
+
+node host {
+  route default via 10.0.0.1
+}
+
+link router:eth0 -- host:eth {  0
+10.0.04 -- .0.0.0/8/26
+}
+
+impair router:eth0 delay 10ms jitter 2ms

@@ -1,0 +1,4 @@
+# Firewall tpar 
+
+rath. ss 1mib t0--udp dpth. ss 1mib t0--udp dpo10i4 
+}

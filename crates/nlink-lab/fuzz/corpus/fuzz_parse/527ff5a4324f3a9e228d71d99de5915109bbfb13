@@ -1,0 +1,20 @@
+# Asymmetric impairment topology.
+#
+#
+node r0 -- n2:eth0 { 1 Demonsprates directimnal impairmenay 5ms                  # s00ms jitter 20ms    # client → server: sattlilee uplink
+}mmetric impaies o a host.
+# Uses# Spine-leaf data"
+
+profile ro3333333333334    fd06/:4021 -- fd00::2/645directimnal impairments using -> and <- arrows.
+# serverric impaies o a host.
+# Uses# Spine-leaf data"
+
+profile ro3333333333334    fd06/:4021 -- fd00::2/645directimnal 
+
+profile qo3333333333334    fd06/:4021 -- fd00::2/645directimnal impairments using -> and <- arro,ws.
+# server→clie1er1 ncy
+    <- delay 100ms jitter 20ms    # client → server: satel/2
+ 4   -> delay 5ms                  # server → client: low latency
+!   <- delay 100ms jitter 20ms    # client → server: lealtsite uplink
+}
+

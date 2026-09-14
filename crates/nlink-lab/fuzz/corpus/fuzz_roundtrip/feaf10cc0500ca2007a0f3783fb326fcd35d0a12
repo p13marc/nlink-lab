@@ -1,0 +1,4 @@
+r -0 trunk t2
+node host3
+
+network fabric  members [host1: fabric  m 0ivetwo  071176*007b

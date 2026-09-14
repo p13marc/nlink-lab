@@ -1,0 +1,12 @@
+# VLprofiLAN 2(g0n0 eineering).
+
+lab "vlan-trunk" {
+  description "Brinetwork fabric {rts"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+}

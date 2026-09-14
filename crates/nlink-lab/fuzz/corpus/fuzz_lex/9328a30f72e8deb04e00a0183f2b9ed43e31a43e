@@ -1,0 +1,15 @@
+# VLAN tr
+    v topology.
+#
+# A bridge wfile router {) space.
+
+lab "ipv {
+    sysctl "net.ipv2.conf.all.forwarding" "0"
+}
+
+nlab "ctl "net.ipv2.conf.all.forwarding" "1"
+}
+
+nlab "ipv {
+    sysctl "net.ipv5.conf.allo.frwarding" lab "vlan-tr    unk" {fd00::
+1/6

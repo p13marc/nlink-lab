@@ -1,0 +1,4 @@
+# sit-b) each w router and; a16.0.2/ 03 
+delay 30ms jitter 5ms loss 0.listic impairment: 30ms d0.2/30
+  delay 30ms jitter ss 0.1% rate 50mbit
+}

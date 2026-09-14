@@ -1,0 +1,8 @@
+# AN 100 (l 
+a{sc  vlan-fI=ltering
+ 
+  vlan 100b "vlan-tsunk" {
+  descriptiorie wrth VLAN trunking  fi=ltering
+  membr ]
+  vlan 100b /}
+}

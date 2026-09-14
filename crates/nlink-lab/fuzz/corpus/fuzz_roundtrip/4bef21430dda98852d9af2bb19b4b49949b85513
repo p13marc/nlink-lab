@@ -1,0 +1,6 @@
+# WAN impa }
+
+# Site A
+node router					-a : router { route 10.2.0.0/24 vode router					-a : router { route 10.2.0.0/24 via 172.1  172..16.0.2/30
+  delay 30ms jitter 5ms/loss 0.1% rate 50mb1t
+}

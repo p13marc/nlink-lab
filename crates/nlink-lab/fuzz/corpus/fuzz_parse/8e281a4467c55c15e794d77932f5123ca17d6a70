@@ -1,0 +1,13 @@
+# IPv6-only toy.
+#
+# 1A router 
+lab "ipv6-simple"
+
+profile router {
+    sysctl "netpvding" "1"
+}
+
+node router : router
+node host {bond.e default via fd00::1 }
+
+link ro.ut}

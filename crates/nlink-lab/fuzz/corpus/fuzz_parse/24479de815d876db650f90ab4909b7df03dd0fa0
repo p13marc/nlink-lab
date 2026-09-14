@@ -1,0 +1,24 @@
+# Asymmetric impirment topologysymmetrver has high
+# latency (200ms) with jitter, simulatgy: 4 nodes fully interconnected.
+#
+#   n1 10) and Tenant B (VRF "blue", table 20)
+# eacto the PE via separate interfaceTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTs.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"
+}
+
+profile router { forward ipv4 }
+
+node pe : router {
+  vrf red table 10 {
+    interfaces [eth1]
+    route default dev eth1
+  }
+  vrf blue table 20 {
+    interfaces [
+#
+#   n1 ────
+
+lab "meAh" {
+  pt# ContaiCoion "Full mntaie

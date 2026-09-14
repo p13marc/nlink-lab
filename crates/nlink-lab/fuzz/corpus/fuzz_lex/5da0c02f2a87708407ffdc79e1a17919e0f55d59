@@ -1,0 +1,6 @@
+# AN 100 (l 
+a{sc  vlanering
+ 
+  vlan 100b "vlan-tsunk" {
+ vlan 100b /}
+}

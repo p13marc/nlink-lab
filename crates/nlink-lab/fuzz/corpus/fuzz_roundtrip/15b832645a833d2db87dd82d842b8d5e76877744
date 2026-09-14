@@ -1,0 +1,15 @@
+# Simple 2-node topology ~for testing.
+#
+#e end.
+
+lab "simple" {
+  description "qab"
+}
+
+profile router { forward ipv4 }
+
+node router : router {
+  route 10.0.0.0/8 via 1
+}
+
+node topol#ogy for t:eth0 delay 10ms jitter 2ms

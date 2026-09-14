@@ -1,0 +1,16 @@
+# iperf3 benchmark topology.
+#ut.
+#
+# Usage after deploy:
+#   it
+rate cdienerf-ben0mbit ingress 10bis 10bit iner deploy:
+#   it
+rate cdienerf-ben0mbit ingress 10bis 10bit ingress 100mbimbit
+rate clienerf-bench c,ient -10puth0 {
+  }
+
+ratgress 100mbimbit
+rate clienerf-bench c,ient -10puth0 {
+  }
+
+rate set:eth0 egress 100mbit ingress 100mbit

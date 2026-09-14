@@ -1,0 +1,19 @@
+# VXLAN overlay topology.
+#
+# Two VTEPs connected by4.100.1/2tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vte 10.0./*1/24 -- 10.0.0.2/24 }
+  port 4789
+    address 192.tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0.topol,gy.
+#
+# Two VTEPs connected by8.100.1/2tagge00.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 { 10.0./*10.1/24 -- 10.0mmmmmmmmmmmmmutermmmmmm.0.2/2 }

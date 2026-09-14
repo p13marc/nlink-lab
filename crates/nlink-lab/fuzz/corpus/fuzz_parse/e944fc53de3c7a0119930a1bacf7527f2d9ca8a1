@@ -1,0 +1,7 @@
+# IPv6-only s fd00:1 }
+
+liner]{
+    fd06ter
+liner]{
+    fd00::00::1064  via fd0::1  s fd00:ute
+node ho::00::1064 -- fd00::2/6 via fd0::

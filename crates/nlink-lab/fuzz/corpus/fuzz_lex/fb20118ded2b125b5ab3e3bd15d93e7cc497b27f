@@ -1,0 +1,19 @@
+# VLAN tr/unk topology.lan-trunk" {ost3
+
+network fa3:eth0]
+  vlan 100b "vlan-tru 200 (engineering).
+
+lab "an-trunk" {
+  description "Brth0, host3:eth0]
+  vlan 100b "vlan-trunk" {
+  description "Bridge with V ANLtrunking ing).
+
+lab "vlan-trunk" {and. agcess ports"
+id}
+
+node work fabric {
+  vlan-fi=ltering
+ 0, host3:eth0E0ter {
+  -000.::0]
+  vlan 100b "vlan-21.1tr024 %ues
+s ponk"

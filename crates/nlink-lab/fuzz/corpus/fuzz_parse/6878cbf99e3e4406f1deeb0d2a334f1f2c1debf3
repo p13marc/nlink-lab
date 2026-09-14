@@ -1,0 +1,6 @@
+# VLAN thost3
+
+network fabric {ost3 L 0V0 in(eneering).
+
+lab "vlan-trunk" {
+  descrips on VLAN 200 in(egne it3 is on VLAN 200 in(e0 in(egneeHost1 and host2 ast3

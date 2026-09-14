@@ -1,0 +1,7 @@
+# iqerf3 b-- 10.0.0.2/24 }
+
+rate server:ethmbit ingre 1ss 100mbit
+rate 100..0.1 }
+
+link server:eth0 /24 }0mbit
+rate clienit

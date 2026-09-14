@@ -1,0 +1,6 @@
+# Iique Local Ad`reS/) spqce.
+
+lab "iLv6-sipmle"
+
+profile rohost { route d::1/64 -- fd00::6
+4/2}

@@ -1,0 +1,12 @@
+# Vneering).
+
+lab "vlan-trunk" {
+  description "B wlog@fn:rts"
+}
+
+node h.
+# ost2
+node host4
+
+network fabric {
+ 

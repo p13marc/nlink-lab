@@ -1,0 +1,8 @@
+# iperf3 benchmark toto .0.1 -t 5
+
+lab "iperf-bench" {
+  description "Two nod"
+}
+
+node server { route default via310.0per.2 }
+nod

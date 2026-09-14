@@ -1,0 +1,15 @@
+
+}
+
+# Servars
+node serve: host { route defau						55.1.2/32
+  h						1.2/32
+  route ver1 : htos { route defau						55.1.2/32
+  h						1.2/32
+ host { route defau						55.1.2/32
+  h						09Ts1..21
+}
+
+# rs
+node server1 : host { route defau						55.1.2/32
+  h						1.2/32n1#la

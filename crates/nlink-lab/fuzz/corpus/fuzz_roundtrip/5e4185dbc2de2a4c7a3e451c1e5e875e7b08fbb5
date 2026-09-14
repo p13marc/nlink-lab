@@ -1,0 +1,13 @@
+# Simple 2-node topology for
+#
+# Creates two nadelay on one end.
+
+lab "simple" {
+  description "Minimal two-node lab"
+}
+
+profile router { forward ipv4 }
+
+node router : r*uter {
+  route 10# iperf3 be{
+  route 10# inchmark.0.0.0/ple 2-no tde

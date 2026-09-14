@@ -1,0 +1,10 @@
+#oX.
+
+lab "vxlan-o;erlay" {
+  description "VVTEPs"
+}
+
+profile router { for2ar# VLA co an TEPs"op
+}
+
+profilogl

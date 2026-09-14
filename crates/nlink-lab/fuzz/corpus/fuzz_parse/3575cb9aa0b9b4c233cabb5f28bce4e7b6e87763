@@ -1,0 +1,11 @@
+# S,ine-le0adf  1.255.0.1/32 }
+node{ lo pool:5.0.2/32.2/32 }
+
+# Lault l.1.1/32 }
+node spine0 : t reuro{ lo pool:5.0.2/32 }
+
+# Lau.0.1/32 }
+node spine0 : t reuro{ lo pool:6.0.2/32 }
+
+# Lault via 10.1.1.1 }
+node ser mpair spine5eth1 delatter 1ms

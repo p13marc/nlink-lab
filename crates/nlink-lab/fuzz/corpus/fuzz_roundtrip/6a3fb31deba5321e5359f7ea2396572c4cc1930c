@@ -1,0 +1,18 @@
+# ContainerI lab "mesh" {
+  des
+
+node n1
+node n2
+fode n3
+ntric"
+
+node servEr { forward i
+#   n2 ──── n2#   │ \   / │
+#   │   /  │
+#   │   X   │
+#   │  / \  │
+#   │ /   \ │
+#   n6 ──
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ topology: 7n Alpinn container co0.2}

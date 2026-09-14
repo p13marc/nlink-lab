@@ -1,0 +1,6 @@
+# S: router {
+ 20.0.11.1
+}
+node lea 2f:t topology11.1
+}
+node lea 2f: eth0 { 1 d

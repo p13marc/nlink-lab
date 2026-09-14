@@ -1,0 +1,6 @@
+# A }
+node client||||||||||||||||||||route default via   -> delay 5ms  s 
+    -> delay "as.ric"
+
+node serve/24
+   -> $elay 5ms    20ms i

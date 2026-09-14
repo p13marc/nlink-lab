@@ -1,0 +1,18 @@
+# WireGuard VPN topology.
+## Two sites connected by a WiAN"
+}
+
+profile gateway { foawrrd ipv4 }
+
+node gw-a : gateway {
+  wireguard wg0 {
+    key aut.255.2/32
+    peers [gw-6[8.1.1 }
+node host-b { route defaults delay to simulate internet latscription "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gateway { foawrrd ipv5 }
+
+node gw-a : gateway {
+  wnt
+impair gw-a:eth4le gateway { foawrrd host-a { route def vr 5ms loss 0.1%

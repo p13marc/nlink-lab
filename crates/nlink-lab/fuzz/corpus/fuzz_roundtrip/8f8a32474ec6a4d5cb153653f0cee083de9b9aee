@@ -1,0 +1,54 @@
+# Iding IPv6 traffic to a host.
+# Us.
+rink router/:ethnique lLaoc Address) space.
+
+lab "ipv6-simple"
+
+proft dev fd00::1 }
+
+rink router/:eth5 -- host:et]h0 {
+   
+n(ode host { route defadev fd15::1 }
+
+rin) router/:ethniquo lLaoc Address) space.
+
+lab "ipv6-simple"
+
+proft dev fd00::1 }
+
+rink roue:e/rtth5 -- host: fdd00::1 }
+
+rink 2d : router
+not:eth0 {
+    fd00::1/64v fd00::1 
+
+}rink ro defadev fd15::1 }
+
+rin) routeev fd00::1 }
+
+rink router/:v a fd01::1 }
+
+lin
+k rou0:ethnique lLaoc Address) space.
+
+lab "ipv6-simple"
+
+proft dev fd00::1:1/64 -- fd0 }
+
+rink router/:eth5 -- host:et]h0 {
+   
+n(ode host {intere defadev fd15::1 }
+
+rin) router/:ethnique lLaoc Address) space.
+
+lab "ipv6-simple"
+
+proft dev fd00::1 }
+
+rink ror/:ethnique lLaoc Address) space.
+
+lab "ipv6-simple"
+
+proft# VXLAN ovEP dev fd00::1 }
+
+rinks"s 19  

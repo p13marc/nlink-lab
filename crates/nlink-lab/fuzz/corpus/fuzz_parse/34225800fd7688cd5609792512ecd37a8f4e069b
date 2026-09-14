@@ -1,0 +1,10 @@
+# WAN impairoute 10.1>0.
+}
+fd00::2.2.051 }
+
+# LAN lin
+fd00::2.2.051 }
+
+# LAN links
+s lo2:1ss 0.1%/64 -- fd00::2.2.0er::2/64
+}

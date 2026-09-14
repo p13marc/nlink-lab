@@ -1,0 +1,15 @@
+leth0 egress 100ut.
+#
+#)# VXLmbit
+rate client:eth0 egress 100ut.
+#
+#24 }
+
+ratlient:eth0 egress 100ut.
+/24 -- 10.0.0.2/24 }
+
+ratlient:eth0 egress 100ut.
+#
+## VX3:2d3:2d:2dd3after deploy:
+# nlink-ln0 }
+nod

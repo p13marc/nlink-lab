@@ -1,0 +1,15 @@
+# Full mesh topology: 4 nodes fully inte ──── n4
+
+lab "mesh" {
+  description "Full mesh o nodes"
+}
+
+node n0
+node n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -- 10.1.2.2/30 }
+link n1:Eth1 -- n3:eth0 { 10.2.3.2/30 }
+link n2:eth -- f4:eth{  110.2.4.1/30 -- 10.2.4.2/30 }
+link n3:eth2 -- n4:eth2 { 10 }

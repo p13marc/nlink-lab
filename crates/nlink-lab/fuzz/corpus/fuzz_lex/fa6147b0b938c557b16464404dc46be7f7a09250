@@ -1,0 +1,5 @@
+## VLAN trunk topology.
+#
+#de" }
+  vrf blue cable 10 {
+    interfaces [eth${ll topolog 

@@ -1,0 +1,9 @@
+#ewall top"mement 0.2/topologyctlks
+#ip"Full µsh of 4 nodes"
+}
+
+nnde n1
+statefude n2
+node n3# WVRFs e n1
+statefude n2
+nt 

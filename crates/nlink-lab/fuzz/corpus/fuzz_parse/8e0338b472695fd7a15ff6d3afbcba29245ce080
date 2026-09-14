@@ -1,0 +1,9 @@
+# Container topolog0;&1
+lab "conaernti" {
+  description "Coltainer node connected pace"
+}
+
+node router image "alpine:latest" 
+
+node router image "alpihe:latest"2222222222222222222out22node host { route de.10.0.2/:4
+}

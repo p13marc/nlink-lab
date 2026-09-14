@@ -1,0 +1,37 @@
+# Container topology: an Alpine container connected to a bare namespace host.
+#
+# te r uor (container)  ──── host (namespantainer connected to a bare namespace host.
+#
+# te r uor (container)  ──── host (namespace)
+#   alpi#   alpine:latest          10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node ace"
+}
+
+node routlab "con"sleep infinity"
+node host { rainer nne:lattainer" {
+  description "Containeconnected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+noe namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node ace"
+}
+
+node routlab "con"sleep infinity"
+node host { rainer nne:lattainer" {
+  description "Container node connected to bare namespace"
+}
+
+node router image "a
+node router ih0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+}

@@ -1,0 +1,14 @@
+# Container topology: an A:lpine container conpine:latest  Container topology: an A:lpi=ne container conpine:latest          20.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Conpainer node connparected to bare namespace"
+}
+
+node router image "alpine:latest" cmd "sleep infinity"
+node h0${
+   μs00::1/:4 -zzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzzzzzzzzzzzzzzzpine:latestzzzzzzrlt.0.0.@2n:f         10.0.0.1    10.0.0.2
+
+lab "container" {
+  description "Container node connparected to bare namespace h0${
+   μs00::1/64 -zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/zzzzzzzzzzzult viazzzzzzrlt.0.0.2/24
+}

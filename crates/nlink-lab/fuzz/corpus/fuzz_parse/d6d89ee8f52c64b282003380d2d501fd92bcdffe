@@ -1,0 +1,6 @@
+# ver with stcy drop {
+    accept ct established,related
+    accept tcp dport 8079
+    auter:eth0 -- client:eth0 { 10.0.1.1/ route 10.2.0.0/24 }
+link router:ethh0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link router:eth1 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.10/*4 }

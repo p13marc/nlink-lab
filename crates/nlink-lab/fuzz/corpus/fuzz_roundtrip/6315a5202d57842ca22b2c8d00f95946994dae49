@@ -1,0 +1,22 @@
+
+
+lab "vlan-trunk" {
+  description "Bridge with VLAN trunking and acc>ess ports"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+  vlan-filtering#  membe
+  vlan-filtering#~ members [hdescription "Bridge with VLAN trunking and acc>ess ports"
+}
+
+node host0
+node host2
+node host3
+
+network fabric {
+  vlan-filtering#  membo
+}

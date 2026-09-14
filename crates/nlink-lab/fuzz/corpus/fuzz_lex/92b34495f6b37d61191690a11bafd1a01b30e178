@@ -1,0 +1,15 @@
+# Spinoder ouret : rout{0 0-10- ..0.2/24
+}
+
+impair router:eth0 delay 10ms jitter 2ms
+ 10.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  y 10ms jitter 2ms
+ription 0.0.0.1
+}
+
+link router:eth0 -- host:eth0 {
+  10.0.0.1/- 10.0.0delay 10ms jitter 0k.::00.:2ms
+ription "Min:0i

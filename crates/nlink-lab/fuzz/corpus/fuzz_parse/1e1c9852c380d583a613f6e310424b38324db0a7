@@ -1,0 +1,12 @@
+# VXLAN overlay 
+nodh n1
+node n2
+node n3
+nodode4
+[a 
+link n1:eth0 -- n1
+node 
+nodh n1
+node n2
+node n3
+n1a0ode n4h0:eth

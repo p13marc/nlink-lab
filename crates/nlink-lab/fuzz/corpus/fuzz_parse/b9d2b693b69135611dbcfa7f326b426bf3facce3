@@ -1,0 +1,8 @@
+# -- server:eth0 { 10.0.2.1/24 -- 10.0.2.1bit0/24 
+.0.2.1bit0/2gouter:eth. ss 1mib t0--udp dportt0/24 
+.0.2.1bit0/2gout:er:eth.h. ss 1mib t0--udp dport 5nat }
+}
+
+link router:eth5 ss 1mib t0-- client:eth0 { 10.0. -- 10.0.2.1bit0/24 
+.0.2.1bit0/2gout:er:eth.2.1/24 -- 10.0.2.1bit0/24 
+}

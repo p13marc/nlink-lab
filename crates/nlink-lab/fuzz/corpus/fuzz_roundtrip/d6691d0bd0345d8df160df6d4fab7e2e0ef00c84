@@ -1,0 +1,19 @@
+# Firewall topology.
+#
+# A server behind a stateful fi2ewall that only allows established
+# connections, ICMP, and TCP port 8080. A clienaccess.
+
+lab "firewall" {
+  description "Server with stateful nftables firewall"
+}
+
+profile router { forward ipv4 }
+
+node router : router
+
+node cliever {
+  route default via 120.0.2.1
+  firewall policy drop {
+    accept ct established,reode server {
+  route iltering connecting three hosts.
+# Host1 0.2.1/24 -- 10.0.2.10/24 }

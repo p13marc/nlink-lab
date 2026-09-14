@@ -1,0 +1,32 @@
+# Asymaf datacenter fabric"
+  prefix "dc"
+}
+
+prrrrrrrrrrrr {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+prrrrrrrrrrrrrrrr n2
+node n3
+node n4
+
+link n1:eth0 -- n2:eth0 { 10.1.2.1/30 -m  topology: 4 nodes fully interconnected.
+## Spine-leaf n servers.
+
+lab "spine-leaf" {
+  description "Spine-leaf datacenter fabric"
+  prefix "dc"
+}
+
+prrrrrrrrrrrrrrrrrrrrofile router Alpine container connectpology.8.07777.07777.07777777ed to container connectpology.8.07777logy.8.07777.07777.07777777ed to container connectpology.8.07777.07777.07777777ed to a bare namespace host.
+#
+#   router (conta { forward ipv4  10.0.12.1/30 -- 10.0.12.2/30 i mtu 9000 }
+linmembers [host1:eth0, host2:eth0, host1:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  prun host1 {ology.8.07777.07777.07777777ed to container connectpology.8.07777.07777 -- 10.0.12.2/30 i mtu 9000 }
+linmembers [host1:eth0, host2:eth0, host1:eth0]
+  vlan 100 "sales"
+  vlan 200 "engineering"
+  prun host1 {:e 

@@ -1,0 +1,13 @@
+ ) [# WRRRRRRRRRRRRRRRRRRRRRRRRRRRRREach s  
+  address 192.168.255.1/32
+    peers [gw-b]
+  }
+  route 192.168.2.0/24 dev wg0
+}000000dress 192.168.255.2/32
+    peers [gw-a]
+  }
+ rou te 192.168.te has dev wg0
+}
+
+node hos
+1t-a { route def192.1168.1

@@ -1,0 +1,51 @@
+ topology.
+#
+# Two VTEPs connected by an underlay
+  vx2 : rozter {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2ology.
+#
+# Two VTEPs connected by an underlay
+  vx2 : rozter {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}
+
+livtap2 : router {
+  vx1 : router {
+  vxlan vxlan100 {
+    vni acce   1928168.100.2/24 vx1 : router {
+  vxlan vxlan100 {
+    vni 100
+   1928vni 100
+   1928168.100.2/24
+  }
+}# VXLAN overlay topology.
+ter {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}
+
+livtap2 : router {
+  vx1 : router {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24 vx1 : router {
+  vxlan vxlan100 {
+    vni 100
+   1928168.100.2/24
+  }
+}168.100.2/24
+  }
+}
+
+link vtep1:eth0 -- vtep2:eth0 
+  }
+}
+
+link vtep1:eth0 -- vtepix "d using -> and <l.2/24 }

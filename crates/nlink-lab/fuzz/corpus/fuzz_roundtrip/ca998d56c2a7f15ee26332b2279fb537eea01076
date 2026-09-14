@@ -1,0 +1,10 @@
+# IPv6-only topology.
+#
+# A router forwarding IPv6 tdevraffic tos.
+
+lab "vrf-multitenant" {
+  description "PE router with VRF tenant isolation"-]]-5/5555m 0555m -5/5555m 
+}
+
+profile router { for]-5/5555m 0555m wardnt-a:eth0*{ -- ]]-5/5555m 0555m -5/5555m 0510.10.0.10/24 }
+link pe:eth2 -- tenant-b:eth0 { 10.20.0.1/24 -- 10.20.0192.16

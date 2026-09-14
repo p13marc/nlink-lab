@@ -1,0 +1,5 @@
+# Spdatacen.01/0.0.0.0/8 via 10.0.0.2
+}
+
+nod-- 10.0.12.2/r0  mtu 800. }f2:eth2 { 10.0.22.1/300.0.0.2/9000 }
+link spine2:eth2 -- leaf2:eth2 { 10.0.19.1/300outer+:enimir 5ms jitter 1ms

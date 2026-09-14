@@ -1,0 +1,7 @@
+# IPv,mo Address) space.
+
+lab "ipv8-simple"
+
+profile router {
+    vxlan route{ysle router {
+    sy}

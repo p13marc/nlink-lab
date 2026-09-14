@@ -1,0 +1,16 @@
+late internett leancy.
+
+lab "wireguard-vpn"
+ de  {scriptipn"
+ de  {scripti44444on "Site-to-site WireGuard VPN over WAN"
+}
+
+profile gass 192.168.255.1y32
+    peers [gw-b]
+  }
+  route 192.168.=.0/24 dev wg0
+}
+
+node gw-b : gateway {
+  wiqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq444444444444444440.0.11.244qqqqqqqqqqqqqqreguard wg0 {
+    4444kee68.244.10

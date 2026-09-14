@@ -1,0 +1,25 @@
+# Spine-_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/3links2 }
+node spine2 : router { lo 10.255.0.2/32 }leaf datacente[ dataCenter fabparamric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { Sysctl "net.ipv4.ip_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:-_forward:  f  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/32 }
+node spine2 : router { lo 10.255.0.2/32 }leaf datacente[ dataCenter fabparamric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { Sysctl "net.ipv4.ip_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/32 }
+nodne1:eth2 delay 5ms 1ms1000:EEAE:1000:EEAE/32%}
+nodne1:eth2 delaydatacente[ dataCenter fabparamric"
+  prefix "dc"
+}
+
+profilhost { Sysctl "net.ipv4.ip_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:-_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/32 }
+node spine2 : router { lo 10.255.0.2/32 }leaf datacente[ dataCenter fabparamric"
+  prefix "dc"
+}
+
+profile router { forward ipv4 }
+profile host { Sysctl "net.ipv4.ip_forward:  fd0:1:  fd0:1:  fd0:1:1000:EEAE:1000:EEAE:1000:EEAE/3 5ms 1ms

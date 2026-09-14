@@ -1,0 +1,5 @@
+#wo si$tes
+
+lab "wiregu-vpn"node gw-a : gateway {
+  vrf fd02::2/64D00
+4W-a

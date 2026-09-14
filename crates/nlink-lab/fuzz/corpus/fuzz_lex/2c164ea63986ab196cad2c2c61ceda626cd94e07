@@ -1,0 +1,37 @@
+# iperf3 benchmark topology.
+#
+# Two nodes connected by a rate-limited link. Se<<<<<<<<<<<<<<<<<<<<<<<rver runs iperf3,nch" {
+ -bench client -- iperf3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erla rate-lk. Serf3,
+#  iperf3 -c 10.0.0.1 erf3,nch" {
+ -bench client -- iperf3 -c 10.0.0.-benc#" {
+  erla rate-lk. Serf3,
+#  iperf3 -c 10.0.0.1 erf3,nch" {
+ -bench client -- iperf3 -c 10.0.sage after deploy:
+#   nlin!k-lab exec iper\-bench client -- ipech" {
+ -bench client -- iperf6 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {
+  erlay between gateway
+lab "iperf-bench" {
+ -bench client -3 -c 10.0.0.1 -t 5
+
+lab "iperf-bench" {teway
+lab "iperf-bench" {
+ -bench client .-- ipeonnect to measure throughput.b 
+#
+# Usage after deploy:
+#   nlin!k-lab exec iper\-bench client -- iperf1 -c 10.0.0.1 -t 5
+
+lab "iperf-s [30 }
+1k ne:th ebench" {
+ -bench client -- iperf3 -c 10.0.0.1 -t 5
+
+laay
+lab "iperf-bench" {
+ -bench client -3 -c 10.0.0.1 -t 5
+
+lab "iperf-bencgrh" {
+  erlay between gates

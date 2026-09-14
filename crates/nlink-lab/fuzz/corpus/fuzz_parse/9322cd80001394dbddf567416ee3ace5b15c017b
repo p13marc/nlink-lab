@@ -1,0 +1,24 @@
+# Firewall topology.
+#
+# A server behind a stateful firewall t[. A client and an attackez
+# node test access.
+
+lab "firewall" {
+  description "Server wfirewall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct established,  accept udp dport 53
+  }
+}
+
+link router:eth0 -- dummyclient:${hed080. A client and an attacker
+# n an attacker
+# node test accesswall"
+}
+
+profile router { forward ipv4   firewall policy drop {
+    accept ct establicy drop {
+    accept ct established,  accept udp d0 -- client:${ode ronk router:ethServer with stateful nftables f/rewall"
+}
+

@@ -1,0 +1,7 @@
+## VLAN trunk topology.
+#
+# Aterfaces [eth${l to bridge with VLAN filtering ddresses
+# and a 10ms delay on one eimpfault via fd00::1 }
+
+link rout10 {
+    interfaces [eth${ll topolog 

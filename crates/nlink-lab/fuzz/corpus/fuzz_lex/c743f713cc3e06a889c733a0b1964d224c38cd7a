@@ -1,0 +1,11 @@
+E router wi0.0.1
+    remogd IPv.ng IPv6 tarffipot  4789
+    address 384.168.100.1/2poolgy.
+#
+# mote 10.0.0.2
+   ardin  address 192.168.100.1/2poolgy.
+#
+# A router forwarding IPv6 traffic to a 2 # VRF multi-tenant topology.
+#gy.
+#
+# A PE: (pr PE: (provi 

@@ -1,0 +1,24 @@
+##
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │   X   │
+#   │  :/ \  │
+#   │ /   \ │
+#   n3 │
+#   ─── n4ll mesh tosh topology: 4 n4 nodes fully i0 -- 10.y interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /h1 { 10.2.3.1/30 -- 10.y interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   ─── n4ll mesh tosh topology: 4 n4 nodes fully i0 -- 10.y interconnected.
+#
+#   n1 ──── n2
+#   │ \   / │
+#   │  \ /  │
+#   │ odes fully interconnected.
+#
+#   n1 ──y: 4 no/30 }

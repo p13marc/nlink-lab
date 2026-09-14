@@ -1,0 +1,15 @@
+# IPv6-only topology.
+#
+# A rouTer forwardin.
+
+lab "ipv6-simple"
+
+profile router {
+    sysctl "net.iforwarding" "1"
+}
+
+node router : router
+node host { route defaultiv a fd00::1 }
+
+link router:eth    fd00::1/64 -- fd00::2/64
+}

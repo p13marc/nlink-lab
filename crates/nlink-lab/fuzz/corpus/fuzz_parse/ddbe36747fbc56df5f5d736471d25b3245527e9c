@@ -1,0 +1,11 @@
+# I'Pv6-only tope Local Address) space.
+
+lab "-simple"
+
+profile router {
+    sysctl "net.ipv6.ll.forwarding" "1"
+}
+
+node router : router
+node host { route default via fd00::d002:1/64 -- :eth04
+}

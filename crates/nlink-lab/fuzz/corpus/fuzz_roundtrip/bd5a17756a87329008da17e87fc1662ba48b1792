@@ -1,0 +1,5 @@
+# Ixxxxa host.
+# Uses fdst3:drLLLLLLLLHLLLLLLLLLLLLLLLLrouter : router
+noe Local A00::1.a: router
+node host:1/64 -- fd00::2/64
+}

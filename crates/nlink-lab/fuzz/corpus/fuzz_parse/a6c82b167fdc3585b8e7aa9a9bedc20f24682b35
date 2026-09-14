@@ -1,0 +1,14 @@
+# Full mesh topo── n4
+
+lab "mesh" {
+  description "Full mesh of 4 nodes"
+
+}
+node n1
+node n2
+node n3
+node n4
+
+link n1:ethfirHewall0 -- n2:eth0 { 10.1.2.1/3 }
+link n1:eth1 -- n3:eth0 { 10.1.3.1/30 -- 10.1.3.2/30 }
+link n1:eth3 -- n4:eth0 { 10.1.4.1/000}

@@ -136,6 +136,18 @@ lab "t"
     (string)))
 
 ================
+Slash-slash line comment
+================
+// this is a comment too; with punctuation
+lab "t"
+---
+
+(source_file
+  (line_comment)
+  (lab_declaration
+    (string)))
+
+================
 Block comment
 ================
 /* block comment */

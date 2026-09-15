@@ -3559,6 +3559,14 @@ validate {{ reach a b }}
     lab.partition("b:eth0").await.unwrap();
     lab.heal("b:eth0").await.unwrap();
     lab.clear_impairment("a:eth0").await.unwrap();
+    // A frozen process is still "alive" to the kernel; `signal_process`
+    // must record the signal and never escalate to KILL.
+    lab.signal_process(pid, nlink_lab::Signal::Stop).unwrap();
+    assert!(
+        lab.process_status().iter().any(|p| p.pid == pid && p.alive),
+        "a STOPped process is still tracked as alive"
+    );
+    lab.signal_process(pid, nlink_lab::Signal::Cont).unwrap();
     lab.kill_process(pid).unwrap();
     let (st, tp) = nlink_lab::state::load(&lab_name).unwrap();
     nlink_lab::state::snapshot_save(&lab_name, "s1", None, &st, &tp).unwrap();
@@ -3578,11 +3586,17 @@ validate {{ reach a b }}
             "partitioned",
             "healed",
             "impair_cleared",
+            "signalled",
+            "signalled",
             "killed",
             "snapshot_taken",
         ],
         "{names:?}"
     );
+    assert!(matches!(
+        &nlink_lab::events::read(&lab_name).unwrap()[7].kind,
+        nlink_lab::LifecycleKind::Signalled { pid: p, signal, .. } if *p == pid && signal == "STOP"
+    ));
     let evs = nlink_lab::events::read(&lab_name).unwrap();
     assert!(matches!(
         &evs[2].kind,

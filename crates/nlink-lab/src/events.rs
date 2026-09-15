@@ -58,6 +58,12 @@ pub enum LifecycleKind {
         node: Option<String>,
         pid: u32,
     },
+    /// `kill --signal`: one signal, no escalation (STOP/CONT freeze and thaw).
+    Signalled {
+        node: Option<String>,
+        pid: u32,
+        signal: String,
+    },
     Impaired {
         endpoint: String,
         impairment: Box<crate::types::Impairment>,
@@ -99,6 +105,7 @@ impl LifecycleKind {
             LifecycleKind::Destroyed => "destroyed",
             LifecycleKind::Spawned { .. } => "spawned",
             LifecycleKind::Killed { .. } => "killed",
+            LifecycleKind::Signalled { .. } => "signalled",
             LifecycleKind::Impaired { .. } => "impaired",
             LifecycleKind::ImpairCleared { .. } => "impair_cleared",
             LifecycleKind::Partitioned { .. } => "partitioned",
@@ -124,6 +131,10 @@ impl LifecycleEvent {
             K::Killed { node, pid } => match node {
                 Some(n) => format!("{n} pid {pid}"),
                 None => format!("pid {pid}"),
+            },
+            K::Signalled { node, pid, signal } => match node {
+                Some(n) => format!("{n} pid {pid} SIG{signal}"),
+                None => format!("pid {pid} SIG{signal}"),
             },
             K::Impaired {
                 endpoint,

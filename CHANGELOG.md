@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — the fault knobs a resilience lab asked for
+
+Both come from building a zenoh fault lab (robots ↔ WAN ↔ central, all
+container nodes) on 0.10.2; each was worked around there first and the lab
+is the consumer that validates the fix.
+
+- `impair` now exposes every netem property `Impairment` has: `--corrupt`,
+  `--reorder`, `--duplicate`, `--delay-correlation`, `--loss-correlation`,
+  `--limit` join `--delay --jitter --loss --rate` in the symmetric form.
+  Until now the last six were reachable at runtime only through
+  `edit --set-impair`; bursty loss (`--loss 2% --loss-correlation 25%`) is
+  what a cellular uplink looks like and it belongs on the one-shot command.
+  The directional `--out-*`/`--in-*` set is unchanged.
+- `kill --signal <NAME>` (`-s`) sends exactly one signal — `TERM`, `KILL`,
+  `STOP`, `CONT`, `HUP`, `INT`, `USR1`, `USR2`, with or without the `SIG`
+  prefix — instead of the TERM-then-KILL sequence, under the same PID-reuse
+  guard. `STOP`/`CONT` freeze and thaw a tracked process in place: the
+  kernel keeps ACKing its TCP sockets while the application is dead, which is
+  the "zombie peer" a protocol's liveness detection has to catch. Library:
+  `RunningLab::signal_process(pid, Signal)`, `parse_signal`. A new lifecycle
+  event `signalled { node, pid, signal }` is recorded (`events --kind
+  signalled`); `killed` is unchanged.
+
 ## [0.10.2] - 2026-09-14
 
 One fix: a `vxlan` block with no `vni` rendered to un-parseable `vni 0` (#118).

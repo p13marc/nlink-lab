@@ -108,7 +108,8 @@ pub use events::{LifecycleEvent, LifecycleKind};
 pub use lint::{LINT_RULE_IDS, LintFinding, lint};
 pub use proc_stat::ProcStat;
 pub use running::{
-    ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
+    ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, Signal, SpawnOpts,
+    parse_signal,
 };
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,

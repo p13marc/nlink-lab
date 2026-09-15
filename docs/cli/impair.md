@@ -107,6 +107,24 @@ Options:
       --rate <RATE>
           Rate limit (e.g., "100mbit")
 
+      --corrupt <CORRUPT>
+          Packet corruption (e.g., "0.01%")
+
+      --reorder <REORDER>
+          Packet reordering (e.g., "0.5%")
+
+      --duplicate <DUPLICATE>
+          Packet duplication (e.g., "1%")
+
+      --delay-correlation <DELAY_CORRELATION>
+          Correlation of successive delay values (e.g., "25%")
+
+      --loss-correlation <LOSS_CORRELATION>
+          Correlation of successive loss decisions (e.g., "25%"): bursty loss
+
+      --limit <LIMIT>
+          netem queue limit in packets (default 1000)
+
       --clear
           Remove impairment
 

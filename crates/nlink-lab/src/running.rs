@@ -1523,6 +1523,46 @@ impl RunningLab {
         }
     }
 
+    /// Send one signal to a tracked process, with the same PID-reuse guard
+    /// as [`RunningLab::kill_process`] and no TERM/KILL escalation.
+    ///
+    /// `STOP`/`CONT` are the point: a frozen process keeps its sockets, the
+    /// kernel keeps ACKing, and only the application protocol can tell it
+    /// is dead -- the "zombie peer" every resilience lab needs.
+    pub fn signal_process(&self, pid: u32, signal: Signal) -> Result<()> {
+        let node = self
+            .pids
+            .iter()
+            .find(|(_, p)| *p == pid)
+            .map(|(n, _)| n.clone());
+        if node.is_none() {
+            return Err(Error::deploy_failed(format!(
+                "pid {pid} is not tracked by lab '{}'",
+                self.topology.lab.name
+            )));
+        }
+        match signal_tracked(pid, self.starttimes.get(&pid).copied(), signal) {
+            KillOutcome::Signalled | KillOutcome::Gone => {
+                crate::events::record(
+                    &self.topology.lab.name,
+                    crate::events::LifecycleKind::Signalled {
+                        node,
+                        pid,
+                        signal: signal.name().to_string(),
+                    },
+                );
+                Ok(())
+            }
+            KillOutcome::Unverified => Err(Error::deploy_failed(format!(
+                "refusing to signal pid {pid}: its start time was not recorded (state file \
+                 written by an older release) so it cannot be proven to still be the lab's process"
+            ))),
+            KillOutcome::Reused => Err(Error::deploy_failed(format!(
+                "refusing to signal pid {pid}: it now belongs to a different process"
+            ))),
+        }
+    }
+
     /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
     pub async fn destroy(self) -> Result<()> {
         // Acquire exclusive lock
@@ -1980,6 +2020,90 @@ pub(crate) fn kill_tracked(pid: u32, expected_starttime: Option<u64>) -> KillOut
     KillOutcome::Signalled
 }
 
+/// A signal `nlink-lab kill --signal` may send.  Deliberately a closed set:
+/// the lab tracks processes it started, and these are the ones a fault
+/// scenario needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    Term,
+    Kill,
+    Stop,
+    Cont,
+    Hup,
+    Int,
+    Usr1,
+    Usr2,
+}
+
+impl Signal {
+    pub fn name(self) -> &'static str {
+        match self {
+            Signal::Term => "TERM",
+            Signal::Kill => "KILL",
+            Signal::Stop => "STOP",
+            Signal::Cont => "CONT",
+            Signal::Hup => "HUP",
+            Signal::Int => "INT",
+            Signal::Usr1 => "USR1",
+            Signal::Usr2 => "USR2",
+        }
+    }
+
+    fn number(self) -> libc::c_int {
+        match self {
+            Signal::Term => libc::SIGTERM,
+            Signal::Kill => libc::SIGKILL,
+            Signal::Stop => libc::SIGSTOP,
+            Signal::Cont => libc::SIGCONT,
+            Signal::Hup => libc::SIGHUP,
+            Signal::Int => libc::SIGINT,
+            Signal::Usr1 => libc::SIGUSR1,
+            Signal::Usr2 => libc::SIGUSR2,
+        }
+    }
+}
+
+/// Parse `TERM`, `sigterm`, `SIGSTOP`, ... into a [`Signal`].
+pub fn parse_signal(name: &str) -> Result<Signal> {
+    let upper = name.trim().to_ascii_uppercase();
+    let bare = upper.strip_prefix("SIG").unwrap_or(&upper);
+    Ok(match bare {
+        "TERM" => Signal::Term,
+        "KILL" => Signal::Kill,
+        "STOP" => Signal::Stop,
+        "CONT" => Signal::Cont,
+        "HUP" => Signal::Hup,
+        "INT" => Signal::Int,
+        "USR1" => Signal::Usr1,
+        "USR2" => Signal::Usr2,
+        _ => {
+            return Err(Error::invalid_topology(format!(
+                "unknown signal {name:?} (TERM, KILL, STOP, CONT, HUP, INT, USR1, USR2)"
+            )));
+        }
+    })
+}
+
+/// [`kill_tracked`] without the escalation: one signal, same guards.
+pub(crate) fn signal_tracked(
+    pid: u32,
+    expected_starttime: Option<u64>,
+    signal: Signal,
+) -> KillOutcome {
+    let Some(current) = host_starttime(pid) else {
+        return KillOutcome::Gone;
+    };
+    match expected_starttime {
+        None => return KillOutcome::Unverified,
+        Some(expected) if expected != current => return KillOutcome::Reused,
+        Some(_) => {}
+    }
+    unsafe {
+        libc::kill(pid as i32, signal.number());
+    }
+    KillOutcome::Signalled
+}
+
 /// Check whether a process is alive **and not a zombie**.
 ///
 /// `kill(pid, 0)` alone is insufficient: a zombie (a process that has
@@ -2164,6 +2288,33 @@ mod pid_identity_tests {
     fn host_starttime_of_missing_pid_is_none() {
         // PID_MAX is 4194304 on 64-bit; nothing lives above it.
         assert_eq!(host_starttime(4_194_305), None);
+    }
+
+    #[test]
+    fn parse_signal_accepts_bare_and_prefixed_names() {
+        assert_eq!(parse_signal("STOP").unwrap(), Signal::Stop);
+        assert_eq!(parse_signal("sigcont").unwrap(), Signal::Cont);
+        assert_eq!(parse_signal(" SIGKILL ").unwrap(), Signal::Kill);
+        assert!(parse_signal("SEGV").is_err(), "not in the closed set");
+        assert!(parse_signal("9").is_err(), "numbers are not accepted");
+    }
+
+    #[test]
+    fn signal_tracked_never_signals_unverified_or_reused() {
+        let me = std::process::id();
+        let real = host_starttime(me).unwrap();
+        assert_eq!(
+            signal_tracked(me, None, Signal::Stop),
+            KillOutcome::Unverified
+        );
+        assert_eq!(
+            signal_tracked(me, Some(real + 1), Signal::Stop),
+            KillOutcome::Reused
+        );
+        assert_eq!(
+            signal_tracked(4_194_305, Some(1), Signal::Stop),
+            KillOutcome::Gone
+        );
     }
 
     #[test]

@@ -32,6 +32,30 @@ pub struct Args {
     #[arg(long)]
     pub rate: Option<String>,
 
+    /// Packet corruption (e.g., "0.01%").
+    #[arg(long)]
+    pub corrupt: Option<String>,
+
+    /// Packet reordering (e.g., "0.5%").
+    #[arg(long)]
+    pub reorder: Option<String>,
+
+    /// Packet duplication (e.g., "1%").
+    #[arg(long)]
+    pub duplicate: Option<String>,
+
+    /// Correlation of successive delay values (e.g., "25%").
+    #[arg(long)]
+    pub delay_correlation: Option<String>,
+
+    /// Correlation of successive loss decisions (e.g., "25%"): bursty loss.
+    #[arg(long)]
+    pub loss_correlation: Option<String>,
+
+    /// netem queue limit in packets (default 1000).
+    #[arg(long)]
+    pub limit: Option<String>,
+
     /// Remove impairment.
     #[arg(long)]
     pub clear: bool,
@@ -86,6 +110,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         jitter,
         loss,
         rate,
+        corrupt,
+        reorder,
+        duplicate,
+        delay_correlation,
+        loss_correlation,
+        limit,
         clear,
         out_delay,
         out_jitter,
@@ -158,11 +188,20 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             || in_jitter.is_some()
             || in_loss.is_some()
             || in_rate.is_some();
-        let has_symmetric = delay.is_some() || jitter.is_some() || loss.is_some() || rate.is_some();
+        let has_symmetric = delay.is_some()
+            || jitter.is_some()
+            || loss.is_some()
+            || rate.is_some()
+            || corrupt.is_some()
+            || reorder.is_some()
+            || duplicate.is_some()
+            || delay_correlation.is_some()
+            || loss_correlation.is_some()
+            || limit.is_some();
 
         if has_directional && has_symmetric {
             return Err(nlink_lab::Error::invalid_topology(
-                "cannot mix --delay/--loss with --out-delay/--in-delay",
+                "cannot mix the symmetric flags (--delay, --loss, --corrupt, ...) with --out-*/--in-*",
             ));
         }
 
@@ -197,7 +236,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 jitter,
                 loss,
                 rate,
-                ..Default::default()
+                corrupt,
+                reorder,
+                duplicate,
+                delay_correlation,
+                loss_correlation,
+                limit,
             };
             running.set_impairment(&endpoint, &impairment).await?;
             report("updated impairment on", &endpoint, None);

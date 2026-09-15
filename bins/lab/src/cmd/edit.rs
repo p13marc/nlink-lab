@@ -45,6 +45,11 @@ pub struct Args {
     #[arg(long, value_name = "NODE:IFACE")]
     pub clear_qdisc: Vec<String>,
 
+    /// Set the MTU of a link, live, on both ends (`a:eth0=1280`).  The
+    /// topology's declaration is updated so `verify` stays clean.
+    #[arg(long, value_name = "NODE:IFACE=MTU")]
+    pub set_mtu: Vec<String>,
+
     /// Show the resulting plan without applying it.
     #[arg(long)]
     pub dry_run: bool,
@@ -316,11 +321,65 @@ fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::type
     })
 }
 
+/// `NODE:IFACE=MTU` -> (endpoint, mtu).
+pub fn parse_mtu_spec(spec: &str) -> nlink_lab::Result<(String, u32)> {
+    let (ep, mtu) = spec.split_once('=').ok_or_else(|| {
+        nlink_lab::Error::invalid_topology(format!(
+            "--set-mtu expects NODE:IFACE=MTU, got {spec:?}"
+        ))
+    })?;
+    let mtu: u32 = mtu.trim().parse().map_err(|_| {
+        nlink_lab::Error::invalid_topology(format!("--set-mtu: {mtu:?} is not an MTU"))
+    })?;
+    if !(68..=65535).contains(&mtu) {
+        return Err(nlink_lab::Error::invalid_topology(format!(
+            "--set-mtu: {mtu} is outside 68..=65535"
+        )));
+    }
+    Ok((ep.trim().to_string(), mtu))
+}
+
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     require_root()?;
     let mut running = nlink_lab::RunningLab::load(&args.lab)?;
+    // MTU changes are applied directly (both ends, live) rather than through
+    // the plan: the plan only knows an MTU at veth creation.
+    let mut mtu_log = Vec::new();
+    for spec in &args.set_mtu {
+        let (ep, mtu) = parse_mtu_spec(spec)?;
+        let peer = running.peer_endpoint(&ep)?;
+        if args.dry_run {
+            mtu_log.push(format!("set mtu {mtu} on {ep} and {peer} (live)"));
+        } else {
+            running.set_link_mtu(&ep, mtu).await?;
+            mtu_log.push(format!("set mtu {mtu} on {ep} and {peer}"));
+        }
+    }
+    let only_mtu = !args.set_mtu.is_empty()
+        && args.add_node.is_empty()
+        && args.remove_node.is_empty()
+        && args.add_link.is_empty()
+        && args.remove_link.is_empty()
+        && args.set_impair.is_empty()
+        && args.clear_impair.is_empty()
+        && args.set_qdisc.is_empty()
+        && args.clear_qdisc.is_empty();
+    if only_mtu {
+        if ctx.json {
+            println!(
+                "{}",
+                serde_json::json!({ "lab": args.lab, "edits": mtu_log, "ops": 0, "removed": 0, "applied": [] })
+            );
+        } else if !ctx.quiet {
+            for l in &mtu_log {
+                println!("  {l}");
+            }
+        }
+        return Ok(());
+    }
     let mut desired = running.topology().clone();
-    let log = apply_edits(&mut desired, &args)?;
+    let mut log = apply_edits(&mut desired, &args)?;
+    log.splice(0..0, mtu_log);
     let result = desired.validate();
     for w in result.warnings() {
         eprintln!("  {} {w}", yellow("WARN"));
@@ -391,6 +450,7 @@ mod tests {
             set_impair: vec![],
             clear_impair: vec![],
             set_qdisc: vec![],
+            set_mtu: vec![],
             clear_qdisc: vec![],
             dry_run: false,
         }

@@ -253,14 +253,21 @@ pub fn collect_impair_show(
         let ep = EndpointRef::parse(&ep_str).ok_or_else(|| {
             nlink_lab::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in topology"))
         })?;
-        // Skip endpoints whose node isn't a known namespace (e.g.
-        // container-only nodes — `tc qdisc show` via `running.exec`
-        // would route through docker/podman and is meaningless).
-        if running.namespace_for(&ep.node).is_err() {
-            continue;
-        }
-        let tc = running.exec(&ep.node, "tc", &["qdisc", "show", "dev", &ep.iface])?;
-        let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&tc.stdout);
+        // The host's `tc`, run inside the node's network namespace -- a
+        // bare namespace by name, a container by its init pid (its image
+        // need not ship iproute2).  A node with neither is not running.
+        let stdout = match running.ns_resolver_of(&ep.node) {
+            Some(ns) => {
+                let mut cmd = std::process::Command::new("tc");
+                cmd.args(["qdisc", "show", "dev", &ep.iface]);
+                let out = ns.spawn_output(cmd).map_err(|e| {
+                    nlink_lab::Error::deploy_failed(format!("tc in '{}': {e}", ep.node))
+                })?;
+                String::from_utf8_lossy(&out.stdout).into_owned()
+            }
+            None => continue,
+        };
+        let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&stdout);
         let entry = parsed.map(|fields| ImpairShowEntry {
             fields,
             partition: running.is_partitioned(&ep_str),

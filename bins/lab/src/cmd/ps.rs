@@ -30,7 +30,11 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     } else {
         println!("{:<12} {:<8} STATUS", "NODE", "PID");
         for p in &procs {
-            let status = if p.alive { "running" } else { "dead" };
+            let status = match (p.alive, p.exit_code) {
+                (true, _) => "running".to_string(),
+                (false, Some(rc)) => format!("exited ({rc})"),
+                (false, None) => "dead".to_string(),
+            };
             println!("{:<12} {:<8} {}", p.node, p.pid, status);
         }
     }

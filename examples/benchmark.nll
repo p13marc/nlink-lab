@@ -4,7 +4,8 @@
 # Assertions use `above`/`below` operators for metric comparison.
 #
 # After deploying:
-#   sudo nlink-lab benchmark run perf-test
+#   (library only: `nlink_lab::benchmark::run_benchmark`; there is no
+#   `nlink-lab benchmark` subcommand yet)
 
 lab "perf-test"
 

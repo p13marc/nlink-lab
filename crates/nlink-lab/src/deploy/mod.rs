@@ -443,6 +443,104 @@ pub async fn restore(
     Ok(report)
 }
 
+/// Re-create every link of `node` after its container was restarted.
+///
+/// `docker restart` gives the container a new network namespace: every
+/// veth end that had been moved into it is gone, and a veth pair dies with
+/// either end, so the peer's end is gone too. Planning the topology
+/// *without* this node's links as "current" and the real topology as
+/// "desired" yields exactly the ops a fresh deploy would have run for them
+/// — veths, addresses, up, routes, netem — on both ends, through the same
+/// journaled executor `apply` uses. Endpoints on those links lose their
+/// runtime partition (the qdisc died with the veth); a live impairment set
+/// with `impair` is re-installed.
+///
+/// Bridge-network ports (`network { members [...] }`) are not re-attached
+/// yet; callers refuse such nodes up front.
+pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<ApplyReport> {
+    let mut desired = running.topology().clone();
+    desired.validate().bail()?;
+    let _lock = state::lock(running.name())?;
+    let touches = |ep: &String| ep.split(':').next() == Some(node);
+    let lost: std::collections::BTreeSet<String> = desired
+        .links
+        .iter()
+        .filter(|l| l.endpoints.iter().any(touches))
+        .flat_map(|l| l.endpoints.iter().cloned())
+        .collect();
+    let mut current = desired.clone();
+    current.links.retain(|l| !l.endpoints.iter().any(touches));
+    for ep in &lost {
+        current.impairments.remove(ep);
+        // What `impair` installed at runtime is what comes back.
+        if let Some(live) = running.live_impairments().get(ep) {
+            desired.impairments.insert(ep.clone(), live.clone());
+        }
+    }
+    let inputs = PlanInputs::for_deploy(&desired)?;
+    let cur_plan = plan::plan(&current, &inputs)?;
+    let des_plan = plan::plan(&desired, &inputs)?;
+    let diff = Plan::diff(&cur_plan, &des_plan);
+    let report = ApplyReport {
+        ops: diff.ops.len(),
+        removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
+        applied: diff.ops.iter().map(|o| o.describe()).collect(),
+    };
+    tracing::info!(
+        "reattach '{node}': {} link end(s), {} op(s)",
+        lost.len(),
+        report.ops
+    );
+    let mut env = apply::ApplyEnv::from_running(running, &desired)?;
+    let mut journal = Journal::new(running.name());
+    if let Err(e) = apply::execute(&diff, &mut env, &mut journal).await {
+        tracing::warn!("reattach '{node}' failed: {e}; rolling back");
+        journal.unwind().await;
+        return Err(e);
+    }
+    journal.discard();
+    running.retain_partitions(|ep| !lost.contains(ep));
+    running.absorb_apply(
+        env.namespace_names,
+        env.containers,
+        env.pids,
+        env.starttimes,
+        env.exec_pids,
+        env.process_logs,
+        env.mgmt_peers,
+        env.dns_injected,
+        env.wifi_loaded,
+    );
+    // The lab lock is held: write state.json directly, as `apply` does
+    // (`save_state` would take the lock again and block on itself).
+    let mut lab_state = match state::load(running.name()) {
+        Ok((existing, _)) => existing,
+        Err(_) => LabState::new(running.name().to_string(), now_iso8601()),
+    };
+    lab_state.schema_version = state::SCHEMA_VERSION;
+    lab_state.namespaces = running.namespace_names().clone();
+    lab_state.pids = running.pids().to_vec();
+    lab_state.starttimes = running.starttimes().clone();
+    lab_state.exec_pids = running.exec_pids().clone();
+    lab_state.mgmt_peers = running.mgmt_peers().clone();
+    lab_state.containers = running.containers().clone();
+    lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
+    lab_state.dns_injected = running.dns_injected();
+    lab_state.wifi_loaded = running.wifi_loaded();
+    lab_state.process_logs = running.process_logs_map().clone();
+    lab_state.saved_impairments = running.saved_impairments_map().clone();
+    lab_state.live_impairments = running.live_impairments().clone();
+    state::save(&lab_state, running.topology())?;
+    crate::events::record(
+        running.name(),
+        crate::events::LifecycleKind::Applied {
+            ops: report.ops,
+            removed: report.removed,
+        },
+    );
+    Ok(report)
+}
+
 /// Superseded by [`apply`]; the `TopologyDiff` argument is ignored —
 /// the kernel-level diff is computed from the plans.
 #[deprecated(since = "0.9.0", note = "use `nlink_lab::apply(running, desired)`")]

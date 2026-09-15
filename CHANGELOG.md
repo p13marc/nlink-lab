@@ -4,6 +4,86 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-15
+
+The release a zenoh resilience lab asked for. Every item below was hit while
+building that lab on 0.10.2 (robots ↔ WAN ↔ central, all container nodes),
+worked around there first, and then fixed here with the lab as the consumer
+that validates it.
+
+### Added — the fault knobs a resilience lab asked for
+
+Both come from building a zenoh fault lab (robots ↔ WAN ↔ central, all
+container nodes) on 0.10.2; each was worked around there first and the lab
+is the consumer that validates the fix.
+
+- `impair` now exposes every netem property `Impairment` has: `--corrupt`,
+  `--reorder`, `--duplicate`, `--delay-correlation`, `--loss-correlation`,
+  `--limit` join `--delay --jitter --loss --rate` in the symmetric form.
+  Until now the last six were reachable at runtime only through
+  `edit --set-impair`; bursty loss (`--loss 2% --loss-correlation 25%`) is
+  what a cellular uplink looks like and it belongs on the one-shot command.
+  The directional `--out-*`/`--in-*` set is unchanged.
+- `kill --signal <NAME>` (`-s`) sends exactly one signal — `TERM`, `KILL`,
+  `STOP`, `CONT`, `HUP`, `INT`, `USR1`, `USR2`, with or without the `SIG`
+  prefix — instead of the TERM-then-KILL sequence, under the same PID-reuse
+  guard. `STOP`/`CONT` freeze and thaw a tracked process in place: the
+  kernel keeps ACKing its TCP sockets while the application is dead, which is
+  the "zombie peer" a protocol's liveness detection has to catch. Library:
+  `RunningLab::signal_process(pid, Signal)`, `parse_signal`. A new lifecycle
+  event `signalled { node, pid, signal }` is recorded (`events --kind
+  signalled`); `killed` is unchanged.
+- **Spawned processes now have an exit code.** `spawn` double-forks so the
+  process outlives the caller, which also meant nobody was ever its parent
+  and `ProcessExited.exit_code` was always `null`. The intermediate child
+  now stays behind as a reaper: it drops every fd of the caller's (so a
+  `spawn --json | jq` pipeline is not held open), waits for the process, and
+  writes `<log_dir>/<node>-<cmd>-<pid>.rc` -- the exit code, or `128 + signo`.
+  `ps` prints `exited (rc)`, `ps --json` carries `exit_code`, and the runtime
+  `ProcessExited` event falls back to the file when `waitpid` cannot reap.
+  The reaper is a zombie of the caller's only while the caller lives.
+- `spawn` works on container nodes: the process is `<runtime> exec <id>
+  <cmd>` run on the host with its output in the lab's log dir, exactly like a
+  deploy-time `run ... background` (#112) -- it used to fail with "node not
+  found". `--workdir` and `--env` map to `exec -w` / `-e`. The tracked pid is
+  the runtime client's, so `kill --signal STOP` freezes the client, not the
+  process inside the container; freeze those with `exec <node> -- kill -STOP`.
+- `edit --set-mtu NODE:IFACE=MTU` sets the MTU of both ends of a link live
+  and records it in the topology, so `verify` stays clean and a later
+  `apply` does not fight it. Until now an MTU was only applied when the veth
+  was created. Library: `RunningLab::set_link_mtu`.
+- `restart` works on container nodes **with links**. `docker restart`
+  gives the container a fresh network namespace and takes every veth end in
+  it -- and each peer end -- with it; `restart` now re-creates the node's
+  point-to-point links with the same journaled executor `apply` uses
+  (`nlink_lab::reattach_node`: the topology minus the node's links is
+  planned as "current", the real one as "desired", the diff is applied on
+  both ends, runtime partitions on those endpoints are forgotten and live
+  impairments re-installed). Bridge-network members are still refused with
+  a clear message (issue #31).
+
+### Fixed — container nodes in the read-side commands
+
+- `impair --show` (and `--show --json`) covers container nodes: the host's
+  `tc` runs inside the container's network namespace
+  (`ns_exec::spawn_output_path`), so the image needs no iproute2. They used
+  to be skipped as if they had no interfaces.
+- The per-process TCP socket metrics (`top`, `metrics`, `daemon --http`)
+  cover container nodes: sockdiag is opened by the container's init pid
+  (`namespace::connection_for_pid`) instead of by namespace name only.
+
+### Fixed — documentation that described behaviour the code does not have
+
+- A failing `scenario` step does **not** abort the scenario; the remaining
+  steps run and the exit code is 2 (`docs/cookbook/p2p-partition.md`,
+  `USER_GUIDE.md`).
+- `nlink-lab test` does **not** run scenarios; the CI recipe is
+  `deploy --strict` → `scenario` → `destroy` (`USER_GUIDE.md`).
+- The `#[lab_test]` snippets called a `RunningLab::run_scenario()` that does
+  not exist; the entry point is `nlink_lab::scenario::run_scenario`.
+- `examples/benchmark.nll` advertised a `benchmark` subcommand; the runner is
+  library-only.
+
 ## [0.10.2] - 2026-09-14
 
 One fix: a `vxlan` block with no `vni` rendered to un-parseable `vni 0` (#118).

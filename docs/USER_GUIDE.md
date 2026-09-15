@@ -391,7 +391,8 @@ The scenario runner emits a timeline:
 scenario "wan-flap" PASSED in 15.022s
 ```
 
-If any `validate` fails, the scenario aborts and exits non-zero.
+If any `validate` fails, that step is marked failed, the scenario
+still runs to its last step, and the command exits 2.
 This is the difference between a real test and a bash script
 that calls `iptables` and prays — declarative, validated,
 reproducible.
@@ -403,9 +404,8 @@ For deeper exploration see the
 
 ## Step 7 — Run as a CI gate (5 minutes)
 
-For CI, the all-in-one verb is `nlink-lab test`. It deploys,
-runs the validate block + scenarios, then destroys, in one
-shot:
+For CI, `nlink-lab test` deploys, runs the `validate` block, and
+destroys, in one shot -- it does **not** run scenarios:
 
 ```bash
 sudo nlink-lab test wan.nll
@@ -413,12 +413,21 @@ sudo nlink-lab test wan.nll
 
 ```text
 PASS  wan.nll
-  topology: 4 nodes, 3 links, 1 scenario
+  topology: 4 nodes, 3 links
   deploy:   0.3s
   validate: 4 assertions ✓
-  scenario "wan-flap": PASSED (15.0s)
   destroy:  0.2s
 TOTAL: 1 passed, 0 failed
+```
+
+A scenario is a separate step with its own exit code (2 on any failed
+step), so a CI gate that wants both is:
+
+```bash
+sudo nlink-lab deploy wan.nll --strict
+sudo nlink-lab scenario wan wan-flap; rc=$?
+sudo nlink-lab destroy wan
+exit $rc
 ```
 
 JUnit XML for CI dashboards:
@@ -436,8 +445,9 @@ use nlink_lab::RunningLab;
 
 #[lab_test("wan.nll", capture = true, timeout = 30)]
 async fn wan_recovers_from_partition(lab: RunningLab) {
-    let result = lab.run_scenario("wan-flap").await.unwrap();
-    assert!(result.passed());
+    let scenario = lab.topology().scenarios.iter().find(|s| s.name == "wan-flap").unwrap();
+    let result = nlink_lab::scenario::run_scenario(&lab, scenario).await.unwrap();
+    assert!(result.passed);
 }
 ```
 

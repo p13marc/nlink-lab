@@ -109,8 +109,9 @@ Five action kinds appear here:
   interface (deletes the root qdisc).
 - **`validate { ... }`** — run a block of reach / no-reach /
   tcp-connect / latency-under / route-has / dns-resolves
-  assertions. Failures abort the scenario and the lab reports
-  non-zero exit.
+  assertions. A failed assertion marks that step -- and the
+  scenario -- as failed; the remaining steps still run (a soak
+  wants the whole timeline), and the exit code is 2.
 - **`exec NODE "cmd" "arg" ...`** — run a one-shot command in
   a node. Useful for capturing observed behavior into the lab's
   test output.
@@ -159,15 +160,18 @@ The exec output shows alice's RTT before the impair clear (~30ms)
 and after (~0.4ms). The numbers tell the story: WAN impair was
 real, and the scenario engine cleanly removed it.
 
-If any `validate` step fails, the scenario aborts immediately:
+If a `validate` step fails, the step is reported as failed and the
+scenario keeps running to its last step -- the timeline is the point;
+a partial run would hide what happened after the failure:
 
 ```text
 [6.001s] validate: no-reach bob alice ✗ — alice IS reachable from bob
-
-scenario "partition-and-heal" FAILED at step at=6s
+...
+scenario "partition-and-heal" FAILED (step at=6s)
 ```
 
-The exit code reflects success/failure for CI consumption.
+The exit code is 2 whenever any step failed (`--json` carries every
+step's `ok`), for CI consumption.
 
 ## Tear down
 
@@ -236,9 +240,15 @@ use nlink_lab::RunningLab;
 
 #[lab_test("examples/cookbook/p2p-partition.nll", timeout = 30)]
 async fn partition_recovery_works(lab: RunningLab) {
-    let result = lab.run_scenario("partition-and-heal").await.unwrap();
-    assert!(result.passed());
-    assert!(result.duration().as_secs() < 20);
+    let scenario = lab
+        .topology()
+        .scenarios
+        .iter()
+        .find(|s| s.name == "partition-and-heal")
+        .unwrap();
+    let result = nlink_lab::scenario::run_scenario(&lab, scenario).await.unwrap();
+    assert!(result.passed);
+    assert!(result.duration_ms < 20_000);
 }
 ```
 

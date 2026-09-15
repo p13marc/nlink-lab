@@ -100,7 +100,7 @@ pub use builder::Lab;
 pub use deploy::apply_diff;
 pub use deploy::{
     ApplyOptions, ApplyReport, NsRef, Op, Plan, Stage, apply, apply_plan, apply_with,
-    compute_layered_diff, plan_for, restore,
+    compute_layered_diff, plan_for, reattach_node, restore,
 };
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
@@ -108,7 +108,8 @@ pub use events::{LifecycleEvent, LifecycleKind};
 pub use lint::{LINT_RULE_IDS, LintFinding, lint};
 pub use proc_stat::ProcStat;
 pub use running::{
-    ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, SpawnOpts,
+    ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, Signal, SpawnOpts,
+    parse_signal,
 };
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,

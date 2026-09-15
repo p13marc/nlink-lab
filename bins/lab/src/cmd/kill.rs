@@ -10,13 +10,43 @@ pub struct Args {
 
     /// Process ID to kill.
     pub pid: u32,
+
+    /// Send this signal instead of the TERM-then-KILL sequence: TERM, KILL,
+    /// STOP, CONT, HUP, INT, USR1, USR2 (with or without the SIG prefix).
+    /// STOP/CONT freeze and thaw a process in place -- a "TCP answers,
+    /// application is dead" peer for resilience tests.
+    #[arg(long, short = 's')]
+    pub signal: Option<String>,
 }
 
-pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { lab, pid } = args;
+pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+    let Args { lab, pid, signal } = args;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
-    running.kill_process(pid)?;
-    println!("Killed process {pid}");
+    match signal {
+        None => {
+            running.kill_process(pid)?;
+            if ctx.json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "lab": lab, "pid": pid, "action": "killed" })
+                );
+            } else {
+                println!("Killed process {pid}");
+            }
+        }
+        Some(name) => {
+            let signal = nlink_lab::parse_signal(&name)?;
+            running.signal_process(pid, signal)?;
+            if ctx.json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "lab": lab, "pid": pid, "action": "signalled", "signal": signal.name() })
+                );
+            } else {
+                println!("Sent SIG{} to process {pid}", signal.name());
+            }
+        }
+    }
     Ok(())
 }

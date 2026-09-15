@@ -282,6 +282,35 @@
           ]
         },
         {
+          "description": "`kill --signal`: one signal, no escalation (STOP/CONT freeze and thaw).",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "signalled"
+            },
+            "node": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pid": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "signal": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "pid",
+            "signal"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "endpoint": {

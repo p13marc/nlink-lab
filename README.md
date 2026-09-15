@@ -123,16 +123,19 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and Rust API stable across patch releases;
 breaking changes flagged in CHANGELOG with migration notes. Built
 on [`nlink`](https://github.com/p13marc/nlink) 0.27 as of
-nlink-lab 0.10.2.
+nlink-lab 0.11.0.
 
-Current release: **0.10.2** (2026-09-14) — a `vxlan` block with no
+Current release: **0.11.0** (2026-09-15) — the fault toolbox a resilience
+lab asked for: `impair` with all ten netem knobs, `kill --signal` (STOP/CONT
+freeze a process in place), exit codes for spawned processes, `spawn` on
+container nodes, `edit --set-mtu`, `restart` that re-attaches a container
+node's links, and `impair --show` / socket metrics that cover container
+nodes. Four doc passages that described behaviour the code does not have
+are corrected.
+
+Previous release: **0.10.2** (2026-09-14) — a `vxlan` block with no
 `vni` no longer renders to un-parseable `vni 0`, and the validator names
 it accurately (#118).
-
-Previous release: **0.10.1** (2026-09-14) — fixes NLL interpolation
-inventing a closing brace for an unterminated `${` and normalising
-whitespace inside `${ ... }`, which made `parse -> render -> parse`
-lose or duplicate entries (#116).
 
 Previous release: **0.10.0** (2026-09-14) — four silent-no-op fixes:
 container nodes now honour `config` / `overlay` / `env-file` / `exec`

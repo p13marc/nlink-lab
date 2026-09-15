@@ -6,6 +6,7 @@ use std::time::Instant;
 use nlink::netlink::{Connection, SockDiag, namespace};
 use nlink::sockdiag::{SocketFilter, SocketOwnerMap, SocketRateTracker};
 use nlink_lab::RunningLab;
+use nlink_lab::deploy::NsRef;
 use nlink_lab_shared::WIRE_VERSION;
 use nlink_lab_shared::messages::{LabEvent, LabEventKind};
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics, SocketRateMetric};
@@ -43,10 +44,17 @@ impl MetricsCollector {
     async fn collect_sockets(
         &mut self,
         node: &str,
-        ns_name: &str,
+        ns: &NsRef,
         owners: &SocketOwnerMap,
     ) -> Vec<SocketRateMetric> {
-        let conn: Connection<SockDiag> = match namespace::connection_for(ns_name) {
+        // A bare namespace by name, a container by its init pid: both are
+        // a network namespace sockdiag can be opened in.
+        let conn: Result<Connection<SockDiag>, _> = match ns {
+            NsRef::Named { name } => namespace::connection_for(name),
+            NsRef::Container { pid, .. } => namespace::connection_for_pid(*pid),
+            NsRef::Root => namespace::connection_for_path("/proc/self/ns/net"),
+        };
+        let conn = match conn {
             Ok(c) => c,
             Err(e) => {
                 tracing::debug!("sockdiag connection for '{node}' failed: {e}");
@@ -111,7 +119,7 @@ impl MetricsCollector {
         let mut events = Vec::new();
         if let Some(prev) = &self.alive_pids {
             for proc_info in status.iter().filter(|p| !p.alive && prev.contains(&p.pid)) {
-                let exit_code = reap_exit_code(proc_info.pid);
+                let exit_code = reap_exit_code(proc_info.pid).or(proc_info.exit_code);
                 tracing::info!(
                     node = proc_info.node,
                     pid = proc_info.pid,
@@ -194,14 +202,10 @@ impl MetricsCollector {
 
             let issues: Vec<String> = diag.issues.iter().map(|i| i.to_string()).collect();
 
-            // Per-process TCP goodput for bare-namespace nodes; container
-            // nodes (no entry in the namespace map) are skipped.
-            let sockets = match lab.namespace_name_of(&diag.node) {
-                Some(ns_name) => {
-                    let ns_name = ns_name.to_string();
-                    self.collect_sockets(&diag.node, &ns_name, &socket_owners)
-                        .await
-                }
+            // Per-process TCP goodput, for bare-namespace and container
+            // nodes alike (a container's namespace is its init pid's).
+            let sockets = match lab.ns_resolver_of(&diag.node) {
+                Some(ns) => self.collect_sockets(&diag.node, &ns, &socket_owners).await,
                 None => Vec::new(),
             };
 

@@ -40,6 +40,9 @@ Options:
       --clear-qdisc <NODE:IFACE>
           Remove the qdisc block of an endpoint (repeatable)
 
+      --set-mtu <NODE:IFACE=MTU>
+          Set the MTU of a link, live, on both ends (`a:eth0=1280`).  The topology's declaration is updated so `verify` stays clean
+
       --dry-run
           Show the resulting plan without applying it
 

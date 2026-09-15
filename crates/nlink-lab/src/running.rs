@@ -141,6 +141,12 @@ pub struct ProcessInfo {
     /// Path to stdout log file (if captured).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stdout_log: Option<String>,
+    /// Exit code once the process has exited, read from the `.rc` file the
+    /// spawn reaper writes next to the logs (`128 + signo` for a signal
+    /// death). `None` while alive, or for processes spawned by a release
+    /// without the reaper.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
     /// Path to stderr log file (if captured).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stderr_log: Option<String>,
@@ -823,7 +829,17 @@ impl RunningLab {
         if cmd.is_empty() {
             return Err(Error::invalid_topology("empty command"));
         }
-        let ns_name = self.namespace_for(node)?.to_string();
+        // A container node: the process is `<runtime> exec <id> <cmd>` run on
+        // the host, exactly as a deploy-time `run ... background` does (#112),
+        // so its output lands in the lab's log dir like any other process.
+        // The tracked pid is the runtime client's; its exit code is the
+        // command's.
+        let container = self.containers.get(node).map(|c| c.id.clone());
+        let ns_name = if container.is_some() {
+            String::new()
+        } else {
+            self.namespace_for(node)?.to_string()
+        };
 
         let log_dir = opts
             .log_dir
@@ -842,19 +858,49 @@ impl RunningLab {
         let stdout_file = std::fs::File::create(&stdout_path)?;
         let stderr_file = std::fs::File::create(&stderr_path)?;
 
-        let mut command = std::process::Command::new(cmd[0]);
-        command.args(&cmd[1..]);
+        let mut command = if let Some(id) = &container {
+            let rt = self
+                .runtime_binary
+                .clone()
+                .unwrap_or_else(|| "docker".to_string());
+            let mut c = std::process::Command::new(rt);
+            c.arg("exec");
+            if let Some(wd) = opts.workdir {
+                c.arg("-w").arg(wd);
+            }
+            for (k, v) in opts.env {
+                c.arg("-e").arg(format!("{k}={v}"));
+            }
+            c.arg(id);
+            c.args(cmd);
+            c
+        } else {
+            let mut c = std::process::Command::new(cmd[0]);
+            c.args(&cmd[1..]);
+            if let Some(wd) = opts.workdir {
+                c.current_dir(wd);
+            }
+            for (k, v) in opts.env {
+                c.env(k, v);
+            }
+            c
+        };
         command.stdout(stdout_file);
         command.stderr(stderr_file);
-        if let Some(wd) = opts.workdir {
-            command.current_dir(wd);
-        }
-        for (k, v) in opts.env {
-            command.env(k, v);
-        }
 
-        let pid = crate::ns_exec::spawn_detached(&ns_name, command)
-            .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
+        // The reaper writes `<log_dir>/<node>-<basename>-<pid>.rc` when the
+        // process exits: the only source of a detached process's exit code.
+        let rc_prefix = log_dir.join(format!("{node}-{cmd_basename}-"));
+        let pid = if container.is_some() {
+            crate::ns_exec::spawn_detached_path_reaped(
+                std::path::Path::new("/proc/self/ns/net"),
+                command,
+                &rc_prefix,
+            )
+        } else {
+            crate::ns_exec::spawn_detached_reaped(&ns_name, command, &rc_prefix)
+        }
+        .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
         self.track_pid(node, pid);
         self.attach_cgroup(node, pid);
         self.process_logs.insert(
@@ -1268,6 +1314,42 @@ impl RunningLab {
         )))
     }
 
+    /// Set the MTU of both ends of the link `endpoint` belongs to, live,
+    /// and record it in the topology so `verify` and a later `apply` agree.
+    ///
+    /// nlink-lab otherwise only sets an MTU when it creates a veth; this is
+    /// the runtime path (`edit --set-mtu`) a path-MTU fault needs.
+    pub async fn set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> Result<()> {
+        use nlink::netlink::namespace;
+        let peer = self.peer_endpoint(endpoint)?;
+        for ep in [endpoint.to_string(), peer] {
+            let r = EndpointRef::parse(&ep).ok_or_else(|| Error::InvalidEndpoint {
+                endpoint: ep.clone(),
+            })?;
+            let ns = self
+                .ns_resolver_of(&r.node)
+                .ok_or_else(|| Error::NodeNotFound {
+                    name: r.node.clone(),
+                })?;
+            let conn: nlink::Connection<nlink::Route> = match &ns {
+                crate::deploy::NsRef::Named { name } => namespace::connection_for(name),
+                crate::deploy::NsRef::Container { pid, .. } => namespace::connection_for_pid(*pid),
+                crate::deploy::NsRef::Root => namespace::connection_for_path("/proc/self/ns/net"),
+            }
+            .map_err(|e| Error::deploy_failed(format!("netlink in '{}': {e}", r.node)))?;
+            conn.set_link_mtu(r.iface.as_str(), mtu)
+                .await
+                .map_err(|e| Error::deploy_failed(format!("set mtu {mtu} on {ep}: {e}")))?;
+        }
+        let needle = endpoint.to_string();
+        for link in &mut self.topology.links {
+            if link.endpoints.contains(&needle) {
+                link.mtu = Some(mtu);
+            }
+        }
+        self.save_state()
+    }
+
     /// Modify the netem impairment on an interface at runtime.
     ///
     /// The value is recorded in the lab state (`live_impairments`) so a
@@ -1523,6 +1605,46 @@ impl RunningLab {
         }
     }
 
+    /// Send one signal to a tracked process, with the same PID-reuse guard
+    /// as [`RunningLab::kill_process`] and no TERM/KILL escalation.
+    ///
+    /// `STOP`/`CONT` are the point: a frozen process keeps its sockets, the
+    /// kernel keeps ACKing, and only the application protocol can tell it
+    /// is dead -- the "zombie peer" every resilience lab needs.
+    pub fn signal_process(&self, pid: u32, signal: Signal) -> Result<()> {
+        let node = self
+            .pids
+            .iter()
+            .find(|(_, p)| *p == pid)
+            .map(|(n, _)| n.clone());
+        if node.is_none() {
+            return Err(Error::deploy_failed(format!(
+                "pid {pid} is not tracked by lab '{}'",
+                self.topology.lab.name
+            )));
+        }
+        match signal_tracked(pid, self.starttimes.get(&pid).copied(), signal) {
+            KillOutcome::Signalled | KillOutcome::Gone => {
+                crate::events::record(
+                    &self.topology.lab.name,
+                    crate::events::LifecycleKind::Signalled {
+                        node,
+                        pid,
+                        signal: signal.name().to_string(),
+                    },
+                );
+                Ok(())
+            }
+            KillOutcome::Unverified => Err(Error::deploy_failed(format!(
+                "refusing to signal pid {pid}: its start time was not recorded (state file \
+                 written by an older release) so it cannot be proven to still be the lab's process"
+            ))),
+            KillOutcome::Reused => Err(Error::deploy_failed(format!(
+                "refusing to signal pid {pid}: it now belongs to a different process"
+            ))),
+        }
+    }
+
     /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
     pub async fn destroy(self) -> Result<()> {
         // Acquire exclusive lock
@@ -1709,6 +1831,11 @@ impl RunningLab {
                     alive,
                     stdout_log: logs.map(|(s, _)| s.clone()),
                     stderr_log: logs.map(|(_, s)| s.clone()),
+                    exit_code: if alive {
+                        None
+                    } else {
+                        logs.and_then(|(s, _)| read_exit_code(s))
+                    },
                 }
             })
             .collect()
@@ -1980,6 +2107,97 @@ pub(crate) fn kill_tracked(pid: u32, expected_starttime: Option<u64>) -> KillOut
     KillOutcome::Signalled
 }
 
+/// The exit code the spawn reaper recorded for a process whose stdout log
+/// is `stdout_log` (`<...>.stdout` -> `<...>.rc`).
+pub(crate) fn read_exit_code(stdout_log: &str) -> Option<i32> {
+    let rc = stdout_log.strip_suffix(".stdout")?.to_string() + ".rc";
+    std::fs::read_to_string(rc).ok()?.trim().parse().ok()
+}
+
+/// A signal `nlink-lab kill --signal` may send.  Deliberately a closed set:
+/// the lab tracks processes it started, and these are the ones a fault
+/// scenario needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    Term,
+    Kill,
+    Stop,
+    Cont,
+    Hup,
+    Int,
+    Usr1,
+    Usr2,
+}
+
+impl Signal {
+    pub fn name(self) -> &'static str {
+        match self {
+            Signal::Term => "TERM",
+            Signal::Kill => "KILL",
+            Signal::Stop => "STOP",
+            Signal::Cont => "CONT",
+            Signal::Hup => "HUP",
+            Signal::Int => "INT",
+            Signal::Usr1 => "USR1",
+            Signal::Usr2 => "USR2",
+        }
+    }
+
+    fn number(self) -> libc::c_int {
+        match self {
+            Signal::Term => libc::SIGTERM,
+            Signal::Kill => libc::SIGKILL,
+            Signal::Stop => libc::SIGSTOP,
+            Signal::Cont => libc::SIGCONT,
+            Signal::Hup => libc::SIGHUP,
+            Signal::Int => libc::SIGINT,
+            Signal::Usr1 => libc::SIGUSR1,
+            Signal::Usr2 => libc::SIGUSR2,
+        }
+    }
+}
+
+/// Parse `TERM`, `sigterm`, `SIGSTOP`, ... into a [`Signal`].
+pub fn parse_signal(name: &str) -> Result<Signal> {
+    let upper = name.trim().to_ascii_uppercase();
+    let bare = upper.strip_prefix("SIG").unwrap_or(&upper);
+    Ok(match bare {
+        "TERM" => Signal::Term,
+        "KILL" => Signal::Kill,
+        "STOP" => Signal::Stop,
+        "CONT" => Signal::Cont,
+        "HUP" => Signal::Hup,
+        "INT" => Signal::Int,
+        "USR1" => Signal::Usr1,
+        "USR2" => Signal::Usr2,
+        _ => {
+            return Err(Error::invalid_topology(format!(
+                "unknown signal {name:?} (TERM, KILL, STOP, CONT, HUP, INT, USR1, USR2)"
+            )));
+        }
+    })
+}
+
+/// [`kill_tracked`] without the escalation: one signal, same guards.
+pub(crate) fn signal_tracked(
+    pid: u32,
+    expected_starttime: Option<u64>,
+    signal: Signal,
+) -> KillOutcome {
+    let Some(current) = host_starttime(pid) else {
+        return KillOutcome::Gone;
+    };
+    match expected_starttime {
+        None => return KillOutcome::Unverified,
+        Some(expected) if expected != current => return KillOutcome::Reused,
+        Some(_) => {}
+    }
+    unsafe {
+        libc::kill(pid as i32, signal.number());
+    }
+    KillOutcome::Signalled
+}
+
 /// Check whether a process is alive **and not a zombie**.
 ///
 /// `kill(pid, 0)` alone is insufficient: a zombie (a process that has
@@ -2164,6 +2382,33 @@ mod pid_identity_tests {
     fn host_starttime_of_missing_pid_is_none() {
         // PID_MAX is 4194304 on 64-bit; nothing lives above it.
         assert_eq!(host_starttime(4_194_305), None);
+    }
+
+    #[test]
+    fn parse_signal_accepts_bare_and_prefixed_names() {
+        assert_eq!(parse_signal("STOP").unwrap(), Signal::Stop);
+        assert_eq!(parse_signal("sigcont").unwrap(), Signal::Cont);
+        assert_eq!(parse_signal(" SIGKILL ").unwrap(), Signal::Kill);
+        assert!(parse_signal("SEGV").is_err(), "not in the closed set");
+        assert!(parse_signal("9").is_err(), "numbers are not accepted");
+    }
+
+    #[test]
+    fn signal_tracked_never_signals_unverified_or_reused() {
+        let me = std::process::id();
+        let real = host_starttime(me).unwrap();
+        assert_eq!(
+            signal_tracked(me, None, Signal::Stop),
+            KillOutcome::Unverified
+        );
+        assert_eq!(
+            signal_tracked(me, Some(real + 1), Signal::Stop),
+            KillOutcome::Reused
+        );
+        assert_eq!(
+            signal_tracked(4_194_305, Some(1), Signal::Stop),
+            KillOutcome::Gone
+        );
     }
 
     #[test]

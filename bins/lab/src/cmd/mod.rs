@@ -94,7 +94,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Logs(args) => logs::run(ctx, args),
         Commands::Pull(args) => pull::run(ctx, args),
         Commands::Stats(args) => stats::run(ctx, args),
-        Commands::Restart(args) => restart::run(ctx, args),
+        Commands::Restart(args) => restart::run(ctx, args).await,
         Commands::Snapshot(args) => snapshot::run(ctx, args),
         Commands::Restore(args) => restore::run(ctx, args).await,
         Commands::Completions { .. } => {

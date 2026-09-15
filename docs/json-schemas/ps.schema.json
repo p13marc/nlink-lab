@@ -14,6 +14,14 @@
           "description": "Whether the process is still alive (`kill(pid, 0)` returns 0).\n\nStays `false` after the process exits — the entry is kept for\npost-mortem inspection (log paths, exit ordering). See the\ntype-level retention note above.",
           "type": "boolean"
         },
+        "exit_code": {
+          "description": "Exit code once the process has exited, read from the `.rc` file the\nspawn reaper writes next to the logs (`128 + signo` for a signal\ndeath). `None` while alive, or for processes spawned by a release\nwithout the reaper.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
         "host_pid": {
           "description": "Explicit alias for `pid`. Equal today because nlink-lab does not\nuse `CLONE_NEWPID` (host_pid == ns_pid for every spawned\nprocess). The field exists so consumers that explicitly want\n\"the host PID\" can name it; if a future nlink-lab adds\n`CLONE_NEWPID`, an `ns_pid` field will join `host_pid` and\n`pid` will follow `host_pid`. See `docs/ARCHITECTURE.md`\n\"Process & namespace model\".",
           "type": "integer",

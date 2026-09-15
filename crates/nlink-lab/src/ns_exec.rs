@@ -88,9 +88,162 @@ pub fn spawn_detached(ns_name: &str, cmd: std::process::Command) -> NlResult<u32
     let ns_fd = namespace::open(ns_name)?;
     note_overlay_support(ns_name, &ns_fd);
     let enter = Enter::new(ns_name, ns_fd.as_raw_fd(), false)?;
-    let pid = spawn_detached_with(cmd, enter)?;
+    let pid = spawn_detached_with(cmd, enter, None)?;
     drop(ns_fd);
     Ok(pid)
+}
+
+/// [`spawn_detached`] whose intermediate child stays behind as the real
+/// process's parent, waits for it, and records its exit status in
+/// `<rc_prefix><pid>.rc` -- one line, the exit code, or `128 + signo` for
+/// a signal death.  That file is the only place a detached process's exit
+/// status can come from: nothing else is ever its parent.
+///
+/// The reaper holds no fd of the caller's (stdio goes to `/dev/null`, every
+/// other fd is closed), so a caller in a pipeline is not kept open, and it
+/// is a zombie of the caller's for the caller's remaining lifetime only.
+pub fn spawn_detached_reaped(
+    ns_name: &str,
+    cmd: std::process::Command,
+    rc_prefix: &std::path::Path,
+) -> NlResult<u32> {
+    let ns_fd = namespace::open(ns_name)?;
+    note_overlay_support(ns_name, &ns_fd);
+    let enter = Enter::new(ns_name, ns_fd.as_raw_fd(), false)?;
+    let pid = spawn_detached_with(cmd, enter, Some(RcPath::new(rc_prefix)?))?;
+    drop(ns_fd);
+    Ok(pid)
+}
+
+/// Where the reaper writes the exit status: `<prefix><pid>.rc`, assembled
+/// after `fork` with nothing but stack writes (no allocation in the child).
+struct RcPath {
+    buf: [u8; RC_PATH_MAX],
+    len: usize,
+}
+
+const RC_PATH_MAX: usize = 4096;
+
+impl RcPath {
+    fn new(prefix: &std::path::Path) -> NlResult<Self> {
+        use std::os::unix::ffi::OsStrExt as _;
+        let bytes = prefix.as_os_str().as_bytes();
+        // room for the pid (10 digits), ".rc" and the NUL
+        if bytes.len() + 14 > RC_PATH_MAX {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "exit-status path prefix too long",
+            )
+            .into());
+        }
+        let mut buf = [0u8; RC_PATH_MAX];
+        buf[..bytes.len()].copy_from_slice(bytes);
+        Ok(Self {
+            buf,
+            len: bytes.len(),
+        })
+    }
+
+    /// Async-signal-safe: open/write/close only.
+    unsafe fn write(&mut self, pid: u32, code: i32) {
+        let mut n = self.len;
+        n += fmt_u32(&mut self.buf[n..], pid as u64);
+        self.buf[n..n + 3].copy_from_slice(b".rc");
+        n += 3;
+        self.buf[n] = 0;
+        let fd = unsafe {
+            libc::open(
+                self.buf.as_ptr().cast(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC | libc::O_CLOEXEC,
+                0o644,
+            )
+        };
+        if fd < 0 {
+            return;
+        }
+        let mut line = [0u8; 16];
+        let mut l = 0;
+        if code < 0 {
+            line[0] = b'-';
+            l = 1;
+        }
+        l += fmt_u32(&mut line[l..], code.unsigned_abs() as u64);
+        line[l] = b'\n';
+        l += 1;
+        let mut off = 0;
+        while off < l {
+            let w = unsafe { libc::write(fd, line[off..].as_ptr().cast(), l - off) };
+            if w <= 0 {
+                break;
+            }
+            off += w as usize;
+        }
+        unsafe { libc::close(fd) };
+    }
+}
+
+/// Decimal formatting without allocation; returns the digit count.
+fn fmt_u32(out: &mut [u8], mut v: u64) -> usize {
+    let mut tmp = [0u8; 20];
+    let mut i = 0;
+    loop {
+        tmp[i] = b'0' + (v % 10) as u8;
+        i += 1;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    for (k, d) in tmp[..i].iter().rev().enumerate() {
+        out[k] = *d;
+    }
+    i
+}
+
+/// Close every fd except `keep` (and stdio), then point stdio at
+/// `/dev/null`.  Async-signal-safe.
+unsafe fn detach_reaper(keep: libc::c_int) {
+    // close_range (Linux >= 5.9); the loop below is the fallback.
+    let r1 = unsafe { libc::syscall(libc::SYS_close_range, 3u32, (keep - 1) as u32, 0u32) };
+    let r2 = unsafe { libc::syscall(libc::SYS_close_range, (keep + 1) as u32, u32::MAX, 0u32) };
+    if r1 < 0 || r2 < 0 {
+        for fd in 3..4096 {
+            if fd != keep {
+                unsafe { libc::close(fd) };
+            }
+        }
+    }
+    let null = unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_RDWR) };
+    if null >= 0 {
+        for fd in 0..3 {
+            unsafe { libc::dup2(null, fd) };
+        }
+        if null > 2 {
+            unsafe { libc::close(null) };
+        }
+    }
+}
+
+/// Wait for `pid` and turn its status into a shell-style exit code.
+unsafe fn wait_exit_code(pid: libc::pid_t) -> i32 {
+    let mut status: libc::c_int = 0;
+    loop {
+        let r = unsafe { libc::waitpid(pid, &mut status, 0) };
+        if r == pid {
+            break;
+        }
+        if r < 0 && unsafe { *libc::__errno_location() } == libc::EINTR {
+            continue;
+        }
+        return -1;
+    }
+    if libc::WIFEXITED(status) {
+        libc::WEXITSTATUS(status)
+    } else if libc::WIFSIGNALED(status) {
+        128 + libc::WTERMSIG(status)
+    } else {
+        -1
+    }
 }
 
 /// [`spawn_detached`] for a namespace given by path (`/proc/<pid>/ns/net`
@@ -99,12 +252,29 @@ pub fn spawn_detached(ns_name: &str, cmd: std::process::Command) -> NlResult<u32
 pub fn spawn_detached_path(ns_path: &std::path::Path, cmd: std::process::Command) -> NlResult<u32> {
     let ns_fd = namespace::open_path(ns_path)?;
     let enter = Enter::bare(ns_fd.as_raw_fd());
-    let pid = spawn_detached_with(cmd, enter)?;
+    let pid = spawn_detached_with(cmd, enter, None)?;
     drop(ns_fd);
     Ok(pid)
 }
 
-fn spawn_detached_with(mut cmd: std::process::Command, enter: Enter) -> NlResult<u32> {
+/// [`spawn_detached_reaped`] for a namespace given by path.
+pub fn spawn_detached_path_reaped(
+    ns_path: &std::path::Path,
+    cmd: std::process::Command,
+    rc_prefix: &std::path::Path,
+) -> NlResult<u32> {
+    let ns_fd = namespace::open_path(ns_path)?;
+    let enter = Enter::bare(ns_fd.as_raw_fd());
+    let pid = spawn_detached_with(cmd, enter, Some(RcPath::new(rc_prefix)?))?;
+    drop(ns_fd);
+    Ok(pid)
+}
+
+fn spawn_detached_with(
+    mut cmd: std::process::Command,
+    enter: Enter,
+    rc: Option<RcPath>,
+) -> NlResult<u32> {
     use std::io::Read as _;
     use std::os::fd::FromRawFd as _;
 
@@ -115,10 +285,13 @@ fn spawn_detached_with(mut cmd: std::process::Command, enter: Enter) -> NlResult
     }
     // SAFETY: both fds were just returned by pipe2 and are owned here.
     let (mut rd, wr) = unsafe { (std::fs::File::from_raw_fd(fds[0]), fds[1]) };
+    let reaping = rc.is_some();
+    let mut rc = rc;
     // SAFETY: the closure runs in the forked child; it only calls
-    // async-signal-safe syscalls (setsid, fork, write, _exit) plus
-    // `Enter::run`, which has the same property. `wr` is inherited by
-    // the fork; the parent closes its own copy right after spawn.
+    // async-signal-safe syscalls (setsid, fork, write, waitpid, open,
+    // close, dup2, _exit) plus `Enter::run`, which has the same property.
+    // `wr` is inherited by the fork; the parent closes its own copy right
+    // after spawn.
     unsafe {
         cmd.pre_exec(move || {
             libc::setsid();
@@ -130,7 +303,13 @@ fn spawn_detached_with(mut cmd: std::process::Command, enter: Enter) -> NlResult
                 // The real process: enter the namespace, then std execs.
                 return enter.run();
             }
-            // Intermediate: hand the pid to the parent and vanish.
+            if rc.is_some() {
+                // The reaper: drop every fd of the caller's -- including
+                // std's exec-status pipe, so the caller's `spawn()` returns
+                // now -- and keep only the pid pipe.
+                detach_reaper(wr);
+            }
+            // Intermediate: hand the pid to the parent.
             let bytes = (pid as u32).to_ne_bytes();
             let mut off = 0usize;
             while off < bytes.len() {
@@ -143,6 +322,11 @@ fn spawn_detached_with(mut cmd: std::process::Command, enter: Enter) -> NlResult
                 }
                 off += n as usize;
             }
+            libc::close(wr);
+            if let Some(rc) = rc.as_mut() {
+                let code = wait_exit_code(pid);
+                rc.write(pid as u32, code);
+            }
             libc::_exit(0);
         });
     }
@@ -150,8 +334,10 @@ fn spawn_detached_with(mut cmd: std::process::Command, enter: Enter) -> NlResult
     // SAFETY: closing the parent's write end; the child has its own copy.
     unsafe { libc::close(wr) };
     let mut child = spawned?;
-    // The intermediate exits immediately; reap it so nothing lingers.
-    let _ = child.wait();
+    if !reaping {
+        // The intermediate exits immediately; reap it so nothing lingers.
+        let _ = child.wait();
+    }
     let mut buf = [0u8; 4];
     rd.read_exact(&mut buf).map_err(|e| {
         std::io::Error::new(

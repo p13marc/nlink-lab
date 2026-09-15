@@ -521,7 +521,7 @@ the workspace). It targets the NLL parser. To run:
 
 ```bash
 cd crates/nlink-lab/fuzz
-cargo +nightly fuzz run nll_parse
+cargo +nightly fuzz run fuzz_parse
 ```
 
 Findings should be added as unit tests (don't just commit a

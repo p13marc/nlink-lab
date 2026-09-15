@@ -17,6 +17,13 @@ All notable changes to this project will be documented in this file.
 - `deny`: RustSec advisory RUSTSEC-2026-0285 (rustls 0.23.44, TLS 1.3
   handshake messages accepted across encryption levels, reached through
   zenoh's QUIC/TLS links); `Cargo.lock` bumped to rustls 0.23.45.
+- The `fuzz` CI lane had failed on every dispatch since it was added, in
+  seconds, before a single input ran: `cargo fuzz` defaults `--target` to
+  the triple cargo-fuzz itself was built for, and the install action ships
+  the static musl binary, so it tried to build the sanitized targets for
+  `x86_64-unknown-linux-musl`. The lane now passes the nightly toolchain's
+  host triple explicitly. (Local runs were never affected: a `cargo install`
+  build is a gnu binary.)
 
 ## [0.11.0] - 2026-09-15
 

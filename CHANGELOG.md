@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`spawn` no longer leaves a zombie per process in a long-lived caller.**
+  0.11.0's exit-code reaper was the caller's child and stayed a zombie of it
+  until the caller exited -- harmless for a one-shot `spawn`, but the backend,
+  `top` and the integration test binary accumulated one per spawn (the root
+  CI lane went red on `spawn_leaves_no_zombie_and_returns_real_pid`). The
+  reaper is now triple-forked: the intermediate child forks it and exits at
+  once, so the caller reaps that exit as before and the reaper is init's
+  child, not the caller's.
+- `deny`: RustSec advisory RUSTSEC-2026-0285 (rustls 0.23.44, TLS 1.3
+  handshake messages accepted across encryption levels, reached through
+  zenoh's QUIC/TLS links); `Cargo.lock` bumped to rustls 0.23.45.
+
 ## [0.11.0] - 2026-09-15
 
 The release a zenoh resilience lab asked for. Every item below was hit while

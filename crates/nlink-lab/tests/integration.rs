@@ -343,6 +343,44 @@ async fn spawn_leaves_no_zombie_and_returns_real_pid(mut lab: RunningLab) {
     );
 }
 
+// 0.11.0's exit-code reaper: a spawned process's exit status lands in
+// `<log>.rc` and surfaces as `ProcessInfo::exit_code` once it is dead --
+// and the reaper that writes it is init's child, never ours (the 0.11.0
+// version stayed our zombie until we exited, one per spawn).
+#[lab_test("examples/simple.nll")]
+async fn spawn_records_exit_code_without_owning_the_reaper(mut lab: RunningLab) {
+    let pid = lab
+        .spawn_with_logs("host", &["sh", "-c", "exit 3"], None)
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let code = loop {
+        let info = lab
+            .process_status()
+            .into_iter()
+            .find(|p| p.pid == pid)
+            .expect("spawned pid is tracked");
+        if let (false, Some(code)) = (info.alive, info.exit_code) {
+            break code;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "pid {pid}: no exit code after 5s (alive={}, exit_code={:?})",
+            info.alive,
+            info.exit_code
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert_eq!(code, 3, "exit code read back from the .rc file");
+    // The reaper outlives the process by a moment; give it that moment,
+    // then it must have been reaped by init, not be waiting on us.
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(
+        our_zombie_children().is_empty(),
+        "the reaper must not be our zombie: {:?}",
+        our_zombie_children()
+    );
+}
+
 // `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
 // by wrapping in `/usr/bin/env`. Verifies both visibility of the new var
 // and additive semantics — inherited PATH must remain set.

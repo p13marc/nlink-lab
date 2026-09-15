@@ -174,7 +174,12 @@ spawn`) are started **detached**: `ns_exec::spawn_detached` double-forks
 — an intermediate child calls `setsid(2)`, forks the real process and
 exits at once — so nlink-lab never has a child to reap (no zombies,
 whatever the deploying process does next) and the process is reparented
-to init, outliving the terminal session that deployed the lab. The pid
+to init, outliving the terminal session that deployed the lab. Spawns
+that need an exit code (`spawn_detached_reaped`, used by `spawn` and
+`run … background`) add one level: the intermediate forks a *reaper*
+before exiting, and that reaper — init's child, holding no fd of the
+caller's — is the real process's parent, waits for it and writes
+`<log>.rc`, which `ps` and `ProcessExited` read. The pid
 handed back is the real process; it is recorded together with its
 `/proc/<pid>/stat` start time, and every later signal (`destroy`,
 `kill`, an `apply` that edits or removes the `run` line) verifies that

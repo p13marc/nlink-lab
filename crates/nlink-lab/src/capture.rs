@@ -1041,12 +1041,17 @@ mod tests {
         let flag = AtomicBool::new(false);
         let limits = CaptureLimits {
             count: None,
-            duration: Some(Duration::from_millis(450)),
+            duration: Some(Duration::from_secs(1)),
         };
         let mut timeouts: Vec<Duration> = Vec::new();
+        // Return early from every poll (a real poll(2) may; the loop
+        // must not assume the full timeout elapsed). Sleeping the whole
+        // timeout with a 450ms deadline used to leave only 50ms of slack
+        // for the third poll -- two small overshoots on a loaded CI runner
+        // and the "several polls" assertion below failed.
         let source = |timeout: Duration, _sink: &mut PacketSink<'_>| -> Result<()> {
             timeouts.push(timeout);
-            std::thread::sleep(timeout);
+            std::thread::sleep(Duration::from_millis(20));
             Ok(())
         };
         let (_, reason) = drive_capture_loop(limits, &flag, source, |_| Ok(())).unwrap();
@@ -1092,10 +1097,16 @@ mod tests {
             count: Some(0),
             duration: None,
         };
-        let started = Instant::now();
-        let (count, reason) = drive_capture_loop(limits, &flag, idle_source, |_| Ok(())).unwrap();
+        // "Immediately" means the source is never polled -- a structural
+        // check, not a wall-clock bound a starved runner can miss.
+        let mut polls = 0u32;
+        let source = |_timeout: Duration, _sink: &mut PacketSink<'_>| -> Result<()> {
+            polls += 1;
+            Ok(())
+        };
+        let (count, reason) = drive_capture_loop(limits, &flag, source, |_| Ok(())).unwrap();
         assert_eq!((count, reason), (0, StopReason::CountReached));
-        assert!(started.elapsed() < Duration::from_millis(100));
+        assert_eq!(polls, 0, "count 0 must not wait for a poll");
     }
 
     /// A stop requested during a flood is honoured between packets of

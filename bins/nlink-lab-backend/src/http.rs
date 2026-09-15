@@ -69,7 +69,12 @@ pub async fn spawn(
 ) -> std::io::Result<tokio::task::JoinHandle<()>> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "HTTP endpoint listening (/metrics, /api/v1/*)");
-    Ok(tokio::spawn(async move {
+    Ok(spawn_on(listener, state))
+}
+
+/// Serve on an already-bound listener until the returned task is aborted.
+pub fn spawn_on(listener: tokio::net::TcpListener, state: Shared) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
         loop {
             let Ok((stream, _)) = listener.accept().await else {
                 continue;
@@ -81,7 +86,7 @@ pub async fn spawn(
                 }
             });
         }
-    }))
+    })
 }
 
 async fn handle(mut stream: tokio::net::TcpStream, state: Shared) -> std::io::Result<()> {
@@ -414,10 +419,12 @@ mod tests {
     #[tokio::test]
     async fn http_routes_answer() {
         let state: Shared = Arc::new(RwLock::new(sample()));
+        // Keep the ephemeral port we were given: releasing it and binding
+        // it again in `spawn` is a race with every other test and job on
+        // the runner (AddrInUse under parallel CI lanes).
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        drop(listener);
-        let task = spawn(addr, state).await.unwrap();
+        let task = spawn_on(listener, state);
         async fn get(addr: std::net::SocketAddr, path: &str) -> (String, String) {
             let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
             s.write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())

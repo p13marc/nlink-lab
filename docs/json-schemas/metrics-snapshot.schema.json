@@ -39,7 +39,14 @@
           "default": ""
         },
         "rx_bps": {
-          "description": "Receive rate in **bits** per second — the unit [`format_rate`]\nexpects. nlink's `LinkRates` counts bytes, so these are populated\nfrom its `rx_bps()`/`tx_bps()` accessors, which convert.",
+          "description": "Receive rate in **bits** per second — the unit [`format_rate`]\nexpects. Differenced by the collector from [`Self::rx_bytes`]\nacross two ticks; `0` on the first sample for an interface and\non any tick whose counters stepped backwards.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_bytes": {
+          "description": "Cumulative bytes received, straight off the link's\n`rtnl_link_stats64` — not from tc, which accounts nothing on the\n`noqueue` qdisc an un-impaired veth carries.\n\nCounted since the interface appeared, so a consumer can\ndifference two samples to get the bytes in a window it chooses\n*after* the run — which a rate, already averaged over the\ncollector's own tick, cannot give.\n\nMonotonic only within one interface lifetime: recreating the\ninterface restarts it at zero. Detect a backwards step rather\nthan assuming monotonicity across a whole run.",
           "type": "integer",
           "format": "uint64",
           "default": 0,
@@ -57,7 +64,15 @@
           "default": 0,
           "minimum": 0
         },
+        "rx_pkts": {
+          "description": "Cumulative packets received. See [`Self::rx_bytes`] for the\nmonotonicity caveat.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
         "rx_pps": {
+          "description": "Receive packets per second, differenced from [`Self::rx_pkts`].\nSame first-sample and reset rules as [`Self::rx_bps`].",
           "type": "integer",
           "format": "uint64",
           "default": 0,
@@ -86,6 +101,13 @@
           "default": 0,
           "minimum": 0
         },
+        "tx_bytes": {
+          "description": "Cumulative bytes transmitted. See [`Self::rx_bytes`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
         "tx_dropped": {
           "type": "integer",
           "format": "uint64",
@@ -98,7 +120,15 @@
           "default": 0,
           "minimum": 0
         },
+        "tx_pkts": {
+          "description": "Cumulative packets transmitted. See [`Self::rx_bytes`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
         "tx_pps": {
+          "description": "Transmit packets per second. See [`Self::rx_pps`].",
           "type": "integer",
           "format": "uint64",
           "default": 0,
@@ -125,7 +155,7 @@
           }
         },
         "sockets": {
-          "description": "Top TCP flows by goodput in this node's namespace, attributed to\nthe owning process where resolvable (Plan 160 / nlink 0.24\nsockdiag). Empty for container nodes and when no flow moved data\nbetween the last two collector ticks. `#[serde(default)]` keeps\nthe snapshot wire-compatible with backends that predate the field.",
+          "description": "Top TCP flows by goodput in this node's namespace, attributed to\nthe owning process where resolvable (Plan 160 / nlink 0.24\nsockdiag). Covers bare-namespace and container nodes alike — a\ncontainer's namespace is its init pid's, since 0.11.0. Empty when\nno flow moved data between the last two collector ticks.\n`#[serde(default)]` keeps the snapshot wire-compatible with\nbackends that predate the field.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/SocketRateMetric"

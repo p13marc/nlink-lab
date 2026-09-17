@@ -4,6 +4,59 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Migration
+
+- **`nlink_lab_iface_rx_bytes_per_second` / `…_tx_bytes_per_second` are
+  renamed to `nlink_lab_iface_rx_bits_per_second` /
+  `…_tx_bits_per_second`** (#134). The value never was bytes:
+  `InterfaceMetrics::rx_bps` has been **bits** per second since 0.8.0,
+  and the HTTP exporter — written a day later, on a branch that did not
+  have that change — picked the old name. A dashboard reading it as
+  bytes was 8x high. The per-flow `nlink_lab_socket_*_bytes_per_second`
+  gauges are genuinely bytes and are unchanged. Rename the metric in any
+  query; there is no compatibility alias, because keeping a name that
+  states the wrong unit is the bug.
+
+### Added
+
+- **Cumulative `rx_bytes` / `tx_bytes` / `rx_pkts` / `tx_pkts` on
+  `InterfaceMetrics`** (#130), from the link's `rtnl_link_stats64` —
+  not from tc, which accounts nothing on the `noqueue` qdisc an
+  un-impaired veth carries. A consumer scoring a run offline needs to
+  attribute bytes to a window it picks *after* the run (a phase, or a
+  phase minus a warm-up decided at scoring time); a rate is already
+  averaged over the collector's tick and cannot be re-windowed. They
+  are additive, so the wire version does not move, and they are
+  exported over HTTP as
+  `nlink_lab_iface_{rx,tx}_{bytes,packets}_total` counters. Monotonic
+  only within one interface lifetime — recreating the interface
+  restarts them at zero, so detect a backwards step.
+
+### Fixed
+
+- **Every interface rate in every metrics snapshot was `0`** (#133) —
+  in `top`, `metrics`, `daemon --http` and the topoviewer, however much
+  traffic was moving. nlink computes rates from the previous sample
+  held by the `Diagnostics` runner, and `RunningLab::diagnose` builds a
+  fresh runner per node per call, so there was never a previous sample:
+  `scan()` always took the `LinkRates::default()` branch and the
+  `prev_stats` it wrote on the way out died with the runner. The
+  backend collector — which *is* long-lived across ticks — now
+  differences the cumulative counters itself. First sample for an
+  interface reports no rate, as the per-flow goodput already did, and a
+  counter that stepped backwards re-baselines instead of reporting a
+  `saturating_sub`'d interval. `RunningLab::diagnose`'s doc now says its
+  `rates` are always default, so the dead field is not plumbed again.
+- `nlink-lab top --once` collecting locally samples twice, half a second
+  apart, so its rate columns are a real reading rather than a first
+  sample's zeros.
+- `NodeMetrics::sockets` no longer claims to be "empty for container
+  nodes" (#132). 0.11.0 made sockdiag open a container's namespace by
+  its init pid, and the collector's own comment two hundred lines away
+  already said so — the stale one was the doc on the public struct, and
+  it is a reason to not bother with `metrics` at all on a container
+  lab.
+
 ## [0.11.1] - 2026-09-17
 
 The release 0.11.0 could not be. Its tag points at a commit whose CI can

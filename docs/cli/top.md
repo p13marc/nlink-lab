@@ -103,7 +103,9 @@ Options:
           [default: 1]
 
       --once
-          Print one text frame and exit: no terminal control, safe in pipes, CI and `watch`. With `--json`, prints the raw metrics snapshot
+          Print one text frame and exit: no terminal control, safe in pipes, CI and `watch`. With `--json`, prints the raw metrics snapshot.
+          
+          Collecting locally, this samples twice half a second apart — a rate is a delta between two samples, so a single collection would report every interface as idle.
 
   -n, --node <SUBSTR>
           Start with the node/interface filter set to this substring

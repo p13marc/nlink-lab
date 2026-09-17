@@ -29,6 +29,10 @@ pub struct Args {
 
     /// Print one text frame and exit: no terminal control, safe in pipes,
     /// CI and `watch`. With `--json`, prints the raw metrics snapshot.
+    ///
+    /// Collecting locally, this samples twice half a second apart — a
+    /// rate is a delta between two samples, so a single collection would
+    /// report every interface as idle.
     #[arg(long)]
     pub once: bool,
 
@@ -277,8 +281,21 @@ async fn run_once(
     app: &mut App,
     interval: Duration,
 ) -> nlink_lab::Result<()> {
+    /// How long `--once` waits between its baseline collection and the
+    /// sample it prints. A rate is a delta over an interval, so a single
+    /// collection has nothing to report; long enough for a counter to
+    /// move, short enough not to be felt in a pipeline or a `watch`.
+    const RATE_WINDOW: Duration = Duration::from_millis(500);
+
     let snapshot = match source {
-        Source::Local { .. } => source.collect().await?,
+        Source::Local { .. } => {
+            // Collect twice: the first pass is the collector's baseline
+            // and carries no rates (#133), so a one-shot frame built from
+            // it would report every interface as idle.
+            let _baseline = source.collect().await?;
+            tokio::time::sleep(RATE_WINDOW).await;
+            source.collect().await?
+        }
         Source::Zenoh { rx, .. } => {
             // Bounded so a daemon that is not publishing cannot hang CI.
             let wait = (interval * 5).max(Duration::from_secs(10));

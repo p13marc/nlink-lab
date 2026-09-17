@@ -1524,6 +1524,17 @@ impl RunningLab {
     }
 
     /// Run diagnostics on the lab, optionally filtered to a single node.
+    ///
+    /// **The `rates` on each returned `InterfaceDiag` are always
+    /// `LinkRates::default()` — all zeros.** nlink computes rates from
+    /// the previous sample held by the `Diagnostics` runner, and this
+    /// method builds a fresh runner per node per call, so there is never
+    /// a previous sample to difference against. That is inherent to a
+    /// one-shot API and not worth a cached runner: a caller sampling on
+    /// a cadence wants to own the window anyway.
+    ///
+    /// Use the cumulative `stats` counters and difference them yourself
+    /// — which is what the backend collector does (#133).
     pub async fn diagnose(&self, node: Option<&str>) -> Result<Vec<NodeDiagnostic>> {
         let mut results = Vec::new();
 

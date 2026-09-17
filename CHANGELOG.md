@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Changing an `sfq` qdisc's parameters failed with EINVAL**, a
+  regression from the in-place qdisc replace in 0.11.2 (#108). A
+  same-kind replace becomes `qdisc_change()` in the kernel, and
+  `sch_sfq` sets `.change = NULL`, so it answers *"Change operation not
+  supported by specified qdisc"*. sfq is the only kind `qdisc` blocks
+  support without a change op — netem, tbf, fq_codel and prio all have
+  one — and the plan's old unconditional teardown had been covering for
+  it. The applier now deletes and re-adds for that kind when the replace
+  is refused, which is the only sequence the kernel offers; a change of
+  *kind* is unaffected, because that takes the create-and-graft path.
+  Fixed upstream too (nlink#361), so the fallback here can go once the
+  dependency moves.
+
+
 ### Migration
 
 - **`nlink_lab_iface_rx_bytes_per_second` / `…_tx_bytes_per_second` are

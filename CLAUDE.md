@@ -252,7 +252,7 @@ CLI commands (46 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json
 `watch` (`--family route|nftables|both`, `--json` for NDJSON),
 `wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
 `ip` (`--iface`, `--cidr`),
-`ps`, `kill`, `proc-stat`, `init`, `completions`, `daemon`, `metrics`,
+`ps`, `kill`, `proc-stat` (`--all`, `--pid`, `--watch`), `init`, `completions`, `daemon`, `metrics`,
 `containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `stats`, `restart`, `fmt` (`--check`, `-w`, `-`), `lint`
 (`--strict`, `--allow`), `doctor`, `verify`, `edit` (`--set-impair`),

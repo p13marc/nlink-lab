@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Array_of_ProcStat",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/ProcStat"
+  },
+  "$defs": {
+    "ProcStat": {
+      "description": "Resource snapshot for a single process. Built from\n`/proc/<pid>/stat` (fields), `/proc/<pid>/status` (memory + UID),\nand a count of entries in `/proc/<pid>/fd/`.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Short process name (`/proc/<pid>/comm`-equivalent — first 16 bytes\nof the binary's basename or whatever `prctl(PR_SET_NAME)` set).",
+          "type": "string"
+        },
+        "cpu_kernel_ticks": {
+          "description": "Kernel-mode CPU time in clock ticks (`stime` — field 15).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cpu_user_ticks": {
+          "description": "User-mode CPU time in clock ticks since process start\n(`utime` — field 14 of `/proc/<pid>/stat`). Convert to seconds\nby dividing by `sysconf(_SC_CLK_TCK)` — typically 100 on Linux.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fd_count": {
+          "description": "Number of file descriptors open by the process. Counted by\nlisting `/proc/<pid>/fd/`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "host_pid": {
+          "description": "Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`) for a\nnamespace node; see `docs/ARCHITECTURE.md` \"Process & namespace\nmodel\". A container node has its own PID namespace, so for one\nof those this is the host PID when the process was discovered\nwith `--all` and the in-container PID when you named it.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "node": {
+          "description": "Lab node the process was sampled in. Present so a multi-process\nsample stays self-describing once the records are written to a\nfile and read back somewhere else.",
+          "type": "string"
+        },
+        "pss_kb": {
+          "description": "Proportional set size in kilobytes (`Pss` from\n`/proc/<pid>/smaps_rollup`): resident memory with every shared\npage divided among the processes mapping it.\n\nThis is the number to sum across a node. Summing [`Self::rss_kb`]\ndouble-counts every shared page, which is harmless for one\nprocess and wrong for a node — and *systematically* wrong when\ncomparing two configurations with different process counts,\nbecause the one with more processes is penalised for sharing the\nsame libraries.\n\n`None` where `smaps_rollup` is unreadable: kernel threads, and\nkernels before 4.14, which did not have the file. Reading it is\na single kernel-side aggregate, unlike walking `smaps`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rss_kb": {
+          "description": "Resident set size in kilobytes (`VmRSS` from status). `None`\nwhen the process is a kernel thread or has no MM.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "started_at_unix_micros": {
+          "description": "Process start time as Unix microseconds. Computed from\n`starttime` (stat field 22) + `btime` (from `/proc/stat`) +\nthe system clock tick rate.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Process state — single character per `man 5 proc`:\n`R` running, `S` sleeping, `D` uninterruptible disk sleep,\n`Z` zombie, `T` stopped, `t` tracing-stopped, `X` dead, `I`\nidle.",
+          "type": "string"
+        },
+        "uid": {
+          "description": "Effective UID of the process (column 1 of `Uid:`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "vsz_kb": {
+          "description": "Virtual address space size in kilobytes (`VmSize`). `None` for\nkernel threads.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "node",
+        "host_pid",
+        "command",
+        "uid",
+        "fd_count",
+        "cpu_user_ticks",
+        "cpu_kernel_ticks",
+        "started_at_unix_micros",
+        "state"
+      ]
+    }
+  }
+}

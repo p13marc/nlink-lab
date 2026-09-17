@@ -194,6 +194,10 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             schemars::schema_for!(nlink_lab::proc_stat::ProcStat),
         ),
         (
+            "proc-stat-list",
+            schemars::schema_for!(Vec<nlink_lab::proc_stat::ProcStat>),
+        ),
+        (
             "doctor",
             schemars::schema_for!(crate::cmd::doctor::DoctorReport),
         ),

@@ -1,4 +1,5 @@
-//! Pure parser for `/proc/<pid>/{stat,status}` output → structured
+//! Pure parser for `/proc/<pid>/{stat,status,smaps_rollup}` output →
+//! structured
 //! resource-usage fields. Used by `nlink-lab proc-stat` to give
 //! harness consumers a single primitive for "sample resource usage of
 //! process X" without parsing /proc themselves (and without hitting
@@ -15,8 +16,15 @@ use serde::Serialize;
 /// and a count of entries in `/proc/<pid>/fd/`.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct ProcStat {
-    /// Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`); see
-    /// `docs/ARCHITECTURE.md` "Process & namespace model".
+    /// Lab node the process was sampled in. Present so a multi-process
+    /// sample stays self-describing once the records are written to a
+    /// file and read back somewhere else.
+    pub node: String,
+    /// Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`) for a
+    /// namespace node; see `docs/ARCHITECTURE.md` "Process & namespace
+    /// model". A container node has its own PID namespace, so for one
+    /// of those this is the host PID when the process was discovered
+    /// with `--all` and the in-container PID when you named it.
     pub host_pid: u32,
     /// Short process name (`/proc/<pid>/comm`-equivalent — first 16 bytes
     /// of the binary's basename or whatever `prctl(PR_SET_NAME)` set).
@@ -31,6 +39,22 @@ pub struct ProcStat {
     /// kernel threads.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vsz_kb: Option<u64>,
+    /// Proportional set size in kilobytes (`Pss` from
+    /// `/proc/<pid>/smaps_rollup`): resident memory with every shared
+    /// page divided among the processes mapping it.
+    ///
+    /// This is the number to sum across a node. Summing [`Self::rss_kb`]
+    /// double-counts every shared page, which is harmless for one
+    /// process and wrong for a node — and *systematically* wrong when
+    /// comparing two configurations with different process counts,
+    /// because the one with more processes is penalised for sharing the
+    /// same libraries.
+    ///
+    /// `None` where `smaps_rollup` is unreadable: kernel threads, and
+    /// kernels before 4.14, which did not have the file. Reading it is
+    /// a single kernel-side aggregate, unlike walking `smaps`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pss_kb: Option<u64>,
     /// Number of file descriptors open by the process. Counted by
     /// listing `/proc/<pid>/fd/`.
     pub fd_count: u32,
@@ -137,6 +161,22 @@ fn parse_kb(s: &str) -> Option<u64> {
     value.parse().ok()
 }
 
+/// Parse `Pss:` out of `/proc/<pid>/smaps_rollup`.
+///
+/// `smaps_rollup` is the kernel's own aggregate over every mapping, so
+/// there is exactly one `Pss:` line and no summing to do here. Lines we
+/// do not recognise are skipped; a file without a `Pss:` line (or an
+/// empty read, which is what an unreadable one degrades to) yields
+/// `None`.
+pub(crate) fn parse_pss_kb(text: &str) -> Option<u64> {
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("Pss:") {
+            return parse_kb(rest.trim());
+        }
+    }
+    None
+}
+
 /// Parse the `btime` line from `/proc/stat` content — Unix seconds at
 /// which the kernel booted. Used to convert `starttime_ticks` (jiffies
 /// since boot) into a wall-clock timestamp.
@@ -149,27 +189,44 @@ pub(crate) fn parse_btime(proc_stat_text: &str) -> Option<u64> {
     None
 }
 
-/// Combine the three sources into a final `ProcStat`. `tick_hz`
-/// is the system clock-tick rate (typically 100 on Linux —
-/// `sysconf(_SC_CLK_TCK)`); the caller obtains it from inside the
-/// target namespace via `getconf CLK_TCK` or libc directly.
+/// Everything read from `/proc` for one process, before it is combined
+/// with the per-node constants into a [`ProcStat`].
+pub(crate) struct Sampled<'a> {
+    pub stat: &'a StatFields,
+    pub status: &'a StatusFields,
+    pub fd_count: u32,
+    pub pss_kb: Option<u64>,
+}
+
+/// Combine the per-process sources with the per-node constants into a
+/// final `ProcStat`. `tick_hz` is the system clock-tick rate (typically
+/// 100 on Linux — `sysconf(_SC_CLK_TCK)`); `btime_secs` is the kernel
+/// boot time. Both are constants for a node, which is why they are
+/// separate arguments: a multi-process sample reads them once.
 pub(crate) fn assemble(
+    node: &str,
     pid: u32,
-    stat: &StatFields,
-    status: &StatusFields,
-    fd_count: u32,
+    sampled: Sampled<'_>,
     btime_secs: u64,
     tick_hz: u64,
 ) -> ProcStat {
+    let Sampled {
+        stat,
+        status,
+        fd_count,
+        pss_kb,
+    } = sampled;
     let starttime_secs_since_boot = stat.starttime_ticks as f64 / tick_hz as f64;
     let started_unix_secs = btime_secs as f64 + starttime_secs_since_boot;
     let started_unix_micros = (started_unix_secs * 1_000_000.0) as u64;
     ProcStat {
+        node: node.to_string(),
         host_pid: pid,
         command: stat.comm.clone(),
         uid: status.uid.unwrap_or(0),
         rss_kb: status.vm_rss_kb,
         vsz_kb: status.vm_size_kb,
+        pss_kb,
         fd_count,
         cpu_user_ticks: stat.utime_ticks,
         cpu_kernel_ticks: stat.stime_ticks,
@@ -251,6 +308,36 @@ mod tests {
         assert_eq!(s, StatusFields::default());
     }
 
+    /// `smaps_rollup` is one aggregate block; `Pss:` is a single line
+    /// in it, in the same `"<n> kB"` form as `/proc/<pid>/status`.
+    #[test]
+    fn parse_pss_extracts_the_rollup_line() {
+        let text = "\
+55a4c0e00000-7ffd0e5f4000 ---p 00000000 00:00 0                          [rollup]
+Rss:                4132 kB
+Pss:                1234 kB
+Pss_Dirty:           900 kB
+Shared_Clean:       2900 kB
+Private_Dirty:       900 kB
+";
+        assert_eq!(parse_pss_kb(text), Some(1234));
+    }
+
+    /// `Pss_Dirty` starts with the same four characters. Matching on
+    /// the `Pss:` prefix including the colon is what keeps them apart.
+    #[test]
+    fn parse_pss_does_not_match_pss_dirty() {
+        assert_eq!(parse_pss_kb("Pss_Dirty:           900 kB\n"), None);
+    }
+
+    /// A kernel thread has no rollup, and a pre-4.14 kernel has no such
+    /// file at all. Both reach here as an empty read.
+    #[test]
+    fn parse_pss_absent_is_none() {
+        assert_eq!(parse_pss_kb(""), None);
+        assert_eq!(parse_pss_kb("Rss:                4132 kB\n"), None);
+    }
+
     #[test]
     fn parse_btime_extracts_seconds() {
         let text = "cpu 1 2 3 4 5 6 7 8 9 10\ncpu0 1 2 3 4\nbtime 1714900000\nintr 12345\n";
@@ -279,12 +366,25 @@ mod tests {
             vm_rss_kb: Some(512),
             uid: Some(0),
         };
-        let ps = assemble(123, &stat, &status, 4, 1_700_000_000, 100);
+        let ps = assemble(
+            "host",
+            123,
+            Sampled {
+                stat: &stat,
+                status: &status,
+                fd_count: 4,
+                pss_kb: Some(300),
+            },
+            1_700_000_000,
+            100,
+        );
+        assert_eq!(ps.node, "host");
         assert_eq!(ps.host_pid, 123);
         assert_eq!(ps.command, "sleep");
         assert_eq!(ps.uid, 0);
         assert_eq!(ps.rss_kb, Some(512));
         assert_eq!(ps.vsz_kb, Some(1024));
+        assert_eq!(ps.pss_kb, Some(300));
         assert_eq!(ps.fd_count, 4);
         assert_eq!(ps.cpu_user_ticks, 5);
         assert_eq!(ps.cpu_kernel_ticks, 7);
@@ -305,7 +405,18 @@ mod tests {
             comm: "(defunct)".into(),
         };
         let status = StatusFields::default();
-        let ps = assemble(99, &stat, &status, 0, 0, 100);
+        let ps = assemble(
+            "host",
+            99,
+            Sampled {
+                stat: &stat,
+                status: &status,
+                fd_count: 0,
+                pss_kb: None,
+            },
+            0,
+            100,
+        );
         assert_eq!(ps.state, "Z");
         assert_eq!(ps.rss_kb, None);
     }

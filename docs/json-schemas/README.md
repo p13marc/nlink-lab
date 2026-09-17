@@ -15,7 +15,8 @@ have no typed struct yet.
 | `nlink-lab status --json` (no lab) | `status-list.schema.json` | generated (`Vec<LabInfo>`) |
 | `nlink-lab status --scan --json` | `status-scan.schema.json` | generated (`StatusScanReport`) |
 | `nlink-lab ps --json` | `ps.schema.json` | generated (`Vec<ProcessInfo>`) |
-| `nlink-lab proc-stat --json` | `proc-stat.schema.json` | generated (`ProcStat`) |
+| `nlink-lab proc-stat --json <PID>` | `proc-stat.schema.json` | generated (`ProcStat`) |
+| `nlink-lab proc-stat --json --all` / `--pid` | `proc-stat-list.schema.json` | generated (`Vec<ProcStat>`) |
 | `nlink-lab doctor --json` | `doctor.schema.json` | generated (`DoctorReport`) |
 | `nlink-lab lint --json` | `lint.schema.json` | generated (`LintReport`) |
 | `nlink-lab metrics --format json` (one line per snapshot) | `metrics-snapshot.schema.json` | generated (`MetricsSnapshot`) |

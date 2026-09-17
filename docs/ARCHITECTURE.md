@@ -22,37 +22,51 @@ nlink-lab/                        ← workspace root
 │   │   │   │       ├── lexer.rs   logos-based, typed tokens
 │   │   │   │       ├── ast.rs     untyped AST (pre-lowering)
 │   │   │   │       ├── parser.rs  recursive-descent parser → AST
+│   │   │   │       ├── value.rs   Val<T>: typed + spanned literals
 │   │   │   │       └── lower.rs   AST → Topology, imports, loops
-│   │   │   ├── validator.rs      20-rule validator
+│   │   │   ├── validator.rs      53-rule validator (stable ids)
+│   │   │   ├── lint.rs           style hints (`lint`)
+│   │   │   ├── fmt.rs            NLL formatter (`fmt`)
 │   │   │   ├── render.rs         Topology → flat NLL serializer
-│   │   │   ├── deploy.rs         The 18-step deploy sequence
+│   │   │   ├── deploy/           plan + execute (see below)
 │   │   │   ├── running.rs        RunningLab — interact with deployed lab
-│   │   │   ├── state.rs          Persistence (~/.nlink-lab/, flock)
+│   │   │   ├── state.rs          Persistence (XDG state dir, flock)
+│   │   │   ├── events.rs         Lifecycle event log (events.ndjson)
 │   │   │   ├── diff.rs           TopologyDiff — drives `apply`
+│   │   │   ├── watch.rs          nftables + RTNETLINK drift watch
 │   │   │   ├── scenario.rs       Timed fault-injection engine
 │   │   │   ├── benchmark.rs      ping/iperf3 + assertions
 │   │   │   ├── capture.rs        Packet capture (netring backend)
 │   │   │   ├── dns.rs            /etc/hosts injection / removal
+│   │   │   ├── frr.rs            FRR daemons (zebra, ospfd, bgpd)
 │   │   │   ├── wifi.rs           hostapd/wpa_supplicant + hwsim
 │   │   │   ├── container.rs      Docker / Podman wrapper
+│   │   │   ├── cgroup.rs         cpu/memory limits for container nodes
+│   │   │   ├── ns_exec.rs        setns + spawn (detached, reaped)
+│   │   │   ├── netns_tag.rs      Ownership tag; the orphan reaper's gate
+│   │   │   ├── proc_stat.rs      /proc reads that need root
 │   │   │   ├── test_runner.rs    `nlink-lab test` (CI mode)
 │   │   │   ├── helpers.rs        parse_cidr, parse_duration, ...
 │   │   │   ├── ipfunc.rs         subnet() / host() NLL functions
+│   │   │   ├── ipmap.rs          address bookkeeping
+│   │   │   ├── subnet_pool.rs    named pools, loopback pools
 │   │   │   └── templates/        Built-in `nlink-lab init` templates
+│   │   ├── fuzz/                 NLL parser fuzz targets (not in workspace)
 │   │   └── tests/                Integration tests (root-gated)
 │   ├── nlink-lab-macros/         #[lab_test] proc macro
-│   └── nlink-lab-shared/         Zenoh metrics types
+│   └── nlink-lab-shared/         Zenoh topics + metrics types
 ├── bins/
-│   ├── lab/                      `nlink-lab` CLI (clap)
-│   ├── nlink-lab-backend/        Zenoh backend daemon
-│   └── topoviewer/               Topology viewer (iced GUI)
-├── examples/                     40 .nll files, all parse-tested
+│   ├── lab/                      `nlink-lab` CLI (clap; cmd/<name>.rs each)
+│   ├── nlink-lab-backend/        Zenoh backend daemon + HTTP endpoints
+│   └── topoviewer/               Experimental desktop viewer (iced)
+├── examples/                     49 .nll files, all parse-tested
+├── flatpak/                      Viewer packaging (manifest, metainfo, icon)
 ├── docs/                         User-facing docs (this dir)
 └── editors/                      VS Code / Neovim / Helix / Zed
 ```
 
-Source-of-truth count: **~22k LOC** across `crates/nlink-lab/src/`,
-**~24k LOC** including the macros and shared crates.
+Rough size, the way `just stats` counts it: **~73k lines** across
+`crates/` and `bins/`, inline `#[cfg(test)]` modules included.
 
 ## The Topology pipeline
 
@@ -69,12 +83,15 @@ parser/nll/parser.rs       ──→  ast::Document  (Statements, NodeDefs, Netw
    ↓
 types::Topology            ──→  The fully-resolved, flat, immutable form
    │
-   │  validator.rs         ──→  40 rules (stable ids): CIDRs valid, endpoints exist, no cycles, ...
+   │  validator.rs         ──→  53 rules (stable ids): CIDRs valid, endpoints exist, no cycles, ...
    ↓
 ValidationResult            ──→  Errors block deploy; warnings reported but allowed
    │
    ↓                       (deploy commands only)
-deploy.rs::deploy()        ──→  18-step kernel ops via nlink (netlink)
+deploy::plan(topology)     ──→  Plan: an ordered list of Ops, no kernel calls
+   │
+   ↓
+deploy::execute(plan)      ──→  Kernel ops via nlink (netlink), journalled
    │
    ↓
 running::RunningLab        ──→  Handle to a live lab; `exec`, `spawn`, `apply`, `destroy`
@@ -88,56 +105,116 @@ Three abstractions you'll touch most:
   reconcile).
 - **`RunningLab`** — owns kernel state. Drops to `destroy`.
 
-## The 18-step deploy sequence
+## Deploy: plan, then execute
 
-`deploy.rs:deploy()` executes these in order. Each step uses
-`nlink` (the netlink library) for the actual kernel operations.
+Deploy used to be one long numbered function. Since Plan 161 it is
+two halves, which is what makes `apply` and `--dry-run` possible:
 
 ```
- 1. Parse topology file → Topology
- 2. Validate (bail on errors)
- 3. Create namespaces
- 3d. Create host-reachable mgmt bridge (if `mgmt ... host-reachable`)
- 4. Create bridge networks (if any)
- 5. Create veth pairs spanning namespaces
- 6. Create additional interfaces (vxlan, bond, vlan, wireguard)
- 7. Assign interfaces to bridges/bonds
- 8. Configure VLANs on bridge ports
- 9. Set interface addresses
-10. Bring interfaces up
-11. Apply sysctls per namespace
-12. Add routes per namespace
-13. Apply nftables rules per namespace
-14. Apply TC qdiscs/impairments per interface
-14b. Apply per-pair network impairments (PerPeerImpairer)
-15. Apply rate limits
-15b. Inject /etc/hosts entries (if `dns hosts`)
-16. Spawn background processes (topo-sorted by depends_on)
-17. Run validation block (reach / no-reach / tcp-connect / ...)
-18. Write state file
+ deploy(t)       = execute(plan(t))
+ apply(cur, des) = execute(Plan::diff(plan(cur), plan(des)))   # with purge
 ```
+
+Everything under `deploy/plan/` is **pure** — it reads a
+`Topology` and returns a `Plan` (an ordered list of `Op`s) without
+touching the kernel. `deploy/apply.rs` is the only module that
+touches the kernel or the host, and it journals an inverse for
+every op it runs.
+
+```
+crates/nlink-lab/src/deploy/
+  mod.rs        deploy(), apply(), compute_layered_diff(), plan_for();
+                the per-node stack appliers (network / nftables / WireGuard)
+  op.rs         NsRef (Root | Named | Container), Stage, Op, Plan::diff
+  plan/         PURE planners — nothing here touches the kernel:
+    topology.rs   namespaces, containers, hwsim, mgmt bridge, bridge
+                  networks + member veths + VLANs, p2p veths, host-side
+                  macvlan/ipvlan, links-up, sysctls, DNS overlays
+    network.rs    topology_to_network_config (links/addresses/routes,
+                  incl. VRF-table routes via RouteBuilder::table)
+    nftables.rs   topology_to_nftables_config (firewall + NAT, one table)
+    wireguard.rs  key material + WireguardConfig per node
+    qdisc.rs      build_netem
+    process.rs    depends_on order, container create options
+  apply.rs      the ONLY kernel/host-touching module
+  rollback.rs   Undo + Journal (persisted as journal.json)
+```
+
+### Stages
+
+`execute` runs ops in `Stage` order. In an `apply`, removals run
+first, in *reverse* stage order.
+
+| # | Stage | What it creates |
+|---|-------|-----------------|
+| 1 | `Namespaces` | network namespaces and containers |
+| 2 | `Hwsim` | `mac80211_hwsim` load + PHY moves |
+| 3 | `MgmtBridge` | host-reachable mgmt bridge + per-node veth peers |
+| 4 | `Networks` | bridge networks, member veths, VLANs |
+| 5 | `Links` | point-to-point veth pairs |
+| 6 | `HostLinks` | host macvlan/ipvlan moved into namespaces |
+| 7 | `LinksUp` | bring nlink-lab-created interfaces up |
+| 8 | `Sysctls` | per-node sysctls |
+| 9 | `Stack` | the declarative per-node stack: links, addresses, routes, nftables, WireGuard |
+| 10 | `Routes` | routes in non-main (VRF) tables, owned explicitly because nlink's purge only converges the main table (#83) |
+| 11 | `Tc` | netem, per-pair impairments, rate limits |
+| 12 | `Dns` | `/etc/hosts` and per-namespace `/etc` overlays |
+| 13 | `RoutingDaemons` | FRR (zebra + ospfd/bgpd) — after DNS, before user processes, so services see converged routes (#65) |
+| 14 | `Processes` | background processes and healthchecks |
+| 15 | `Wifi` | hostapd / wpa_supplicant / mesh join |
+
+Every netlink resource commits through nlink's declarative
+`NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile
+paths — zero kernel calls when nothing changed. In apply mode the
+network layer runs with `ApplyOptions::with_purge(true)`.
+
+After the stages, `deploy()` writes the state file, records a
+`Deployed` lifecycle event, and *then* runs any `validate { … }`
+assertions. Assertions never fail the deploy: the results ride on
+the returned `RunningLab` via `assertion_results()`, and
+`deploy --strict` is what turns them into a non-zero exit.
+
+`deploy --dry-run` prints the plan and stops before `execute`.
 
 ### Rollback semantics
 
-Each step appends to a `Cleanup` struct (in `deploy.rs`). The
-struct's `Drop` impl unwinds in reverse: kill spawned processes,
-remove DNS injections, delete namespaces, etc. If `deploy()` panics
-or returns an error mid-sequence, RAII drops the `Cleanup` and
-unwinds.
+`apply.rs` appends an `Undo` to a `Journal` for every op it
+performs, persisted next to the lab's state as `journal.json`. The
+journal is unwound:
 
-The exception is **after step 17** (validation) and **before step
-18** (state file write): if validation fails, the state file is
-NOT written, but the kernel state is still up. The user has to
-`destroy` explicitly. This is intentional — failing validation is
-the kind of error a user might want to inspect before tearing
-down. (`destroy --orphans` reaps it without a state file.)
+- when `execute` returns an error mid-plan,
+- on the **next** deploy, if a previous run died before finishing
+  (a crash leaves the journal on disk),
+- by `destroy --orphans`, which reaps host resources with no state
+  file behind them.
+
+Namespaces nlink-lab created carry an ownership tag under
+`/run/nlink-lab/netns/<ns>` (`netns_tag.rs`), and the orphan
+reaper only ever touches tagged ones — a namespace you made by
+hand is never someone else's to delete.
+
+### Live reconcile
+
+`apply_diff` shares the declarative builders with the
+initial-deploy path, so `apply` and `deploy` cannot drift apart.
+`compute_layered_diff(running, desired)` is the preview half: it
+walks every node, builds the same per-namespace `NetworkConfig` /
+`NftablesConfig`, and emits one `LayeredDiff` bundle for
+`apply --check` / `apply --dry-run`. The JSON form is **schema
+v3**; the v1 `diff` / `layered_summary` /
+`layered_summary_deprecated` fields were removed in 0.7.0 after
+their deprecation window.
+
+`nlink-lab watch <lab>` subscribes to every node's nftables and
+RTNETLINK multicast and prints one line per drift — the way to
+catch hand-edits that bypass `apply`.
 
 ### Concurrency
 
-`state::lock(&lab_name)` uses `libc::flock()` on
-`~/.nlink-lab/<name>/.lock`. Held for the duration of `deploy`,
-`destroy`, and `apply`. Different labs have different lock files
-and run in parallel without contention.
+`state::lock(&lab_name)` uses `libc::flock()` on a file under the
+state directory's `.locks/`. It is held for the duration of
+`deploy`, `destroy`, and `apply`. Different labs use different
+lock files and run in parallel without contention.
 
 **Global state caveat**: a few subsystems mutate host-global state
 without per-lab locks — `dns::inject_hosts` rewrites `/etc/hosts`,
@@ -454,8 +531,9 @@ When trying to fix a bug, start here:
 | Parse error or surprising parse | `parser/nll/parser.rs` (look for the keyword) |
 | AST → Topology mismatch | `parser/nll/lower.rs` |
 | Validator rejects a valid topology (or accepts an invalid one) | `validator.rs` |
-| Deploy fails at step N | `deploy.rs:deploy()` (steps numbered in comments) |
-| `apply` reconciles wrong | `diff.rs` (diff engine) + `deploy.rs:apply_diff()` |
+| Deploy fails in stage N | `deploy/plan/` for what was planned, `deploy/apply.rs` for what ran |
+| `apply` reconciles wrong | `diff.rs` (diff engine) + `deploy/mod.rs:apply_diff()` |
+| A crashed deploy left resources behind | `deploy/rollback.rs` + `netns_tag.rs` |
 | Render round-trip drops a field | `render.rs` |
 | Container nodes misbehave | `container.rs` |
 | Spawned-process bookkeeping is wrong | `running.rs` + `state.rs` |
@@ -473,7 +551,7 @@ When trying to fix a bug, start here:
 | `clap` | CLI parsing | `derive` form. |
 | `logos` | Lexer derive macro | Produces typed tokens. |
 | `miette` | Pretty error diagnostics | Source spans, color, the `--help` line in errors. |
-| `serde` + `toml` + `serde_json` | State serialization | TOML for state.json, JSON for `--json` output. |
+| `serde` + `toml` + `serde_json` | State serialization | JSON for `state.json` and `--json` output; TOML for the rendered `topology.toml`. |
 | `thiserror` | Error enum derive | |
 | `x25519-dalek` + `getrandom` | WireGuard keypairs | Used by lower.rs when `key auto`. |
 
@@ -497,22 +575,33 @@ lives upstream where other consumers can also use it.
 
 ## CI
 
-Today: GitHub Actions (`.github/workflows/`). Gates:
+Forgejo Actions, in `.forgejo/workflows/`. Three files:
 
-- `cargo build --workspace`
-- `cargo test -p nlink-lab --lib` (unit tests; no root needed)
-- `cargo clippy --workspace --all-features -- --deny warnings`
-- `cargo fmt --check`
+- **`ci.yml`** — every push and PR. Lanes: `fmt`, `clippy` (both
+  feature edges, `-D warnings`), `test` across
+  `{default, --all-features, --no-default-features}`, `stress`,
+  `docs` (rustdoc with `-D warnings`, plus the docs gate below),
+  `deny` (cargo-deny: advisories, licences, sources), `msrv`,
+  `stable-latest`, `cli-smoke` (`scripts/cli-smoke.sh`, rootless),
+  `tree-sitter` (grammar conformance against every example) and
+  `fuzz`.
+- **`integration.yml`** — the root-gated suite, on a self-hosted
+  runner with `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`. These tests
+  really create namespaces.
+- **`release.yml`** — on a bare-semver tag. Asserts
+  `Cargo.toml`'s version matches the tag, **refuses to release
+  unless CI is green for that commit**, builds the binary tarball
+  and the flatpak bundle, and attaches both plus `SHA256SUMS`.
 
-Not yet wired (see **Plan 150 Phase D**):
+`just ci` mirrors the rootless half locally; `just test-integration`
+runs the privileged half.
 
-- A doc-snippet parse test (every \`\`\`nll block in `docs/`
-  parses).
-- A link-check job for internal `docs/` references.
-
-Privileged integration tests (root-gated via `#[ignore]`) need a
-self-hosted runner with `CAP_NET_ADMIN`. They run via
-`cargo test -- --ignored` and aren't on every PR yet.
+The doc gate lives in `crates/nlink-lab/tests/docs_examples.rs`
+and does two things: every ```` ```nll ```` block under `docs/`
+must parse and validate (opt out with ```` ```nll-ignore ````, or
+```` ```nll-no-validate ```` for a fragment), and every relative
+markdown link in `docs/` and `README.md` must resolve. If you add
+a doc, that test is what catches the typo in its links.
 
 ## Fuzz harness
 
@@ -537,10 +626,11 @@ Some non-obvious choices worth knowing:
 - **`map_err` to a domain Error variant** at every nlink call
   site. The user shouldn't see a `nlink::Error::InvalidMessage`
   with no context.
-- **18 deploy steps are numbered in source comments**, e.g.
-  `// ── Step 14b: Apply per-pair network impairments ──`.
-  When adding a new step, update both the code comment and
-  `CLAUDE.md`'s deploy-sequence list.
+- **New deploy work goes in a planner, not in `apply.rs`.**
+  `deploy/plan/` must stay pure — no kernel calls, no host reads —
+  so `--dry-run` and `apply --check` keep telling the truth. If a
+  stage is missing, add a `Stage` variant and update the table in
+  this document and in `CLAUDE.md`.
 - **`#[allow(dead_code)]` is rare.** One exists for a test
   helper; everything else gets removed if unused.
 - **`unsafe` is only for libc syscalls** (`flock`, `kill`, fd
@@ -554,7 +644,7 @@ Before opening a PR for a non-trivial change:
 - **Design questions**: open a discussion / draft a plan file in
   `docs/plans/`. The recent plans (128, 150–154) are good shape
   references.
-- **nlink-side concerns**: file in [nlink](https://github.com/p13marc/nlink)
+- **nlink-side concerns**: file in [nlink](https://git.marcpardo.eu/marcpardo/nlink)
   directly. Plan 128 has a good example of nlink-lab proposing a
   helper to nlink.
 - **Build/CI/tooling**: PR welcome; small fixes don't need a plan.
@@ -565,11 +655,15 @@ Before opening a PR for a non-trivial change:
   parallel surface for live metrics. If you're adding a new
   topology feature, the daemon is downstream — don't co-evolve.
 - The topoviewer GUI (`bins/topoviewer/`) is an experimental
-  iced-based viewer. Not yet on the supported-surface list.
+  iced-based viewer, not on the supported-surface list — see
+  [GUI.md](GUI.md). It has no integration tests, so treat a change
+  there as unverified until someone runs it on a display.
 
 ## See also
 
+- [INSTALL.md](INSTALL.md) — getting a build onto a host
 - [USER_GUIDE.md](USER_GUIDE.md) — for end users
 - [NLL_DSL_DESIGN.md](NLL_DSL_DESIGN.md) — the language itself
+- [GUI.md](GUI.md) — backend, `top`, and the desktop viewer
 - [COMPARISON.md](COMPARISON.md) — vs containerlab
 - [plans/](plans/) — design proposals (active and historical)

@@ -10,7 +10,7 @@ nlink-lab status [OPTIONS] [NAME]
 
 ## Description
 
-Reads `~/.nlink-lab/*/state.json` to enumerate currently-running
+Reads `~/.local/state/nlink-lab/labs/*/state.json` to enumerate currently-running
 labs. With a name, shows the lab's nodes, addresses, and spawned
 processes. With `--scan`, also walks the host for orphan resources
 (namespaces, mgmt bridges, veths) without a state file — these are

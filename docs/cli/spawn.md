@@ -33,7 +33,7 @@ use `exec` for one-shot commands (ping, curl, scripted tests).
 |------|-------------|
 | `--env KEY=VALUE` | Set environment variables. Repeatable. |
 | `--workdir DIR` | Working directory before `exec()`. |
-| `--log-dir DIR` | Where to capture stdout/stderr. Default: `~/.nlink-lab/<lab>/logs/`. |
+| `--log-dir DIR` | Where to capture stdout/stderr. Default: `~/.local/state/nlink-lab/labs/<lab>/logs/`. |
 | `--wait-tcp HOST:PORT` | After spawn, block until a TCP connect succeeds. Useful for "service ready" gating. The probe runs inside the node's namespace — `127.0.0.1:PORT` only matches loopback-bound services. |
 | `--wait-timeout SECS` | Timeout for `--wait-tcp` (default 30s). |
 | `--json` | Print `{pid, log_path}` as JSON instead of human text. |

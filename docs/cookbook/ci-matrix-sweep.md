@@ -120,7 +120,7 @@ echo "started lab $NAME"
 ## Pitfalls
 
 1. **State directory races.** Each parallel deploy writes to
-   `~/.nlink-lab/<name>/`. With `--unique` or distinct
+   `~/.local/state/nlink-lab/labs/<name>/`. With `--unique` or distinct
    `--suffix`, this is fine. Without, two processes race the
    lock and one fails — file an issue if this matters for your
    workflow.

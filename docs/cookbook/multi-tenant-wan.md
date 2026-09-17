@@ -136,9 +136,10 @@ correct. Three things have to be right for it to pass:
 sudo nlink-lab deploy examples/cookbook/multi-tenant-wan.nll
 ```
 
-Deploy runs the 18-step sequence, including step 17 (validation).
-If the validate block fails, deploy returns non-zero and the
-diff is printed.
+Deploy plans the topology, executes every stage, writes the state
+file, and then runs the `validate` block. A failed assertion is
+reported but does not by itself fail the deploy — add `--strict`
+to turn assertion failures into exit code 2.
 
 ### Verify customer red
 

@@ -16,7 +16,7 @@ Two modes, auto-detected:
 - **Lab mode**: argument is a deployed lab name. Output mirrors
   `status` but with topology details — interfaces, addresses,
   routes, impairments, networks. Reads from
-  `~/.nlink-lab/<name>/`.
+  `~/.local/state/nlink-lab/labs/<name>/`.
 - **Archive mode**: argument is a path ending in `.nlz` (or any
   existing path that isn't a known lab). Output is the archive
   manifest + node/link/network counts. Read-only — never

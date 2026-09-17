@@ -30,12 +30,16 @@ under a second — see
 ## Quickstart
 
 ```bash
-git clone https://github.com/p13marc/nlink-lab && cd nlink-lab
+git clone https://git.marcpardo.eu/marcpardo/nlink-lab && cd nlink-lab
 cargo build --release
 sudo ./target/release/nlink-lab deploy examples/simple.nll
 sudo ./target/release/nlink-lab exec simple host -- ping -c 3 router
 sudo ./target/release/nlink-lab destroy simple
 ```
+
+Prebuilt binaries, a system-wide install, capabilities instead of
+`sudo`, shell completions and the desktop viewer are all in
+[docs/INSTALL.md](docs/INSTALL.md).
 
 Or use the `#[lab_test]` macro from a `cargo test` integration
 suite — no Docker daemon, no compose file, just `cargo test`:
@@ -76,8 +80,8 @@ async fn test_connectivity(lab: RunningLab) {
   pure-Linux topologies.
 - A multi-host orchestrator. Single-host only.
 - A GUI-first tool. The CLI and the Rust library are the supported
-  surface; the `topoviewer` desktop app (flatpak) is an experimental
-  visualiser fed by the zenoh backend.
+  surface. There is a terminal dashboard (`nlink-lab top`) and an
+  experimental desktop viewer — see [docs/GUI.md](docs/GUI.md).
 
 ## How it compares to containerlab
 
@@ -106,67 +110,60 @@ side-by-side examples, and migration notes — lives at
 
 ## Documentation
 
-- [User guide](docs/USER_GUIDE.md) — install, first lab, CLI tour, container management, CI/CD, packet capture.
-- [Harness guide](docs/HARNESS_GUIDE.md) — patterns for building Rust test harnesses on top of nlink-lab (spawn ordering, capture endpoint selection, failure-mode debugging, parallel-lab concurrency).
+**Start here**
+
+- [Install](docs/INSTALL.md) — binaries, source, capabilities vs SUID, completions, the flatpak viewer.
+- [User guide](docs/USER_GUIDE.md) — a 60-minute walkthrough that grows one topology into a WAN with WireGuard, firewall, chaos injection and a `cargo test` integration.
 - [NLL language spec](docs/NLL_DSL_DESIGN.md) — every keyword, with examples.
-- [Testing guide](docs/TESTING_GUIDE.md) — `#[lab_test]` macro and integration test patterns.
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — permission errors, MTU mismatches, namespace cleanup.
-- [Examples](examples/) — 43 NLL files (34 top-level, 3 cookbook, 6 import modules) covering loops, imports, VRF, WireGuard, VXLAN, containers, scenarios, benchmarks, Wi-Fi.
-- [Architecture / design](docs/NLINK_LAB.md) — the why and how.
-- [Architecture for contributors](docs/ARCHITECTURE.md) — code map, the 18-step deploy sequence, how to add an NLL feature end-to-end.
-- [Comparison vs containerlab](docs/COMPARISON.md) — capability matrix + side-by-side examples.
-- [Active plans](docs/plans/) — what's coming next (docs overhaul, killer examples, full reconcile, lab archives).
-- [Changelog](CHANGELOG.md) — per-release notes (Keep-a-Changelog format). The README's `## Status` section pins the current minor.
+- [CLI reference](docs/cli/) — one page per subcommand, generated from the clap definitions.
+
+**Going further**
+
+- [Cookbook](docs/cookbook/) — 14 task-shaped recipes: satellite mesh, CI matrix sweeps, macvlan host bridges, Rust integration tests.
+- [Testing guide](docs/TESTING_GUIDE.md) — the `#[lab_test]` macro and integration-test patterns.
+- [Harness guide](docs/HARNESS_GUIDE.md) — building Rust test harnesses: spawn ordering, capture endpoint selection, failure-mode debugging, parallel-lab concurrency.
+- [Live views and the GUI](docs/GUI.md) — `nlink-lab top`, the zenoh backend, the experimental desktop viewer.
+- [Examples](examples/) — 49 NLL files (40 top-level, 3 cookbook, 6 import modules), every one parse-tested in CI.
+
+**When something breaks, or you want to change it**
+
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — permission errors, leftover namespaces, state corruption, apply/reconcile surprises.
+- [Architecture for contributors](docs/ARCHITECTURE.md) — code map, the plan/execute deploy model, how to add an NLL feature end-to-end.
+- [Comparison vs containerlab](docs/COMPARISON.md) — capability matrix, side-by-side examples, migration notes.
+- [Plans](docs/plans/) — design proposals, active and historical.
+- [Changelog](CHANGELOG.md) — per-release notes with migration notes for every breaking change.
 
 ## Status
 
-Beta. NLL syntax and Rust API stable across patch releases;
-breaking changes flagged in CHANGELOG with migration notes. Built
-on [`nlink`](https://github.com/p13marc/nlink) 0.27 as of
-nlink-lab 0.11.0.
+Beta. NLL syntax and the Rust API are stable across patch
+releases; breaking changes are flagged in the CHANGELOG with a
+migration note. Built on
+[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.27.
 
-Current release: **0.11.0** (2026-09-15) — the fault toolbox a resilience
-lab asked for: `impair` with all ten netem knobs, `kill --signal` (STOP/CONT
-freeze a process in place), exit codes for spawned processes, `spawn` on
-container nodes, `edit --set-mtu`, `restart` that re-attaches a container
-node's links, and `impair --show` / socket metrics that cover container
-nodes. Four doc passages that described behaviour the code does not have
-are corrected.
+Current release: **0.11.0** (2026-09-15) — the fault toolbox a
+resilience lab asked for: `impair` with all ten netem knobs, `kill
+--signal` (STOP/CONT freeze a process in place), exit codes for
+spawned processes, `spawn` on container nodes, `edit --set-mtu`,
+`restart` that re-attaches a container node's links, and `impair
+--show` / socket metrics that cover container nodes.
 
-Previous release: **0.10.2** (2026-09-14) — a `vxlan` block with no
-`vni` no longer renders to un-parseable `vni 0`, and the validator names
-it accurately (#118).
-
-Previous release: **0.10.0** (2026-09-14) — four silent-no-op fixes:
-container nodes now honour `config` / `overlay` / `env-file` / `exec`
-(they parsed and validated but were never applied, #111), a container's
-`run … background` output is captured like a namespace node's instead of
-being discarded (#112), `//` is a line comment (#113), and the release
-workflow hashes the real artifacts rather than their JSON metadata.
-
-Previous release: **0.9.0** (2026-09-14) — the deep-analysis
-series: six audit waves plus the `lsp`, `top`, IPv6, `qdisc`,
-snapshot/restore, events and FRR waves. WireGuard is fully declarative (device bootstrap via
-`WireguardConfig::ensure_devices`), rate limits reconcile instead
-of rebuild (`RateLimiter::reconcile`), teardown uses the typed
-`del_*_if_exists` helpers, and deploy self-heals a stale namespace
-marker. `watch` shows per-rule nftables counters, and live metrics
-gain per-process TCP bandwidth (sockdiag goodput + attribution).
-The nlink bump also makes traffic shaping correct (psched-tick
-fixes) and installs firewall rules in declared order. `apply
---check --json` is now schema v3 — the deprecated v1 `diff` /
-`layered_summary` / `layered_summary_deprecated` fields are
-removed; read the typed `network` / `nftables` maps. See
-`CHANGELOG.md` for the full per-commit record + migration notes.
+Earlier releases — the deep-analysis series (0.9.0), the
+silent-no-op fixes (0.10.0), the `vxlan`/`vni` render fix (0.10.2)
+— are in the [CHANGELOG](CHANGELOG.md), newest first.
 
 ## Requirements
 
 - Linux kernel 4.19+ (5.x recommended)
-- One of: root, SUID install, or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`
-  capabilities. Some features need extra caps:
-  `CAP_DAC_OVERRIDE` for DNS injection, `CAP_SYS_MODULE` for
-  Wi-Fi (mac80211_hwsim auto-load).
-- Rust 1.98+ (edition 2024)
+- One of: root, a SUID install, or `CAP_NET_ADMIN` +
+  `CAP_SYS_ADMIN`. `CAP_DAC_OVERRIDE` for DNS injection,
+  `CAP_SYS_MODULE` for Wi-Fi (mac80211_hwsim auto-load).
+- Rust 1.98+ (edition 2024) to build from source
+- `iproute2` and `iputils-ping` on the host; `nlink-lab doctor`
+  checks these and the optional extras (`nft`, `tc`, `wg`,
+  `iperf3`, `hostapd`, docker/podman)
+
+Full details, including capabilities vs SUID, in
+[docs/INSTALL.md](docs/INSTALL.md).
 
 ## Editor support
 

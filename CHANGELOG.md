@@ -4,6 +4,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- **`docs/INSTALL.md` is new** and is now the single install page:
+  the release tarball (CLI + backend + completions), building from
+  source, SUID vs file capabilities vs `sudo`, the runtime-binary
+  checklist `doctor` enforces, shell completions, verifying the
+  install, upgrading and uninstalling. README and USER_GUIDE point
+  at it instead of carrying three partial copies.
+- **`docs/GUI.md` is new**: the three live surfaces in one place —
+  the zenoh backend (topics, `--http` OpenMetrics), `nlink-lab
+  top`, and the experimental topoviewer, including its three modes,
+  the flatpak sandbox limits (`~/Documents` read-only,
+  `~/Pictures` for PNG export) and what "experimental" commits us
+  to. The viewer had no documentation at all before this.
+- **The deploy docs described a function that no longer exists.**
+  `ARCHITECTURE.md` still walked an 18-step `deploy.rs:deploy()`;
+  deploy has been plan + execute since Plan 161. It now documents
+  the `deploy/plan` (pure) / `deploy/apply.rs` (kernel) split, the
+  15 `Stage`s in order, `Journal`-based rollback and when it
+  unwinds, the tag-gated orphan reaper, and live reconcile. Same
+  fix in `docs/cli/deploy.md` and the USER_GUIDE walkthrough.
+  Corrected with it: the state file is written **before**
+  `validate { … }` assertions run, and assertions never fail a
+  deploy on their own — `--strict` is what turns them into an exit
+  code.
+- **Stale facts swept out**: validator rule counts (docs said 20,
+  40 and 41 in three places; there are 53), the state directory
+  (`~/.nlink-lab/<lab>/` in 8 files; it is
+  `$XDG_STATE_HOME/nlink-lab/labs/<lab>/`, with `state.json` as
+  JSON and `topology.toml` as TOML), the MSRV in the USER_GUIDE
+  (1.85 → 1.98), the example count in the README (43 → 49), the
+  crate layout and ~73k LOC in `ARCHITECTURE.md`, and its CI
+  section, which described GitHub Actions and four gates rather
+  than Forgejo Actions and thirteen.
+- **Canonical URLs are `git.marcpardo.eu`** in clone commands,
+  `[dev-dependencies]` snippets (also `version = "0.8"` → `"0.11"`),
+  the nlink link and the issue tracker.
+- `TROUBLESHOOTING.md` stops recommending hand-deleted namespaces
+  as the first cleanup step — `status --scan` and
+  `destroy --orphans` exist, only reap tagged namespaces, and
+  unwind a crashed deploy's journal. `COMPARISON.md`'s limitations
+  list drops the "no save/restore" entry (`snapshot`/`restore` and
+  `export --archive` shipped) and reframes "no web UI" around what
+  does exist.
+- `docs/NLINK_LAB.md`, the pre-implementation design proposal, is
+  archived as `docs/plans/NLINK_LAB-original-design.md` with a
+  banner saying so. Its roadmap, gap analysis and CLI sketch were
+  duplicating — and drifting from — ARCHITECTURE, COMPARISON and
+  the NLL spec.
+- The README's `## Status` no longer stacks four release blurbs,
+  and its documentation index is grouped by what you are trying to
+  do; the cookbook (14 recipes) is linked from it for the first
+  time.
+
 ### Fixed
 
 - **`spawn` no longer leaves a zombie per process in a long-lived caller.**

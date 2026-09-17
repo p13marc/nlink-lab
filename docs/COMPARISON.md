@@ -223,14 +223,17 @@ Where nlink-lab is **worse** than containerlab today:
    contributors.
 2. **No multi-host.** A 200-node lab on a single laptop works, but
    distributing across hosts (for actual scale) doesn't.
-3. **No web UI.** `nlink-lab graph` outputs Dot or ASCII.
-   No interactive view.
+3. **No web UI.** There is an interactive terminal dashboard
+   (`nlink-lab top`), Dot/ASCII/Mermaid output from
+   `nlink-lab graph`, and an experimental desktop viewer — but
+   nothing you can point a browser at. See [GUI.md](GUI.md).
 4. **Docs are younger.** containerlab has years of accumulated
    recipes, blog posts, conference talks. nlink-lab has the
    [cookbook](cookbook/) — comprehensive but newer.
-5. **Save/restore is incomplete.** `nlink-lab apply` reconciles
-   topology changes, but there's no `clab save` equivalent yet —
-   see **Plan 153**.
+5. **Save/restore is namespace-state only.** `nlink-lab snapshot`
+   and `restore` checkpoint a lab, and `export --archive` produces
+   a portable `.nlz`, but neither captures the contents of a
+   container's filesystem the way an image commit would.
 6. **No vendor NOS support, ever.** This is a design decision, not
    a bug — the project doesn't compete in that space.
 

@@ -122,6 +122,6 @@ multi-host clustering, web UI.
 | File | Description |
 |------|-------------|
 | [GUIDELINES.md](GUIDELINES.md) | Implementation guidelines for new plans |
-| [../NLINK_LAB.md](../NLINK_LAB.md) | Full design document |
+| [NLINK_LAB-original-design.md](NLINK_LAB-original-design.md) | The original design proposal (historical) |
 | [../NLL_DSL_DESIGN.md](../NLL_DSL_DESIGN.md) | NLL language specification |
 | `../../CHANGELOG.md` | Authoritative ship record |

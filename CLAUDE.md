@@ -112,7 +112,7 @@ crates/nlink-lab/src/
   benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
   capture.rs        # Packet capture using netring (pcap output, BPF filters)
   wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim mgmt)
-  deploy.rs         # Deployer — 18-step deployment sequence
+  deploy/           # Deployer — plan + execute (see "Deployment Sequence")
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence ($XDG_STATE_HOME/nlink-lab/labs, schema 2, flock in .locks/; snapshots/<name>/ checkpoints)
   events.rs         # Lifecycle event log (events.ndjson per lab; `events` command, backend republish)
@@ -341,5 +341,7 @@ useful for spotting hand-edits that bypass `apply`. Powered by
 ## Design Documents
 
 - `docs/NLL_DSL_DESIGN.md` — NLL language specification and examples
-- `docs/NLINK_LAB.md` — Full design document (topology DSL, architecture, roadmap)
+- `docs/INSTALL.md` — Installation (binaries, source, capabilities, flatpak viewer)
+- `docs/GUI.md` — Live views: backend, `top`, the experimental desktop viewer
+- `docs/plans/NLINK_LAB-original-design.md` — The original design proposal (historical)
 - `docs/plans/` — Active implementation plans

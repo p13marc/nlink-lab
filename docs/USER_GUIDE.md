@@ -13,44 +13,32 @@ If you want a feature reference instead of a tutorial, jump to
 
 ## Install (5 minutes)
 
-Requirements:
-
-- Linux kernel 4.19+ (5.x recommended).
-- One of: root, SUID install, or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`
-  capabilities. `CAP_DAC_OVERRIDE` for DNS injection,
-  `CAP_SYS_MODULE` for Wi-Fi (mac80211_hwsim auto-load).
-- Rust 1.85+ toolchain.
-
-Build and install:
+The short version, from a clone:
 
 ```bash
-git clone https://github.com/p13marc/nlink-lab.git
+git clone https://git.marcpardo.eu/marcpardo/nlink-lab.git
 cd nlink-lab
-
-# Option 1: SUID root (recommended — full feature support)
-just install
-
-# Option 2: Capabilities only (no SUID)
-just install-caps
-
-# Option 3: Manual
-cargo build --release -p nlink-lab-cli
-sudo install -o root -g root -m 4755 \
-    target/release/nlink-lab /usr/local/bin/
+just install        # SUID root — full feature support
 ```
 
-Shell completions:
+Or grab the release tarball instead of building, or use file
+capabilities instead of SUID, or install the desktop viewer:
+[INSTALL.md](INSTALL.md) has all of it, plus shell completions and
+the runtime-binary checklist.
+
+You need Linux (kernel 4.19+), Rust 1.98+ to build from source,
+and root — or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN` — to deploy.
+
+Check the host before your first lab:
 
 ```bash
-nlink-lab completions bash > /etc/bash_completion.d/nlink-lab
-nlink-lab completions zsh  > /usr/share/zsh/site-functions/_nlink-lab
+sudo nlink-lab doctor
 ```
 
-Verify:
-
-```bash
-nlink-lab --help | head -5
-```
+It reports privileges, netlink, the binaries nlink-lab execs
+inside namespaces (`ip` and `ping` are the required two), kernel
+modules, a writable state directory, and anything a previous
+crashed run left behind.
 
 ---
 
@@ -90,18 +78,19 @@ What this declares:
 Now validate, deploy, smoke-test, and tear down:
 
 ```bash
-nlink-lab validate wan.nll        # syntax + 20 validator rules
-sudo nlink-lab deploy wan.nll     # ~200ms; writes state to ~/.nlink-lab/wan/
+nlink-lab validate wan.nll        # syntax + 53 validator rules
+sudo nlink-lab deploy wan.nll     # ~200ms; state in ~/.local/state/nlink-lab/labs/wan/
 sudo nlink-lab exec wan site-a-client -- ping -c 3 10.0.1.1
 sudo nlink-lab destroy wan
 ```
 
-The ping succeeds because step 9 of the deploy sequence assigned
-addresses, step 10 brought interfaces up, step 12 added routes.
-The 18-step sequence is documented in
+The ping succeeds because the deploy planned the veth pair, the
+addresses and the route, then executed those stages in order —
+links, then addresses and routes (the `Stack` stage), then
+everything downstream of them. The stage list is in
 [ARCHITECTURE.md](ARCHITECTURE.md); the takeaway here is that
 deploy is **declarative** — you describe state, nlink-lab makes
-it real.
+it real. `--dry-run` prints the plan without touching anything.
 
 ---
 
@@ -499,10 +488,14 @@ tooling. From here:
   [container nodes](cookbook/healthcheck-depends-on.md),
   [satellite mesh](cookbook/satellite-mesh.md).
 - **Reference**: [NLL by Example](#nll-by-example) below covers
-  all 18 NLL features in compact form. The full grammar is in
+  21 feature areas in compact form. The full grammar is in
   [`docs/NLL_DSL_DESIGN.md`](NLL_DSL_DESIGN.md).
 - **CLI reference**: every command has a page in
   [`docs/cli/`](cli/).
+- **Live views**: [`GUI.md`](GUI.md) — the metrics backend,
+  `nlink-lab top`, and the experimental desktop viewer.
+- **Harness patterns**: [`HARNESS_GUIDE.md`](HARNESS_GUIDE.md) if
+  you are building test tooling on top of nlink-lab.
 - **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) is the
   contributor on-ramp.
 - **vs containerlab**: [`COMPARISON.md`](COMPARISON.md) is the
@@ -1367,24 +1360,32 @@ sudo nlink-lab deploy ./labs/my-dc.nll
 
 ### Zenoh Backend Daemon
 
-The daemon collects per-interface metrics (rx/tx bytes, packets, errors, drops, bitrates) and publishes them over Zenoh.
+The daemon collects per-interface metrics (rx/tx bytes, packets, errors, drops, bitrates) and publishes them over Zenoh, and answers RPC for `exec`, `impairment` and `status`.
 
-Start with deployment:
+Start it with the deploy:
 
 ```bash
 sudo nlink-lab deploy topology.nll --daemon
 ```
 
-Or attach to a running lab:
+Or attach to a lab that is already running:
 
 ```bash
 sudo nlink-lab daemon mylab --interval 2
+sudo nlink-lab daemon mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
 ```
 
-The daemon publishes on these Zenoh key expressions:
+It publishes under `nlink-lab/<lab>/`:
 
-- `nlink-lab/<lab>/metrics/snapshot` -- full metrics snapshot (all nodes, all interfaces)
-- `nlink-lab/<lab>/metrics/<node>/<iface>` -- per-interface metrics
+- `metrics/snapshot` -- full metrics snapshot (all nodes, all interfaces)
+- `metrics/<node>/<iface>` -- per-interface metrics
+- `topology`, `health` -- the resolved topology (also a queryable, so late subscribers get it) and the health summary discovery uses
+- `events`, `lifecycle` -- the lifecycle event log
+- `rpc/exec`, `rpc/impairment`, `rpc/status` -- request/response
+
+With `--http`, the same snapshot is available at `/metrics`
+(OpenMetrics) and `/api/v1/{snapshot,health,topology}` — which is
+what to point Prometheus at.
 
 ### Live TUI
 
@@ -1415,11 +1416,21 @@ Table output shows per-interface rx/tx rates, packet counts, errors, and drops.
 
 ### TopoViewer GUI
 
-The topoviewer is an Iced-based GUI that visualizes the live topology. It connects to the daemon via Zenoh and displays:
+The topoviewer is an experimental Iced-based desktop app that
+visualizes a topology. It has three modes:
 
-- Force-directed graph layout of nodes and links
-- Live per-interface throughput metrics on link edges
-- Pan, zoom, click-select, and drag interaction
-- PNG export of the current view
+```bash
+nlink-lab-topoviewer topology.nll     # static -- just parse and lay out a file
+nlink-lab-topoviewer --lab mylab      # live -- follow a running lab
+nlink-lab-topoviewer                  # discovery -- list labs on the bus
+```
 
-Launch it while a daemon is running to get a real-time view of your lab's network state.
+Live and discovery mode need the daemon above; on one host, zenoh
+peer scouting finds it with no flags. It gives you a force-directed
+layout, live per-interface throughput on the links, pan/zoom/drag,
+click-select, an exec box for the selected node, and PNG export.
+
+It ships as a flatpak bundle —
+[INSTALL.md](INSTALL.md#option-c--the-desktop-viewer-flatpak) — and
+[GUI.md](GUI.md) covers the sandbox limits and what "experimental"
+means here.

@@ -140,16 +140,19 @@ releases; breaking changes are flagged in the CHANGELOG with a
 migration note. Built on
 [`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.27.
 
-Current release: **0.11.0** (2026-09-15) — the fault toolbox a
-resilience lab asked for: `impair` with all ten netem knobs, `kill
---signal` (STOP/CONT freeze a process in place), exit codes for
-spawned processes, `spawn` on container nodes, `edit --set-mtu`,
-`restart` that re-attaches a container node's links, and `impair
---show` / socket metrics that cover container nodes.
+Current release: **0.11.1** (2026-09-17) — `spawn` no longer
+leaves a zombie per process in a long-lived caller, a rustls
+advisory is cleared, the `fuzz` lane runs for the first time, and
+the documentation is squared up with the code (new
+[install guide](docs/INSTALL.md) and [GUI page](docs/GUI.md)).
+**Take this over 0.11.0**, which was tagged but never released —
+its CI could not go green, so it has no downloadable assets.
 
-Earlier releases — the deep-analysis series (0.9.0), the
-silent-no-op fixes (0.10.0), the `vxlan`/`vni` render fix (0.10.2)
-— are in the [CHANGELOG](CHANGELOG.md), newest first.
+0.11.0 is where the fault toolbox landed: `impair` with all ten
+netem knobs, `kill --signal`, exit codes for spawned processes,
+`spawn` on container nodes, `edit --set-mtu`, and `restart` that
+re-attaches a container node's links. Earlier releases are in the
+[CHANGELOG](CHANGELOG.md), newest first.
 
 ## Requirements
 

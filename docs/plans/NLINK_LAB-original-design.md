@@ -1,5 +1,17 @@
 # nlink-lab: Network Lab Engine Built on nlink
 
+> **Historical.** This is the original design proposal, written
+> before nlink-lab existed, and it is kept for the reasoning behind
+> the design — not as a description of the shipped tool. Its gap
+> analysis, roadmap and CLI sketches are all superseded. For what
+> nlink-lab does today read
+> [ARCHITECTURE.md](../ARCHITECTURE.md), the
+> [NLL specification](../NLL_DSL_DESIGN.md), the
+> [comparison with containerlab](../COMPARISON.md) and the
+> [CHANGELOG](../../CHANGELOG.md). Moved here from
+> `docs/NLINK_LAB.md` in the 2026-09 docs pass.
+
+
 *Design document for a containerlab-like network simulation tool powered by nlink*
 
 ## 1. Executive Summary

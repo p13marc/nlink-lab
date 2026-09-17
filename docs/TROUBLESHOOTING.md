@@ -38,14 +38,22 @@ nlink-lab status
 sudo nlink-lab destroy --force <name>
 ```
 
-If the state file is gone but namespaces remain, clean up manually:
+If the state file is gone but namespaces remain, that is an
+*orphan*, and nlink-lab reaps those for you:
 
 ```bash
-sudo ip netns list
-sudo ip netns delete <ns-name>
+nlink-lab status --scan          # what is orphaned or stale
+sudo nlink-lab destroy --orphans # reap it
 ```
 
-Repeat for every namespace belonging to the lab (they share the lab prefix).
+The reaper only ever touches namespaces nlink-lab created — they
+carry an ownership tag under `/run/nlink-lab/netns/` — so a
+namespace you made by hand is safe from it. `sudo nlink-lab doctor`
+reports the same orphans as part of its host check.
+
+Manual cleanup (`sudo ip netns delete <ns-name>` for each
+namespace sharing the lab prefix) is the last resort, and it
+leaves the mgmt bridge and any host-side veths behind.
 
 ---
 
@@ -129,8 +137,12 @@ network namespace. Do not override the network mode.
 
 ## State Corruption
 
-Lab state is stored in `~/.local/state/nlink-lab/labs/`. Each lab has a TOML
-file tracking its namespaces, interfaces, and processes.
+Lab state is stored in `$XDG_STATE_HOME/nlink-lab/labs/` (usually
+`~/.local/state/nlink-lab/labs/`). Each lab directory holds
+`state.json` — namespaces, container ids, spawned PIDs and their
+start times, live impairments — alongside the rendered
+`topology.toml`, `meta.json`, `logs/`, `snapshots/` and, after a
+crash, a `journal.json` of work to unwind.
 
 If state becomes inconsistent (e.g., after a system crash):
 
@@ -142,13 +154,15 @@ sudo nlink-lab destroy --force <name>
 rm -rf ~/.local/state/nlink-lab/labs/<name>
 ```
 
-Then verify no orphaned namespaces remain:
+Then reap whatever the removed state file was tracking:
 
 ```bash
-sudo ip netns list
-# Delete any that match the lab prefix
-sudo ip netns delete <orphaned-ns>
+nlink-lab status --scan
+sudo nlink-lab destroy --orphans
 ```
+
+A `journal.json` left by a crashed deploy is unwound automatically
+on the next deploy of that lab, and by `destroy --orphans`.
 
 ---
 
@@ -391,6 +405,9 @@ Common fixes:
 ---
 
 ## Filing a Bug
+
+Issues go to
+<https://git.marcpardo.eu/marcpardo/nlink-lab/issues>.
 
 A good bug report includes:
 

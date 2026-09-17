@@ -14,7 +14,7 @@ nlink-lab destroy --orphans [OPTIONS]
 
 Reverses what `deploy` built: kills spawned processes, removes
 container nodes, deletes namespaces, removes bridges and veth
-pairs, removes the state directory at `~/.nlink-lab/<name>/`.
+pairs, removes the state directory at `~/.local/state/nlink-lab/labs/<name>/`.
 
 Three modes:
 
@@ -82,7 +82,7 @@ are warnings, not errors.
 | Spawned processes | yes (SIGKILL) |
 | /etc/hosts injections | yes |
 | Wi-Fi `mac80211_hwsim` radios | yes |
-| State directory `~/.nlink-lab/<lab>/` | yes |
+| State directory `~/.local/state/nlink-lab/labs/<lab>/` | yes |
 
 ## Exit codes
 

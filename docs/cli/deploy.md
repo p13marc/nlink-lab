@@ -10,11 +10,17 @@ nlink-lab deploy [OPTIONS] <TOPOLOGY>
 
 ## Description
 
-Parses the NLL file, runs the validator, and executes the 18-step
-deployment sequence: namespaces → bridges → veths → addresses →
-routes → sysctls → nftables → impairments → rate limits → DNS →
-spawned processes → validation. State is written to
-`~/.nlink-lab/<lab-name>/`.
+Parses the NLL file, runs the validator, builds a plan, and
+executes it stage by stage: namespaces → hwsim → mgmt bridge →
+bridge networks → veths → host links → links up → sysctls →
+addresses/routes/nftables/WireGuard → VRF routes → impairments →
+DNS → routing daemons → processes → Wi-Fi. State is written to
+`$XDG_STATE_HOME/nlink-lab/labs/<lab-name>/` (usually
+`~/.local/state/nlink-lab/labs/<lab-name>/`), then any
+`validate { … }` assertions run.
+
+`--dry-run` prints the plan and stops before touching the
+kernel.
 
 `deploy` requires either root, SUID install, or
 `CAP_NET_ADMIN`+`CAP_SYS_ADMIN`. Some features need additional caps
@@ -41,7 +47,7 @@ exit code 3 unless `--force` is passed.
 | `--suffix STR` | Append a fixed suffix to the lab name. Mutually exclusive with `--unique`. |
 | `--daemon` | Start the Zenoh metrics daemon after deploy completes. |
 | `--json` | Emit machine-parseable JSON: lab name, namespaces, addresses, exit status. |
-| `-v`, `--verbose` | Print every deployment step (the 18-step trace). |
+| `-v`, `--verbose` | Trace every stage of the plan as it executes. |
 | `-q`, `--quiet` | Suppress all output except errors. |
 
 ## Examples
@@ -101,9 +107,9 @@ deploy. Doesn't require root.
 
 Deploy writes:
 
-- `~/.nlink-lab/<lab>/state.json` — namespace names, container IDs,
+- `~/.local/state/nlink-lab/labs/<lab>/state.json` — namespace names, container IDs,
   spawned PIDs, addresses
-- `~/.nlink-lab/<lab>/topology.toml` — rendered (post-loop, post-import)
+- `~/.local/state/nlink-lab/labs/<lab>/topology.toml` — rendered (post-loop, post-import)
   topology
 
 These files are read by `destroy`, `apply`, `inspect`, `exec`, and

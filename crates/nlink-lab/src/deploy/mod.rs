@@ -1623,6 +1623,127 @@ network b {
         }
     }
 
+    /// A router must never get a route for a network it is already
+    /// attached to. Such a route has the same destination and prefix as
+    /// the kernel's connected route, so `replace_route` replaces it, and
+    /// every later gateway on that segment stops resolving —
+    /// `ENETUNREACH`, "Nexthop has invalid gateway" (#138).
+    ///
+    /// The shape that produced it: `edge` sits on two segments, and BFS
+    /// reaches a node on the *second* one the long way round, through
+    /// the first.
+    #[test]
+    fn test_auto_route_never_covers_a_connected_network() {
+        let topo = crate::parser::parse(
+            r#"lab "t" { routing auto }
+profile router { forward ipv4 }
+node edge : router
+node hub : router
+node far : router
+network a {
+  members [edge:eth0, hub:eth0]
+  port edge:eth0 { 172.16.1.2/24 }
+  port hub:eth0 { 172.16.1.1/24 }
+}
+network b {
+  members [edge:eth1, hub:eth1, far:eth1]
+  port edge:eth1 { 172.16.2.2/24 }
+  port hub:eth1 { 172.16.2.1/24 }
+  port far:eth1 { 172.16.2.3/24 }
+}
+"#,
+        )
+        .unwrap();
+        let routes = auto_generate_routes(&topo);
+        for connected in ["172.16.1.0/24", "172.16.2.0/24"] {
+            assert!(
+                !routes
+                    .get("edge")
+                    .is_some_and(|r| r.contains_key(connected)),
+                "edge is on {connected}; routing it via a gateway replaces the \
+                 connected route: {:?}",
+                routes.get("edge")
+            );
+        }
+    }
+
+    /// The same invariant over every shipped example that uses
+    /// `routing auto`. `auto_generate_routes` is pure, so this costs
+    /// nothing and needs no root — and a deploy is the only other thing
+    /// that would have caught #138, which CI does not do for most
+    /// examples.
+    #[test]
+    fn examples_never_auto_route_over_a_connected_network() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("workspace root");
+        let mut checked = 0;
+        let mut stack = vec![root.join("examples")];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read examples dir") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "nll") {
+                    continue;
+                }
+                // Imported fragments are not standalone topologies.
+                let Ok(topo) = crate::parser::parse_file(&path) else {
+                    continue;
+                };
+                if topo.lab.routing != crate::types::RoutingMode::Auto {
+                    continue;
+                }
+                checked += 1;
+                let routes = auto_generate_routes(&topo);
+                // Every address the node holds, as a network CIDR.
+                for (node_name, node_routes) in &routes {
+                    let mut connected: std::collections::BTreeSet<String> = Default::default();
+                    for link in &topo.links {
+                        let Some(addrs) = &link.addresses else {
+                            continue;
+                        };
+                        for (i, ep) in link.endpoints.iter().enumerate() {
+                            if crate::types::EndpointRef::parse(ep)
+                                .is_some_and(|e| &e.node == node_name)
+                                && let Some(cidr) = super::plan::network::network_cidr(&addrs[i])
+                            {
+                                connected.insert(cidr);
+                            }
+                        }
+                    }
+                    for network in topo.networks.values() {
+                        for (ep, port) in &network.ports {
+                            if !crate::types::EndpointRef::parse(ep)
+                                .is_some_and(|e| &e.node == node_name)
+                            {
+                                continue;
+                            }
+                            for addr in &port.addresses {
+                                if let Some(cidr) = super::plan::network::network_cidr(addr) {
+                                    connected.insert(cidr);
+                                }
+                            }
+                        }
+                    }
+                    for dest in node_routes.keys() {
+                        assert!(
+                            !connected.contains(dest),
+                            "{}: {node_name} is already on {dest}, but routing auto \
+                             emitted a route for it — that replaces the connected \
+                             route and breaks every gateway on the segment (#138)",
+                            path.display()
+                        );
+                    }
+                }
+            }
+        }
+        assert!(checked >= 2, "expected examples using `routing auto`");
+    }
+
     #[test]
     fn test_auto_route_manual_v6_default_not_overridden() {
         let topo = crate::parser::parse(

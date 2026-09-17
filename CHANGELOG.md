@@ -65,6 +65,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`routing auto` emitted routes for networks the node was already
+  attached to** (#138), which made `examples/multi-site.nll` undeployable:
+  such a route has the same destination and prefix as the kernel's
+  connected route, so `replace_route` replaces it, and every later route
+  whose gateway lives on that segment then fails with `ENETUNREACH` /
+  "Nexthop has invalid gateway". The directly-connected check compared
+  *addresses* (`10.18.2.2/24` against `10.18.2.1/24`) rather than
+  networks, so it could never match — two nodes on one segment do not
+  share an address. It compares networks now. `validate` and `render`
+  could not have caught this: the routes are computed at deploy time.
+
 - **Changing an impairment briefly removed it** (#108). `edit
   --set-impair`, and any `apply` that changed a netem or `qdisc` block,
   went through `Plan::diff`'s generic "re-create when the payload

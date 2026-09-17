@@ -620,6 +620,16 @@ fn is_family(addr: &str, v6: bool) -> bool {
         .is_some_and(|ip| ip.is_ipv6() == v6)
 }
 
+/// `"10.18.2.2/24"` → `Some("10.18.2.0/24")`. `None` for anything that
+/// does not parse as a CIDR.
+pub(crate) fn network_cidr(addr: &str) -> Option<String> {
+    let (ip, prefix) = crate::helpers::parse_cidr(addr).ok()?;
+    Some(format!(
+        "{}/{prefix}",
+        crate::helpers::network_address(ip, prefix)
+    ))
+}
+
 fn auto_routes_for_family(
     topology: &Topology,
     v6: bool,
@@ -781,16 +791,23 @@ fn auto_routes_for_family(
             }
         }
 
+        // The networks this node is *on*, as CIDRs. A route must never
+        // be emitted for one of these: it would have the same
+        // destination and prefix as the connected route the kernel
+        // maintains for the interface, so `replace_route` replaces it —
+        // and the gateway of every later route on that segment then
+        // resolves to nothing (`ENETUNREACH`, "Nexthop has invalid
+        // gateway"). `examples/multi-site.nll` could not deploy at all
+        // because of this (#138).
+        let my_networks: BTreeSet<String> = node_subnets
+            .get(node_name)
+            .map(|addrs| addrs.iter().filter_map(|a| network_cidr(a)).collect())
+            .unwrap_or_default();
+
         while let Some((current, next_hop_ip)) = queue.pop_front() {
             // Add routes for current node's subnets via next_hop_ip
             if let Some(subnets) = node_subnets.get(&current) {
                 for subnet in subnets {
-                    // Skip if directly connected
-                    let my_subnets = node_subnets.get(node_name);
-                    let is_direct = my_subnets.is_some_and(|s| s.contains(subnet));
-                    if is_direct {
-                        continue;
-                    }
                     // Skip if manual route exists
                     if existing_routes.contains_key(subnet) {
                         continue;
@@ -799,6 +816,14 @@ fn auto_routes_for_family(
                     if let Ok((ip, prefix)) = crate::helpers::parse_cidr(subnet) {
                         let net_addr = crate::helpers::network_address(ip, prefix);
                         let net_cidr = format!("{net_addr}/{prefix}");
+                        // Skip if directly connected. Compared as
+                        // networks: the addresses differ by definition
+                        // (two nodes on one segment never share one),
+                        // so comparing them was a test that could not
+                        // pass.
+                        if my_networks.contains(&net_cidr) {
+                            continue;
+                        }
                         if !existing_routes.contains_key(&net_cidr) {
                             auto_routes
                                 .entry(node_name.clone())

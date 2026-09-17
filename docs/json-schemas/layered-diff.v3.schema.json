@@ -33,10 +33,14 @@
       }
     },
     "schema_version": {
-      "description": "Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`\nfields (Plan 160 / 0.7.0) — use `network` / `nftables` / `removals`.",
+      "description": "Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`\nfields (Plan 160 / 0.7.0) — use `topology` / `network` /\n`nftables` / `removals`. `topology` was added later and is\nadditive, so the marker did not move.",
       "type": "integer",
       "format": "uint32",
       "minimum": 0
+    },
+    "topology": {
+      "description": "Lab-graph changes: nodes, links, routes, sysctls, nftables — and\n**every traffic-control change**, which lives only here.\nImpairments, per-pair `impair` matrices, `qdisc` blocks and rate\nlimits are applied imperatively, outside the declarative\n`NetworkConfig` the `network` layer diffs, so without this field\n`apply --check --json` reported a netem edit as no change at all\n(#108). Elided when empty.",
+      "$ref": "#/$defs/TopologyDiff"
     }
   },
   "required": [
@@ -44,8 +48,812 @@
     "lab",
     "no_op",
     "change_count",
+    "topology",
     "network",
     "nftables",
     "removals"
-  ]
+  ],
+  "$defs": {
+    "FirewallConfig": {
+      "description": "Firewall configuration (nftables).",
+      "type": "object",
+      "properties": {
+        "policy": {
+          "description": "Default chain policy (\"accept\" or \"drop\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "description": "Firewall rules.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      }
+    },
+    "FirewallRule": {
+      "description": "A single firewall rule.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "Action (\"accept\", \"drop\", \"reject\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "match": {
+          "description": "Match expression (e.g., \"tcp dport 80\", \"ct state established,related\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Impairment": {
+      "description": "Network impairment configuration (netem).",
+      "type": "object",
+      "properties": {
+        "corrupt": {
+          "description": "Packet corruption (e.g., \"0.01%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay": {
+          "description": "Delay (e.g., \"10ms\", \"100us\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay_correlation": {
+          "description": "Correlation of successive delay values (e.g., \"25%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duplicate": {
+          "description": "Packet duplication (e.g., \"1%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jitter": {
+          "description": "Jitter (e.g., \"2ms\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "netem queue limit in packets (default 1000).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss": {
+          "description": "Packet loss (e.g., \"0.1%\", \"5%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss_correlation": {
+          "description": "Correlation of successive loss decisions (e.g., \"25%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate": {
+          "description": "Bandwidth rate limit (e.g., \"100mbit\", \"1gbit\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reorder": {
+          "description": "Packet reordering (e.g., \"0.5%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ImpairmentChange": {
+      "description": "A change to an impairment on a specific endpoint.",
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "new": {
+          "$ref": "#/$defs/Impairment"
+        },
+        "old": {
+          "$ref": "#/$defs/Impairment"
+        }
+      },
+      "required": [
+        "endpoint",
+        "old",
+        "new"
+      ]
+    },
+    "Link": {
+      "description": "Point-to-point link between two nodes (creates a veth pair).",
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "description": "IP addresses in CIDR notation for each endpoint.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "endpoints": {
+          "description": "Endpoints in `\"node:interface\"` format.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "mtu": {
+          "description": "MTU for both ends.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "endpoints"
+      ]
+    },
+    "NatAction": {
+      "description": "NAT action type.",
+      "type": "string",
+      "enum": [
+        "masquerade",
+        "snat",
+        "dnat",
+        "translate"
+      ]
+    },
+    "NatConfig": {
+      "description": "NAT configuration.",
+      "type": "object",
+      "properties": {
+        "rules": {
+          "description": "NAT rules.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NatRule"
+          }
+        }
+      }
+    },
+    "NatRule": {
+      "description": "A single NAT rule.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "NAT action.",
+          "$ref": "#/$defs/NatAction"
+        },
+        "dst": {
+          "description": "Destination CIDR match.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "description": "Source CIDR match.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Target address for SNAT/DNAT.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_port": {
+          "description": "Target port for DNAT.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "NetworkImpairerChange": {
+      "description": "A change to the per-peer impairer on `(network, src_node)`.\n\n`desired` carries the rules that should be live after reconcile;\n`None` means \"remove the impairer entirely on this source's\ninterface\" (which translates to `PerPeerImpairer::clear`).",
+      "type": "object",
+      "properties": {
+        "desired": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/NetworkImpairment"
+          }
+        },
+        "network": {
+          "type": "string"
+        },
+        "src_node": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "src_node"
+      ]
+    },
+    "NetworkImpairment": {
+      "description": "Per-pair impairment within a shared network.\n\n`src` and `dst` are node names (not endpoints) — the bridge\ndetermines the interface. The configured `impairment` is applied\nto traffic leaving `src`'s network interface destined for `dst`.",
+      "type": "object",
+      "properties": {
+        "dst": {
+          "description": "Destination node name.",
+          "type": "string"
+        },
+        "impairment": {
+          "description": "netem configuration applied to this pair.",
+          "$ref": "#/$defs/Impairment"
+        },
+        "rate_cap": {
+          "description": "Optional per-pair rate cap (HTB ceil). Independent of\n`impairment.rate` — `rate_cap` builds an HTB shaper on top of\nnetem, while `impairment.rate` uses netem's built-in\n(token-bucket-like) rate limiting.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "description": "Source node name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "src",
+        "dst",
+        "impairment"
+      ]
+    },
+    "NftablesChange": {
+      "description": "A change to the per-node nftables ruleset (firewall + NAT).\n\n`desired_*` carries the rules that should be live after\nreconcile; `None` means \"remove the ruleset entirely on this\nnode\" (translates to `del_table`).",
+      "type": "object",
+      "properties": {
+        "desired_firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "desired_nat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NatConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "type": "string"
+        },
+        "was_present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "node",
+        "was_present"
+      ]
+    },
+    "QdiscChange": {
+      "description": "A change to the `qdisc` block of one endpoint.",
+      "type": "object",
+      "properties": {
+        "desired": {
+          "description": "`None` → the qdisc should be removed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QdiscConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "was_present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "endpoint",
+        "was_present"
+      ]
+    },
+    "QdiscConfig": {
+      "description": "A root qdisc other than netem on one interface (issue #67).\n\nValues keep the NLL spelling (`\"10mbit\"`, `\"32kb\"`, `\"5ms\"`) like\n[`Impairment`]; the planner parses them.",
+      "type": "object",
+      "oneOf": [
+        {
+          "description": "Token bucket filter: `rate` and `burst` are mandatory.",
+          "type": "object",
+          "properties": {
+            "burst": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "tbf"
+            },
+            "limit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mtu": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "peakrate": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rate": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "rate",
+            "burst"
+          ]
+        },
+        {
+          "description": "Fair queuing with controlled delay.",
+          "type": "object",
+          "properties": {
+            "ecn": {
+              "type": "boolean"
+            },
+            "flows": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "interval": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "fq_codel"
+            },
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "quantum": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "target": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Stochastic fairness queuing.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "sfq"
+            },
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "perturb": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "quantum": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Priority bands.",
+          "type": "object",
+          "properties": {
+            "bands": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "prio"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "RateLimit": {
+      "description": "Per-interface rate limiting.",
+      "type": "object",
+      "properties": {
+        "burst": {
+          "description": "Burst size (e.g., \"10mbit\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "egress": {
+          "description": "Egress rate (e.g., \"1gbit\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ingress": {
+          "description": "Ingress rate (e.g., \"1gbit\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "RateLimitChange": {
+      "description": "A change to the rate-limit on a single endpoint.\n\n`desired = None` means \"remove the rate-limit entirely on this\nendpoint\" — translates to deleting the root qdisc on the\ninterface.",
+      "type": "object",
+      "properties": {
+        "desired": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "was_present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "endpoint",
+        "was_present"
+      ]
+    },
+    "RouteChange": {
+      "description": "A change to a single static route on a single node.",
+      "type": "object",
+      "properties": {
+        "desired": {
+          "description": "`None` → the route should be removed.\n`Some` → add (when `was_present == false`) or replace\n(when the old config differs).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dest": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "was_present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "node",
+        "dest",
+        "was_present"
+      ]
+    },
+    "RouteConfig": {
+      "description": "Route configuration.",
+      "type": "object",
+      "properties": {
+        "dev": {
+          "description": "Output device name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metric": {
+          "description": "Route metric.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "via": {
+          "description": "Next-hop gateway address.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SysctlChange": {
+      "description": "Sysctl changes on a single node.\n\nWe don't try to *reset* removed sysctls — the kernel default\nisn't recoverable in general and overshooting is worse than\nleaving the previous value in place. Removed entries are\nreported so the operator can act on them, but no kernel call\nis made on the remove path.",
+      "type": "object",
+      "properties": {
+        "added": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "node": {
+          "type": "string"
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "node",
+        "added",
+        "changed",
+        "removed"
+      ]
+    },
+    "TopologyDiff": {
+      "description": "A structured diff between two topologies.",
+      "type": "object",
+      "properties": {
+        "impairments_added": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Impairment"
+              }
+            ]
+          }
+        },
+        "impairments_changed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImpairmentChange"
+          }
+        },
+        "impairments_removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "links_added": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Link"
+          }
+        },
+        "links_removed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Link"
+          }
+        },
+        "network_impairs_changed": {
+          "description": "Network-level per-pair impairment changes, grouped by\n`(network_name, src_node)` because that's the unit\n`nlink::netlink::impair::PerPeerImpairer` reconciles.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NetworkImpairerChange"
+          }
+        },
+        "nftables_changed": {
+          "description": "Per-node nftables ruleset changes (firewall + NAT, both\nrooted in the same `nlink-lab` table). Reconcile is coarse:\nany change triggers a full atomic flush + rebuild for the\naffected node. Plan 152 Phase B.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NftablesChange"
+          }
+        },
+        "nodes_added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nodes_removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "qdiscs_changed": {
+          "description": "Per-endpoint `qdisc` block changes (#67).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QdiscChange"
+          }
+        },
+        "rate_limits_changed": {
+          "description": "Per-endpoint rate-limit changes. Plan 152 Phase B.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RateLimitChange"
+          }
+        },
+        "routes_changed": {
+          "description": "Per-node static-route changes. Plan 152 Phase B.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteChange"
+          }
+        },
+        "sysctls_changed": {
+          "description": "Per-node sysctl changes. Plan 152 Phase B.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SysctlChange"
+          }
+        }
+      },
+      "required": [
+        "nodes_added",
+        "nodes_removed",
+        "links_added",
+        "links_removed",
+        "impairments_changed",
+        "impairments_added",
+        "impairments_removed",
+        "network_impairs_changed",
+        "routes_changed",
+        "sysctls_changed",
+        "rate_limits_changed",
+        "nftables_changed"
+      ]
+    }
+  }
 }

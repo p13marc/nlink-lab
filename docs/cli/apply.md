@@ -37,7 +37,7 @@ respawn — apply leaves them alone.
 |------|-------------|
 | `--dry-run` | Print the diff and what would change; don't make kernel calls. |
 | `--check` | Drift gate — exit non-zero if the live lab differs from the NLL. Implies `--dry-run`. |
-| `--json` | Emit a structured report. With `--dry-run`/`--check`: the schema-v3 envelope (`{schema_version: 3, lab, no_op, change_count, network: {…}, nftables: {…}}`, see `docs/json-schemas/layered-diff.v3.schema.json`) suitable for CI. |
+| `--json` | Emit a structured report. With `--dry-run`/`--check`: the schema-v3 envelope (`{schema_version: 3, lab, no_op, change_count, topology: {…}, network: {…}, nftables: {…}}`, see `docs/json-schemas/layered-diff.v3.schema.json`) suitable for CI. Traffic-control changes live in `topology`. |
 | `-v`, `--verbose` | Print every reconcile step. |
 | `-q`, `--quiet` | Suppress non-error output. |
 
@@ -83,15 +83,21 @@ nlink-lab --json apply --check topo.nll \
 ```
 
 The `--json` flag with `--dry-run`/`--check` emits the schema-v3 envelope
-(`docs/json-schemas/layered-diff.v3.schema.json`): per-namespace typed
-diffs from nlink, keyed by node name, with empty maps elided.
+(`docs/json-schemas/layered-diff.v3.schema.json`): the lab-graph diff,
+plus per-namespace typed diffs from nlink keyed by node name, with empty
+layers elided.
 
 ```json
 {
   "schema_version": 3,
   "lab": "satellite-mesh",
   "no_op": false,
-  "change_count": 2,
+  "change_count": 3,
+  "topology": {
+    "impairments_changed": [
+      { "endpoint": "alpha:radio", "old": { "delay": "10ms" }, "new": { "delay": "40ms" } }
+    ]
+  },
   "network": {
     "alpha": { "addresses_to_add": [ { "ifname": "radio", "address": "172.100.0.3/24" } ] }
   },
@@ -100,6 +106,11 @@ diffs from nlink, keyed by node name, with empty maps elided.
   }
 }
 ```
+
+**Traffic-control changes appear only under `topology`.** Impairments,
+per-pair `impair` matrices, `qdisc` blocks and rate limits are applied
+imperatively rather than through the declarative `NetworkConfig` the
+`network` layer diffs, so a netem edit shows up there and nowhere else.
 
 `apply --check` exits 2 when `no_op` is false.
 

@@ -514,15 +514,24 @@ qdisc a:eth0 {kind}
         assert_eq!(q[0].key(), "qdisc:a:eth0");
         assert!(matches!(q[0].inverse(), Some(Op::ClearQdisc { .. })));
 
+        // A changed qdisc is one op, not a teardown and a re-add.
+        // `replace_qdisc` sends `NLM_F_CREATE | NLM_F_REPLACE`, which
+        // the kernel grafts atomically even across a change of kind;
+        // deleting first would drop the interface to `noqueue` in
+        // between and reset the counters (#108).
         let changed = plan_of(&src("sfq { perturb 10s }"));
         let diff = Plan::diff(&plan, &changed);
-        assert!(diff.ops.iter().any(
-            |o| matches!(o, Op::ClearQdisc { node, iface } if node == "a" && iface == "eth0")
-        ));
         assert!(
+            !diff.ops.iter().any(|o| matches!(o, Op::ClearQdisc { .. })),
+            "a changed qdisc must not be torn down first: {:?}",
+            diff.ops
+        );
+        assert_eq!(
             diff.ops
                 .iter()
-                .any(|o| matches!(o, Op::Qdisc { qdisc, .. } if qdisc.kind.name() == "sfq"))
+                .filter(|o| matches!(o, Op::Qdisc { qdisc, .. } if qdisc.kind.name() == "sfq"))
+                .count(),
+            1
         );
         let removed = plan_of(
             "lab \"q\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n",

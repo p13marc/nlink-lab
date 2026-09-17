@@ -2999,6 +2999,66 @@ async fn proc_stat_returns_live_data(mut lab: RunningLab) {
     let _ = lab.exec("host", "kill", &[&pid.to_string()]);
 }
 
+// Issue #131: sampling a whole node in one call, and PSS.
+//
+// The old shape was one process per invocation, each costing five
+// namespace-entering execs. A consumer sampling ~50 processes on a
+// cadence therefore paid ~250 execs per tick, enough that the sampler's
+// own CPU showed up in the CPU it was measuring.
+#[lab_test("examples/simple.nll")]
+async fn proc_stat_many_samples_a_whole_node(mut lab: RunningLab) {
+    let a = lab.spawn_with_logs("host", &["sleep", "40"], None).unwrap();
+    let b = lab.spawn_with_logs("host", &["sleep", "41"], None).unwrap();
+
+    // `--all` is namespace membership, not nlink-lab's own bookkeeping:
+    // it must find processes whether or not nlink-lab spawned them.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let pids = loop {
+        let pids = lab.node_pids("host").unwrap();
+        if (pids.contains(&a) && pids.contains(&b)) || std::time::Instant::now() >= deadline {
+            break pids;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert!(pids.contains(&a), "node_pids missed {a}: {pids:?}");
+    assert!(pids.contains(&b), "node_pids missed {b}: {pids:?}");
+    // The host's own PIDs share the host namespace, not this node's.
+    assert!(
+        !pids.contains(&std::process::id()),
+        "the test runner is not in the node's namespace: {pids:?}"
+    );
+
+    let stats = lab.proc_stat_many("host", &pids).unwrap();
+    assert_eq!(stats.len(), pids.len());
+    assert!(stats.iter().all(|s| s.node == "host"));
+
+    // One call must agree field for field with the single-PID path —
+    // apart from the CPU counters and state, which move on their own.
+    let many = stats.iter().find(|s| s.host_pid == a).unwrap();
+    let one = lab.proc_stat("host", a).unwrap();
+    assert_eq!(one.host_pid, many.host_pid);
+    assert_eq!(one.command, many.command);
+    assert_eq!(one.uid, many.uid);
+    assert_eq!(one.vsz_kb, many.vsz_kb);
+    assert_eq!(
+        one.started_at_unix_micros, many.started_at_unix_micros,
+        "start time is derived from btime + starttime; both paths must \
+         read the same tick rate"
+    );
+
+    // PSS: present for a userland process, and never above RSS — every
+    // page counts once in RSS and at most once (1/N of a shared page)
+    // in PSS.
+    let pss = one.pss_kb.expect("smaps_rollup should be readable as root");
+    let rss = one.rss_kb.expect("a userland process has an MM");
+    assert!(pss > 0, "PSS should not be zero for a live process");
+    assert!(pss <= rss, "pss {pss} kB must not exceed rss {rss} kB");
+
+    for pid in [a, b] {
+        let _ = lab.exec("host", "kill", &[&pid.to_string()]);
+    }
+}
+
 // ─── Plan 156 PR A — partition cycles fix ───────────────
 
 // Round-4 §1: `partition` was a silent no-op on the second call after

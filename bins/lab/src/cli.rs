@@ -223,24 +223,39 @@ pub enum Commands {
     /// Kill a tracked background process.
     Kill(cmd::kill::Args),
 
-    /// Sample resource usage of a process inside a lab node.
+    /// Sample resource usage of processes inside a lab node.
     ///
-    /// Reads `/proc/<pid>/{stat,status}` and counts entries in
-    /// `/proc/<pid>/fd/` from inside the target namespace. Routes the
-    /// reads through `nlink-lab exec` so `/proc/<pid>/fd/`
-    /// (mode 0700, owned by root) is readable even from a non-root
-    /// caller.
+    /// Reads `/proc/<pid>/{stat,status,smaps_rollup}` and counts
+    /// entries in `/proc/<pid>/fd/`. For a namespace node these come
+    /// from the host's `/proc`, which is the same `/proc` the node sees
+    /// (nlink-lab does not use `CLONE_NEWPID`); a container node has
+    /// its own PID namespace, so the reads are routed through
+    /// `nlink-lab exec` instead. Either way they run as root, so
+    /// `/proc/<pid>/fd/` — mode 0700 — is readable.
+    ///
+    /// Name one PID positionally, repeat `--pid`, or take the whole
+    /// node with `--all`. The per-node constants (boot time, clock-tick
+    /// rate) are read once per call, so sampling N processes costs one
+    /// call rather than N.
     ///
     /// JSON OUTPUT (with `--json`):
-    ///   { "host_pid": int, "command": str, "uid": int,
+    ///   { "node": str, "host_pid": int, "command": str, "uid": int,
     ///     "rss_kb": int | null, "vsz_kb": int | null,
-    ///     "fd_count": int,
+    ///     "pss_kb": int | null, "fd_count": int,
     ///     "cpu_user_ticks": int, "cpu_kernel_ticks": int,
     ///     "started_at_unix_micros": int, "state": str }
-    /// Schema: docs/json-schemas/proc-stat.schema.json
+    /// one object for a single positional PID, or an ARRAY of them for
+    /// `--all` / `--pid`.
+    /// Schema: docs/json-schemas/proc-stat.schema.json,
+    ///   docs/json-schemas/proc-stat-list.schema.json
     ///
     /// CPU ticks are in `sysconf(_SC_CLK_TCK)` units (typically 100
     /// per second); convert by dividing.
+    ///
+    /// Sum `pss_kb`, not `rss_kb`, to get a node's memory: RSS
+    /// double-counts every page shared between processes, which
+    /// systematically overstates whichever configuration runs more of
+    /// them.
     ProcStat(cmd::proc_stat::Args),
 
     /// Run diagnostics on a lab.

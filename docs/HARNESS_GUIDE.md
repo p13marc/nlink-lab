@@ -36,6 +36,30 @@ nlink-lab proc-stat des-3m site_a 292086 --json
 nlink-lab proc-stat des-3m site_a 292086 --json --watch 5  # NDJSON, every 5s
 ```
 
+To sample more than one process, take them in a single call rather than
+looping the command — the per-node constants are read once, and for a
+namespace node the whole sample costs no namespace-entering execs at
+all:
+
+```bash
+nlink-lab proc-stat des-3m site_a --all --json          # whole namespace
+nlink-lab proc-stat des-3m site_a --pid 292086 --pid 292090 --json
+```
+
+`--all` is namespace membership (it walks `/proc` comparing
+`/proc/<pid>/ns/net`), not nlink-lab's own spawn bookkeeping, so it
+finds processes your own supervisor started inside the node. Both
+multi-process forms emit a JSON **array**; the positional single-PID
+form still emits one object.
+
+**Sum `pss_kb`, not `rss_kb`, for a node's memory.** RSS counts every
+shared page once per process mapping it, so summing it over a node
+double-counts the shared runtime — and does so *systematically* more for
+whichever configuration runs more processes, which turns a fair
+comparison into a biased one. `pss_kb` comes from
+`/proc/<pid>/smaps_rollup`, a single kernel-side aggregate, and is
+`None` for kernel threads and on kernels before 4.14.
+
 [arch-ns]: ARCHITECTURE.md#process--namespace-model
 
 ---

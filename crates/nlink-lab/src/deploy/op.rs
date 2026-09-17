@@ -79,7 +79,7 @@ impl NsRef {
     }
 
     /// Path of the namespace file (`/proc/<pid>/ns/net` for containers).
-    fn ns_path(&self) -> std::path::PathBuf {
+    pub fn ns_path(&self) -> std::path::PathBuf {
         match self {
             NsRef::Root => "/proc/self/ns/net".into(),
             NsRef::Named { name } => std::path::Path::new(namespace::NETNS_RUN_DIR).join(name),

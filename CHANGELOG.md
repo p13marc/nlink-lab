@@ -19,6 +19,24 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`nlink-lab proc-stat` samples a whole node in one call, and reports
+  PSS** (#131). `--all` takes every process in the node's network
+  namespace (found by walking `/proc` and comparing
+  `/proc/<pid>/ns/net`, so it sees processes your own supervisor
+  started, not just nlink-lab's spawns); `--pid` is repeatable; the
+  positional single-PID form is unchanged. The per-node constants (boot
+  time, clock-tick rate) are read once per call rather than once per
+  process. `pss_kb` comes from `/proc/<pid>/smaps_rollup` — the number
+  to sum across a node, because summing `rss_kb` counts every shared
+  page once per process and so systematically overstates whichever
+  configuration runs more of them. `None` for kernel threads and on
+  kernels before 4.14.
+
+  `--json` now emits an **array** for `--all`/`--pid`
+  (`docs/json-schemas/proc-stat-list.schema.json`); the positional form
+  still emits one object. Every record gains a `node` field so a
+  multi-process sample stays self-describing once written to a file.
+
 - **Cumulative `rx_bytes` / `tx_bytes` / `rx_pkts` / `tx_pkts` on
   `InterfaceMetrics`** (#130), from the link's `rtnl_link_stats64` —
   not from tc, which accounts nothing on the `noqueue` qdisc an
@@ -31,6 +49,19 @@ All notable changes to this project will be documented in this file.
   `nlink_lab_iface_{rx,tx}_{bytes,packets}_total` counters. Monotonic
   only within one interface lifetime — recreating the interface
   restarts them at zero, so detect a backwards step.
+
+### Changed
+
+- **`proc-stat` reads the host's `/proc` for a namespace node** instead
+  of routing five reads per process through `nlink-lab exec`. nlink-lab
+  does not use `CLONE_NEWPID`, so the host's `/proc/<pid>` *is* the
+  node's — the repo already relied on this for `pid_is_alive` and the
+  PID-reuse start-time check. Container nodes keep the exec path,
+  because a container does have its own PID namespace and a host PID
+  would name a different process. Sampling a process now costs zero
+  namespace entries, which is what makes a per-second cadence possible
+  without the sampler's own cost showing up in the CPU figure it
+  collects.
 
 ### Fixed
 

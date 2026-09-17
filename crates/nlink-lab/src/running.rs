@@ -1863,71 +1863,191 @@ impl RunningLab {
             .collect()
     }
 
-    /// Sample resource usage for a single process inside a node's
-    /// namespace. Reads `/proc/<pid>/{stat,status}` plus the entry
-    /// count of `/proc/<pid>/fd/`, then assembles into a structured
-    /// [`crate::ProcStat`].
+    /// Sample resource usage for one process inside a node's namespace.
     ///
-    /// The reads happen via [`exec`](Self::exec) inside the target
-    /// namespace, so:
-    ///
-    /// - The mount-namespaced `/proc` view (when `dns hosts` etc. has
-    ///   set up `/etc/netns/`) is what the parser sees.
-    /// - The exec runs as the same UID as `nlink-lab` itself —
-    ///   typically root via `check_root` — so `/proc/<pid>/fd/` is
-    ///   readable even though it's mode 0700 owned by the spawned
-    ///   process's UID.
+    /// Thin wrapper over [`proc_stat_many`](Self::proc_stat_many); see
+    /// there for where the reads come from.
     ///
     /// `pid` is the host PID (same as ns PID — `CLONE_NEWPID` isn't
-    /// used). See `docs/ARCHITECTURE.md` "Process & namespace model".
-    /// (Round-5 §2.2.)
+    /// used for namespace nodes). See `docs/ARCHITECTURE.md` "Process &
+    /// namespace model". (Round-5 §2.2.)
     pub fn proc_stat(&self, node: &str, pid: u32) -> Result<crate::proc_stat::ProcStat> {
-        let stat_path = format!("/proc/{pid}/stat");
-        let status_path = format!("/proc/{pid}/status");
+        self.proc_stat_many(node, &[pid])?
+            .pop()
+            .ok_or_else(|| Error::deploy_failed(format!("no such process: {pid}")))
+    }
 
-        let stat_out = self.exec(node, "cat", &[&stat_path])?;
-        if stat_out.exit_code != 0 {
-            return Err(Error::deploy_failed(format!(
-                "read {stat_path}: exit {} stderr={}",
-                stat_out.exit_code,
-                stat_out.stderr.trim()
-            )));
-        }
-        let stat_fields = crate::proc_stat::parse_stat(&stat_out.stdout).ok_or_else(|| {
-            Error::deploy_failed(format!("parse /proc/{pid}/stat (unexpected format)"))
+    /// Host PIDs of every process whose **network namespace** is this
+    /// node's.
+    ///
+    /// Walks `/proc` and compares the `(dev, ino)` of each process's
+    /// `/proc/<pid>/ns/net` with the node's namespace file — the same
+    /// identity `ip netns pids` uses. Needs root, like everything else
+    /// that reads another process's `/proc/<pid>/ns/`.
+    ///
+    /// Works for container nodes too (the host sees every PID), and
+    /// reports host PIDs in that case — a container's own PID namespace
+    /// numbers them differently.
+    ///
+    /// Skips processes that vanish mid-walk rather than failing: a
+    /// sampled lab is by definition churning.
+    pub fn node_pids(&self, node: &str) -> Result<Vec<u32>> {
+        let ns = self
+            .ns_resolver_of(node)
+            .ok_or_else(|| Error::deploy_failed(format!("node '{node}' is not running")))?;
+        let want = std::fs::metadata(ns.ns_path()).map_err(|e| {
+            Error::deploy_failed(format!(
+                "stat namespace of '{node}' ({}): {e}",
+                ns.ns_path().display()
+            ))
         })?;
-
-        let status_out = self.exec(node, "cat", &[&status_path])?;
-        if status_out.exit_code != 0 {
-            return Err(Error::deploy_failed(format!(
-                "read {status_path}: exit {} stderr={}",
-                status_out.exit_code,
-                status_out.stderr.trim()
-            )));
+        let (want_dev, want_ino) = {
+            use std::os::unix::fs::MetadataExt;
+            (want.dev(), want.ino())
+        };
+        let mut pids = Vec::new();
+        for entry in std::fs::read_dir("/proc").map_err(Error::Io)? {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let name = entry.file_name();
+            let pid: u32 = match name.to_str().and_then(|s| s.parse().ok()) {
+                Some(p) => p,
+                None => continue,
+            };
+            // A process that exits between the readdir and the stat is
+            // not an error, it is just not in the sample.
+            let Ok(md) = std::fs::metadata(format!("/proc/{pid}/ns/net")) else {
+                continue;
+            };
+            use std::os::unix::fs::MetadataExt;
+            if md.dev() == want_dev && md.ino() == want_ino {
+                pids.push(pid);
+            }
         }
-        let status_fields = crate::proc_stat::parse_status(&status_out.stdout);
+        pids.sort_unstable();
+        Ok(pids)
+    }
 
-        // Count entries in /proc/<pid>/fd. Direct `ls` exec — see
-        // `count_fd_dir` for why we don't go through `sh -c`.
+    /// Sample resource usage for several processes in one call.
+    ///
+    /// Reads `/proc/<pid>/{stat,status,smaps_rollup}` and the entry
+    /// count of `/proc/<pid>/fd/` for each PID, plus the two per-node
+    /// constants (`btime` from `/proc/stat` and the clock-tick rate)
+    /// **once** rather than once per process.
+    ///
+    /// Where the reads come from depends on the node:
+    ///
+    /// - **Namespace node** — straight from the host's `/proc` with
+    ///   `std::fs`. nlink-lab never uses `CLONE_NEWPID`, so the host's
+    ///   `/proc/<pid>` *is* the node's, and `/proc` is not remounted by
+    ///   the `/etc/netns` overlay. This costs zero namespace-entering
+    ///   execs; the previous implementation spent five per process,
+    ///   which is enough for a sampler to contaminate the CPU figure it
+    ///   is collecting.
+    /// - **Container node** — via [`exec`](Self::exec), because a
+    ///   container has its own PID namespace and a host PID would name
+    ///   a different process. The exec runs as nlink-lab's own UID
+    ///   (root, via `check_root`), which is what makes mode-0700
+    ///   `/proc/<pid>/fd/` readable.
+    ///
+    /// A PID that does not exist is an error; a PID whose
+    /// `smaps_rollup` cannot be read simply yields `pss_kb: None`.
+    pub fn proc_stat_many(
+        &self,
+        node: &str,
+        pids: &[u32],
+    ) -> Result<Vec<crate::proc_stat::ProcStat>> {
+        let container = matches!(
+            self.ns_resolver_of(node),
+            Some(crate::deploy::NsRef::Container { .. })
+        );
+        // Per-node constants: one read each, not one per process.
+        let (btime, tick_hz) = if container {
+            let out = self.exec(node, "cat", &["/proc/stat"])?;
+            let btime = crate::proc_stat::parse_btime(&out.stdout).unwrap_or(0);
+            let tck = self.exec(node, "getconf", &["CLK_TCK"])?;
+            (btime, tck.stdout.trim().parse().unwrap_or(100))
+        } else {
+            let btime = std::fs::read_to_string("/proc/stat")
+                .ok()
+                .and_then(|t| crate::proc_stat::parse_btime(&t))
+                .unwrap_or(0);
+            // SAFETY: `sysconf` is thread-safe and takes no pointers.
+            let tck = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+            (btime, if tck > 0 { tck as u64 } else { 100 })
+        };
+
+        let mut out = Vec::with_capacity(pids.len());
+        for &pid in pids {
+            let (stat_text, status_text, smaps_text, fd_count) = if container {
+                self.read_proc_via_exec(node, pid)?
+            } else {
+                Self::read_proc_on_host(pid)?
+            };
+            let stat_fields = crate::proc_stat::parse_stat(&stat_text).ok_or_else(|| {
+                Error::deploy_failed(format!("parse /proc/{pid}/stat (unexpected format)"))
+            })?;
+            let status_fields = crate::proc_stat::parse_status(&status_text);
+            out.push(crate::proc_stat::assemble(
+                node,
+                pid,
+                crate::proc_stat::Sampled {
+                    stat: &stat_fields,
+                    status: &status_fields,
+                    fd_count,
+                    pss_kb: crate::proc_stat::parse_pss_kb(&smaps_text),
+                },
+                btime,
+                tick_hz,
+            ));
+        }
+        Ok(out)
+    }
+
+    /// The per-process `/proc` reads for a namespace node, from the
+    /// host. Returns `(stat, status, smaps_rollup, fd_count)`.
+    ///
+    /// `smaps_rollup` is best-effort: it does not exist before kernel
+    /// 4.14 and a kernel thread has no rollup, both of which read back
+    /// as "no PSS" rather than an error.
+    fn read_proc_on_host(pid: u32) -> Result<(String, String, String, u32)> {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .map_err(|e| Error::deploy_failed(format!("read /proc/{pid}/stat: {e}")))?;
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status"))
+            .map_err(|e| Error::deploy_failed(format!("read /proc/{pid}/status: {e}")))?;
+        let smaps =
+            std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup")).unwrap_or_default();
+        let fd_count = std::fs::read_dir(format!("/proc/{pid}/fd"))
+            .map_err(|e| Error::deploy_failed(format!("list /proc/{pid}/fd: {e}")))?
+            .count() as u32;
+        Ok((stat, status, smaps, fd_count))
+    }
+
+    /// The per-process `/proc` reads for a container node, through
+    /// `exec`. Returns `(stat, status, smaps_rollup, fd_count)`.
+    ///
+    /// Each read is its own direct exec rather than one `sh -c` — see
+    /// [`count_fd_dir`] for why a shell is not an option here.
+    fn read_proc_via_exec(&self, node: &str, pid: u32) -> Result<(String, String, String, u32)> {
+        let read = |path: String| -> Result<String> {
+            let out = self.exec(node, "cat", &[&path])?;
+            if out.exit_code != 0 {
+                return Err(Error::deploy_failed(format!(
+                    "read {path}: exit {} stderr={}",
+                    out.exit_code,
+                    out.stderr.trim()
+                )));
+            }
+            Ok(out.stdout)
+        };
+        let stat = read(format!("/proc/{pid}/stat"))?;
+        let status = read(format!("/proc/{pid}/status"))?;
+        // Best-effort, exactly as on the host path.
+        let smaps = read(format!("/proc/{pid}/smaps_rollup")).unwrap_or_default();
         let fd_count = count_fd_dir(self, node, pid)?;
-
-        // /proc/stat for btime — needed to convert starttime_ticks
-        // (jiffies since boot) into a Unix timestamp.
-        let proc_stat_out = self.exec(node, "cat", &["/proc/stat"])?;
-        let btime = crate::proc_stat::parse_btime(&proc_stat_out.stdout).unwrap_or(0);
-
-        // Tick rate. `getconf CLK_TCK` is portable across ns + host.
-        let tck_out = self.exec(node, "getconf", &["CLK_TCK"])?;
-        let tick_hz: u64 = tck_out.stdout.trim().parse().unwrap_or(100);
-
-        Ok(crate::proc_stat::assemble(
-            pid,
-            &stat_fields,
-            &status_fields,
-            fd_count,
-            btime,
-            tick_hz,
-        ))
+        Ok((stat, status, smaps, fd_count))
     }
 }
 

@@ -1387,6 +1387,17 @@ With `--http`, the same snapshot is available at `/metrics`
 (OpenMetrics) and `/api/v1/{snapshot,health,topology}` — which is
 what to point Prometheus at.
 
+Each interface carries both the cumulative counters
+(`nlink_lab_iface_{rx,tx}_{bytes,packets}_total`, straight off
+`rtnl_link_stats64`) and the rates the collector differences from
+them (`nlink_lab_iface_{rx,tx}_bits_per_second`, and
+`…_packets_per_second`). Prefer the counters when scoring a run
+afterwards: a rate is already averaged over the collector's tick, so
+it cannot be re-windowed, while two counter samples give you the
+bytes in whatever window you choose later. The counters restart at
+zero if the interface is recreated, so detect a backwards step rather
+than assuming they only ever grow.
+
 ### Live TUI
 
 `nlink-lab top` puts the same data on one screen, refreshed in place:

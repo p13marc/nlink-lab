@@ -43,9 +43,11 @@ pub struct NodeMetrics {
     pub issues: Vec<String>,
     /// Top TCP flows by goodput in this node's namespace, attributed to
     /// the owning process where resolvable (Plan 160 / nlink 0.24
-    /// sockdiag). Empty for container nodes and when no flow moved data
-    /// between the last two collector ticks. `#[serde(default)]` keeps
-    /// the snapshot wire-compatible with backends that predate the field.
+    /// sockdiag). Covers bare-namespace and container nodes alike — a
+    /// container's namespace is its init pid's, since 0.11.0. Empty when
+    /// no flow moved data between the last two collector ticks.
+    /// `#[serde(default)]` keeps the snapshot wire-compatible with
+    /// backends that predate the field.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sockets: Vec<SocketRateMetric>,
 }
@@ -88,17 +90,45 @@ pub struct InterfaceMetrics {
     #[serde(default)]
     pub state: String,
     /// Receive rate in **bits** per second — the unit [`format_rate`]
-    /// expects. nlink's `LinkRates` counts bytes, so these are populated
-    /// from its `rx_bps()`/`tx_bps()` accessors, which convert.
+    /// expects. Differenced by the collector from [`Self::rx_bytes`]
+    /// across two ticks; `0` on the first sample for an interface and
+    /// on any tick whose counters stepped backwards.
     #[serde(default)]
     pub rx_bps: u64,
     /// Transmit rate in **bits** per second. See [`Self::rx_bps`].
     #[serde(default)]
     pub tx_bps: u64,
+    /// Receive packets per second, differenced from [`Self::rx_pkts`].
+    /// Same first-sample and reset rules as [`Self::rx_bps`].
     #[serde(default)]
     pub rx_pps: u64,
+    /// Transmit packets per second. See [`Self::rx_pps`].
     #[serde(default)]
     pub tx_pps: u64,
+    /// Cumulative bytes received, straight off the link's
+    /// `rtnl_link_stats64` — not from tc, which accounts nothing on the
+    /// `noqueue` qdisc an un-impaired veth carries.
+    ///
+    /// Counted since the interface appeared, so a consumer can
+    /// difference two samples to get the bytes in a window it chooses
+    /// *after* the run — which a rate, already averaged over the
+    /// collector's own tick, cannot give.
+    ///
+    /// Monotonic only within one interface lifetime: recreating the
+    /// interface restarts it at zero. Detect a backwards step rather
+    /// than assuming monotonicity across a whole run.
+    #[serde(default)]
+    pub rx_bytes: u64,
+    /// Cumulative bytes transmitted. See [`Self::rx_bytes`].
+    #[serde(default)]
+    pub tx_bytes: u64,
+    /// Cumulative packets received. See [`Self::rx_bytes`] for the
+    /// monotonicity caveat.
+    #[serde(default)]
+    pub rx_pkts: u64,
+    /// Cumulative packets transmitted. See [`Self::rx_bytes`].
+    #[serde(default)]
+    pub tx_pkts: u64,
     #[serde(default)]
     pub rx_errors: u64,
     #[serde(default)]
@@ -172,6 +202,20 @@ mod tests {
 
         let sm: SocketRateMetric = serde_json::from_str("{}").unwrap();
         assert!(sm.pid.is_none());
+    }
+
+    /// The cumulative counters are additive, so a snapshot from a
+    /// backend that predates them still decodes — they read as `0`,
+    /// which a consumer differencing two samples sees as "no traffic",
+    /// not as a reset.
+    #[test]
+    fn interface_metrics_deserialize_without_the_cumulative_counters() {
+        let json = r#"{"name":"eth0","state":"up","rx_bps":8,"tx_bps":8}"#;
+        let im: InterfaceMetrics = serde_json::from_str(json).unwrap();
+        assert_eq!(im.rx_bytes, 0);
+        assert_eq!(im.tx_bytes, 0);
+        assert_eq!(im.rx_pkts, 0);
+        assert_eq!(im.tx_pkts, 0);
     }
 
     /// Fields a newer backend adds are ignored by an older client.

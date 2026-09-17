@@ -232,16 +232,38 @@ pub fn openmetrics(state: &State) -> String {
     }
     if let Some(s) = &state.snapshot {
         let lab = esc(&s.lab_name);
-        let gauges: [(&str, &str, Getter); 10] = [
+        // `rx_bps`/`tx_bps` are **bits** per second; the name said bytes
+        // until #134, which is an 8x error for anything scraping it.
+        let gauges: [(&str, &str, Getter); 14] = [
             (
-                "nlink_lab_iface_rx_bytes_per_second",
+                "nlink_lab_iface_rx_bits_per_second",
                 "Receive throughput.",
                 |m| m.rx_bps,
             ),
             (
-                "nlink_lab_iface_tx_bytes_per_second",
+                "nlink_lab_iface_tx_bits_per_second",
                 "Transmit throughput.",
                 |m| m.tx_bps,
+            ),
+            (
+                "nlink_lab_iface_rx_bytes_total",
+                "Cumulative bytes received since the interface appeared.",
+                |m| m.rx_bytes,
+            ),
+            (
+                "nlink_lab_iface_tx_bytes_total",
+                "Cumulative bytes transmitted since the interface appeared.",
+                |m| m.tx_bytes,
+            ),
+            (
+                "nlink_lab_iface_rx_packets_total",
+                "Cumulative packets received since the interface appeared.",
+                |m| m.rx_pkts,
+            ),
+            (
+                "nlink_lab_iface_tx_packets_total",
+                "Cumulative packets transmitted since the interface appeared.",
+                |m| m.tx_pkts,
             ),
             (
                 "nlink_lab_iface_rx_packets_per_second",
@@ -362,6 +384,10 @@ mod tests {
                     tx_bps: 20,
                     rx_pps: 1,
                     tx_pps: 2,
+                    rx_bytes: 6_000,
+                    tx_bytes: 7_000,
+                    rx_pkts: 60,
+                    tx_pkts: 70,
                     rx_errors: 0,
                     tx_errors: 0,
                     rx_dropped: 3,
@@ -409,6 +435,21 @@ mod tests {
         );
         assert!(text.contains("nlink_lab_iface_rx_dropped_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 3\n"), "{text}");
         assert!(text.contains("nlink_lab_iface_tc_qlen{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 5\n"), "{text}");
+        // #134: the interface rate is bits, so it must not be named
+        // bytes — the per-flow gauges below are the genuine bytes ones.
+        assert!(text.contains("nlink_lab_iface_rx_bits_per_second{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 10\n"), "{text}");
+        assert!(
+            !text.contains("nlink_lab_iface_rx_bytes_per_second"),
+            "{text}"
+        );
+        // #130: cumulative counters, typed as counters by the `_total`
+        // suffix rule.
+        assert!(
+            text.contains("# TYPE nlink_lab_iface_rx_bytes counter\n"),
+            "{text}"
+        );
+        assert!(text.contains("nlink_lab_iface_rx_bytes_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 6000\n"), "{text}");
+        assert!(text.contains("nlink_lab_iface_tx_packets_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 70\n"), "{text}");
         assert!(
             text.contains("nlink_lab_node_issues{lab=\"l\\\"ab\",node=\"r1\"} 1\n"),
             "{text}"

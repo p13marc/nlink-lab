@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-09-17
+
+The release 0.11.0 could not be. Its tag points at a commit whose CI can
+never go green -- the lockfile carries RUSTSEC-2026-0285 -- so the release
+lane, which refuses to build without a green run for the tagged commit,
+never produced assets for it. **0.11.0 has no downloads; 0.11.1 is the
+release to take.** No functional change from 0.11.0 beyond the fixes below.
+
+One real bug: `spawn`'s exit-code reaper was the caller's child and stayed
+a zombie of it, one per spawn, for as long as the caller lived -- invisible
+for a one-shot `spawn`, an accumulating leak in the backend, `top` and any
+long-running harness. The rest is CI and docs: a rustls advisory, a `fuzz`
+lane that had never once run an input, four tests that a starved runner
+could fail, and a documentation set that had drifted from the code in a
+dozen places (a new install guide and GUI page, and the deploy docs
+rewritten around plan + execute).
+
 ### Documentation
 
 - **`docs/INSTALL.md` is new** and is now the single install page:

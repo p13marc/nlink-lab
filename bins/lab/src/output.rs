@@ -88,11 +88,22 @@ mod tests {
 #[schemars(title = "nlink-lab apply --dry-run / --check / verify --json (v3)")]
 pub struct DryRunReport<'a> {
     /// Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`
-    /// fields (Plan 160 / 0.7.0) — use `network` / `nftables` / `removals`.
+    /// fields (Plan 160 / 0.7.0) — use `topology` / `network` /
+    /// `nftables` / `removals`. `topology` was added later and is
+    /// additive, so the marker did not move.
     pub schema_version: u32,
     pub lab: &'a str,
     pub no_op: bool,
     pub change_count: usize,
+    /// Lab-graph changes: nodes, links, routes, sysctls, nftables — and
+    /// **every traffic-control change**, which lives only here.
+    /// Impairments, per-pair `impair` matrices, `qdisc` blocks and rate
+    /// limits are applied imperatively, outside the declarative
+    /// `NetworkConfig` the `network` layer diffs, so without this field
+    /// `apply --check --json` reported a netem edit as no change at all
+    /// (#108). Elided when empty.
+    #[serde(skip_serializing_if = "nlink_lab::diff::TopologyDiff::is_empty")]
+    pub topology: &'a nlink_lab::diff::TopologyDiff,
     /// Typed per-namespace `NetworkConfig` diff. Empty map elided.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
@@ -118,6 +129,7 @@ impl<'a> DryRunReport<'a> {
             lab,
             no_op: layered.is_empty() && removals.is_empty(),
             change_count: layered.change_count() + removals.len(),
+            topology: &layered.topology,
             network: &layered.network,
             nftables: &layered.nftables,
             removals,

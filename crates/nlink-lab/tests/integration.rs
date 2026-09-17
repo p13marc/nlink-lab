@@ -3484,6 +3484,163 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+// ─── #108: a changed impairment is replaced, not torn down ───
+
+/// Changing one netem property used to go netem -> `noqueue` -> a new
+/// netem with a new handle and a new seed: a moment with no impairment
+/// at all, and the accumulated byte counters gone with it. A consumer
+/// measuring a capped link lost an interval per change and, worse, the
+/// link was briefly uncapped during a phase whose premise was that it
+/// was not.
+///
+/// This asserts the kernel-visible consequences: same handle, and a
+/// `Sent` counter that never steps backwards.
+#[tokio::test]
+async fn changing_an_impairment_keeps_the_handle_and_the_counters() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping changing_an_impairment_keeps_the_handle_and_the_counters: requires root"
+        );
+        return;
+    }
+    let lab_name = format!("qreplace-{}", std::process::id());
+    let src = |delay: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay {delay} rate 5mbit }}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("10ms")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // `tc -s qdisc show` prints `qdisc netem <handle>: root ...` and a
+    // `Sent <n> bytes` line; both are what a consumer keys on.
+    let probe = |lab: &RunningLab| -> (String, u64) {
+        let out = lab
+            .exec("a", "tc", &["-s", "qdisc", "show", "dev", "eth0"])
+            .unwrap()
+            .stdout;
+        let handle = out
+            .split_whitespace()
+            .skip_while(|w| *w != "netem")
+            .nth(1)
+            .unwrap_or("?")
+            .to_string();
+        let sent = out
+            .split_whitespace()
+            .skip_while(|w| *w != "Sent")
+            .nth(1)
+            .and_then(|w| w.parse().ok())
+            .unwrap_or(0);
+        (handle, sent)
+    };
+
+    // Move some bytes so the counter is non-zero and a reset is visible.
+    let _ = lab.exec("a", "ping", &["-c", "5", "-s", "1000", "10.0.0.2"]);
+    let (handle_before, sent_before) = probe(&lab);
+    assert!(
+        sent_before > 0,
+        "expected the netem counter to have moved: {sent_before}"
+    );
+
+    let desired = nlink_lab::parser::parse(&src("40ms")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (delay 40ms) failed");
+
+    let (handle_after, sent_after) = probe(&lab);
+    assert_eq!(
+        handle_before, handle_after,
+        "the qdisc was replaced, not changed in place: {handle_before} -> {handle_after}"
+    );
+    assert!(
+        sent_after >= sent_before,
+        "counters were reset by the change: {sent_before} -> {sent_after}"
+    );
+    // And the new value really did reach the kernel.
+    let out = lab
+        .exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap()
+        .stdout;
+    assert!(out.contains("40ms"), "delay 40ms expected: {out}");
+
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #135: `Op::NetworkImpairments` is always re-run, and it used to
+/// rebuild the whole HTB+netem+flower tree from scratch every time.
+/// Reconciling instead, an unchanged matrix must converge with zero
+/// kernel calls — and keep its counters, which is the observable proof.
+#[tokio::test]
+async fn reapplying_a_network_impair_matrix_keeps_its_counters() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping reapplying_a_network_impair_matrix_keeps_its_counters: requires root");
+        return;
+    }
+    let lab_name = format!("permatrix-{}", std::process::id());
+    let src = format!(
+        r#"
+lab "{lab_name}"
+node a
+node b
+network lan {{
+  subnet 10.30.0.0/24
+  members [a:eth0, b:eth0]
+  impair a -- b {{ delay 20ms rate-cap 5mbit }}
+  impair b -- a {{ delay 20ms rate-cap 5mbit }}
+}}
+"#
+    );
+    let topo = nlink_lab::parser::parse(&src).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    let tree = |lab: &RunningLab| -> String {
+        lab.exec("a", "tc", &["-s", "qdisc", "show", "dev", "eth0"])
+            .unwrap()
+            .stdout
+    };
+    let htb_sent = |text: &str| -> u64 {
+        text.split_whitespace()
+            .skip_while(|w| *w != "Sent")
+            .nth(1)
+            .and_then(|w| w.parse().ok())
+            .unwrap_or(0)
+    };
+
+    let before = tree(&lab);
+    assert!(before.contains("qdisc htb"), "htb root expected: {before}");
+    let _ = lab.exec("a", "ping", &["-c", "5", "-s", "1000", "10.30.0.2"]);
+    let sent_before = htb_sent(&tree(&lab));
+    assert!(sent_before > 0, "expected traffic through the htb root");
+
+    // Apply the *same* topology. Nothing changed, so nothing should be
+    // rebuilt.
+    let desired = nlink_lab::parser::parse(&src).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("re-apply failed");
+
+    let after = tree(&lab);
+    assert!(after.contains("qdisc htb"), "htb root expected: {after}");
+    assert!(
+        htb_sent(&after) >= sent_before,
+        "the tree was rebuilt: counters went {sent_before} -> {}",
+        htb_sent(&after)
+    );
+
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── Runtime impairments persist; snapshot / restore (#59) ───
 
 #[tokio::test]

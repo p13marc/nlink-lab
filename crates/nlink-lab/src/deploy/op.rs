@@ -805,6 +805,32 @@ impl Plan {
                             );
                         }
                     }
+                    // A root qdisc is *replaced*, never deleted first.
+                    // `Op::Netem`/`Op::Qdisc` apply through
+                    // `Connection::replace_qdisc`, i.e. `RTM_NEWQDISC`
+                    // with `NLM_F_CREATE | NLM_F_REPLACE`: with the same
+                    // kind the kernel changes it in place, keeping the
+                    // handle, the netem seed and the accumulated
+                    // statistics, and with a different kind it creates
+                    // and grafts atomically. Emitting the generic
+                    // `ClearQdisc` removal first instead dropped the
+                    // interface to `noqueue` in between — a window with
+                    // no impairment at all, which is a correctness bug
+                    // for a scenario whose premise is "this link is
+                    // capped for the whole phase" and not only a
+                    // measurement one (#108). nlink removed the same
+                    // del-then-add sequence from its declarative applier
+                    // in 0.19 for the same reason.
+                    //
+                    // Clearing an impairment outright still emits
+                    // `ClearQdisc`: that op is in `desired.ops` for
+                    // neither side, so it comes from the removal pass
+                    // above, which this arm does not touch.
+                    Op::Netem { .. } | Op::Qdisc { .. } => {
+                        if format!("{existing:?}") != format!("{op:?}") {
+                            changes.push(op.clone());
+                        }
+                    }
                     // everything else: re-create when the payload changed
                     _ => {
                         if format!("{existing:?}") != format!("{op:?}") {
@@ -860,6 +886,81 @@ network lan { subnet 10.9.0.0/24  members [r:eth1, h:eth1] }
             checked >= 8,
             "only {checked} inverses exercised: {:?}",
             p.ops
+        );
+    }
+
+    fn plan_of(nll: &str) -> Plan {
+        let t = crate::parser::parse(nll).unwrap();
+        crate::deploy::plan_for(&t).unwrap()
+    }
+
+    /// Changing an impairment must be *one* op. Emitting the generic
+    /// `ClearQdisc` removal first would leave the interface on
+    /// `noqueue` in between, i.e. briefly unimpaired, and hand the new
+    /// netem a fresh handle, seed and zeroed counters (#108).
+    #[test]
+    fn a_changed_impairment_replaces_in_place() {
+        let lab = |delay: &str| {
+            format!(
+                r#"lab "q"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay {delay} }}
+"#
+            )
+        };
+        let plan = Plan::diff(&plan_of(&lab("5ms")), &plan_of(&lab("40ms")));
+        let tc: Vec<&Op> = plan
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. }))
+            .collect();
+        assert!(
+            tc.iter().all(|o| matches!(o, Op::Netem { .. })),
+            "a changed impairment must not be preceded by a teardown: {tc:?}"
+        );
+        assert_eq!(tc.len(), 2, "one Netem per endpoint: {tc:?}");
+    }
+
+    /// Removing an impairment altogether still tears the qdisc down —
+    /// that is the only way back to no impairment, and it comes from
+    /// the removal pass rather than the changed-payload arm.
+    #[test]
+    fn a_removed_impairment_still_clears_the_qdisc() {
+        let with = r#"lab "q"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
+"#;
+        let without = r#"lab "q"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#;
+        let plan = Plan::diff(&plan_of(with), &plan_of(without));
+        assert!(
+            plan.ops.iter().any(|o| matches!(o, Op::ClearQdisc { .. })),
+            "dropping the impairment must clear the qdisc: {:?}",
+            plan.ops
+        );
+    }
+
+    /// An unchanged impairment is still no ops at all.
+    #[test]
+    fn an_unchanged_impairment_is_a_no_op() {
+        let nll = r#"lab "q"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms rate 1mbit }
+"#;
+        let plan = Plan::diff(&plan_of(nll), &plan_of(nll));
+        assert!(
+            !plan
+                .ops
+                .iter()
+                .any(|o| matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. })),
+            "re-applying the same impairment must touch nothing: {:?}",
+            plan.ops
         );
     }
 }

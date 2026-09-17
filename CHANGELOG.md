@@ -65,6 +65,42 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Changing an impairment briefly removed it** (#108). `edit
+  --set-impair`, and any `apply` that changed a netem or `qdisc` block,
+  went through `Plan::diff`'s generic "re-create when the payload
+  changed" arm: `ClearQdisc` first, then the new qdisc. Between the two
+  the interface sat on `noqueue` — a window with no impairment at all,
+  which is a correctness gap for a scenario whose premise is "this link
+  is capped for the whole phase" and not only a measurement one. The new
+  qdisc also arrived with a fresh handle, a fresh netem seed and zeroed
+  counters; a reporter measured ~25 MB of accumulated statistics lost per
+  change, and any netem backlog discarded rather than drained.
+
+  The teardown was never needed: both ops apply through
+  `Connection::replace_qdisc`, i.e. `RTM_NEWQDISC` with `NLM_F_CREATE |
+  NLM_F_REPLACE`, which the kernel turns into an in-place change for the
+  same kind and an atomic graft for a different one. `Plan::diff` now
+  says so. Removing an impairment altogether still clears the qdisc —
+  that path comes from the removal pass, not this one. (nlink took the
+  same del-then-add sequence out of its declarative applier in 0.19.)
+
+- **Per-pair `network { impair … }` matrices were rebuilt from scratch on
+  every apply** (#135), including an apply that changed something else
+  entirely: `Op::NetworkImpairments` is one of the ops `Plan::diff`
+  always re-runs, and it committed with `PerPeerImpairer::apply`, which
+  opens with `del_qdisc(ROOT)`. Same consequences as above, on every
+  reconcile rather than only on a change. It now uses `reconcile()`, as
+  the function's own doc comment had claimed since it was written, with
+  `fallback_to_apply` for the first deploy where the live root is
+  `noqueue` and there is nothing to converge incrementally.
+
+- **`apply --check --json` reported traffic-control changes as no
+  change** (#108). Impairments, per-pair matrices, `qdisc` blocks and
+  rate limits are applied imperatively, so they appear in `LayeredDiff`'s
+  `topology` layer and never in the `network` one — and the JSON envelope
+  carried only `network`, `nftables` and `removals`. It now carries
+  `topology` too. Additive, so `schema_version` stays `3`.
+
 - **Every interface rate in every metrics snapshot was `0`** (#133) —
   in `top`, `metrics`, `daemon --http` and the topoviewer, however much
   traffic was moving. nlink computes rates from the previous sample

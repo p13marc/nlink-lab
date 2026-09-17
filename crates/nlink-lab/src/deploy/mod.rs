@@ -730,14 +730,27 @@ async fn apply_network_with_retry(
 /// Apply per-pair network impairments using `PerPeerImpairer`.
 ///
 /// For each network with impairments, group rules by source node and
-/// install one HTB+netem+flower tree per source interface. We use
-/// `reconcile()` so re-deploying an unchanged topology makes zero
-/// kernel calls.
+/// install one HTB+netem+flower tree per source interface.
+///
+/// This uses `reconcile()`, which dumps the live tree, diffs it and
+/// emits only the operations needed to converge — so re-applying an
+/// unchanged topology makes zero kernel calls. `apply()` would be
+/// wrong here: it opens with `del_qdisc(ROOT)` and rebuilds from
+/// scratch, and because `Op::NetworkImpairments` is one of the ops
+/// `Plan::diff` always re-runs, that happened on *every* apply, even
+/// one that changed an unrelated node. Each time, the link spent a
+/// moment with no impairment at all and came back with new handles and
+/// zeroed counters (#135).
+///
+/// `fallback_to_apply` covers the first deploy, where the live root is
+/// `noqueue` rather than HTB: reconcile refuses a wrong-kind root by
+/// default, and there is genuinely nothing to converge incrementally.
 async fn apply_network_impairments(
     topology: &Topology,
     node_handles: &BTreeMap<String, NsRef>,
 ) -> Result<()> {
     use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
+    use nlink::netlink::tc_recipe::ReconcileOptions;
     use nlink::util::Rate;
 
     let networks_with_impair: Vec<_> = topology
@@ -830,12 +843,19 @@ async fn apply_network_impairments(
                 ))
             })?;
 
-            impairer.apply(&conn).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "network '{net_name}': failed to apply per-pair impairment on \
-                     '{src_node}:{src_iface}': {e}"
-                ))
-            })?;
+            let report = impairer
+                .reconcile_with_options(&conn, ReconcileOptions::new().with_fallback_to_apply(true))
+                .await
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "network '{net_name}': failed to apply per-pair impairment on \
+                         '{src_node}:{src_iface}': {e}"
+                    ))
+                })?;
+            tracing::debug!(
+                "network '{net_name}': {src_node}:{src_iface} reconciled, {} change(s)",
+                report.changes_made
+            );
         }
     }
 

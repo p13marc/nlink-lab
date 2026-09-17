@@ -443,6 +443,28 @@ network lan_b {
         );
     }
 
+    /// `should_continue` for the follow tests: keep polling until the
+    /// writer thread reports it is done, then `extra` more polls (a poll
+    /// that finds no data sleeps 250ms) so the follower sees the bytes.
+    /// A fixed poll count used to double as the timeout, which made the
+    /// tests depend on the writer's 100ms sleep landing inside that
+    /// budget -- not a given on a starved CI runner. The 10s deadline
+    /// only bounds a writer that never reports.
+    fn follow_until_written(
+        written: &std::sync::atomic::AtomicBool,
+        extra: usize,
+    ) -> impl Fn() -> bool + '_ {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let after = std::sync::atomic::AtomicUsize::new(0);
+        move || {
+            if written.load(std::sync::atomic::Ordering::SeqCst) {
+                after.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < extra
+            } else {
+                std::time::Instant::now() < deadline
+            }
+        }
+    }
+
     #[test]
     fn tail_follow_reads_appended_data() {
         use std::io::Write;
@@ -456,6 +478,8 @@ network lan_b {
 
         // Append after a short delay from a background thread.
         let path_w = path.clone();
+        let written = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let written_w = std::sync::Arc::clone(&written);
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(100));
             let mut f = std::fs::OpenOptions::new()
@@ -463,16 +487,11 @@ network lan_b {
                 .open(&path_w)
                 .unwrap();
             f.write_all(b"appended\n").unwrap();
+            written_w.store(true, std::sync::atomic::Ordering::SeqCst);
         });
 
-        let counter = std::sync::atomic::AtomicUsize::new(0);
         let mut out = Vec::new();
-        tail_follow_to(&path, start, &mut out, || {
-            // Stop after roughly 1 second of polling (4×250ms sleeps).
-            let c = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            c < 6
-        })
-        .unwrap();
+        tail_follow_to(&path, start, &mut out, follow_until_written(&written, 3)).unwrap();
 
         let captured = String::from_utf8(out).unwrap();
         assert!(
@@ -500,19 +519,17 @@ network lan_b {
 
         // Truncate then write fresh content.
         let path_w = path.clone();
+        let written = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let written_w = std::sync::Arc::clone(&written);
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(100));
             let mut f = std::fs::File::create(&path_w).unwrap(); // truncates
             f.write_all(b"fresh\n").unwrap();
+            written_w.store(true, std::sync::atomic::Ordering::SeqCst);
         });
 
-        let counter = std::sync::atomic::AtomicUsize::new(0);
         let mut out = Vec::new();
-        tail_follow_to(&path, start, &mut out, || {
-            let c = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            c < 8
-        })
-        .unwrap();
+        tail_follow_to(&path, start, &mut out, follow_until_written(&written, 4)).unwrap();
 
         let captured = String::from_utf8(out).unwrap();
         assert!(

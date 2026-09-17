@@ -273,7 +273,9 @@ mod tests {
         // Poll until the zombie is collectable (never wait() ourselves —
         // that would reap it first).
         let mut code = None;
-        for _ in 0..200 {
+        // 10s: the loop returns on the first success; the budget only has
+        // to outlast a starved runner, not a fast one.
+        for _ in 0..1000 {
             code = reap_exit_code(pid);
             if code.is_some() {
                 break;

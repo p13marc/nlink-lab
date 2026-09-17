@@ -218,10 +218,17 @@ jobs:
       - uses: https://github.com/taiki-e/install-action@v2.87.7
         with:
           tool: cargo-fuzz
+      # `cargo fuzz` defaults `--target` to the triple cargo-fuzz ITSELF was
+      # built for (`current_platform::CURRENT_PLATFORM`), and install-action
+      # ships the static musl binary on Linux -- so without an explicit
+      # target every run died in seconds with "sanitizer is incompatible
+      # with statically linked libc" / "can't find crate for `core`
+      # (x86_64-unknown-linux-musl)". Pin it to the toolchain's host.
       - run: |
           cd crates/nlink-lab
+          host=$(rustc +nightly -vV | sed -n 's/^host: //p')
           for t in fuzz_lex fuzz_parse fuzz_roundtrip; do
-            cargo +nightly fuzz run "$t" -- -max_total_time=90 -timeout=10
+            cargo +nightly fuzz run --target "$host" "$t" -- -max_total_time=90 -timeout=10
           done
       - uses: https://data.forgejo.org/actions/upload-artifact@v4
         if: failure()

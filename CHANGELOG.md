@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`spawn` no longer leaves a zombie per process in a long-lived caller.**
+  0.11.0's exit-code reaper was the caller's child and stayed a zombie of it
+  until the caller exited -- harmless for a one-shot `spawn`, but the backend,
+  `top` and the integration test binary accumulated one per spawn (the root
+  CI lane went red on `spawn_leaves_no_zombie_and_returns_real_pid`). The
+  reaper is now triple-forked: the intermediate child forks it and exits at
+  once, so the caller reaps that exit as before and the reaper is init's
+  child, not the caller's.
+- `deny`: RustSec advisory RUSTSEC-2026-0285 (rustls 0.23.44, TLS 1.3
+  handshake messages accepted across encryption levels, reached through
+  zenoh's QUIC/TLS links); `Cargo.lock` bumped to rustls 0.23.45.
+- The `fuzz` CI lane had failed on every dispatch since it was added, in
+  seconds, before a single input ran: `cargo fuzz` defaults `--target` to
+  the triple cargo-fuzz itself was built for, and the install action ships
+  the static musl binary, so it tried to build the sanitized targets for
+  `x86_64-unknown-linux-musl`. The lane now passes the nightly toolchain's
+  host triple explicitly. (Local runs were never affected: a `cargo install`
+  build is a gnu binary.)
+- Four unit tests could fail on a starved CI runner and were the likely
+  cause of the `test (--all-features)` red on the 0.11.0 push (it passed on
+  the same commit three times in a row when re-run with logs captured):
+  the capture loop's poll-bounds test slept the full quantum against a
+  450ms deadline, leaving 50ms of slack for its "at least three polls"
+  assertion; its `--count 0` test asserted a 100ms wall-clock bound (now a
+  structural "the source was never polled"); the backend HTTP test released
+  its ephemeral port and re-bound it (a race with every parallel job; it
+  now serves on the listener it was given, via the new `http::spawn_on`);
+  and the two `tail --follow` tests used a fixed poll count as their
+  timeout for a 100ms-delayed writer (they now stop when the writer
+  reports done, with a 10s ceiling). The `reap_exit_code` test budget went
+  from 2s to 10s.
+
 ## [0.11.0] - 2026-09-15
 
 The release a zenoh resilience lab asked for. Every item below was hit while

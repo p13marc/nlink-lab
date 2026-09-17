@@ -93,15 +93,18 @@ pub fn spawn_detached(ns_name: &str, cmd: std::process::Command) -> NlResult<u32
     Ok(pid)
 }
 
-/// [`spawn_detached`] whose intermediate child stays behind as the real
-/// process's parent, waits for it, and records its exit status in
+/// [`spawn_detached`] with a reaper: a process that stays behind as the
+/// real process's parent, waits for it, and records its exit status in
 /// `<rc_prefix><pid>.rc` -- one line, the exit code, or `128 + signo` for
 /// a signal death.  That file is the only place a detached process's exit
 /// status can come from: nothing else is ever its parent.
 ///
-/// The reaper holds no fd of the caller's (stdio goes to `/dev/null`, every
-/// other fd is closed), so a caller in a pipeline is not kept open, and it
-/// is a zombie of the caller's for the caller's remaining lifetime only.
+/// The reaper is triple-forked: the intermediate child forks it and exits
+/// at once (the caller reaps that exit, as in [`spawn_detached`]), so the
+/// reaper is init's child, not the caller's -- a long-lived caller (the
+/// backend, `top`, a test binary) never accumulates a zombie per spawn.
+/// The reaper holds no fd of the caller's (stdio goes to `/dev/null`,
+/// every other fd is closed), so a caller in a pipeline is not kept open.
 pub fn spawn_detached_reaped(
     ns_name: &str,
     cmd: std::process::Command,
@@ -295,6 +298,20 @@ fn spawn_detached_with(
     unsafe {
         cmd.pre_exec(move || {
             libc::setsid();
+            if reaping {
+                // One more level: the intermediate forks the reaper and
+                // exits at once, so the caller's `wait()` below reaps it
+                // and the reaper -- which outlives the real process -- is
+                // reparented to init rather than left as the caller's
+                // zombie.
+                let reaper = libc::fork();
+                if reaper < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if reaper > 0 {
+                    libc::_exit(0);
+                }
+            }
             let pid = libc::fork();
             if pid < 0 {
                 return Err(std::io::Error::last_os_error());
@@ -306,10 +323,12 @@ fn spawn_detached_with(
             if rc.is_some() {
                 // The reaper: drop every fd of the caller's -- including
                 // std's exec-status pipe, so the caller's `spawn()` returns
-                // now -- and keep only the pid pipe.
+                // now -- and keep only the pid pipe. The real process was
+                // forked first, so it still carries the exec-status pipe
+                // and an exec failure in it reaches the caller.
                 detach_reaper(wr);
             }
-            // Intermediate: hand the pid to the parent.
+            // Intermediate (or reaper): hand the pid to the caller.
             let bytes = (pid as u32).to_ne_bytes();
             let mut off = 0usize;
             while off < bytes.len() {
@@ -334,10 +353,8 @@ fn spawn_detached_with(
     // SAFETY: closing the parent's write end; the child has its own copy.
     unsafe { libc::close(wr) };
     let mut child = spawned?;
-    if !reaping {
-        // The intermediate exits immediately; reap it so nothing lingers.
-        let _ = child.wait();
-    }
+    // The intermediate exits immediately; reap it so nothing lingers.
+    let _ = child.wait();
     let mut buf = [0u8; 4];
     rd.read_exact(&mut buf).map_err(|e| {
         std::io::Error::new(

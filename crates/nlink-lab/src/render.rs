@@ -1595,6 +1595,29 @@ fn render_assertion(out: &mut String, indent: &str, a: &Assertion) -> Result<()>
     Ok(())
 }
 
+fn render_assertion_block_with(
+    out: &mut String,
+    indent: &str,
+    assertions: &[Assertion],
+    retries: Option<u32>,
+    interval: Option<&str>,
+) -> Result<()> {
+    write!(out, "{indent}validate").unwrap();
+    if let Some(r) = retries {
+        write!(out, " retries {r}").unwrap();
+    }
+    if let Some(i) = interval {
+        write!(out, " interval {i}").unwrap();
+    }
+    writeln!(out, " {{").unwrap();
+    let inner = format!("{indent}  ");
+    for a in assertions {
+        render_assertion(out, &inner, a)?;
+    }
+    writeln!(out, "{indent}}}").unwrap();
+    Ok(())
+}
+
 fn render_assertion_block(out: &mut String, indent: &str, assertions: &[Assertion]) -> Result<()> {
     writeln!(out, "{indent}validate {{").unwrap();
     let inner = format!("{indent}  ");
@@ -1609,7 +1632,13 @@ fn render_assertions(out: &mut String, topo: &Topology) -> Result<()> {
     if topo.assertions.is_empty() {
         return Ok(());
     }
-    render_assertion_block(out, "", &topo.assertions)?;
+    render_assertion_block_with(
+        out,
+        "",
+        &topo.assertions,
+        topo.assertion_retries,
+        topo.assertion_interval.as_deref(),
+    )?;
     out.push('\n');
     Ok(())
 }

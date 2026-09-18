@@ -5,6 +5,9 @@
 
 lab "pools-demo" {
   description "Subnet pools with auto-allocation"
+  /* Without this the leaves have no route to each other's access
+     subnet, and `reach server1 server2` below cannot pass. */
+  routing auto
 }
 
 profile router { forward ipv4 }

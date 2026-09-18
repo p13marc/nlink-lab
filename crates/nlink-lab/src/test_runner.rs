@@ -103,9 +103,34 @@ pub fn run_assertions(
 
     let mut results = Vec::with_capacity(topology.assertions.len());
 
+    // Block-level settle policy: re-evaluate a failing assertion rather
+    // than judging a lab that has not converged yet. Assertions run the
+    // moment the deploy finishes, which is far too early for anything
+    // dynamic — a `routing frr { bgp }` lab needs tens of seconds before
+    // `reach` or `route-has` can pass.
+    //
+    // Only failures are retried, so a lab that is already converged
+    // costs nothing, and a `no-reach` that is *meant* to fail settles on
+    // the first attempt.
+    let attempts = topology.assertion_retries.unwrap_or(1).max(1);
+    let interval = topology
+        .assertion_interval
+        .as_deref()
+        .and_then(|i| crate::helpers::parse_duration(i).ok())
+        .unwrap_or(std::time::Duration::from_secs(1));
+
     for assertion in &topology.assertions {
         let start = Instant::now();
-        let (desc, passed, detail) = eval_assertion(lab, assertion, &ip_map);
+        let mut outcome = eval_assertion(lab, assertion, &ip_map);
+        for attempt in 1..attempts {
+            if outcome.1 {
+                break;
+            }
+            let _ = attempt;
+            std::thread::sleep(interval);
+            outcome = eval_assertion(lab, assertion, &ip_map);
+        }
+        let (desc, passed, detail) = outcome;
         let duration_ms = start.elapsed().as_millis() as u64;
         results.push(AssertionResult {
             description: desc,

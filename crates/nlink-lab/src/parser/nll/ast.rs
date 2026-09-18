@@ -174,6 +174,10 @@ pub struct PoolDef {
 #[derive(Debug, Clone)]
 pub struct ValidateDef {
     pub assertions: Vec<AssertionDef>,
+    /// `validate retries N interval D { … }` — re-evaluate failing
+    /// assertions rather than judging a lab that has not converged yet.
+    pub retries: Option<u32>,
+    pub interval: Option<Val<Duration>>,
 }
 
 /// Single reachability assertion.

@@ -214,6 +214,16 @@ fn lower_with_base_dir_and_params(
             ast::Statement::Qdisc(q) => lower_qdisc(&mut topology, q)?,
             ast::Statement::Pattern(p) => expand_pattern(&mut topology, p, &mut ctx)?,
             ast::Statement::Validate(v) => {
+                // Block-level settle policy. Several `validate` blocks
+                // in one file share it: last one with a value wins,
+                // which is what a single lab-wide convergence budget
+                // means.
+                if v.retries.is_some() {
+                    topology.assertion_retries = v.retries;
+                }
+                if let Some(i) = &v.interval {
+                    topology.assertion_interval = Some(ast::Val::to_text(i)?);
+                }
                 for a in &v.assertions {
                     match a {
                         ast::AssertionDef::Reach { from, to } => {
@@ -1194,6 +1204,8 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
             S::Pattern(p)
         }
         S::Validate(v) => S::Validate(ast::ValidateDef {
+            retries: v.retries,
+            interval: v.interval.clone(),
             assertions: v
                 .assertions
                 .into_iter()
@@ -1823,6 +1835,8 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
             profile: io(&p.profile, vars),
         }),
         ast::Statement::Validate(v) => ast::Statement::Validate(ast::ValidateDef {
+            retries: v.retries,
+            interval: v.interval.clone(),
             assertions: v
                 .assertions
                 .iter()
@@ -3779,6 +3793,83 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
         name: s.name.clone(),
         steps,
     })
+}
+
+#[cfg(test)]
+mod settle_tests {
+    /// `validate retries N interval D { … }` — assertions run the
+    /// moment a deploy finishes, which is too early for anything that
+    /// converges. Without this, `examples/frr-bgp.nll` asserted against
+    /// a routing table BGP had not filled in yet.
+    #[test]
+    fn validate_block_carries_a_settle_policy() {
+        let t = crate::parser::parse(
+            r#"lab "s"
+node a
+node b
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/24 }
+validate retries 30 interval 2s {
+  reach a b
+}
+"#,
+        )
+        .unwrap();
+        assert_eq!(t.assertion_retries, Some(30));
+        assert_eq!(t.assertion_interval.as_deref(), Some("2s"));
+        assert_eq!(t.assertions.len(), 1);
+    }
+
+    /// Both knobs are optional and independent, and a plain block still
+    /// means "evaluate once".
+    #[test]
+    fn a_plain_validate_block_has_no_settle_policy() {
+        let t = crate::parser::parse(
+            r#"lab "s"
+node a
+node b
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/24 }
+validate { reach a b }
+"#,
+        )
+        .unwrap();
+        assert_eq!(t.assertion_retries, None);
+        assert_eq!(t.assertion_interval, None);
+
+        let only_retries = crate::parser::parse(
+            r#"lab "s"
+node a
+node b
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/24 }
+validate retries 5 { reach a b }
+"#,
+        )
+        .unwrap();
+        assert_eq!(only_retries.assertion_retries, Some(5));
+        assert_eq!(only_retries.assertion_interval, None);
+    }
+
+    /// The policy survives a render round-trip, so `render` output is
+    /// still a faithful copy of the topology.
+    #[test]
+    fn settle_policy_round_trips_through_render() {
+        let src = r#"lab "s"
+node a
+node b
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/24 }
+validate retries 7 interval 250ms {
+  reach a b
+}
+"#;
+        let t = crate::parser::parse(src).unwrap();
+        let rendered = crate::render::try_render(&t).unwrap();
+        assert!(
+            rendered.contains("validate retries 7 interval 250ms {"),
+            "{rendered}"
+        );
+        let again = crate::parser::parse(&rendered).unwrap();
+        assert_eq!(again.assertion_retries, Some(7));
+        assert_eq!(again.assertion_interval.as_deref(), Some("250ms"));
+    }
 }
 
 #[cfg(test)]

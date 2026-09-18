@@ -3481,6 +3481,25 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
         "{out_b}"
     );
 
+    // Changing an sfq *parameter* while sfq is live. `sch_sfq` sets
+    // `.change = NULL`, so the in-place replace #108 introduced gets
+    // EINVAL ("Change operation not supported by specified qdisc") —
+    // the one kind here that has to be deleted and re-added. Before the
+    // fix this failed the apply outright; before #108 the plan's
+    // unconditional teardown happened to cover it.
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 sfq { perturb 20s }\nqdisc b:eth0 prio { bands 4 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (sfq perturb change) failed");
+    let out = show(&lab);
+    assert!(
+        out.contains("qdisc sfq") && out.contains("perturb 20sec"),
+        "sfq must still be installed, with the new period: {out}"
+    );
+
     lab.destroy().await.expect("destroy failed");
 }
 

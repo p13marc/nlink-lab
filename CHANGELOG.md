@@ -34,6 +34,24 @@ fq_codel, sfq, prio and tbf options (upstream #361).
 
 ### Added
 
+- **`validate retries N interval D { … }`** — a settle policy for the
+  whole assertion block. Assertions run the moment a deploy finishes,
+  which is too early for anything that has to converge: BGP needs tens
+  of seconds, so `examples/frr-bgp.nll` was asserting `route-has` and
+  `reach` against a routing table that did not exist yet, and failed
+  both every time. `tcp-connect` has had per-assertion
+  `retries`/`interval` since it was added; this is the same idea for the
+  block, because convergence is a property of the lab rather than of one
+  assertion. Only *failing* assertions are retried, so a converged lab
+  costs nothing and a `no-reach` that is meant to fail settles on the
+  first attempt.
+
+  Found by deploying every example that declares `validate { … }` with
+  `--strict`: three of ten failed their own assertions. `frr-bgp` is
+  fixed by the new knobs; `subnet-pools` was missing `routing auto`, so
+  its leaves had no route to each other and `reach server1 server2`
+  could never pass.
+
 - **New validator rule `command-not-split`** (#143): a container `cmd`
   written as one string — `cmd "sleep infinity"` — is a *single* argv
   element, so the runtime looks for a binary with that exact name and

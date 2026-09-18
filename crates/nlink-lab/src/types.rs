@@ -59,6 +59,26 @@ pub struct Topology {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertions: Vec<Assertion>,
 
+    /// How many times to re-evaluate a failing assertion before
+    /// reporting it, and how long to wait between attempts
+    /// (`validate retries 20 interval 2s { … }`).
+    ///
+    /// Assertions run the moment the deploy finishes, which is too
+    /// early for anything that has to converge: a `routing frr { bgp }`
+    /// lab needs tens of seconds before `reach` or `route-has` can pass,
+    /// so `examples/frr-bgp.nll` asserted against a routing table that
+    /// did not exist yet. `tcp-connect` has had per-assertion
+    /// `retries`/`interval` since it was added; this is the same idea
+    /// for the whole block, because convergence is a property of the
+    /// lab rather than of one assertion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assertion_retries: Option<u32>,
+
+    /// Delay between assertion attempts. See
+    /// [`assertion_retries`](Self::assertion_retries).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assertion_interval: Option<String>,
+
     /// Timed test scenarios (fault injection + validation).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scenarios: Vec<Scenario>,

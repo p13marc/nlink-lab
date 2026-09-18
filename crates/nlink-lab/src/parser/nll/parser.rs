@@ -3161,8 +3161,26 @@ fn parse_pool(tokens: &[Spanned], pos: &mut usize) -> Result<ast::PoolDef> {
 
 fn parse_validate(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ValidateDef> {
     expect(tokens, pos, &Token::Validate)?;
+    // Optional settle policy, before the block: `validate retries 20
+    // interval 2s { … }`. Both are independent — `retries` alone uses
+    // the default interval, `interval` alone is pointless but harmless.
+    let mut retries = None;
+    let mut interval = None;
+    loop {
+        if eat_kw(tokens, pos, "retries") {
+            retries = Some(expect_u32(tokens, pos, "retries", 0)?);
+        } else if eat_kw(tokens, pos, "interval") {
+            interval = Some(expect_duration(tokens, pos)?);
+        } else {
+            break;
+        }
+    }
     let assertions = parse_assertion_block(tokens, pos)?;
-    Ok(ast::ValidateDef { assertions })
+    Ok(ast::ValidateDef {
+        assertions,
+        retries,
+        interval,
+    })
 }
 
 /// Parse `{ assertion* }` block — shared between validate and scenario validate actions.

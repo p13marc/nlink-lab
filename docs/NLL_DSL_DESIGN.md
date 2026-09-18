@@ -1254,7 +1254,10 @@ qdisc_prop     = "rate" RATE | "burst" SIZE | "limit" (SIZE | INT) | "peakrate" 
 defaults       = "defaults" ("link" | "impair" | "rate" | IDENT) block
 pool           = "pool" IDENT CIDR "/" INT        # IPv4 or IPv6; INT ≤ 32 / 128
 pattern        = ("mesh" | "ring" | "star") IDENT block
-validate       = "validate" "{" assertion* "}"
+validate       = "validate" ("retries" INT)? ("interval" DURATION)?
+                 "{" assertion* "}"
+                 (* retries/interval re-evaluate a *failing* assertion,
+                    for labs that have to converge first *)
 param          = "param" IDENT ("default" value)?
 let_decl       = "let" IDENT "=" value
 for_loop       = "for" IDENT "in" (range | list) block

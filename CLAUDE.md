@@ -204,7 +204,8 @@ route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
 capabilities, health checks with `interval`/`timeout`/`retries`,
 depends-on, config injection, overlay), reachability assertions
-(`validate { reach a b }`), management network (`mgmt` in lab block,
+(`validate { reach a b }`, with `retries`/`interval` on the block for
+labs that converge), management network (`mgmt` in lab block,
 with optional `host-reachable` for root-namespace bridge),
 DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
 macvlan/ipvlan (attach nodes to host physical interfaces),

@@ -46,7 +46,12 @@ link r1:eth0 -- r2:eth0 { 192.0.2.1/30 -- 192.0.2.2/30 }
 link r1:eth1 -- h1:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
 link r2:eth1 -- h2:eth0 { 10.2.0.1/24 -- 10.2.0.2/24 }
 
-validate {
+/* BGP needs to converge before either of these can pass, and
+   assertions run the moment the deploy finishes. `retries`/`interval`
+   give the session time to come up instead of judging an empty routing
+   table — only failing assertions are retried, so a lab that converges
+   quickly does not wait. */
+validate retries 30 interval 2s {
   route-has r1 10.2.0.0/24 via 192.0.2.2
   reach h1 h2
 }

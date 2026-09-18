@@ -1526,7 +1526,7 @@ modules directly under `crates/nlink-lab/src/parser/nll/`.
   Topology               → The one model every command consumes
     │
     ▼
-  Validator              → 53 rules with stable ids (`validate`)
+  Validator              → 54 rules with stable ids (`validate`)
 ```
 
 NLL is the only topology input format; `Topology` is also produced by the

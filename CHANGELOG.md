@@ -4,22 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed
-
-- **Changing an `sfq` qdisc's parameters failed with EINVAL**, a
-  regression from the in-place qdisc replace in 0.11.2 (#108). A
-  same-kind replace becomes `qdisc_change()` in the kernel, and
-  `sch_sfq` sets `.change = NULL`, so it answers *"Change operation not
-  supported by specified qdisc"*. sfq is the only kind `qdisc` blocks
-  support without a change op — netem, tbf, fq_codel and prio all have
-  one — and the plan's old unconditional teardown had been covering for
-  it. The applier now deletes and re-adds for that kind when the replace
-  is refused, which is the only sequence the kernel offers; a change of
-  *kind* is unaffected, because that takes the create-and-graft path.
-  Fixed upstream too (nlink#361), so the fallback here can go once the
-  dependency moves.
-
-
 ### Migration
 
 - **`nlink_lab_iface_rx_bytes_per_second` / `…_tx_bytes_per_second` are
@@ -80,6 +64,63 @@ All notable changes to this project will be documented in this file.
   collects.
 
 ### Fixed
+
+- **Four examples could not deploy**, found by deploying all 43 rather
+  than validating them:
+  - `list-iteration.nll` gave all four services `route default via
+    ${lb.eth0}` while each sat on its own point-to-point link, so three
+    of them named a gateway they had no route to and the deploy failed
+    with ENETUNREACH. They share one segment now, which is what makes
+    `${lb.eth0}` a gateway all of them can reach.
+  - `management-network.nll` pointed `host2` at `${router.eth0}`, which
+    is on `host1`'s link. It uses `${router.eth1}` now.
+  - `container.nll` used `cmd "sleep infinity"`, which is a *single*
+    argv element, so the runtime looked for a binary named
+    `sleep infinity`. Now `cmd ["sleep", "infinity"]`, like every other
+    container example. What the string form should mean is #143.
+  - `container-lifecycle.nll` / `container-advanced.nll` set
+    `workdir "/app"`, which the image does not have: docker creates a
+    missing workdir, podman refuses. They use a path the image has.
+
+  **Both route bugs had been warned about all along** —
+  `route-reachability` fires on exactly this — and shipped anyway,
+  because nothing fails a `validate` that only warns. There is now a
+  test that every shipped example validates with **no** warnings, which
+  is pure and needs no root.
+
+- **`validate` warned about three examples that were correct**, which is
+  how the two that were not stayed buried:
+  - `unreferenced-node` counted only links and networks as
+    connectivity, so `wifi.nll`'s AP and both stations were reported as
+    having none. Wi-Fi, WireGuard, macvlan and ipvlan interfaces count
+    now — for those nodes they are the *whole* of the connectivity, not
+    an extra on top of a link.
+  - `route-reachability` did not look at macvlan/ipvlan addresses, so
+    `macvlan.nll` and `ipvlan.nll` were flagged for a gateway sitting on
+    the subnet of the macvlan address two lines above it.
+
+- **A container that failed to create kept its name**, so the next
+  deploy of the same topology failed with "the container name is
+  already in use" instead of the real error, and the one after that too.
+  `run -d` can claim the name and *then* fail — a workdir the image
+  lacks is the usual way — and the caller records its rollback entry
+  only once create succeeds, so nothing ever reclaimed it. Create now
+  removes a half-made container before reporting the original failure.
+
+- **Changing an `sfq` qdisc's parameters failed with EINVAL**, a
+  regression from the in-place qdisc replace in 0.11.2 (#108). A
+  same-kind replace becomes `qdisc_change()` in the kernel, and
+  `sch_sfq` sets `.change = NULL`, so it answers *"Change operation not
+  supported by specified qdisc"*. sfq is the only kind `qdisc` blocks
+  support without a change op — netem, tbf, fq_codel and prio all have
+  one — and the plan's old unconditional teardown had been covering for
+  it. The applier now deletes and re-adds for that kind when the replace
+  is refused, which is the only sequence the kernel offers; a change of
+  *kind* is unaffected, because that takes the create-and-graft path.
+  Fixed upstream too (nlink#361), so the fallback here can go once the
+  dependency moves.
+
+
 
 - **`routing auto` emitted routes for networks the node was already
   attached to** (#138), which made `examples/multi-site.nll` undeployable:

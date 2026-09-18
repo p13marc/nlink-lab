@@ -2338,6 +2338,26 @@ fn validate_route_reachability(
             }
         }
 
+        // From macvlan / ipvlan interfaces. These sit on a host
+        // interface's segment, which is exactly where the node's
+        // default gateway usually lives — `examples/macvlan.nll` and
+        // `examples/ipvlan.nll` were both flagged for a gateway that is
+        // on the subnet of the macvlan address two lines above it.
+        for mv in &node.macvlans {
+            for addr in &mv.addresses {
+                if let Ok((ip, prefix)) = parse_cidr(addr) {
+                    subnets.push((ip, prefix));
+                }
+            }
+        }
+        for iv in &node.ipvlans {
+            for addr in &iv.addresses {
+                if let Ok((ip, prefix)) = parse_cidr(addr) {
+                    subnets.push((ip, prefix));
+                }
+            }
+        }
+
         // Check each route's gateway
         for (dest, route) in &node.routes {
             if let Some(via_str) = &route.via
@@ -2369,10 +2389,25 @@ fn validate_unreferenced_nodes(
 ) {
     for node_name in topology.nodes.keys() {
         if let Some(ifaces) = interfaces.get(node_name) {
-            // Check if the node has any interfaces from links or networks
-            let has_connections = ifaces
-                .values()
-                .any(|src| matches!(src, InterfaceSource::Link(_) | InterfaceSource::Network(_)));
+            // Any interface that carries traffic to somewhere else
+            // counts. Links and networks are the common ones, but a
+            // node can just as well be reachable only over Wi-Fi
+            // (mac80211_hwsim), a WireGuard tunnel, or a macvlan/ipvlan
+            // onto a host interface — all three of which are its
+            // *whole* connectivity, not an extra on top of a link.
+            // `examples/wifi.nll` had three nodes flagged for having no
+            // connections while being a working AP and two stations.
+            let has_connections = ifaces.values().any(|src| {
+                matches!(
+                    src,
+                    InterfaceSource::Link(_)
+                        | InterfaceSource::Network(_)
+                        | InterfaceSource::Wifi
+                        | InterfaceSource::Wireguard
+                        | InterfaceSource::Macvlan
+                        | InterfaceSource::Ipvlan
+                )
+            });
             if !has_connections {
                 issues.push(ValidationIssue {
                     severity: Severity::Warning,

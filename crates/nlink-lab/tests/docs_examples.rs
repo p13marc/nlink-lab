@@ -300,3 +300,60 @@ fn internal_doc_links_resolve() {
         panic!("{} broken internal link(s) in docs.", errors.len());
     }
 }
+
+/// Every shipped example must validate with **no warnings**.
+///
+/// `validate` warnings are not decoration: `route-reachability` fires
+/// when a node's gateway is on no subnet that node is attached to, and
+/// Linux refuses `ip route add ... via X` for an off-link X — so the
+/// deploy fails with ENETUNREACH. Two examples shipped that way
+/// (`list-iteration.nll` had it on three of four nodes,
+/// `management-network.nll` on one) and nobody was looking at the
+/// warning, because nothing failed if you only ever ran `validate`.
+///
+/// Pure: parses and validates, no root and no kernel.
+#[test]
+fn every_example_validates_without_warnings() {
+    let root = workspace_root();
+    let mut files = Vec::new();
+    let mut stack = vec![root.join("examples")];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read examples dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "nll") {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    assert!(
+        files.len() >= 40,
+        "expected the example set, got {}",
+        files.len()
+    );
+
+    let mut offenders = Vec::new();
+    for path in &files {
+        // Import fragments are not standalone topologies.
+        let Ok(topo) = nlink_lab::parser::parse_file(path) else {
+            continue;
+        };
+        let result = topo.validate();
+        for w in result.warnings() {
+            offenders.push(format!(
+                "{}: [{}] {}",
+                path.strip_prefix(&root).unwrap_or(path).display(),
+                w.rule,
+                w.message
+            ));
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "examples must validate cleanly; a warning here is usually a topology \
+         that cannot deploy:\n  {}",
+        offenders.join("\n  ")
+    );
+}

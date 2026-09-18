@@ -34,6 +34,18 @@ fq_codel, sfq, prio and tbf options (upstream #361).
 
 ### Added
 
+- **New validator rule `command-not-split`** (#143): a container `cmd`
+  written as one string — `cmd "sleep infinity"` — is a *single* argv
+  element, so the runtime looks for a binary with that exact name and
+  the deploy fails with "executable file not found in $PATH". The rule
+  names the list form to use instead. A warning rather than an error,
+  because a binary really can have a space in its name and by the time
+  the validator sees it the two are the same `Vec<String>`; shipped
+  examples are gated at zero warnings, so it still cannot recur in-tree.
+  `run "sleep 30"` and `exec "…"` are *not* affected — they lower to
+  `["sh", "-c", …]`, so their string form is a shell command line that
+  works.
+
 - **`nlink-lab proc-stat` samples a whole node in one call, and reports
   PSS** (#131). `--all` takes every process in the node's network
   namespace (found by walking `/proc` and comparing

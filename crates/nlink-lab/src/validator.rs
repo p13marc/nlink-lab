@@ -92,6 +92,7 @@ pub const RULE_IDS: &[&str] = &[
     "route-reachability",
     "unreferenced-node",
     "empty-exec-cmd",
+    "command-not-split",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -110,6 +111,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "route-reachability",
     "unreferenced-node",
     "empty-exec-cmd",
+    "command-not-split",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -2432,7 +2434,52 @@ fn validate_exec_cmds(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                     location: Some(format!("nodes.{node_name}.exec[{i}]")),
                 });
             }
+            check_argv(&exec.cmd, &format!("nodes.{node_name}.exec[{i}]"), issues);
         }
+        if let Some(cmd) = &node.cmd {
+            check_argv(cmd, &format!("nodes.{node_name}.cmd"), issues);
+        }
+    }
+}
+
+/// A one-element argv whose only element contains whitespace is almost
+/// always a command line that was never split: `cmd "sleep infinity"`
+/// is *one* argument, so the runtime looks for a binary named
+/// `sleep infinity` and the deploy fails with "executable file not
+/// found in $PATH". `examples/container.nll` shipped that way (#143).
+///
+/// This is specific to a container's `cmd`. `run "sleep 30"` and
+/// `exec "…"` lower to `["sh", "-c", "sleep 30"]`, so their string form
+/// is a shell command line and works — the check still covers their
+/// argv, because writing `run ["sleep 30"]` reaches the same dead end
+/// by hand.
+///
+/// A warning, not an error, because it is not provably wrong: a binary
+/// really can have a space in its name, and the list form
+/// `["/opt/my app/bin"]` produces an argv indistinguishable from the
+/// trap by the time it reaches here. Shipped examples are gated at zero
+/// warnings, so this still cannot recur in-tree.
+fn check_argv(cmd: &[String], location: &str, issues: &mut Vec<ValidationIssue>) {
+    if cmd.len() == 1
+        && let Some(only) = cmd.first()
+        && only.split_whitespace().count() > 1
+    {
+        let split: Vec<&str> = only.split_whitespace().collect();
+        issues.push(ValidationIssue {
+            severity: Severity::Warning,
+            rule: "command-not-split",
+            message: format!(
+                "command {only:?} is a single argument, so it runs only if a \
+                 binary with that exact name (spaces included) exists; write it \
+                 as a list — [{}]",
+                split
+                    .iter()
+                    .map(|w| format!("{w:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            location: Some(location.to_string()),
+        });
     }
 }
 
@@ -2913,6 +2960,79 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         );
         assert!(result.has_warnings());
         assert!(result.warnings().any(|w| w.rule == "route-reachability"));
+    }
+
+    /// #143 — a container `cmd` written as one string is one argv
+    /// element, which can only execute if a binary with that exact
+    /// name exists. `examples/container.nll` shipped that way and
+    /// failed with "executable file `sleep infinity` not found".
+    #[test]
+    fn command_not_split_warns_on_a_single_argument_with_spaces() {
+        let topo = crate::parser::parse(
+            r#"lab "c"
+node app image "alpine:latest" cmd "sleep infinity"
+node peer
+link app:eth0 -- peer:eth0 { subnet 10.0.0.0/24 }
+"#,
+        )
+        .unwrap();
+        let result = topo.validate();
+        let w: Vec<_> = result
+            .warnings()
+            .filter(|w| w.rule == "command-not-split")
+            .collect();
+        assert_eq!(w.len(), 1, "{:?}", result.issues);
+        assert!(
+            w[0].message.contains(r#"["sleep", "infinity"]"#),
+            "the message should show the list form: {}",
+            w[0].message
+        );
+    }
+
+    /// The list form is what the rule is steering people to, so it must
+    /// not warn — and neither must a genuine single-word command.
+    #[test]
+    fn command_not_split_is_quiet_on_a_proper_argv() {
+        let topo = crate::parser::parse(
+            r#"lab "c"
+node app image "alpine:latest" cmd ["sleep", "infinity"]
+node solo image "alpine:latest" cmd ["true"]
+node peer
+link app:eth0 -- peer:eth0 { subnet 10.0.0.0/24 }
+link solo:eth0 -- peer:eth1 { subnet 10.0.1.0/24 }
+"#,
+        )
+        .unwrap();
+        assert!(
+            !topo
+                .validate()
+                .issues
+                .iter()
+                .any(|i| i.rule == "command-not-split")
+        );
+    }
+
+    /// `run "sleep 30"` is *not* the same trap: it lowers to
+    /// `["sh", "-c", "sleep 30"]`, a shell command line that works. The
+    /// rule must not punish it.
+    #[test]
+    fn command_not_split_leaves_the_shell_form_of_run_alone() {
+        let topo = crate::parser::parse(
+            r#"lab "c"
+node a { run "sleep 30" }
+node b
+link a:eth0 -- b:eth0 { subnet 10.0.0.0/24 }
+"#,
+        )
+        .unwrap();
+        assert_eq!(topo.nodes["a"].exec[0].cmd, vec!["sh", "-c", "sleep 30"]);
+        assert!(
+            !topo
+                .validate()
+                .issues
+                .iter()
+                .any(|i| i.rule == "command-not-split")
+        );
     }
 
     #[test]

@@ -115,8 +115,16 @@ fq_codel, sfq, prio and tbf options (upstream #361).
 
 ### Changed
 
-- **nlink 0.27 → 0.28.** Brings the masquerade diff fix (#141 is closed
-  by the bump alone) and the declarative qdisc parity work. The local
+- **nlink 0.27 → 0.28.1.** Brings two upstream fixes this release
+  depends on. The masquerade diff fix closes #141 by the bump alone —
+  `apply --check` stopped reporting permanent drift on any `nat
+  { masquerade }` topology. The IPv6 route-metric fix (upstream #366)
+  did the same for every IPv6 route declared without a metric: the
+  kernel stamps `IP6_RT_PRIO_USER` (1024) on one, the diff compared
+  against 0, and `ipv6-simple`, `ipv6-dual-stack` and
+  `management-network-v6` all reported drift forever while `apply` said
+  there was nothing to do. Found by deploying every example and running
+  `apply --check` against itself. and the declarative qdisc parity work. The local
   del+add fallback for `sfq` **stays**: nlink 0.28 added the same
   fallback to its *declarative* applier, and `Op::Qdisc` here goes
   through the imperative `Connection::replace_qdisc` — the side path

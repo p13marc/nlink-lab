@@ -238,7 +238,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (46 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (47 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
 `destroy` (with `--all`, `--orphans`), `apply` (`--reset-impairments`),
 `snapshot` (`--list`, `--delete`), `restore` (`--dry-run`),
 `events` (`--follow`, `--since`, `--kind`, `--socket`),
@@ -257,7 +257,8 @@ CLI commands (46 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json
 `containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `stats`, `restart`, `fmt` (`--check`, `-w`, `-`), `lint`
 (`--strict`, `--allow`), `doctor`, `verify`, `edit` (`--set-impair`),
-`scenario`, `lsp` (LSP server over stdio, issue #56),
+`scenario`, `benchmark` (ping/iperf3 with metric asserts),
+`lsp` (LSP server over stdio, issue #56),
 `top` (`--interval`, `--once`, `--zenoh`, `--zenoh-connect`; ratatui TUI,
 issue #63).
 

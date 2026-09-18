@@ -225,6 +225,20 @@ impl Runtime {
     ///
     /// By default, adds `NET_ADMIN` and `NET_RAW` capabilities (sufficient for
     /// network lab operations). Use `privileged: true` for full privileges.
+    /// Remove a container by name, ignoring every failure.
+    ///
+    /// Used to undo a half-made container when `create` fails after the
+    /// runtime has already claimed the name. There is nothing useful to
+    /// do with an error here: the caller is on its way to reporting the
+    /// real one, and a name that was never claimed is the common case.
+    fn force_remove(&self, name: &str) {
+        let _ = std::process::Command::new(&self.binary)
+            .args(["rm", "-f", name])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+
     pub fn create(&self, name: &str, image: &str, opts: &CreateOpts) -> Result<ContainerInfo> {
         let mut args = vec![
             "run".to_string(),
@@ -331,6 +345,16 @@ impl Runtime {
             })?;
 
         if !output.status.success() {
+            // `run -d` can claim the name and *then* fail — a workdir
+            // the image does not have is the common one, and podman
+            // leaves the container in `Created`. Nothing has been
+            // journalled at this point (the caller records its undo
+            // only on success), so without this the name stays taken
+            // and every later deploy of the same topology fails with
+            // "the container name is already in use" instead of the
+            // real error. Best-effort: the failure we report is the
+            // original one either way.
+            self.force_remove(name);
             return Err(Error::deploy_failed(format!(
                 "failed to create container '{name}': {}",
                 String::from_utf8_lossy(&output.stderr)
@@ -343,11 +367,14 @@ impl Runtime {
         // every later `/proc/<pid>/ns/net` reference would point at a
         // dead or recycled PID (#31). `inspect_pid` rejects that.
         let pid = self.inspect_pid(&id).map_err(|e| {
-            Error::deploy_failed(format!(
+            let msg = Error::deploy_failed(format!(
                 "container '{name}' ({}): {e}; inspect with `{} logs {name}`",
                 &id[..id.len().min(12)],
                 self.binary
-            ))
+            ));
+            // Created but unusable — same reasoning as above.
+            self.force_remove(name);
+            msg
         })?;
 
         Ok(ContainerInfo {

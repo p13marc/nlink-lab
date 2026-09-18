@@ -7,7 +7,7 @@ lab "container" {
   description "Container node connected to bare namespace"
 }
 
-node router image "alpine:latest" cmd "sleep infinity"
+node router image "alpine:latest" cmd ["sleep", "infinity"]
 node host { route default via 10.0.0.1 }
 
 link router:eth0 -- host:eth0 {

@@ -28,7 +28,8 @@ node web image "nginx:alpine" {
 node app image "python:3-slim" {
   entrypoint "/bin/sh"
   cmd ["-c", "python -m http.server 8080"]
-  workdir "/app"
+  /* Must exist in the image — podman will not create it. */
+  workdir "/tmp"
   cpu 1
   memory ${app_memory}
   cap-add [NET_ADMIN, NET_RAW, SYS_PTRACE]

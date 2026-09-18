@@ -658,6 +658,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             // change is unaffected — that takes create-and-graft, not
             // change — so this costs a transient window only where there
             // is no alternative.
+            //
+            // nlink 0.28 grew the same fallback (nlink#361), but in its
+            // *declarative* applier. This path is the imperative
+            // `Connection::replace_qdisc` — the side path #108 is about
+            // — so it does not inherit it. Removing this on the 0.28
+            // bump put the EINVAL straight back.
             if res.is_err() && matches!(qdisc.kind, crate::types::QdiscKind::Sfq { .. }) {
                 conn.del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
                     .await

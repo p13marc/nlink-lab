@@ -56,7 +56,7 @@ containing the CLI, the backend, shell completions and the
 licence/changelog. It does **not** contain the GUI.
 
 ```bash
-VER=0.11.1   # check the releases page for the newest
+VER=0.12.0   # check the releases page for the newest
 base=https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER
 
 curl -LO $base/nlink-lab-$VER-x86_64-linux-gnu.tar.gz
@@ -108,7 +108,7 @@ sudo apt install flatpak     # or dnf/pacman equivalent
 flatpak remote-add --if-not-exists --user \
     flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-VER=0.11.1
+VER=0.12.0
 curl -LO https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER/nlink-lab-topoviewer-$VER.flatpak
 flatpak install --user ./nlink-lab-topoviewer-$VER.flatpak
 

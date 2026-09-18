@@ -138,21 +138,22 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and the Rust API are stable across patch
 releases; breaking changes are flagged in the CHANGELOG with a
 migration note. Built on
-[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.27.
+[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.28.
 
-Current release: **0.11.1** (2026-09-17) — `spawn` no longer
-leaves a zombie per process in a long-lived caller, a rustls
-advisory is cleared, the `fuzz` lane runs for the first time, and
-the documentation is squared up with the code (new
-[install guide](docs/INSTALL.md) and [GUI page](docs/GUI.md)).
-**Take this over 0.11.0**, which was tagged but never released —
-its CI could not go green, so it has no downloadable assets.
+Current release: **0.12.0** (2026-09-18) — the measurement
+release. Interface rates were **always zero** and nobody had
+noticed, so `metrics`, `top`, `daemon --http` and the viewer
+reported an idle lab whatever the traffic; snapshots now carry
+cumulative byte and packet counters and the rates are differenced
+from them. `proc-stat` samples a whole node in one call and
+reports PSS. Changing an impairment no longer tears the qdisc down
+first, so counters survive and the link is never briefly
+unimpaired. One OpenMetrics gauge is renamed — see the CHANGELOG's
+Migration note.
 
-0.11.0 is where the fault toolbox landed: `impair` with all ten
-netem knobs, `kill --signal`, exit codes for spawned processes,
-`spawn` on container nodes, `edit --set-mtu`, and `restart` that
-re-attaches a container node's links. Earlier releases are in the
-[CHANGELOG](CHANGELOG.md), newest first.
+0.11.1 fixed a zombie per `spawn` in a long-lived caller and
+squared the documentation up with the code. Earlier releases are
+in the [CHANGELOG](CHANGELOG.md), newest first.
 
 ## Requirements
 

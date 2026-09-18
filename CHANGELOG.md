@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-18
+
+The measurement release. Every interface rate this tool reported was
+**zero** — in `metrics`, `top`, `daemon --http` and the viewer, however
+much traffic was moving — and had been for as long as the metrics
+existed. Nobody noticed because nothing asserted on them. That is the
+shape of most of this release: the numbers were there, the plumbing
+looked right, and no test compared either against the kernel.
+
+Built on nlink 0.28, which carries two fixes this release depends on:
+a declared `masquerade` rule no longer diffs as changed forever
+(upstream #362 — that is what made `apply --check` report permanent
+drift here), and the declarative qdisc builder can finally express
+fq_codel, sfq, prio and tbf options (upstream #361).
+
 ### Migration
 
 - **`nlink_lab_iface_rx_bytes_per_second` / `…_tx_bytes_per_second` are
@@ -51,6 +66,13 @@ All notable changes to this project will be documented in this file.
   restarts them at zero, so detect a backwards step.
 
 ### Changed
+
+- **nlink 0.27 → 0.28.** Brings the masquerade diff fix (#141 is closed
+  by the bump alone) and the declarative qdisc parity work. The local
+  del+add fallback for `sfq` **stays**: nlink 0.28 added the same
+  fallback to its *declarative* applier, and `Op::Qdisc` here goes
+  through the imperative `Connection::replace_qdisc` — the side path
+  #108 is about — so it does not inherit it.
 
 - **`proc-stat` reads the host's `/proc` for a namespace node** instead
   of routing five reads per process through `nlink-lab exec`. nlink-lab

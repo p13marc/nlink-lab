@@ -1053,6 +1053,22 @@ async fn nat_masquerade_reapply_is_zero_ops() {
          baseline={baseline_handles:?} after={after_handles:?}"
     );
 
+    // #141: the *diff* must agree with the applier. Handles surviving
+    // only proves `apply` converged; it did that before too. What was
+    // broken is what `apply --check` reads — `Expr::Masquerade` rendered
+    // without the empty NFTA_EXPR_DATA nest the kernel echoes, so the
+    // rule came out four bytes short of the kernel's copy and diffed as
+    // changed on every reconcile, forever. Nothing here asserted on the
+    // diff, which is why it took a downstream drift gate to find it.
+    // Fixed upstream in nlink 0.28 (nlink#362).
+    let diff = nlink_lab::deploy::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("layered diff");
+    assert!(
+        diff.is_empty(),
+        "a freshly applied topology must show no drift; got:\n{diff}"
+    );
+
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }

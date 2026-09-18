@@ -3486,9 +3486,9 @@ dependencies = [
 
 [[package]]
 name = "nlink"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f1c6fafbea98b0e2e0d4ec9a81ef475ed3ea580424bb74c3cd878aa63a4dad4"
+checksum = "fadcdf2200186045b72d09d6e183a1f08b304bfb0d21dace0bd2ab896135d7ee"
 dependencies = [
  "bitflags 2.13.2",
  "bytes",
@@ -3510,7 +3510,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "base64 0.23.1",
  "flate2",
@@ -3539,7 +3539,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-backend"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "clap",
  "libc",
@@ -3559,7 +3559,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-cli"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -3589,7 +3589,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-macros"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3598,7 +3598,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-shared"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "schemars 1.2.2",
  "serde",
@@ -3607,7 +3607,7 @@ dependencies = [
 
 [[package]]
 name = "nlink-lab-topoviewer"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "clap",
  "iced",
@@ -3623,9 +3623,9 @@ dependencies = [
 
 [[package]]
 name = "nlink-macros"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "649d5b66ae8c1cb925f9bf08ffd7a350036ead78d7ec1315225231c65fabd50a"
+checksum = "3a3f088ea0cdb8b0a5096dbab42cad5aa41ff0cb503cc0683c8640e03e866bf0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6081,7 +6081,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",

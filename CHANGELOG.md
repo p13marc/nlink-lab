@@ -34,6 +34,24 @@ fq_codel, sfq, prio and tbf options (upstream #361).
 
 ### Added
 
+- **`nlink-lab benchmark <LAB> [NAME]`** — the `benchmark` block had an
+  engine and no way to run it. `benchmark::run_benchmark` was a public
+  function **nothing in the repo called**: no CLI command, not wired
+  into `test`, not reachable from `scenario`. So a topology could
+  declare `ping`/`iperf3` tests with `assert` thresholds, have them
+  parse and validate, and never execute — `nlink-lab test
+  examples/benchmark.nll` reported `PASS (0/0 assertions)` on a file
+  with two.
+
+  The command mirrors `scenario`: omit the name to list, give one to
+  run, `--json` for the full `BenchmarkResult`, exit 2 when an assertion
+  fails. Metrics print alongside each assertion, because a benchmark
+  with no assertions still has something to say.
+
+  `examples/iperf-benchmark.nll` now declares the throughput benchmark
+  its name promises, instead of a comment telling you to run iperf3 by
+  hand.
+
 - **`validate retries N interval D { … }`** — a settle policy for the
   whole assertion block. Assertions run the moment a deploy finishes,
   which is too early for anything that has to converge: BGP needs tens
@@ -150,6 +168,11 @@ fq_codel, sfq, prio and tbf options (upstream #361).
   - `route-reachability` did not look at macvlan/ipvlan addresses, so
     `macvlan.nll` and `ipvlan.nll` were flagged for a gateway sitting on
     the subnet of the macvlan address two lines above it.
+
+- **`examples/iperf-benchmark.nll` is egress-only.** `rate … ingress`
+  drops 100% of traffic (#149) — the IFB shaper passes the packets and
+  they never reach the stack — so the example's own benchmark could not
+  connect. The ingress line comes back when that is fixed.
 
 - **A container that failed to create kept its name**, so the next
   deploy of the same topology failed with "the container name is

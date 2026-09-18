@@ -82,6 +82,7 @@ Things you'd reach for in a chaos test.
 | [`metrics`](metrics.md) | Stream live metrics published by `daemon` |
 | [`watch`](watch.md) | Print RTNETLINK + nftables drift events for a lab |
 | [`scenario`](scenario.md) | Run a `scenario` block from a deployed lab's topology |
+| [`benchmark`](benchmark.md) | Run a `benchmark` block from a deployed lab's topology |
 | [`proc-stat`](proc-stat.md) | Resource snapshot of a spawned process |
 | [`wait`](wait.md) | Block until a lab's state file exists (deploy finished) |
 
@@ -109,6 +110,6 @@ same value in `exit_code`):
 |------|---------|
 | 0 | Success |
 | 1 | Error (bad arguments, lab not found, kernel/netlink failure, lock held by another process) |
-| 2 | Validation, assertion or drift failure: `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `apply --check` |
+| 2 | Validation, assertion or drift failure: `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `benchmark`, `apply --check` |
 | 124 | Timeout (`exec --timeout`, `wait-for`) |
 | child's code | `exec` and `shell` pass the command's exit status through |

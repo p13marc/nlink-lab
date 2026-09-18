@@ -1,10 +1,15 @@
 # iperf3 benchmark topology.
 #
-# Two nodes connected by a rate-limited link. Server runs iperf3,
-# client can connect to measure throughput.
+# Two nodes connected by a rate-limited link, with a `benchmark` block
+# that measures the throughput the shaper actually delivers and asserts
+# on it.
 #
 # Usage after deploy:
-#   nlink-lab exec iperf-bench client -- iperf3 -c 10.0.0.1 -t 5
+#   nlink-lab benchmark iperf-bench throughput
+#   nlink-lab exec iperf-bench client -- iperf3 -c 10.0.0.1 -t 5   # by hand
+#
+# Needs iperf3 on the host; the benchmark engine starts the server side
+# for you.
 
 lab "iperf-bench" {
   description "Two nodes for throughput benchmarking"
@@ -15,5 +20,19 @@ node client { route default via 10.0.0.1 }
 
 link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
-rate server:eth0 egress 100mbit ingress 100mbit
-rate client:eth0 egress 100mbit ingress 100mbit
+# Egress only: `rate ... ingress` currently drops every packet (#149),
+# which would make the benchmark below unable to connect at all.
+rate server:eth0 egress 100mbit
+rate client:eth0 egress 100mbit
+
+# The link is shaped to 100mbit, so a 5-second run should land near it.
+# `bandwidth` is the metric iperf3 reports, in bits per second; the
+# threshold takes the usual rate units. The floor is deliberately loose
+# — a shaper plus TCP slow-start on a loaded machine does not reach the
+# nominal rate, and an assertion that flaps is worse than none.
+benchmark "throughput" {
+  iperf3 client server {
+    duration 5s
+    assert bandwidth above 50mbit
+  }
+}

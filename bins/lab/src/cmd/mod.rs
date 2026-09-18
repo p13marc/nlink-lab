@@ -4,6 +4,7 @@
 //! single match that routes a parsed command to its handler.
 
 pub mod apply;
+pub mod benchmark;
 pub mod capture;
 pub mod containers;
 pub mod daemon;
@@ -73,6 +74,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Top(args) => top::run(ctx, args).await,
         Commands::Impair(args) => impair::run(ctx, args).await,
         Commands::Scenario(args) => scenario::run(ctx, args).await,
+        Commands::Benchmark(args) => benchmark::run(ctx, args).await,
         Commands::DocsGen(args) => docs_gen::run(ctx, args),
         Commands::Graph(args) => graph::run(ctx, args),
         Commands::Render(args) => render::run(ctx, args),

@@ -192,6 +192,17 @@ pub enum Commands {
     /// actions, assertion outcomes, timings). Exit 2 when any step fails.
     Scenario(cmd::scenario::Args),
 
+    /// Run a `benchmark` block from a deployed lab's topology.
+    ///
+    /// Collects the metrics the block asks for (`ping` latency/loss,
+    /// `iperf3` throughput/retransmits) and evaluates each `assert`
+    /// against them. Omit the name to list the lab's benchmarks.
+    ///
+    /// JSON OUTPUT (with `--json`): the full `BenchmarkResult` (per test:
+    /// the metric map, every assertion with its actual value, and the
+    /// pass flag). Exit 2 when any assertion fails.
+    Benchmark(cmd::benchmark::Args),
+
     /// Regenerate `docs/cli/*.md` from the clap definitions (maintainers).
     #[command(hide = true)]
     DocsGen(cmd::docs_gen::Args),

@@ -102,7 +102,7 @@ Options:
           Jitter (e.g., "2ms")
 
       --loss <LOSS>
-          Packet loss: "0.1%", or a bursty-loss model in tc's grammar — "gemodel P [R [1-H [1-K]]]" (Gilbert-Elliott) or "state P13 [P31 [P32 [P23 [P14]]]]" (4-state)
+          Packet loss: `0.1%`, or a bursty-loss model in tc's grammar — `gemodel P [R [1-H [1-K]]]` (Gilbert-Elliott) or `state P13 [P31 [P32 [P23 [P14]]]]` (4-state)
 
       --rate <RATE>
           Rate limit (e.g., "100mbit")

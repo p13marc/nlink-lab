@@ -1616,11 +1616,9 @@ fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<
         },
         ValueKind::Rate => parse_rate_bps(value).err(),
         ValueKind::Loss => match crate::deploy::plan::qdisc::parse_loss(value) {
-            Ok(crate::deploy::plan::qdisc::Loss::Random(p)) if !(0.0..=100.0).contains(&p) => {
-                Some(crate::Error::invalid_topology(format!(
-                    "percentage {p} out of range (0-100)"
-                )))
-            }
+            Ok(crate::deploy::plan::qdisc::Loss::Random(p)) if !(0.0..=100.0).contains(&p) => Some(
+                crate::Error::invalid_topology(format!("percentage {p} out of range (0-100)")),
+            ),
             Ok(_) => None,
             Err(e) => Some(e),
         },

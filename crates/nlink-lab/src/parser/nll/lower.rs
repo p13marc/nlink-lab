@@ -5919,13 +5919,20 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  loss 1% }
         );
         let ge = &topo.impairments["a:eth0"];
         assert_eq!(ge.loss.as_deref(), Some("gemodel 1% 30% 50% 0.1%"));
-        assert_eq!(ge.delay.as_deref(), Some("10ms"), "parsing continues after the model");
+        assert_eq!(
+            ge.delay.as_deref(),
+            Some("10ms"),
+            "parsing continues after the model"
+        );
         let gi = &topo.impairments["b:eth0"];
         assert_eq!(gi.loss.as_deref(), Some("state 1% 2% 3% 4% 5%"));
         assert_eq!(gi.delay.as_deref(), Some("5ms"));
 
         let rendered = crate::render::try_render(&topo).unwrap();
-        assert!(rendered.contains("loss gemodel 1% 30% 50% 0.1%"), "{rendered}");
+        assert!(
+            rendered.contains("loss gemodel 1% 30% 50% 0.1%"),
+            "{rendered}"
+        );
         let back = crate::parser::parse(&rendered).unwrap();
         assert_eq!(back.impairments["a:eth0"], *ge);
         assert_eq!(back.impairments["b:eth0"], *gi);
@@ -5934,20 +5941,33 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  loss 1% }
         match netem.loss_model {
             Some(NetemLossModel::GilbertElliot { p, r, h, k1, .. }) => {
                 assert!((p - 1.0).abs() < 1e-9 && (r - 30.0).abs() < 1e-9);
-                assert!((h - 50.0).abs() < 1e-9 && (k1 - 0.1).abs() < 1e-9, "h {h} k1 {k1}");
+                assert!(
+                    (h - 50.0).abs() < 1e-9 && (k1 - 0.1).abs() < 1e-9,
+                    "h {h} k1 {k1}"
+                );
             }
             other => panic!("expected Gilbert-Elliot, got {other:?}"),
         }
         assert!(netem.loss.is_zero(), "a model is not also random loss");
-        match crate::deploy::plan::qdisc::build_netem(gi).unwrap().loss_model {
+        match crate::deploy::plan::qdisc::build_netem(gi)
+            .unwrap()
+            .loss_model
+        {
             Some(NetemLossModel::GilbertIntuitive { p14, p23, .. }) => {
-                assert!((p23 - 4.0).abs() < 1e-9 && (p14 - 5.0).abs() < 1e-9, "p23 {p23} p14 {p14}");
+                assert!(
+                    (p23 - 4.0).abs() < 1e-9 && (p14 - 5.0).abs() < 1e-9,
+                    "p23 {p23} p14 {p14}"
+                );
             }
             other => panic!("expected 4-state, got {other:?}"),
         }
         let result = topo.validate();
         assert!(!result.has_errors(), "{:?}", result.issues());
-        assert!(result.warnings().all(|w| w.rule != "loss-correlation-suppresses-loss"));
+        assert!(
+            result
+                .warnings()
+                .all(|w| w.rule != "loss-correlation-suppresses-loss")
+        );
     }
 
     #[test]
@@ -5955,12 +5975,18 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  loss 1% }
         // No values at all is a parse error.
         let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  loss gemodel }\n";
         let err = crate::parser::parse(src).unwrap_err();
-        assert!(err.to_string().contains("needs at least one percentage"), "{err}");
+        assert!(
+            err.to_string().contains("needs at least one percentage"),
+            "{err}"
+        );
 
         // Too many values, and a model beside a correlation, are validation errors.
         for (props, rule) in [
             ("loss gemodel 1% 2% 3% 4% 5%", "invalid-impairment-value"),
-            ("loss gemodel 1% loss-correlation 25%", "loss-model-excludes-correlation"),
+            (
+                "loss gemodel 1% loss-correlation 25%",
+                "loss-model-excludes-correlation",
+            ),
         ] {
             let topo = parse_and_lower(&format!(
                 "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  {props} }}\n"

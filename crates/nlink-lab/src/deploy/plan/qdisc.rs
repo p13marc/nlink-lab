@@ -22,9 +22,8 @@ pub(crate) fn parse_loss(loss: &str) -> Result<Loss> {
         Some(&("gemodel" | "state")) => {
             let mut params = vec!["loss"];
             params.extend(&words);
-            let cfg = NetemConfig::parse_params(&params).map_err(|e| {
-                crate::Error::invalid_topology(format!("loss {loss:?}: {e}"))
-            })?;
+            let cfg = NetemConfig::parse_params(&params)
+                .map_err(|e| crate::Error::invalid_topology(format!("loss {loss:?}: {e}")))?;
             let model = cfg.loss_model.ok_or_else(|| {
                 crate::Error::invalid_topology(format!("loss {loss:?}: no loss model parsed"))
             })?;

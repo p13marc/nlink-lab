@@ -218,7 +218,10 @@ mod tests {
             "qdisc netem 8c08: root refcnt 2 limit 1000 delay 20ms loss gemodel p 1% r 30% 1-h 50% 1-k 0.1% rate 100Mbit seed 2928661007094348000\n",
         )
         .unwrap();
-        assert_eq!(out.loss_model.as_deref(), Some("gemodel p 1% r 30% 1-h 50% 1-k 0.1%"));
+        assert_eq!(
+            out.loss_model.as_deref(),
+            Some("gemodel p 1% r 30% 1-h 50% 1-k 0.1%")
+        );
         assert_eq!(out.loss_pct, None);
         assert_eq!(out.delay_ms, Some(20.0));
         assert!(out.rate_bps.is_some(), "parsing resumes after the model");

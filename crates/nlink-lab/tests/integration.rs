@@ -3140,13 +3140,24 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
     assert!(qd.stdout.contains("loss gemodel"), "tc said: {}", qd.stdout);
     let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout).unwrap();
     assert!(
-        parsed.loss_model.as_deref().is_some_and(|m| m.starts_with("gemodel")),
+        parsed
+            .loss_model
+            .as_deref()
+            .is_some_and(|m| m.starts_with("gemodel")),
         "{parsed:?}"
     );
     let ping = lab
-        .exec("router", "ping", &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.2"])
+        .exec(
+            "router",
+            "ping",
+            &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.2"],
+        )
         .unwrap();
-    assert_ne!(ping.exit_code, 0, "every packet must be lost: {}", ping.stdout);
+    assert_ne!(
+        ping.exit_code, 0,
+        "every packet must be lost: {}",
+        ping.stdout
+    );
     let stats = lab
         .exec("router", "tc", &["-s", "qdisc", "show", "dev", "eth0"])
         .unwrap();
@@ -3162,9 +3173,17 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
     };
     lab.set_impairment("router:eth0", &lose_none).await.unwrap();
     let ping = lab
-        .exec("router", "ping", &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.2"])
+        .exec(
+            "router",
+            "ping",
+            &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.2"],
+        )
         .unwrap();
-    assert_eq!(ping.exit_code, 0, "a model that never loses must not drop: {}", ping.stdout);
+    assert_eq!(
+        ping.exit_code, 0,
+        "a model that never loses must not drop: {}",
+        ping.stdout
+    );
 }
 
 // ─── Plan 156 PR C — impair --show JSON view ────────────

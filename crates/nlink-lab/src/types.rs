@@ -1635,14 +1635,23 @@ mod impairment_tests {
     fn loss_correlation_warning_needs_both_and_is_deterministic() {
         let mut imp = Impairment::default();
         imp.set_property("loss", "0.5%").unwrap();
-        assert!(imp.loss_correlation_warning().is_none(), "loss alone is fine");
+        assert!(
+            imp.loss_correlation_warning().is_none(),
+            "loss alone is fine"
+        );
         imp.set_property("loss-correlation", "25%").unwrap();
         let w = imp.loss_correlation_warning().expect("must warn");
         assert_eq!(imp.loss_correlation_warning().as_deref(), Some(w.as_str()));
         imp.set_property("loss-correlation", "0%").unwrap();
-        assert!(imp.loss_correlation_warning().is_none(), "zero correlation is off");
+        assert!(
+            imp.loss_correlation_warning().is_none(),
+            "zero correlation is off"
+        );
         imp.loss = None;
         imp.set_property("loss-correlation", "25%").unwrap();
-        assert!(imp.loss_correlation_warning().is_none(), "no loss, nothing lost");
+        assert!(
+            imp.loss_correlation_warning().is_none(),
+            "no loss, nothing lost"
+        );
     }
 }

@@ -2897,10 +2897,15 @@ network lan {
                 .is_some_and(|l| l.ends_with(".loss-correlation"))
         }));
         assert!(
-            w.iter().any(|w| w.message.contains("drops about 0.00% of packets, not 0.5%")),
+            w.iter()
+                .any(|w| w.message.contains("drops about 0.00% of packets, not 0.5%")),
             "{w:?}"
         );
-        assert!(result.errors().next().is_none(), "a warning, not an error: {:?}", result.issues);
+        assert!(
+            result.errors().next().is_none(),
+            "a warning, not an error: {:?}",
+            result.issues
+        );
     }
 
     #[test]

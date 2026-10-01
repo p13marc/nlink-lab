@@ -149,7 +149,7 @@
           ]
         },
         "loss_correlation": {
-          "description": "Correlation of successive loss decisions (e.g., \"25%\").",
+          "description": "netem's loss \"correlation\" (e.g., \"25%\"). **It does not make loss\nbursty, it lowers the loss rate**: netem averages each random draw\nwith the previous one, so a small loss probability almost never\ntriggers (`loss 0.5%` with `loss-correlation 25%` drops ~0 %). See\n[`Impairment::loss_correlation_warning`].",
           "type": [
             "string",
             "null"

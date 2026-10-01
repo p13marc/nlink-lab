@@ -1422,6 +1422,11 @@ impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
                  ("duplicate" PERCENT)? ("delay-correlation" PERCENT)?
                  ("loss-correlation" PERCENT)? ("limit" INT)?
+                 (* loss-correlation LOWERS the loss rate, it does not
+                    make loss bursty: netem averages each draw with the
+                    previous one, so "loss 0.5% loss-correlation 25%"
+                    drops ~0 %. `validate` warns:
+                    loss-correlation-suppresses-loss (#152) *)
 rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" SIZE)?
 
 # ── Collections ──────────────────────────────────

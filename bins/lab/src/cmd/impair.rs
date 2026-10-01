@@ -48,7 +48,8 @@ pub struct Args {
     #[arg(long)]
     pub delay_correlation: Option<String>,
 
-    /// Correlation of successive loss decisions (e.g., "25%"): bursty loss.
+    /// netem loss "correlation" (e.g., "25%"). Not bursty loss: it LOWERS the
+    /// loss rate, to ~0 at small rates (loss 0.5% + 25% drops ~0%)
     #[arg(long)]
     pub loss_correlation: Option<String>,
 
@@ -243,6 +244,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 loss_correlation,
                 limit,
             };
+            // `impair` bypasses the validator, and is how loss-correlation
+            // usually gets set (#152).
+            if let Some(warning) = impairment.loss_correlation_warning() {
+                eprintln!("  {} {warning}", crate::ctx::yellow("WARN"));
+            }
             running.set_impairment(&endpoint, &impairment).await?;
             report("updated impairment on", &endpoint, None);
         }

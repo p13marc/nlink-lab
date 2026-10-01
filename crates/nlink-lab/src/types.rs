@@ -990,7 +990,11 @@ pub struct Impairment {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delay_correlation: Option<String>,
 
-    /// Correlation of successive loss decisions (e.g., "25%").
+    /// netem's loss "correlation" (e.g., "25%"). **It does not make loss
+    /// bursty, it lowers the loss rate**: netem averages each random draw
+    /// with the previous one, so a small loss probability almost never
+    /// triggers (`loss 0.5%` with `loss-correlation 25%` drops ~0 %). See
+    /// [`Impairment::loss_correlation_warning`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loss_correlation: Option<String>,
 
@@ -999,7 +1003,62 @@ pub struct Impairment {
     pub limit: Option<String>,
 }
 
+/// The loss rate, in percent, that netem's correlated generator produces
+/// for `loss_pct` with correlation `corr_pct`: the kernel's `get_crandom`
+/// (`value = (1 - ρ)·rand + ρ·last`, lost when `value < p`), run for a fixed
+/// number of draws from a fixed seed so the answer is deterministic.
+fn netem_correlated_rate(loss_pct: f64, corr_pct: f64) -> f64 {
+    const DRAWS: u32 = 200_000;
+    let (p, rho) = (loss_pct / 100.0, corr_pct / 100.0);
+    let mut x: u64 = 0x9E37_79B9_7F4A_7C15; // xorshift64*, fixed seed
+    let mut next = || {
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        (x.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let mut last = next();
+    let mut lost = 0u32;
+    for _ in 0..DRAWS {
+        last = (1.0 - rho) * next() + rho * last;
+        if last < p {
+            lost += 1;
+        }
+    }
+    100.0 * f64::from(lost) / f64::from(DRAWS)
+}
+
 impl Impairment {
+    /// The warning to show when `loss` is combined with `loss-correlation`,
+    /// or `None`.
+    ///
+    /// netem's correlation is not a statistical correlation; `tc-netem(8)`
+    /// calls it "an approximation". Each random draw is averaged with the
+    /// previous one, `value = (1 - ρ)·rand + ρ·last`, and a packet is lost
+    /// when that value falls below the loss probability. Averaging pulls the
+    /// value towards the middle of its range, so a small probability almost
+    /// never triggers: `loss 0.5%` with `loss-correlation 25%` dropped 0 of
+    /// 40 000 packets on Linux 6.12, where `loss 0.5%` alone dropped 0.48 %.
+    /// The documentation used to promise "bursty loss" instead (#152).
+    ///
+    /// The message quotes the effective rate, computed from that formula
+    /// with a fixed seed, so it is the same on every run. Unparseable
+    /// values return `None`; the validator reports those on its own.
+    pub fn loss_correlation_warning(&self) -> Option<String> {
+        let loss = crate::helpers::parse_percent(self.loss.as_deref()?).ok()?;
+        let corr = crate::helpers::parse_percent(self.loss_correlation.as_deref()?).ok()?;
+        if loss == 0.0 || corr == 0.0 {
+            return None;
+        }
+        let effective = netem_correlated_rate(loss, corr);
+        Some(format!(
+            "loss {loss}% with loss-correlation {corr}% drops about {effective:.2}% of packets, \
+             not {loss}%: netem's correlation averages each random draw with the previous one, \
+             which lowers a small loss probability instead of making loss bursty. Drop \
+             loss-correlation for {loss}% independent loss"
+        ))
+    }
+
     /// Every property name [`Impairment::set_property`] accepts, in the
     /// order they are listed to the user.
     pub const PROPERTIES: [&'static str; 10] = [
@@ -1549,5 +1608,45 @@ mod name_hash_tests {
     fn network_bridge_name_uses_nb_prefix() {
         let n = network_bridge_name_for("mynet");
         assert!(n.starts_with("nb"), "expected nb prefix, got {n}");
+    }
+}
+
+#[cfg(test)]
+mod impairment_tests {
+    use super::*;
+
+    /// The estimate behind the #152 warning has to agree with netem: the
+    /// same formula simulated independently gave 0.00 / 1.77 / 9.99 %.
+    #[test]
+    fn netem_correlated_rate_matches_the_formula() {
+        assert!(netem_correlated_rate(0.5, 25.0) < 0.01);
+        let r = netem_correlated_rate(10.0, 25.0);
+        assert!((1.5..2.1).contains(&r), "{r}");
+        let r = netem_correlated_rate(10.0, 0.0);
+        assert!((9.7..10.3).contains(&r), "{r}");
+    }
+
+    #[test]
+    fn loss_correlation_warning_needs_both_and_is_deterministic() {
+        let mut imp = Impairment::default();
+        imp.set_property("loss", "0.5%").unwrap();
+        assert!(
+            imp.loss_correlation_warning().is_none(),
+            "loss alone is fine"
+        );
+        imp.set_property("loss-correlation", "25%").unwrap();
+        let w = imp.loss_correlation_warning().expect("must warn");
+        assert_eq!(imp.loss_correlation_warning().as_deref(), Some(w.as_str()));
+        imp.set_property("loss-correlation", "0%").unwrap();
+        assert!(
+            imp.loss_correlation_warning().is_none(),
+            "zero correlation is off"
+        );
+        imp.loss = None;
+        imp.set_property("loss-correlation", "25%").unwrap();
+        assert!(
+            imp.loss_correlation_warning().is_none(),
+            "no loss, nothing lost"
+        );
     }
 }

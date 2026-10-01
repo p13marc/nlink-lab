@@ -120,7 +120,7 @@ Options:
           Correlation of successive delay values (e.g., "25%")
 
       --loss-correlation <LOSS_CORRELATION>
-          Correlation of successive loss decisions (e.g., "25%"): bursty loss
+          netem loss "correlation" (e.g., "25%"). Not bursty loss: it LOWERS the loss rate, to ~0 at small rates (loss 0.5% + 25% drops ~0%)
 
       --limit <LIMIT>
           netem queue limit in packets (default 1000)

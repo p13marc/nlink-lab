@@ -93,6 +93,7 @@ pub const RULE_IDS: &[&str] = &[
     "unreferenced-node",
     "empty-exec-cmd",
     "command-not-split",
+    "loss-correlation-suppresses-loss",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -112,6 +113,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "unreferenced-node",
     "empty-exec-cmd",
     "command-not-split",
+    "loss-correlation-suppresses-loss",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -1654,6 +1656,16 @@ fn check_impairment(imp: &Impairment, prefix: &str, issues: &mut Vec<ValidationI
             check_value(kind, v, format!("{prefix}.{name}"), issues);
         }
     }
+    // A warning, not an error: the kernel accepts it, it just does not do
+    // what the topology says (#152).
+    if let Some(message) = imp.loss_correlation_warning() {
+        issues.push(ValidationIssue {
+            severity: Severity::Warning,
+            rule: "loss-correlation-suppresses-loss",
+            message,
+            location: Some(format!("{prefix}.loss-correlation")),
+        });
+    }
 }
 
 /// Every netem / rate-limit literal must parse and percentages must be 0-100.
@@ -2849,6 +2861,66 @@ network lan {
             result
                 .errors()
                 .any(|e| e.rule == "network-impair-needs-subnet")
+        );
+    }
+
+    /// #152: `loss-correlation` lowers the loss rate instead of making it
+    /// bursty, and nothing used to say so. Both places an impairment can be
+    /// written must warn, with the rate netem will actually produce.
+    #[test]
+    fn loss_correlation_warns_with_the_effective_rate() {
+        let result = parse_and_validate(
+            r#"lab "corr"
+node a
+node b
+node c
+node d
+link a:eth0 -- b:eth0 {
+  subnet 10.0.0.0/24
+  -> loss 0.5% loss-correlation 25%
+}
+network lan {
+  members [c:eth0, d:eth0]
+  subnet 10.0.1.0/24
+  impair c -- d { loss 2% loss-correlation 10% }
+}
+"#,
+        );
+        let w: Vec<_> = result
+            .warnings()
+            .filter(|w| w.rule == "loss-correlation-suppresses-loss")
+            .collect();
+        assert_eq!(w.len(), 2, "{:?}", result.issues);
+        assert!(w.iter().all(|w| {
+            w.location
+                .as_deref()
+                .is_some_and(|l| l.ends_with(".loss-correlation"))
+        }));
+        assert!(
+            w.iter().any(|w| w.message.contains("drops about 0.00% of packets, not 0.5%")),
+            "{w:?}"
+        );
+        assert!(result.errors().next().is_none(), "a warning, not an error: {:?}", result.issues);
+    }
+
+    #[test]
+    fn loss_without_correlation_does_not_warn() {
+        let result = parse_and_validate(
+            r#"lab "nocorr"
+node a
+node b
+link a:eth0 -- b:eth0 {
+  subnet 10.0.0.0/24
+  -> loss 0.5% delay-correlation 25%
+}
+"#,
+        );
+        assert!(
+            result
+                .warnings()
+                .all(|w| w.rule != "loss-correlation-suppresses-loss"),
+            "{:?}",
+            result.issues
         );
     }
 

@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`loss-correlation` was documented as bursty loss; it removes small loss
+  rates, and nothing warned (#152).** netem's correlation averages each random
+  draw with the previous one (`tc-netem(8)`: "an approximation"), so a small
+  loss probability almost never triggers. `loss 0.5% loss-correlation 25%`
+  dropped 0 of 40 000 packets where `loss 0.5%` alone dropped 0.48 %. It went
+  unseen in the zenoh resilience lab's `lte` profile for every run it made.
+
+  - **A new warning rule, `loss-correlation-suppresses-loss`,** fires wherever
+    an impairment sets both: per-link and in network impairment matrices. So
+    `validate`, `deploy`, `apply` and `edit --set-impair` all show it.
+  - **`impair`, which bypasses the validator, prints the same warning.**
+  - **The message quotes the rate netem will actually produce**, from
+    `Impairment::loss_correlation_warning`: the kernel's formula, run with a
+    fixed seed.
+  - **The docs now say what the knob does** (`impair --loss-correlation`, the
+    `Impairment` field, the NLL grammar) instead of "bursty loss". Real bursty
+    loss needs netem's loss models (#153).
+
 ## [0.12.0] - 2026-09-18
 
 The measurement release. Every interface rate this tool reported was

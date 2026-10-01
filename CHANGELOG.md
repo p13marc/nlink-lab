@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Built on **nlink 0.29**, which can write netem's loss models (nlink#368),
+and whose netem replace now sets the whole state (nlink#370).
+
+### Added
+
+- **Bursty loss: netem's loss models, in `tc`'s own grammar (#153).**
+  `loss` takes a percent as before, or a Markov model:
+  - **Gilbert-Elliott:** `loss gemodel p [r [1-h [1-k]]]`, e.g.
+    `loss gemodel 1% 30% 50% 0.1%`;
+  - **4-state:** `loss state p13 [p31 [p32 [p23 [p14]]]]`.
+
+  The syntax is the same in NLL (`-> delay 10ms loss gemodel 1% 30%`), in
+  `impair --loss "gemodel 1% 30%"`, and in
+  `edit --set-impair ep=loss=gemodel 1% 30%`.
+  - **No second copy of the semantics:** a model is parsed by nlink's own `tc`
+    parser, so its defaults, its `1-h`/`1-k` convention and `state`'s
+    `p23`-before-`p14` order are the ones nlink checked against iproute2.
+  - **Validation:** `validate` rejects a malformed model
+    (`invalid-impairment-value`), and rejects a model beside `loss-correlation`
+    (new error rule `loss-model-excludes-correlation`), which the model replaces.
+  - **`impair --show --json`** reports a model as `loss_model`, verbatim from
+    `tc` (schema updated).
+  - **An integration test proves a model actually drops.** A deterministic
+    lose-everything model makes ping fail and netem count drops; a lose-nothing
+    one lets it through.
+
+### Changed
+
+- **Impairment replaces now set the whole state** (nlink 0.29, #370). A runtime
+  `impair` or `edit --set-impair` replaces the endpoint's netem. Before,
+  `rate`, `reorder`, `corrupt` and the correlations from the *previous*
+  impairment survived a replace that did not mention them (delay and loss did
+  not), so the endpoint ran something no command had asked for. It now runs
+  exactly what was given. To keep a value, give it again.
+
 ### Fixed
 
 - **`loss-correlation` was documented as bursty loss; it removes small loss

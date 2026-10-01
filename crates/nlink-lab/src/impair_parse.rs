@@ -28,6 +28,11 @@ pub struct ImpairShow {
     /// Loss percentage in `0.0..=100.0`, if `loss X%` appeared.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub loss_pct: Option<f64>,
+    /// A netem loss model as `tc` prints it, e.g.
+    /// `"gemodel p 1% r 30% 1-h 50% 1-k 0.1%"` or `"state p13 1% p31 99% …"`
+    /// (#153). Set instead of `loss_pct`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loss_model: Option<String>,
     /// Rate in bits per second, if `rate X` appeared.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_bps: Option<u64>,
@@ -97,6 +102,7 @@ fn parse_root_qdisc(kind: &str, tokens: &[&str]) -> ImpairShow {
         delay_ms: None,
         jitter_ms: None,
         loss_pct: None,
+        loss_model: None,
         rate_bps: None,
     };
     let mut i = 0;
@@ -116,6 +122,26 @@ fn parse_root_qdisc(kind: &str, tokens: &[&str]) -> ImpairShow {
                 }
             }
             "loss" => {
+                // `loss gemodel p 1% r 30% 1-h 50% 1-k 0.1%`: the model, then
+                // its named parameters and their percentages (#153).
+                if let Some(&kind @ ("gemodel" | "state")) = tokens.get(i + 1) {
+                    let mut words = vec![kind];
+                    let mut j = i + 2;
+                    while let Some(&w) = tokens.get(j) {
+                        let is_param = matches!(
+                            w,
+                            "p" | "r" | "1-h" | "1-k" | "p13" | "p31" | "p32" | "p23" | "p14"
+                        );
+                        if !is_param && parse_pct(w).is_none() {
+                            break;
+                        }
+                        words.push(w);
+                        j += 1;
+                    }
+                    out.loss_model = Some(words.join(" "));
+                    i = j;
+                    continue;
+                }
                 if let Some(l) = tokens.get(i + 1).and_then(|s| parse_pct(s)) {
                     out.loss_pct = Some(l);
                     i += 2;
@@ -184,6 +210,22 @@ fn parse_rate_bps(s: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Verbatim `tc qdisc show` for a Gilbert-Elliot netem (iproute2 6.15).
+    #[test]
+    fn parses_a_loss_model() {
+        let out = parse_tc_qdisc_show(
+            "qdisc netem 8c08: root refcnt 2 limit 1000 delay 20ms loss gemodel p 1% r 30% 1-h 50% 1-k 0.1% rate 100Mbit seed 2928661007094348000\n",
+        )
+        .unwrap();
+        assert_eq!(
+            out.loss_model.as_deref(),
+            Some("gemodel p 1% r 30% 1-h 50% 1-k 0.1%")
+        );
+        assert_eq!(out.loss_pct, None);
+        assert_eq!(out.delay_ms, Some(20.0));
+        assert!(out.rate_bps.is_some(), "parsing resumes after the model");
+    }
 
     #[test]
     fn parses_loss_only() {

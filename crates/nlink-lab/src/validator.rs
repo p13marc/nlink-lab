@@ -84,6 +84,7 @@ pub const RULE_IDS: &[&str] = &[
     "empty-image",
     "depends-on-exists",
     "depends-on-cycle",
+    "loss-model-excludes-correlation",
     // Warning-level
     "frr-requires-forwarding",
     "mgmt-subnet-not-network-address",
@@ -1596,6 +1597,8 @@ enum ValueKind {
     Packets,
     /// A byte size (`burst`).
     Size,
+    /// `loss`: a percent, or a netem loss model in tc's grammar (#153).
+    Loss,
 }
 
 fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<ValidationIssue>) {
@@ -1612,6 +1615,13 @@ fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<
             Err(e) => Some(e),
         },
         ValueKind::Rate => parse_rate_bps(value).err(),
+        ValueKind::Loss => match crate::deploy::plan::qdisc::parse_loss(value) {
+            Ok(crate::deploy::plan::qdisc::Loss::Random(p)) if !(0.0..=100.0).contains(&p) => Some(
+                crate::Error::invalid_topology(format!("percentage {p} out of range (0-100)")),
+            ),
+            Ok(_) => None,
+            Err(e) => Some(e),
+        },
         ValueKind::Size => crate::helpers::parse_size(value).err(),
         ValueKind::Packets => match value.parse::<u32>() {
             Ok(0) | Err(_) => Some(crate::Error::invalid_topology(
@@ -1634,7 +1644,7 @@ fn check_impairment(imp: &Impairment, prefix: &str, issues: &mut Vec<ValidationI
     let fields = [
         ("delay", &imp.delay, ValueKind::Duration),
         ("jitter", &imp.jitter, ValueKind::Duration),
-        ("loss", &imp.loss, ValueKind::Percent),
+        ("loss", &imp.loss, ValueKind::Loss),
         ("corrupt", &imp.corrupt, ValueKind::Percent),
         ("reorder", &imp.reorder, ValueKind::Percent),
         ("rate", &imp.rate, ValueKind::Rate),
@@ -1655,6 +1665,24 @@ fn check_impairment(imp: &Impairment, prefix: &str, issues: &mut Vec<ValidationI
         if let Some(v) = value {
             check_value(kind, v, format!("{prefix}.{name}"), issues);
         }
+    }
+    // A loss model replaces random loss; nlink refuses a correlation beside
+    // one (the kernel would ignore it), so say so before deploy does (#153).
+    if let (Some(loss), Some(_)) = (&imp.loss, &imp.loss_correlation)
+        && matches!(
+            crate::deploy::plan::qdisc::parse_loss(loss),
+            Ok(crate::deploy::plan::qdisc::Loss::Model(_))
+        )
+    {
+        issues.push(ValidationIssue {
+            severity: Severity::Error,
+            rule: "loss-model-excludes-correlation",
+            message: format!(
+                "loss {loss:?} is a loss model, which replaces random loss: \
+                 loss-correlation does not apply to it; remove loss-correlation"
+            ),
+            location: Some(format!("{prefix}.loss-correlation")),
+        });
     }
     // A warning, not an error: the kernel accepts it, it just does not do
     // what the topology says (#152).

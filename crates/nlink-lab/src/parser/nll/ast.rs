@@ -524,6 +524,22 @@ pub struct ImpairProps {
     pub delay_correlation: Option<Val<Percent>>,
     pub loss_correlation: Option<Val<Percent>>,
     pub limit: Option<Val<Packets>>,
+    /// `loss gemodel …` / `loss state …`: a netem loss model in place of
+    /// the percent in [`loss`](Self::loss) (#153). At most one of the two
+    /// is set.
+    pub loss_model: Option<LossModelProps>,
+}
+
+/// A netem Markov loss model as written in NLL, in `tc`'s own grammar:
+/// `loss gemodel p [r [1-h [1-k]]]` or `loss state p13 [p31 [p32 [p23
+/// [p14]]]]`. The values stay [`Val`]s so they interpolate like any other
+/// percent; their meaning and defaults are nlink's, which checked them
+/// against iproute2 (#153).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LossModelProps {
+    /// `gemodel` or `state`.
+    pub kind: String,
+    pub values: Vec<Val<Percent>>,
 }
 
 impl ImpairProps {
@@ -532,6 +548,15 @@ impl ImpairProps {
     /// spread over several lines of a block accumulate instead of the
     /// last line replacing the earlier ones.
     pub fn merge(&mut self, other: ImpairProps) {
+        // `loss 1%` and `loss gemodel …` are one property: whichever the
+        // overlay sets replaces the other.
+        if other.loss.is_some() {
+            self.loss_model = None;
+        }
+        if other.loss_model.is_some() {
+            self.loss = None;
+        }
+        overlay(&mut self.loss_model, other.loss_model);
         overlay(&mut self.delay, other.delay);
         overlay(&mut self.jitter, other.jitter);
         overlay(&mut self.loss, other.loss);

@@ -970,7 +970,11 @@ pub struct Impairment {
     /// Jitter (e.g., "2ms").
     pub jitter: Option<String>,
 
-    /// Packet loss (e.g., "0.1%", "5%").
+    /// Packet loss, in `tc`'s grammar: independent loss (`"0.1%"`), or a
+    /// netem Markov model for **bursty** loss — Gilbert-Elliott
+    /// `"gemodel p [r [1-h [1-k]]]"` (e.g. `"gemodel 1% 30% 50% 0.1%"`) or
+    /// the 4-state `"state p13 [p31 [p32 [p23 [p14]]]]"` (#153). A model's
+    /// values and defaults are nlink's, checked against iproute2.
     pub loss: Option<String>,
 
     /// Bandwidth rate limit (e.g., "100mbit", "1gbit").
@@ -1055,7 +1059,8 @@ impl Impairment {
             "loss {loss}% with loss-correlation {corr}% drops about {effective:.2}% of packets, \
              not {loss}%: netem's correlation averages each random draw with the previous one, \
              which lowers a small loss probability instead of making loss bursty. Drop \
-             loss-correlation for {loss}% independent loss"
+             loss-correlation for {loss}% independent loss, or use a loss model \
+             (`loss gemodel …`) for bursty loss"
         ))
     }
 

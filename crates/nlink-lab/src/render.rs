@@ -1352,7 +1352,20 @@ fn impairment_props(imp: &Impairment) -> Result<String> {
         parts.push(format!("jitter {}", lit_duration(j)?));
     }
     if let Some(l) = &imp.loss {
-        parts.push(format!("loss {}", lit_percent(l)?));
+        // `loss 1%`, or a loss model kept in tc's own text, `gemodel 1% …`
+        // (#153): the model word, then each value as a percent literal.
+        let mut words = l.split_whitespace();
+        match words.next() {
+            Some(kind @ ("gemodel" | "state")) => {
+                let mut text = format!("loss {kind}");
+                for v in words {
+                    text.push(' ');
+                    text.push_str(&lit_percent(v)?);
+                }
+                parts.push(text);
+            }
+            _ => parts.push(format!("loss {}", lit_percent(l)?)),
+        }
     }
     if let Some(r) = &imp.rate {
         parts.push(format!("rate {}", lit_rate(r)?));

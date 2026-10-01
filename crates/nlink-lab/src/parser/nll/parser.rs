@@ -2455,7 +2455,35 @@ fn parse_impair_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Impair
             props.jitter = Some(expect_duration(tokens, pos)?);
         } else if check_kw(tokens, *pos, "loss") {
             *pos += 1;
-            props.loss = Some(expect_percent(tokens, pos)?);
+            // tc's grammar: `loss <pct>`, or a Markov model whose values
+            // follow greedily while they are percents (#153). Checked
+            // before `expect_percent`, which would take `gemodel` as a
+            // deferred value.
+            if let Some(kind) = ["gemodel", "state"]
+                .into_iter()
+                .find(|k| check_kw(tokens, *pos, k))
+            {
+                *pos += 1;
+                let mut values = Vec::new();
+                while matches!(at(tokens, *pos), Some(Token::Percent(_) | Token::Interp(_))) {
+                    values.push(expect_percent(tokens, pos)?);
+                }
+                if values.is_empty() {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!("`loss {kind}` needs at least one percentage"),
+                    ));
+                }
+                props.loss_model = Some(ast::LossModelProps {
+                    kind: kind.to_string(),
+                    values,
+                });
+                props.loss = None;
+            } else {
+                props.loss = Some(expect_percent(tokens, pos)?);
+                props.loss_model = None;
+            }
         } else if check(tokens, *pos, &Token::Rate) {
             *pos += 1;
             props.rate = Some(expect_rate(tokens, pos)?);

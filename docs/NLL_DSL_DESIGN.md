@@ -1418,15 +1418,21 @@ match_expr     = "ct" IDENT ("," IDENT)*
 addr_pair      = CIDR "--" CIDR
 dir_impair     = ("->" | "<-") impair_props
 impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
-                 ("loss" PERCENT)? ("rate" RATE)?
+                 ("loss" (PERCENT | loss_model))? ("rate" RATE)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
                  ("duplicate" PERCENT)? ("delay-correlation" PERCENT)?
                  ("loss-correlation" PERCENT)? ("limit" INT)?
                  (* loss-correlation LOWERS the loss rate, it does not
                     make loss bursty: netem averages each draw with the
                     previous one, so "loss 0.5% loss-correlation 25%"
-                    drops ~0 %. `validate` warns:
+                    drops ~0 %. For bursts use loss_model. `validate` warns:
                     loss-correlation-suppresses-loss (#152) *)
+loss_model     = ("gemodel" | "state") PERCENT+
+                 (* tc's own grammar, for BURSTY loss (#153):
+                    gemodel p [r [1-h [1-k]]]  -- Gilbert-Elliott
+                    state p13 [p31 [p32 [p23 [p14]]]]  -- 4-state
+                    tc's defaults for omitted values; excludes
+                    loss-correlation (loss-model-excludes-correlation) *)
 rate_props     = ("egress" RATE)? ("ingress" RATE)? ("burst" SIZE)?
 
 # ── Collections ──────────────────────────────────

@@ -3119,6 +3119,54 @@ async fn clear_impairment_idempotent_on_fresh_deploy(mut lab: RunningLab) {
     lab.clear_impairment("host:eth0").await.unwrap();
 }
 
+// ─── #153 — netem loss models end to end ────────────────
+
+// A loss model set through `set_impairment` (the path `impair --loss` and
+// `edit --set-impair` take) reaches the kernel as the model, `--show`'s
+// parser reports it, and it drops what it describes. Deterministic models,
+// so the outcome is exact: Gilbert-Elliott that never enters the bad state
+// and loses everything in the good one drops every ping; the same with
+// `1-k` 0 drops none.
+#[lab_test("examples/simple.nll")]
+async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
+    let lose_all = nlink_lab::Impairment {
+        loss: Some("gemodel 0% 100% 100% 100%".into()),
+        ..Default::default()
+    };
+    lab.set_impairment("router:eth0", &lose_all).await.unwrap();
+    let qd = lab
+        .exec("router", "tc", &["-s", "qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(qd.stdout.contains("loss gemodel"), "tc said: {}", qd.stdout);
+    let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout).unwrap();
+    assert!(
+        parsed.loss_model.as_deref().is_some_and(|m| m.starts_with("gemodel")),
+        "{parsed:?}"
+    );
+    let ping = lab
+        .exec("router", "ping", &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.2"])
+        .unwrap();
+    assert_ne!(ping.exit_code, 0, "every packet must be lost: {}", ping.stdout);
+    let stats = lab
+        .exec("router", "tc", &["-s", "qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    assert!(
+        !stats.stdout.contains("dropped 0,"),
+        "netem must count drops: {}",
+        stats.stdout
+    );
+
+    let lose_none = nlink_lab::Impairment {
+        loss: Some("gemodel 0%".into()),
+        ..Default::default()
+    };
+    lab.set_impairment("router:eth0", &lose_none).await.unwrap();
+    let ping = lab
+        .exec("router", "ping", &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.2"])
+        .unwrap();
+    assert_eq!(ping.exit_code, 0, "a model that never loses must not drop: {}", ping.stdout);
+}
+
 // ─── Plan 156 PR C — impair --show JSON view ────────────
 
 // Round-4 follow-up: `--show --json` returned `endpoints: {}` for any

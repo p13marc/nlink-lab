@@ -2218,6 +2218,10 @@ fn interpolate_impair_props(
         delay_correlation: iv(&p.delay_correlation, vars),
         loss_correlation: iv(&p.loss_correlation, vars),
         limit: iv(&p.limit, vars),
+        loss_model: p.loss_model.as_ref().map(|m| ast::LossModelProps {
+            kind: m.kind.clone(),
+            values: m.values.iter().map(|v| v.interp(vars)).collect(),
+        }),
     }
 }
 
@@ -3339,7 +3343,19 @@ fn lower_impair_props(props: &ast::ImpairProps) -> Result<types::Impairment> {
     Ok(types::Impairment {
         delay: t(&props.delay)?,
         jitter: t(&props.jitter)?,
-        loss: t(&props.loss)?,
+        // A model lowers to tc's own text, `gemodel 1% 30% …`, which is
+        // what `Impairment::loss` holds and the planner parses (#153).
+        loss: match &props.loss_model {
+            Some(m) => {
+                let mut text = m.kind.clone();
+                for v in &m.values {
+                    text.push(' ');
+                    text.push_str(&v.to_text()?);
+                }
+                Some(text)
+            }
+            None => t(&props.loss)?,
+        },
         rate: t(&props.rate)?,
         corrupt: t(&props.corrupt)?,
         reorder: t(&props.reorder)?,
@@ -5879,6 +5895,83 @@ link a:eth0 -- b:eth0 {
         let (msg, span) = parse_err_span(src);
         assert_eq!(&src[span], "0");
         assert!(msg.contains("packet count"), "{msg}");
+    }
+
+    /// #153: `loss gemodel …` / `loss state …`, tc's grammar for bursty
+    /// loss, parses, lowers to tc's text, renders, round-trips, and builds
+    /// the model nlink writes — with tc's semantics (`1-h` 50 % is the
+    /// kernel's `h` 50; `state` takes p23 before p14).
+    #[test]
+    fn test_loss_models_lower_render_and_build() {
+        use nlink::netlink::tc::NetemLossModel;
+        let topo = parse_and_lower(
+            r#"lab "t"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  -> delay 10ms loss gemodel 1% 30% 50% 0.1%
+  <- loss state 1% 2% 3% 4% 5% delay 5ms
+}
+link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  loss 1% }
+"#,
+        );
+        let ge = &topo.impairments["a:eth0"];
+        assert_eq!(ge.loss.as_deref(), Some("gemodel 1% 30% 50% 0.1%"));
+        assert_eq!(ge.delay.as_deref(), Some("10ms"), "parsing continues after the model");
+        let gi = &topo.impairments["b:eth0"];
+        assert_eq!(gi.loss.as_deref(), Some("state 1% 2% 3% 4% 5%"));
+        assert_eq!(gi.delay.as_deref(), Some("5ms"));
+
+        let rendered = crate::render::try_render(&topo).unwrap();
+        assert!(rendered.contains("loss gemodel 1% 30% 50% 0.1%"), "{rendered}");
+        let back = crate::parser::parse(&rendered).unwrap();
+        assert_eq!(back.impairments["a:eth0"], *ge);
+        assert_eq!(back.impairments["b:eth0"], *gi);
+
+        let netem = crate::deploy::plan::qdisc::build_netem(ge).unwrap();
+        match netem.loss_model {
+            Some(NetemLossModel::GilbertElliot { p, r, h, k1, .. }) => {
+                assert!((p - 1.0).abs() < 1e-9 && (r - 30.0).abs() < 1e-9);
+                assert!((h - 50.0).abs() < 1e-9 && (k1 - 0.1).abs() < 1e-9, "h {h} k1 {k1}");
+            }
+            other => panic!("expected Gilbert-Elliot, got {other:?}"),
+        }
+        assert!(netem.loss.is_zero(), "a model is not also random loss");
+        match crate::deploy::plan::qdisc::build_netem(gi).unwrap().loss_model {
+            Some(NetemLossModel::GilbertIntuitive { p14, p23, .. }) => {
+                assert!((p23 - 4.0).abs() < 1e-9 && (p14 - 5.0).abs() < 1e-9, "p23 {p23} p14 {p14}");
+            }
+            other => panic!("expected 4-state, got {other:?}"),
+        }
+        let result = topo.validate();
+        assert!(!result.has_errors(), "{:?}", result.issues());
+        assert!(result.warnings().all(|w| w.rule != "loss-correlation-suppresses-loss"));
+    }
+
+    #[test]
+    fn test_loss_model_errors() {
+        // No values at all is a parse error.
+        let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  loss gemodel }\n";
+        let err = crate::parser::parse(src).unwrap_err();
+        assert!(err.to_string().contains("needs at least one percentage"), "{err}");
+
+        // Too many values, and a model beside a correlation, are validation errors.
+        for (props, rule) in [
+            ("loss gemodel 1% 2% 3% 4% 5%", "invalid-impairment-value"),
+            ("loss gemodel 1% loss-correlation 25%", "loss-model-excludes-correlation"),
+        ] {
+            let topo = parse_and_lower(&format!(
+                "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  {props} }}\n"
+            ));
+            let result = topo.validate();
+            assert!(
+                result.errors().any(|e| e.rule == rule),
+                "{props}: expected {rule}, got {:?}",
+                result.issues()
+            );
+        }
     }
 
     /// Parse `src` expecting an `NllParseAt`; returns (message, span).

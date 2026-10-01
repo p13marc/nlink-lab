@@ -112,7 +112,7 @@
           ]
         },
         "loss": {
-          "description": "Packet loss (e.g., \"0.1%\", \"5%\").",
+          "description": "Packet loss, in `tc`'s grammar: independent loss (`\"0.1%\"`), or a\nnetem Markov model for **bursty** loss — Gilbert-Elliott\n`\"gemodel p [r [1-h [1-k]]]\"` (e.g. `\"gemodel 1% 30% 50% 0.1%\"`) or\nthe 4-state `\"state p13 [p31 [p32 [p23 [p14]]]]\"` (#153). A model's\nvalues and defaults are nlink's, checked against iproute2.",
           "type": [
             "string",
             "null"

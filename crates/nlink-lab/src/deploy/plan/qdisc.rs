@@ -4,6 +4,36 @@ use crate::error::Result;
 use crate::helpers::{parse_duration, parse_percent, parse_rate_bps};
 use nlink::netlink::tc::NetemConfig;
 
+/// What an impairment's `loss` says, in `tc`'s own grammar: a percent of
+/// independent loss (`1%`), or one of netem's Markov loss models,
+/// `gemodel p [r [1-h [1-k]]]` / `state p13 [p31 [p32 [p23 [p14]]]]` (#153).
+pub(crate) enum Loss {
+    Random(f64),
+    Model(nlink::netlink::tc::NetemLossModel),
+}
+
+/// Parse an impairment's `loss` value. A model is handed to nlink's own
+/// `tc` parser, so its defaults and argument order (tc takes `p23` before
+/// `p14`, and `1-h` rather than `h`) are the ones nlink verified against
+/// iproute2, not a second copy here.
+pub(crate) fn parse_loss(loss: &str) -> Result<Loss> {
+    let words: Vec<&str> = loss.split_whitespace().collect();
+    match words.first() {
+        Some(&("gemodel" | "state")) => {
+            let mut params = vec!["loss"];
+            params.extend(&words);
+            let cfg = NetemConfig::parse_params(&params).map_err(|e| {
+                crate::Error::invalid_topology(format!("loss {loss:?}: {e}"))
+            })?;
+            let model = cfg.loss_model.ok_or_else(|| {
+                crate::Error::invalid_topology(format!("loss {loss:?}: no loss model parsed"))
+            })?;
+            Ok(Loss::Model(model))
+        }
+        _ => Ok(Loss::Random(parse_percent(loss)?)),
+    }
+}
+
 pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<NetemConfig> {
     use nlink::util::{Percent, Rate};
 
@@ -16,7 +46,10 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
         netem = netem.jitter(parse_duration(jitter)?);
     }
     if let Some(loss) = &impairment.loss {
-        netem = netem.loss(Percent::new(parse_percent(loss)?));
+        netem = match parse_loss(loss)? {
+            Loss::Random(pct) => netem.loss(Percent::new(pct)),
+            Loss::Model(model) => netem.loss_model(model),
+        };
     }
     if let Some(rate) = &impairment.rate {
         netem = netem.rate(Rate::bits_per_sec(parse_rate_bps(rate)?));

@@ -24,7 +24,9 @@ pub struct Args {
     #[arg(long)]
     pub jitter: Option<String>,
 
-    /// Packet loss (e.g., "0.1%").
+    /// Packet loss: "0.1%", or a bursty-loss model in tc's grammar —
+    /// "gemodel P [R [1-H [1-K]]]" (Gilbert-Elliott) or
+    /// "state P13 [P31 [P32 [P23 [P14]]]]" (4-state)
     #[arg(long)]
     pub loss: Option<String>,
 

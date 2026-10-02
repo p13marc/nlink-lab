@@ -138,18 +138,17 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and the Rust API are stable across patch
 releases; breaking changes are flagged in the CHANGELOG with a
 migration note. Built on
-[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.28.
+[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.29.
 
-Current release: **0.12.0** (2026-09-18) — the measurement
-release. Interface rates were **always zero** and nobody had
-noticed, so `metrics`, `top`, `daemon --http` and the viewer
-reported an idle lab whatever the traffic; snapshots now carry
-cumulative byte and packet counters and the rates are differenced
-from them. `proc-stat` samples a whole node in one call and
-reports PSS. Changing an impairment no longer tears the qdisc down
-first, so counters survive and the link is never briefly
-unimpaired. One OpenMetrics gauge is renamed — see the CHANGELOG's
-Migration note.
+Current release: **0.13.0** (2026-10-02) — the loss release.
+`loss-correlation` was documented as bursty loss; it **lowers** a
+small loss rate instead (`loss 0.5% loss-correlation 25%` drops
+~0 %), and `validate`, `deploy`, `apply`, `edit` and `impair` now
+warn with the rate netem will really produce. Bursty loss proper
+is netem's loss models, in tc's own grammar: `loss gemodel 1% 30%`
+or `loss state …`, in NLL, `impair --loss` and `edit --set-impair`.
+An impairment replace now sets the whole netem state — see the
+CHANGELOG's Changed note.
 
 0.11.1 fixed a zombie per `spawn` in a long-lived caller and
 squared the documentation up with the code. Earlier releases are

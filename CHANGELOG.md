@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-02
+
+The loss release. A network-fault lab ran every experiment it ever made
+on an "LTE" profile of `loss 0.5% loss-correlation 25%`, and it dropped
+**nothing**. netem's correlation lowers a small loss probability instead
+of making loss bursty, and this tool's own docs called it "bursty loss"
+(#152). Real bursty loss needs netem's loss models, which nlink could
+read but not write until 0.29 (#153).
+
 Built on **nlink 0.29**, which can write netem's loss models (nlink#368),
 and whose netem replace now sets the whole state (nlink#370).
 

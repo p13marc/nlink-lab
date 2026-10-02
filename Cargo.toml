@@ -11,7 +11,7 @@ members = [
 exclude = ["crates/nlink-lab/fuzz"]
 
 [workspace.package]
-version = "0.12.0"
+version = "0.13.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://git.marcpardo.eu/marcpardo/nlink-lab"

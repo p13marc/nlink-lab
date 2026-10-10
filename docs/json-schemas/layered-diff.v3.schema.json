@@ -115,6 +115,13 @@
           "items": {
             "$ref": "#/$defs/FirewallRule"
           }
+        },
+        "sets": {
+          "description": "Named sets rules match against (`src @blocked`), by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/FirewallSet"
+          }
         }
       }
     },
@@ -148,6 +155,50 @@
           ]
         }
       }
+    },
+    "FirewallSet": {
+      "description": "A named nftables set (`set blocked [10.0.0.0/8, 192.0.2.7]`): what a\nrule's `@name` looks up. An nftables set holds one key type, so an IPv4\nand an IPv6 blocklist are two sets.",
+      "type": "object",
+      "properties": {
+        "dynamic": {
+          "description": "Filled at run time (by hand, `nft add element`): `apply` adds the\ndeclared elements and leaves the others.",
+          "type": "boolean"
+        },
+        "elements": {
+          "description": "Elements as written: an address, a prefix (`10.0.0.0/24`), a range\n(`10.0.0.1-10.0.0.9`, `8000-8999`), or for a concatenated key its\nparts joined by ` . ` (`10.0.1.10 . 22`). A prefix or a range makes\nit an interval set.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "key": {
+          "description": "The key: one field, or several concatenated (`ipv4 . port`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SetKey"
+          }
+        },
+        "size": {
+          "description": "Maximum number of elements.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "timeout": {
+          "description": "Default element lifetime (`300s`): elements expire.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "key"
+      ]
     },
     "Impairment": {
       "description": "Network impairment configuration (netem).",
@@ -768,6 +819,31 @@
           ]
         }
       }
+    },
+    "SetKey": {
+      "description": "One field of a set key.",
+      "oneOf": [
+        {
+          "description": "An IPv4 address (`src`, `dst`).",
+          "type": "string",
+          "const": "ipv4"
+        },
+        {
+          "description": "An IPv6 address (`src`, `dst`).",
+          "type": "string",
+          "const": "ipv6"
+        },
+        {
+          "description": "A TCP/UDP port (`tcp dport`, …).",
+          "type": "string",
+          "const": "port"
+        },
+        {
+          "description": "A packet mark (`mark`).",
+          "type": "string",
+          "const": "mark"
+        }
+      ]
     },
     "SysctlChange": {
       "description": "Sysctl changes on a single node.\n\nWe don't try to *reset* removed sysctls — the kernel default\nisn't recoverable in general and overshooting is worse than\nleaving the previous value in place. Removed entries are\nreported so the operator can act on them, but no kernel call\nis made on the remove path.",

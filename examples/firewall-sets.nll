@@ -1,0 +1,53 @@
+# Firewall sets: a blocklist, a port set and a concatenated key.
+#
+# `gw` routes a LAN (`server`) to two WAN hosts. Its forward chain drops
+# every source in the `blocked` set and opens exactly the address/port
+# pairs in `published`; its input chain resets connections to the ports
+# in `mgmt`. Change a set's elements and `apply`: only the elements move,
+# the rules stay where they are.
+#
+#   sudo nlink-lab deploy --strict examples/firewall-sets.nll
+#   sudo nlink-lab exec firewall-sets gw -- nft list set inet nlink-lab blocked
+#
+# Demonstrates: set declarations (key inferred or written, prefixes and
+# ranges), `src @set`, `dst . tcp dport @set`, `tcp dport @set`.
+
+lab "firewall-sets" {
+  description "Firewall with a blocklist, a port set and an address/port set"
+}
+
+profile router { forward ipv4 }
+
+node gw : router {
+  firewall {
+    set blocked [10.0.3.66, 10.0.9.0/24]
+    set published ipv4 . port [10.0.1.10 . 5201]
+    set mgmt port [22, 8000-8999]
+    input policy accept {
+      reject with tcp-reset tcp dport @mgmt
+    }
+    forward policy drop {
+      accept ct established,related
+      accept iif lan0 oif wan0
+      drop src @blocked
+      accept dst . tcp dport @published
+    }
+  }
+}
+
+node server {
+  route default via 10.0.1.1
+  run background ["iperf3", "-s", "-p", "5201"]
+}
+node good { route default via 10.0.2.1 }
+node bad { route default via 10.0.3.1 }
+
+link gw:lan0 -- server:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link gw:wan0 -- good:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }
+link gw:wan1 -- bad:eth0 { 10.0.3.1/24 -- 10.0.3.66/24 }
+
+validate retries 10 interval 500ms {
+  reach server good
+  tcp-connect good server 5201
+  no-reach bad server
+}

@@ -4716,6 +4716,182 @@ link r:eth1 -- b:eth0 {{ 10.0.2.1/24 -- 10.0.2.2/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+// ─── firewall sets on real traffic (#165) ───
+
+/// Named sets: v4 and v6 blocklists drop exactly their members, a port
+/// set its ports, a concatenated set its pairs and not their crossings.
+/// An element edit changes traffic without touching the rule; a foreign
+/// element on a declared set is drift that `apply` removes, while on a
+/// dynamic set it is kept.
+#[tokio::test]
+async fn firewall_sets_match_traffic_and_reconcile_elements() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_sets_match_traffic_and_reconcile_elements: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_sets_match_traffic_and_reconcile_elements: no nftables");
+        return;
+    }
+    let lab_name = format!("fwset-{}", std::process::id());
+    let src = |b4: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node c
+node s {{
+  firewall {{
+    set b4 [{b4}]
+    set b6 [fd00:1::1]
+    set ports port [5301-5302]
+    set pairs ipv4 . port [10.0.0.1 . 5401, 10.0.1.1 . 5402]
+    set dyn ipv4 dynamic
+    input policy accept {{
+      drop src @b4
+      drop src @b6
+      drop src @dyn
+      drop tcp dport @ports
+      drop src . tcp dport @pairs
+    }}
+  }}
+}}
+link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+link c:eth1 -- s:eth1 {{ 10.0.1.1/24 -- 10.0.1.2/24 }}
+link c:eth2 -- s:eth2 {{ fd00:1::1/64 -- fd00:1::2/64 }}
+link c:eth3 -- s:eth3 {{ fd00:2::1/64 -- fd00:2::2/64 }}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("10.0.1.1")).unwrap();
+    let r = topo.validate();
+    assert!(!r.has_errors(), "{:?}", r.issues());
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    for iface in ["eth2", "eth3"] {
+        wait_for_dad(&lab, "c", iface).await;
+        wait_for_dad(&lab, "s", iface).await;
+    }
+    let pings = |lab: &RunningLab, to: &str| {
+        lab.exec("c", "ping", &["-c", "1", "-W", "1", to])
+            .unwrap()
+            .exit_code
+            == 0
+    };
+    // blocklists: 10.0.1.1 and fd00:1::1 are members, the others are not
+    assert!(pings(&lab, "10.0.0.2"));
+    assert!(!pings(&lab, "10.0.1.2"), "10.0.1.1 is in @b4");
+    assert!(pings(&lab, "fd00:2::2"));
+    assert!(!pings(&lab, "fd00:1::2"), "fd00:1::1 is in @b6");
+    // a port set: 5301 dropped (timeout), 5303 refused (no listener)
+    assert_eq!(tcp_connect(&lab, "c", "10.0.0.2", 5301).0, 124);
+    let (rc, took) = tcp_connect(&lab, "c", "10.0.0.2", 5303);
+    assert!(rc != 0 && rc != 124 && took < std::time::Duration::from_millis(1500));
+    // a concatenated set: (10.0.0.1, 5401) dropped; (10.0.0.1, 5402) is a crossing
+    assert_eq!(tcp_connect(&lab, "c", "10.0.0.2", 5401).0, 124);
+    let (rc, _) = tcp_connect(&lab, "c", "10.0.0.2", 5402);
+    assert_ne!(rc, 124, "a crossing of two members' parts is not a member");
+
+    let nft_handles = |lab: &RunningLab| {
+        collect_rule_handles(
+            &lab.exec(
+                "s",
+                "nft",
+                &["-a", "list", "chain", "inet", "nlink-lab", "input"],
+            )
+            .unwrap()
+            .stdout,
+        )
+    };
+    let handles = nft_handles(&lab);
+
+    // an element edit: 10.0.1.1 leaves @b4, the rules stay put
+    let edited = nlink_lab::parser::parse(&src("10.0.9.9")).unwrap();
+    nlink_lab::apply(&mut lab, &edited)
+        .await
+        .expect("apply failed");
+    assert!(pings(&lab, "10.0.1.2"), "10.0.1.1 is no longer blocked");
+    assert_eq!(
+        handles,
+        nft_handles(&lab),
+        "an element edit must not touch a rule"
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &edited)
+        .await
+        .unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+
+    // a foreign element on a declared set is drift, and apply removes it
+    let add = |lab: &RunningLab, set: &str, elem: &str| {
+        let elem = format!("{{ {elem} }}");
+        let out = lab
+            .exec(
+                "s",
+                "nft",
+                &["add", "element", "inet", "nlink-lab", set, &elem],
+            )
+            .unwrap();
+        assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    };
+    add(&lab, "b4", "10.0.0.1");
+    assert!(!pings(&lab, "10.0.0.2"));
+    let layered = nlink_lab::compute_layered_diff(&lab, &edited)
+        .await
+        .unwrap();
+    assert!(!layered.is_empty(), "a foreign element on @b4 is drift");
+    nlink_lab::apply(&mut lab, &edited)
+        .await
+        .expect("apply failed");
+    assert!(pings(&lab, "10.0.0.2"), "apply removed the foreign element");
+
+    // …on a dynamic set it is what the set is for, and it stays
+    add(&lab, "dyn", "10.0.0.1");
+    assert!(!pings(&lab, "10.0.0.2"));
+    nlink_lab::apply(&mut lab, &edited)
+        .await
+        .expect("apply failed");
+    assert!(
+        !pings(&lab, "10.0.0.2"),
+        "a dynamic set keeps its runtime elements"
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &edited)
+        .await
+        .unwrap();
+    assert!(
+        layered.is_empty(),
+        "a dynamic set's runtime elements are not drift:\n{layered}"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// examples/firewall-sets.nll: its assertions pass and it converges.
+#[tokio::test]
+async fn firewall_sets_example_converges() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_sets_example_converges: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_sets_example_converges: no nftables");
+        return;
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall-sets.nll"
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert_eq!(lab.assertion_results().len(), 3);
+    assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── watch: nftables events nlink 0.30 delivers (#158) ───
 
 /// Set elements and named objects arrive typed; the generation event nlink

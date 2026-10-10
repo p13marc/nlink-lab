@@ -947,9 +947,14 @@ pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(
             "`reject with` on a rule whose action is '{action}'"
         )),
         Some(RejectWith::TcpReset)
-            if !clauses
-                .iter()
-                .any(|c| matches!(c, Clause::Port { tcp: true, .. })) =>
+            if !clauses.iter().any(|c| match c {
+                Clause::Port { tcp: true, .. } => true,
+                Clause::InSet { field, .. } => matches!(field, Field::Port { tcp: true, .. }),
+                Clause::Concat { fields, .. } => fields
+                    .iter()
+                    .any(|f| matches!(f, Field::Port { tcp: true, .. })),
+                _ => false,
+            }) =>
         {
             Err(
                 "`reject with tcp-reset` needs a `tcp dport`/`tcp sport` match: a reset \
@@ -1067,6 +1072,10 @@ mod tests {
             r.last(),
             Some(Expr::Reject { reject_type: 1, .. })
         ));
+        // a TCP port in a set lookup is a TCP match too
+        let mut set = rule("tcp dport @mgmt", "reject");
+        set.reject_with = Some(RejectWith::TcpReset);
+        assert!(check_verdict(&set, &parse_match("tcp dport @mgmt").unwrap()).is_ok());
         // a reset answers TCP only
         let mut udp = rule("udp dport 53", "reject");
         udp.reject_with = Some(RejectWith::TcpReset);

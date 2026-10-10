@@ -410,3 +410,95 @@ pub(crate) fn apply_match_expr(
 pub(crate) fn parse_addr_match(s: &str) -> Result<(std::net::IpAddr, u8)> {
     crate::helpers::parse_ip_or_cidr(s)
 }
+
+#[cfg(test)]
+mod golden {
+    //! Every example's planned nftables config, pinned. A change here is
+    //! a change to what deployed labs run: the next `apply` after an
+    //! upgrade replaces each rule whose body moved. Regenerate with
+    //! `UPDATE_GOLDEN=1 cargo test -p nlink-lab --lib nftables_golden`
+    //! and justify every line of the diff.
+
+    use std::fmt::Write;
+
+    const FIXTURE: &str = "src/deploy/plan/testdata/nftables-golden.txt";
+
+    fn render_all() -> String {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        for dir in [root.clone(), root.join("cookbook"), root.join("imports")] {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let p = entry.unwrap().path();
+                if p.extension().is_some_and(|e| e == "nll") {
+                    files.push(p);
+                }
+            }
+        }
+        files.sort();
+        let mut out = String::new();
+        for file in files {
+            // parametric modules need --set; they are planned where imported
+            let Ok(topo) = crate::parser::parse_file(&file) else {
+                continue;
+            };
+            let name = file.strip_prefix(&root).unwrap().display().to_string();
+            for (node_name, node) in &topo.nodes {
+                let fw = topo.effective_firewall(node);
+                let nat = node.nat.as_ref();
+                if fw.is_none() && nat.is_none() {
+                    continue;
+                }
+                let cfg = super::topology_to_nftables_config(fw, nat).unwrap();
+                for table in cfg.tables() {
+                    for chain in table.chains() {
+                        writeln!(
+                            out,
+                            "{name} {node_name} chain {} policy={:?}",
+                            chain.name(),
+                            chain.policy()
+                        )
+                        .unwrap();
+                    }
+                    for rule in table.rules() {
+                        writeln!(
+                            out,
+                            "{name} {node_name} rule {} {} {:?}",
+                            rule.chain(),
+                            rule.handle_key().unwrap_or("-"),
+                            rule.exprs()
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn nftables_golden() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE);
+        let got = render_all();
+        if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            std::fs::write(&path, &got).unwrap();
+            return;
+        }
+        let want = std::fs::read_to_string(&path).unwrap_or_default();
+        if got != want {
+            let diff: Vec<String> = want
+                .lines()
+                .filter(|l| !got.lines().any(|g| g == *l))
+                .map(|l| format!("- {l}"))
+                .chain(
+                    got.lines()
+                        .filter(|l| !want.lines().any(|w| w == *l))
+                        .map(|l| format!("+ {l}")),
+                )
+                .collect();
+            panic!(
+                "planned nftables config changed for the examples ({FIXTURE}):\n{}",
+                diff.join("\n")
+            );
+        }
+    }
+}

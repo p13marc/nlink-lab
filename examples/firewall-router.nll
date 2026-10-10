@@ -1,0 +1,47 @@
+# Router firewall: input, forward and output chains.
+#
+# `gw` routes between a LAN and a WAN. Its input chain protects the
+# router itself; its forward chain decides what may cross it. The
+# assertions prove both: the LAN reaches the WAN, the WAN cannot reach
+# into the LAN, and only the LAN may ping the router.
+#
+#   sudo nlink-lab deploy --strict examples/firewall-router.nll
+#   sudo nlink-lab exec firewall-router gw -- nft list table inet nlink-lab
+#
+# Demonstrates: the forward chain, iif/oif, port ranges, a bare verdict,
+# reject vs drop, reject with tcp-reset.
+
+lab "firewall-router" {
+  description "Router with an input and a forward firewall chain"
+}
+
+profile router { forward ipv4 }
+
+node gw : router {
+  # Traffic addressed to gw itself.
+  firewall policy drop {
+    accept ct established,related
+    accept iif lan0 icmp 8
+    reject
+  }
+  # Traffic routed through gw.
+  firewall forward policy drop {
+    accept ct established,related
+    accept iif lan0 oif wan0
+    accept iif wan0 dst 10.0.1.10 tcp dport 8000-8999
+    reject with tcp-reset iif wan0 tcp dport 22
+  }
+}
+
+node lan-host { route default via 10.0.1.1 }
+node wan-host { route default via 10.0.2.1 }
+
+link gw:lan0 -- lan-host:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link gw:wan0 -- wan-host:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }
+
+validate {
+  reach lan-host wan-host
+  no-reach wan-host lan-host
+  reach lan-host gw
+  no-reach wan-host gw
+}

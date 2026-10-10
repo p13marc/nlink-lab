@@ -4442,6 +4442,207 @@ validate {{ reach a b }}
     lab.destroy().await.expect("destroy failed");
 }
 
+// ─── firewall: reject, chains, matches on real traffic (#164) ───
+
+/// Start an iperf3 server on `port` in `node`, detached, and wait for it.
+fn listen_tcp(lab: &RunningLab, node: &str, port: u16) {
+    let p = port.to_string();
+    let out = lab
+        .exec(node, "iperf3", &["-s", "-D", "-p", &p, "--one-off"])
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "iperf3 -s: {}", out.stderr);
+    for _ in 0..20 {
+        let ss = lab.exec(node, "ss", &["-ltn"]).unwrap();
+        if ss.stdout.contains(&format!(":{p} ")) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("iperf3 never listened on {node}:{port}");
+}
+
+/// `(exit code, elapsed)` of a TCP connect from `node` to `addr:port`.
+fn tcp_connect(lab: &RunningLab, node: &str, addr: &str, port: u16) -> (i32, std::time::Duration) {
+    let t = std::time::Instant::now();
+    let out = lab
+        .exec(
+            node,
+            "timeout",
+            &["3", "bash", "-c", &format!("echo > /dev/tcp/{addr}/{port}")],
+        )
+        .unwrap();
+    (out.exit_code, t.elapsed())
+}
+
+/// `reject` rejects. Before #164 the planner installed it as `accept`.
+/// A drop is silence (a timeout); a reject answers at once — ICMP port
+/// unreachable by default, a TCP reset with `reject with tcp-reset` — and
+/// a port range and `!=` match what they say.
+#[tokio::test]
+async fn firewall_reject_is_a_reject_and_ranges_match() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_reject_is_a_reject_and_ranges_match: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_reject_is_a_reject_and_ranges_match: no nftables");
+        return;
+    }
+    let lab_name = format!("fwrj-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node c
+node s {{
+  firewall policy accept {{
+    reject icmp 8
+    reject tcp dport 5201
+    reject with tcp-reset tcp dport 5202
+    drop tcp dport 8000-8999
+    drop src != 10.0.0.0/24 tcp dport 5203
+  }}
+}}
+link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+link c:eth1 -- s:eth1 {{ 10.0.1.1/24 -- 10.0.1.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // ICMP: a reject answers (a drop would time out, an accept reply)
+    let ping = lab
+        .exec("c", "ping", &["-c", "1", "-W", "2", "10.0.0.2"])
+        .unwrap();
+    assert_ne!(ping.exit_code, 0, "ping must be rejected: {}", ping.stdout);
+    assert!(
+        ping.stdout.contains("Unreachable"),
+        "a reject answers with ICMP unreachable: {}",
+        ping.stdout
+    );
+
+    for port in [5201, 5202, 5203] {
+        listen_tcp(&lab, "s", port);
+    }
+    // reject (ICMP port unreachable) and reject with tcp-reset: refused fast
+    for port in [5201, 5202] {
+        let (rc, took) = tcp_connect(&lab, "c", "10.0.0.2", port);
+        assert_ne!(rc, 0, "port {port}: the connect must fail");
+        assert_ne!(rc, 124, "port {port}: a reject must answer, not time out");
+        assert!(
+            took < std::time::Duration::from_millis(1500),
+            "port {port}: {took:?}"
+        );
+    }
+    let nft = lab
+        .exec("s", "nft", &["list", "chain", "inet", "nlink-lab", "input"])
+        .unwrap()
+        .stdout;
+    assert!(nft.contains("reject with tcp reset"), "{nft}");
+
+    // a port range: 8500 is dropped (timeout), 9000 is not (refused, no listener)
+    let (rc, _) = tcp_connect(&lab, "c", "10.0.0.2", 8500);
+    assert_eq!(
+        rc, 124,
+        "8500 is in 8000-8999: dropped, so the connect times out"
+    );
+    let (rc, took) = tcp_connect(&lab, "c", "10.0.0.2", 9000);
+    assert!(rc != 0 && rc != 124 && took < std::time::Duration::from_millis(1500));
+
+    // `src != 10.0.0.0/24`: from 10.0.0.1 port 5203 is open, from 10.0.1.1 dropped
+    let (rc, _) = tcp_connect(&lab, "c", "10.0.0.2", 5203);
+    assert_eq!(rc, 0, "10.0.0.1 is inside 10.0.0.0/24: accepted");
+    let (rc, _) = tcp_connect(&lab, "c", "10.0.1.2", 5203);
+    assert_eq!(rc, 124, "10.0.1.1 is outside 10.0.0.0/24: dropped");
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// A router's input `policy drop` no longer drops what it routes, and a
+/// forward chain filters routed traffic (examples/firewall-router.nll,
+/// whose assertions cover both directions and the router itself).
+#[tokio::test]
+async fn firewall_forward_chain_filters_routed_traffic() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_forward_chain_filters_routed_traffic: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_forward_chain_filters_routed_traffic: no nftables");
+        return;
+    }
+    // 1. input-only firewall on a router: routing works
+    let lab_name = format!("fwfw-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node r : router {{
+  firewall policy drop {{ accept ct established,related }}
+}}
+node a {{ route default via 10.0.1.1 }}
+node b {{ route default via 10.0.2.1 }}
+link r:eth0 -- a:eth0 {{ 10.0.1.1/24 -- 10.0.1.2/24 }}
+link r:eth1 -- b:eth0 {{ 10.0.2.1/24 -- 10.0.2.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let ping = lab
+        .exec("a", "ping", &["-c", "2", "-W", "2", "10.0.2.2"])
+        .unwrap();
+    assert_eq!(
+        ping.exit_code, 0,
+        "an input `policy drop` must not drop routed traffic: {}",
+        ping.stdout
+    );
+    let ping = lab
+        .exec("a", "ping", &["-c", "1", "-W", "1", "10.0.1.1"])
+        .unwrap();
+    assert_ne!(ping.exit_code, 0, "the router itself still drops pings");
+    lab.destroy().await.expect("destroy failed");
+    drop(guard);
+
+    // 2. the example: forward chain + assertions, converged, stable handles
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall-router.nll"
+    ))
+    .unwrap();
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert_eq!(lab.assertion_results().len(), 4);
+    assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    let handles = |lab: &RunningLab| {
+        collect_rule_handles(
+            &lab.exec("gw", "nft", &["-a", "list", "table", "inet", "nlink-lab"])
+                .unwrap()
+                .stdout,
+        )
+    };
+    let before = handles(&lab);
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("reapply failed");
+    assert_eq!(before, handles(&lab), "a re-apply must not touch a rule");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── watch: nftables events nlink 0.30 delivers (#158) ───
 
 /// Set elements and named objects arrive typed; the generation event nlink

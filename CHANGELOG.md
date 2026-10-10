@@ -71,9 +71,44 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`watch` / `events --follow` no longer show nftables generation
   events.** nlink delivers one after every committed batch, nlink-lab's
   own applies included.
+- **A firewall's forward chain now accepts unless you declare it**
+  (#164). Before, `firewall policy drop { … }` also installed a forward
+  chain with policy drop and no way to add rules to it, so a router with
+  a firewall dropped everything it routed. To keep blocking routed
+  traffic, declare it:
+  `firewall forward policy drop { accept ct established,related }`.
+- **A firewall policy must be `accept` or `drop`.** `policy reject`, or
+  any other word, used to install accept; it is now a parse error
+  (`firewall-policy` for JSON and builder topologies). End a chain with a
+  bare `reject` rule for reject-by-default.
+- **`reject` now rejects.** It was installed as `accept`. A deployed
+  lab's `reject` rules are replaced on the first `apply` after upgrading.
+- **An unknown `ct` state is an error** (`ct establised`). It used to be
+  dropped, leaving a rule that never matched.
+- **`Topology::effective_firewall` returns `Option<Cow<FirewallConfig>>`**
+  (library API). It merges a node's profiles and the node chain by
+  chain, so callers that need a reference use `.as_deref()`. A node
+  whose `firewall` declares no input chain now keeps its profile's input
+  chain.
 
 ### Added
 
+- **Firewall chains and matches (#164).**
+  - `firewall forward [policy P] { … }` filters routed traffic.
+  - `firewall output [policy P] { … }` filters what the node sends.
+  - `firewall { input … forward … output … }` groups chains;
+    `firewall policy P { … }` is still the input chain.
+  - A node's chains are laid over its profile's, chain by chain.
+  - New matches: `iif`/`oif`, `!=` on `src`/`dst` and ports, port
+    ranges (`tcp dport 8000-8999`), and `ct state … untracked`.
+  - A rule may be a bare verdict (`reject` as a catch-all), and
+    `reject with tcp-reset | port-unreachable | host-unreachable |
+    no-route | admin-prohibited` picks the answer.
+  - New validation rules: `firewall-policy`, `firewall-action`,
+    `firewall-chain-context` (an `oif` on input, an `iif` on output) and
+    `firewall-iface-exists` (warning). Firewalls inherited from profiles
+    are now validated too.
+  - New example: `examples/firewall-router.nll`.
 - **Changing a declared interface on a running lab** (see Migration).
   The network layer is planned with nlink's `preserve_undeclared_tc`, so
   a recreated link keeps nlink-lab's Tc, and with VRF routes declared,
@@ -105,6 +140,13 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`prio { bands 2 }` was EINVAL (#172).**
 - **The VRF table's last route survived its removal.** With routes
   declared, a table the node no longer declares into is still purged.
+- **`reject` was installed as `accept`, and a router's firewall dropped
+  all routed traffic** (#164). See Migration. The examples whose forward
+  chain this changes (`firewall`, `ipv6-dual-stack`, `multi-profile`,
+  `cookbook/multi-tenant-wan`) are pinned by a golden fixture of every
+  example's planned rules, which shows no other rule changing.
+- **A profile's firewall edit was invisible to `apply --check`**: the
+  topology diff compared the node's own firewall, not the effective one.
 - **Removing a `rate … ingress` left the ingress shaper running.**
   Removal and rollback deleted only the root qdisc, so the `ffff:`
   ingress qdisc, its redirect filter and the `ifb_<iface>` device stayed,

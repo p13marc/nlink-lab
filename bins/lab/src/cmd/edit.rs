@@ -35,7 +35,7 @@ pub struct Args {
     pub clear_impair: Vec<String>,
 
     /// Set a non-netem root qdisc on an endpoint:
-    /// `a:eth0=tbf,rate=10mbit,burst=32kb` / `a:eth0=fq_codel,target=5ms,ecn`
+    /// `a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` / `a:eth0=fq_codel,target=5ms,ecn`
     /// / `a:eth0=sfq,perturb=10s` / `a:eth0=prio,bands=3` (repeatable;
     /// replaces the endpoint's qdisc block).
     #[arg(long, value_name = "NODE:IFACE=KIND[,K=V…]")]
@@ -281,7 +281,12 @@ fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::type
                     .get("burst")
                     .cloned()
                     .ok_or_else(|| bad("tbf requires burst=".into()))?,
-                limit: kv.get("limit").cloned(),
+                // No limit means no queue: the TBF would drop everything.
+                limit: Some(
+                    kv.get("limit")
+                        .cloned()
+                        .ok_or_else(|| bad("tbf requires limit= (a byte size, e.g. limit=64kb)".into()))?,
+                ),
                 peakrate: kv.get("peakrate").cloned(),
                 mtu: num("mtu")?,
             }
@@ -552,6 +557,10 @@ mod tests {
         a.set_qdisc = vec!["a:eth0=tbf,rate=10mbit".into()];
         let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
         assert!(err.contains("requires burst"), "{err}");
+        let mut a = args();
+        a.set_qdisc = vec!["a:eth0=tbf,rate=10mbit,burst=32kb".into()];
+        let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
+        assert!(err.contains("requires limit"), "{err}");
         let mut a = args();
         a.set_qdisc = vec!["a:eth0=sfq,rate=1mbit".into()];
         let err = apply_edits(&mut topo, &a).unwrap_err().to_string();

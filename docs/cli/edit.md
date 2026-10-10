@@ -35,7 +35,7 @@ Options:
           Clear the impairment of an endpoint (repeatable)
 
       --set-qdisc <NODE:IFACE=KIND[,K=V…]>
-          Set a non-netem root qdisc on an endpoint: `a:eth0=tbf,rate=10mbit,burst=32kb` / `a:eth0=fq_codel,target=5ms,ecn` / `a:eth0=sfq,perturb=10s` / `a:eth0=prio,bands=3` (repeatable; replaces the endpoint's qdisc block)
+          Set a non-netem root qdisc on an endpoint: `a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` / `a:eth0=fq_codel,target=5ms,ecn` / `a:eth0=sfq,perturb=10s` / `a:eth0=prio,bands=3` (repeatable; replaces the endpoint's qdisc block)
 
       --clear-qdisc <NODE:IFACE>
           Remove the qdisc block of an endpoint (repeatable)

@@ -887,7 +887,8 @@ qdisc hub:eth1 fq_codel {
 }
 ```
 
-Kinds: `tbf` (needs `rate` + `burst`; `limit`, `peakrate`, `mtu`),
+Kinds: `tbf` (needs `rate`, `burst` and `limit` — without a limit a TBF
+has no queue and drops everything; optional `peakrate`, `mtu`),
 `fq_codel` (`target`, `interval`, `limit`, `flows`, `quantum`, `ecn`),
 `sfq` (`perturb`, `limit`, `quantum`), `prio` (`bands`). One root qdisc
 per interface — a `qdisc` endpoint cannot also carry `impair` or

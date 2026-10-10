@@ -6065,6 +6065,11 @@ qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum
         let (msg, span) = parse_err_span(src);
         assert_eq!(&src[span], "tbf");
         assert!(msg.contains("requires 'burst'"), "{msg}");
+        // …and a queue limit: without one the TBF drops everything (#398)
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 tbf { rate 10mbit burst 32kb }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "tbf");
+        assert!(msg.contains("requires 'limit'"), "{msg}");
         // parameter of another kind
         let src = "lab \"t\"\nnode a\nqdisc a:eth0 sfq { rate 10mbit }\n";
         let (msg, _) = parse_err_span(src);

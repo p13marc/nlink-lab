@@ -125,6 +125,7 @@ Qdisc block
 qdisc hub:eth0 tbf {
   rate 10mbit
   burst 32kb
+  limit 100kb
 }
 qdisc hub:eth1 fq_codel { target 5ms ecn }
 ---
@@ -136,6 +137,7 @@ qdisc hub:eth1 fq_codel { target 5ms ecn }
       (identifier))
     (identifier)
     (rate)
+    (size)
     (size))
   (qdisc_statement
     (endpoint

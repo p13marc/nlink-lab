@@ -3517,6 +3517,16 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     let out = show(&lab);
     assert!(out.contains("qdisc tbf"), "tbf expected: {out}");
     assert!(out.to_ascii_lowercase().contains("rate 10mbit"), "{out}");
+    // The TBF must pass traffic, not just exist: one without a queue limit
+    // installed fine on nlink 0.29 and dropped every packet (nlink #398).
+    let ping = lab
+        .exec("a", "ping", &["-c", "3", "-i", "0.2", "-W", "2", "10.0.0.2"])
+        .unwrap();
+    assert_eq!(
+        ping.exit_code, 0,
+        "ping through the tbf failed: {}{}",
+        ping.stdout, ping.stderr
+    );
 
     // Change the kind: apply must replace the root qdisc.
     let desired = nlink_lab::parser::parse(&src(

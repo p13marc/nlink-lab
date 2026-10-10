@@ -503,7 +503,7 @@ qdisc a:eth0 {kind}
 "#
             )
         };
-        let plan = plan_of(&src("tbf { rate 10mbit burst 32kb }"));
+        let plan = plan_of(&src("tbf { rate 10mbit burst 32kb limit 100kb }"));
         let q: Vec<&Op> = plan
             .ops
             .iter()

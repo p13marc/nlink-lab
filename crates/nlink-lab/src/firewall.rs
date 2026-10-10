@@ -557,7 +557,7 @@ mod tests {
         let cmps: Vec<(CmpOp, Vec<u8>)> = r
             .iter()
             .filter_map(|e| match e {
-                Expr::Cmp { op, data, .. } => Some((op.clone(), data.clone())),
+                Expr::Cmp { op, data, .. } => Some((*op, data.clone())),
                 _ => None,
             })
             .collect();

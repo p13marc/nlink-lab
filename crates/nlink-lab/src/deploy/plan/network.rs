@@ -59,6 +59,29 @@ pub(crate) fn topology_to_network_config(
     // matters when the parent is also declarative.
     use crate::types::InterfaceKind;
 
+    // Who enslaves whom: bond members, then VRF interfaces (a VRF wins a
+    // collision, as it did when its enslave was declared last). Each
+    // link is declared **once**, so a member that is itself a declared
+    // kind (a VLAN in a VRF, a dummy in a bond) carries its master on
+    // that declaration. `NetworkConfig::link` appends rather than
+    // merges, and a second, kind-less entry for the same name is a
+    // `Physical` declaration: nlink 0.30 skips those when it recreates a
+    // link (#417), so the link came back without its master.
+    let mut masters: BTreeMap<&str, &str> = BTreeMap::new();
+    for (iface_name, iface_config) in &node.interfaces {
+        if iface_config.kind == Some(InterfaceKind::Bond) {
+            for member in &iface_config.members {
+                masters.insert(member, iface_name);
+            }
+        }
+    }
+    for (vrf_name, vrf_config) in &node.vrfs {
+        for iface in &vrf_config.interfaces {
+            masters.insert(iface, vrf_name);
+        }
+    }
+    let master_of = |iface: &str| masters.get(iface).map(|m| m.to_string());
+
     // Pass 1 — parentless single-namespace kinds (Dummy, Bond,
     // VRF, Vxlan). The 0.19 upstream topo-sort handles dependency
     // ordering across `links_to_add`, but declaring parents
@@ -68,22 +91,36 @@ pub(crate) fn topology_to_network_config(
         match iface_config.kind {
             Some(InterfaceKind::Dummy) => {
                 let mtu = iface_config.mtu;
+                let master = master_of(iface_name);
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.dummy().up();
                     if let Some(m) = mtu {
                         b = b.mtu(m);
                     }
+                    // Without a master the kind is released (`nomaster`): since nlink
+                    // 0.31 a declaration with none leaves the master alone (#462).
+                    b = match &master {
+                        Some(m) => b.master(m),
+                        None => b.nomaster(),
+                    };
                     b
                 });
             }
             Some(InterfaceKind::Bond) => {
                 let mtu = iface_config.mtu;
                 let bond = iface_config.bond.clone();
+                let master = master_of(iface_name);
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.bond().up();
                     if let Some(m) = mtu {
                         b = b.mtu(m);
                     }
+                    // Without a master the kind is released (`nomaster`): since nlink
+                    // 0.31 a declaration with none leaves the master alone (#462).
+                    b = match &master {
+                        Some(m) => b.master(m),
+                        None => b.nomaster(),
+                    };
                     // Bonding options (#75): nlink 0.26 `LinkBuilder::bond_*`.
                     if let Some(o) = &bond {
                         use crate::types::{BondMode as M, LacpRate as L};
@@ -123,18 +160,9 @@ pub(crate) fn topology_to_network_config(
                     }
                     b
                 });
-                // Enslave each member (Plan 158e Slice 2 folds in
-                // what was step 10b). The member link itself must
-                // exist already (veth — created in step 5) and is left
-                // *down* by the LinksUp stage: the kernel refuses to
-                // enslave an up device, and nlink would `set_link_up`
-                // before `set_link_master`. The bonding driver opens the
-                // slave itself once enslaved, so the state stays
-                // `Unchanged` here.
-                for member in &iface_config.members {
-                    let bond_name = iface_name.clone();
-                    cfg = cfg.link(member, move |b| b.master(&bond_name));
-                }
+                // Members are enslaved through `masters` (their own
+                // declaration, or a bare `.master()` entry for a veth;
+                // see the end of this function).
             }
             Some(InterfaceKind::Vxlan) => {
                 // Plan 159a Slice 4 — declarative VXLAN via 0.19's
@@ -182,8 +210,15 @@ pub(crate) fn topology_to_network_config(
                 let port = iface_config.port;
                 let underlay = iface_config.underlay.clone();
                 let mtu = iface_config.mtu;
+                let master = master_of(iface_name);
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.vxlan(vni).up();
+                    // Without a master the kind is released (`nomaster`): since nlink
+                    // 0.31 a declaration with none leaves the master alone (#462).
+                    b = match &master {
+                        Some(m) => b.master(m),
+                        None => b.nomaster(),
+                    };
                     if let Some(l) = local {
                         b = b.vxlan_local(l);
                     }
@@ -244,8 +279,15 @@ pub(crate) fn topology_to_network_config(
         };
         let mtu = iface_config.mtu;
         let protocol = iface_config.vlan_protocol;
+        let master = master_of(iface_name);
         cfg = cfg.link(iface_name, move |mut b| {
             b = b.vlan(&parent, vid).up();
+            // Without a master the kind is released (`nomaster`): since nlink
+            // 0.31 a declaration with none leaves the master alone (#462).
+            b = match &master {
+                Some(m) => b.master(m),
+                None => b.nomaster(),
+            };
             // 802.1ad outer tag for Q-in-Q (#75).
             if let Some(p) = protocol {
                 b = b.vlan_protocol(match p {
@@ -262,15 +304,36 @@ pub(crate) fn topology_to_network_config(
         });
     }
 
-    // Pass 3 — VRF enslave. Declared AFTER VRF link + VLAN children
-    // so an iface enslaved to a VRF — including a declarative VLAN
-    // — has both endpoints declared before the master ref. Plan
-    // 159a Slice 4 (folds in what was step 10c).
-    for (vrf_name, vrf_config) in &node.vrfs {
-        for iface in &vrf_config.interfaces {
-            let master = vrf_name.clone();
-            cfg = cfg.link(iface, move |b| b.master(&master));
+    // Pass 3 — enslave members that are not declared kinds above (veths
+    // from the Links stage, macvlans, WireGuard devices): a bare
+    // `.master()` entry, declared after every master. A bond member is
+    // left *down* by the LinksUp stage; since nlink 0.30 (#406) the
+    // apply enslaves before raising and takes an up port down to join,
+    // so that exclusion only saves an up→down→up flap. The driver opens
+    // the port itself once enslaved, so the state stays `Unchanged`.
+    let declared_kinds: std::collections::BTreeSet<&str> = node
+        .interfaces
+        .iter()
+        .filter(|(_, c)| {
+            matches!(
+                c.kind,
+                Some(
+                    InterfaceKind::Dummy
+                        | InterfaceKind::Bond
+                        | InterfaceKind::Vxlan
+                        | InterfaceKind::Vlan
+                )
+            )
+        })
+        .map(|(n, _)| n.as_str())
+        .chain(node.vrfs.keys().map(String::as_str))
+        .collect();
+    for (iface, master) in &masters {
+        if declared_kinds.contains(iface) {
+            continue;
         }
+        let master = master.to_string();
+        cfg = cfg.link(iface, move |b| b.master(&master));
     }
 
     // VRF-table routes are NOT declared here: nlink's purge converges

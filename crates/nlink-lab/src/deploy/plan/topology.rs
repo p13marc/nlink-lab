@@ -176,9 +176,11 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
         ifaces.extend(node.macvlans.iter().map(|m| m.name.clone()));
         ifaces.extend(node.ipvlans.iter().map(|i| i.name.clone()));
         ifaces.extend(node.wifi.iter().map(|w| w.name.clone()));
-        // Bond members must be *down* to be enslaved; the stack brings
-        // them up together with the `master` assignment (the kernel
-        // applies IFLA_MASTER before the flag change in one message).
+        // Bond members stay down here: the kernel refuses to enslave an
+        // up device, and the Stack stage enslaves them, after which the
+        // bonding driver opens them itself. nlink 0.30 (#406) would also
+        // take an up port down to join, but leaving it down avoids an
+        // up→down→up flap.
         let bond_members: std::collections::BTreeSet<&String> = node
             .interfaces
             .values()

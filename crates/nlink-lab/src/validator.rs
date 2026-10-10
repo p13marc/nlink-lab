@@ -4081,10 +4081,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                 Some(msg) => {
                     assert_eq!(bad.len(), 1, "limit {limit:?}: {bad:?}");
                     assert!(bad[0].message.contains(msg), "limit {limit:?}: {bad:?}");
-                    assert_eq!(
-                        bad[0].location.as_deref(),
-                        Some("qdiscs.\"a:eth0\".limit")
-                    );
+                    assert_eq!(bad[0].location.as_deref(), Some("qdiscs.\"a:eth0\".limit"));
                 }
                 None => assert!(bad.is_empty(), "limit {limit:?}: {bad:?}"),
             }

@@ -2367,6 +2367,79 @@ node host
         );
     }
 
+    /// Every link is declared once. A VRF or bond member that is itself a
+    /// declared kind carries its master on that declaration; only members
+    /// created elsewhere (veths) get a bare `.master()` entry. A second,
+    /// kind-less entry is a `Physical` declaration, which nlink 0.30 skips
+    /// when it recreates the link, so the link came back without its master.
+    #[test]
+    fn network_config_declares_each_link_once_with_its_master() {
+        use nlink::netlink::config::DeclaredLinkType;
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "vl0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vlan),
+                parent: Some("eth0".into()),
+                vni: Some(10),
+                ..Default::default()
+            },
+        );
+        node.interfaces.insert(
+            "d0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Dummy),
+                ..Default::default()
+            },
+        );
+        node.interfaces.insert(
+            "bond0".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Bond),
+                members: vec!["eth2".into(), "d0".into()],
+                ..Default::default()
+            },
+        );
+        node.vrfs.insert(
+            "red".into(),
+            crate::types::VrfConfig {
+                table: 10,
+                interfaces: vec!["vl0".into(), "eth1".into()],
+                routes: BTreeMap::new(),
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let mut names: Vec<&str> = cfg.links().iter().map(|l| l.name()).collect();
+        names.sort();
+        let before = names.len();
+        names.dedup();
+        assert_eq!(names.len(), before, "a link is declared twice: {names:?}");
+        let link = |n: &str| cfg.links().iter().find(|l| l.name() == n).unwrap();
+        assert!(matches!(
+            link("vl0").link_type(),
+            DeclaredLinkType::Vlan { .. }
+        ));
+        assert_eq!(link("vl0").master(), Some("red"));
+        assert!(matches!(link("d0").link_type(), DeclaredLinkType::Dummy));
+        assert_eq!(link("d0").master(), Some("bond0"));
+        // veths from the Links stage: bare enslave entries
+        assert!(matches!(
+            link("eth1").link_type(),
+            DeclaredLinkType::Physical
+        ));
+        assert_eq!(link("eth1").master(), Some("red"));
+        assert_eq!(link("eth2").master(), Some("bond0"));
+        // …declared after every master
+        let pos = |n: &str| cfg.links().iter().position(|l| l.name() == n).unwrap();
+        assert!(pos("eth1") > pos("red") && pos("eth2") > pos("bond0"));
+    }
+
     #[test]
     fn network_config_vlan_iface_declares_parent_and_vid() {
         let topo = crate::parser::parse(

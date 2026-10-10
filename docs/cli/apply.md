@@ -124,7 +124,8 @@ layers elided.
           "rule": { "table": "nlink-lab", "chain": "input", "family": "inet", "handle-key": "nlink-lab/fw/input/1" },
           "placement": { "After": 3 }
         }
-      ]
+      ],
+      "generation": 2
     }
   }
 }
@@ -136,7 +137,9 @@ serialized with kebab-case keys, and every key they define is present
 (a declared link whose kind parameters changed, see below),
 `rules-to-move` (rules found out of declared order) and the set and
 object collections. `rules-to-add` items carry the rule and where it goes
-in the chain (`"Append"`, `{"Before": handle}`, `{"After": handle}`).
+in the chain (`"Append"`, `{"Before": handle}`, `{"After": handle}`), and
+`generation` is the ruleset generation the diff was taken from (an apply
+of it is refused if the ruleset moved since).
 
 **Traffic-control changes appear only under `topology`.** Impairments,
 per-pair `impair` matrices, `qdisc` blocks and rate limits are applied

@@ -1868,8 +1868,8 @@ fn validate_firewall_match_exprs(topology: &Topology, issues: &mut Vec<Validatio
     }
 }
 
-/// VXLAN `local`/`remote` must be IP addresses of the same family, and
-/// (until nlink plumbs `IFLA_VXLAN_LOCAL6`/`GROUP6`) IPv4.
+/// VXLAN `local`/`remote` must be IP addresses of the same family (the
+/// kernel refuses a mix). Either family works since nlink 0.30 (#418).
 fn validate_vxlan_underlay(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in sorted(&topology.nodes) {
         for (iface_name, iface) in sorted(&node.interfaces) {
@@ -1903,17 +1903,6 @@ fn validate_vxlan_underlay(topology: &Topology, issues: &mut Vec<ValidationIssue
                     rule: "vxlan-underlay-address",
                     message: format!(
                         "VXLAN local '{a}' and remote '{b}' are different address families"
-                    ),
-                    location: location.clone(),
-                });
-                continue;
-            }
-            if let Some((field, ip)) = parsed.iter().find(|(_, ip)| ip.is_ipv6()) {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "vxlan-underlay-address",
-                    message: format!(
-                        "VXLAN {field} '{ip}' is IPv6: an IPv6 underlay is not applied by nlink 0.26 (IFLA_VXLAN_LOCAL6/GROUP6 are not plumbed); use an IPv4 underlay"
                     ),
                     location: location.clone(),
                 });
@@ -4172,7 +4161,18 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
         assert_eq!(hits.len(), 1, "{:?}", result.issues());
         assert!(hits[0].message.contains("different address families"));
 
+        // An all-IPv6 underlay is fine since nlink 0.30 (#418).
         vx.local = Some("fd00::1".into());
+        topo.nodes
+            .get_mut("r")
+            .unwrap()
+            .interfaces
+            .insert("vx0".into(), vx.clone());
+        let result = validate_topo(topo.clone());
+        let hits = rules_of(&result, "vxlan-underlay-address");
+        assert!(hits.is_empty(), "{:?}", result.issues());
+
+        vx.local = Some("fd00::1::bad".into());
         topo.nodes
             .get_mut("r")
             .unwrap()
@@ -4181,7 +4181,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
         let result = validate_topo(topo);
         let hits = rules_of(&result, "vxlan-underlay-address");
         assert_eq!(hits.len(), 1, "{:?}", result.issues());
-        assert!(hits[0].message.contains("IPv6 underlay is not applied"));
+        assert!(hits[0].message.contains("is invalid"));
     }
 
     #[test]

@@ -450,7 +450,8 @@ node host {
 - Validation catches mixed families early: `nat-family-mismatch`
   (`snat src fd00::/64 to 10.0.0.1`), `firewall-match-expr`
   (`ip saddr fd00::/64` — use `ip6 saddr`), `vxlan-underlay-address`
-  (VXLAN needs an IPv4 underlay until nlink plumbs `IFLA_VXLAN_LOCAL6`).
+  (a VXLAN's `local` and `remote` must be the same family; an all-IPv6
+  underlay is fine).
 - `subnet auto/N` stays IPv4 (`10.0.0.0/8`).
 - Interface addresses other than `mgmt0` still perform Duplicate Address
   Detection: allow ~1 s before the first IPv6 packet, as

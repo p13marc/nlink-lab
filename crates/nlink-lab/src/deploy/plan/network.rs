@@ -177,25 +177,17 @@ pub(crate) fn topology_to_network_config(
                          '{node_name}' missing vni"
                     ))
                 })?;
-                // nlink 0.26 only plumbs IPv4 underlay addresses
-                // (`IFLA_VXLAN_LOCAL6`/`GROUP6` are dropped silently), so
-                // an IPv6 underlay is refused here rather than deployed
-                // as a tunnel without endpoints. The validator reports
-                // it first (`vxlan-underlay-address`).
+                // Either family: nlink 0.30 writes IPv6 endpoints as
+                // `IFLA_VXLAN_LOCAL6`/`GROUP6` (nlink #418). Mixing the
+                // two is refused by the kernel; the validator reports it
+                // first (`vxlan-underlay-address`).
                 let parse_underlay = |what: &str, v: &str| -> Result<std::net::IpAddr> {
-                    let ip: std::net::IpAddr = v.parse().map_err(|e| {
+                    v.parse().map_err(|e| {
                         Error::invalid_topology(format!(
                             "bad vxlan {what} address '{v}' on \
                              '{node_name}:{iface_name}': {e}"
                         ))
-                    })?;
-                    if ip.is_ipv6() {
-                        return Err(Error::invalid_topology(format!(
-                            "vxlan {what} address '{v}' on '{node_name}:{iface_name}' is IPv6: \
-                             an IPv6 underlay is not applied by nlink 0.26"
-                        )));
-                    }
-                    Ok(ip)
+                    })
                 };
                 let local = iface_config
                     .local

@@ -2741,6 +2741,38 @@ node host
         );
     }
 
+    /// An IPv6 underlay is declared with its endpoints: nlink 0.30 writes
+    /// them as `IFLA_VXLAN_LOCAL6`/`GROUP6` (#418), where 0.26–0.29 dropped
+    /// them and this planner refused the link.
+    #[test]
+    fn network_config_vxlan_accepts_ipv6_underlay() {
+        use nlink::netlink::config::DeclaredLinkType;
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node host
+"#,
+        )
+        .unwrap();
+        let mut node = topo.nodes["host"].clone();
+        node.interfaces.insert(
+            "vx6".into(),
+            crate::types::InterfaceConfig {
+                kind: Some(crate::types::InterfaceKind::Vxlan),
+                vni: Some(42),
+                local: Some("fd00:1::1".into()),
+                remote: Some("fd00:1::2".into()),
+                ..Default::default()
+            },
+        );
+        let cfg = topology_to_network_config("host", &node, &topo, None).unwrap();
+        let vx = cfg.links().iter().find(|l| l.name() == "vx6").unwrap();
+        let DeclaredLinkType::Vxlan { local, remote, .. } = vx.link_type() else {
+            panic!("vx6 should be a vxlan: {vx:?}");
+        };
+        assert_eq!(*local, Some("fd00:1::1".parse().unwrap()));
+        assert_eq!(*remote, Some("fd00:1::2".parse().unwrap()));
+    }
+
     /// Plan 159a Phase 2 — `build_wg_public_key_map` decodes
     /// the explicit base64 private key and returns the
     /// deterministic public key.

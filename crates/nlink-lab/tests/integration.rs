@@ -1346,6 +1346,85 @@ async fn slice4_vxlan_reapply_is_zero_ops() {
     lab.destroy().await.expect("destroy failed");
 }
 
+/// A VXLAN over an IPv6 underlay deploys with its endpoints and carries
+/// traffic. nlink 0.26–0.29 dropped IPv6 endpoints (the tunnel came up
+/// with none), so the validator refused them; 0.30 writes
+/// `IFLA_VXLAN_LOCAL6`/`GROUP6` (nlink #418).
+#[tokio::test]
+async fn vxlan_ipv6_underlay_deploys_and_forwards() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping vxlan_ipv6_underlay_deploys_and_forwards: requires root");
+        return;
+    }
+    let lab_name = format!("vx6-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node vtep1 {{
+  vxlan vx6 {{
+    vni 600
+    local fd00:1::1
+    remote fd00:1::2
+    port 4789
+    address 192.168.160.1/24
+  }}
+}}
+node vtep2 {{
+  vxlan vx6 {{
+    vni 600
+    local fd00:1::2
+    remote fd00:1::1
+    port 4789
+    address 192.168.160.2/24
+  }}
+}}
+link vtep1:eth0 -- vtep2:eth0 {{ fd00:1::1/64 -- fd00:1::2/64 }}
+"#
+    ))
+    .unwrap();
+    let result = topo.validate();
+    assert!(!result.has_errors(), "{:?}", result.issues());
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let out = lab
+        .exec("vtep1", "ip", &["-d", "link", "show", "vx6"])
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    assert!(
+        out.stdout.contains("local fd00:1::1") && out.stdout.contains("remote fd00:1::2"),
+        "vx6 must carry its IPv6 endpoints: {}",
+        out.stdout
+    );
+    wait_for_dad(&lab, "vtep1", "eth0").await;
+    wait_for_dad(&lab, "vtep2", "eth0").await;
+    let mut last = String::new();
+    let mut ok = false;
+    for _ in 0..10 {
+        let ping = lab
+            .exec("vtep1", "ping", &["-c", "1", "-W", "1", "192.168.160.2"])
+            .unwrap();
+        if ping.exit_code == 0 {
+            ok = true;
+            break;
+        }
+        last = format!("{}{}", ping.stdout, ping.stderr);
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+    assert!(ok, "overlay ping over the IPv6 underlay failed: {last}");
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(
+        layered.is_empty(),
+        "expected empty layered diff after an IPv6-underlay VXLAN deploy; got {} change(s):\n{layered}",
+        layered.change_count()
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Plan 159a Phase 2 — WireGuard configuration via
 // `WireguardConfig::apply_reconcile`. Re-applying the same
 // topology must produce zero set_device calls — verified end-

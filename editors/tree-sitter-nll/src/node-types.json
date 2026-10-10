@@ -978,6 +978,10 @@
           "named": true
         },
         {
+          "type": "hex",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -2178,6 +2182,10 @@
         },
         {
           "type": "glob",
+          "named": true
+        },
+        {
+          "type": "hex",
           "named": true
         },
         {
@@ -4052,6 +4060,14 @@
     "named": true
   },
   {
+    "type": "clamp",
+    "named": false
+  },
+  {
+    "type": "classify",
+    "named": false
+  },
+  {
     "type": "clear",
     "named": false
   },
@@ -4246,6 +4262,10 @@
   {
     "type": "hello",
     "named": false
+  },
+  {
+    "type": "hex",
+    "named": true
   },
   {
     "type": "host-reachable",
@@ -4477,6 +4497,10 @@
     "named": false
   },
   {
+    "type": "mss",
+    "named": false
+  },
+  {
     "type": "mtu",
     "named": false
   },
@@ -4569,6 +4593,10 @@
     "named": false
   },
   {
+    "type": "pmtu",
+    "named": false
+  },
+  {
     "type": "policy",
     "named": false
   },
@@ -4645,6 +4673,10 @@
     "named": false
   },
   {
+    "type": "restore",
+    "named": false
+  },
+  {
     "type": "retries",
     "named": false
   },
@@ -4678,6 +4710,10 @@
   },
   {
     "type": "samples",
+    "named": false
+  },
+  {
+    "type": "save",
     "named": false
   },
   {

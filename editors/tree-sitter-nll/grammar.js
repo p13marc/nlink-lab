@@ -22,7 +22,10 @@ module.exports = grammar({
   // `wifi wlan0 mode ap` both parse.
   word: ($) => $.identifier,
 
-  conflicts: ($) => [[$._value, $._name]],
+  // Newlines are whitespace, so where one firewall rule ends and the next
+  // begins is ambiguous (`… counter` / `ct mark save` / `ct state new …`):
+  // let the GLR parser try both.
+  conflicts: ($) => [[$._value, $._name], [$.firewall_rule], [$.match_expression]],
 
   rules: {
     source_file: ($) => repeat($._statement),
@@ -235,12 +238,10 @@ module.exports = grammar({
     // next line attaches to the rule before it (prec.right) — the same
     // highlighting either way.
     firewall_rule: ($) =>
-      prec.right(
-        choice(
-          seq($._verdict, optional($.match_expression), repeat($.fw_statement)),
-          seq($.match_expression, repeat1($.fw_statement)),
-          repeat1($.fw_statement),
-        ),
+      choice(
+        seq($._verdict, optional($.match_expression), repeat($.fw_statement)),
+        seq($.match_expression, repeat1($.fw_statement)),
+        repeat1($.fw_statement),
       ),
 
     _verdict: ($) =>
@@ -261,11 +262,25 @@ module.exports = grammar({
           ),
           seq("counter", optional(seq("name", $._name))),
           seq("log", optional($.string), optional(seq("group", $.integer))),
+          seq("mark", "set", $._mark_value, optional(seq("/", $._mark_value))),
+          seq("ct", "mark", choice(seq("set", $._mark_value), "save", "restore")),
+          seq(
+            "classify",
+            choice($.integer, $.hex, $.identifier),
+            ":",
+            optional(choice($.integer, $.hex, $.identifier)),
+          ),
+          seq("clamp", "mss", choice($.integer, "pmtu")),
         ),
       ),
 
+    _mark_value: ($) => choice($.integer, $.hex),
+
+    hex: ($) => token(prec(2, /0[xX][0-9a-fA-F]+/)),
+
     match_expression: ($) =>
-      prec.right(
+      prec.dynamic(
+        0,
         repeat1(
           choice(
             $.set_concat,
@@ -277,8 +292,13 @@ module.exports = grammar({
             choice(seq($._value, optional(seq("-", $.integer))), $.set_ref),
           ),
           seq(choice("icmp", "icmpv6"), optional($._value)),
-          seq("ct", optional("state"), $.ct_states),
-            seq("mark", optional("!="), choice($._value, $.set_ref)),
+            seq("ct", optional("state"), $.ct_states),
+            seq("ct", "mark", $._mark_value),
+            seq(
+              "mark",
+              optional("!="),
+              choice(seq($._mark_value, optional(seq("/", $._mark_value))), $.set_ref),
+            ),
             seq(choice("iif", "oif"), optional("!="), $._value),
           ),
         ),
@@ -294,10 +314,19 @@ module.exports = grammar({
 
     nat_rule: ($) =>
       choice(
-        seq("masquerade", optional(seq("src", $._value))),
-        seq("dnat", optional(seq("dst", $._value)), "to", $._value),
-        seq("snat", optional(seq("src", $._value)), "to", $._value),
+        seq("masquerade", repeat($._nat_qualifier)),
+        // `to ADDR[:PORT]`
+        seq("dnat", repeat($._nat_qualifier), "to", $._value, optional(seq(":", $.integer))),
+        seq("snat", repeat($._nat_qualifier), "to", $._value),
         seq("translate", $._value, "to", $._value),
+      ),
+
+    // `src X`, `dst X`, `iif NAME`, `oif NAME`, `tcp|udp dport P`
+    _nat_qualifier: ($) =>
+      choice(
+        seq(choice("src", "dst"), $._value),
+        seq(choice("iif", "oif"), $._name),
+        seq(choice("tcp", "udp"), "dport", $.integer),
       ),
 
     // ── VRF / WireGuard / VXLAN / Dummy / macvlan / ipvlan / wifi ──

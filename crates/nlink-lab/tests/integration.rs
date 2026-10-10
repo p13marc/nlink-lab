@@ -1055,7 +1055,7 @@ async fn nat_masquerade_reapply_is_zero_ops() {
 
     // #141: the *diff* must agree with the applier. Handles surviving
     // only proves `apply` converged; it did that before too. What was
-    // broken is what `apply --check` reads — `Expr::Masquerade` rendered
+    // broken is what `apply --check` reads — the masquerade expression rendered
     // without the empty NFTA_EXPR_DATA nest the kernel echoes, so the
     // rule came out four bytes short of the kernel's copy and diffed as
     // changed on every reconcile, forever. Nothing here asserted on the

@@ -104,7 +104,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (54 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (56 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -286,8 +286,8 @@ execute**:
    topology.rs   namespaces, containers, hwsim, mgmt bridge, bridge
                  networks + member veths + VLANs, p2p veths, host-side
                  macvlan/ipvlan, links-up, sysctls, DNS overlays
-   network.rs    topology_to_network_config (links/addresses/routes incl.
-                 VRF-table routes via RouteBuilder::table)
+   network.rs    topology_to_network_config (links — one declaration each,
+                 carrying its master — addresses, routes incl. VRF tables)
    nftables.rs   topology_to_nftables_config (firewall + NAT, one table)
    wireguard.rs  key material + WireguardConfig per node
    qdisc.rs      build_netem
@@ -301,7 +301,12 @@ execute**:
 
 Stages, in order (`Stage`): Namespaces → Hwsim → MgmtBridge → Networks →
 Links → HostLinks → LinksUp → Sysctls → Stack → Tc → Dns →
-RoutingDaemons → Processes → Wifi. Removals in an apply run first, in reverse stage order. Every
+RoutingDaemons → Processes → Wifi. Removals in an apply run first, in reverse stage order.
+A declared link whose kind parameters change (VLAN id, VNI, bond mode, VRF
+table…) is recreated by nlink inside Stack, which keeps its Tc
+(`preserve_undeclared_tc`) and puts its declared routes back; `apply` runs a
+read-only preflight so a recreate nlink would refuse fails before anything
+changes. Every
 netlink resource still commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile paths
 (zero kernel calls when unchanged); in apply mode the network layer uses

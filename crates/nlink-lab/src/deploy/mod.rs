@@ -690,43 +690,6 @@ async fn apply_nftables_for_node(
     Ok(())
 }
 
-/// `NetworkConfig::apply` with a small EBUSY/EAGAIN retry budget (three
-/// attempts, 50 ms doubling).
-///
-/// nlink 0.27 added `apply_reconcile_with_options`, which fixes the first
-/// half of why this exists — `apply_reconcile` used to hardcode
-/// `ApplyOptions::default()`, so purge was unreachable through it. The
-/// second half stands: it returns a `ReconcileReport { attempts,
-/// change_count }`, while the caller inspects `ApplyResult::errors` to
-/// turn a partially-applied config into a failed deploy. Swapping to it
-/// would silently drop that check, so the retry stays here until the
-/// report carries the per-op errors.
-///
-/// nlink recomputes the diff inside every `apply`, so a retry never
-/// replays a stale plan.
-async fn apply_network_with_retry(
-    cfg: &nlink::netlink::config::NetworkConfig,
-    conn: &Connection<Route>,
-    plan: nlink::netlink::config::PlanOptions,
-) -> std::result::Result<nlink::netlink::config::ApplyResult, nlink::netlink::Error> {
-    let mut backoff = std::time::Duration::from_millis(50);
-    let mut attempt = 0;
-    loop {
-        attempt += 1;
-        let mut opts = nlink::netlink::config::ApplyOptions::default();
-        opts.plan = plan.clone();
-        let res = cfg.apply_with_options(conn, opts).await;
-        match res {
-            Err(e) if attempt < 3 && (e.is_busy() || e.is_try_again()) => {
-                tracing::debug!(attempt, "NetworkConfig::apply busy, retrying: {e}");
-                tokio::time::sleep(backoff).await;
-                backoff *= 2;
-            }
-            other => return other,
-        }
-    }
-}
-
 /// Apply per-pair network impairments using `PerPeerImpairer`.
 ///
 /// For each network with impairments, group rules by source node and
@@ -918,34 +881,29 @@ async fn apply_network_config_for_node(
         Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
     })?;
 
-    // `NetworkConfig::apply` computes the diff and applies it.
-    // Idempotent — re-apply on an unchanged topology completes
-    // with `changes_made == 0`.
-    // apply mode: undeclared global addresses and main-table static
-    // routes on managed interfaces are removed (nlink's conservative
-    // purge — links and qdiscs are never touched). Retries on
-    // EBUSY/EAGAIN like the nftables and WireGuard layers (#75).
-    let result = apply_network_with_retry(&cfg, &conn, plan)
+    // Diff + apply, with the diff recomputed on each attempt and a small
+    // EBUSY/EAGAIN retry budget (three attempts, 50 ms doubling), like the
+    // nftables and WireGuard layers (#75). Idempotent — an unchanged
+    // topology is zero changes. In apply mode undeclared global addresses
+    // and static routes in the tables the node owns are removed (qdiscs
+    // are never touched). Any error is returned: without
+    // `continue_on_error` nlink stops at the first.
+    let opts = nlink::reconcile::ReconcileOptions::new()
+        .with_max_retries(2)
+        .with_backoff(std::time::Duration::from_millis(50));
+    let mut apply = nlink::netlink::config::ApplyOptions::default();
+    apply.plan = plan;
+    let report = cfg
+        .apply_reconcile_with_options(&conn, opts, apply)
         .await
         .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
 
     tracing::info!(
         node = %node_name,
-        changes = result.changes_made,
-        errors = result.errors.len(),
+        changes = report.changes_made,
+        attempts = report.attempts,
         "NetworkConfig reconcile (addresses + routes)"
     );
-
-    if !result.errors.is_empty() {
-        let first = &result.errors[0];
-        return Err(Error::deploy_failed(format!(
-            "NetworkConfig::apply on '{node_name}' completed with {} error(s); \
-             first: {}: {}",
-            result.errors.len(),
-            first.operation,
-            first.error
-        )));
-    }
     Ok(())
 }
 
@@ -970,7 +928,7 @@ async fn apply_network_config_for_node(
 /// before applying, with no way to opt out — a second full dump per node
 /// per apply, which a 200-node lab pays for — and `facade::apply::
 /// network_in_with` calls `apply_with_options` directly, so it has no
-/// EBUSY/EAGAIN retry (see `apply_network_with_retry`). Routing through
+/// EBUSY/EAGAIN retry (see `apply_network_config_for_node`). Routing through
 /// `NsRef::connection<P>()` also keeps the container
 /// (`connection_for_pid`) and bare-namespace cases on one code path.
 #[cfg(feature = "wireguard")]

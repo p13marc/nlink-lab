@@ -943,10 +943,16 @@ const ICMPX_ADMIN_PROHIBITED: u8 = 3;
 /// Check a rule's verdict and its `reject with`, given its clauses.
 pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(), String> {
     let action = rule.action.as_deref().unwrap_or("accept");
-    if !matches!(action, "accept" | "drop" | "reject") {
+    if !matches!(action, "accept" | "drop" | "reject" | "continue") {
         return Err(format!(
-            "unknown firewall action '{action}' (expected accept, drop or reject)"
+            "unknown firewall action '{action}' (expected accept, drop, reject, or continue for \
+             a rule that only counts, logs or limits)"
         ));
+    }
+    if action == "continue" && !rule.has_statement() {
+        return Err(
+            "a rule with no verdict must count, log or limit (`tcp dport 22 counter`)".to_string(),
+        );
     }
     match rule.reject_with {
         Some(_) if action != "reject" => Err(format!(
@@ -972,17 +978,99 @@ pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(
     }
 }
 
+/// Check a rule's statements: what the kernel would refuse or misread.
+pub(crate) fn check_statements(rule: &FirewallRule) -> Result<(), String> {
+    if let Some(l) = &rule.limit {
+        if l.rate == 0 {
+            return Err("a limit of 0 packets matches nothing (`limit 10/second`)".to_string());
+        }
+        if l.burst == Some(0) {
+            return Err(
+                "`burst 0` is the kernel's default of 5: leave it out or give a burst".to_string(),
+            );
+        }
+    }
+    if let Some(name) = &rule.counter_name {
+        let mut chars = name.chars();
+        let ok = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && name.len() <= 64
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if !ok && !name.contains("${") {
+            return Err(format!(
+                "counter name '{name}' must start with a letter and hold letters, digits, `_` and \
+                 `-` (at most 64)"
+            ));
+        }
+    }
+    if let Some(prefix) = rule.log.as_ref().and_then(|l| l.prefix.as_deref()) {
+        // NF_LOG_PREFIXLEN is 128 with the NUL
+        if prefix.len() > 127 || prefix.contains('\0') {
+            return Err(format!(
+                "log prefix '{prefix}' is longer than 127 bytes or holds a NUL"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Every named counter a firewall's rules count into (they are declared by
+/// use), sorted and once each.
+pub(crate) fn counter_names(fw: &FirewallConfig) -> Vec<String> {
+    let names: std::collections::BTreeSet<String> = fw
+        .all_rules()
+        .filter_map(|r| r.counter_name.clone())
+        .collect();
+    names.into_iter().collect()
+}
+
 /// Build the nftables rule for one firewall rule in `chain` of the
 /// `nlink-lab` table.
 pub(crate) fn lower_rule(table: &str, chain: Chain, rule: &FirewallRule) -> Result<Rule, String> {
     let clauses = parse_match(rule.match_expr.as_deref().unwrap_or(""))?;
     check_verdict(rule, &clauses)?;
+    check_statements(rule)?;
     let mut r = Rule::new(table, chain.name()).family(Family::Inet);
     for c in &clauses {
         r = c.lower(r);
     }
+    // Statements in a fixed order: the limit first (it is a match too), so
+    // the counters and the log see only the packets the rule acts on.
+    if let Some(l) = &rule.limit {
+        use nlink::netlink::nftables::{LimitExpr, LimitUnit};
+        let unit = match l.per {
+            crate::types::LimitPer::Second => LimitUnit::Second,
+            crate::types::LimitPer::Minute => LimitUnit::Minute,
+            crate::types::LimitPer::Hour => LimitUnit::Hour,
+            crate::types::LimitPer::Day => LimitUnit::Day,
+        };
+        let mut e = LimitExpr::packets(l.rate, unit);
+        if let Some(b) = l.burst {
+            e = e.burst(b);
+        }
+        if l.over {
+            e = e.over();
+        }
+        r = r.expr(e);
+    }
+    if rule.counter {
+        r = r.counter();
+    }
+    if let Some(name) = &rule.counter_name {
+        r = r.counter_named(name);
+    }
+    if let Some(l) = &rule.log {
+        let mut e = nlink::netlink::nftables::LogExpr::new();
+        if let Some(p) = &l.prefix {
+            e = e.prefix(p.as_str());
+        }
+        if let Some(g) = l.group {
+            e = e.group(g);
+        }
+        r = r.expr(e);
+    }
     use nlink::netlink::nftables::{NFT_REJECT_ICMPX_UNREACH, NFT_REJECT_TCP_RST};
     Ok(match rule.action.as_deref().unwrap_or("accept") {
+        "continue" => r,
         "drop" => r.drop(),
         "reject" => match rule.reject_with {
             None | Some(RejectWith::PortUnreachable) => {

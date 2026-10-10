@@ -1632,6 +1632,8 @@ fn parse_firewall_chain(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Fire
 }
 
 fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallRuleDef> {
+    let start = *pos;
+    // No verdict: the rule counts, logs or limits and the packet goes on.
     let action = if eat_kw(tokens, pos, "accept") {
         "accept".to_string()
     } else if eat_kw(tokens, pos, "drop") {
@@ -1639,14 +1641,7 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
     } else if eat_kw(tokens, pos, "reject") {
         "reject".to_string()
     } else {
-        return Err(err(
-            tokens,
-            *pos,
-            format!(
-                "expected firewall action (accept/drop/reject), found {}",
-                at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
-            ),
-        ));
+        "continue".to_string()
     };
 
     // `reject with tcp-reset|port-unreachable|host-unreachable|no-route|admin-prohibited`
@@ -1669,6 +1664,74 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
 
     // Matches are optional: a bare verdict (`reject`) matches every packet.
     let match_expr = parse_match_expr(tokens, pos)?;
+
+    // Statements, after the matches, in any order (#166).
+    let mut limit = None;
+    let mut counter = false;
+    let mut counter_name = None;
+    let mut log = None;
+    loop {
+        if eat_kw(tokens, pos, "limit") {
+            let over = eat_kw(tokens, pos, "over");
+            let rate_at = *pos;
+            let rate = u64::try_from(expect_int(tokens, pos)?)
+                .map_err(|_| err(tokens, rate_at, "a limit rate cannot be negative".into()))?;
+            expect(tokens, pos, &Token::Slash)?;
+            let unit_at = *pos;
+            let unit = expect_ident(tokens, pos)?;
+            let per = crate::types::LimitPer::parse(&unit).ok_or_else(|| {
+                err(
+                    tokens,
+                    unit_at,
+                    format!("unknown limit unit '{unit}' (expected second, minute, hour or day)"),
+                )
+            })?;
+            let burst = if eat_kw(tokens, pos, "burst") {
+                Some(expect_u32(tokens, pos, "burst", 0)?)
+            } else {
+                None
+            };
+            limit = Some(crate::types::FirewallLimit {
+                rate,
+                per,
+                burst,
+                over,
+            });
+        } else if eat_kw(tokens, pos, "counter") {
+            if eat_kw(tokens, pos, "name") {
+                counter_name = Some(parse_name(tokens, pos)?);
+            } else {
+                counter = true;
+            }
+        } else if eat_kw(tokens, pos, "log") {
+            let mut l = crate::types::FirewallLog::default();
+            if let Some(Token::String(p)) = at(tokens, *pos) {
+                l.prefix = Some(p.clone());
+                *pos += 1;
+            }
+            if eat_kw(tokens, pos, "group") {
+                l.group = Some(u16::try_from(expect_u32(tokens, pos, "group", 0)?).map_err(
+                    |_| err(tokens, *pos - 1, "log group out of range 0..=65535".into()),
+                )?);
+            }
+            log = Some(l);
+        } else {
+            break;
+        }
+    }
+
+    let has_statement = limit.is_some() || counter || counter_name.is_some() || log.is_some();
+    if action == "continue" && match_expr.is_empty() && !has_statement {
+        return Err(err(
+            tokens,
+            start,
+            format!(
+                "expected a firewall rule (a verdict accept/drop/reject, or a match then \
+                 counter/log/limit), found {}",
+                at(tokens, start).map_or("end of input".to_string(), |t| t.to_string())
+            ),
+        ));
+    }
     match at(tokens, *pos) {
         None | Some(Token::Newline | Token::RBrace) => {}
         Some(Token::Ident(s)) if matches!(s.as_str(), "accept" | "drop" | "reject") => {}
@@ -1677,17 +1740,29 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
                 tokens,
                 *pos,
                 format!(
-                    "expected a firewall match (ct/tcp/udp/icmp/icmpv6/mark/src/dst/iif/oif), \
-                     found {other}"
+                    "expected a firewall match (ct/tcp/udp/icmp/icmpv6/mark/src/dst/iif/oif) or \
+                     a statement (limit/counter/log), found {other} (matches go before \
+                     statements)"
                 ),
             ));
         }
+    }
+    if action == "continue" && !has_statement {
+        return Err(err(
+            tokens,
+            start,
+            "a rule with no verdict must count, log or limit (`tcp dport 22 counter`)".into(),
+        ));
     }
 
     Ok(ast::FirewallRuleDef {
         action,
         reject_with,
         match_expr,
+        limit,
+        counter,
+        counter_name,
+        log,
     })
 }
 
@@ -3662,6 +3737,47 @@ fn parse_assertion_block(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<ast:
                 from,
                 name,
                 expected_ip,
+            });
+        } else if eat_kw(tokens, pos, "counter") {
+            // `counter NODE NAME [packets|bytes] OP N` (#166)
+            use crate::types::{CompareOp, CounterMetric};
+            let node = parse_name(tokens, pos)?;
+            let name = parse_name(tokens, pos)?;
+            let metric = if eat_kw(tokens, pos, "bytes") {
+                CounterMetric::Bytes
+            } else {
+                eat_kw(tokens, pos, "packets");
+                CounterMetric::Packets
+            };
+            let op = match at(tokens, *pos) {
+                Some(Token::EqEq) => CompareOp::Eq,
+                Some(Token::NotEq) => CompareOp::Ne,
+                Some(Token::GtEq) => CompareOp::Gte,
+                Some(Token::LtEq) => CompareOp::Lte,
+                Some(Token::Gt) => CompareOp::Gt,
+                Some(Token::Lt) => CompareOp::Lt,
+                other => {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        format!(
+                            "expected a comparison (==, !=, >, >=, <, <=) in counter assertion, \
+                             found {}",
+                            other.map_or("end of input".to_string(), |t| t.to_string())
+                        ),
+                    ));
+                }
+            };
+            *pos += 1;
+            let value_at = *pos;
+            let value = u64::try_from(expect_int(tokens, pos)?)
+                .map_err(|_| err(tokens, value_at, "a counter is never negative".into()))?;
+            assertions.push(ast::AssertionDef::Counter {
+                node,
+                name,
+                metric,
+                op,
+                value,
             });
         } else {
             match at(tokens, *pos) {

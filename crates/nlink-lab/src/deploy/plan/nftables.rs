@@ -52,7 +52,9 @@ pub(crate) fn topology_to_nftables_config(
     let mut fw_chains = Vec::new();
     let mut fw_rules = Vec::new();
     let mut fw_sets = Vec::new();
+    let mut fw_counters = Vec::new();
     if let Some(fw) = fw {
+        fw_counters = crate::firewall::counter_names(fw);
         for (name, set) in &fw.sets {
             let lowered = crate::firewall::lower_set(name, set).map_err(Error::deploy_failed)?;
             fw_sets.push((name.clone(), lowered));
@@ -92,6 +94,10 @@ pub(crate) fn topology_to_nftables_config(
                 }
                 s
             });
+        }
+        // Named counters, declared by use (#166).
+        for name in fw_counters {
+            t = t.object(name, nlink::netlink::nftables::ObjectConfig::Counter);
         }
         for (chain, policy) in fw_chains {
             t = t.chain(chain.name(), |c| {

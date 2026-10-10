@@ -136,6 +136,34 @@ pub enum CompareOp {
     Lt,
     Gte,
     Lte,
+    Eq,
+    Ne,
+}
+
+impl CompareOp {
+    /// `value OP threshold`.
+    pub fn holds<T: PartialOrd>(self, value: T, threshold: T) -> bool {
+        match self {
+            Self::Gt => value > threshold,
+            Self::Lt => value < threshold,
+            Self::Gte => value >= threshold,
+            Self::Lte => value <= threshold,
+            Self::Eq => value == threshold,
+            Self::Ne => value != threshold,
+        }
+    }
+
+    /// The NLL spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Gt => ">",
+            Self::Lt => "<",
+            Self::Gte => ">=",
+            Self::Lte => "<=",
+            Self::Eq => "==",
+            Self::Ne => "!=",
+        }
+    }
 }
 
 /// A timed test scenario with fault injection and validation steps.
@@ -209,6 +237,27 @@ pub enum Assertion {
         name: String,
         expected_ip: String,
     },
+    /// Assert on a named firewall counter of `node`
+    /// (`counter NODE NAME [packets|bytes] OP N`).
+    Counter {
+        node: String,
+        name: String,
+        #[serde(default)]
+        metric: CounterMetric,
+        op: CompareOp,
+        value: u64,
+    },
+}
+
+/// What a [`Assertion::Counter`] reads.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum CounterMetric {
+    #[default]
+    Packets,
+    Bytes,
 }
 
 /// DNS resolution mode for lab nodes.
@@ -1387,6 +1436,90 @@ pub struct FirewallRule {
     /// for IPv6).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reject_with: Option<RejectWith>,
+
+    /// Rate limit: the rule acts only on packets under (or, with `over`,
+    /// above) the rate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<FirewallLimit>,
+
+    /// Count the packets and bytes the rule acts on (`counter`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub counter: bool,
+
+    /// Count into a named counter (`counter name ssh-drops`), which
+    /// `validate { counter … }` and `inspect` read. Declared by use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counter_name: Option<String>,
+
+    /// Log the packets the rule acts on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<FirewallLog>,
+}
+
+impl FirewallRule {
+    /// True when the rule counts, logs or limits: what a rule without a
+    /// verdict (action "continue") is for.
+    pub fn has_statement(&self) -> bool {
+        self.limit.is_some() || self.counter || self.counter_name.is_some() || self.log.is_some()
+    }
+}
+
+/// `limit [over] N/UNIT [burst N]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FirewallLimit {
+    /// Packets per `per`.
+    pub rate: u64,
+    pub per: LimitPer,
+    /// Packets allowed above the rate in a burst (the kernel's default is 5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub burst: Option<u32>,
+    /// Act on the packets *above* the rate instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub over: bool,
+}
+
+/// The unit of a [`FirewallLimit`] rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum LimitPer {
+    Second,
+    Minute,
+    Hour,
+    Day,
+}
+
+impl LimitPer {
+    /// The NLL spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Second => "second",
+            Self::Minute => "minute",
+            Self::Hour => "hour",
+            Self::Day => "day",
+        }
+    }
+
+    /// Parse the NLL spelling.
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "second" => Self::Second,
+            "minute" => Self::Minute,
+            "hour" => Self::Hour,
+            "day" => Self::Day,
+            _ => return None,
+        })
+    }
+}
+
+/// `log ["prefix"] [group N]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FirewallLog {
+    /// Text put before each logged packet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// Send to nflog group N instead of the kernel log.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<u16>,
 }
 
 /// The answer a `reject` rule sends (`reject with …`).

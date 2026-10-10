@@ -303,6 +303,41 @@ fn eval_assertion(
                 Err(e) => (desc, false, Some(e.to_string())),
             }
         }
+        Assertion::Counter {
+            node,
+            name,
+            metric,
+            op,
+            value,
+        } => {
+            use crate::types::CounterMetric;
+            let what = match metric {
+                CounterMetric::Packets => "packets",
+                CounterMetric::Bytes => "bytes",
+            };
+            let desc = format!("counter {node} {name} {what} {} {value}", op.as_str());
+            match lab.firewall_counters_blocking(node) {
+                Ok(counters) => match counters.iter().find(|c| &c.name == name) {
+                    Some(c) => {
+                        let got = match metric {
+                            CounterMetric::Packets => c.packets,
+                            CounterMetric::Bytes => c.bytes,
+                        };
+                        if op.holds(got, *value) {
+                            (desc, true, None)
+                        } else {
+                            (desc, false, Some(format!("counted {got} {what}")))
+                        }
+                    }
+                    None => (
+                        desc,
+                        false,
+                        Some(format!("node '{node}' has no counter '{name}'")),
+                    ),
+                },
+                Err(e) => (desc, false, Some(e.to_string())),
+            }
+        }
     }
 }
 

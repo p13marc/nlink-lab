@@ -474,9 +474,9 @@ qdisc gw:wan0 prio { bands 3 }
   mark a connection's first packet, restore the mark on all the others.
 - `classify MAJOR:MINOR` sets the packet's priority, which picks a class
   of the classful qdisc it leaves through: `classify 1:3` is the third
-  band of a `prio`. A root `qdisc` gets handle `1:` (labs deployed
-  before 0.14 keep a kernel-chosen handle, which `classify` misses, until
-  redeployed). It has no effect in the input chain
+  band of a `prio`, which nlink-lab installs at handle `1:` (labs
+  deployed before 0.14 keep a kernel-chosen handle, which `classify`
+  misses, until redeployed). It has no effect in the input chain
   (`firewall-chain-context`); `firewall-classify-no-effect` warns when
   the node has no `prio` qdisc or rate limit.
 - `clamp mss N` and `clamp mss pmtu` lower the MSS that TCP handshakes

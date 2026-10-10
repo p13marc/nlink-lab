@@ -90,11 +90,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   chain, so callers that need a reference use `.as_deref()`. A node
   whose `firewall` declares no input chain now keeps its profile's input
   chain.
-- **A root `qdisc` block is installed with handle `1:`** (#167). It used
-  to get a kernel-chosen handle (`8001:`), which a `prio` qdisc compares
-  with a packet's priority, so `classify 1:N` never picked a band. A
-  deployed lab keeps its old handle until the qdisc is redeployed (or
-  its block edited); `classify` misses it until then.
+- **A `qdisc … prio` block is installed with handle `1:`** (#167). It
+  used to get a kernel-chosen handle (`8001:`), and `prio` compares a
+  packet's priority with its own handle, so `classify 1:N` never picked
+  a band. A deployed lab keeps its old handle until the qdisc is
+  redeployed (or its block edited); `classify` misses it until then.
+  The other kinds keep a kernel-chosen handle.
 - **`NatRule` has four new fields** (`proto`, `dport`, `iif`, `oif`;
   library API). Code that builds one with a struct literal adds
   `proto: None, dport: None, iif: None, oif: None`.

@@ -148,6 +148,14 @@ imperatively rather than through the declarative `NetworkConfig` the
 
 `apply --check` exits 2 when `no_op` is false.
 
+### Repair drift
+
+`apply` with the file the lab was deployed from is not a no-op when the
+kernel has drifted from it — a rule deleted by hand, an address someone
+added, or what a newer nlink-lab plans differently for the same file. It
+reports the drift (`topology unchanged; the kernel has drifted from it`)
+and converges it, exactly the changes `verify` lists.
+
 ### Auto-apply in a config-watch loop
 
 ```bash

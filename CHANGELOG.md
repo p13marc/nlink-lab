@@ -145,6 +145,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   chain this changes (`firewall`, `ipv6-dual-stack`, `multi-profile`,
   `cookbook/multi-tenant-wan`) are pinned by a golden fixture of every
   example's planned rules, which shows no other rule changing.
+- **`apply` refused to repair drift.** With an unchanged topology it
+  printed `No changes to apply` and stopped, even when `apply --check`
+  and `verify` reported drift (a rule deleted by hand). So the planner
+  changes in this release (the forward chain) could not reach a deployed
+  lab without editing its file or redeploying. It now checks the kernel
+  and converges what it finds.
 - **A profile's firewall edit was invisible to `apply --check`**: the
   topology diff compared the node's own firewall, not the effective one.
 - **Removing a `rate … ingress` left the ingress shaper running.**

@@ -54,19 +54,62 @@
     "removals"
   ],
   "$defs": {
-    "FirewallConfig": {
-      "description": "Firewall configuration (nftables).",
+    "FirewallChain": {
+      "description": "One firewall chain besides input: its policy and rules.",
       "type": "object",
       "properties": {
         "policy": {
-          "description": "Default chain policy (\"accept\" or \"drop\").",
+          "description": "\"accept\" (the default) or \"drop\".",
           "type": [
             "string",
             "null"
           ]
         },
         "rules": {
-          "description": "Firewall rules.",
+          "description": "Rules, in order (first match wins).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      }
+    },
+    "FirewallConfig": {
+      "description": "Firewall configuration (nftables): one `nlink-lab` table per node.\n\n`policy` and `rules` are the **input** chain (traffic to the node\nitself) — the shape every earlier version wrote, so it keeps loading.\n`forward` (traffic routed through the node) and `output` (traffic the\nnode sends) are separate chains with their own policy.",
+      "type": "object",
+      "properties": {
+        "forward": {
+          "description": "Forward chain. Left out, it is installed with policy accept and no\nrules (before 0.14 it took the input chain's policy and could hold\nno rule, so `policy drop` on a router dropped everything routed).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallChain"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output": {
+          "description": "Output chain. Left out, none is installed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallChain"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy": {
+          "description": "Input chain policy: \"accept\" (the default) or \"drop\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "description": "Input chain rules, in order (first match wins).",
           "type": "array",
           "default": [],
           "items": {
@@ -80,17 +123,28 @@
       "type": "object",
       "properties": {
         "action": {
-          "description": "Action (\"accept\", \"drop\", \"reject\").",
+          "description": "Verdict: \"accept\" (the default), \"drop\" or \"reject\".",
           "type": [
             "string",
             "null"
           ]
         },
         "match": {
-          "description": "Match expression (e.g., \"tcp dport 80\", \"ct state established,related\").",
+          "description": "Match expression (e.g., \"tcp dport 80\", \"ct state established,related\").\nEmpty or absent: the rule matches every packet.",
           "type": [
             "string",
             "null"
+          ]
+        },
+        "reject_with": {
+          "description": "How a `reject` answers. Left out: ICMP port unreachable (ICMPv6\nfor IPv6).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RejectWith"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -623,6 +677,36 @@
       "required": [
         "endpoint",
         "was_present"
+      ]
+    },
+    "RejectWith": {
+      "description": "The answer a `reject` rule sends (`reject with …`).",
+      "oneOf": [
+        {
+          "description": "A TCP reset. Only meaningful for TCP: the rule must match `tcp`.",
+          "type": "string",
+          "const": "tcp-reset"
+        },
+        {
+          "description": "ICMP(v6) port unreachable — what a bare `reject` sends.",
+          "type": "string",
+          "const": "port-unreachable"
+        },
+        {
+          "description": "ICMP(v6) host unreachable.",
+          "type": "string",
+          "const": "host-unreachable"
+        },
+        {
+          "description": "ICMP(v6) no route to destination.",
+          "type": "string",
+          "const": "no-route"
+        },
+        {
+          "description": "ICMP(v6) administratively prohibited.",
+          "type": "string",
+          "const": "admin-prohibited"
+        }
       ]
     },
     "RouteChange": {

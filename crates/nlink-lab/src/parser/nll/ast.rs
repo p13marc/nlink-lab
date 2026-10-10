@@ -375,10 +375,21 @@ pub struct RouteDef {
     pub metric: Option<u32>,
 }
 
-/// Firewall definition.
-#[derive(Debug, Clone)]
+/// Firewall definition: one `firewall …` property. `firewall policy P
+/// { … }` is one input chain; `firewall forward { … }` one forward chain;
+/// `firewall { input … forward … }` several.
+#[derive(Debug, Clone, Default)]
 pub struct FirewallDef {
-    pub policy: String,
+    pub chains: Vec<FirewallChainDef>,
+}
+
+/// One chain of a firewall property.
+#[derive(Debug, Clone)]
+pub struct FirewallChainDef {
+    /// `input`, `forward` or `output`.
+    pub chain: String,
+    /// `accept` or `drop` (checked by the parser); `None` accepts.
+    pub policy: Option<String>,
     pub rules: Vec<FirewallRuleDef>,
 }
 
@@ -386,6 +397,9 @@ pub struct FirewallDef {
 #[derive(Debug, Clone)]
 pub struct FirewallRuleDef {
     pub action: String,
+    /// `reject with …` (only on `reject`).
+    pub reject_with: Option<crate::types::RejectWith>,
+    /// The nft-like match string; empty matches every packet.
     pub match_expr: String,
 }
 

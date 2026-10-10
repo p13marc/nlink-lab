@@ -70,6 +70,7 @@ pub mod diff;
 pub mod dns;
 pub mod error;
 pub mod events;
+pub(crate) mod firewall;
 pub mod fmt;
 pub mod frr;
 pub mod helpers;

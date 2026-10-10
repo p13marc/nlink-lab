@@ -28,9 +28,9 @@
 use std::collections::BTreeMap;
 
 use crate::types::{
-    ExecConfig, FirewallConfig, FirewallRule, Impairment, InterfaceConfig, LabConfig, Link,
-    Network, Node, PortConfig, Profile, RateLimit, RouteConfig, Topology, VlanConfig, VrfConfig,
-    WireguardConfig,
+    ExecConfig, FirewallChain, FirewallConfig, FirewallRule, Impairment, InterfaceConfig,
+    LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RejectWith, RouteConfig,
+    Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
 
 /// Top-level lab builder.
@@ -727,23 +727,77 @@ impl FirewallBuilder {
         }
     }
 
-    /// Set the default policy ("accept" or "drop").
+    /// Set the input chain's policy ("accept" or "drop").
     pub fn policy(mut self, policy: &str) -> Self {
         self.config.policy = Some(policy.to_string());
         self
     }
 
-    /// Add a firewall rule.
+    /// Add an input chain rule: an nft-style match (`"tcp dport 22"`,
+    /// empty for every packet) and a verdict ("accept", "drop", "reject").
     pub fn rule(mut self, match_expr: &str, action: &str) -> Self {
-        self.config.rules.push(FirewallRule {
-            match_expr: Some(match_expr.to_string()),
-            action: Some(action.to_string()),
-        });
+        self.config.rules.push(chain_rule(match_expr, action, None));
+        self
+    }
+
+    /// Add an input chain `reject with …` rule.
+    pub fn reject_with(mut self, match_expr: &str, with: RejectWith) -> Self {
+        self.config
+            .rules
+            .push(chain_rule(match_expr, "reject", Some(with)));
+        self
+    }
+
+    /// Declare the forward chain (traffic routed through the node).
+    pub fn forward(mut self, f: impl FnOnce(FirewallChainBuilder) -> FirewallChainBuilder) -> Self {
+        self.config.forward = Some(f(FirewallChainBuilder::default()).chain);
+        self
+    }
+
+    /// Declare the output chain (traffic the node sends).
+    pub fn output(mut self, f: impl FnOnce(FirewallChainBuilder) -> FirewallChainBuilder) -> Self {
+        self.config.output = Some(f(FirewallChainBuilder::default()).chain);
         self
     }
 
     fn build(self) -> FirewallConfig {
         self.config
+    }
+}
+
+fn chain_rule(match_expr: &str, action: &str, reject_with: Option<RejectWith>) -> FirewallRule {
+    FirewallRule {
+        match_expr: (!match_expr.is_empty()).then(|| match_expr.to_string()),
+        action: Some(action.to_string()),
+        reject_with,
+    }
+}
+
+/// Builder for a forward or output [`FirewallChain`].
+#[derive(Default)]
+pub struct FirewallChainBuilder {
+    chain: FirewallChain,
+}
+
+impl FirewallChainBuilder {
+    /// Set the chain's policy ("accept" or "drop").
+    pub fn policy(mut self, policy: &str) -> Self {
+        self.chain.policy = Some(policy.to_string());
+        self
+    }
+
+    /// Add a rule (see [`FirewallBuilder::rule`]).
+    pub fn rule(mut self, match_expr: &str, action: &str) -> Self {
+        self.chain.rules.push(chain_rule(match_expr, action, None));
+        self
+    }
+
+    /// Add a `reject with …` rule.
+    pub fn reject_with(mut self, match_expr: &str, with: RejectWith) -> Self {
+        self.chain
+            .rules
+            .push(chain_rule(match_expr, "reject", Some(with)));
+        self
     }
 }
 

@@ -800,7 +800,7 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
             }
         }
         if let Some(fw) = &mut node.firewall {
-            for rule in &mut fw.rules {
+            for rule in fw.all_rules_mut() {
                 if let Some(match_expr) = &mut rule.match_expr {
                     *match_expr = resolve_ref(match_expr, &addr_map)?;
                     *match_expr = normalize_match_family(match_expr);
@@ -823,15 +823,17 @@ fn normalize_match_family(expr: &str) -> String {
     let mut out: Vec<String> = Vec::with_capacity(tokens.len());
     let mut i = 0;
     while i < tokens.len() {
+        // `ip saddr X` or `ip saddr != X`
+        let neg = tokens.get(i + 2) == Some(&"!=");
+        let operand = i + 2 + usize::from(neg);
         if matches!(tokens[i], "ip" | "ip6")
-            && i + 2 < tokens.len()
+            && operand < tokens.len()
             && matches!(tokens[i + 1], "saddr" | "daddr")
-            && let Ok((ip, _)) = crate::helpers::parse_ip_or_cidr(tokens[i + 2])
+            && let Ok((ip, _)) = crate::helpers::parse_ip_or_cidr(tokens[operand])
         {
             out.push(if ip.is_ipv6() { "ip6" } else { "ip" }.to_string());
-            out.push(tokens[i + 1].to_string());
-            out.push(tokens[i + 2].to_string());
-            i += 3;
+            out.extend(tokens[i + 1..=operand].iter().map(|t| t.to_string()));
+            i = operand + 1;
             continue;
         }
         out.push(tokens[i].to_string());
@@ -851,7 +853,7 @@ fn warn_unresolved_refs(topology: &types::Topology) {
             }
         }
         if let Some(fw) = &node.firewall {
-            for rule in &fw.rules {
+            for rule in fw.all_rules() {
                 if let Some(expr) = &rule.match_expr
                     && expr.contains("${")
                 {
@@ -2053,13 +2055,21 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
         ast::NodeProp::Lo(addr) => ast::NodeProp::Lo(i(addr, vars)),
         ast::NodeProp::Route(r) => ast::NodeProp::Route(interpolate_route(r, vars)),
         ast::NodeProp::Firewall(fw) => ast::NodeProp::Firewall(ast::FirewallDef {
-            policy: i(&fw.policy, vars),
-            rules: fw
-                .rules
+            chains: fw
+                .chains
                 .iter()
-                .map(|r| ast::FirewallRuleDef {
-                    match_expr: i(&r.match_expr, vars),
-                    action: i(&r.action, vars),
+                .map(|c| ast::FirewallChainDef {
+                    chain: c.chain.clone(),
+                    policy: c.policy.clone(),
+                    rules: c
+                        .rules
+                        .iter()
+                        .map(|r| ast::FirewallRuleDef {
+                            match_expr: i(&r.match_expr, vars),
+                            action: r.action.clone(),
+                            reject_with: r.reject_with,
+                        })
+                        .collect(),
                 })
                 .collect(),
         }),
@@ -2546,22 +2556,64 @@ fn lower_profile(profile: &ast::ProfileDef) -> types::Profile {
                 p.frr = lower_frr(f).ok();
             }
             ast::NodeProp::Firewall(fw) => {
-                p.firewall = Some(types::FirewallConfig {
-                    policy: Some(fw.policy.clone()),
-                    rules: fw
-                        .rules
-                        .iter()
-                        .map(|r| types::FirewallRule {
-                            match_expr: Some(r.match_expr.clone()),
-                            action: Some(r.action.clone()),
-                        })
-                        .collect(),
-                });
+                merge_firewall(&mut p.firewall, lower_firewall(fw, |s| s.to_string()));
             }
             _ => {} // Other props not applicable to profiles
         }
     }
     p
+}
+
+/// Lower one `firewall …` property: each chain it declares, its match
+/// strings passed through `interp` (variables), an empty match stored as
+/// none (the rule matches every packet).
+fn lower_firewall(fw: &ast::FirewallDef, interp: impl Fn(&str) -> String) -> types::FirewallConfig {
+    let mut out = types::FirewallConfig::default();
+    for c in &fw.chains {
+        let rules: Vec<types::FirewallRule> = c
+            .rules
+            .iter()
+            .map(|r| {
+                let m = interp(&r.match_expr);
+                types::FirewallRule {
+                    match_expr: (!m.is_empty()).then_some(m),
+                    action: Some(r.action.clone()),
+                    reject_with: r.reject_with,
+                }
+            })
+            .collect();
+        let chain = types::FirewallChain {
+            policy: c.policy.clone(),
+            rules,
+        };
+        let layer = match c.chain.as_str() {
+            "forward" => types::FirewallConfig {
+                forward: Some(chain),
+                ..Default::default()
+            },
+            "output" => types::FirewallConfig {
+                output: Some(chain),
+                ..Default::default()
+            },
+            _ => types::FirewallConfig {
+                policy: chain.policy,
+                rules: chain.rules,
+                ..Default::default()
+            },
+        };
+        out.merge_from(&layer);
+    }
+    out
+}
+
+/// Lay a lowered `firewall` property over what a node (or profile) already
+/// has, chain by chain: a node's `firewall forward { … }` keeps the input
+/// chain its profile gave it, and a second `firewall` property adds to the
+/// first instead of replacing it.
+fn merge_firewall(slot: &mut Option<types::FirewallConfig>, layer: types::FirewallConfig) {
+    if layer.input_declared() || layer.forward.is_some() || layer.output.is_some() {
+        slot.get_or_insert_with(Default::default).merge_from(&layer);
+    }
 }
 
 fn lower_lab(lab: &ast::LabDecl) -> Result<types::LabConfig> {
@@ -2871,17 +2923,10 @@ fn apply_node_props(
             }
             ast::NodeProp::Firewall(fw) => {
                 let vars = &ctx.variables;
-                node.firewall = Some(types::FirewallConfig {
-                    policy: Some(interpolate(&fw.policy, vars)),
-                    rules: fw
-                        .rules
-                        .iter()
-                        .map(|r| types::FirewallRule {
-                            match_expr: Some(interpolate(&r.match_expr, vars)),
-                            action: Some(interpolate(&r.action, vars)),
-                        })
-                        .collect(),
-                });
+                merge_firewall(
+                    &mut node.firewall,
+                    lower_firewall(fw, |s| interpolate(s, vars)),
+                );
             }
             ast::NodeProp::Nat(nat) => {
                 let rules = expand_nat_rules(nat, &ctx.variables)?
@@ -4101,6 +4146,151 @@ node server {
             fw.rules[0].match_expr.as_deref(),
             Some("ct state established,related")
         );
+    }
+
+    /// #164: chains, bare verdicts, `reject with`, iif/oif, `!=` and port
+    /// ranges lower into the per-chain config.
+    #[test]
+    fn test_lower_firewall_chains() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+node gw {
+  firewall policy drop {
+    accept ct established,related
+    accept iif lan0 tcp dport 22
+    reject
+  }
+  firewall forward policy drop {
+    accept iif lan0 oif wan0
+    accept iif wan0 dst 10.0.1.10 tcp dport 8000-8999
+    drop src != 10.0.0.0/8
+    reject with tcp-reset iif wan0 tcp dport 22
+  }
+  firewall output { accept oif != wan0 }
+}"#,
+        );
+        let fw = topo.nodes["gw"].firewall.as_ref().unwrap();
+        assert_eq!(fw.policy.as_deref(), Some("drop"));
+        assert_eq!(fw.rules.len(), 3);
+        assert_eq!(
+            fw.rules[1].match_expr.as_deref(),
+            Some("iifname lan0 tcp dport 22")
+        );
+        assert_eq!(fw.rules[2].match_expr, None, "a bare verdict has no match");
+        assert_eq!(fw.rules[2].action.as_deref(), Some("reject"));
+        let fwd = fw.forward.as_ref().unwrap();
+        assert_eq!(fwd.policy.as_deref(), Some("drop"));
+        let m: Vec<&str> = fwd
+            .rules
+            .iter()
+            .map(|r| r.match_expr.as_deref().unwrap())
+            .collect();
+        assert_eq!(
+            m,
+            [
+                "iifname lan0 oifname wan0",
+                "ip daddr 10.0.1.10 iifname wan0 tcp dport 8000-8999",
+                "ip saddr != 10.0.0.0/8",
+                "iifname wan0 tcp dport 22",
+            ]
+        );
+        assert_eq!(fwd.rules[3].reject_with, Some(types::RejectWith::TcpReset));
+        let out = fw.output.as_ref().unwrap();
+        assert_eq!(out.policy, None);
+        assert_eq!(out.rules[0].match_expr.as_deref(), Some("oifname != wan0"));
+    }
+
+    /// The grouped form, and a node's chains laid over its profile's chain
+    /// by chain.
+    #[test]
+    fn test_lower_firewall_group_and_profile_merge() {
+        let topo = parse_and_lower(
+            r#"lab "t"
+profile guarded {
+  firewall policy drop { accept ct established,related }
+}
+node a : guarded {
+  firewall forward policy drop { accept iif eth0 }
+}
+node b : guarded {
+  firewall {
+    input { reject icmp 8 }
+    forward { accept tcp dport 80 }
+  }
+}"#,
+        );
+        let a = topo.nodes["a"].firewall.as_ref().unwrap();
+        assert_eq!(
+            a.policy.as_deref(),
+            Some("drop"),
+            "input comes from the profile"
+        );
+        assert_eq!(a.rules.len(), 1);
+        assert_eq!(a.forward.as_ref().unwrap().rules.len(), 1);
+        let b = topo.nodes["b"].firewall.as_ref().unwrap();
+        // b declares an input chain: it replaces the profile's
+        assert_eq!(b.policy, None);
+        assert_eq!(b.rules[0].action.as_deref(), Some("reject"));
+        assert_eq!(
+            b.forward.as_ref().unwrap().rules[0].match_expr.as_deref(),
+            Some("tcp dport 80")
+        );
+    }
+
+    #[test]
+    fn test_firewall_parse_errors() {
+        for (src, want, at) in [
+            (
+                "firewall policy reject { }",
+                "must be `accept` or `drop`",
+                "reject",
+            ),
+            (
+                "firewall policy dorp { }",
+                "must be `accept` or `drop`",
+                "dorp",
+            ),
+            (
+                "firewall policy drop { accept ct bogus }",
+                "unknown ct state",
+                "bogus",
+            ),
+            (
+                "firewall policy drop { reject with frob }",
+                "unknown reject type",
+                "frob",
+            ),
+            (
+                "firewall policy drop { drop tcp dport 9-1 }",
+                "starts after it ends",
+                "9",
+            ),
+            (
+                "firewall policy drop { drop tcp dport != 1-2 }",
+                "negated port range",
+                "1",
+            ),
+            (
+                "firewall policy drop { drop tcp dport 70000 }",
+                "out of range",
+                "70000",
+            ),
+            (
+                "firewall policy drop { accept frob }",
+                "expected a firewall match",
+                "frob",
+            ),
+            (
+                "firewall sideways { }",
+                "expected `policy`, `input`",
+                "sideways",
+            ),
+        ] {
+            let full = format!("lab \"t\"\nnode a {{\n  {src}\n}}\n");
+            let (msg, span) = parse_err_span(&full);
+            assert!(msg.contains(want), "{src}: {msg}");
+            assert_eq!(&full[span], at, "{src}: {msg}");
+        }
     }
 
     #[test]

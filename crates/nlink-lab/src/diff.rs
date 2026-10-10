@@ -649,16 +649,20 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
             continue;
         };
 
-        let fw_diff = current_node.firewall != desired_node.firewall;
+        // What the node runs, profiles merged in: a profile's firewall
+        // edit changes every node using it.
+        let current_fw = current.effective_firewall(current_node);
+        let desired_fw = desired.effective_firewall(desired_node);
+        let fw_diff = current_fw != desired_fw;
         let nat_diff = current_node.nat != desired_node.nat;
         if !fw_diff && !nat_diff {
             continue;
         }
 
-        let was_present = current_node.firewall.is_some() || current_node.nat.is_some();
+        let was_present = current_fw.is_some() || current_node.nat.is_some();
         diff.nftables_changed.push(NftablesChange {
             node: node_name.clone(),
-            desired_firewall: desired_node.firewall.clone(),
+            desired_firewall: desired_fw.map(std::borrow::Cow::into_owned),
             desired_nat: desired_node.nat.clone(),
             was_present,
         });

@@ -206,3 +206,73 @@ node gw {
           (firewall_rule
             (match_expression
               (integer))))))))
+
+================
+Firewall sets
+================
+node gw {
+  firewall {
+    set blocked [10.0.2.66, 10.0.9.0/24, 10.0.8.1-10.0.8.9]
+    set pub ipv4 . port [10.0.1.10 . 22, 10.0.1.0/24 . 8000-8999]
+    set q ipv6 size 1024 timeout 300s dynamic
+    forward policy drop {
+      drop src @blocked
+      accept dst . tcp dport != @pub
+      drop mark != @marks tcp dport @web
+    }
+  }
+  firewall set extra [80]
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_set
+          (identifier)
+          (set_elements
+            (set_element
+              (ipv4_address))
+            (set_element
+              (cidr))
+            (set_element
+              (ipv4_address)
+              (ipv4_address))))
+        (firewall_set
+          (identifier)
+          (set_elements
+            (set_element
+              (ipv4_address)
+              (integer))
+            (set_element
+              (cidr)
+              (integer)
+              (integer))))
+        (firewall_set
+          (identifier)
+          (integer)
+          (duration))
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (set_ref
+                (identifier))))
+          (firewall_rule
+            (match_expression
+              (set_concat
+                (set_ref
+                  (identifier)))))
+          (firewall_rule
+            (match_expression
+              (set_ref
+                (identifier))
+              (set_ref
+                (identifier))))))
+      (firewall_block
+        (firewall_set
+          (identifier)
+          (set_elements
+            (set_element
+              (integer))))))))

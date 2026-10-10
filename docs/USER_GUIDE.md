@@ -634,8 +634,13 @@ Sets let one rule match many values: `set blocked [10.0.3.66,
 dport @published`. Sets go in a grouped `firewall { … }` block; editing
 their elements changes nothing else.
 
-See `examples/firewall.nll`, `examples/firewall-router.nll` and
-`examples/firewall-sets.nll`.
+Rules can also count, log and rate-limit: `drop tcp dport 22 counter name
+ssh-drops log "ssh: "`, `drop icmp 8 limit over 5/second`. A
+`validate { counter server ssh-drops > 0 }` assertion reads a named
+counter, and `nlink-lab inspect` lists them.
+
+See `examples/firewall.nll`, `examples/firewall-router.nll`,
+`examples/firewall-sets.nll` and `examples/firewall-observability.nll`.
 
 ### 7. Bridge Networks with VLANs
 

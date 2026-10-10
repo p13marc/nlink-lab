@@ -125,6 +125,61 @@
         }
       }
     },
+    "FirewallLimit": {
+      "description": "`limit [over] N/UNIT [burst N]`.",
+      "type": "object",
+      "properties": {
+        "burst": {
+          "description": "Packets allowed above the rate in a burst (the kernel's default is 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "over": {
+          "description": "Act on the packets *above* the rate instead.",
+          "type": "boolean"
+        },
+        "per": {
+          "$ref": "#/$defs/LimitPer"
+        },
+        "rate": {
+          "description": "Packets per `per`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "rate",
+        "per"
+      ]
+    },
+    "FirewallLog": {
+      "description": "`log [\"prefix\"] [group N]`.",
+      "type": "object",
+      "properties": {
+        "group": {
+          "description": "Send to nflog group N instead of the kernel log.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "prefix": {
+          "description": "Text put before each logged packet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "FirewallRule": {
       "description": "A single firewall rule.",
       "type": "object",
@@ -134,6 +189,39 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "counter": {
+          "description": "Count the packets and bytes the rule acts on (`counter`).",
+          "type": "boolean"
+        },
+        "counter_name": {
+          "description": "Count into a named counter (`counter name ssh-drops`), which\n`validate { counter … }` and `inspect` read. Declared by use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "Rate limit: the rule acts only on packets under (or, with `over`,\nabove) the rate.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "log": {
+          "description": "Log the packets the rule acts on.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallLog"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "match": {
@@ -294,6 +382,16 @@
         "endpoint",
         "old",
         "new"
+      ]
+    },
+    "LimitPer": {
+      "description": "The unit of a [`FirewallLimit`] rate.",
+      "type": "string",
+      "enum": [
+        "second",
+        "minute",
+        "hour",
+        "day"
       ]
     },
     "Link": {

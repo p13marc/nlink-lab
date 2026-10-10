@@ -1,0 +1,50 @@
+# Firewall observability: counters, a rate limit, and assertions that
+# read a counter.
+#
+# `server` counts what its firewall drops and what reaches iperf3, and
+# rate-limits pings. The validate block checks that nothing has hit the
+# SSH drop rule yet; the scenario probes SSH and checks that it did.
+#
+#   sudo nlink-lab deploy --strict examples/firewall-observability.nll
+#   sudo nlink-lab scenario firewall-observability probe
+#   sudo nlink-lab inspect firewall-observability      # FIREWALL COUNTERS
+#
+# Demonstrates: `limit`, `counter`, `counter name`, a rule with no verdict,
+# and `validate { counter NODE NAME OP N }`. A `log "prefix"` statement
+# works the same way; see docs/TROUBLESHOOTING.md for where it prints.
+
+lab "firewall-observability" {
+  description "Firewall counters, a rate limit and counter assertions"
+}
+
+node client
+node server {
+  firewall policy drop {
+    # Pings over the rate are dropped (and counted) before the conntrack
+    # rule, which would accept every echo after the first.
+    drop icmp 8 limit over 5/second burst 10 counter
+    accept ct established,related
+    accept icmp 8
+    drop tcp dport 22 counter name ssh-drops
+    tcp dport 5201 counter name iperf
+    accept tcp dport 5201
+  }
+  run background ["iperf3", "-s", "-p", "5201"]
+}
+
+link client:eth0 -- server:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+
+validate {
+  reach client server
+  counter server ssh-drops == 0
+}
+
+scenario "probe" {
+  at 0s {
+    log "probing ssh, which the firewall drops"
+    exec client "bash" "-c" "timeout 1 bash -c 'echo > /dev/tcp/10.0.0.2/22' || true"
+  }
+  at 2s {
+    validate { counter server ssh-drops > 0 }
+  }
+}

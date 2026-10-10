@@ -126,6 +126,20 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   - New validation rules: `firewall-set-undeclared`, `firewall-set-type`,
     `firewall-set-element` and `firewall-set-unused` (warning).
   - New example: `examples/firewall-sets.nll`.
+- **Firewall statements and counter assertions (#166).**
+  - `limit [over] N/second|minute|hour|day [burst N]`, `counter`,
+    `counter name NAME` and `log ["prefix"] [group N]` follow a rule's
+    matches, in that order, before the verdict.
+  - A rule with no verdict counts, logs or limits and lets the packet go
+    on.
+  - Named counters are declared by use. `validate { counter NODE NAME
+    [packets|bytes] OP N }` reads one in deploy, `test`, `apply` and
+    scenario steps, and `inspect` lists them.
+  - These became usable with nlink 0.30: on 0.29 such a rule was
+    replaced, and its counter zeroed, on every apply.
+  - New validation rules: `firewall-statement` and
+    `assertion-counter-exists`.
+  - New example: `examples/firewall-observability.nll`.
 - **Changing a declared interface on a running lab** (see Migration).
   The network layer is planned with nlink's `preserve_undeclared_tc`, so
   a recreated link keeps nlink-lab's Tc, and with VRF routes declared,

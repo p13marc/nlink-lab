@@ -4892,6 +4892,199 @@ async fn firewall_sets_example_converges() {
     lab.destroy().await.expect("destroy failed");
 }
 
+// ─── firewall counters, limit, log on real traffic (#166) ───
+
+/// A named counter counts what its rule acts on, a counter assertion reads
+/// it, a rate limit lets only part of a flood through, and counters that
+/// have counted are not drift (nlink 0.30: they used to be replaced and
+/// zeroed by every apply).
+#[tokio::test]
+async fn firewall_counters_limit_and_counter_assertions() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_counters_limit_and_counter_assertions: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_counters_limit_and_counter_assertions: no nftables");
+        return;
+    }
+    let lab_name = format!("fwctr-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node c
+node s {{
+  firewall policy drop {{
+    drop icmp 8 limit over 2/second burst 2 counter
+    accept ct established,related
+    accept icmp 8
+    drop tcp dport 22 counter name ssh
+    tcp dport 5201 counter name probe
+  }}
+}}
+link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let assert_counter = |lab: &RunningLab, op: nlink_lab::types::CompareOp, value: u64| {
+        nlink_lab::test_runner::eval_assertion_pub(
+            lab,
+            &nlink_lab::types::Assertion::Counter {
+                node: "s".into(),
+                name: "ssh".into(),
+                metric: nlink_lab::types::CounterMetric::Packets,
+                op,
+                value,
+            },
+            &Default::default(),
+        )
+    };
+    use nlink_lab::types::CompareOp;
+    let (desc, ok, detail) = assert_counter(&lab, CompareOp::Eq, 0);
+    assert!(ok, "{desc}: {detail:?}");
+
+    for _ in 0..3 {
+        let _ = tcp_connect(&lab, "c", "10.0.0.2", 22);
+    }
+    let counters = lab.firewall_counters("s").await.unwrap();
+    let ssh = counters.iter().find(|c| c.name == "ssh").unwrap();
+    assert!(ssh.packets >= 3 && ssh.bytes > 0, "{counters:?}");
+    let probe = counters.iter().find(|c| c.name == "probe").unwrap();
+    assert_eq!(probe.packets, 0, "{counters:?}");
+    assert!(assert_counter(&lab, CompareOp::Gt, 0).1);
+    let (_, ok, detail) = assert_counter(&lab, CompareOp::Eq, 0);
+    assert!(!ok);
+    assert!(detail.unwrap().starts_with("counted "));
+
+    // pings over 2/second (burst 2) are dropped *before* the conntrack
+    // rule, which would otherwise accept every echo after the first
+    let flood = lab
+        .exec(
+            "c",
+            "ping",
+            &["-c", "40", "-i", "0.05", "-W", "1", "-q", "10.0.0.2"],
+        )
+        .unwrap();
+    let received: u32 = flood
+        .stdout
+        .split(", ")
+        .find_map(|p| {
+            p.strip_suffix(" received")
+                .and_then(|n| n.trim().parse().ok())
+        })
+        .unwrap_or(0);
+    assert!(
+        received > 0 && received < 20,
+        "the limit let {received}/40 through: {}",
+        flood.stdout
+    );
+
+    // counters that have counted are not drift, and a re-apply keeps them
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(
+        layered.is_empty(),
+        "a counted counter must not be drift:\n{layered}"
+    );
+    let handles = |lab: &RunningLab| {
+        collect_rule_handles(
+            &lab.exec(
+                "s",
+                "nft",
+                &["-a", "list", "chain", "inet", "nlink-lab", "input"],
+            )
+            .unwrap()
+            .stdout,
+        )
+    };
+    let before = handles(&lab);
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("reapply failed");
+    assert_eq!(before, handles(&lab));
+    let after = lab.firewall_counters("s").await.unwrap();
+    let ssh_after = after.iter().find(|c| c.name == "ssh").unwrap();
+    assert_eq!(
+        ssh_after.packets, ssh.packets,
+        "a re-apply must not reset a counter"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// examples/firewall-observability.nll: its assertions pass, its scenario
+/// sees the probe in the counter, and it converges after counting.
+#[tokio::test]
+async fn firewall_observability_example_counts() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_observability_example_counts: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_observability_example_counts: no nftables");
+        return;
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall-observability.nll"
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
+    let result = nlink_lab::scenario::run_scenario(&lab, &topo.scenarios[0])
+        .await
+        .expect("scenario failed to run");
+    assert!(result.passed, "{result:?}");
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// A `log` rule installs and converges. Skipped where the host has no
+/// nftables logger (`nf_log_syslog`): the kernel then refuses the batch.
+#[tokio::test]
+async fn firewall_log_installs_and_converges() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_log_installs_and_converges: requires root");
+        return;
+    }
+    if !has_nftables() || !has_kernel_module("nf_log_syslog") {
+        eprintln!("skipping firewall_log_installs_and_converges: no nftables logger");
+        return;
+    }
+    let lab_name = format!("fwlog-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node c
+node s {{
+  firewall policy accept {{
+    drop tcp dport 22 log "ssh-drop: " counter
+  }}
+}}
+link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let nft = lab
+        .exec("s", "nft", &["list", "chain", "inet", "nlink-lab", "input"])
+        .unwrap()
+        .stdout;
+    assert!(nft.contains("log prefix \"ssh-drop: \""), "{nft}");
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "a log rule must converge:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── watch: nftables events nlink 0.30 delivers (#158) ───
 
 /// Set elements and named objects arrive typed; the generation event nlink

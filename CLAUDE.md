@@ -137,7 +137,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (42 top-level; 51 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (43 top-level; 52 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -200,7 +200,8 @@ cross-references (`${node.iface}`), multi-profile inheritance,
 inline impairments (`->` / `<-`), profiles, firewall (input/forward/output
 chains; `src`/`dst`, `iif`/`oif`, `!=`, port ranges; accept/drop/reject
 with `reject with tcp-reset`; named sets with `@set` lookups, interval and
-concatenated keys), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
+concatenated keys; `limit`/`counter`/`counter name`/`log` statements and a
+`validate { counter … }` assertion), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
 link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
 route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,
@@ -212,7 +213,7 @@ with optional `host-reachable` for root-namespace bridge),
 DNS resolution (`dns hosts` auto-generates `/etc/hosts` entries),
 macvlan/ipvlan (attach nodes to host physical interfaces),
 rich validation assertions (`tcp-connect` with `retries`/`interval`,
-`latency-under`, `route-has`, `dns-resolves`),
+`latency-under`, `route-has`, `dns-resolves`, `counter`),
 timed scenarios for fault injection (`scenario` block
 with `at`, `down`, `up`, `clear`, `validate`), performance benchmarks
 (`benchmark` block with `ping`/`iperf3` and `assert` thresholds),

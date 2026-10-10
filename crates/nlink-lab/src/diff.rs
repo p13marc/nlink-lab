@@ -45,9 +45,10 @@ pub struct TopologyDiff {
     pub qdiscs_changed: Vec<QdiscChange>,
 
     /// Per-node nftables ruleset changes (firewall + NAT, both
-    /// rooted in the same `nlink-lab` table). Reconcile is coarse:
-    /// any change triggers a full atomic flush + rebuild for the
-    /// affected node. Plan 152 Phase B.
+    /// rooted in the same `nlink-lab` table). One entry per node whose
+    /// rules differ; the `nftables` layer has the per-rule detail. The
+    /// apply reconciles rule by rule in one atomic batch. Plan 152
+    /// Phase B.
     pub nftables_changed: Vec<NftablesChange>,
 }
 
@@ -272,7 +273,7 @@ impl std::fmt::Display for TopologyDiff {
             let has_desired = n.desired_firewall.is_some() || n.desired_nat.is_some();
             match (has_desired, n.was_present) {
                 (true, false) => writeln!(f, "  + add nftables: {}", n.node)?,
-                (true, true) => writeln!(f, "  ~ rebuild nftables: {}", n.node)?,
+                (true, true) => writeln!(f, "  ~ change nftables: {}", n.node)?,
                 (false, _) => writeln!(f, "  - remove nftables: {}", n.node)?,
             }
         }
@@ -639,10 +640,10 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
     }
 
     // ── nftables (per-node firewall + NAT) ──
-    // Coarse reconcile: if either firewall OR nat differs on a
-    // node that exists on both sides, emit one NftablesChange.
-    // The apply path will atomically flush + rebuild the node's
-    // `nlink-lab` table.
+    // If either firewall OR nat differs on a node that exists on both
+    // sides, emit one NftablesChange. The apply reconciles the node's
+    // `nlink-lab` table rule by rule (the `nftables` layer of the
+    // layered diff has the detail).
     for (node_name, desired_node) in &desired.nodes {
         let Some(current_node) = current.nodes.get(node_name) else {
             continue;

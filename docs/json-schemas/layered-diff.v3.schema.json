@@ -793,7 +793,7 @@
           }
         },
         "nftables_changed": {
-          "description": "Per-node nftables ruleset changes (firewall + NAT, both\nrooted in the same `nlink-lab` table). Reconcile is coarse:\nany change triggers a full atomic flush + rebuild for the\naffected node. Plan 152 Phase B.",
+          "description": "Per-node nftables ruleset changes (firewall + NAT, both\nrooted in the same `nlink-lab` table). One entry per node whose\nrules differ; the `nftables` layer has the per-rule detail. The\napply reconciles rule by rule in one atomic batch. Plan 152\nPhase B.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/NftablesChange"

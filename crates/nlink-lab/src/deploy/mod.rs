@@ -2040,6 +2040,10 @@ validate {
                 dst: None,
                 target: None,
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         };
         let cfg = topology_to_nftables_config(None, Some(&nat)).unwrap();
@@ -2080,6 +2084,10 @@ validate {
                 dst: Some("203.0.113.1/32".into()),
                 target: Some("10.0.0.10".into()),
                 target_port: Some(8080),
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         };
         let cfg = topology_to_nftables_config(Some(&fw), Some(&nat)).unwrap();
@@ -2299,6 +2307,73 @@ node s {
         assert!(matches!(t.rules()[2].exprs().last(), Some(Expr::Objref(_))));
     }
 
+    /// #167: mangle statements lower to their nlink expressions; a clamp
+    /// rule matches SYNs; NAT qualifiers add their matches and nothing for
+    /// a rule without them.
+    #[test]
+    fn nftables_config_mangle_statements_and_nat_matches() {
+        use nlink::netlink::nftables::Expr;
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node gw {
+  firewall forward {
+    oif wan0 clamp mss pmtu
+    mark set 0x10/0xff ct mark save
+    oif wan0 tcp dport 22 classify 1:3
+  }
+  nat {
+    masquerade src 10.0.1.0/24
+    masquerade src 10.0.1.0/24 oif wan0
+    dnat dst 10.0.2.1 tcp dport 80 to 10.0.1.10:5201
+  }
+}
+qdisc gw:wan0 prio { bands 3 }
+"#,
+        )
+        .unwrap();
+        let fw = topo.effective_firewall(&topo.nodes["gw"]);
+        let cfg =
+            topology_to_nftables_config(fw.as_deref(), topo.nodes["gw"].nat.as_ref()).unwrap();
+        let t = &cfg.tables()[0];
+        let rule = |key: &str| {
+            t.rules()
+                .iter()
+                .find(|r| r.handle_key() == Some(key))
+                .unwrap()
+                .exprs()
+                .to_vec()
+        };
+        let clamp = rule("nlink-lab/fw/forward/0");
+        assert!(
+            clamp.iter().any(|e| matches!(e, Expr::Rt { .. })),
+            "{clamp:?}"
+        );
+        assert!(
+            clamp.iter().any(|e| matches!(e, Expr::ExthdrSet { .. })),
+            "{clamp:?}"
+        );
+        let marks = rule("nlink-lab/fw/forward/1");
+        assert!(marks.iter().any(|e| matches!(e, Expr::MetaSet { .. })));
+        assert!(marks.iter().any(|e| matches!(e, Expr::CtSet { .. })));
+        let classify = rule("nlink-lab/fw/forward/2");
+        assert!(
+            matches!(classify.last(), Some(Expr::MetaSet { .. })),
+            "{classify:?}"
+        );
+        let plain = rule("nlink-lab/nat/postrouting/0/masq");
+        let with_oif = rule("nlink-lab/nat/postrouting/1/masq");
+        assert_eq!(
+            with_oif.len(),
+            plain.len() + 2,
+            "oif adds a meta load and a compare"
+        );
+        let dnat = rule("nlink-lab/nat/prerouting/2/dnat");
+        assert!(
+            dnat.iter().any(|e| matches!(e, Expr::Payload { .. })),
+            "the port match"
+        );
+    }
+
     #[test]
     fn nftables_config_ip_keyword_with_v6_address_errors() {
         let fw = crate::types::FirewallConfig {
@@ -2335,6 +2410,10 @@ node s {
                     dst: None,
                     target: None,
                     target_port: None,
+                    proto: None,
+                    dport: None,
+                    iif: None,
+                    oif: None,
                 },
                 crate::types::NatRule {
                     action: crate::types::NatAction::Snat,
@@ -2342,6 +2421,10 @@ node s {
                     dst: None,
                     target: Some("fd00:1::1".into()),
                     target_port: None,
+                    proto: None,
+                    dport: None,
+                    iif: None,
+                    oif: None,
                 },
                 crate::types::NatRule {
                     action: crate::types::NatAction::Dnat,
@@ -2349,6 +2432,10 @@ node s {
                     dst: Some("2001:db8::1/128".into()),
                     target: Some("fd00:1::2".into()),
                     target_port: Some(8080),
+                    proto: None,
+                    dport: None,
+                    iif: None,
+                    oif: None,
                 },
             ],
         };
@@ -2369,6 +2456,10 @@ node s {
                 dst: None,
                 target: Some("10.0.0.1".into()),
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         };
         let err = validate_nat_rule_literals(&nat).unwrap_err();
@@ -2389,6 +2480,10 @@ node s {
                 dst: None,
                 target: None,
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         };
         validate_nat_rule_literals(&nat).unwrap();
@@ -2404,6 +2499,10 @@ node s {
                 dst: None,
                 target: None,
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         };
         let err = validate_nat_rule_literals(&nat).unwrap_err();
@@ -2422,6 +2521,10 @@ node s {
                 dst: None,
                 target: Some("not-an-ip".into()),
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         };
         let err = validate_nat_rule_literals(&nat).unwrap_err();

@@ -80,6 +80,7 @@ pub const RULE_IDS: &[&str] = &[
     "firewall-set-element",
     "firewall-statement",
     "assertion-counter-exists",
+    "invalid-nat-match",
     "mgmt-subnet-capacity",
     "vxlan-vni-range",
     "vxlan-underlay-address",
@@ -105,6 +106,7 @@ pub const RULE_IDS: &[&str] = &[
     "loss-correlation-suppresses-loss",
     "firewall-iface-exists",
     "firewall-set-unused",
+    "firewall-classify-no-effect",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -127,6 +129,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "loss-correlation-suppresses-loss",
     "firewall-iface-exists",
     "firewall-set-unused",
+    "firewall-classify-no-effect",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -403,6 +406,7 @@ impl Topology {
         validate_impairment_values(self, &mut issues);
         validate_nat_addresses(self, &mut issues);
         validate_nat_families(self, &mut issues);
+        validate_nat_matches(self, &mut issues);
         validate_firewall(self, &interfaces, &mut issues);
         validate_route_addresses(self, &mut issues);
         validate_mgmt_subnet(self, &mut issues);
@@ -1799,6 +1803,25 @@ fn validate_nat_addresses(topology: &Topology, issues: &mut Vec<ValidationIssue>
 /// NAT `src`/`dst` and `target` must belong to the same address family
 /// (`masquerade src fd00::/64` is NAT66; `snat src fd00::/64 to 10.0.0.1`
 /// can never match).
+/// A NAT rule's `iif`/`oif`/`dport` fit its action (#167).
+fn validate_nat_matches(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        let Some(nat) = &node.nat else {
+            continue;
+        };
+        for (i, rule) in nat.rules.iter().enumerate() {
+            if let Some(msg) = crate::deploy::plan::nftables::nat_match_problem(rule) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "invalid-nat-match",
+                    message: format!("node '{node_name}': {msg}"),
+                    location: Some(format!("nodes.{node_name}.nat.rules[{i}]")),
+                });
+            }
+        }
+    }
+}
+
 fn validate_nat_families(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in sorted(&topology.nodes) {
         let Some(nat) = &node.nat else {
@@ -1944,6 +1967,25 @@ fn validate_firewall(
                         },
                     });
                 }
+                if let Some(msg) = crate::firewall::check_statement_context(rule, chain) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "firewall-chain-context",
+                        message: format!("node '{node_name}': {msg}"),
+                        location: location.clone(),
+                    });
+                }
+                if rule.classify.is_some() && !node_has_classful_qdisc(topology, node_name) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Warning,
+                        rule: "firewall-classify-no-effect",
+                        message: format!(
+                            "node '{node_name}': `classify` sets a priority, but the node has no \
+                             `qdisc … prio` and no `rate` to read it"
+                        ),
+                        location: location.clone(),
+                    });
+                }
                 if let Err(msg) = crate::firewall::check_statements(rule) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
@@ -2016,6 +2058,17 @@ fn validate_firewall(
             });
         }
     }
+}
+
+/// Does any interface of `node` have a qdisc that reads a packet's
+/// priority (a `prio` block, or the HTB a `rate` builds)?
+fn node_has_classful_qdisc(topology: &Topology, node: &str) -> bool {
+    let on_node = |ep: &str| EndpointRef::parse(ep).is_some_and(|e| e.node == node);
+    topology
+        .qdiscs
+        .iter()
+        .any(|(ep, q)| on_node(ep) && matches!(q.kind, crate::types::QdiscKind::Prio { .. }))
+        || topology.rate_limits.keys().any(|ep| on_node(ep))
 }
 
 /// A set name nft and the NLL grammar both take.
@@ -3934,6 +3987,10 @@ rate a:eth0 egress 100mbit ingress 50mbit
                 dst: Some("203.0.113.0/24".into()),
                 target: Some("10.0.1.2".into()),
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         });
         topo.nodes.insert("fw".into(), node);
@@ -4265,6 +4322,10 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                     dst: None,
                     target: Some("10.0.0.1".into()),
                     target_port: None,
+                    proto: None,
+                    dport: None,
+                    iif: None,
+                    oif: None,
                 },
                 crate::types::NatRule {
                     action: crate::types::NatAction::Masquerade,
@@ -4272,6 +4333,10 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                     dst: None,
                     target: None,
                     target_port: None,
+                    proto: None,
+                    dport: None,
+                    iif: None,
+                    oif: None,
                 },
             ],
         });
@@ -4459,6 +4524,60 @@ validate {
         assert_eq!(c.len(), 1, "{:?}", result.issues());
         assert!(c[0].message.contains("`counter name nope`"));
         assert_eq!(c[0].location.as_deref(), Some("assertions[1].name"));
+    }
+
+    /// #167: statements that cannot work where they are, classify with
+    /// nothing to read it, NAT qualifiers on the wrong action.
+    #[test]
+    fn test_firewall_mangle_rules() {
+        let result = parse_and_validate(
+            r#"lab "t"
+node a {
+  firewall {
+    input {
+      clamp mss pmtu
+      classify 1:2
+      accept tcp dport 22 clamp mss 1200
+    }
+    forward { oif eth0 classify 1:3 }
+  }
+}
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        );
+        assert_eq!(
+            rules_of(&result, "firewall-chain-context").len(),
+            2,
+            "{:?}",
+            result.issues()
+        );
+        let act = rules_of(&result, "firewall-action");
+        assert!(act.iter().any(|i| {
+            i.message
+                .contains("`clamp mss` goes on a rule with no verdict")
+        }));
+        // classify twice, no prio qdisc / rate on the node
+        assert_eq!(rules_of(&result, "firewall-classify-no-effect").len(), 2);
+
+        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        topo.nodes.get_mut("r").unwrap().nat = Some(crate::types::NatConfig {
+            rules: vec![crate::types::NatRule {
+                action: crate::types::NatAction::Masquerade,
+                src: None,
+                dst: None,
+                target: None,
+                target_port: None,
+                proto: None,
+                dport: Some(80),
+                iif: None,
+                oif: None,
+            }],
+        });
+        let result = validate_topo(topo);
+        let nat = rules_of(&result, "invalid-nat-match");
+        assert_eq!(nat.len(), 1, "{:?}", result.issues());
+        assert!(nat[0].message.contains("needs its protocol"));
     }
 
     #[test]

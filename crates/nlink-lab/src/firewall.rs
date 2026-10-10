@@ -75,6 +75,14 @@ pub(crate) fn policy(p: Option<&str>) -> Result<Policy, String> {
     }
 }
 
+/// A 32-bit value written in decimal or `0x` hex.
+pub(crate) fn parse_u32(s: &str) -> Option<u32> {
+    match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        Some(hex) => u32::from_str_radix(hex, 16).ok(),
+        None => s.parse().ok(),
+    }
+}
+
 /// `ct state` names nftables knows.
 const CT_STATES: [&str; 5] = ["established", "related", "new", "invalid", "untracked"];
 
@@ -245,8 +253,14 @@ pub(crate) enum Clause {
     Icmp { v6: bool, ty: u8 },
     /// `ct state a,b`.
     CtState(Vec<String>),
-    /// `mark N`.
-    Mark(u32),
+    /// `mark V` or `mark V/M` (decimal or hex, as written in `text`).
+    Mark {
+        value: u32,
+        mask: Option<u32>,
+        text: String,
+    },
+    /// `ct mark V`.
+    CtMark { value: u32, text: String },
     /// `iifname|oifname [!=] NAME`.
     Iface { out: bool, neg: bool, name: String },
 }
@@ -404,12 +418,31 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
                 i += 3;
             }
             "mark" => {
-                let value = operand(i + 1)?;
-                let mark = value
-                    .parse::<u32>()
-                    .map_err(|_| format!("invalid mark '{value}' in firewall rule"))?;
-                out.push(Clause::Mark(mark));
+                let text = operand(i + 1)?;
+                let bad = || format!("invalid mark '{text}' in firewall rule");
+                let (value, mask) = match text.split_once('/') {
+                    Some((v, m)) => (
+                        parse_u32(v).ok_or_else(bad)?,
+                        Some(parse_u32(m).ok_or_else(bad)?),
+                    ),
+                    None => (parse_u32(text).ok_or_else(bad)?, None),
+                };
+                out.push(Clause::Mark {
+                    value,
+                    mask,
+                    text: text.to_string(),
+                });
                 i += 2;
+            }
+            "ct" if toks.get(i + 1) == Some(&"mark") => {
+                let text = operand(i + 2)?;
+                let value = parse_u32(text)
+                    .ok_or_else(|| format!("invalid ct mark '{text}' in firewall rule"))?;
+                out.push(Clause::CtMark {
+                    value,
+                    text: text.to_string(),
+                });
+                i += 3;
             }
             kw @ ("iifname" | "oifname") => {
                 let neg = toks.get(i + 1) == Some(&"!=");
@@ -482,7 +515,8 @@ impl Clause {
             }
             Clause::Icmp { v6, ty } => format!("{} {ty}", if *v6 { "icmpv6" } else { "icmp" }),
             Clause::CtState(states) => format!("ct {}", states.join(",")),
-            Clause::Mark(m) => format!("mark {m}"),
+            Clause::Mark { text, .. } => format!("mark {text}"),
+            Clause::CtMark { text, .. } => format!("ct mark {text}"),
             Clause::Iface { out, neg, name } => {
                 format!("{}{} {name}", if *out { "oif" } else { "iif" }, ne(*neg))
             }
@@ -580,7 +614,15 @@ impl Clause {
                 }
                 rule.match_ct_state(ct)
             }
-            Clause::Mark(m) => rule.match_mark(*m),
+            Clause::Mark {
+                value, mask: None, ..
+            } => rule.match_mark(*value),
+            Clause::Mark {
+                value,
+                mask: Some(mask),
+                ..
+            } => rule.match_mark_masked(*value, *mask),
+            Clause::CtMark { value, .. } => rule.match_ct_mark(*value),
             Clause::Iface {
                 out,
                 neg: false,
@@ -664,7 +706,8 @@ impl Clause {
             }
             Clause::Icmp { v6, ty } => format!("{} type {ty}", if *v6 { "icmpv6" } else { "icmp" }),
             Clause::CtState(states) => format!("ct state {}", states.join(",")),
-            Clause::Mark(m) => format!("mark {m}"),
+            Clause::Mark { text, .. } => format!("mark {text}"),
+            Clause::CtMark { text, .. } => format!("ct mark {text}"),
             Clause::Iface { out, neg, name } => format!(
                 "{}{} {name}",
                 if *out { "oifname" } else { "iifname" },
@@ -949,6 +992,12 @@ pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(
              a rule that only counts, logs or limits)"
         ));
     }
+    if rule.clamp_mss.is_some() && action != "continue" {
+        return Err(format!(
+            "`clamp mss` goes on a rule with no verdict: it matches TCP SYNs, so a `{action}` \
+             there would apply to SYNs only"
+        ));
+    }
     if action == "continue" && !rule.has_statement() {
         return Err(
             "a rule with no verdict must count, log or limit (`tcp dport 22 counter`)".to_string(),
@@ -1002,6 +1051,19 @@ pub(crate) fn check_statements(rule: &FirewallRule) -> Result<(), String> {
             ));
         }
     }
+    if rule.set_mark.is_some_and(|m| m.mask == Some(0)) {
+        return Err("`mark set V/0` changes no bit".to_string());
+    }
+    if let Some(h) = &rule.classify
+        && h.parse::<nlink::TcHandle>().is_err()
+    {
+        return Err(format!(
+            "classify '{h}' is not a tc class handle (like 1:10)"
+        ));
+    }
+    if rule.clamp_mss == Some(crate::types::MssClamp::Mss(0)) {
+        return Err("`clamp mss 0`: an MSS of 0 is not a size".to_string());
+    }
     if let Some(prefix) = rule.log.as_ref().and_then(|l| l.prefix.as_deref()) {
         // NF_LOG_PREFIXLEN is 128 with the NUL
         if prefix.len() > 127 || prefix.contains('\0') {
@@ -1011,6 +1073,25 @@ pub(crate) fn check_statements(rule: &FirewallRule) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// A statement that cannot work in `chain`.
+pub(crate) fn check_statement_context(rule: &FirewallRule, chain: Chain) -> Option<String> {
+    if chain == Chain::Input && rule.clamp_mss == Some(crate::types::MssClamp::Pmtu) {
+        return Some(
+            "`clamp mss pmtu` reads the route's MTU, which the kernel only allows in the \
+             forward and output chains"
+                .to_string(),
+        );
+    }
+    if chain == Chain::Input && rule.classify.is_some() {
+        return Some(
+            "`classify` in the input chain has no effect: a priority picks a qdisc class on the \
+             way out (forward or output)"
+                .to_string(),
+        );
+    }
+    None
 }
 
 /// Every named counter a firewall's rules count into (they are declared by
@@ -1032,6 +1113,11 @@ pub(crate) fn lower_rule(table: &str, chain: Chain, rule: &FirewallRule) -> Resu
     let mut r = Rule::new(table, chain.name()).family(Family::Inet);
     for c in &clauses {
         r = c.lower(r);
+    }
+    if rule.clamp_mss.is_some() {
+        // the MSS option rides on SYNs: `tcp flags syn / syn,rst`
+        use nlink::netlink::nftables::TcpFlags;
+        r = r.match_tcp_flags(TcpFlags::SYN, TcpFlags::SYN | TcpFlags::RST);
     }
     // Statements in a fixed order: the limit first (it is a match too), so
     // the counters and the log see only the packets the rule acts on.
@@ -1067,6 +1153,29 @@ pub(crate) fn lower_rule(table: &str, chain: Chain, rule: &FirewallRule) -> Resu
             e = e.group(g);
         }
         r = r.expr(e);
+    }
+    if let Some(m) = rule.set_mark {
+        r = match m.mask {
+            Some(mask) => r.set_mark_masked(m.value, mask),
+            None => r.set_mark(m.value),
+        };
+    }
+    match rule.ct_mark {
+        Some(crate::types::CtMarkAction::Set(v)) => r = r.set_ct_mark(v),
+        Some(crate::types::CtMarkAction::Save) => r = r.save_mark_to_ct(),
+        Some(crate::types::CtMarkAction::Restore) => r = r.restore_mark_from_ct(),
+        None => {}
+    }
+    if let Some(h) = &rule.classify {
+        let handle: nlink::TcHandle = h
+            .parse()
+            .map_err(|_| format!("classify '{h}' is not a tc class handle (like 1:10)"))?;
+        r = r.set_priority(handle);
+    }
+    match rule.clamp_mss {
+        Some(crate::types::MssClamp::Pmtu) => r = r.clamp_tcp_mss_to_pmtu(),
+        Some(crate::types::MssClamp::Mss(m)) => r = r.clamp_tcp_mss(m),
+        None => {}
     }
     use nlink::netlink::nftables::{NFT_REJECT_ICMPX_UNREACH, NFT_REJECT_TCP_RST};
     Ok(match rule.action.as_deref().unwrap_or("accept") {

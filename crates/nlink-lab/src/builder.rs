@@ -748,6 +748,13 @@ impl FirewallBuilder {
         self
     }
 
+    /// Add a complete input chain rule (statements included: counters,
+    /// log, limit, marks, classify, MSS clamping).
+    pub fn push_rule(mut self, rule: FirewallRule) -> Self {
+        self.config.rules.push(rule);
+        self
+    }
+
     /// Declare the forward chain (traffic routed through the node).
     pub fn forward(mut self, f: impl FnOnce(FirewallChainBuilder) -> FirewallChainBuilder) -> Self {
         self.config.forward = Some(f(FirewallChainBuilder::default()).chain);
@@ -849,6 +856,12 @@ impl FirewallChainBuilder {
         self.chain
             .rules
             .push(chain_rule(match_expr, "reject", Some(with)));
+        self
+    }
+
+    /// Add a complete rule (see [`FirewallBuilder::push_rule`]).
+    pub fn push_rule(mut self, rule: FirewallRule) -> Self {
+        self.chain.rules.push(rule);
         self
     }
 }

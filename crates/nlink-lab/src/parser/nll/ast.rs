@@ -428,6 +428,10 @@ pub struct FirewallRuleDef {
     pub counter: bool,
     pub counter_name: Option<String>,
     pub log: Option<crate::types::FirewallLog>,
+    pub set_mark: Option<crate::types::MarkValue>,
+    pub ct_mark: Option<crate::types::CtMarkAction>,
+    pub classify: Option<String>,
+    pub clamp_mss: Option<crate::types::MssClamp>,
 }
 
 /// NAT definition: rules and `for` loops in source order (rule order is
@@ -461,6 +465,12 @@ pub struct NatRuleDef {
     pub dst: Option<Val<IpOrCidr>>,
     pub target: Option<Val<IpOrCidr>>,
     pub target_port: Option<u16>,
+    /// `tcp|udp dport P` (dnat).
+    pub proto: Option<crate::types::NatProto>,
+    pub dport: Option<u16>,
+    /// `iif NAME` (dnat), `oif NAME` (masquerade, snat).
+    pub iif: Option<String>,
+    pub oif: Option<String>,
 }
 
 /// VRF definition.

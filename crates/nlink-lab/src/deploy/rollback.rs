@@ -46,6 +46,12 @@ pub enum Undo {
         ns: NsRef,
         iface: String,
     },
+    /// A `rate` limit: the root shaper, the `ffff:` ingress qdisc with its
+    /// redirect filter, and the `ifb_<iface>` device ingress shaping uses.
+    RemoveRateLimit {
+        ns: NsRef,
+        iface: String,
+    },
     /// A non-main-table route (`Op::Route`).
     DelRoute {
         ns: NsRef,
@@ -223,6 +229,13 @@ impl Journal {
                             .await;
                     }
                 }
+                Undo::RemoveRateLimit { ns, iface } => {
+                    if let Ok(conn) = ns.connection::<Route>() {
+                        let _ = nlink::netlink::ratelimit::RateLimiter::new(iface)
+                            .remove(&conn)
+                            .await;
+                    }
+                }
                 Undo::RemoveHosts { lab } => {
                     let _ = crate::dns::remove_hosts(lab);
                 }
@@ -291,7 +304,8 @@ impl Drop for Journal {
                 Undo::DeleteHostLink { .. }
                 | Undo::DeleteLink { .. }
                 | Undo::DelRoute { .. }
-                | Undo::ClearQdisc { .. } => {}
+                | Undo::ClearQdisc { .. }
+                | Undo::RemoveRateLimit { .. } => {}
             }
         }
         // The file stays so `destroy --orphans` can finish the netlink half.

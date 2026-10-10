@@ -3481,6 +3481,59 @@ rate a:eth0 egress 10mbit burst 64kbyte
     lab.destroy().await.expect("destroy failed");
 }
 
+/// Removing a `rate … ingress` removes all of it: the root shaper, the
+/// `ffff:` ingress qdisc with its redirect filter, and the `ifb_<iface>`
+/// device. Clearing only the root qdisc left the other two running (#158).
+#[tokio::test]
+async fn rate_limit_removal_takes_ingress_and_ifb() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping rate_limit_removal_takes_ingress_and_ifb: requires root");
+        return;
+    }
+    let lab_name = format!("rmrate-{}", std::process::id());
+    let src = |rate: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+{rate}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("rate a:eth0 egress 10mbit ingress 10mbit")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let qdiscs = |lab: &RunningLab| {
+        lab.exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+            .unwrap()
+            .stdout
+    };
+    let has_ifb = |lab: &RunningLab| {
+        lab.exec("a", "ip", &["link", "show", "ifb_eth0"])
+            .unwrap()
+            .exit_code
+            == 0
+    };
+    let out = qdiscs(&lab);
+    assert!(out.contains("qdisc htb"), "{out}");
+    assert!(out.contains("qdisc ingress"), "{out}");
+    assert!(has_ifb(&lab), "ingress shaping should create ifb_eth0");
+
+    let desired = nlink_lab::parser::parse(&src("")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (no rate) failed");
+    let out = qdiscs(&lab);
+    assert!(!out.contains("qdisc htb"), "root shaper left behind: {out}");
+    assert!(!out.contains("qdisc ingress"), "ingress qdisc left behind: {out}");
+    assert!(!has_ifb(&lab), "ifb_eth0 left behind");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── `qdisc` blocks reach tc and follow apply (#67) ─────
 
 #[tokio::test]

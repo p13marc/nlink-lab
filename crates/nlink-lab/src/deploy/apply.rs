@@ -719,7 +719,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 ))
             })?;
             tracing::debug!(endpoint = %format!("{node}:{iface}"), changes = report.changes_made, "rate limit reconcile complete");
-            journal.record(Undo::ClearQdisc {
+            journal.record(Undo::RemoveRateLimit {
                 ns: env.handle(node)?.clone(),
                 iface: iface.clone(),
             });
@@ -1046,7 +1046,19 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             }
             env.mgmt_peers.retain(|_, p| p != name);
         }
-        Op::ClearQdisc { node, iface } | Op::RemoveRateLimit { node, iface } => {
+        // A rate limit is more than its root qdisc: ingress shaping adds an
+        // `ffff:` qdisc with a redirect filter and an `ifb_<iface>` device,
+        // which clearing the root alone left running.
+        Op::RemoveRateLimit { node, iface } => {
+            if let Ok(conn) = env.route(node) {
+                RateLimiter::new(iface).remove(&conn).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to remove rate limit on '{node}:{iface}': {e}"
+                    ))
+                })?;
+            }
+        }
+        Op::ClearQdisc { node, iface } => {
             if let Ok(conn) = env.route(node) {
                 conn.del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
                     .await

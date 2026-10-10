@@ -4360,6 +4360,80 @@ validate {{ reach a b }}
     lab.destroy().await.expect("destroy failed");
 }
 
+// ─── watch: nftables events nlink 0.30 delivers (#158) ───
+
+/// Set elements and named objects arrive typed; the generation event nlink
+/// 0.30 sends after every committed batch does not show up at all.
+#[tokio::test]
+async fn watch_types_set_elements_and_objects_and_drops_generations() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping watch_types_set_elements_and_objects_and_drops_generations: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping watch_types_set_elements_and_objects_and_drops_generations: no nftables");
+        return;
+    }
+    let lab_name = format!("wnft-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let opts = nlink_lab::WatchOpts {
+        family: nlink_lab::WatchFamily::Nftables,
+        ..Default::default()
+    };
+    let (mut rx, tasks) = nlink_lab::watch_stream(&lab, &opts)
+        .unwrap()
+        .expect("nodes to watch");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    for cmd in [
+        "add table inet probe",
+        "add set inet probe s { type ipv4_addr ; }",
+        "add element inet probe s { 10.0.0.9 }",
+        "add counter inet probe c",
+    ] {
+        let args: Vec<&str> = cmd.split(' ').collect();
+        let out = lab.exec("a", "nft", &args).unwrap();
+        assert_eq!(out.exit_code, 0, "nft {cmd}: {}", out.stderr);
+    }
+    let mut kinds = Vec::new();
+    let mut raw = Vec::new();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
+        match tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await {
+            Ok(Some(ev)) if ev.node == "a" => {
+                let json = serde_json::to_value(&ev).unwrap();
+                kinds.push(json["kind"]["kind"].as_str().unwrap_or("?").to_string());
+                raw.push(json);
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => break,
+            Err(_) => continue,
+        }
+    }
+    for t in tasks {
+        t.abort();
+    }
+    for want in ["new_table", "new_set", "new_set_elements", "new_object"] {
+        assert!(kinds.iter().any(|k| k == want), "no {want} event: {raw:?}");
+    }
+    assert!(!kinds.iter().any(|k| k == "other"), "untyped event: {raw:?}");
+    let all = serde_json::to_string(&raw).unwrap();
+    assert!(!all.contains("NewGen"), "generation event leaked: {all}");
+    assert!(all.contains(r#""set":"s""#), "set name missing: {all}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── Bond options + Q-in-Q reach the kernel (#75) ───────
 
 #[tokio::test]

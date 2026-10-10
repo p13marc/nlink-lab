@@ -255,11 +255,46 @@ pub enum WatchEventKind {
     },
     NewSet {
         table: String,
+        /// The set's name (absent in events recorded before 0.14).
+        #[serde(default)]
+        set: String,
         family: String,
     },
     DelSet {
         table: String,
+        #[serde(default)]
+        set: String,
         family: String,
+    },
+    /// Elements added to a set (nlink 0.30 delivers these). Elements a
+    /// rule adds from the packet path (`add @set`) are not notified by
+    /// the kernel.
+    NewSetElements {
+        table: String,
+        set: String,
+        family: String,
+        elements: usize,
+    },
+    DelSetElements {
+        table: String,
+        set: String,
+        family: String,
+        elements: usize,
+    },
+    /// A named stateful object (counter, quota, limit) was added.
+    NewObject {
+        table: String,
+        name: String,
+        family: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        object_type: Option<String>,
+    },
+    DelObject {
+        table: String,
+        name: String,
+        family: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        object_type: Option<String>,
     },
     NewFlowtable {
         table: String,
@@ -369,8 +404,12 @@ impl WatchEventKind {
         }
     }
 
-    fn from_nftables(ev: NftablesEvent) -> Self {
-        match ev {
+    /// `None` for events that are not a change to watch: nlink 0.30
+    /// delivers a `NewGen` after every committed batch, nlink-lab's own
+    /// applies included.
+    fn from_nftables(ev: NftablesEvent) -> Option<Self> {
+        Some(match ev {
+            NftablesEvent::NewGen(_) => return None,
             NftablesEvent::NewTable(t) => Self::NewTable {
                 table: t.name,
                 family: format!("{:?}", t.family),
@@ -409,11 +448,37 @@ impl WatchEventKind {
             },
             NftablesEvent::NewSet(s) => Self::NewSet {
                 table: s.table,
+                set: s.name,
                 family: format!("{:?}", s.family),
             },
             NftablesEvent::DelSet(s) => Self::DelSet {
                 table: s.table,
+                set: s.name,
                 family: format!("{:?}", s.family),
+            },
+            NftablesEvent::NewSetElements(e) => Self::NewSetElements {
+                table: e.table,
+                set: e.set,
+                family: format!("{:?}", e.family),
+                elements: e.elements.len(),
+            },
+            NftablesEvent::DelSetElements(e) => Self::DelSetElements {
+                table: e.table,
+                set: e.set,
+                family: format!("{:?}", e.family),
+                elements: e.elements.len(),
+            },
+            NftablesEvent::NewObject(o) => Self::NewObject {
+                object_type: o.object_type().map(|t| format!("{t:?}").to_lowercase()),
+                table: o.table,
+                name: o.name,
+                family: format!("{:?}", o.family),
+            },
+            NftablesEvent::DelObject(o) => Self::DelObject {
+                object_type: o.object_type().map(|t| format!("{t:?}").to_lowercase()),
+                table: o.table,
+                name: o.name,
+                family: format!("{:?}", o.family),
             },
             NftablesEvent::NewFlowtable(f) => Self::NewFlowtable {
                 table: f.table,
@@ -426,7 +491,7 @@ impl WatchEventKind {
             other => Self::Other {
                 raw: format!("{other:?}"),
             },
-        }
+        })
     }
 }
 
@@ -705,6 +770,22 @@ fn short_kind(k: &WatchEventKind) -> String {
         WatchEventKind::DelFilter { ifindex, handle } => {
             format!("DelFilter if={ifindex} handle={handle}")
         }
+        WatchEventKind::NewSetElements {
+            table, set, elements, ..
+        } => format!("NewSetElements {table}/{set} +{elements}"),
+        WatchEventKind::DelSetElements {
+            table, set, elements, ..
+        } => format!("DelSetElements {table}/{set} -{elements}"),
+        WatchEventKind::NewObject {
+            table,
+            name,
+            object_type,
+            ..
+        } => format!(
+            "NewObject {table}/{name}{}",
+            object_type.as_deref().map(|t| format!(" ({t})")).unwrap_or_default()
+        ),
+        WatchEventKind::DelObject { table, name, .. } => format!("DelObject {table}/{name}"),
         WatchEventKind::Other { raw } => format!("Other {raw}"),
         other => format!("{other:?}"),
     }
@@ -956,6 +1037,9 @@ async fn run_nftables_subscription(
             ResyncedEvent::Marker(_) => continue,
             _ => continue,
         };
+        let Some(kind) = kind else {
+            continue;
+        };
         let watch_ev = WatchEvent {
             node: node.to_owned(),
             family: WatchFamily::Nftables,
@@ -1049,6 +1133,33 @@ mod tests {
 
     /// Plan 159b Phase 3 — `WatchOpts::default()` has no node
     /// filter and silences snapshot replays by default.
+    /// nlink 0.30 delivers set-element and object events; they render and
+    /// serialize typed. A `new_set` recorded before the `set` field
+    /// existed still reads back.
+    #[test]
+    fn set_element_and_object_events_render_typed() {
+        let ev = WatchEventKind::NewSetElements {
+            table: "nlink-lab".into(),
+            set: "blocked".into(),
+            family: "Inet".into(),
+            elements: 3,
+        };
+        assert_eq!(short_kind(&ev), "NewSetElements nlink-lab/blocked +3");
+        let json = serde_json::to_value(&ev).unwrap();
+        assert_eq!(json["kind"], "new_set_elements");
+        assert_eq!(json["elements"], 3);
+        let ev = WatchEventKind::NewObject {
+            table: "nlink-lab".into(),
+            name: "ssh-drops".into(),
+            family: "Inet".into(),
+            object_type: Some("counter".into()),
+        };
+        assert_eq!(short_kind(&ev), "NewObject nlink-lab/ssh-drops (counter)");
+        let old: WatchEventKind =
+            serde_json::from_str(r#"{"kind":"new_set","table":"t","family":"Inet"}"#).unwrap();
+        assert!(matches!(old, WatchEventKind::NewSet { set, .. } if set.is_empty()));
+    }
+
     #[test]
     fn watch_opts_defaults() {
         let opts = WatchOpts::default();

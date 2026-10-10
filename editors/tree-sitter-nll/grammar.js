@@ -230,17 +230,45 @@ module.exports = grammar({
         "}",
       ),
 
-    // A bare verdict matches every packet.
+    // A bare verdict matches every packet; a rule with no verdict counts,
+    // logs or limits. Newlines are whitespace here, so a statement on the
+    // next line attaches to the rule before it (prec.right) — the same
+    // highlighting either way.
     firewall_rule: ($) =>
-      seq(
-        choice("accept", "drop", seq("reject", optional(seq("with", $.identifier)))),
-        optional($.match_expression),
+      prec.right(
+        choice(
+          seq($._verdict, optional($.match_expression), repeat($.fw_statement)),
+          seq($.match_expression, repeat1($.fw_statement)),
+          repeat1($.fw_statement),
+        ),
+      ),
+
+    _verdict: ($) =>
+      choice("accept", "drop", seq("reject", optional(seq("with", $.identifier)))),
+
+    // `limit [over] 5/second [burst 10]`, `counter [name NAME]`,
+    // `log ["prefix"] [group N]`
+    fw_statement: ($) =>
+      prec.right(
+        choice(
+          seq(
+            "limit",
+            optional("over"),
+            $.integer,
+            "/",
+            $.identifier,
+            optional(seq("burst", $.integer)),
+          ),
+          seq("counter", optional(seq("name", $._name))),
+          seq("log", optional($.string), optional(seq("group", $.integer))),
+        ),
       ),
 
     match_expression: ($) =>
-      repeat1(
-        choice(
-          $.set_concat,
+      prec.right(
+        repeat1(
+          choice(
+            $.set_concat,
           seq(choice("src", "dst"), optional("!="), choice($._value, $.set_ref)),
           seq(
             choice("tcp", "udp"),
@@ -250,8 +278,9 @@ module.exports = grammar({
           ),
           seq(choice("icmp", "icmpv6"), optional($._value)),
           seq("ct", optional("state"), $.ct_states),
-          seq("mark", optional("!="), choice($._value, $.set_ref)),
-          seq(choice("iif", "oif"), optional("!="), $._value),
+            seq("mark", optional("!="), choice($._value, $.set_ref)),
+            seq(choice("iif", "oif"), optional("!="), $._value),
+          ),
         ),
       ),
 
@@ -544,6 +573,14 @@ module.exports = grammar({
               seq("interval", $.duration),
             ),
           ),
+        ),
+        seq(
+          "counter",
+          $._name,
+          $._name,
+          optional(choice("packets", "bytes")),
+          choice("==", "!=", ">", ">=", "<", "<="),
+          $.integer,
         ),
         seq(
           "latency-under",

@@ -1718,6 +1718,31 @@ async fn wireguard_config_reapply_is_zero_ops() {
         after.stdout
     );
 
+    // …and the WG layer itself has nothing left to do. nlink 0.29 diffed
+    // a peer as changed forever when its allowed IPs carried host bits
+    // (ours do: `10.0.0.2/24` style, `plan/wireguard.rs`) or the private
+    // key was not pre-clamped (nlink #410, #412).
+    let plan = nlink_lab::apply_plan(&lab, &topo).unwrap();
+    let mut checked = 0;
+    for op in &plan.ops {
+        let Op::Stack { node, cfg } = op else {
+            continue;
+        };
+        let Some(wg) = &cfg.wireguard else {
+            continue;
+        };
+        let conn = lab
+            .ns_resolver_of(node)
+            .expect("node handle")
+            .connection_async::<nlink::Wireguard>()
+            .await
+            .expect("wireguard connection");
+        let diff = wg.diff(&conn).await.expect("WireguardConfig::diff");
+        assert!(diff.is_empty(), "{node}: WireGuard diff after reapply: {diff:?}");
+        checked += 1;
+    }
+    assert!(checked >= 2, "expected both gateways to carry WireGuard");
+
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }

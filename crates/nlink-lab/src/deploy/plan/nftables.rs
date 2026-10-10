@@ -51,7 +51,12 @@ pub(crate) fn topology_to_nftables_config(
 
     let mut fw_chains = Vec::new();
     let mut fw_rules = Vec::new();
+    let mut fw_sets = Vec::new();
     if let Some(fw) = fw {
+        for (name, set) in &fw.sets {
+            let lowered = crate::firewall::lower_set(name, set).map_err(Error::deploy_failed)?;
+            fw_sets.push((name.clone(), lowered));
+        }
         for (chain, policy, rules) in crate::firewall::chains(fw) {
             let policy = crate::firewall::policy(policy).map_err(Error::deploy_failed)?;
             fw_chains.push((chain, policy));
@@ -68,6 +73,26 @@ pub(crate) fn topology_to_nftables_config(
     let nat_rules = nat.map(|n| n.rules.as_slice()).unwrap_or(&[]);
 
     cfg = cfg.table(NLINK_LAB_TABLE, Family::Inet, |mut t| {
+        // Sets before the rules that look them up (nlink orders the batch
+        // the same way).
+        for (name, set) in fw_sets {
+            t = t.set(name, move |mut s| {
+                s = s.key_type(set.key_type).elements(set.elements);
+                if set.interval {
+                    s = s.interval();
+                }
+                if let Some(n) = set.size {
+                    s = s.size(n);
+                }
+                if let Some(d) = set.timeout {
+                    s = s.timeout(d);
+                }
+                if set.dynamic {
+                    s = s.dynamic();
+                }
+                s
+            });
+        }
         for (chain, policy) in fw_chains {
             t = t.chain(chain.name(), |c| {
                 c.hook(chain.hook())

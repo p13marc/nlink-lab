@@ -455,6 +455,9 @@ fn firewall_match_to_nll(expr: &str) -> Result<String> {
             Clause::Iface { name, .. } => {
                 nll_name(name)?;
             }
+            Clause::InSet { set, .. } | Clause::Concat { set, .. } => {
+                nll_name(set)?;
+            }
             _ => {}
         }
     }
@@ -469,12 +472,31 @@ fn firewall_match_to_nll(expr: &str) -> Result<String> {
 /// `firewall policy P { … }`, so existing output is unchanged; otherwise
 /// the grouped `firewall { input … forward … output … }`.
 fn render_firewall(out: &mut String, indent: &str, fw: &FirewallConfig) -> Result<()> {
-    if fw.forward.is_none() && fw.output.is_none() {
+    if fw.forward.is_none() && fw.output.is_none() && fw.sets.is_empty() {
         let policy = fw.policy.as_deref().unwrap_or("accept");
         return render_firewall_chain(out, indent, "firewall", Some(policy), &fw.rules);
     }
     writeln!(out, "{indent}firewall {{").unwrap();
     let inner = format!("{indent}  ");
+    for (name, set) in &fw.sets {
+        let mut line = format!("set {}", nll_name(name)?);
+        if !set.key.is_empty() {
+            let key: Vec<&str> = set.key.iter().map(|k| k.as_str()).collect();
+            line.push(' ');
+            line.push_str(&key.join(" . "));
+        }
+        if let Some(n) = set.size {
+            line.push_str(&format!(" size {n}"));
+        }
+        if let Some(t) = &set.timeout {
+            line.push_str(&format!(" timeout {t}"));
+        }
+        if set.dynamic {
+            line.push_str(" dynamic");
+        }
+        line.push_str(&format!(" [{}]", set.elements.join(", ")));
+        writeln!(out, "{inner}{line}").unwrap();
+    }
     if fw.input_declared() {
         render_firewall_chain(out, &inner, "input", fw.policy.as_deref(), &fw.rules)?;
     }
@@ -2019,6 +2041,47 @@ node h {
         );
         assert!(
             rendered.contains("  firewall policy accept {\n    drop icmp 8"),
+            "{rendered}"
+        );
+    }
+
+    /// #164 wave C: sets render with their key, options and elements, and
+    /// round-trip with the set lookups.
+    #[test]
+    fn test_render_firewall_sets_roundtrip() {
+        let (_, rendered, _) = roundtrip(
+            r#"lab "t"
+
+node gw {
+  firewall {
+    set blocked [10.0.2.66, 10.0.9.0/24, 10.0.8.1-10.0.8.9]
+    set b6 [fd00:2::66]
+    set pub ipv4 . port [10.0.1.10 . 22, 10.0.1.0/24 . 8000-8999]
+    set q ipv4 dynamic timeout 300s size 1024
+    input policy drop {
+      drop src @blocked
+      drop src != @b6 tcp dport 22
+      accept dst . tcp dport @pub
+      drop src @q
+    }
+  }
+}
+"#,
+        );
+        assert!(
+            rendered.contains("    set blocked ipv4 [10.0.2.66, 10.0.9.0/24, 10.0.8.1-10.0.8.9]"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("    set q ipv4 size 1024 timeout 300s dynamic []"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("      accept dst . tcp dport @pub"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("      drop src != @b6 tcp dport 22"),
             "{rendered}"
         );
     }

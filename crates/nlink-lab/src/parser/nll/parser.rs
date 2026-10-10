@@ -1370,18 +1370,208 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
 /// [policy P] { … }`, or `firewall { … }` holding several of those (#164).
 fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallDef> {
     let mut def = ast::FirewallDef::default();
+    let item = |def: &mut ast::FirewallDef, pos: &mut usize| -> Result<()> {
+        if check_kw(tokens, *pos, "set") {
+            def.sets.push(parse_firewall_set(tokens, pos)?);
+        } else {
+            def.chains.push(parse_firewall_chain(tokens, pos)?);
+        }
+        Ok(())
+    };
     if eat(tokens, pos, &Token::LBrace) {
         loop {
             skip_newlines(tokens, pos);
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            def.chains.push(parse_firewall_chain(tokens, pos)?);
+            item(&mut def, pos)?;
         }
     } else {
-        def.chains.push(parse_firewall_chain(tokens, pos)?);
+        item(&mut def, pos)?;
     }
     Ok(def)
+}
+
+/// `set NAME [KEY (. KEY)*] [size N] [timeout D] [dynamic] [ELEM, …]` (#164).
+fn parse_firewall_set(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallSetDef> {
+    expect_kw(tokens, pos, "set")?;
+    let name = parse_name(tokens, pos)?;
+    let mut key = Vec::new();
+    if let Some(Token::Ident(w)) = at(tokens, *pos)
+        && crate::types::SetKey::parse(w).is_some()
+    {
+        loop {
+            let at_pos = *pos;
+            let w = expect_ident(tokens, pos)?;
+            key.push(crate::types::SetKey::parse(&w).ok_or_else(|| {
+                err(
+                    tokens,
+                    at_pos,
+                    format!("unknown set key '{w}' (expected ipv4, ipv6, port or mark)"),
+                )
+            })?);
+            if !eat(tokens, pos, &Token::Dot) {
+                break;
+            }
+        }
+    }
+    let mut size = None;
+    let mut timeout = None;
+    let mut dynamic = false;
+    loop {
+        if eat_kw(tokens, pos, "size") {
+            size = Some(expect_u32(tokens, pos, "size", 1)?);
+        } else if eat_kw(tokens, pos, "timeout") {
+            timeout = Some(expect_duration(tokens, pos)?.to_text()?);
+        } else if eat_kw(tokens, pos, "dynamic") {
+            dynamic = true;
+        } else {
+            break;
+        }
+    }
+    match at(tokens, *pos) {
+        None | Some(Token::LBracket | Token::Newline | Token::RBrace) => {}
+        Some(other) => {
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "unexpected {other} in set '{name}' (expected a key ipv4/ipv6/port/mark, \
+                     size, timeout, dynamic, or [elements])"
+                ),
+            ));
+        }
+    }
+    let mut elements = Vec::new();
+    if eat(tokens, pos, &Token::LBracket) {
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBracket) {
+                break;
+            }
+            let mut parts = vec![parse_set_part(tokens, pos)?];
+            while eat(tokens, pos, &Token::Dot) {
+                parts.push(parse_set_part(tokens, pos)?);
+            }
+            elements.push(parts.join(" . "));
+            skip_newlines(tokens, pos);
+            if !eat(tokens, pos, &Token::Comma) {
+                skip_newlines(tokens, pos);
+                expect(tokens, pos, &Token::RBracket)?;
+                break;
+            }
+        }
+    }
+    Ok(ast::FirewallSetDef {
+        name,
+        key,
+        elements,
+        size,
+        timeout,
+        dynamic,
+    })
+}
+
+/// One part of a set element: an address, a prefix, a port, a
+/// `${var}`, or a range of two of them (`10.0.0.1-10.0.0.9`, `80-89`).
+fn parse_set_part(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    let one = |pos: &mut usize, prefix_ok: bool| -> Result<String> {
+        match at(tokens, *pos) {
+            Some(Token::Ipv4Addr(s) | Token::Ipv6Addr(s) | Token::Int(s) | Token::Interp(s)) => {
+                *pos += 1;
+                Ok(s.clone())
+            }
+            Some(Token::Cidr(s) | Token::Ipv6Cidr(s)) if prefix_ok => {
+                *pos += 1;
+                Ok(s.clone())
+            }
+            other => Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected a set element (an address, prefix, port or range), found {}",
+                    other.map_or("end of input".to_string(), |t| t.to_string())
+                ),
+            )),
+        }
+    };
+    let a = one(pos, true)?;
+    if matches!(at(tokens, *pos), Some(Token::Dash))
+        && tokens[*pos].span.start == tokens[*pos - 1].span.end
+        && !a.contains('/')
+    {
+        *pos += 1;
+        let b = one(pos, false)?;
+        return Ok(format!("{a}-{b}"));
+    }
+    Ok(a)
+}
+
+/// `@name`: the `@` touching the name.
+fn parse_set_ref(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    expect(tokens, pos, &Token::At)?;
+    if *pos >= tokens.len() || tokens[*pos].span.start != tokens[*pos - 1].span.end {
+        return Err(err(
+            tokens,
+            *pos - 1,
+            "'@' needs a set name right after it".into(),
+        ));
+    }
+    Ok(format!("@{}", parse_name(tokens, pos)?))
+}
+
+/// A field a set can be keyed on, in a concatenation: `src`, `dst`,
+/// `tcp|udp dport|sport`, `mark`.
+fn parse_set_field(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    if eat_kw(tokens, pos, "src") {
+        return Ok("ip saddr".into());
+    }
+    if eat_kw(tokens, pos, "dst") {
+        return Ok("ip daddr".into());
+    }
+    if eat_kw(tokens, pos, "mark") {
+        return Ok("mark".into());
+    }
+    for proto in ["tcp", "udp"] {
+        if eat_kw(tokens, pos, proto) {
+            for dir in ["dport", "sport"] {
+                if eat_kw(tokens, pos, dir) {
+                    return Ok(format!("{proto} {dir}"));
+                }
+            }
+            return Err(err(
+                tokens,
+                *pos,
+                format!("expected 'dport' or 'sport' after '{proto}'"),
+            ));
+        }
+    }
+    Err(err(
+        tokens,
+        *pos,
+        format!(
+            "expected a field to concatenate (src, dst, tcp/udp dport/sport, mark), found {}",
+            at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+        ),
+    ))
+}
+
+/// After a first field and a `.`: the rest of `F . F … [!=] @set`.
+fn parse_concat_tail(tokens: &[Spanned], pos: &mut usize, first: String) -> Result<String> {
+    let mut fields = vec![first];
+    while eat(tokens, pos, &Token::Dot) {
+        fields.push(parse_set_field(tokens, pos)?);
+    }
+    let neg = eat_neq(tokens, pos);
+    if !matches!(at(tokens, *pos), Some(Token::At)) {
+        return Err(err(
+            tokens,
+            *pos,
+            "a concatenation is matched against a set: `src . tcp dport @name`".into(),
+        ));
+    }
+    let set = parse_set_ref(tokens, pos)?;
+    Ok(format!("{}{neg} {set}", fields.join(" . ")))
 }
 
 fn parse_firewall_chain(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallChainDef> {
@@ -1545,14 +1735,31 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     loop {
         if check_kw(tokens, *pos, "src") {
             *pos += 1;
+            if matches!(at(tokens, *pos), Some(Token::Dot)) {
+                parts.push(parse_concat_tail(tokens, pos, "ip saddr".into())?);
+                continue;
+            }
             let neg = eat_neq(tokens, pos);
-            let addr = parse_cidr_or_name(tokens, pos)?;
+            let addr = if matches!(at(tokens, *pos), Some(Token::At)) {
+                // the family is the set's, fixed after lowering
+                parse_set_ref(tokens, pos)?
+            } else {
+                parse_cidr_or_name(tokens, pos)?
+            };
             let family = if addr.contains(':') { "ip6" } else { "ip" };
             parts.insert(0, format!("{family} saddr{neg} {addr}")); // saddr first in nftables order
         } else if check_kw(tokens, *pos, "dst") {
             *pos += 1;
+            if matches!(at(tokens, *pos), Some(Token::Dot)) {
+                parts.push(parse_concat_tail(tokens, pos, "ip daddr".into())?);
+                continue;
+            }
             let neg = eat_neq(tokens, pos);
-            let addr = parse_cidr_or_name(tokens, pos)?;
+            let addr = if matches!(at(tokens, *pos), Some(Token::At)) {
+                parse_set_ref(tokens, pos)?
+            } else {
+                parse_cidr_or_name(tokens, pos)?
+            };
             let family = if addr.contains(':') { "ip6" } else { "ip" };
             // Insert after saddr if present, otherwise at start
             let insert_pos = parts
@@ -1608,7 +1815,16 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                     ),
                 ));
             };
+            if matches!(at(tokens, *pos), Some(Token::Dot)) {
+                parts.push(parse_concat_tail(tokens, pos, format!("{proto} {dir}"))?);
+                continue;
+            }
             let neg = eat_neq(tokens, pos);
+            if matches!(at(tokens, *pos), Some(Token::At)) {
+                let set = parse_set_ref(tokens, pos)?;
+                parts.push(format!("{proto} {dir}{neg} {set}"));
+                continue;
+            }
             let neg_at = *pos;
             let port = parse_port_or_range(tokens, pos)?;
             if !neg.is_empty() && port.contains('-') {
@@ -1632,6 +1848,23 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             parts.push(format!("icmpv6 type {icmp_type}"));
         } else if check_kw(tokens, *pos, "mark") {
             *pos += 1;
+            if matches!(at(tokens, *pos), Some(Token::Dot)) {
+                parts.push(parse_concat_tail(tokens, pos, "mark".into())?);
+                continue;
+            }
+            let neg = eat_neq(tokens, pos);
+            if matches!(at(tokens, *pos), Some(Token::At)) {
+                let set = parse_set_ref(tokens, pos)?;
+                parts.push(format!("mark{neg} {set}"));
+                continue;
+            }
+            if !neg.is_empty() {
+                return Err(err(
+                    tokens,
+                    *pos,
+                    "`mark !=` takes a set: `mark != @name`".into(),
+                ));
+            }
             let mark = expect_int(tokens, pos)?;
             parts.push(format!("mark {mark}"));
         } else if check_kw(tokens, *pos, "iif") || check_kw(tokens, *pos, "oif") {

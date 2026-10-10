@@ -381,6 +381,20 @@ pub struct RouteDef {
 #[derive(Debug, Clone, Default)]
 pub struct FirewallDef {
     pub chains: Vec<FirewallChainDef>,
+    pub sets: Vec<FirewallSetDef>,
+}
+
+/// `set NAME [KEY (. KEY)*] [size N] [timeout D] [dynamic] [ELEMENTS]`.
+#[derive(Debug, Clone)]
+pub struct FirewallSetDef {
+    pub name: String,
+    /// Empty: inferred from the elements.
+    pub key: Vec<crate::types::SetKey>,
+    /// As written (` . ` between the parts of a concatenation).
+    pub elements: Vec<String>,
+    pub size: Option<u32>,
+    pub timeout: Option<String>,
+    pub dynamic: bool,
 }
 
 /// One chain of a firewall property.

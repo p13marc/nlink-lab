@@ -75,6 +75,9 @@ pub const RULE_IDS: &[&str] = &[
     "firewall-policy",
     "firewall-action",
     "firewall-chain-context",
+    "firewall-set-undeclared",
+    "firewall-set-type",
+    "firewall-set-element",
     "mgmt-subnet-capacity",
     "vxlan-vni-range",
     "vxlan-underlay-address",
@@ -99,6 +102,7 @@ pub const RULE_IDS: &[&str] = &[
     "command-not-split",
     "loss-correlation-suppresses-loss",
     "firewall-iface-exists",
+    "firewall-set-unused",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -120,6 +124,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "command-not-split",
     "loss-correlation-suppresses-loss",
     "firewall-iface-exists",
+    "firewall-set-unused",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -1855,6 +1860,32 @@ fn validate_firewall(
         let Some(fw) = topology.effective_firewall(node) else {
             continue;
         };
+        let mut used: std::collections::BTreeSet<String> = Default::default();
+        for (name, set) in &fw.sets {
+            let location = Some(format!("nodes.{node_name}.firewall.sets.{name}"));
+            if !is_valid_set_name(name) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "invalid-name",
+                    message: format!(
+                        "node '{node_name}': set name '{name}' must start with a letter and hold \
+                         letters, digits, `_` and `-` (at most 64)"
+                    ),
+                    location: location.clone(),
+                });
+            }
+            if set.elements.iter().any(|e| e.contains("${")) {
+                continue;
+            }
+            if let Err(msg) = crate::firewall::lower_set(name, set) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "firewall-set-element",
+                    message: format!("node '{node_name}': {msg}"),
+                    location,
+                });
+            }
+        }
         for (chain, policy, rules) in crate::firewall::chains(&fw) {
             let base = match chain {
                 Chain::Input => format!("nodes.{node_name}.firewall"),
@@ -1886,6 +1917,31 @@ fn validate_firewall(
                         continue;
                     }
                 };
+                for c in &clauses {
+                    if let crate::firewall::Clause::InSet { set, .. }
+                    | crate::firewall::Clause::Concat { set, .. } = c
+                    {
+                        used.insert(set.clone());
+                    }
+                }
+                for (problem, msg) in crate::firewall::check_set_refs(&clauses, &fw.sets) {
+                    let message = format!("node '{node_name}': {msg}");
+                    let location = location.clone();
+                    issues.push(match problem {
+                        crate::firewall::SetRefProblem::Undeclared => ValidationIssue {
+                            severity: Severity::Error,
+                            rule: "firewall-set-undeclared",
+                            message,
+                            location,
+                        },
+                        crate::firewall::SetRefProblem::WrongKey => ValidationIssue {
+                            severity: Severity::Error,
+                            rule: "firewall-set-type",
+                            message,
+                            location,
+                        },
+                    });
+                }
                 if let Err(msg) = crate::firewall::check_verdict(rule, &clauses) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
@@ -1939,7 +1995,25 @@ fn validate_firewall(
                 }
             }
         }
+        for name in fw.sets.keys().filter(|n| !used.contains(n.as_str())) {
+            issues.push(ValidationIssue {
+                severity: Severity::Warning,
+                rule: "firewall-set-unused",
+                message: format!(
+                    "node '{node_name}': set '{name}' is declared but no rule uses it"
+                ),
+                location: Some(format!("nodes.{node_name}.firewall.sets.{name}")),
+            });
+        }
     }
+}
+
+/// A set name nft and the NLL grammar both take.
+fn is_valid_set_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && name.len() <= 64
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// VXLAN `local`/`remote` must be IP addresses of the same family (the
@@ -4282,6 +4356,51 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         assert!(act[1].message.contains("tcp-reset"));
         let m = rules_of(&result, "firewall-match-expr");
         assert!(m[0].message.contains("unknown ct state 'bogus'"), "{m:?}");
+    }
+
+    /// #164 wave C: set lookups name declared sets of the right key; sets
+    /// hold elements of their key; an unused set is a warning.
+    #[test]
+    fn test_firewall_set_rules() {
+        let result = parse_and_validate(
+            r#"lab "t"
+node a {
+  firewall {
+    set ok [10.0.0.1]
+    set ports [22]
+    set bad ipv4 [fd00::1]
+    set idle [10.0.0.9]
+    input policy drop {
+      drop src @ok
+      drop src @nope
+      drop tcp dport @ok
+      drop src @bad
+      accept tcp dport @ports
+    }
+  }
+}
+"#,
+        );
+        assert_eq!(
+            rules_of(&result, "firewall-set-undeclared").len(),
+            1,
+            "{:?}",
+            result.issues()
+        );
+        let ty = rules_of(&result, "firewall-set-type");
+        assert_eq!(ty.len(), 1, "{:?}", result.issues());
+        assert!(
+            ty[0]
+                .message
+                .contains("`tcp dport` looks up `port` in set '@ok'"),
+            "{ty:?}"
+        );
+        let el = rules_of(&result, "firewall-set-element");
+        assert_eq!(el.len(), 1);
+        assert_eq!(el[0].location.as_deref(), Some("nodes.a.firewall.sets.bad"));
+        let unused = rules_of(&result, "firewall-set-unused");
+        assert_eq!(unused.len(), 1);
+        assert!(unused[0].message.contains("'idle'"));
     }
 
     #[test]

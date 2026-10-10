@@ -317,6 +317,7 @@ fn lower_with_base_dir_and_params(
 
     // Post-lowering pass: resolve cross-references like ${router.eth0}
     resolve_cross_refs(&mut topology)?;
+    normalize_set_families(&mut topology);
     warn_unresolved_refs(&topology);
 
     // Post-lowering pass: expand `translate` NAT rules using topology addresses
@@ -840,6 +841,30 @@ fn normalize_match_family(expr: &str) -> String {
         i += 1;
     }
     out.join(" ")
+}
+
+/// `src @blocked` says nothing about the address family; the set's key
+/// does. Fix each set lookup's `ip`/`ip6` once every firewall is lowered
+/// and merged (a node's set may come from its profile).
+fn normalize_set_families(topology: &mut types::Topology) {
+    let fws = topology
+        .nodes
+        .values_mut()
+        .filter_map(|n| n.firewall.as_mut())
+        .chain(
+            topology
+                .profiles
+                .values_mut()
+                .filter_map(|p| p.firewall.as_mut()),
+        );
+    for fw in fws {
+        let sets = fw.sets.clone();
+        for rule in fw.all_rules_mut() {
+            if let Some(m) = &mut rule.match_expr {
+                *m = crate::firewall::normalize_set_families(m, &sets);
+            }
+        }
+    }
 }
 
 /// Warn about unresolved cross-references remaining after lowering.
@@ -2055,6 +2080,14 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
         ast::NodeProp::Lo(addr) => ast::NodeProp::Lo(i(addr, vars)),
         ast::NodeProp::Route(r) => ast::NodeProp::Route(interpolate_route(r, vars)),
         ast::NodeProp::Firewall(fw) => ast::NodeProp::Firewall(ast::FirewallDef {
+            sets: fw
+                .sets
+                .iter()
+                .map(|set| ast::FirewallSetDef {
+                    elements: set.elements.iter().map(|e| i(e, vars)).collect(),
+                    ..set.clone()
+                })
+                .collect(),
             chains: fw
                 .chains
                 .iter()
@@ -2569,6 +2602,21 @@ fn lower_profile(profile: &ast::ProfileDef) -> types::Profile {
 /// none (the rule matches every packet).
 fn lower_firewall(fw: &ast::FirewallDef, interp: impl Fn(&str) -> String) -> types::FirewallConfig {
     let mut out = types::FirewallConfig::default();
+    for set in &fw.sets {
+        let mut lowered = types::FirewallSet {
+            key: set.key.clone(),
+            elements: set.elements.iter().map(|e| interp(e)).collect(),
+            size: set.size,
+            timeout: set.timeout.clone(),
+            dynamic: set.dynamic,
+        };
+        // Store the key even when it was inferred, so topology JSON and
+        // `render` say it; one that cannot be inferred is the validator's.
+        if let Ok(key) = crate::firewall::set_key(&set.name, &lowered) {
+            lowered.key = key;
+        }
+        out.sets.insert(set.name.clone(), lowered);
+    }
     for c in &fw.chains {
         let rules: Vec<types::FirewallRule> = c
             .rules
@@ -2611,7 +2659,7 @@ fn lower_firewall(fw: &ast::FirewallDef, interp: impl Fn(&str) -> String) -> typ
 /// chain its profile gave it, and a second `firewall` property adds to the
 /// first instead of replacing it.
 fn merge_firewall(slot: &mut Option<types::FirewallConfig>, layer: types::FirewallConfig) {
-    if layer.input_declared() || layer.forward.is_some() || layer.output.is_some() {
+    if layer.declares_anything() {
         slot.get_or_insert_with(Default::default).merge_from(&layer);
     }
 }
@@ -4150,6 +4198,26 @@ node server {
 
     /// #164: chains, bare verdicts, `reject with`, iif/oif, `!=` and port
     /// ranges lower into the per-chain config.
+    const SETS_NLL: &str = r#"lab "t"
+node gw {
+  firewall {
+    set blocked [10.0.2.66, 10.0.9.0/24, 10.0.8.1-10.0.8.9]
+    set blocked6 [fd00:2::66]
+    set web port [80, 443, 8000-8999]
+    set published ipv4 . port [10.0.1.10 . 22, 10.0.1.0/24 . 8000-8999]
+    set quarantine ipv4 dynamic timeout 300s size 1024
+    forward policy drop {
+      drop src @blocked
+      drop src @blocked6
+      drop src @quarantine
+      accept dst . tcp dport @published
+      accept dst 10.0.1.20 tcp dport @web
+      drop src != @blocked tcp dport != @web
+    }
+  }
+}
+"#;
+
     #[test]
     fn test_lower_firewall_chains() {
         let topo = parse_and_lower(
@@ -4235,6 +4303,68 @@ node b : guarded {
             b.forward.as_ref().unwrap().rules[0].match_expr.as_deref(),
             Some("tcp dport 80")
         );
+    }
+
+    /// #164 wave C: named sets, keys inferred, set lookups in the family
+    /// of their set, concatenations.
+    #[test]
+    fn test_lower_firewall_sets() {
+        let topo = parse_and_lower(SETS_NLL);
+        let fw = topo.nodes["gw"].firewall.as_ref().unwrap();
+        use types::SetKey;
+        assert_eq!(fw.sets["blocked"].key, [SetKey::Ipv4], "inferred");
+        assert_eq!(fw.sets["blocked"].elements[2], "10.0.8.1-10.0.8.9");
+        assert_eq!(fw.sets["blocked6"].key, [SetKey::Ipv6]);
+        assert_eq!(fw.sets["web"].key, [SetKey::Port]);
+        assert_eq!(fw.sets["published"].key, [SetKey::Ipv4, SetKey::Port]);
+        assert_eq!(fw.sets["published"].elements[1], "10.0.1.0/24 . 8000-8999");
+        let q = &fw.sets["quarantine"];
+        assert!(q.dynamic && q.elements.is_empty());
+        assert_eq!((q.size, q.timeout.as_deref()), (Some(1024), Some("300s")));
+        let m: Vec<&str> = fw
+            .forward
+            .as_ref()
+            .unwrap()
+            .rules
+            .iter()
+            .map(|r| r.match_expr.as_deref().unwrap())
+            .collect();
+        assert_eq!(
+            m,
+            [
+                "ip saddr @blocked",
+                "ip6 saddr @blocked6",
+                "ip saddr @quarantine",
+                "ip daddr . tcp dport @published",
+                "ip daddr 10.0.1.20 tcp dport @web",
+                "ip saddr != @blocked tcp dport != @web",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_firewall_set_parse_errors() {
+        for (src, want) in [
+            ("firewall set s ipv5 [1]", "unexpected ipv5 in set 's'"),
+            ("firewall set s [10.0.0.1-]", "expected a set element"),
+            (
+                "firewall set s [10.0.0.1 10.0.0.2]",
+                "expected ], found 10.0.0.2",
+            ),
+            (
+                "firewall policy drop { drop src @ s }",
+                "needs a set name right after",
+            ),
+            (
+                "firewall policy drop { drop src . tcp dport 22 }",
+                "matched against a set",
+            ),
+            ("firewall policy drop { drop mark != 3 }", "takes a set"),
+        ] {
+            let full = format!("lab \"t\"\nnode a {{\n  {src}\n}}\n");
+            let (msg, _) = parse_err_span(&full);
+            assert!(msg.contains(want), "{src}: {msg}");
+        }
     }
 
     #[test]

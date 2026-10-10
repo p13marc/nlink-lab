@@ -1238,6 +1238,76 @@ pub struct FirewallConfig {
     /// Output chain. Left out, none is installed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<FirewallChain>,
+
+    /// Named sets rules match against (`src @blocked`), by name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sets: BTreeMap<String, FirewallSet>,
+}
+
+/// A named nftables set (`set blocked [10.0.0.0/8, 192.0.2.7]`): what a
+/// rule's `@name` looks up. An nftables set holds one key type, so an IPv4
+/// and an IPv6 blocklist are two sets.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FirewallSet {
+    /// The key: one field, or several concatenated (`ipv4 . port`).
+    pub key: Vec<SetKey>,
+
+    /// Elements as written: an address, a prefix (`10.0.0.0/24`), a range
+    /// (`10.0.0.1-10.0.0.9`, `8000-8999`), or for a concatenated key its
+    /// parts joined by ` . ` (`10.0.1.10 . 22`). A prefix or a range makes
+    /// it an interval set.
+    #[serde(default)]
+    pub elements: Vec<String>,
+
+    /// Maximum number of elements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u32>,
+
+    /// Default element lifetime (`300s`): elements expire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<String>,
+
+    /// Filled at run time (by hand, `nft add element`): `apply` adds the
+    /// declared elements and leaves the others.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dynamic: bool,
+}
+
+/// One field of a set key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SetKey {
+    /// An IPv4 address (`src`, `dst`).
+    Ipv4,
+    /// An IPv6 address (`src`, `dst`).
+    Ipv6,
+    /// A TCP/UDP port (`tcp dport`, …).
+    Port,
+    /// A packet mark (`mark`).
+    Mark,
+}
+
+impl SetKey {
+    /// The NLL spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ipv4 => "ipv4",
+            Self::Ipv6 => "ipv6",
+            Self::Port => "port",
+            Self::Mark => "mark",
+        }
+    }
+
+    /// Parse the NLL spelling.
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "ipv4" => Self::Ipv4,
+            "ipv6" => Self::Ipv6,
+            "port" => Self::Port,
+            "mark" => Self::Mark,
+            _ => return None,
+        })
+    }
 }
 
 /// One firewall chain besides input: its policy and rules.
@@ -1258,9 +1328,21 @@ impl FirewallConfig {
         self.policy.is_some() || !self.rules.is_empty()
     }
 
-    /// Lay `other`'s declared chains over these, chain by chain: a node's
-    /// `firewall forward { … }` keeps the input chain its profile gave it.
+    /// True when this declares anything at all.
+    pub fn declares_anything(&self) -> bool {
+        self.input_declared()
+            || self.forward.is_some()
+            || self.output.is_some()
+            || !self.sets.is_empty()
+    }
+
+    /// Lay `other`'s declared chains over these, chain by chain, and its
+    /// sets by name: a node's `firewall forward { … }` keeps the input
+    /// chain its profile gave it.
     pub fn merge_from(&mut self, other: &FirewallConfig) {
+        for (name, set) in &other.sets {
+            self.sets.insert(name.clone(), set.clone());
+        }
         if other.input_declared() {
             self.policy.clone_from(&other.policy);
             self.rules.clone_from(&other.rules);

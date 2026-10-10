@@ -184,6 +184,9 @@ pub enum Token {
     Dot,
     #[token("*")]
     Asterisk,
+    /// `@name`: a firewall set reference.
+    #[token("@")]
+    At,
     #[token("-", priority = 0)]
     Dash,
     #[token("/")]
@@ -328,6 +331,7 @@ impl std::fmt::Display for Token {
             Token::DotDot => write!(f, ".."),
             Token::Dot => write!(f, "."),
             Token::Asterisk => write!(f, "*"),
+            Token::At => write!(f, "@"),
             Token::Dash => write!(f, "-"),
             Token::Slash => write!(f, "/"),
             Token::Newline => write!(f, "newline"),
@@ -1217,7 +1221,7 @@ link router:eth0 -- host:eth0 {
             }
         }
         // An error after a comment points at the real offset too.
-        let src = "node a /* x */ @";
+        let src = "node a /* x */ ~";
         let err = lex(src).unwrap_err().to_string();
         assert!(err.contains("line 1, column 16"), "{err}");
     }

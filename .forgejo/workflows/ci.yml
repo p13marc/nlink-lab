@@ -193,12 +193,17 @@ jobs:
         run: ./node_modules/.bin/tree-sitter generate && git diff --exit-code -- src/
       - name: Corpus
         run: ./node_modules/.bin/tree-sitter test
+      # A parse that prints no tree at all must fail too: this step used to
+      # grep only for ERROR/MISSING, and it stayed green while
+      # examples/frr-bgp.nll (`validate retries … {`) did not parse, so in
+      # CI it was not parsing anything. `-p .` names this grammar.
       - name: Every example parses
         run: |
           status=0
           for f in ../../examples/*.nll ../../examples/*/*.nll; do
-            if ./node_modules/.bin/tree-sitter parse "$f" | grep -qE 'ERROR|MISSING'; then
-              echo "::error::$f does not parse with the tree-sitter grammar"; status=1
+            out=$(./node_modules/.bin/tree-sitter parse -p . "$f" 2>&1 || true)
+            if ! printf '%s' "$out" | grep -q '(source_file' || printf '%s' "$out" | grep -qE 'ERROR|MISSING'; then
+              echo "::error::$f does not parse with the tree-sitter grammar"; echo "$out" | tail -5; status=1
             fi
           done
           exit $status

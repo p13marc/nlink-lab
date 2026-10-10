@@ -3558,6 +3558,14 @@
         {
           "type": "assertion",
           "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
         }
       ]
     }

@@ -448,8 +448,18 @@ module.exports = grammar({
       ),
 
     // ── Validate / Scenario / Benchmark ─────────────
+    // `validate retries 30 interval 2s { … }`: the settle policy sits
+    // before the block, in any order.
     validate_block: ($) =>
-      seq("validate", "{", repeat($.assertion), "}"),
+      seq(
+        "validate",
+        repeat(
+          choice(seq("retries", $.integer), seq("interval", $.duration)),
+        ),
+        "{",
+        repeat($.assertion),
+        "}",
+      ),
 
     assertion: ($) =>
       choice(

@@ -54,6 +54,36 @@
     "removals"
   ],
   "$defs": {
+    "CtMarkAction": {
+      "description": "What a rule does to the connection mark.",
+      "oneOf": [
+        {
+          "description": "`ct mark set V`.",
+          "type": "object",
+          "properties": {
+            "set": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "set"
+          ]
+        },
+        {
+          "description": "`ct mark save`: the packet's mark into the connection.",
+          "type": "string",
+          "const": "save"
+        },
+        {
+          "description": "`ct mark restore`: the connection's mark onto the packet.",
+          "type": "string",
+          "const": "restore"
+        }
+      ]
+    },
     "FirewallChain": {
       "description": "One firewall chain besides input: its policy and rules.",
       "type": "object",
@@ -191,6 +221,24 @@
             "null"
           ]
         },
+        "clamp_mss": {
+          "description": "`clamp mss N|pmtu`: lower a TCP SYN's MSS option.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MssClamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "classify": {
+          "description": "`classify X:Y`: the packet's priority, which a `prio` qdisc turns\ninto a band and an HTB into a class (tc hex: `1:10` is minor 0x10).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "counter": {
           "description": "Count the packets and bytes the rule acts on (`counter`).",
           "type": "boolean"
@@ -200,6 +248,17 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "ct_mark": {
+          "description": "`ct mark set V`, `ct mark save`, `ct mark restore` (connmark).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CtMarkAction"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "limit": {
@@ -236,6 +295,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/RejectWith"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "set_mark": {
+          "description": "`mark set V[/M]`: set the packet mark (only the bits under the mask).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MarkValue"
             },
             {
               "type": "null"
@@ -433,6 +503,55 @@
         "endpoints"
       ]
     },
+    "MarkValue": {
+      "description": "A mark value, with the bits it applies to.",
+      "type": "object",
+      "properties": {
+        "mask": {
+          "description": "Only these bits; left out, all 32.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "value": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "value"
+      ]
+    },
+    "MssClamp": {
+      "description": "`clamp mss N` or `clamp mss pmtu`.",
+      "oneOf": [
+        {
+          "description": "To what the path allows (`tcp option maxseg size set rt mtu`).",
+          "type": "string",
+          "const": "pmtu"
+        },
+        {
+          "description": "To at most this value.",
+          "type": "object",
+          "properties": {
+            "mss": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "mss"
+          ]
+        }
+      ]
+    },
     "NatAction": {
       "description": "NAT action type.",
       "type": "string",
@@ -457,6 +576,14 @@
         }
       }
     },
+    "NatProto": {
+      "description": "The L4 protocol a NAT rule matches.",
+      "type": "string",
+      "enum": [
+        "tcp",
+        "udp"
+      ]
+    },
     "NatRule": {
       "description": "A single NAT rule.",
       "type": "object",
@@ -465,11 +592,46 @@
           "description": "NAT action.",
           "$ref": "#/$defs/NatAction"
         },
+        "dport": {
+          "description": "Only this destination port (needs `proto`).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
         "dst": {
           "description": "Destination CIDR match.",
           "type": [
             "string",
             "null"
+          ]
+        },
+        "iif": {
+          "description": "Only packets that came in on this interface (`dnat`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oif": {
+          "description": "Only packets going out of this interface (`masquerade`, `snat`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proto": {
+          "description": "Only this L4 protocol (`dnat … tcp dport 80`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NatProto"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "src": {

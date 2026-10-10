@@ -5188,6 +5188,285 @@ link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+// ─── firewall marks, classify, MSS clamping, NAT qualifiers (#167) ───
+
+/// Packets sent through `class` of the root qdisc on `node`:`iface`.
+fn tc_class_packets(lab: &RunningLab, node: &str, iface: &str, class: &str) -> u64 {
+    let out = lab
+        .exec(node, "tc", &["-s", "class", "show", "dev", iface])
+        .unwrap()
+        .stdout;
+    let mut lines = out.lines();
+    while let Some(line) = lines.next() {
+        // "class prio 1:3 parent 1:" then " Sent 1234 bytes 12 pkt (dropped …"
+        if line.split_whitespace().nth(2) == Some(class) {
+            let sent: Vec<&str> = lines
+                .next()
+                .unwrap_or_default()
+                .split_whitespace()
+                .collect();
+            return sent
+                .get(3)
+                .and_then(|n| n.parse().ok())
+                .unwrap_or_else(|| panic!("no packet count for {class}:\n{out}"));
+        }
+    }
+    panic!("no class {class} on {node}:{iface}:\n{out}");
+}
+
+/// The packet count of the first rule in an `nft list` output that
+/// contains `needle`.
+fn nft_rule_packets(listing: &str, needle: &str) -> u64 {
+    let line = listing
+        .lines()
+        .find(|l| l.contains(needle))
+        .unwrap_or_else(|| panic!("no rule with {needle:?} in:\n{listing}"));
+    line.split("packets ")
+        .nth(1)
+        .and_then(|s| s.split_whitespace().next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("no counter in {line:?}"))
+}
+
+/// A mark set under a mask keeps the bits outside it, `ct mark save` and
+/// `ct mark restore` carry the mark onto every later packet of the
+/// connection, `classify 1:3` puts the router's WAN-bound packets in the
+/// third band of its `prio` qdisc (which needs the qdisc at handle `1:`;
+/// it used to get `8001:`, and every packet fell back to the priomap), and
+/// `clamp mss pmtu` lowers the MSS a handshake announces to what the WAN's
+/// MTU allows.
+#[tokio::test]
+async fn firewall_marks_classify_and_mss_clamp_on_a_router() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_marks_classify_and_mss_clamp_on_a_router: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_marks_classify_and_mss_clamp_on_a_router: no nftables");
+        return;
+    }
+    let lab_name = format!("fwmk-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node r : router {{
+  firewall forward {{
+    oif wan0 clamp mss pmtu
+    ct mark restore
+    ct new tcp dport 5201 mark set 0x100
+    ct new tcp dport 5201 mark set 0x10/0xff ct mark save
+    oif wan0 mark 0x10/0xff counter name masked classify 1:3
+    oif wan0 mark 0x10 counter name exact
+    oif lan0 ct mark 0x110 counter name connmark
+  }}
+}}
+node s {{
+  route default via 10.0.1.1
+  run background ["iperf3", "-s", "-p", "5201"]
+}}
+node c {{ route default via 10.0.2.1 }}
+link r:lan0 -- s:eth0 {{ 10.0.1.1/24 -- 10.0.1.10/24 }}
+link r:wan0 -- c:eth0 {{
+  10.0.2.1/24 -- 10.0.2.10/24
+  mtu 1400
+}}
+qdisc r:wan0 prio {{ bands 3 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let qdisc = lab
+        .exec("r", "tc", &["qdisc", "show", "dev", "wan0"])
+        .unwrap()
+        .stdout;
+    assert!(qdisc.contains("qdisc prio 1: root"), "{qdisc}");
+
+    // count the MSS of the SYN-ACKs that reach c: s announces 1460 (its
+    // MTU is 1500), the clamp on r cuts it to 1400 - 40
+    let probe = "table inet mssprobe {\n chain in {\n  type filter hook input priority 0;\n  tcp flags & (syn | ack) == syn | ack tcp option maxseg size 1360 counter\n  tcp flags & (syn | ack) == syn | ack tcp option maxseg size 1460 counter\n }\n}\n";
+    let out = lab
+        .exec(
+            "c",
+            "bash",
+            &["-c", &format!("printf '%s' '{probe}' | nft -f -")],
+        )
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "probe table: {}", out.stderr);
+
+    for _ in 0..20 {
+        let ss = lab.exec("s", "ss", &["-ltn"]).unwrap();
+        if ss.stdout.contains(":5201 ") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let band3_before = tc_class_packets(&lab, "r", "wan0", "1:3");
+    for _ in 0..3 {
+        let (rc, _) = tcp_connect(&lab, "c", "10.0.1.10", 5201);
+        assert_eq!(rc, 0, "c must reach s:5201 through r");
+    }
+
+    let counters = lab.firewall_counters("r").await.unwrap();
+    let packets = |name: &str| counters.iter().find(|c| c.name == name).unwrap().packets;
+    assert!(
+        packets("masked") > 0,
+        "replies carry the restored mark: {counters:?}"
+    );
+    assert_eq!(
+        packets("exact"),
+        0,
+        "`mark set 0x10/0xff` keeps bit 8, so the mark is 0x110: {counters:?}"
+    );
+    assert!(
+        packets("connmark") > 0,
+        "the connection keeps the saved mark: {counters:?}"
+    );
+    let band3 = tc_class_packets(&lab, "r", "wan0", "1:3");
+    assert!(
+        band3 > band3_before,
+        "classify 1:3 must fill prio band 1:3 ({band3_before} -> {band3})"
+    );
+
+    let mss = lab
+        .exec("c", "nft", &["list", "chain", "inet", "mssprobe", "in"])
+        .unwrap()
+        .stdout;
+    assert!(
+        nft_rule_packets(&mss, "maxseg size 1360") > 0,
+        "SYN-ACKs must arrive clamped:\n{mss}"
+    );
+    assert_eq!(
+        nft_rule_packets(&mss, "maxseg size 1460"),
+        0,
+        "no SYN-ACK may keep s's MSS:\n{mss}"
+    );
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// NAT rules match what they name: a masquerade restricted to `oif wan0`
+/// leaves traffic out of wan1 alone, and a `dnat … iif wan0 tcp dport 80`
+/// rewrites neither pings nor the same port arriving on another
+/// interface.
+#[tokio::test]
+async fn nat_matches_interface_and_port() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping nat_matches_interface_and_port: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping nat_matches_interface_and_port: no nftables");
+        return;
+    }
+    let lab_name = format!("natq-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node r : router {{
+  nat {{
+    masquerade src 10.0.1.0/24 oif wan0
+    dnat dst 10.0.2.1 iif wan0 tcp dport 80 to 10.0.1.10:5201
+  }}
+}}
+node s {{
+  route default via 10.0.1.1
+  firewall policy accept {{ drop icmp 8 }}
+  run background ["iperf3", "-s", "-p", "5201"]
+}}
+node c
+node d {{ route 10.0.2.0/24 via 10.0.3.1 }}
+link r:lan0 -- s:eth0 {{ 10.0.1.1/24 -- 10.0.1.10/24 }}
+link r:wan0 -- c:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
+link r:wan1 -- d:eth0 {{ 10.0.3.1/24 -- 10.0.3.10/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    for _ in 0..20 {
+        let ss = lab.exec("s", "ss", &["-ltn"]).unwrap();
+        if ss.stdout.contains(":5201 ") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let ping = |from: &str, to: &str| {
+        lab.exec(from, "ping", &["-c", "1", "-W", "1", to])
+            .unwrap()
+            .exit_code
+    };
+
+    // c and d have no route to the LAN: only a masqueraded ping comes back
+    assert_eq!(ping("s", "10.0.2.10"), 0, "masqueraded out of wan0");
+    assert_ne!(
+        ping("s", "10.0.3.10"),
+        0,
+        "`oif wan0`: what leaves through wan1 keeps its LAN source"
+    );
+
+    // gw:80 from the WAN is s:5201
+    let (rc, _) = tcp_connect(&lab, "c", "10.0.2.1", 80);
+    assert_eq!(rc, 0, "dnat tcp dport 80 must reach s:5201");
+    // s drops pings, so this answer is r's own: `tcp dport 80` left ICMP alone
+    assert_eq!(ping("c", "10.0.2.1"), 0, "a ping to r must not be DNAT'd");
+    // other ports, and port 80 arriving on wan1, are r's (nothing listens)
+    let (rc, _) = tcp_connect(&lab, "c", "10.0.2.1", 5201);
+    assert!(
+        rc != 0 && rc != 124,
+        "port 5201 is not DNAT'd: refused by r"
+    );
+    let (rc, _) = tcp_connect(&lab, "d", "10.0.2.1", 80);
+    assert!(
+        rc != 0 && rc != 124,
+        "`iif wan0`: port 80 from wan1 is not DNAT'd: refused by r"
+    );
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// examples/firewall-qos.nll: its assertions pass, its scenario fills the
+/// `bulk` counter through the DNAT, and it converges.
+#[tokio::test]
+async fn firewall_qos_example_classifies_and_converges() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_qos_example_classifies_and_converges: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_qos_example_classifies_and_converges: no nftables");
+        return;
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/firewall-qos.nll"
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
+    let result = nlink_lab::scenario::run_scenario(&lab, &topo.scenarios[0])
+        .await
+        .expect("scenario failed to run");
+    assert!(result.passed, "{result:?}");
+    assert!(tc_class_packets(&lab, "gw", "wan0", "1:3") > 0);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── watch: nftables events nlink 0.30 delivers (#158) ───
 
 /// Set elements and named objects arrive typed; the generation event nlink

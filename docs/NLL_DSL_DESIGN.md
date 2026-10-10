@@ -449,6 +449,59 @@ validate { counter server ssh-drops == 0 }
 - Counters keep counting across `apply`. Validation:
   `firewall-statement`, `assertion-counter-exists`.
 
+**Statements: marks, classification, MSS.** A router can mark a
+connection once and act on the mark later, sort what it sends into the
+bands of a `prio` qdisc, and narrow TCP handshakes to a smaller MTU:
+
+```nll-ignore
+node gw : router {
+  firewall forward {
+    oif wan0 clamp mss pmtu                     # or: clamp mss 1360
+    ct mark restore                             # the connection's mark onto each packet
+    ct new tcp dport 5201 mark set 0x10/0xff ct mark save
+    oif wan0 icmp 8 classify 1:1
+    oif wan0 mark 0x10/0xff classify 1:3
+  }
+}
+qdisc gw:wan0 prio { bands 3 }
+```
+
+- `mark set V[/M]` sets the packet mark; with a mask only the bits under
+  `M` change. `mark V[/M]` matches the packet mark, `ct mark V` the
+  connection's. Marks are decimal or hex (`0x10`).
+- `ct mark set V` sets the connection's mark, `ct mark save` copies the
+  packet mark onto the connection and `ct mark restore` copies it back:
+  mark a connection's first packet, restore the mark on all the others.
+- `classify MAJOR:MINOR` sets the packet's priority, which picks a class
+  of the classful qdisc it leaves through: `classify 1:3` is the third
+  band of a `prio`. A root `qdisc` gets handle `1:` (labs deployed
+  before 0.14 keep a kernel-chosen handle, which `classify` misses, until
+  redeployed). It has no effect in the input chain
+  (`firewall-chain-context`); `firewall-classify-no-effect` warns when
+  the node has no `prio` qdisc or rate limit.
+- `clamp mss N` and `clamp mss pmtu` lower the MSS that TCP handshakes
+  passing the rule announce: to `N`, or to what the route's MTU allows
+  (forward and output chains only). An MSS is never raised. The rule
+  takes no verdict: it only sees SYNs, and the rest of the connection
+  goes on to the next rule.
+- With these, the statement order is limit, counter, named counter, log,
+  mark set, ct mark, classify, clamp mss, verdict.
+
+**NAT.** A `nat { … }` block (its own nftables chains, in the same
+table) rewrites addresses. Besides `src`/`dst`, a rule can name the
+interface and, for `dnat`, the destination port:
+
+```nll-ignore
+nat {
+  masquerade src 10.0.1.0/24 oif wan0         # only what leaves through wan0
+  dnat dst 10.0.2.1 iif wan0 tcp dport 80 to 10.0.1.10:5201
+}
+```
+
+`masquerade` and `snat` take `src` and `oif`; `dnat` takes `dst`, `iif`
+and `tcp`/`udp dport` (a `dnat` without a port rewrites every protocol,
+pings included). Validation: `invalid-nat-match`.
+
 Each rule's identity is its position (`nlink-lab/fw/<chain>/<index>`):
 an edited rule is replaced in place, and `apply` keeps the chain in
 declared order. Validation rules: `firewall-policy`, `firewall-action`,
@@ -1462,10 +1515,11 @@ nat_block      = "nat" "{" (nat_rule | "for" IDENT "in" (range | list) nat_block
 site           = "site" IDENT STRING? "{" statement* "}"
                # All node/link/network names inside are prefixed with "site-"
 
-nat_rule       = "masquerade" ("src" CIDR)?
-               | "dnat" ("dst" CIDR)? "to" (IP | "[" IP "]") (":" INT)?
+nat_rule       = "masquerade" ("src" CIDR | "oif" IDENT)*
+               | "dnat" ("dst" CIDR | "iif" IDENT | ("tcp" | "udp") "dport" INT)*
+                 "to" (IP | "[" IP "]") (":" INT)?
                # an IPv6 target with a port needs brackets: to [fd00::2]:8080
-               | "snat" ("src" CIDR)? "to" IP
+               | "snat" ("src" CIDR | "oif" IDENT)* "to" IP
                | "translate" CIDR "to" CIDR
 
 # ── Route (supports list destinations) ──────────
@@ -1559,11 +1613,17 @@ verdict        = "accept" | "drop" | "reject" ("with" reject_type)?
 fw_statement   = "limit" "over"? INT "/" ("second" | "minute" | "hour" | "day") ("burst" INT)?
                | "counter" ("name" IDENT)?
                | "log" STRING? ("group" INT)?
+               | "mark" "set" mark_value
+               | "ct" "mark" ("set" mark_value | "save" | "restore")
+               | "classify" INT ":" INT
+               | "clamp" "mss" (INT | "pmtu")
+mark_value     = (INT | HEX) ("/" (INT | HEX))?
 reject_type    = "tcp-reset" | "port-unreachable" | "host-unreachable"
                | "no-route" | "admin-prohibited"
 match_expr     = "ct" "state"? IDENT ("," IDENT)*
                | ("tcp" | "udp") ("dport" | "sport") "!="? (INT | INT "-" INT | set_ref)
-               | "icmp" INT | "icmpv6" INT | "mark" (INT | "!="? set_ref)
+               | "icmp" INT | "icmpv6" INT | "mark" (mark_value | "!="? set_ref)
+               | "ct" "mark" (INT | HEX)
                | ("src" | "dst") "!="? (CIDR | set_ref)
                | ("iif" | "oif") "!="? IDENT
                | set_field ("." set_field)+ "!="? set_ref
@@ -1606,6 +1666,7 @@ string_list    = "[" STRING ("," STRING)* "]"
 IDENT          = [a-zA-Z_][a-zA-Z0-9_-]*
 STRING         = '"' [^"]* '"'
 INT            = [0-9]+
+HEX            = "0" ("x" | "X") [0-9a-fA-F]+         # marks: 0x10/0xff
 CIDR           = IP "/" INT
 IP             = ipv4_addr | ipv6_addr
 DURATION       = (INT | FLOAT) ("s" | "ms" | "us" | "ns")

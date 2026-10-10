@@ -639,8 +639,18 @@ ssh-drops log "ssh: "`, `drop icmp 8 limit over 5/second`. A
 `validate { counter server ssh-drops > 0 }` assertion reads a named
 counter, and `nlink-lab inspect` lists them.
 
+A router can mark connections and shape what it sends: `ct new tcp dport
+5201 mark set 0x10/0xff ct mark save` marks a connection, `ct mark
+restore` puts the mark back on its later packets, `mark 0x10/0xff
+classify 1:3` sends them to the third band of a `qdisc gw:wan0 prio
+{ bands 3 }`, and `oif wan0 clamp mss pmtu` narrows TCP handshakes to the
+WAN's MTU. NAT rules take `oif` (masquerade, snat), `iif` and `tcp|udp
+dport` (dnat): `dnat dst 10.0.2.1 iif wan0 tcp dport 80 to
+10.0.1.10:5201`.
+
 See `examples/firewall.nll`, `examples/firewall-router.nll`,
-`examples/firewall-sets.nll` and `examples/firewall-observability.nll`.
+`examples/firewall-sets.nll`, `examples/firewall-observability.nll` and
+`examples/firewall-qos.nll`.
 
 ### 7. Bridge Networks with VLANs
 

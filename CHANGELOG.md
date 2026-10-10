@@ -90,6 +90,14 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   chain, so callers that need a reference use `.as_deref()`. A node
   whose `firewall` declares no input chain now keeps its profile's input
   chain.
+- **A root `qdisc` block is installed with handle `1:`** (#167). It used
+  to get a kernel-chosen handle (`8001:`), which a `prio` qdisc compares
+  with a packet's priority, so `classify 1:N` never picked a band. A
+  deployed lab keeps its old handle until the qdisc is redeployed (or
+  its block edited); `classify` misses it until then.
+- **`NatRule` has four new fields** (`proto`, `dport`, `iif`, `oif`;
+  library API). Code that builds one with a struct literal adds
+  `proto: None, dport: None, iif: None, oif: None`.
 
 ### Added
 
@@ -140,6 +148,27 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   - New validation rules: `firewall-statement` and
     `assertion-counter-exists`.
   - New example: `examples/firewall-observability.nll`.
+- **Firewall marks, classification and MSS clamping (#167).**
+  - `mark set V[/M]` sets the packet mark (only the bits under `M` with
+    a mask); `mark V/M` matches under a mask, `ct mark V` matches the
+    connection's mark. Marks may be written in hex (`0x10/0xff`).
+  - `ct mark set V`, `ct mark save` and `ct mark restore` set the
+    connection's mark, or copy it from or onto the packet.
+  - `classify 1:3` sets the packet's priority, which picks a band of a
+    `prio` qdisc (or a class of a rate limit's HTB) on the way out.
+  - `clamp mss N` and `clamp mss pmtu` lower the MSS of TCP handshakes
+    passing the rule, which takes no verdict.
+  - These statements follow the counting ones: limit, counter, named
+    counter, log, mark set, ct mark, classify, clamp mss, verdict.
+  - NAT rules match more: `masquerade`/`snat … oif IFACE`, and
+    `dnat … iif IFACE tcp|udp dport P` (a `dnat … to ADDR:PORT` without a
+    port match also rewrites pings).
+  - New validation rules: `invalid-nat-match` and
+    `firewall-classify-no-effect` (warning: no `prio` qdisc or rate limit
+    on the node); `firewall-statement` and `firewall-chain-context` cover
+    the new statements (`clamp mss pmtu` and `classify` need forward or
+    output).
+  - New example: `examples/firewall-qos.nll`.
 - **Changing a declared interface on a running lab** (see Migration).
   The network layer is planned with nlink's `preserve_undeclared_tc`, so
   a recreated link keeps nlink-lab's Tc, and with VRF routes declared,

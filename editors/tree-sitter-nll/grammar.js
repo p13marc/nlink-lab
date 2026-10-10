@@ -160,30 +160,50 @@ module.exports = grammar({
       ),
 
     // ── Firewall ────────────────────────────────────
+    // `firewall policy drop { … }` (the input chain), `firewall forward
+    // [policy P] { … }`, or `firewall { input … forward … output … }`.
     firewall_block: ($) =>
       seq(
         "firewall",
-        "policy",
-        choice("accept", "drop", "reject"),
+        choice($.firewall_chain, seq("{", repeat($.firewall_chain), "}")),
+      ),
+
+    firewall_chain: ($) =>
+      seq(
+        choice(
+          seq("policy", choice("accept", "drop")),
+          seq(
+            choice("input", "forward", "output"),
+            optional(seq("policy", choice("accept", "drop"))),
+          ),
+        ),
         "{",
         repeat($.firewall_rule),
         "}",
       ),
 
+    // A bare verdict matches every packet.
     firewall_rule: ($) =>
       seq(
-        choice("accept", "drop", "reject"),
+        choice("accept", "drop", seq("reject", optional(seq("with", $.identifier)))),
         optional($.match_expression),
       ),
 
     match_expression: ($) =>
       repeat1(
         choice(
-          seq(choice("src", "dst"), $._value),
-          seq(choice("tcp", "udp"), choice("dport", "sport"), $._value),
+          seq(choice("src", "dst"), optional("!="), $._value),
+          seq(
+            choice("tcp", "udp"),
+            choice("dport", "sport"),
+            optional("!="),
+            $._value,
+            optional(seq("-", $.integer)),
+          ),
           seq(choice("icmp", "icmpv6"), optional($._value)),
-          seq("ct", $.ct_states),
+          seq("ct", optional("state"), $.ct_states),
           seq("mark", $._value),
+          seq(choice("iif", "oif"), optional("!="), $._value),
         ),
       ),
 

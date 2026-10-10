@@ -77,12 +77,6 @@ fn vscode_grammar_highlights_every_keyword() {
         .filter(|k| !have.contains(*k))
         .collect();
     assert_subset(&missing, "VS Code grammar", &file);
-    // Value words (`hosts`, `auto`, `above`, …) are legitimately highlighted
-    // too; only flag words that were never part of the language.
-    assert!(
-        !have.contains("with"),
-        "VS Code grammar lists `with`, which NLL never had"
-    );
 }
 
 /// Keywords the tree-sitter grammar does not model yet. Shrink this

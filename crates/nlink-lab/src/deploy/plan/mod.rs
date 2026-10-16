@@ -101,7 +101,6 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
                 wireguard: wg,
             }),
         });
-        ops.extend(network::vrf_route_ops(node_name, node)?);
     }
 
     // ── traffic control ──
@@ -606,149 +605,65 @@ link a:eth0 -- b:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
     }
 
     #[test]
-    fn plan_emits_vrf_routes_as_ops_after_the_stack() {
+    fn plan_declares_vrf_routes_in_the_stack() {
+        // VRF-table routes are declared routes again: purge has covered
+        // every table a config declares into since nlink 0.27, and a
+        // declared route is what nlink restores after a link recreate.
         let p = plan_of(VRF);
-        let routes: Vec<&Op> = p.stage(Stage::Routes).collect();
-        assert_eq!(routes.len(), 2, "{routes:?}");
-        assert!(routes.iter().all(|o| matches!(
-            o,
-            Op::Route { node, route } if node == "pe" && route.table == 10
-        )));
-        let d: Vec<String> = routes.iter().map(|o| o.describe()).collect();
-        assert!(
-            d.contains(&"pe: route 0.0.0.0/0 table 10 via 10.10.0.10".to_string()),
-            "{d:?}"
-        );
-        assert!(
-            d.contains(&"pe: route 192.168.5.0/24 table 10 via 10.10.0.10 metric 50".to_string()),
-            "{d:?}"
-        );
-        // the stack no longer declares them
-        let stack_pos = p
+        let cfg = p
             .ops
             .iter()
-            .position(|o| matches!(o, Op::Stack { node, .. } if node == "pe"))
-            .unwrap();
-        let route_pos = p
-            .ops
+            .find_map(|o| match o {
+                Op::Stack { node, cfg } if node == "pe" => Some(cfg),
+                _ => None,
+            })
+            .expect("pe's stack");
+        let vrf: Vec<_> = cfg
+            .network
+            .routes()
             .iter()
-            .position(|o| matches!(o, Op::Route { .. }))
-            .unwrap();
-        assert!(stack_pos < route_pos);
-        if let Op::Stack { cfg, .. } = &p.ops[stack_pos] {
-            assert!(
-                cfg.network
-                    .routes()
-                    .iter()
-                    .all(|r| r.table().is_none_or(|t| t == 254))
-            );
-        }
-    }
-
-    #[test]
-    fn diff_removed_vrf_route_emits_del_route() {
-        let cur = plan_of(VRF);
-        let des = plan_of(&VRF.replace(
-            "    route 192.168.5.0/24 via 10.10.0.10 metric 50
-",
-            "",
-        ));
-        let d = Plan::diff(&cur, &des);
-        let dels: Vec<&Op> = d
-            .ops
-            .iter()
-            .filter(|o| matches!(o, Op::DelRoute { .. }))
+            .filter(|r| r.table() == Some(10))
             .collect();
-        assert_eq!(dels.len(), 1, "{:?}", d.ops);
-        assert_eq!(
-            dels[0].describe(),
-            "pe: delete route 192.168.5.0/24 table 10 via 10.10.0.10 metric 50"
-        );
-        assert!(
-            !d.ops.iter().any(|o| matches!(o, Op::Route { .. })),
-            "unchanged routes must not be re-added: {:?}",
-            d.ops
-        );
+        assert_eq!(vrf.len(), 2, "{vrf:?}");
     }
 
     #[test]
-    fn diff_changed_vrf_route_metric_deletes_then_replaces() {
+    fn diff_vrf_route_change_is_a_stack_change() {
         let cur = plan_of(VRF);
         let des = plan_of(&VRF.replace("metric 50", "metric 60"));
         let d = Plan::diff(&cur, &des);
-        let del = d
-            .ops
-            .iter()
-            .position(|o| matches!(o, Op::DelRoute { route, .. } if route.metric == Some(50)));
-        let add = d
-            .ops
-            .iter()
-            .position(|o| matches!(o, Op::Route { route, .. } if route.metric == Some(60)));
-        assert!(del.is_some() && add.is_some(), "{:?}", d.ops);
-        assert!(del < add, "delete must precede the replacement");
-    }
-
-    #[test]
-    fn diff_removed_vrf_node_skips_del_route() {
-        let cur = plan_of(VRF);
-        let des = plan_of(
-            &VRF.replace(
-                "node pe : router {
-  vrf red table 10 {
-    interfaces [eth1]
-    route default via 10.10.0.10
-    route 192.168.5.0/24 via 10.10.0.10 metric 50
-  }
-}
-",
-                "node pe : router
-",
-            )
-            .replace(
-                "link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
-",
-                "",
-            ),
-        );
-        // pe still exists but the link and the VRF are gone: DelRoute ops
-        // are emitted (pe is not dying)
-        let d = Plan::diff(&cur, &des);
-        assert_eq!(
+        assert!(
             d.ops
                 .iter()
-                .filter(|o| matches!(o, Op::DelRoute { .. }))
-                .count(),
-            2,
+                .any(|o| matches!(o, Op::Stack { node, .. } if node == "pe")),
             "{:?}",
             d.ops
-        );
-        // whereas a node that disappears entirely takes its routes with it
-        let des2 = plan_of("lab \"v\"\nnode a { route default via 10.10.0.1 }\n");
-        let d2 = Plan::diff(&cur, &des2);
-        assert!(
-            !d2.ops.iter().any(|o| matches!(o, Op::DelRoute { .. })),
-            "{:?}",
-            d2.ops
-        );
-        assert!(
-            d2.ops
-                .iter()
-                .any(|o| matches!(o, Op::DeleteNamespace { ns, .. } if ns == "v-pe"))
         );
     }
 
     #[test]
-    fn vrf_route_with_mismatched_family_is_a_plan_error() {
-        // `default via <v6>` is a valid v6 default route; a v4 destination
-        // with a v6 gateway is the mismatch.
+    fn vrf_route_via_an_ipv6_gateway_is_declared() {
+        // An IPv4 route via an IPv6 gateway (RFC 5549, `RTA_VIA`) is a
+        // route nlink 0.32 declares, in a VRF table as in main.
         let t = topo(&VRF.replace(
             "route 192.168.5.0/24 via 10.10.0.10 metric 50",
             "route 192.168.5.0/24 via fd00::1",
         ));
-        let err = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap_err();
+        let p = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap();
+        let routes: Vec<_> = p
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::Stack { node, cfg } if node == "pe" => Some(cfg.network.routes().to_vec()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
         assert!(
-            err.to_string().contains("different address families"),
-            "{err}"
+            routes
+                .iter()
+                .any(|r| r.gateway() == Some("fd00::1".parse().unwrap())),
+            "{routes:?}"
         );
     }
 

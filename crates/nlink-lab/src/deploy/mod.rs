@@ -316,6 +316,7 @@ pub async fn apply_with(
         applied: diff.ops.iter().map(|o| o.describe()).collect(),
     };
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
+    preflight_recreates(running, desired).await?;
 
     let env = apply::ApplyEnv::from_running(running, desired)?;
     let journal = Journal::new(running.name());
@@ -706,18 +707,15 @@ async fn apply_nftables_for_node(
 async fn apply_network_with_retry(
     cfg: &nlink::netlink::config::NetworkConfig,
     conn: &Connection<Route>,
-    purge: bool,
+    plan: nlink::netlink::config::PlanOptions,
 ) -> std::result::Result<nlink::netlink::config::ApplyResult, nlink::netlink::Error> {
     let mut backoff = std::time::Duration::from_millis(50);
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let res = if purge {
-            let opts = nlink::netlink::config::ApplyOptions::default().with_purge(true);
-            cfg.apply_with_options(conn, opts).await
-        } else {
-            cfg.apply(conn).await
-        };
+        let mut opts = nlink::netlink::config::ApplyOptions::default();
+        opts.plan = plan.clone();
+        let res = cfg.apply_with_options(conn, opts).await;
         match res {
             Err(e) if attempt < 3 && (e.is_busy() || e.is_try_again()) => {
                 tracing::debug!(attempt, "NetworkConfig::apply busy, retrying: {e}");
@@ -870,6 +868,28 @@ async fn apply_network_impairments(
 // `NftablesConfig` covering firewall + NAT and commits it
 // via `NftablesDiff::apply_reconcile`.
 
+/// The options a node's network layer is planned with, in an apply and
+/// in `apply --check` alike:
+///
+/// * purge in apply mode, also over the VRF tables the node declared
+///   routes into before (`previous_vrf_tables`): a table it no longer
+///   declares into is not in the config, so purge would otherwise leave
+///   its routes behind;
+/// * `preserve_undeclared_tc`: a link nlink recreates (a VLAN id, a VNI, a
+///   bond mode changed, nlink #417) keeps nlink-lab's netem, `qdisc`,
+///   rate limit and per-pair tree, which nlink snapshots before the
+///   delete and replays after (nlink #645). Without it nlink refuses the
+///   recreate, as that Tc is not in the config.
+pub(crate) fn network_plan_options(
+    purge: bool,
+    previous_vrf_tables: &[u32],
+) -> nlink::netlink::config::PlanOptions {
+    nlink::netlink::config::PlanOptions::default()
+        .purge(purge)
+        .purge_tables(previous_vrf_tables.iter().copied())
+        .preserve_undeclared_tc(true)
+}
+
 /// Apply the declarative [`NetworkConfig`] for one node.
 /// Plan 158e Slice 1.
 ///
@@ -880,12 +900,12 @@ async fn apply_network_config_for_node(
     node_handle: &NsRef,
     node_name: &str,
     cfg: nlink::netlink::config::NetworkConfig,
-    purge: bool,
+    plan: nlink::netlink::config::PlanOptions,
 ) -> Result<()> {
     // Skip the round-trip when the declared config is empty (no
     // addresses, no routes, no links, no qdiscs) — unless purging,
     // where "nothing declared" means "remove what is there".
-    if !purge
+    if !plan.purge
         && cfg.links().is_empty()
         && cfg.addresses().is_empty()
         && cfg.routes().is_empty()
@@ -905,7 +925,7 @@ async fn apply_network_config_for_node(
     // routes on managed interfaces are removed (nlink's conservative
     // purge — links and qdiscs are never touched). Retries on
     // EBUSY/EAGAIN like the nftables and WireGuard layers (#75).
-    let result = apply_network_with_retry(&cfg, &conn, purge)
+    let result = apply_network_with_retry(&cfg, &conn, plan)
         .await
         .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
 
@@ -961,7 +981,7 @@ async fn apply_stack_for_node(
     fw: Option<&crate::types::FirewallConfig>,
     nat: Option<&crate::types::NatConfig>,
     wireguard: Option<nlink::netlink::genl::wireguard::WireguardConfig>,
-    purge: bool,
+    plan: nlink::netlink::config::PlanOptions,
 ) -> Result<()> {
     // Plan 160 — bootstrap WG links *before* the NetworkConfig apply
     // so their tunnel addresses (declared on the network layer) land
@@ -970,7 +990,7 @@ async fn apply_stack_for_node(
     if let Some(cfg) = &wireguard {
         ensure_wireguard_devices_for_node(node_handle, node_name, cfg).await?;
     }
-    apply_network_config_for_node(node_handle, node_name, network, purge).await?;
+    apply_network_config_for_node(node_handle, node_name, network, plan).await?;
     apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
     if let Some(cfg) = wireguard {
         apply_wireguard_for_node(node_handle, node_name, cfg).await?;
@@ -989,9 +1009,9 @@ async fn apply_stack_for_node(
     fw: Option<&crate::types::FirewallConfig>,
     nat: Option<&crate::types::NatConfig>,
     _wireguard: Option<()>,
-    purge: bool,
+    plan: nlink::netlink::config::PlanOptions,
 ) -> Result<()> {
-    apply_network_config_for_node(node_handle, node_name, network, purge).await?;
+    apply_network_config_for_node(node_handle, node_name, network, plan).await?;
     apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
     tracing::info!(node = %node_name, "stack reconcile complete");
     Ok(())
@@ -1121,7 +1141,6 @@ pub async fn compute_layered_diff(
 
         // RTNETLINK side.
         let cfg = topology_to_network_config(node_name, node, desired, auto_routes.get(node_name))?;
-        let cfg = plan::network::with_vrf_routes(cfg, node_name, node)?;
         let cfg_is_empty = cfg.links().is_empty()
             && cfg.addresses().is_empty()
             && cfg.routes().is_empty()
@@ -1134,7 +1153,13 @@ pub async fn compute_layered_diff(
             // routes on managed interfaces are drift too — `apply`
             // removes them, so `apply --check` / `verify` must report
             // them (found by `verify` missing a hand-added address).
-            let opts = nlink::netlink::config::PlanOptions::default().purge(true);
+            let previous: Vec<u32> = running
+                .topology()
+                .nodes
+                .get(node_name)
+                .map(|n| n.vrfs.values().map(|v| v.table).collect())
+                .unwrap_or_default();
+            let opts = network_plan_options(true, &previous);
             let diff = cfg.diff_with_options(&conn, opts).await.map_err(|e| {
                 Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
             })?;
@@ -1161,6 +1186,69 @@ pub async fn compute_layered_diff(
         network,
         nftables,
     })
+}
+
+/// Refuse an apply before anything changes when it implies a link
+/// recreate nlink would refuse.
+///
+/// nlink recreates a declared link whose kind parameters cannot change in
+/// place (a VLAN id, a VNI, a bond mode, nlink #417), and refuses up front
+/// when the link carries state the config does not declare and the
+/// recreate would destroy (a permanent neighbour, a hand-added FDB entry
+/// or route, FRR's routes, nlink #426). That refusal comes from the
+/// `Stack` stage, after earlier stages of the same apply have run, so it
+/// is checked here first. nlink's offline prediction
+/// (`NetworkConfig::diff_against`) picks the nodes; only those pay for a
+/// read-only kernel diff.
+async fn preflight_recreates(running: &RunningLab, desired: &Topology) -> Result<()> {
+    let current = running.topology();
+    let cur_autos = auto_routes_for(current);
+    let des_autos = auto_routes_for(desired);
+    let mut refused = Vec::new();
+    for (node_name, node) in &desired.nodes {
+        let Some(prev) = current.nodes.get(node_name) else {
+            continue;
+        };
+        let des_cfg =
+            topology_to_network_config(node_name, node, desired, des_autos.get(node_name))?;
+        let cur_cfg =
+            topology_to_network_config(node_name, prev, current, cur_autos.get(node_name))?;
+        if des_cfg.diff_against(&cur_cfg).is_empty() {
+            continue;
+        }
+        let conn: Connection<Route> =
+            node_handle_for(running, node_name)?
+                .connection()
+                .map_err(|e| {
+                    Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
+                })?;
+        let previous: Vec<u32> = prev.vrfs.values().map(|v| v.table).collect();
+        let diff = des_cfg
+            .diff_with_options(&conn, network_plan_options(true, &previous))
+            .await
+            .map_err(|e| {
+                Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
+            })?;
+        for r in diff.links_to_recreate.iter().filter(|r| r.is_refused()) {
+            let blockers: Vec<String> = r.blocked_by.iter().map(ToString::to_string).collect();
+            refused.push(format!(
+                "{node_name}:{} ({}) carries {}",
+                r.name,
+                r.reason,
+                blockers.join(", ")
+            ));
+        }
+    }
+    if refused.is_empty() {
+        return Ok(());
+    }
+    Err(Error::deploy_failed(format!(
+        "apply would recreate a link that carries state the topology does not declare, \
+         and nothing has been changed: {}. Remove that state first (e.g. `ip neigh del`, \
+         a hand-added route or FDB entry; for FRR, take the link out of routing), or \
+         destroy and deploy the lab again.",
+        refused.join("; ")
+    )))
 }
 
 /// Run post-deploy `validate { … }` assertions (step 19).

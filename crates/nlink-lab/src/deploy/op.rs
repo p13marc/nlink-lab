@@ -166,9 +166,6 @@ pub enum Stage {
     Sysctls,
     /// Declarative per-node stack (links/addresses/routes, nftables, WireGuard).
     Stack,
-    /// Routes in non-main tables (VRF), owned explicitly because nlink's
-    /// purge only converges the main table (#83).
-    Routes,
     /// Traffic control: netem, per-pair impairments, rate limits.
     Tc,
     /// /etc/hosts and per-namespace /etc overlays.
@@ -180,35 +177,6 @@ pub enum Stage {
     Processes,
     /// hostapd / wpa_supplicant / mesh join.
     Wifi,
-}
-
-/// One route in a non-main table, fully resolved so the delete can
-/// replay exactly what the add declared (kernel route identity is
-/// destination + table + metric; gateway/dev disambiguate multipath).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RouteSpec {
-    pub dest: std::net::IpAddr,
-    pub prefix: u8,
-    pub table: u32,
-    pub via: Option<std::net::IpAddr>,
-    pub dev: Option<String>,
-    pub metric: Option<u32>,
-}
-
-impl std::fmt::Display for RouteSpec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{} table {}", self.dest, self.prefix, self.table)?;
-        if let Some(gw) = &self.via {
-            write!(f, " via {gw}")?;
-        }
-        if let Some(d) = &self.dev {
-            write!(f, " dev {d}")?;
-        }
-        if let Some(m) = self.metric {
-            write!(f, " metric {m}")?;
-        }
-        Ok(())
-    }
 }
 
 /// Bridge-port VLAN settings for one network member.
@@ -306,11 +274,6 @@ pub enum Op {
         node: String,
         cfg: Box<StackConfig>,
     },
-    /// A route in a non-main table (VRF); see [`Stage::Routes`].
-    Route {
-        node: String,
-        route: RouteSpec,
-    },
     Netem {
         node: String,
         iface: String,
@@ -383,10 +346,6 @@ pub enum Op {
         ns: String,
         name: String,
     },
-    DelRoute {
-        node: String,
-        route: RouteSpec,
-    },
     ClearQdisc {
         node: String,
         iface: String,
@@ -442,7 +401,6 @@ impl Op {
             LinksUp { .. } => Stage::LinksUp,
             Sysctls { .. } => Stage::Sysctls,
             Stack { .. } => Stage::Stack,
-            Route { .. } | DelRoute { .. } => Stage::Routes,
             Netem { .. }
             | NetworkImpairments
             | RateLimit { .. }
@@ -486,10 +444,6 @@ impl Op {
             LinksUp { node, .. } => format!("linksup:{node}"),
             Sysctls { node, .. } => format!("sysctls:{node}"),
             Stack { node, .. } => format!("stack:{node}"),
-            Route { node, route } | DelRoute { node, route } => format!(
-                "route:{node}:{}:{}/{}",
-                route.table, route.dest, route.prefix
-            ),
             Netem { node, iface, .. } | ClearQdisc { node, iface } => {
                 format!("qdisc:{node}:{iface}")
             }
@@ -562,10 +516,6 @@ impl Op {
                 node: node.clone(),
                 iface: cfg.name.clone(),
             },
-            Route { node, route } => DelRoute {
-                node: node.clone(),
-                route: route.clone(),
-            },
             Qdisc { node, iface, .. } => ClearQdisc {
                 node: node.clone(),
                 iface: iface.clone(),
@@ -599,7 +549,6 @@ impl Op {
                 | DeleteLink { .. }
                 | DeleteHostLink { .. }
                 | DeleteBridge { .. }
-                | DelRoute { .. }
                 | ClearQdisc { .. }
                 | RemoveRateLimit { .. }
                 | KillNodeProcesses { .. }
@@ -650,7 +599,6 @@ impl Op {
             Stack { node, .. } => {
                 format!("{node}: reconcile links/addresses/routes, nftables, wireguard")
             }
-            Route { node, route } => format!("{node}: route {route}"),
             Netem { node, iface, .. } => format!("netem on {node}:{iface}"),
             Qdisc { node, iface, qdisc } => {
                 format!("{} qdisc on {node}:{iface}", qdisc.kind.name())
@@ -682,7 +630,6 @@ impl Op {
             DeleteLink { node, iface } => format!("delete link {node}:{iface}"),
             DeleteHostLink { name } => format!("delete host link {name}"),
             DeleteBridge { ns, name } => format!("delete bridge {name} in {ns}"),
-            DelRoute { node, route } => format!("{node}: delete route {route}"),
             ClearQdisc { node, iface } => format!("clear qdisc on {node}:{iface}"),
             RemoveRateLimit { node, iface } => format!("remove rate limit on {node}:{iface}"),
             KillNodeProcesses { node } => format!("stop background processes of {node}"),
@@ -749,7 +696,6 @@ impl Plan {
         removals.retain(|o| match o {
             Op::DeleteBridge { ns, .. } => !dying_ns.contains(ns.as_str()),
             Op::DeleteLink { node, .. }
-            | Op::DelRoute { node, .. }
             | Op::ClearQdisc { node, .. }
             | Op::RemoveRateLimit { node, .. }
             | Op::KillNodeProcesses { node }

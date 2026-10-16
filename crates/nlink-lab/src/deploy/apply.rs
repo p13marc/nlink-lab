@@ -13,7 +13,7 @@ use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::{Connection, Route};
 
-use super::op::{Op, Plan, RouteSpec, Stage};
+use super::op::{Op, Plan, Stage};
 use super::rollback::{Journal, Undo};
 use super::{NsRef, apply_network_impairments, apply_stack_for_node, guard_namespace_absent};
 use crate::container::Runtime;
@@ -42,6 +42,9 @@ pub(super) struct ApplyEnv {
     pub wifi_loaded: bool,
     /// Reconcile the declarative layers with purge (apply mode).
     pub purge: bool,
+    /// The VRF tables each node declared routes into before this apply,
+    /// purged even when the node no longer declares into them.
+    pub previous_vrf_tables: BTreeMap<String, Vec<u32>>,
     /// Resolved FRR daemon binaries (filled by the preflight when the
     /// plan starts routing daemons, #65).
     pub frr_bins: BTreeMap<crate::frr::Daemon, std::path::PathBuf>,
@@ -71,6 +74,7 @@ impl ApplyEnv {
             dns_injected: false,
             wifi_loaded: false,
             purge: false,
+            previous_vrf_tables: BTreeMap::new(),
             frr_bins: BTreeMap::new(),
         })
     }
@@ -107,6 +111,12 @@ impl ApplyEnv {
         env.dns_injected = running.dns_injected();
         env.wifi_loaded = running.wifi_loaded();
         env.purge = true;
+        env.previous_vrf_tables = running
+            .topology()
+            .nodes
+            .iter()
+            .map(|(name, node)| (name.clone(), node.vrfs.values().map(|v| v.table).collect()))
+            .collect();
         Ok(env)
     }
 
@@ -620,7 +630,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 cfg.firewall.as_ref(),
                 cfg.nat.as_ref(),
                 wg,
-                env.purge,
+                super::network_plan_options(
+                    env.purge,
+                    env.previous_vrf_tables.get(node).map_or(&[], Vec::as_slice),
+                ),
             )
             .await?;
         }
@@ -1015,23 +1028,6 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             env.containers.remove(node);
             env.ns.remove(node);
         }
-        Op::Route { node, route } => {
-            let conn = env.route(node)?;
-            replace_route_spec(&conn, route).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to add route {route} on '{node}': {e}"))
-            })?;
-            journal.record(Undo::DelRoute {
-                ns: env.handle(node)?.clone(),
-                route: route.clone(),
-            });
-        }
-        Op::DelRoute { node, route } => {
-            if let Ok(conn) = env.route(node)
-                && let Err(e) = del_route_lenient(&conn, route).await
-            {
-                tracing::warn!("failed to delete route {route} on '{node}': {e}");
-            }
-        }
         Op::DeleteLink { node, iface } => {
             if let Ok(conn) = env.route(node)
                 && let Err(e) = conn.del_link_if_exists(iface.as_str()).await
@@ -1268,63 +1264,6 @@ fn exec_op(
         ),
     );
     Ok(())
-}
-
-/// `ip route replace` for a [`RouteSpec`] (idempotent).
-async fn replace_route_spec(
-    conn: &Connection<Route>,
-    spec: &RouteSpec,
-) -> std::result::Result<(), nlink::netlink::Error> {
-    match spec.dest {
-        std::net::IpAddr::V4(dst) => conn.replace_route(route_v4(spec, dst)).await,
-        std::net::IpAddr::V6(dst) => conn.replace_route(route_v6(spec, dst)).await,
-    }
-}
-
-/// `ip route del` for a [`RouteSpec`]; an already-absent route is not an
-/// error.
-///
-/// The ESRCH/not-found swallowing used to live here. nlink 0.27 added
-/// `del_route_if_exists` — table-aware, full-key, same errno treatment —
-/// so this is now just the `RouteSpec` → `Ipv4Route`/`Ipv6Route` bridge
-/// (nlink #333/#335).
-pub(super) async fn del_route_lenient(
-    conn: &Connection<Route>,
-    spec: &RouteSpec,
-) -> std::result::Result<(), nlink::netlink::Error> {
-    match spec.dest {
-        std::net::IpAddr::V4(dst) => conn.del_route_if_exists(route_v4(spec, dst)).await?,
-        std::net::IpAddr::V6(dst) => conn.del_route_if_exists(route_v6(spec, dst)).await?,
-    };
-    Ok(())
-}
-
-fn route_v4(spec: &RouteSpec, dst: std::net::Ipv4Addr) -> nlink::netlink::route::Ipv4Route {
-    let mut r = nlink::netlink::route::Ipv4Route::from_addr(dst, spec.prefix).table(spec.table);
-    if let Some(std::net::IpAddr::V4(gw)) = spec.via {
-        r = r.gateway(gw);
-    }
-    if let Some(d) = &spec.dev {
-        r = r.dev(d.clone());
-    }
-    if let Some(m) = spec.metric {
-        r = r.metric(m);
-    }
-    r
-}
-
-fn route_v6(spec: &RouteSpec, dst: std::net::Ipv6Addr) -> nlink::netlink::route::Ipv6Route {
-    let mut r = nlink::netlink::route::Ipv6Route::from_addr(dst, spec.prefix).table(spec.table);
-    if let Some(std::net::IpAddr::V6(gw)) = spec.via {
-        r = r.gateway(gw);
-    }
-    if let Some(d) = &spec.dev {
-        r = r.dev(d.clone());
-    }
-    if let Some(m) = spec.metric {
-        r = r.metric(m);
-    }
-    r
 }
 
 /// Assign a management address. IPv6 addresses are added with `nodad`

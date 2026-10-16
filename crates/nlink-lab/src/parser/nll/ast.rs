@@ -445,7 +445,7 @@ pub struct NatDef {
 /// One entry of a `nat { … }` block.
 #[derive(Debug, Clone)]
 pub enum NatItem {
-    Rule(NatRuleDef),
+    Rule(Box<NatRuleDef>),
     For(NatForLoop),
 }
 
@@ -471,6 +471,12 @@ pub struct NatRuleDef {
     /// `iif NAME` (dnat), `oif NAME` (masquerade, snat).
     pub iif: Option<String>,
     pub oif: Option<String>,
+    /// `to A-B`: the last address of the range (#189).
+    pub target_end: Option<Val<IpOrCidr>>,
+    /// `to :P-Q`: the last port of the range (#189).
+    pub target_port_end: Option<u16>,
+    /// `random`, `fully-random`, `persistent` (#189).
+    pub flags: Vec<crate::types::NatFlag>,
 }
 
 /// VRF definition.

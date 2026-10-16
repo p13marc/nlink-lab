@@ -548,9 +548,13 @@ fn render_firewall_chain(
             if l.over {
                 s.push_str("over ");
             }
-            s.push_str(&format!("{}/{}", l.rate, l.per.as_str()));
+            // A byte limit is written as a size (`1mb/second`, #189).
+            let amount = |n: u64| {
+                if l.bytes { size_text(n) } else { n.to_string() }
+            };
+            s.push_str(&format!("{}/{}", amount(l.rate), l.per.as_str()));
             if let Some(b) = l.burst {
-                s.push_str(&format!(" burst {b}"));
+                s.push_str(&format!(" burst {}", amount(u64::from(b))));
             }
             parts.push(s);
         }
@@ -567,6 +571,9 @@ fn render_firewall_chain(
             }
             if let Some(g) = l.group {
                 s.push_str(&format!(" group {g}"));
+            }
+            if let Some(level) = &l.level {
+                s.push_str(&format!(" level {level}"));
             }
             parts.push(s);
         }
@@ -596,6 +603,18 @@ fn render_firewall_chain(
     Ok(())
 }
 
+/// A byte count as an NLL size: `1mb`, `64kb`, `1.5kb` (1024-based, as
+/// `parse_size` reads them).
+fn size_text(n: u64) -> String {
+    const MB: u64 = 1024 * 1024;
+    if n >= MB && n.is_multiple_of(MB) {
+        format!("{}mb", n / MB)
+    } else {
+        let kb = format!("{:.3}", n as f64 / 1024.0);
+        format!("{}kb", kb.trim_end_matches('0').trim_end_matches('.'))
+    }
+}
+
 fn render_nat(out: &mut String, indent: &str, nat: &crate::types::NatConfig) -> Result<()> {
     writeln!(out, "{indent}nat {{").unwrap();
     for rule in &nat.rules {
@@ -611,51 +630,49 @@ fn render_nat(out: &mut String, indent: &str, nat: &crate::types::NatConfig) -> 
                 })
         };
         write!(out, "{indent}  ").unwrap();
+        // `src`/`oif` for the postrouting actions, `dst`/`iif`/port for the
+        // prerouting ones.
+        let post = |out: &mut String| -> Result<()> {
+            if let Some(src) = &rule.src {
+                write!(out, " src {}", nll_addr(src)?).unwrap();
+            }
+            if let Some(oif) = &rule.oif {
+                write!(out, " oif {}", nll_name(oif)?).unwrap();
+            }
+            Ok(())
+        };
+        let pre = |out: &mut String| -> Result<()> {
+            if let Some(dst) = &rule.dst {
+                write!(out, " dst {}", nll_addr(dst)?).unwrap();
+            }
+            if let Some(iif) = &rule.iif {
+                write!(out, " iif {}", nll_name(iif)?).unwrap();
+            }
+            if let (Some(proto), Some(port)) = (rule.proto, rule.dport) {
+                let p = match proto {
+                    crate::types::NatProto::Tcp => "tcp",
+                    crate::types::NatProto::Udp => "udp",
+                };
+                write!(out, " {p} dport {port}").unwrap();
+            }
+            Ok(())
+        };
         match rule.action {
             NatAction::Masquerade => {
                 out.push_str("masquerade");
-                if let Some(src) = &rule.src {
-                    write!(out, " src {}", nll_addr(src)?).unwrap();
-                }
-                if let Some(oif) = &rule.oif {
-                    write!(out, " oif {}", nll_name(oif)?).unwrap();
-                }
+                post(out)?;
+            }
+            NatAction::Redirect => {
+                out.push_str("redirect");
+                pre(out)?;
             }
             NatAction::Dnat => {
                 out.push_str("dnat");
-                if let Some(dst) = &rule.dst {
-                    write!(out, " dst {}", nll_addr(dst)?).unwrap();
-                }
-                if let Some(iif) = &rule.iif {
-                    write!(out, " iif {}", nll_name(iif)?).unwrap();
-                }
-                if let (Some(proto), Some(port)) = (rule.proto, rule.dport) {
-                    let p = match proto {
-                        crate::types::NatProto::Tcp => "tcp",
-                        crate::types::NatProto::Udp => "udp",
-                    };
-                    write!(out, " {p} dport {port}").unwrap();
-                }
-                let target = need(rule.target.as_ref(), "target")?;
-                match rule.target_port {
-                    // `[fd00::2]:8080` — an IPv6 target with a port needs
-                    // brackets, otherwise the lexer reads one address.
-                    Some(port) if target.contains(':') => {
-                        write!(out, " to [{target}]:{port}").unwrap();
-                    }
-                    Some(port) => write!(out, " to {target}:{port}").unwrap(),
-                    None => write!(out, " to {target}").unwrap(),
-                }
+                pre(out)?;
             }
             NatAction::Snat => {
                 out.push_str("snat");
-                if let Some(src) = &rule.src {
-                    write!(out, " src {}", nll_addr(src)?).unwrap();
-                }
-                if let Some(oif) = &rule.oif {
-                    write!(out, " oif {}", nll_name(oif)?).unwrap();
-                }
-                write!(out, " to {}", need(rule.target.as_ref(), "target")?).unwrap();
+                post(out)?;
             }
             NatAction::Translate => {
                 write!(
@@ -666,6 +683,36 @@ fn render_nat(out: &mut String, indent: &str, nat: &crate::types::NatConfig) -> 
                 )
                 .unwrap();
             }
+        }
+        // `to ADDR[-ADDR][:PORT[-PORT]]` (snat, dnat), `to :PORT[-PORT]`
+        // (masquerade, redirect), then the flags (#189).
+        if matches!(rule.action, NatAction::Snat | NatAction::Dnat) {
+            let target = need(rule.target.as_ref(), "target")?;
+            let range = match &rule.target_end {
+                Some(end) => format!("{target}-{}", nll_addr(end)?),
+                None => target.clone(),
+            };
+            match rule.target_port {
+                // `[fd00::2]:8080` — an IPv6 target with a port needs
+                // brackets, otherwise the lexer reads one address.
+                Some(_) if target.contains(':') => write!(out, " to [{range}]").unwrap(),
+                _ => write!(out, " to {range}").unwrap(),
+            }
+        } else if matches!(rule.action, NatAction::Masquerade | NatAction::Redirect)
+            && rule.target_port.is_some()
+        {
+            out.push_str(" to ");
+        }
+        if !matches!(rule.action, NatAction::Translate)
+            && let Some(port) = rule.target_port
+        {
+            write!(out, ":{port}").unwrap();
+            if let Some(end) = rule.target_port_end {
+                write!(out, "-{end}").unwrap();
+            }
+        }
+        for flag in &rule.flags {
+            write!(out, " {}", flag.name()).unwrap();
         }
         out.push('\n');
     }
@@ -2760,6 +2807,9 @@ node fw {
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         });
         topo.nodes.insert("fw".into(), fw);

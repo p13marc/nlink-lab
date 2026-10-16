@@ -3175,13 +3175,17 @@
       "type": "object",
       "properties": {
         "burst": {
-          "description": "Packets allowed above the rate in a burst (the kernel's default is 5).",
+          "description": "Packets (bytes) allowed above the rate in a burst (the kernel's\ndefault is 5 packets).",
           "type": [
             "integer",
             "null"
           ],
           "format": "uint32",
           "minimum": 0
+        },
+        "bytes": {
+          "description": "The rate and burst are bytes (`limit 1mb/second`), not packets\n(#189).",
+          "type": "boolean"
         },
         "over": {
           "description": "Act on the packets *above* the rate instead.",
@@ -3191,7 +3195,7 @@
           "$ref": "#/$defs/LimitPer"
         },
         "rate": {
-          "description": "Packets per `per`.",
+          "description": "Packets (or, with `bytes`, bytes) per `per`.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -3215,6 +3219,13 @@
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0
+        },
+        "level": {
+          "description": "The syslog level (`emerg` … `debug`); the kernel's default is\n`warn` (#189).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "prefix": {
           "description": "Text put before each logged packet.",
@@ -4795,12 +4806,21 @@
     },
     "NatAction": {
       "description": "NAT action type.",
-      "type": "string",
-      "enum": [
-        "masquerade",
-        "snat",
-        "dnat",
-        "translate"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "masquerade",
+            "snat",
+            "dnat",
+            "translate"
+          ]
+        },
+        {
+          "description": "`redirect … to :PORT`: to this node itself (#189).",
+          "type": "string",
+          "const": "redirect"
+        }
       ]
     },
     "NatConfig": {
@@ -4818,6 +4838,26 @@
       },
       "required": [
         "rules"
+      ]
+    },
+    "NatFlag": {
+      "description": "How a NAT rule picks its port or address (#189).",
+      "oneOf": [
+        {
+          "description": "`random`: the port is picked at random.",
+          "type": "string",
+          "const": "random"
+        },
+        {
+          "description": "`fully-random`: the port is picked fully at random.",
+          "type": "string",
+          "const": "fully-random"
+        },
+        {
+          "description": "`persistent`: a client gets the same address every time.",
+          "type": "string",
+          "const": "persistent"
+        }
       ]
     },
     "NatProto": {
@@ -4852,6 +4892,13 @@
             "string",
             "null"
           ]
+        },
+        "flags": {
+          "description": "`random`, `fully-random`, `persistent` (#189).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NatFlag"
+          }
         },
         "iif": {
           "description": "Only packets that came in on this interface (`dnat`).",
@@ -4892,8 +4939,25 @@
             "null"
           ]
         },
+        "target_end": {
+          "description": "The last address of a range (`snat to 203.0.113.1-203.0.113.9`),\n`target` the first (#189).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "target_port": {
           "description": "Target port for DNAT.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "target_port_end": {
+          "description": "The last port of a range (`to :40000-40010`), `target_port` the\nfirst (#189).",
           "type": [
             "integer",
             "null"

@@ -1767,6 +1767,9 @@ validate {
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         };
         let cfg = topology_to_nftables_config(None, Some(&nat)).unwrap();
@@ -1811,6 +1814,9 @@ validate {
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         };
         let cfg = topology_to_nftables_config(Some(&fw), Some(&nat)).unwrap();
@@ -2137,6 +2143,9 @@ qdisc gw:wan0 prio { bands 3 }
                     dport: None,
                     iif: None,
                     oif: None,
+                    target_end: None,
+                    target_port_end: None,
+                    flags: Vec::new(),
                 },
                 crate::types::NatRule {
                     action: crate::types::NatAction::Snat,
@@ -2148,6 +2157,9 @@ qdisc gw:wan0 prio { bands 3 }
                     dport: None,
                     iif: None,
                     oif: None,
+                    target_end: None,
+                    target_port_end: None,
+                    flags: Vec::new(),
                 },
                 crate::types::NatRule {
                     action: crate::types::NatAction::Dnat,
@@ -2159,6 +2171,9 @@ qdisc gw:wan0 prio { bands 3 }
                     dport: None,
                     iif: None,
                     oif: None,
+                    target_end: None,
+                    target_port_end: None,
+                    flags: Vec::new(),
                 },
             ],
         };
@@ -2183,6 +2198,9 @@ qdisc gw:wan0 prio { bands 3 }
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         };
         let err = validate_nat_rule_literals(&nat).unwrap_err();
@@ -2207,6 +2225,9 @@ qdisc gw:wan0 prio { bands 3 }
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         };
         validate_nat_rule_literals(&nat).unwrap();
@@ -2226,6 +2247,9 @@ qdisc gw:wan0 prio { bands 3 }
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         };
         let err = validate_nat_rule_literals(&nat).unwrap_err();
@@ -2248,6 +2272,9 @@ qdisc gw:wan0 prio { bands 3 }
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         };
         let err = validate_nat_rule_literals(&nat).unwrap_err();

@@ -137,7 +137,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (44 top-level; 53 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (45 top-level; 54 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -200,10 +200,11 @@ cross-references (`${node.iface}`), multi-profile inheritance,
 inline impairments (`->` / `<-`), profiles, firewall (input/forward/output
 chains; `src`/`dst`, `iif`/`oif`, `!=`, port ranges; accept/drop/reject
 with `reject with tcp-reset`; named sets with `@set` lookups, interval and
-concatenated keys; `limit`/`counter`/`counter name`/`log` statements and a
-`validate { counter … }` assertion; `mark set`/`ct mark set|save|restore`,
+concatenated keys; `limit` (packets or bytes)/`counter`/`counter name`/`log … level` statements and a
+`validate { counter … }` assertion; `rpf` anti-spoofing, `!=` port ranges, mark ranges; `mark set`/`ct mark set|save|restore`,
 `classify` into `prio` bands, `clamp mss`), NAT (`nat` block with
-`masquerade`/`snat`/`dnat`/`translate`, `iif`/`oif`/`tcp dport` qualifiers),
+`masquerade`/`snat`/`dnat`/`redirect`/`translate`, `iif`/`oif`/`tcp dport` qualifiers,
+address and port ranges, `random`/`fully-random`/`persistent`),
 link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
 route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,

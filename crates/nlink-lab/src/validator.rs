@@ -4132,6 +4132,9 @@ rate a:eth0 egress 100mbit ingress 50mbit
                 dport: None,
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         });
         topo.nodes.insert("fw".into(), node);
@@ -4467,6 +4470,9 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                     dport: None,
                     iif: None,
                     oif: None,
+                    target_end: None,
+                    target_port_end: None,
+                    flags: Vec::new(),
                 },
                 crate::types::NatRule {
                     action: crate::types::NatAction::Masquerade,
@@ -4478,6 +4484,9 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                     dport: None,
                     iif: None,
                     oif: None,
+                    target_end: None,
+                    target_port_end: None,
+                    flags: Vec::new(),
                 },
             ],
         });
@@ -4713,6 +4722,9 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
                 dport: Some(80),
                 iif: None,
                 oif: None,
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
             }],
         });
         let result = validate_topo(topo);

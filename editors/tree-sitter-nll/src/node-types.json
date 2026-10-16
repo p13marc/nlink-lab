@@ -994,6 +994,10 @@
           "named": true
         },
         {
+          "type": "size",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         }
@@ -4306,6 +4310,10 @@
     "named": false
   },
   {
+    "type": "fully-random",
+    "named": false
+  },
+  {
     "type": "fwmark",
     "named": false
   },
@@ -4475,6 +4483,10 @@
   },
   {
     "type": "let",
+    "named": false
+  },
+  {
+    "type": "level",
     "named": false
   },
   {
@@ -4663,6 +4675,10 @@
     "named": true
   },
   {
+    "type": "persistent",
+    "named": false
+  },
+  {
     "type": "perturb",
     "named": false
   },
@@ -4719,6 +4735,10 @@
     "named": false
   },
   {
+    "type": "random",
+    "named": false
+  },
+  {
     "type": "rate",
     "named": false
   },
@@ -4732,6 +4752,10 @@
   },
   {
     "type": "reach",
+    "named": false
+  },
+  {
+    "type": "redirect",
     "named": false
   },
   {
@@ -4776,6 +4800,10 @@
   },
   {
     "type": "routing",
+    "named": false
+  },
+  {
+    "type": "rpf",
     "named": false
   },
   {

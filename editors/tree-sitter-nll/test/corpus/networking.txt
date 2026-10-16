@@ -402,3 +402,53 @@ node gw {
           (integer)
           (ipv4_address)
           (integer))))))
+
+================
+nlink 0.32 firewall and NAT statements
+================
+node gw {
+  firewall forward {
+    drop rpf counter name spoofed
+    accept limit 1mb/second burst 64kb
+  }
+  firewall output { log "out: " level info }
+  nat {
+    snat src 10.0.1.0/24 oif wan0 to 203.0.113.1-203.0.113.9:40000-40010 fully-random
+    redirect iif lan0 tcp dport 80 to :3128
+  }
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_chain
+          (firewall_rule
+            (match_expression)
+            (fw_statement
+              (identifier)))
+          (firewall_rule
+            (fw_statement
+              (size)
+              (identifier)
+              (size)))))
+      (firewall_block
+        (firewall_chain
+          (firewall_rule
+            (fw_statement
+              (string)
+              (identifier)))))
+      (nat_block
+        (nat_rule
+          (cidr)
+          (identifier)
+          (ipv4_address)
+          (ipv4_address)
+          (integer)
+          (integer))
+        (nat_rule
+          (identifier)
+          (integer)
+          (integer))))))

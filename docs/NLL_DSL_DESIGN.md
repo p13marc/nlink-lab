@@ -435,13 +435,15 @@ validate { counter server ssh-drops == 0 }
 - `limit [over] N/second|minute|hour|day [burst N]` — the rule acts only
   on packets under the rate (with `over`, above it). Put a limit before
   `accept ct established,related`: every echo after the first is
-  established, so a limit after it never sees them.
+  established, so a limit after it never sees them. A size makes it a
+  byte rate: `limit 1mb/second burst 64kb`.
 - `counter` counts packets and bytes; `counter name NAME` counts into a
   named counter, declared by use, which `inspect` lists and a
   `validate { counter NODE NAME [packets|bytes] OP N }` assertion reads
   (`==`, `!=`, `>`, `>=`, `<`, `<=`).
-- `log ["prefix"] [group N]` logs the packet (see TROUBLESHOOTING: in a
-  lab node the kernel prints nothing by default).
+- `log ["prefix"] [group N] [level L]` logs the packet, at a syslog
+  level (`emerg` … `debug`, the kernel's default `warn`). See
+  TROUBLESHOOTING: in a lab node the kernel prints nothing by default.
 - Statements run in a fixed order — limit, counter, named counter, log,
   then the verdict — so the counters and the log see only the packets
   the rule acts on. A rule with no verdict must have a statement; the
@@ -500,7 +502,28 @@ nat {
 
 `masquerade` and `snat` take `src` and `oif`; `dnat` takes `dst`, `iif`
 and `tcp`/`udp dport` (a `dnat` without a port rewrites every protocol,
-pings included). Validation: `invalid-nat-match`.
+pings included).
+
+Address and port ranges, how the port is picked, and redirection to the
+node itself:
+
+```nll-ignore
+nat {
+  snat src 10.0.1.0/24 oif wan0 to 203.0.113.1-203.0.113.9:40000-40010 fully-random
+  masquerade src 10.0.2.0/24 to :1024-2048 random
+  dnat dst 203.0.113.10 tcp dport 443 to 10.0.1.10:8443 persistent
+  redirect iif lan0 tcp dport 80 to :3128      # a transparent proxy here
+}
+```
+
+`random`, `fully-random` and `persistent` follow a rule; `redirect`
+takes `dnat`'s qualifiers and one port. Validation: `invalid-nat-match`.
+
+**Matches nftables writes for routers.** `rpf` (reverse-path filtering,
+`fib saddr . iif oif missing`): the source has no route back out of the
+interface the packet came in on, which is a spoofed source on a router —
+`drop rpf` in `forward` or `input`. `tcp|udp dport|sport != LO-HI` matches
+outside a range, and `mark LO-HI` a mark range.
 
 Each rule's identity is its position (`nlink-lab/fw/<chain>/<index>`):
 an edited rule is replaced in place, and `apply` keeps the chain in
@@ -1554,12 +1577,16 @@ nat_block      = "nat" "{" (nat_rule | "for" IDENT "in" (range | list) nat_block
 site           = "site" IDENT STRING? "{" statement* "}"
                # All node/link/network names inside are prefixed with "site-"
 
-nat_rule       = "masquerade" ("src" CIDR | "oif" IDENT)*
-               | "dnat" ("dst" CIDR | "iif" IDENT | ("tcp" | "udp") "dport" INT)*
-                 "to" (IP | "[" IP "]") (":" INT)?
+nat_rule       = "masquerade" ("src" CIDR | "oif" IDENT)* ("to" ":" ports)? nat_flag*
+               | "redirect" pre_qual* ("to" ":" INT)? nat_flag*
+               | "dnat" pre_qual* "to" nat_target nat_flag*
                # an IPv6 target with a port needs brackets: to [fd00::2]:8080
-               | "snat" ("src" CIDR | "oif" IDENT)* "to" IP
+               | "snat" ("src" CIDR | "oif" IDENT)* "to" nat_target nat_flag*
                | "translate" CIDR "to" CIDR
+pre_qual       = "dst" CIDR | "iif" IDENT | ("tcp" | "udp") "dport" INT
+nat_target     = (IP ("-" IP)? | "[" IP ("-" IP)? "]") (":" ports)?
+ports          = INT ("-" INT)?
+nat_flag       = "random" | "fully-random" | "persistent"
 
 # ── Route (supports list destinations) ──────────
 route          = "route" route_dest route_params
@@ -1649,19 +1676,23 @@ fw_policy      = "accept" | "drop"
 firewall_rule  = (verdict match_expr* | match_expr+) fw_statement*
                (* no verdict ("continue"): at least one fw_statement *)
 verdict        = "accept" | "drop" | "reject" ("with" reject_type)?
-fw_statement   = "limit" "over"? INT "/" ("second" | "minute" | "hour" | "day") ("burst" INT)?
+fw_statement   = "limit" "over"? (INT | SIZE) "/" ("second" | "minute" | "hour" | "day")
+                 ("burst" (INT | SIZE))?          (* a SIZE: a byte rate *)
                | "counter" ("name" IDENT)?
-               | "log" STRING? ("group" INT)?
+               | "log" STRING? ("group" INT)? ("level" log_level)?
                | "mark" "set" mark_value
                | "ct" "mark" ("set" mark_value | "save" | "restore")
                | "classify" INT ":" INT
                | "clamp" "mss" (INT | "pmtu")
 mark_value     = (INT | HEX) ("/" (INT | HEX))?
+log_level      = "emerg" | "alert" | "crit" | "err" | "warn" | "notice" | "info" | "debug"
 reject_type    = "tcp-reset" | "port-unreachable" | "host-unreachable"
                | "no-route" | "admin-prohibited"
 match_expr     = "ct" "state"? IDENT ("," IDENT)*
                | ("tcp" | "udp") ("dport" | "sport") "!="? (INT | INT "-" INT | set_ref)
-               | "icmp" INT | "icmpv6" INT | "mark" (mark_value | "!="? set_ref)
+               | "icmp" INT | "icmpv6" INT
+               | "mark" (mark_value | (INT | HEX) "-" (INT | HEX) | "!="? set_ref)
+               | "rpf"
                | "ct" "mark" (INT | HEX)
                | ("src" | "dst") "!="? (CIDR | set_ref)
                | ("iif" | "oif") "!="? IDENT

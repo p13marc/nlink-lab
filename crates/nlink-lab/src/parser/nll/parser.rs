@@ -1275,51 +1275,76 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             continue;
         }
 
-        if eat_kw(tokens, pos, "masquerade") {
-            let q = parse_nat_qualifiers(tokens, pos, "masquerade", &["src", "oif"])?;
-            items.push(ast::NatItem::Rule(ast::NatRuleDef {
-                action: "masquerade".into(),
-                target: None,
-                target_port: None,
-                ..q
-            }));
-        } else if eat_kw(tokens, pos, "dnat") {
-            let q = parse_nat_qualifiers(tokens, pos, "dnat", &["dst", "iif", "tcp", "udp"])?;
+        if eat_kw(tokens, pos, "masquerade") || eat_kw(tokens, pos, "redirect") {
+            // `masquerade … [to :P[-Q]]`, `redirect … [to :P]` (#189): no
+            // address, only ports.
+            let action = match at(tokens, *pos - 1) {
+                Some(Token::Ident(w)) => w.clone(),
+                _ => unreachable!("just matched a keyword"),
+            };
+            let allowed: &[&str] = if action == "masquerade" {
+                &["src", "oif"]
+            } else {
+                &["dst", "iif", "tcp", "udp"]
+            };
+            let q = parse_nat_qualifiers(tokens, pos, &action, allowed)?;
+            let mut rule = ast::NatRuleDef { action, ..q };
+            if eat_kw(tokens, pos, "to") {
+                expect(tokens, pos, &Token::Colon)?;
+                let (first, last) = parse_nat_ports(tokens, pos)?;
+                rule.target_port = Some(first);
+                rule.target_port_end = last;
+            }
+            rule.flags = parse_nat_flags(tokens, pos)?;
+            items.push(ast::NatItem::Rule(Box::new(rule)));
+        } else if eat_kw(tokens, pos, "dnat") || eat_kw(tokens, pos, "snat") {
+            let action = match at(tokens, *pos - 1) {
+                Some(Token::Ident(w)) => w.clone(),
+                _ => unreachable!("just matched a keyword"),
+            };
+            let allowed: &[&str] = if action == "dnat" {
+                &["dst", "iif", "tcp", "udp"]
+            } else {
+                &["src", "oif"]
+            };
+            let q = parse_nat_qualifiers(tokens, pos, &action, allowed)?;
             expect_kw(tokens, pos, "to")?;
             // `to [fd00::2]:8080` — brackets disambiguate an IPv6 target
             // from its port (`fd00::2:8080` lexes as one address).
             let bracketed = eat(tokens, pos, &Token::LBracket);
             let target = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
-            if bracketed {
-                expect(tokens, pos, &Token::RBracket)?;
-            }
-            // Optional :port (only if Colon follows, not already consumed by CIDR)
-            let target_port = if eat(tokens, pos, &Token::Colon) {
-                Some(expect_port(tokens, pos, "port")?)
+            // `to 203.0.113.1-203.0.113.9` (#189)
+            let target_end = if eat(tokens, pos, &Token::Dash) {
+                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
             } else {
                 None
             };
-            items.push(ast::NatItem::Rule(ast::NatRuleDef {
-                action: "dnat".into(),
+            if bracketed {
+                expect(tokens, pos, &Token::RBracket)?;
+            }
+            // Optional :port[-port] (only if Colon follows, not already
+            // consumed by CIDR)
+            let (target_port, target_port_end) = if eat(tokens, pos, &Token::Colon) {
+                let (first, last) = parse_nat_ports(tokens, pos)?;
+                (Some(first), last)
+            } else {
+                (None, None)
+            };
+            let flags = parse_nat_flags(tokens, pos)?;
+            items.push(ast::NatItem::Rule(Box::new(ast::NatRuleDef {
+                action,
                 target: Some(target),
                 target_port,
+                target_end,
+                target_port_end,
+                flags,
                 ..q
-            }));
-        } else if eat_kw(tokens, pos, "snat") {
-            let q = parse_nat_qualifiers(tokens, pos, "snat", &["src", "oif"])?;
-            expect_kw(tokens, pos, "to")?;
-            let target = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
-            items.push(ast::NatItem::Rule(ast::NatRuleDef {
-                action: "snat".into(),
-                target: Some(target),
-                target_port: None,
-                ..q
-            }));
+            })));
         } else if eat_kw(tokens, pos, "translate") {
             let src_range = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
             expect_kw(tokens, pos, "to")?;
             let dst_range = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
-            items.push(ast::NatItem::Rule(ast::NatRuleDef {
+            items.push(ast::NatItem::Rule(Box::new(ast::NatRuleDef {
                 action: "translate".into(),
                 src: Some(src_range),
                 dst: None,
@@ -1329,7 +1354,10 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 dport: None,
                 iif: None,
                 oif: None,
-            }));
+                target_end: None,
+                target_port_end: None,
+                flags: Vec::new(),
+            })));
         } else {
             match at(tokens, *pos) {
                 Some(other) => {
@@ -1337,7 +1365,7 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                         tokens,
                         *pos,
                         format!(
-                            "expected NAT rule (masquerade, dnat, snat, translate), found {other}"
+                            "expected NAT rule (masquerade, snat, dnat, redirect, translate), found {other}"
                         ),
                     ));
                 }
@@ -1358,6 +1386,42 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
 /// The qualifiers of a NAT rule before its `to`, in any order:
 /// `src X`, `dst X`, `iif NAME`, `oif NAME`, `tcp|udp dport P` — each where
 /// `allowed` lists it (#167).
+/// A NAT port or port range after `:`: `8080`, `40000-40010` (#189).
+fn parse_nat_ports(tokens: &[Spanned], pos: &mut usize) -> Result<(u16, Option<u16>)> {
+    let first = expect_port(tokens, pos, "port")?;
+    if !eat(tokens, pos, &Token::Dash) {
+        return Ok((first, None));
+    }
+    let last = expect_port(tokens, pos, "port")?;
+    if last < first {
+        return Err(err(
+            tokens,
+            *pos - 1,
+            format!("port range {first}-{last} runs backwards"),
+        ));
+    }
+    Ok((first, Some(last)))
+}
+
+/// A NAT rule's trailing `random`, `fully-random`, `persistent` (#189).
+fn parse_nat_flags(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<crate::types::NatFlag>> {
+    use crate::types::NatFlag;
+    let mut flags = Vec::new();
+    while let Some(Token::Ident(w)) = at(tokens, *pos) {
+        let flag = match w.as_str() {
+            "random" => NatFlag::Random,
+            "fully-random" => NatFlag::FullyRandom,
+            "persistent" => NatFlag::Persistent,
+            _ => break,
+        };
+        *pos += 1;
+        if !flags.contains(&flag) {
+            flags.push(flag);
+        }
+    }
+    Ok(flags)
+}
+
 fn parse_nat_qualifiers(
     tokens: &[Spanned],
     pos: &mut usize,
@@ -1374,6 +1438,9 @@ fn parse_nat_qualifiers(
         dport: None,
         iif: None,
         oif: None,
+        target_end: None,
+        target_port_end: None,
+        flags: Vec::new(),
     };
     const QUALIFIERS: [&str; 6] = ["src", "dst", "iif", "oif", "tcp", "udp"];
     while let Some(Token::Ident(w)) = at(tokens, *pos)
@@ -1722,8 +1789,24 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
         if eat_kw(tokens, pos, "limit") {
             let over = eat_kw(tokens, pos, "over");
             let rate_at = *pos;
-            let rate = u64::try_from(expect_int(tokens, pos)?)
-                .map_err(|_| err(tokens, rate_at, "a limit rate cannot be negative".into()))?;
+            // `limit 1mb/second`: a size is a byte rate (#189), a bare
+            // number a packet rate.
+            let size_at = |tokens: &[Spanned], pos: &mut usize| -> Result<Option<u64>> {
+                let Some(Token::SizeLit(s) | Token::RateLit(s)) = at(tokens, *pos) else {
+                    return Ok(None);
+                };
+                let bytes =
+                    crate::helpers::parse_size(s).map_err(|e| err(tokens, *pos, e.to_string()))?;
+                *pos += 1;
+                Ok(Some(bytes))
+            };
+            let byte_rate = size_at(tokens, pos)?;
+            let bytes = byte_rate.is_some();
+            let rate = match byte_rate {
+                Some(b) => b,
+                None => u64::try_from(expect_int(tokens, pos)?)
+                    .map_err(|_| err(tokens, rate_at, "a limit rate cannot be negative".into()))?,
+            };
             expect(tokens, pos, &Token::Slash)?;
             let unit_at = *pos;
             let unit = expect_ident(tokens, pos)?;
@@ -1735,7 +1818,22 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
                 )
             })?;
             let burst = if eat_kw(tokens, pos, "burst") {
-                Some(expect_u32(tokens, pos, "burst", 0)?)
+                if bytes {
+                    let b_at = *pos;
+                    let b = size_at(tokens, pos)?.ok_or_else(|| {
+                        err(
+                            tokens,
+                            b_at,
+                            "a byte limit's burst is a size (`burst 64kb`)".into(),
+                        )
+                    })?;
+                    Some(
+                        u32::try_from(b)
+                            .map_err(|_| err(tokens, b_at, "a burst is at most 4gb".into()))?,
+                    )
+                } else {
+                    Some(expect_u32(tokens, pos, "burst", 0)?)
+                }
             } else {
                 None
             };
@@ -1744,6 +1842,7 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
                 per,
                 burst,
                 over,
+                bytes,
             });
         } else if eat_kw(tokens, pos, "counter") {
             if eat_kw(tokens, pos, "name") {
@@ -1814,6 +1913,22 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
                 l.group = Some(u16::try_from(expect_u32(tokens, pos, "group", 0)?).map_err(
                     |_| err(tokens, *pos - 1, "log group out of range 0..=65535".into()),
                 )?);
+            }
+            // `level warn` (#189)
+            if eat_kw(tokens, pos, "level") {
+                let at_pos = *pos;
+                let level = expect_ident(tokens, pos)?;
+                if !crate::types::LOG_LEVELS.contains(&level.as_str()) {
+                    return Err(err(
+                        tokens,
+                        at_pos,
+                        format!(
+                            "unknown log level '{level}' (expected {})",
+                            crate::types::LOG_LEVELS.join(", ")
+                        ),
+                    ));
+                }
+                l.level = Some(level);
             }
             log = Some(l);
         } else {
@@ -2059,18 +2174,8 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 parts.push(format!("{proto} {dir}{neg} {set}"));
                 continue;
             }
-            let neg_at = *pos;
+            // `!= LO-HI` is a range compare since nlink 0.32 (#189).
             let port = parse_port_or_range(tokens, pos)?;
-            if !neg.is_empty() && port.contains('-') {
-                return Err(err(
-                    tokens,
-                    neg_at,
-                    format!(
-                        "a negated port range ('!= {port}') is not supported; match the range \
-                         in an accept/drop rule placed first"
-                    ),
-                ));
-            }
             parts.push(format!("{proto} {dir}{neg} {port}"));
         } else if check_kw(tokens, *pos, "icmp") {
             *pos += 1;
@@ -2102,8 +2207,18 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                     "`mark !=` takes a set: `mark != @name`".into(),
                 ));
             }
-            let (text, _, _) = parse_masked_mark(tokens, pos)?;
+            let (mut text, _, mask) = parse_masked_mark(tokens, pos)?;
+            // `mark 0x10-0x1f` (#189)
+            if mask.is_none() && eat(tokens, pos, &Token::Dash) {
+                let (hi, _) = parse_mark_value(tokens, pos)?;
+                text = format!("{text}-{hi}");
+            }
             parts.push(format!("mark {text}"));
+        } else if check_kw(tokens, *pos, "rpf") {
+            // Reverse-path filtering (#189): the source is not routed back
+            // out of the interface it came in on.
+            *pos += 1;
+            parts.push("fib saddr . iif oif missing".into());
         } else if check_kw(tokens, *pos, "iif") || check_kw(tokens, *pos, "oif") {
             let kw = if check_kw(tokens, *pos, "iif") {
                 "iifname"
@@ -5113,7 +5228,7 @@ node r {
             })
             .flatten()
             .filter_map(|item| match item {
-                ast::NatItem::Rule(r) => Some(r),
+                ast::NatItem::Rule(r) => Some(&**r),
                 _ => None,
             })
             .collect();

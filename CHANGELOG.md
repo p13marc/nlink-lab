@@ -123,6 +123,13 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   JSON (marcpardo/nlink#876).
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
+- **`impair --show` prints one line per endpoint** (its root qdisc, netem's
+  values, `(partitioned)`), not each node's `tc qdisc show` output; both
+  it and `--show --json` read the qdisc over netlink (#179). The JSON is
+  unchanged.
+- **`validate { tcp-connect … }` reports why a connection failed**
+  (`Connection refused (os error 111)`, a timeout) instead of `exit code
+  1`, and `route-has` lists the matching routes' hops.
 - **A `network { mtu }` lab deployed by an older nlink-lab keeps its
   1500-byte member veths** until it is redeployed (#161).
 - **Traffic control is declared** (#108). Impairments, `qdisc` blocks,
@@ -319,6 +326,14 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   removed, and `apply --check`, `verify` and `apply` all said there was
   nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`
   converges it.
+- **Shell-outs replaced with nlink** (#179). `validate { tcp-connect … }`
+  and `wait-for --tcp`'s fallback connect from a socket in the node's
+  namespace (they needed `bash` in the node, which a container image may
+  lack); `route-has` reads the main table over netlink; `impair --show`
+  reads the root qdisc over netlink; attached `exec` and `shell` are
+  spawned by nlink's `NetnsCommand`, with the node's `/etc/netns`
+  overlay as `ip netns exec` gives it, instead of `nsenter` with a
+  hard-coded `/var/run/netns` path.
 - **Removing a network's last per-pair `impair` left its HTB tree** on the
   source interface: the op had no inverse. Declared, it is removed with
   the rest (#108).

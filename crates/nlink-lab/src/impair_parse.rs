@@ -1,12 +1,11 @@
-//! Pure parser for `tc qdisc show dev <iface>` output → structured
-//! impairment fields. Used by `nlink-lab impair --show --json` to give
-//! consumers a parseable view of currently-installed netem state
-//! without having to grep raw `tc` text.
+//! An interface's root qdisc as `nlink-lab impair --show --json` reports
+//! it ([`ImpairShow`]): netem's delay, jitter, loss (or loss model) and
+//! rate, the kind alone for any other qdisc.
 //!
-//! Targets Linux 6.x `tc` output; older kernels emit slightly different
-//! field ordering and may not parse cleanly. We extract only the fields
-//! the harness consumers care about (delay, jitter, loss, rate) — anything
-//! more exotic falls through to the qdisc kind alone.
+//! [`impair_show_from`] builds it from the qdisc nlink reads over netlink,
+//! which is what `impair --show` uses (#179): no `tc` binary, the same for
+//! a container node. [`parse_tc_qdisc_show`] still parses `tc qdisc show`
+//! text, for callers that have that.
 
 use serde::Serialize;
 
@@ -64,6 +63,68 @@ pub fn topology_endpoints(topology: &crate::types::Topology) -> Vec<String> {
         out.insert(ep.clone());
     }
     out.into_iter().collect()
+}
+
+/// What `impair --show` reports for a root qdisc nlink read: `None` for
+/// the kernel's default (`noqueue`).
+pub fn impair_show_from(qdisc: &nlink::netlink::messages::TcMessage) -> Option<ImpairShow> {
+    use nlink::netlink::tc_options::{NetemLossModel, QdiscOptions};
+    let kind = qdisc.kind()?;
+    if kind == "noqueue" {
+        return None;
+    }
+    let mut show = ImpairShow {
+        qdisc: kind.to_string(),
+        delay_ms: None,
+        jitter_ms: None,
+        loss_pct: None,
+        loss_model: None,
+        rate_bps: None,
+    };
+    if let Some(QdiscOptions::Netem(netem)) = qdisc.options() {
+        let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+        show.delay_ms = netem.delay().map(ms);
+        show.jitter_ms = netem.jitter().map(ms);
+        // nlink's `rate_bps` is bytes per second; this field is bits.
+        show.rate_bps = netem.rate_bps().map(|bytes| bytes * 8);
+        match netem.loss_model() {
+            Some(NetemLossModel::GilbertElliot { p, r, h, k1 }) => {
+                show.loss_model = Some(format!(
+                    "gemodel p {}% r {}% 1-h {}% 1-k {}%",
+                    pct(*p),
+                    pct(*r),
+                    pct(100.0 - h),
+                    pct(*k1)
+                ));
+            }
+            Some(NetemLossModel::GilbertIntuitive {
+                p13,
+                p31,
+                p32,
+                p14,
+                p23,
+            }) => {
+                show.loss_model = Some(format!(
+                    "state p13 {}% p31 {}% p32 {}% p23 {}% p14 {}%",
+                    pct(*p13),
+                    pct(*p31),
+                    pct(*p32),
+                    pct(*p23),
+                    pct(*p14)
+                ));
+            }
+            // The kernel keeps a fraction of u32::MAX: round it as tc
+            // prints it (1.5, not 1.4999999901).
+            _ => show.loss_pct = netem.loss().map(|l| (l * 1e4).round() / 1e4),
+        }
+    }
+    Some(show)
+}
+
+/// A percentage as `tc` prints it: no trailing zeros, at most 4 decimals.
+fn pct(v: f64) -> String {
+    let s = format!("{v:.4}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 /// Parse one or more lines of `tc qdisc show dev <iface>` output, returning

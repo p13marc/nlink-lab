@@ -78,6 +78,18 @@ impl NsRef {
         }
     }
 
+    /// The namespace as an open nlink [`Netns`](nlink::netlink::namespace::Netns):
+    /// run code in it ([`Netns::run`](nlink::netlink::namespace::Netns::run))
+    /// or open a socket there, without a process in the node.
+    pub fn netns(&self) -> std::result::Result<nlink::netlink::namespace::Netns, nlink::Error> {
+        use nlink::netlink::namespace::Netns;
+        match self {
+            NsRef::Root => Netns::current(),
+            NsRef::Named { name } => Netns::open(name),
+            NsRef::Container { pid, .. } => Netns::from_pid(*pid),
+        }
+    }
+
     /// Path of the namespace file (`/proc/<pid>/ns/net` for containers).
     pub fn ns_path(&self) -> std::path::PathBuf {
         match self {

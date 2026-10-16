@@ -3716,6 +3716,9 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
             .is_some_and(|m| m.starts_with("gemodel")),
         "{parsed:?}"
     );
+    // `impair --show` reads the same over netlink, without `tc` (#179).
+    let read = lab.impair_show_blocking("router:eth0").unwrap();
+    assert_eq!(read.as_ref(), Some(&parsed), "tc said: {}", qd.stdout);
     let ping = lab
         .exec(
             "router",
@@ -3754,6 +3757,77 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
         "a model that never loses must not drop: {}",
         ping.stdout
     );
+
+    // The plain values too: netlink's view equals tc's.
+    let plain = nlink_lab::Impairment {
+        delay: Some("10ms".into()),
+        jitter: Some("2ms".into()),
+        loss: Some("1.5%".into()),
+        rate: Some("10mbit".into()),
+        ..Default::default()
+    };
+    lab.set_impairment("router:eth0", &plain).await.unwrap();
+    let qd = lab
+        .exec("router", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout);
+    let read = lab.impair_show_blocking("router:eth0").unwrap();
+    assert_eq!(read, parsed, "tc said: {}", qd.stdout);
+    assert_eq!(read.and_then(|r| r.rate_bps), Some(10_000_000));
+    lab.clear_impairment("router:eth0").await.unwrap();
+    assert_eq!(lab.impair_show_blocking("router:eth0").unwrap(), None);
+}
+
+/// `tcp-connect` and `route-has` read the kernel through nlink (#179):
+/// a socket made in the node's namespace, and a main-table route dump,
+/// instead of `bash -c 'echo > /dev/tcp/…'` and `ip route show` text.
+#[tokio::test]
+async fn tcp_connect_and_route_has_read_the_kernel() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping tcp_connect_and_route_has_read_the_kernel: requires root");
+        return;
+    }
+    let lab_name = format!("tcrh-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a {{ route 10.9.0.0/24 via 10.0.0.2 }}
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+validate {{
+  tcp-connect a b 5555
+  route-has a 10.9.0.0/24 via 10.0.0.2 dev eth0
+  route-has a 10.9.0.0/24 via 10.0.0.99
+  route-has a 10.0.0.0/24 dev eth0
+  route-has a 10.8.0.0/24
+  tcp-connect a b 5556
+}}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    // A listener in b's namespace, held by this process.
+    let netns = lab.ns_resolver_of("b").unwrap().netns().unwrap();
+    let _listener = netns
+        .run(|| std::net::TcpListener::bind("0.0.0.0:5555"))
+        .unwrap()
+        .unwrap();
+    let ip_map = nlink_lab::scenario::build_ip_map(lab.topology());
+    let got: Vec<(bool, String)> = topo
+        .assertions
+        .iter()
+        .map(|a| {
+            let (desc, ok, detail) = nlink_lab::test_runner::eval_assertion_pub(&lab, a, &ip_map);
+            (ok, format!("{desc}: {detail:?}"))
+        })
+        .collect();
+    let ok: Vec<bool> = got.iter().map(|(ok, _)| *ok).collect();
+    assert_eq!(ok, [true, true, false, true, false, false], "{got:#?}");
+    assert!(got[1].1.contains("via 10.0.0.2 dev eth0"), "{got:#?}");
+    assert!(got[5].1.contains("refused"), "{got:#?}");
+    lab.destroy().await.expect("destroy failed");
 }
 
 // ─── Plan 156 PR C — impair --show JSON view ────────────

@@ -257,6 +257,16 @@ impl RunningLab {
     /// (the assertion engine): on a thread of its own with its own runtime,
     /// so it works inside or outside one.
     pub fn firewall_counters_blocking(&self, node: &str) -> Result<Vec<FirewallCounter>> {
+        self.read_node_blocking(node, async |ns| read_firewall_counters(&ns).await)
+    }
+
+    /// Run `read` against `node`'s namespace on a thread and runtime of its
+    /// own, for the sync callers (assertions, `impair --show`).
+    fn read_node_blocking<T: Send + 'static>(
+        &self,
+        node: &str,
+        read: impl AsyncFnOnce(crate::deploy::NsRef) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
         let ns = self
             .ns_resolver_of(node)
             .ok_or_else(|| Error::NodeNotFound {
@@ -266,11 +276,72 @@ impl RunningLab {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .map_err(|e| Error::deploy_failed(format!("counter runtime: {e}")))?
-                .block_on(read_firewall_counters(&ns))
+                .map_err(|e| Error::deploy_failed(format!("reader runtime: {e}")))?
+                .block_on(read(ns))
         })
         .join()
-        .map_err(|_| Error::deploy_failed("the counter reader panicked".to_string()))?
+        .map_err(|_| Error::deploy_failed("the reader thread panicked".to_string()))?
+    }
+
+    /// What `impair --show` reports for `endpoint`: its root qdisc, read
+    /// over netlink (#179). `None` when it has the kernel's default.
+    pub fn impair_show_blocking(
+        &self,
+        endpoint: &str,
+    ) -> Result<Option<crate::impair_parse::ImpairShow>> {
+        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: endpoint.to_string(),
+        })?;
+        let iface = ep.iface.clone();
+        self.read_node_blocking(&ep.node, async move |ns| {
+            let conn: Connection<Route> = ns
+                .connection()
+                .map_err(|e| Error::deploy_failed(format!("qdisc reader: {e}")))?;
+            let root = conn
+                .get_root_qdisc_by_name(iface.as_str())
+                .await
+                .map_err(|e| Error::deploy_failed(format!("qdisc reader: {e}")))?;
+            Ok(root
+                .as_ref()
+                .and_then(crate::impair_parse::impair_show_from))
+        })
+    }
+
+    /// Open a TCP connection to `addr` from inside `node` and close it
+    /// (`validate { tcp-connect … }`, `wait-for --tcp`). A socket made in
+    /// the node's namespace, so the node needs no shell (#179).
+    pub fn tcp_connect(
+        &self,
+        node: &str,
+        addr: std::net::SocketAddr,
+        timeout: std::time::Duration,
+    ) -> Result<()> {
+        let ns = self
+            .ns_resolver_of(node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node.to_string(),
+            })?;
+        let netns = ns
+            .netns()
+            .map_err(|e| Error::deploy_failed(format!("namespace of '{node}': {e}")))?;
+        netns
+            .run(|| std::net::TcpStream::connect_timeout(&addr, timeout).map(drop))
+            .map_err(|e| Error::deploy_failed(format!("namespace of '{node}': {e}")))?
+            .map_err(Error::Io)
+    }
+
+    /// The routes in `node`'s main table to exactly `dst`/`prefix_len` (what
+    /// `ip route show PREFIX` lists), read over netlink (#179). Each is its
+    /// hops: its gateway and device, one per nexthop for a multipath route.
+    pub fn main_routes_to_blocking(
+        &self,
+        node: &str,
+        dst: std::net::IpAddr,
+        prefix_len: u8,
+    ) -> Result<Vec<Vec<RouteHop>>> {
+        self.read_node_blocking(node, async move |ns| {
+            read_main_routes_to(&ns, dst, prefix_len).await
+        })
     }
 
     pub fn ns_resolver_of(&self, node: &str) -> Option<crate::deploy::NsRef> {
@@ -734,15 +805,12 @@ impl RunningLab {
             })
         } else {
             let ns_name = self.namespace_for(node)?;
-            // Enter the namespace via nsenter so stdio inherits naturally.
-            // Uses the `--net=<path>` single-argv form (see the same pattern
-            // used by the `shell` subcommand).
-            let ns_path = format!("/var/run/netns/{ns_name}");
-            let mut command = std::process::Command::new("nsenter");
+            // Spawned straight into the namespace by nlink, stdio inherited,
+            // with the node's /etc/netns overlay where the host allows one,
+            // as `ip netns exec` does. No `nsenter`, and no hard-coded
+            // namespace directory (#179).
+            let mut command = std::process::Command::new(cmd);
             command
-                .arg(format!("--net={ns_path}"))
-                .arg("--")
-                .arg(cmd)
                 .args(args)
                 .stdin(std::process::Stdio::inherit())
                 .stdout(std::process::Stdio::inherit())
@@ -753,7 +821,15 @@ impl RunningLab {
             for (k, v) in opts.env {
                 command.env(k, v);
             }
-            run_with_optional_timeout(&mut command, opts.timeout).map_err(|e| match e {
+            let child = nlink::netlink::namespace::NetnsCommand::new(ns_name, command)
+                .and_then(|c| {
+                    c.etc_overlay(nlink::netlink::namespace::Overlay::BestEffort)
+                        .spawn()
+                })
+                .map_err(|e| {
+                    Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
+                })?;
+            wait_with_optional_timeout(child, opts.timeout).map_err(|e| match e {
                 Error::Timeout(_) => e,
                 other => Error::deploy_failed(format!("attached exec in '{node}' failed: {other}")),
             })
@@ -1109,10 +1185,10 @@ impl RunningLab {
 
     /// Wait for a TCP listener on `ip:port` inside a node's namespace.
     ///
-    /// Probes the kernel's socket table through sock_diag (no `bash` in
-    /// the node, no connection attempts that leave `connection refused`
-    /// noise in the service's logs); falls back to a `/dev/tcp` connect
-    /// where sock_diag is not permitted.
+    /// Probes the kernel's socket table through sock_diag (no connection
+    /// attempts that leave `connection refused` noise in the service's
+    /// logs); falls back to connecting, from a socket in the node's
+    /// namespace, where sock_diag is not permitted.
     pub async fn wait_for_tcp(
         &self,
         node: &str,
@@ -1126,14 +1202,15 @@ impl RunningLab {
         loop {
             let present = match self.tcp_listener_present(node, want, port).await {
                 Some(present) => present,
-                None => {
-                    let probe = self.exec(
+                None => want.is_some_and(|ip| {
+                    let addr = std::net::SocketAddr::new(ip, port);
+                    self.tcp_connect(
                         node,
-                        "bash",
-                        &["-c", &format!("echo > /dev/tcp/{ip}/{port}")],
-                    );
-                    probe.is_ok_and(|o| o.exit_code == 0)
-                }
+                        addr,
+                        interval.max(std::time::Duration::from_millis(500)),
+                    )
+                    .is_ok()
+                }),
             };
             if present {
                 return Ok(());
@@ -2200,15 +2277,20 @@ fn run_with_optional_timeout(
     command: &mut std::process::Command,
     timeout: Option<std::time::Duration>,
 ) -> Result<i32> {
+    wait_with_optional_timeout(command.spawn().map_err(Error::Io)?, timeout)
+}
+
+/// Wait for `child`, killing it after `timeout`; its exit code (-1 when a
+/// signal ended it).
+fn wait_with_optional_timeout(
+    mut child: std::process::Child,
+    timeout: Option<std::time::Duration>,
+) -> Result<i32> {
     if let Some(t) = timeout {
-        let mut child = command.spawn().map_err(Error::Io)?;
         wait_with_timeout(&mut child, t)?;
-        let status = child.wait().map_err(Error::Io)?;
-        Ok(status.code().unwrap_or(-1))
-    } else {
-        let status = command.status().map_err(Error::Io)?;
-        Ok(status.code().unwrap_or(-1))
     }
+    let status = child.wait().map_err(Error::Io)?;
+    Ok(status.code().unwrap_or(-1))
 }
 
 /// Start time (clock ticks since boot, field 22 of `/proc/<pid>/stat`)
@@ -2587,6 +2669,78 @@ pub struct FirewallCounter {
     pub name: String,
     pub packets: u64,
     pub bytes: u64,
+}
+
+/// One way a route goes: its gateway and output device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteHop {
+    pub via: Option<std::net::IpAddr>,
+    pub dev: Option<String>,
+}
+
+impl std::fmt::Display for RouteHop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut sep = "";
+        if let Some(via) = &self.via {
+            write!(f, "via {via}")?;
+            sep = " ";
+        }
+        if let Some(dev) = &self.dev {
+            write!(f, "{sep}dev {dev}")?;
+        }
+        Ok(())
+    }
+}
+
+async fn read_main_routes_to(
+    ns: &crate::deploy::NsRef,
+    dst: std::net::IpAddr,
+    prefix_len: u8,
+) -> Result<Vec<Vec<RouteHop>>> {
+    let conn: Connection<Route> = ns
+        .connection()
+        .map_err(|e| Error::deploy_failed(format!("route reader: {e}")))?;
+    let names: BTreeMap<u32, String> = conn
+        .get_links()
+        .await
+        .map_err(|e| Error::deploy_failed(format!("route reader: {e}")))?
+        .iter()
+        .filter_map(|l| Some((l.ifindex(), l.name()?.to_string())))
+        .collect();
+    let dev = |ifindex: u32| names.get(&ifindex).cloned();
+    let family = if dst.is_ipv4() {
+        libc::AF_INET
+    } else {
+        libc::AF_INET6
+    } as u8;
+    let want = crate::helpers::network_address(dst, prefix_len);
+    let routes = conn
+        .get_routes_for_table(254)
+        .await
+        .map_err(|e| Error::deploy_failed(format!("route reader: {e}")))?;
+    Ok(routes
+        .iter()
+        .filter(|r| r.family() == family && r.dst_len() == prefix_len)
+        .filter(|r| {
+            r.destination()
+                .map(|d| crate::helpers::network_address(*d, prefix_len))
+                .unwrap_or(crate::helpers::network_address(dst, 0))
+                == want
+        })
+        .map(|r| match r.multipath() {
+            Some(hops) if !hops.is_empty() => hops
+                .iter()
+                .map(|h| RouteHop {
+                    via: h.gateway,
+                    dev: dev(h.ifindex),
+                })
+                .collect(),
+            _ => vec![RouteHop {
+                via: r.gateway().or(r.via()).copied(),
+                dev: r.oif().and_then(dev),
+            }],
+        })
+        .collect())
 }
 
 async fn read_firewall_counters(ns: &crate::deploy::NsRef) -> Result<Vec<FirewallCounter>> {

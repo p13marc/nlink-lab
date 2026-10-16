@@ -93,7 +93,7 @@ Arguments:
 
 Options:
       --show
-          Show current impairments on all interfaces
+          Show every endpoint's root qdisc, one line each: netem's delay, jitter, loss and rate, and whether it is partitioned. Read over netlink, so no `tc` is needed in the node
 
       --delay <DELAY>
           Delay (e.g., "10ms")

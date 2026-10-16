@@ -12,7 +12,9 @@ pub struct Args {
     /// Endpoint (e.g., "router:eth0"). Not required with --show.
     pub endpoint: Option<String>,
 
-    /// Show current impairments on all interfaces.
+    /// Show every endpoint's root qdisc, one line each: netem's delay,
+    /// jitter, loss and rate, and whether it is partitioned. Read over
+    /// netlink, so no `tc` is needed in the node.
     #[arg(long)]
     pub show: bool,
 
@@ -147,12 +149,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 }))?
             );
         } else {
-            for node_name in running.node_names() {
-                let output = running.exec(node_name, "tc", &["qdisc", "show"])?;
-                if !output.stdout.trim().is_empty() {
-                    println!("--- {node_name} ---");
-                    println!("{}", output.stdout.trim());
-                }
+            // One line per endpoint, from the qdisc nlink reads (#179).
+            for (endpoint, entry) in collect_impair_show(&running)? {
+                println!(
+                    "{endpoint:<24} {}",
+                    crate::util::impair_show_line(entry.as_ref())
+                );
             }
         }
         return Ok(());

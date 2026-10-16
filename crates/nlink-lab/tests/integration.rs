@@ -1740,26 +1740,28 @@ network lan {{
             out.stdout
         );
     }
+    // Read the mgmt namespace through nlink, which finds it where
+    // nlink-lab made it (`ip -n` looked in a directory the CI runner's
+    // container does not share).
     let mgmt = format!("{}-mgmt", topo.lab.prefix());
-    let out = std::process::Command::new("ip")
-        .args(["-n", &mgmt, "-o", "link", "show"])
-        .output()
-        .unwrap();
-    let links = String::from_utf8_lossy(&out.stdout);
-    let bridge = nlink_lab::types::network_bridge_name_for("lan");
-    let lines: Vec<&str> = links.lines().collect();
-    assert!(
-        lines
-            .iter()
-            .any(|l| l.contains(&format!(" {bridge}:")) && l.contains("mtu 9000")),
-        "bridge {bridge} is not at 9000:\n{links}"
-    );
-    let ports: Vec<&&str> = lines
+    let conn = nlink::Connection::<nlink::Route>::new_in(mgmt.as_str()).unwrap();
+    let links = conn.get_links().await.unwrap();
+    let bridge_name = nlink_lab::types::network_bridge_name_for("lan");
+    let shown: Vec<(Option<&str>, Option<u32>, Option<u32>)> = links
         .iter()
-        .filter(|l| l.contains(&format!("master {bridge}")))
+        .map(|l| (l.name(), l.mtu(), l.master()))
         .collect();
-    assert_eq!(ports.len(), 2, "{links}");
-    assert!(ports.iter().all(|l| l.contains("mtu 9000")), "{links}");
+    let bridge = links
+        .iter()
+        .find(|l| l.name() == Some(bridge_name.as_str()))
+        .unwrap_or_else(|| panic!("no bridge {bridge_name} in {mgmt}: {shown:?}"));
+    assert_eq!(bridge.mtu(), Some(9000), "bridge: {shown:?}");
+    let ports: Vec<_> = links
+        .iter()
+        .filter(|l| l.master() == Some(bridge.ifindex()))
+        .collect();
+    assert_eq!(ports.len(), 2, "{shown:?}");
+    assert!(ports.iter().all(|l| l.mtu() == Some(9000)), "{shown:?}");
 
     let ping = lab
         .exec(

@@ -905,6 +905,12 @@ pub(crate) fn lower_set(name: &str, set: &FirewallSet) -> Result<LoweredSet, Str
             SetElement::concat(lowered)
         });
     }
+    if interval && key.len() > 1 && key.contains(&SetKey::Mark) {
+        return Err(format!(
+            "set '{name}': a concatenated set with a mark cannot hold prefixes or ranges \
+             (nlink cannot encode a host-order field in an interval concatenation)"
+        ));
+    }
     if set.dynamic && interval {
         return Err(format!(
             "set '{name}': a dynamic set cannot hold prefixes or ranges (the kernel has no \
@@ -1210,6 +1216,10 @@ mod tests {
                 "has 1 part(s), the key has 2",
             ),
             (set(&[], &[]), "no key and no element"),
+            (
+                set(&[SetKey::Ipv4, SetKey::Mark], &["10.0.0.0/24 . 5"]),
+                "concatenated set with a mark",
+            ),
             (
                 FirewallSet {
                     dynamic: true,

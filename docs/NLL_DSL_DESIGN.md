@@ -399,7 +399,8 @@ node gw : router {
   `ipv4`, `ipv6`, `port` and `mark`; several joined by `.` make a
   concatenated key. Left out, the key comes from the first element.
 - Elements are addresses, prefixes and ranges; a concatenation's parts
-  are joined by ` . `. A prefix or a range makes it an interval set.
+  are joined by ` . `. A prefix or a range makes it an interval set
+  (not in a concatenation that has a `mark`, which nlink cannot encode).
 - A set holds one family: an IPv4 and an IPv6 blocklist are two sets.
   `src @blocked` takes its family from the set.
 - Lookups: `src`/`dst` [`!=`] `@set`, `tcp`/`udp` `dport`/`sport` [`!=`]

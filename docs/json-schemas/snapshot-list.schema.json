@@ -56,7 +56,11 @@
       },
       "required": [
         "name",
-        "created_at"
+        "created_at",
+        "node_count",
+        "link_count",
+        "live_impairments",
+        "partitions"
       ]
     }
   }

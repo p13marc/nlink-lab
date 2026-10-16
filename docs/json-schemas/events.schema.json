@@ -139,7 +139,15 @@
             "null"
           ]
         }
-      }
+      },
+      "required": [
+        "delay",
+        "jitter",
+        "loss",
+        "rate",
+        "corrupt",
+        "reorder"
+      ]
     },
     "LifecycleEvent": {
       "description": "One recorded lifecycle event.",
@@ -278,6 +286,7 @@
           },
           "required": [
             "event",
+            "node",
             "pid"
           ]
         },
@@ -306,6 +315,7 @@
           },
           "required": [
             "event",
+            "node",
             "pid",
             "signal"
           ]

@@ -47,23 +47,16 @@
       "$ref": "#/$defs/TopologyDiff"
     },
     "wireguard": {
-      "description": "Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and\nallowed-ips that differ from the declared tunnels (public keys\nonly; private and preshared keys as presence flags). Empty map\nelided. Additive, so the marker stays `3`.",
+      "description": "Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and\nallowed-ips that differ from the declared tunnels (public keys\nonly; private and preshared keys as presence flags). Empty map\nelided. Additive, so the marker stays `3`. Free-form in the\nschema: nlink 0.32 derives one that does not match the JSON (keys\nas byte arrays, presence flags as keys; marcpardo/nlink#876).",
       "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/WireguardConfigDiff"
-      }
+      "additionalProperties": true
     }
   },
   "required": [
     "schema_version",
     "lab",
     "no_op",
-    "change_count",
-    "topology",
-    "network",
-    "nftables",
-    "wireguard",
-    "removals"
+    "change_count"
   ],
   "$defs": {
     "ActionRepr": {
@@ -187,28 +180,6 @@
         "address"
       ]
     },
-    "AllowedIp": {
-      "description": "An allowed IP range for a WireGuard peer.",
-      "type": "object",
-      "properties": {
-        "addr": {
-          "description": "IP address (network portion).",
-          "type": "string",
-          "format": "ip"
-        },
-        "cidr": {
-          "description": "CIDR prefix length.",
-          "type": "integer",
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
-        }
-      },
-      "required": [
-        "addr",
-        "cidr"
-      ]
-    },
     "Blocker": {
       "description": "One reason a link cannot be recreated (#513): something deleting it\nwould destroy that the config does not declare, or a link that cannot\nbe recreated at all.",
       "oneOf": [
@@ -304,6 +275,8 @@
             "destination",
             "prefix-len",
             "table",
+            "nhid",
+            "through",
             "protocol"
           ]
         },
@@ -344,7 +317,8 @@
           "required": [
             "kind",
             "dev",
-            "qdisc"
+            "qdisc",
+            "under"
           ]
         },
         {
@@ -433,7 +407,8 @@
           },
           "required": [
             "kind",
-            "entry"
+            "entry",
+            "via"
           ]
         },
         {
@@ -519,7 +494,8 @@
           "required": [
             "kind",
             "dev",
-            "id"
+            "id",
+            "via"
           ]
         },
         {
@@ -1022,6 +998,7 @@
         "links-to-add",
         "links-to-modify",
         "veth-peers-to-modify",
+        "vrf-strict-mode",
         "links-missing",
         "links-to-remove",
         "addresses-to-add",
@@ -1041,8 +1018,7 @@
         "nexthops-refused",
         "rules-to-add",
         "rules-to-remove",
-        "routes-to-remove",
-        "tc"
+        "routes-to-remove"
       ]
     },
     "CtHelperObject": {
@@ -1073,7 +1049,8 @@
       },
       "required": [
         "helper",
-        "protocol"
+        "protocol",
+        "family"
       ]
     },
     "CtMarkAction": {
@@ -1171,7 +1148,10 @@
       },
       "required": [
         "name",
-        "devices",
+        "hook",
+        "priority",
+        "policy",
+        "chain-type",
         "exclusive"
       ]
     },
@@ -1427,7 +1407,8 @@
       },
       "required": [
         "name",
-        "link-type"
+        "link-type",
+        "state"
       ]
     },
     "DeclaredLinkType": {
@@ -1525,7 +1506,8 @@
               },
               "required": [
                 "parent",
-                "vlan_id"
+                "vlan_id",
+                "protocol"
               ]
             }
           },
@@ -1580,7 +1562,11 @@
                 }
               },
               "required": [
-                "vni"
+                "vni",
+                "remote",
+                "local",
+                "port",
+                "underlay_dev"
               ]
             }
           },
@@ -1833,7 +1819,8 @@
                 }
               },
               "required": [
-                "if_id"
+                "if_id",
+                "underlay_dev"
               ]
             }
           },
@@ -1891,7 +1878,11 @@
                 }
               },
               "required": [
-                "vni"
+                "vni",
+                "remote",
+                "ttl",
+                "tos",
+                "port"
               ]
             }
           },
@@ -1957,7 +1948,13 @@
                 }
               },
               "required": [
-                "parent"
+                "parent",
+                "sci",
+                "port",
+                "encrypt",
+                "protect",
+                "include_sci",
+                "replay_window"
               ]
             }
           },
@@ -2001,6 +1998,7 @@
               "required": [
                 "port",
                 "ethertype",
+                "srcport_min",
                 "multiproto"
               ]
             }
@@ -2098,7 +2096,15 @@
                 }
               },
               "required": [
-                "mode"
+                "mode",
+                "miimon",
+                "xmit_hash_policy",
+                "min_links",
+                "ad_select",
+                "lacp_rate",
+                "downdelay",
+                "updelay",
+                "resend_igmp"
               ]
             }
           },
@@ -2208,7 +2214,12 @@
                 }
               },
               "required": [
-                "peer"
+                "peer",
+                "mode",
+                "primary_policy",
+                "peer_policy",
+                "scrub",
+                "peer_scrub"
               ]
             }
           },
@@ -2360,6 +2371,7 @@
       },
       "required": [
         "dev",
+        "parent",
         "qdisc-type"
       ]
     },
@@ -2551,7 +2563,8 @@
       "required": [
         "table",
         "chain",
-        "family"
+        "family",
+        "handle-key"
       ]
     },
     "DeclaredSet": {
@@ -2648,8 +2661,12 @@
         "name",
         "key-type",
         "flags",
-        "elements",
-        "statements"
+        "size",
+        "timeout",
+        "gc-interval",
+        "element-mode",
+        "data-type",
+        "elements"
       ]
     },
     "DeclaredTable": {
@@ -2717,143 +2734,6 @@
         "flowtables",
         "sets",
         "objects"
-      ]
-    },
-    "DeclaredWgPeer": {
-      "description": "A declared WireGuard peer. Plan 196.",
-      "type": "object",
-      "properties": {
-        "allowed-ips": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/AllowedIp"
-          }
-        },
-        "endpoint": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "endpoint-policy": {
-          "description": "Whether the endpoint is kept to, or set once (#529).",
-          "$ref": "#/$defs/EndpointPolicy"
-        },
-        "persistent-keepalive-secs": {
-          "description": "Serialized as whole seconds (`persistent-keepalive-secs`).",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Duration2"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "preshared-key-set": {
-          "description": "Serialized as a presence boolean (`preshared-key-set`) —\nsecret material never leaves the process via serde.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "maximum": 255,
-            "minimum": 0
-          },
-          "maxItems": 32,
-          "minItems": 32
-        },
-        "public-key": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "maximum": 255,
-            "minimum": 0
-          },
-          "maxItems": 32,
-          "minItems": 32
-        }
-      },
-      "required": [
-        "public-key",
-        "allowed-ips",
-        "endpoint-policy"
-      ]
-    },
-    "DeviceChanges": {
-      "description": "What changed on a single device. Plan 196.",
-      "type": "object",
-      "properties": {
-        "fwmark-set": {
-          "description": "`fwmark` differs from the kernel's current.",
-          "type": "boolean"
-        },
-        "listen-port-set": {
-          "description": "`listen_port` differs from the kernel's current.",
-          "type": "boolean"
-        },
-        "peers-to-add": {
-          "description": "Peers in the config but not in the kernel.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/DeclaredWgPeer"
-          }
-        },
-        "peers-to-modify": {
-          "description": "Per-peer mutations.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 2,
-            "minItems": 2,
-            "prefixItems": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "integer",
-                  "format": "uint8",
-                  "maximum": 255,
-                  "minimum": 0
-                },
-                "maxItems": 32,
-                "minItems": 32
-              },
-              {
-                "$ref": "#/$defs/PeerChanges"
-              }
-            ]
-          }
-        },
-        "peers-to-remove": {
-          "description": "Peers in the kernel but not in the config.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
-            },
-            "maxItems": 32,
-            "minItems": 32
-          }
-        },
-        "private-key-set": {
-          "description": "The declared `private_key` differs from the kernel's, compared\nX25519-clamped as the kernel stores it (#410). `WG_CMD_GET_DEVICE`\nreturns the key to privileged callers (`CAP_NET_ADMIN`).",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "private-key-set",
-        "listen-port-set",
-        "fwmark-set",
-        "peers-to-add",
-        "peers-to-modify",
-        "peers-to-remove"
       ]
     },
     "Duration": {
@@ -2947,21 +2827,6 @@
         }
       ]
     },
-    "EndpointPolicy": {
-      "description": "How a declared peer's endpoint is kept to (#529).",
-      "oneOf": [
-        {
-          "description": "The endpoint is the declared one: a peer that roamed is put back.",
-          "type": "string",
-          "const": "enforce"
-        },
-        {
-          "description": "The endpoint is set when the peer is added, and then left to the\npeer: one that roamed — its handshakes now come from elsewhere —\nkeeps where it went.",
-          "type": "string",
-          "const": "initial-only"
-        }
-      ]
-    },
     "ErspanDirection": {
       "description": "The direction a type III ERSPAN header says traffic was mirrored in.",
       "oneOf": [
@@ -3033,7 +2898,8 @@
       },
       "additionalProperties": false,
       "required": [
-        "session"
+        "session",
+        "version"
       ]
     },
     "ErspanVersion": {
@@ -3157,7 +3023,6 @@
       },
       "required": [
         "parent",
-        "chain",
         "priority",
         "protocol"
       ]
@@ -3245,7 +3110,11 @@
             "$ref": "#/$defs/FirewallRule"
           }
         }
-      }
+      },
+      "required": [
+        "policy",
+        "rules"
+      ]
     },
     "FirewallConfig": {
       "description": "Firewall configuration (nftables): one `nlink-lab` table per node.\n\n`policy` and `rules` are the **input** chain (traffic to the node\nitself) — the shape every earlier version wrote, so it keeps loading.\n`forward` (traffic routed through the node) and `output` (traffic the\nnode sends) are separate chains with their own policy.",
@@ -3295,7 +3164,11 @@
             "$ref": "#/$defs/FirewallSet"
           }
         }
-      }
+      },
+      "required": [
+        "policy",
+        "rules"
+      ]
     },
     "FirewallLimit": {
       "description": "`limit [over] N/UNIT [burst N]`.",
@@ -3454,7 +3327,11 @@
             }
           ]
         }
-      }
+      },
+      "required": [
+        "match",
+        "action"
+      ]
     },
     "FirewallSet": {
       "description": "A named nftables set (`set blocked [10.0.0.0/8, 192.0.2.7]`): what a\nrule's `@name` looks up. An nftables set holds one key type, so an IPv4\nand an IPv6 blocklist are two sets.",
@@ -3497,7 +3374,8 @@
         }
       },
       "required": [
-        "key"
+        "key",
+        "elements"
       ]
     },
     "FlowtableUpdate": {
@@ -3590,15 +3468,6 @@
             }
           ]
         },
-        "interval_us": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
-        },
         "limit": {
           "description": "Packets.",
           "anyOf": [
@@ -3639,15 +3508,6 @@
               "type": "null"
             }
           ]
-        },
-        "target_us": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
         }
       },
       "additionalProperties": false
@@ -3805,7 +3665,15 @@
             "null"
           ]
         }
-      }
+      },
+      "required": [
+        "delay",
+        "jitter",
+        "loss",
+        "rate",
+        "corrupt",
+        "reorder"
+      ]
     },
     "ImpairmentChange": {
       "description": "A change to an impairment on a specific endpoint.",
@@ -3909,7 +3777,10 @@
           ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ]
     },
     "Ipv4Devconf": {
       "enum": [
@@ -4338,7 +4209,9 @@
         }
       },
       "required": [
-        "endpoints"
+        "endpoints",
+        "addresses",
+        "mtu"
       ]
     },
     "LinkChanges": {
@@ -4549,12 +4422,25 @@
       "required": [
         "set-up",
         "set-down",
+        "set-mtu",
+        "set-master",
         "unset-master",
+        "set-address",
         "set-kind-params",
+        "set-txqlen",
+        "set-alias",
+        "set-group",
+        "set-gso-max-size",
+        "set-gso-max-segs",
+        "set-gro-max-size",
+        "set-promisc",
+        "set-protodown",
         "add-altnames",
         "del-altnames",
         "set-ipv4-conf",
         "set-ipv6-conf",
+        "set-addr-gen-mode",
+        "set-ipv6-token",
         "set-port-options",
         "set-port-vlans"
       ]
@@ -4685,6 +4571,7 @@
       "required": [
         "name",
         "link-kind",
+        "stacked-on",
         "blocked-by",
         "destroys"
       ]
@@ -4928,7 +4815,10 @@
             "$ref": "#/$defs/NatRule"
           }
         }
-      }
+      },
+      "required": [
+        "rules"
+      ]
     },
     "NatProto": {
       "description": "The L4 protocol a NAT rule matches.",
@@ -5014,7 +4904,11 @@
         }
       },
       "required": [
-        "action"
+        "action",
+        "src",
+        "dst",
+        "target",
+        "target_port"
       ]
     },
     "NetemLossModel": {
@@ -5133,14 +5027,6 @@
             }
           ]
         },
-        "corrupt_percent": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "writeOnly": true
-        },
         "delay": {
           "anyOf": [
             {
@@ -5161,15 +5047,6 @@
             }
           ]
         },
-        "delay_us": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
-        },
         "duplicate": {
           "anyOf": [
             {
@@ -5189,14 +5066,6 @@
               "type": "null"
             }
           ]
-        },
-        "duplicate_percent": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "writeOnly": true
         },
         "ecn": {
           "type": [
@@ -5221,15 +5090,6 @@
               "type": "null"
             }
           ]
-        },
-        "jitter_us": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
         },
         "limit": {
           "description": "Packets.",
@@ -5272,14 +5132,6 @@
             }
           ]
         },
-        "loss_percent": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "writeOnly": true
-        },
         "rate": {
           "anyOf": [
             {
@@ -5289,16 +5141,6 @@
               "type": "null"
             }
           ]
-        },
-        "rate_bps": {
-          "description": "Bytes per second, as 0.31 had it.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0,
-          "writeOnly": true
         },
         "rate_cell_overhead": {
           "type": [
@@ -5341,14 +5183,6 @@
               "type": "null"
             }
           ]
-        },
-        "reorder_percent": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "writeOnly": true
         },
         "seed": {
           "type": [
@@ -5489,7 +5323,8 @@
       },
       "required": [
         "network",
-        "src_node"
+        "src_node",
+        "desired"
       ]
     },
     "NetworkImpairment": {
@@ -5519,7 +5354,8 @@
       "required": [
         "src",
         "dst",
-        "impairment"
+        "impairment",
+        "rate_cap"
       ]
     },
     "NexthopConflict": {
@@ -5573,6 +5409,8 @@
       },
       "required": [
         "node",
+        "desired_firewall",
+        "desired_nat",
         "was_present"
       ]
     },
@@ -6009,7 +5847,8 @@
         "objects-to-add",
         "objects-to-update",
         "objects-to-delete",
-        "kept-in-use"
+        "kept-in-use",
+        "generation"
       ]
     },
     "ObjectConfig": {
@@ -6123,46 +5962,6 @@
             "type": "string"
           }
         }
-      ]
-    },
-    "PeerChanges": {
-      "description": "What changed on a single peer. Plan 196.",
-      "type": "object",
-      "properties": {
-        "allowed-ips-added": {
-          "description": "The prefixes declared that the peer does not hold (#529).",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/AllowedIp"
-          }
-        },
-        "allowed-ips-removed": {
-          "description": "The prefixes the peer holds that are no longer declared (#529).",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/AllowedIp"
-          }
-        },
-        "allowed-ips-set": {
-          "type": "boolean"
-        },
-        "endpoint-set": {
-          "type": "boolean"
-        },
-        "persistent-keepalive-set": {
-          "type": "boolean"
-        },
-        "preshared-key-set": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "preshared-key-set",
-        "endpoint-set",
-        "persistent-keepalive-set",
-        "allowed-ips-set",
-        "allowed-ips-added",
-        "allowed-ips-removed"
       ]
     },
     "Percent": {
@@ -6435,6 +6234,7 @@
       },
       "required": [
         "endpoint",
+        "desired",
         "was_present"
       ]
     },
@@ -6757,7 +6557,12 @@
             "null"
           ]
         }
-      }
+      },
+      "required": [
+        "egress",
+        "ingress",
+        "burst"
+      ]
     },
     "RateLimitChange": {
       "description": "A change to the rate-limit on a single endpoint.\n\n`desired = None` means \"remove the rate-limit entirely on this\nendpoint\" — translates to deleting the root qdisc on the\ninterface.",
@@ -6782,6 +6587,7 @@
       },
       "required": [
         "endpoint",
+        "desired",
         "was_present"
       ]
     },
@@ -6885,6 +6691,7 @@
       "required": [
         "node",
         "dest",
+        "desired",
         "was_present"
       ]
     },
@@ -6915,7 +6722,12 @@
             "null"
           ]
         }
-      }
+      },
+      "required": [
+        "via",
+        "dev",
+        "metric"
+      ]
     },
     "RouteConflict": {
       "description": "A declared route the apply will not install (#469).\n\nA route is added with `NLM_F_REPLACE`, and the kernel replaces the\nfirst route at the same destination, table and metric — whoever put it\nthere. When that is the kernel's connected route, an RA or DHCP route\nor a routing daemon's, replacing it breaks what depends on it: with the\nconnected route of `10.0.0.1/24` gone, every gateway on that segment is\nunreachable. Give the declared route another metric, or remove the\nother route.",
@@ -7338,7 +7150,13 @@
         "family",
         "key_type",
         "flags",
+        "size",
+        "timeout",
+        "gc_interval",
+        "data_type",
+        "comment",
         "owned",
+        "policy",
         "statements"
       ]
     },
@@ -7481,7 +7299,14 @@
       },
       "required": [
         "key",
-        "flags"
+        "key_end",
+        "data",
+        "timeout",
+        "expiration",
+        "flags",
+        "comment",
+        "counter",
+        "quota_used"
       ]
     },
     "SetElementData": {
@@ -7733,15 +7558,6 @@
             }
           ]
         },
-        "perturb_secs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
-        },
         "quantum": {
           "anyOf": [
             {
@@ -7873,15 +7689,6 @@
             }
           ]
         },
-        "burst_bytes": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
-        },
         "limit": {
           "anyOf": [
             {
@@ -7891,15 +7698,6 @@
               "type": "null"
             }
           ]
-        },
-        "limit_bytes": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0,
-          "writeOnly": true
         },
         "linklayer": {
           "description": "`ethernet` (the default) or `atm` (#806).",
@@ -7948,15 +7746,6 @@
             }
           ]
         },
-        "peakrate_bps": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0,
-          "writeOnly": true
-        },
         "rate": {
           "anyOf": [
             {
@@ -7966,16 +7755,6 @@
               "type": "null"
             }
           ]
-        },
-        "rate_bps": {
-          "description": "Bytes per second, as 0.31 had it.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0,
-          "writeOnly": true
         }
       },
       "additionalProperties": false
@@ -8091,14 +7870,7 @@
         }
       },
       "required": [
-        "dev",
-        "classes-to-add",
-        "classes-to-change",
-        "classes-to-remove",
-        "leaves-to-set",
-        "leaves-to-remove",
-        "filters-to-set",
-        "filters-to-remove"
+        "dev"
       ]
     },
     "TopologyDiff": {
@@ -8345,40 +8117,6 @@
           "type": "string",
           "const": "dot1ad"
         }
-      ]
-    },
-    "WireguardConfigDiff": {
-      "description": "Plan 196 — diff between a [`WireguardConfig`] and the\ncurrent kernel state.\n\n`#[non_exhaustive]` since 0.24 (#165): new change categories\n(e.g. device bootstrap, #169) can appear without a major bump.\nConstruct via [`WireguardConfig::diff`], not literally.\n\nWith the `serde` feature the diff serializes to JSON for typed\ndrift reporting. **No key material is ever serialized**: public\nkeys render as base64, preshared/private keys as presence\nbooleans.",
-      "type": "object",
-      "properties": {
-        "devices-to-add": {
-          "description": "Declared devices that don't exist in the kernel (#169).\nCreate them via [`WireguardConfig::ensure_devices`] (or a\n`NetworkConfig`/`Stack` declaring the links), then diff again.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "devices-to-modify": {
-          "description": "Devices that need at least one mutation: device-\nlevel field change OR a peer add/modify/remove.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 2,
-            "minItems": 2,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/DeviceChanges"
-              }
-            ]
-          }
-        }
-      },
-      "required": [
-        "devices-to-modify",
-        "devices-to-add"
       ]
     },
     "XmitHashPolicy": {

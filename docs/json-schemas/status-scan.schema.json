@@ -86,9 +86,7 @@
       "required": [
         "bridges",
         "veths",
-        "netns",
-        "untagged_ignored",
-        "stale"
+        "netns"
       ]
     },
     "StaleLab": {

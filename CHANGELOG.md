@@ -118,8 +118,9 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   `WireguardConfigDiff` (public keys only; private and preshared keys as
   presence flags). Additive, so `schema_version` stays `3`. The
   published schema (`layered-diff.v3.schema.json`) now types the
-  `network`, `nftables` and `wireguard` objects instead of leaving them
-  free-form.
+  `network` and `nftables` objects instead of leaving them free-form;
+  `wireguard` stays free-form until nlink's own schema of it matches its
+  JSON (marcpardo/nlink#876).
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
 - **A `network { mtu }` lab deployed by an older nlink-lab keeps its
@@ -268,6 +269,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   MTU, so as each joined, the kernel moved the bridge back to 1500. Both
   ends of every member veth now get the network's MTU, and the bridge
   keeps it.
+- **The published JSON schemas rejected real output.** They were
+  generated for deserialization, so every field the output leaves out
+  when empty was required: no `apply --check --json` envelope validated,
+  since one of `topology`, `network` or `nftables` is always elided.
+  They are generated for serialization now (`docs/json-schemas`); every
+  `apply --check --json` from a deploy-every-example sweep validates.
 - **WireGuard drift was invisible** (#170): a peer removed by hand stayed
   removed, and `apply --check`, `verify` and `apply` all said there was
   nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`

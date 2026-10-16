@@ -29,6 +29,12 @@
       "minimum": 0
     }
   },
+  "required": [
+    "wire_version",
+    "lab_name",
+    "timestamp",
+    "nodes"
+  ],
   "$defs": {
     "InterfaceMetrics": {
       "description": "Metrics for a single interface.",
@@ -134,7 +140,25 @@
           "default": 0,
           "minimum": 0
         }
-      }
+      },
+      "required": [
+        "name",
+        "state",
+        "rx_bps",
+        "tx_bps",
+        "rx_pps",
+        "tx_pps",
+        "rx_bytes",
+        "tx_bytes",
+        "rx_pkts",
+        "tx_pkts",
+        "rx_errors",
+        "tx_errors",
+        "rx_dropped",
+        "tx_dropped",
+        "tc_drops",
+        "tc_qlen"
+      ]
     },
     "NodeMetrics": {
       "description": "Metrics for a single node.",
@@ -161,7 +185,11 @@
             "$ref": "#/$defs/SocketRateMetric"
           }
         }
-      }
+      },
+      "required": [
+        "interfaces",
+        "issues"
+      ]
     },
     "SocketRateMetric": {
       "description": "One TCP flow's goodput over the last collector interval, attributed\nto a process. Plain data (no nlink dependency) — the backend\ncollector fills it from nlink's `SocketRateTracker` +\n`SocketOwnerMap`.",
@@ -212,7 +240,16 @@
           "default": 0,
           "minimum": 0
         }
-      }
+      },
+      "required": [
+        "comm",
+        "pid",
+        "local",
+        "remote",
+        "tx_bytes_per_sec",
+        "rx_bytes_per_sec",
+        "retrans_ratio"
+      ]
     }
   }
 }

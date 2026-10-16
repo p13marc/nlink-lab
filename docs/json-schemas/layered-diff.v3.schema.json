@@ -6288,7 +6288,11 @@
           "type": "object",
           "properties": {
             "ecn": {
-              "type": "boolean"
+              "description": "ECN marking: `Some(true)` (`ecn`), `Some(false)` (`noecn`), or\nthe kernel's default, which is on (#173).",
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "flows": {
               "type": [

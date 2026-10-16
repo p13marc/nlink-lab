@@ -1569,8 +1569,10 @@ fn render_qdiscs(out: &mut String, topo: &Topology) -> Result<()> {
                 if let Some(q) = quantum {
                     writeln!(out, "  quantum {q}").unwrap();
                 }
-                if *ecn {
-                    out.push_str("  ecn\n");
+                match ecn {
+                    Some(true) => out.push_str("  ecn\n"),
+                    Some(false) => out.push_str("  noecn\n"),
+                    None => {}
                 }
             }
             QdiscKind::Sfq {

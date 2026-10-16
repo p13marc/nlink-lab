@@ -4529,6 +4529,41 @@ network lan {{
     lab.destroy().await.expect("destroy failed");
 }
 
+/// `fq_codel { noecn }` turns ECN off; without either flag it is the
+/// kernel's default, which is on (#173).
+#[tokio::test]
+async fn fq_codel_noecn_turns_ecn_off() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping fq_codel_noecn_turns_ecn_off: requires root");
+        return;
+    }
+    let lab_name = format!("noecn-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+qdisc a:eth0 fq_codel {{ noecn }}
+qdisc b:eth0 fq_codel {{ limit 1000 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let has_ecn = |n: &str| {
+        let (root, _) = root_qdisc(&lab, n, "eth0");
+        assert!(root.contains("fq_codel"), "{root}");
+        root.split_whitespace().any(|w| w == "ecn")
+    };
+    assert!(!has_ecn("a"), "noecn");
+    assert!(has_ecn("b"), "the kernel's default is on");
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// Changing one netem property used to go netem -> `noqueue` -> a new
 /// netem with a new handle and a new seed: a moment with no impairment
 /// at all, and the accumulated byte counters gone with it. A consumer

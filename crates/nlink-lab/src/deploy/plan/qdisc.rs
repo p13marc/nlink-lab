@@ -136,8 +136,8 @@ pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<QdiscSpec> 
             if let Some(q) = quantum {
                 f = f.quantum(*q);
             }
-            if *ecn {
-                f = f.ecn(true);
+            if let Some(on) = ecn {
+                f = f.ecn(*on);
             }
             QdiscSpec::FqCodel(f)
         }

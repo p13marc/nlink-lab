@@ -37,7 +37,8 @@ pub struct Args {
     /// Set a non-netem root qdisc on an endpoint:
     /// `a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` / `a:eth0=fq_codel,target=5ms,ecn`
     /// / `a:eth0=sfq,perturb=10s` / `a:eth0=prio,bands=3` (repeatable;
-    /// replaces the endpoint's qdisc block).
+    /// replaces the endpoint's qdisc block). fq_codel takes `ecn` or
+    /// `noecn`; without either, ECN is the kernel's default, on.
     #[arg(long, value_name = "NODE:IFACE=KIND[,K=V…]")]
     pub set_qdisc: Vec<String>,
 
@@ -230,7 +231,8 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
 }
 
 /// `KIND[,K=V…]` → [`QdiscKind`](nlink_lab::types::QdiscKind). Bare
-/// `ecn` toggles the flag.
+/// `ecn` / `noecn` turn fq_codel's ECN on or off (the kernel's default is
+/// on).
 fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::types::QdiscKind> {
     use nlink_lab::types::QdiscKind;
     let bad =
@@ -240,13 +242,19 @@ fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::type
         .next()
         .ok_or_else(|| bad("missing qdisc kind".into()))?;
     let mut kv: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
-    let mut ecn = false;
+    let mut ecn: Option<bool> = None;
     for item in items {
         match item.split_once('=') {
             Some((k, v)) => {
                 kv.insert(k.trim(), v.trim().to_string());
             }
-            None if item == "ecn" => ecn = true,
+            None if item == "ecn" || item == "noecn" => {
+                let on = item == "ecn";
+                if ecn.is_some_and(|was| was != on) {
+                    return Err(bad("`ecn` and `noecn` contradict each other".into()));
+                }
+                ecn = Some(on);
+            }
             None => return Err(bad(format!("bad item {item:?} (expected K=V)"))),
         }
     }
@@ -270,6 +278,11 @@ fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::type
         Ok(())
     };
     Ok(match kind {
+        _ if ecn.is_some() && kind != "fq_codel" => {
+            return Err(bad(format!(
+                "`ecn`/`noecn` is a fq_codel setting, not {kind}'s"
+            )));
+        }
         "tbf" => {
             allowed(&["rate", "burst", "limit", "peakrate", "mtu"])?;
             QdiscKind::Tbf {
@@ -543,7 +556,7 @@ mod tests {
             QdiscKind::Tbf { rate, burst, limit: Some(l), .. } if rate == "10mbit" && burst == "32kb" && l == "100kb"
         ));
         assert!(
-            matches!(&topo.qdiscs["b:eth0"].kind, QdiscKind::FqCodel { ecn: true, target: Some(t), .. } if t == "5ms")
+            matches!(&topo.qdiscs["b:eth0"].kind, QdiscKind::FqCodel { ecn: Some(true), target: Some(t), .. } if t == "5ms")
         );
 
         let mut a = args();

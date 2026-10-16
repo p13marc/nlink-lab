@@ -535,6 +535,7 @@ module.exports = grammar({
             seq("perturb", $._value),
             seq("bands", $._value),
             "ecn",
+            "noecn",
           ),
         ),
         "}",

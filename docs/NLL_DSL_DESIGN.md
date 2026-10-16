@@ -689,6 +689,9 @@ nor with the source interface of a network's per-pair `impair` matrix
 (`network-impair-conflicts`). An `impair` on such a source is the
 matrix's default: it applies to traffic to the peers no pair rule names.
 
+`fq_codel`'s ECN marking is on by default (the kernel's default):
+`ecn` says so explicitly and `noecn` turns it off.
+
 Traffic control is declared with the node's links and addresses, so
 `apply` changes a changed block in place (its handle and counters stay),
 removes a removed one, and puts back one deleted by hand; `apply --check`
@@ -1447,7 +1450,7 @@ rate           = "rate" endpoint rate_props
 qdisc          = "qdisc" endpoint ("tbf" | "fq_codel" | "sfq" | "prio") "{" qdisc_prop* "}"
 qdisc_prop     = "rate" RATE | "burst" SIZE | "limit" (SIZE | INT) | "peakrate" RATE
                | "mtu" INT | "target" DURATION | "interval" DURATION | "flows" INT
-               | "quantum" INT | "ecn" | "perturb" DURATION | "bands" INT
+               | "quantum" INT | "ecn" | "noecn" | "perturb" DURATION | "bands" INT
 defaults       = "defaults" ("link" | "impair" | "rate" | IDENT) block
 pool           = "pool" IDENT CIDR "/" INT        # IPv4 or IPv6; INT ≤ 32 / 128
 pattern        = ("mesh" | "ring" | "star") IDENT block

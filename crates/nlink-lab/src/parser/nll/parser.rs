@@ -3405,7 +3405,8 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
     let mut interval = None;
     let mut flows = None;
     let mut quantum = None;
-    let mut ecn = false;
+    // `ecn` / `noecn`; neither leaves the kernel's default, which is on.
+    let mut ecn: Option<bool> = None;
     let mut perturb = None;
     let mut bands = None;
     let is_tbf = kind_name == "tbf";
@@ -3437,8 +3438,16 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
             flows = Some(expect_u32(tokens, pos, "flows", 1)?);
         } else if eat_kw(tokens, pos, "quantum") {
             quantum = Some(expect_u32(tokens, pos, "quantum", 1)?);
-        } else if eat_kw(tokens, pos, "ecn") {
-            ecn = true;
+        } else if eat_kw(tokens, pos, "ecn") || eat_kw(tokens, pos, "noecn") {
+            let on = matches!(at(tokens, *pos - 1), Some(Token::Ident(w)) if w == "ecn");
+            if ecn.is_some_and(|was| was != on) {
+                return Err(err(
+                    tokens,
+                    *pos - 1,
+                    "qdisc: 'ecn' and 'noecn' contradict each other".into(),
+                ));
+            }
+            ecn = Some(on);
         } else if eat_kw(tokens, pos, "perturb") {
             perturb = Some(expect_duration(tokens, pos)?);
         } else if eat_kw(tokens, pos, "bands") {
@@ -3456,7 +3465,7 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
                     tokens,
                     *pos,
                     format!(
-                        "unexpected {other} in qdisc block (rate, burst, limit, peakrate, mtu, target, interval, flows, quantum, ecn, perturb, bands)"
+                        "unexpected {other} in qdisc block (rate, burst, limit, peakrate, mtu, target, interval, flows, quantum, ecn, noecn, perturb, bands)"
                     ),
                 ),
                 None => err(
@@ -3487,7 +3496,8 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
                 ("interval", interval.is_some()),
                 ("flows", flows.is_some()),
                 ("quantum", quantum.is_some()),
-                ("ecn", ecn),
+                ("ecn", ecn == Some(true)),
+                ("noecn", ecn == Some(false)),
                 ("perturb", perturb.is_some()),
                 ("bands", bands.is_some()),
             ])?;
@@ -3541,7 +3551,8 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
                 ("target", target.is_some()),
                 ("interval", interval.is_some()),
                 ("flows", flows.is_some()),
-                ("ecn", ecn),
+                ("ecn", ecn == Some(true)),
+                ("noecn", ecn == Some(false)),
                 ("bands", bands.is_some()),
             ])?;
             ast::QdiscKindDef::Sfq {
@@ -3561,7 +3572,8 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
                 ("interval", interval.is_some()),
                 ("flows", flows.is_some()),
                 ("quantum", quantum.is_some()),
-                ("ecn", ecn),
+                ("ecn", ecn == Some(true)),
+                ("noecn", ecn == Some(false)),
                 ("perturb", perturb.is_some()),
             ])?;
             ast::QdiscKindDef::Prio { bands }

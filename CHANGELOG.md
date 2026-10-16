@@ -152,6 +152,11 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   (#169), here and in the topology: an endpoint `impair` used to be
   dropped there silently. A `qdisc` block or `rate` on such a source is
   now an error (`network-impair-conflicts`).
+- **`QdiscKind::FqCodel::ecn` is `Option<bool>`** (library API and JSON
+  topologies, #173): `Some(true)` is `ecn`, `Some(false)` the new
+  `noecn`, `None` the kernel's default (on). A JSON topology with
+  `"ecn": false` used to mean the default and now turns ECN off; state
+  files never wrote `false`, so they keep their meaning.
 - **One-time replaces on the first `apply` after upgrading:** a `qdisc`
   block's root, and a per-pair tree's, if what nlink reads back differs
   from what it declares (handles and defaults are the ones the
@@ -318,6 +323,8 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   partition replaced the root with a 100%-loss netem, heal deleted it.
 - **An endpoint `impair` on a per-pair source was silently lost** (#169):
   the per-pair tree replaced it. It is the tree's default impairment now.
+- **`fq_codel` could not turn ECN off** (#173): `noecn` does; the spec
+  now says ECN is on by default.
 - **Traffic control drift was invisible**: a qdisc deleted by hand was
   never reported, and `apply` re-installed only what changed in the
   file. It is drift in `apply --check`/`verify` now, and `apply` repairs

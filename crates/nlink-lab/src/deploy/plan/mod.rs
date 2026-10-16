@@ -498,6 +498,15 @@ qdisc a:eth0 {kind}
             kind(&src("sfq { perturb 10s }")),
             QdiscSpec::Sfq(_)
         ));
+        // `noecn` writes ECN off; leaving it out is the kernel's default (#173).
+        match kind(&src("fq_codel { noecn }")) {
+            QdiscSpec::FqCodel(f) => assert_eq!(f.ecn, Some(false)),
+            other => panic!("{other:?}"),
+        }
+        match kind(&src("fq_codel { limit 1000 }")) {
+            QdiscSpec::FqCodel(f) => assert_eq!(f.ecn, None),
+            other => panic!("{other:?}"),
+        }
     }
 
     /// One root per interface (#169): a per-pair source's own `impair` is

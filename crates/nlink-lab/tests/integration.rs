@@ -3808,9 +3808,10 @@ rate a:eth0 egress 10mbit burst 64kbyte
     lab.destroy().await.expect("destroy failed");
 }
 
-/// Removing a `rate … ingress` removes all of it: the root shaper, the
-/// `ffff:` ingress qdisc with its redirect filter, and the `ifb_<iface>`
-/// device. Clearing only the root qdisc left the other two running (#158).
+/// `rate … ingress` passes traffic (#149), and removing it removes all of
+/// it: the root shaper, the `ffff:` ingress qdisc with its redirect
+/// filter, and the `ifb_<iface>` device. Clearing only the root qdisc left
+/// the other two running (#158).
 #[tokio::test]
 async fn rate_limit_removal_takes_ingress_and_ifb() {
     if unsafe { libc::geteuid() } != 0 {
@@ -3849,6 +3850,26 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     assert!(out.contains("qdisc htb"), "{out}");
     assert!(out.contains("qdisc ingress"), "{out}");
     assert!(has_ifb(&lab), "ingress shaping should create ifb_eth0");
+    // Ingress shaping passes traffic (#149): nlink before 0.31 redirected
+    // to the IFB with mirred *ingress*, and every packet a:eth0 received
+    // was lost. The redirect is a mirred egress redirect now.
+    let filters = lab
+        .exec("a", "tc", &["filter", "show", "dev", "eth0", "ingress"])
+        .unwrap()
+        .stdout;
+    assert!(filters.contains("Egress Redirect"), "{filters}");
+    let ping = lab
+        .exec(
+            "b",
+            "ping",
+            &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.1"],
+        )
+        .unwrap();
+    assert_eq!(
+        ping.exit_code, 0,
+        "no traffic through rate … ingress: {}",
+        ping.stdout
+    );
 
     let desired = nlink_lab::parser::parse(&src("")).unwrap();
     nlink_lab::apply(&mut lab, &desired)

@@ -746,7 +746,7 @@ pub(crate) async fn apply_stack_for_node(
     let report = stack
         .apply_reconcile_in(handle.spec(), retry, apply)
         .await
-        .map_err(|e| Error::deploy_failed(format!("stack apply on '{node_name}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("stack apply on '{node_name}'"), e))?;
     tracing::info!(
         node = %node_name,
         attempts = report.attempts,
@@ -775,7 +775,7 @@ pub(crate) async fn reconcile_node_tc(
     let cfg = declare(after)?;
     let conn: Connection<Route> = handle
         .connection()
-        .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("connection for '{node}'"), e))?;
     let mut apply = ApplyOptions::default();
     apply.plan = PlanOptions::default().previous(previous);
     let retry = nlink::reconcile::ReconcileOptions::new()
@@ -784,7 +784,7 @@ pub(crate) async fn reconcile_node_tc(
     let report = cfg
         .apply_reconcile_with_options(&conn, retry, apply)
         .await
-        .map_err(|e| Error::deploy_failed(format!("traffic control on '{node}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("traffic control on '{node}'"), e))?;
     tracing::info!(node = %node, changes = report.changes_made, "traffic control reconciled");
     Ok(())
 }
@@ -839,7 +839,7 @@ pub async fn compute_layered_diff(
         let plan = node_stack(cfg)?
             .plan_in(handle.spec(), opts)
             .await
-            .map_err(|e| Error::deploy_failed(format!("stack plan on '{node_name}': {e}")))?;
+            .map_err(|e| Error::nlink(format!("stack plan on '{node_name}'"), e))?;
         if let Some(d) = plan.network.filter(|d| !d.is_empty()) {
             network.insert(node_name.clone(), d);
         }
@@ -887,20 +887,15 @@ async fn preflight_recreates(running: &RunningLab, desired: &Topology) -> Result
         if des_cfg.diff_against(&cur_cfg).is_empty() {
             continue;
         }
-        let conn: Connection<Route> =
-            node_handle_for(running, node_name)?
-                .connection()
-                .map_err(|e| {
-                    Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
-                })?;
+        let conn: Connection<Route> = node_handle_for(running, node_name)?
+            .connection()
+            .map_err(|e| Error::nlink(format!("NetworkConfig connection on '{node_name}'"), e))?;
         let tables: Vec<u32> = prev.vrfs.values().map(|v| v.table).collect();
         let previous = std::sync::Arc::new(cur_cfg);
         let diff = des_cfg
             .diff_with_options(&conn, network_plan_options(true, &tables, Some(&previous)))
             .await
-            .map_err(|e| {
-                Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
-            })?;
+            .map_err(|e| Error::nlink(format!("NetworkConfig::diff on '{node_name}'"), e))?;
         for r in diff.links_to_recreate.iter().filter(|r| r.is_refused()) {
             let blockers: Vec<String> = r.blocked_by.iter().map(ToString::to_string).collect();
             refused.push(format!(

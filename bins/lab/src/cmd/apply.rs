@@ -148,7 +148,19 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         require_root()?;
         let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
         if layered.is_empty() {
-            if !ctx.quiet {
+            if ctx.json {
+                // One JSON document on stdout, as after an apply (#177).
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "name": lab_name,
+                        "ops": 0,
+                        "removed": 0,
+                        "applied": [],
+                        "apply_time_ms": 0,
+                    })
+                );
+            } else if !ctx.quiet {
                 println!("No changes to apply.");
             }
             return Ok(());
@@ -172,7 +184,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         )));
     }
 
-    if !ctx.quiet {
+    // Under `--json`, stdout carries the one JSON document printed after
+    // the apply; the change summary is for humans (#177).
+    if !ctx.quiet && !ctx.json {
         println!("Changes for lab '{lab_name}':");
         if let Some(layered) = &drift_view {
             println!("  (topology unchanged; the kernel has drifted from it)");

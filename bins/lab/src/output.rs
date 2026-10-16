@@ -51,6 +51,24 @@ pub fn render_error_json(err: &nlink_lab::Error) -> serde_json::Value {
         "ext_ack_offset": err.ext_ack_offset(),
         "exit_code": exit_code_for(err),
     });
+    // What nlink says about a netlink failure (#177): what kind of
+    // failure, the object and the namespace it concerns, and nlink's
+    // own context, innermost last. `null` when no netlink call failed.
+    let nl = err.nlink_error();
+    envelope["kind"] = nl
+        .and_then(|e| serde_json::to_value(e.root_cause().kind()).ok())
+        .unwrap_or(serde_json::Value::Null);
+    envelope["object"] = nl
+        .and_then(|e| e.root_cause().object())
+        .and_then(|o| serde_json::to_value(o).ok())
+        .unwrap_or(serde_json::Value::Null);
+    envelope["netns"] = nl
+        .and_then(|e| e.netns().or(e.root_cause().netns()))
+        .map(serde_json::Value::from)
+        .unwrap_or(serde_json::Value::Null);
+    envelope["context"] = nl
+        .map(|e| serde_json::Value::from(e.context().to_vec()))
+        .unwrap_or(serde_json::Value::Null);
     // Validation failures carry the structured issues so `--json`
     // consumers do not have to scrape "see errors above".
     if let nlink_lab::Error::ValidationErrors(issues) = err {
@@ -62,6 +80,22 @@ pub fn render_error_json(err: &nlink_lab::Error) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_error_envelope_carries_what_nlink_says() {
+        let kernel = nlink::Error::from_errno_ext_ack(16, Some("busy".into()), Some(36));
+        let e = nlink_lab::Error::nlink("failed to apply nftables config on 'b'", kernel);
+        let v = render_error_json(&e);
+        assert_eq!(v["errno"], 16);
+        assert_eq!(v["ext_ack"], "busy");
+        assert_eq!(v["ext_ack_offset"], 36);
+        assert_eq!(v["kind"], "busy", "{v}");
+        assert!(v["error"].as_str().unwrap().starts_with("failed to apply"));
+        assert!(v["context"].is_array());
+        // and nothing invented for an error nlink did not raise
+        let v = render_error_json(&nlink_lab::Error::deploy_failed("no runtime"));
+        assert!(v["kind"].is_null() && v["errno"].is_null(), "{v}");
+    }
 
     #[test]
     fn the_check_envelope_schema_does_not_require_elided_layers() {

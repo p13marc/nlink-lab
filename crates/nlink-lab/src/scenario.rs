@@ -232,11 +232,11 @@ async fn set_link_state(lab: &RunningLab, endpoint: &str, up: bool) -> Result<()
     if up {
         conn.set_link_up(&ep.iface)
             .await
-            .map_err(|e| Error::deploy_failed(format!("failed to bring up {endpoint}: {e}")))?;
+            .map_err(|e| Error::nlink(format!("failed to bring up {endpoint}"), e))?;
     } else {
         conn.set_link_down(&ep.iface)
             .await
-            .map_err(|e| Error::deploy_failed(format!("failed to bring down {endpoint}: {e}")))?;
+            .map_err(|e| Error::nlink(format!("failed to bring down {endpoint}"), e))?;
     }
     Ok(())
 }

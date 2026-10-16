@@ -296,11 +296,11 @@ impl RunningLab {
         self.read_node_blocking(&ep.node, async move |ns| {
             let conn: Connection<Route> = ns
                 .connection()
-                .map_err(|e| Error::deploy_failed(format!("qdisc reader: {e}")))?;
+                .map_err(|e| Error::nlink("qdisc reader", e))?;
             let root = conn
                 .get_root_qdisc_by_name(iface.as_str())
                 .await
-                .map_err(|e| Error::deploy_failed(format!("qdisc reader: {e}")))?;
+                .map_err(|e| Error::nlink("qdisc reader", e))?;
             Ok(root
                 .as_ref()
                 .and_then(crate::impair_parse::impair_show_from))
@@ -323,10 +323,10 @@ impl RunningLab {
             })?;
         let netns = ns
             .netns()
-            .map_err(|e| Error::deploy_failed(format!("namespace of '{node}': {e}")))?;
+            .map_err(|e| Error::nlink(format!("namespace of '{node}'"), e))?;
         netns
             .run(|| std::net::TcpStream::connect_timeout(&addr, timeout).map(drop))
-            .map_err(|e| Error::deploy_failed(format!("namespace of '{node}': {e}")))?
+            .map_err(|e| Error::nlink(format!("namespace of '{node}'"), e))?
             .map_err(Error::Io)
     }
 
@@ -515,7 +515,7 @@ impl RunningLab {
                 name: node.to_string(),
             })?
             .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))
+            .map_err(|e| Error::nlink(format!("connection for '{node}'"), e))
     }
 
     /// Replace the process/log/mgmt bookkeeping after an `apply`.
@@ -705,7 +705,7 @@ impl RunningLab {
                 command.stdout(std::process::Stdio::piped());
                 command.stderr(std::process::Stdio::piped());
                 let mut child = crate::ns_exec::spawn(ns_name, command)
-                    .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
+                    .map_err(|e| Error::nlink(format!("exec in '{node}' failed"), e))?;
                 wait_with_timeout(&mut child, timeout)?;
                 let output = child.wait_with_output().map_err(Error::Io)?;
                 Ok(ExecOutput {
@@ -715,7 +715,7 @@ impl RunningLab {
                 })
             } else {
                 let output = crate::ns_exec::spawn_output(ns_name, command)
-                    .map_err(|e| Error::deploy_failed(format!("exec in '{node}' failed: {e}")))?;
+                    .map_err(|e| Error::nlink(format!("exec in '{node}' failed"), e))?;
                 Ok(ExecOutput {
                     stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                     stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -820,9 +820,7 @@ impl RunningLab {
                     c.etc_overlay(nlink::netlink::namespace::Overlay::BestEffort)
                         .spawn()
                 })
-                .map_err(|e| {
-                    Error::deploy_failed(format!("attached exec in '{node}' failed: {e}"))
-                })?;
+                .map_err(|e| Error::nlink(format!("attached exec in '{node}' failed"), e))?;
             wait_with_optional_timeout(child, opts.timeout).map_err(|e| match e {
                 Error::Timeout(_) => e,
                 other => Error::deploy_failed(format!("attached exec in '{node}' failed: {other}")),
@@ -841,7 +839,7 @@ impl RunningLab {
         command.args(&cmd[1..]);
 
         let pid = crate::ns_exec::spawn_detached(ns_name, command)
-            .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
+            .map_err(|e| Error::nlink(format!("spawn in '{node}' failed"), e))?;
         self.track_pid(node, pid);
         self.attach_cgroup(node, pid);
         Ok(pid)
@@ -1004,7 +1002,7 @@ impl RunningLab {
         } else {
             crate::ns_exec::spawn_detached_reaped(&ns_name, command, &rc_prefix)
         }
-        .map_err(|e| Error::deploy_failed(format!("spawn in '{node}' failed: {e}")))?;
+        .map_err(|e| Error::nlink(format!("spawn in '{node}' failed"), e))?;
         self.track_pid(node, pid);
         self.attach_cgroup(node, pid);
         self.process_logs.insert(
@@ -1143,7 +1141,7 @@ impl RunningLab {
         }
         let ns_name = self.namespace_for(node)?;
         Connection::new_in(ns_name)
-            .map_err(|e| Error::deploy_failed(format!("sock_diag connection for '{ns_name}': {e}")))
+            .map_err(|e| Error::nlink(format!("sock_diag connection for '{ns_name}'"), e))
     }
 
     /// Is there a TCP listener on `port` in `node`'s namespace bound to
@@ -1441,7 +1439,7 @@ impl RunningLab {
                 .map_err(|e| Error::deploy_failed(format!("netlink in '{}': {e}", r.node)))?;
             conn.set_link_mtu(r.iface.as_str(), mtu)
                 .await
-                .map_err(|e| Error::deploy_failed(format!("set mtu {mtu} on {ep}: {e}")))?;
+                .map_err(|e| Error::nlink(format!("set mtu {mtu} on {ep}"), e))?;
         }
         let needle = endpoint.to_string();
         for link in &mut self.topology.links {
@@ -1542,7 +1540,7 @@ impl RunningLab {
         self.route_conn_for(&ep.node)?
             .del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
             .await
-            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
+            .map_err(|e| Error::nlink(format!("clear impairment on '{endpoint}'"), e))?;
         // A cleared endpoint is "no impairment" until the topology says
         // otherwise again: record the empty value so `apply` does not
         // reinstall the declared one behind the operator's back.
@@ -1642,11 +1640,12 @@ impl RunningLab {
                 continue;
             }
             let conn: Connection<Route> = Connection::new_in(ns_name)
-                .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("connection for '{ns_name}'"), e))?;
             let diag = Diagnostics::new(conn);
-            let report = diag.scan().await.map_err(|e| {
-                Error::deploy_failed(format!("diagnostics scan for '{node_name}': {e}"))
-            })?;
+            let report = diag
+                .scan()
+                .await
+                .map_err(|e| Error::nlink(format!("diagnostics scan for '{node_name}'"), e))?;
             results.push(NodeDiagnostic {
                 node: node_name.clone(),
                 interfaces: report.interfaces,
@@ -1664,11 +1663,11 @@ impl RunningLab {
             let conn: Connection<Route> =
                 Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
                     .map_err(|e| {
-                        Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
+                        Error::nlink(format!("connection for container '{node_name}'"), e)
                     })?;
             let diag = Diagnostics::new(conn);
             let report = diag.scan().await.map_err(|e| {
-                Error::deploy_failed(format!("diagnostics scan for container '{node_name}': {e}"))
+                Error::nlink(format!("diagnostics scan for container '{node_name}'"), e)
             })?;
             results.push(NodeDiagnostic {
                 node: node_name.clone(),
@@ -2693,11 +2692,11 @@ async fn read_main_routes_to(
 ) -> Result<Vec<Vec<RouteHop>>> {
     let conn: Connection<Route> = ns
         .connection()
-        .map_err(|e| Error::deploy_failed(format!("route reader: {e}")))?;
+        .map_err(|e| Error::nlink("route reader", e))?;
     let names: BTreeMap<u32, String> = conn
         .get_links()
         .await
-        .map_err(|e| Error::deploy_failed(format!("route reader: {e}")))?
+        .map_err(|e| Error::nlink("route reader", e))?
         .iter()
         .filter_map(|l| Some((l.ifindex(), l.name()?.to_string())))
         .collect();
@@ -2711,7 +2710,7 @@ async fn read_main_routes_to(
     let routes = conn
         .get_routes_for_table(254)
         .await
-        .map_err(|e| Error::deploy_failed(format!("route reader: {e}")))?;
+        .map_err(|e| Error::nlink("route reader", e))?;
     Ok(routes
         .iter()
         .filter(|r| r.family() == family && r.dst_len() == prefix_len)
@@ -2748,7 +2747,7 @@ async fn read_firewall_counters(ns: &crate::deploy::NsRef) -> Result<Vec<Firewal
         Ok(o) => o,
         // no firewall on the node: no table, no counters
         Err(e) if e.is_not_found() => return Ok(Vec::new()),
-        Err(e) => return Err(Error::deploy_failed(format!("read firewall counters: {e}"))),
+        Err(e) => return Err(Error::nlink("read firewall counters", e)),
     };
     Ok(objects
         .into_iter()

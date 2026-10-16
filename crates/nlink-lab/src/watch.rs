@@ -1044,7 +1044,7 @@ async fn run_route_subscription(
 ) -> Result<Stop> {
     let conn: Connection<Route> = resolver
         .connection::<Route>()
-        .map_err(|e| Error::deploy_failed(format!("watch: route connection for '{node}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("watch: route connection for '{node}'"), e))?;
 
     let resolver_for_factory = resolver.clone();
     let factory: nlink::ConnectionFactory<Route> = Arc::new(move || {
@@ -1055,7 +1055,7 @@ async fn run_route_subscription(
     let mut stream = conn
         .into_events_with_resync(factory)
         .await
-        .map_err(|e| Error::deploy_failed(format!("watch: route subscribe for '{node}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("watch: route subscribe for '{node}'"), e))?;
 
     let mut last_error = String::from("the stream ended");
     let mut check = tokio::time::interval(NAMESPACE_CHECK);
@@ -1107,9 +1107,9 @@ async fn run_nftables_subscription(
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
 ) -> Result<Stop> {
-    let conn: Connection<Nftables> = resolver.connection::<Nftables>().map_err(|e| {
-        Error::deploy_failed(format!("watch: nftables connection for '{node}': {e}"))
-    })?;
+    let conn: Connection<Nftables> = resolver
+        .connection::<Nftables>()
+        .map_err(|e| Error::nlink(format!("watch: nftables connection for '{node}'"), e))?;
 
     let resolver_for_factory = resolver.clone();
     let factory: nlink::ConnectionFactory<Nftables> = Arc::new(move || {
@@ -1117,9 +1117,10 @@ async fn run_nftables_subscription(
         Box::pin(async move { r.connection::<Nftables>() })
     });
 
-    let mut stream = conn.into_events_with_resync(factory).await.map_err(|e| {
-        Error::deploy_failed(format!("watch: nftables subscribe for '{node}': {e}"))
-    })?;
+    let mut stream = conn
+        .into_events_with_resync(factory)
+        .await
+        .map_err(|e| Error::nlink(format!("watch: nftables subscribe for '{node}'"), e))?;
 
     let mut last_error = String::from("the stream ended");
     let mut check = tokio::time::interval(NAMESPACE_CHECK);

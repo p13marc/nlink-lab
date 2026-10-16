@@ -21,6 +21,17 @@ pub enum Error {
     #[error("netlink error: {0}")]
     Nlink(#[from] nlink::Error),
 
+    /// An nlink call failed while nlink-lab was doing `context` (#177).
+    /// nlink's error is the source, so `--json` reports its kind, errno,
+    /// extended ack, object and namespace, which a message formatted
+    /// into a string lost. Build it with [`Error::nlink`].
+    #[error("{context}: {source}")]
+    NlinkOp {
+        context: String,
+        #[source]
+        source: nlink::Error,
+    },
+
     /// Topology validation failed (single message).
     #[error("validation failed: {0}")]
     Validation(String),
@@ -85,7 +96,10 @@ pub enum Error {
     Capture(String),
 
     /// Generic deploy failure (for cases that don't fit specific variants).
-    #[error("deploy failed: {0}")]
+    /// A failure described by its message alone. Named for the deploy, its
+    /// first user; it is every command's now, so it prints only the
+    /// message (#177).
+    #[error("{0}")]
     DeployFailed(String),
 
     /// Command exceeded its `--timeout`. The CLI maps this to exit
@@ -165,6 +179,17 @@ impl Error {
         Self::DeployFailed(message.into())
     }
 
+    /// An nlink error, with what nlink-lab was doing when it happened
+    /// (`"failed to apply nftables config on 'b'"`). Prefer it to
+    /// formatting the error into [`Self::deploy_failed`], which keeps only
+    /// its text (#177).
+    pub fn nlink(context: impl Into<String>, source: nlink::Error) -> Self {
+        Self::NlinkOp {
+            context: context.into(),
+            source,
+        }
+    }
+
     /// Check if this is a "not found" error.
     pub fn is_not_found(&self) -> bool {
         matches!(self, Self::NotFound { .. } | Self::NodeNotFound { .. })
@@ -182,6 +207,11 @@ impl Error {
     /// transparently unwraps `Box<nlink::Error>` sources, side-
     /// stepping the `downcast_ref` trap described in
     /// `docs/upstream/nlink-feedback.md` item #4.
+    /// The first nlink error in this error's source chain, if any.
+    pub fn nlink_error(&self) -> Option<&nlink::Error> {
+        self.first_nlink_error()
+    }
+
     fn first_nlink_error(&self) -> Option<&nlink::Error> {
         let mut src: &dyn std::error::Error = self;
         loop {
@@ -231,6 +261,20 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An nlink failure keeps its errno and extended ack under the
+    /// context it happened in, and prints no "deploy failed" (#177).
+    #[test]
+    fn nlink_op_keeps_the_kernel_error() {
+        let kernel = nlink::Error::from_errno_ext_ack(16, Some("busy".into()), Some(36));
+        let e = Error::nlink("failed to apply nftables config on 'b'", kernel);
+        assert_eq!(e.errno(), Some(16));
+        assert_eq!(e.ext_ack(), Some("busy"));
+        assert_eq!(e.ext_ack_offset(), Some(36));
+        let text = e.to_string();
+        assert!(text.starts_with("failed to apply nftables config on 'b': "), "{text}");
+        assert!(!Error::deploy_failed("x").to_string().contains("deploy failed"));
+    }
 
     #[test]
     fn ext_ack_walks_through_namespace_variant() {

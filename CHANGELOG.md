@@ -123,6 +123,21 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   JSON (marcpardo/nlink#876).
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
+- **Error messages no longer start with `deploy failed:`** (#177): that
+  prefix was on every command's errors (`apply`, `impair`, `exec`,
+  `watch`…). The message names what failed (`failed to create veth …`).
+  Scripts matching the prefix need updating.
+- **`--json` errors say more** (#177). netlink failures keep nlink's
+  error as their source (`Error::NlinkOp`, built with `Error::nlink`), so
+  `errno`, `ext_ack` and `ext_ack_offset` are filled where they were
+  `null`, and the envelope has four new fields: `kind` (nlink's error
+  kind: `not-found`, `busy`, `permission-denied`, …), `object` (the
+  link, qdisc, rule… it concerns), `netns`, and `context` (nlink's own,
+  innermost last). `Error` has a new variant (library API).
+- **`apply --json` prints one JSON document on stdout** (#177): the
+  change summary is no longer printed under `--json`, and an apply with
+  nothing to do prints the same `{name, ops, removed, applied,
+  apply_time_ms}` result with zero ops instead of `No changes to apply.`
 - **`watch --json` has two new records** (#175): `{"kind": "ended",
   "reason": …, "retry_in_ms": …}` when a node's stream ends and it is
   subscribed again, and `{"kind": "gone"}` when its namespace is gone and
@@ -338,6 +353,11 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   is gone. Each subscription also checks every 2 s that its namespace
   still exists, so a running `watch` stops pinning a destroyed lab's
   namespaces with its sockets.
+- **Every error said "deploy failed", JSON errors had no errno or
+  extended ack, and `apply --json` mixed text into its stdout** (#177).
+  See Migration. Multi-node network diffs also ran together on one line
+  (`… on eth0NetworkConfig diff (b, …)`): each diff ends with a newline
+  now.
 - **Shell-outs replaced with nlink** (#179). `validate { tcp-connect … }`
   and `wait-for --tcp`'s fallback connect from a socket in the node's
   namespace (they needed `bash` in the node, which a container image may

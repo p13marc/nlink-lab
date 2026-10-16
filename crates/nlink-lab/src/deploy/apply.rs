@@ -135,12 +135,11 @@ impl ApplyEnv {
     fn route(&self, node: &str) -> Result<Connection<Route>> {
         self.handle(node)?
             .connection()
-            .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))
+            .map_err(|e| Error::nlink(format!("connection for '{node}'"), e))
     }
 
     fn root() -> Result<Connection<Route>> {
-        Connection::<Route>::new()
-            .map_err(|e| Error::deploy_failed(format!("root connection: {e}")))
+        Connection::<Route>::new().map_err(|e| Error::nlink("root connection", e))
     }
 }
 
@@ -333,14 +332,14 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             use nlink::netlink::Nl80211;
             let nl = nlink::Connection::<Nl80211>::new_async()
                 .await
-                .map_err(|e| Error::deploy_failed(format!("nl80211 connection: {e}")))?;
+                .map_err(|e| Error::nlink("nl80211 connection", e))?;
             // Only hwsim radios: nlink 0.31 made `set_wiphy_netns` really
             // move a wiphy (it was acked and ignored, nlink #604), so taking
             // the first N would move a host's own Wi-Fi card into a lab.
             let mut phys: Vec<_> = nl
                 .get_phys()
                 .await
-                .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?
+                .map_err(|e| Error::nlink("failed to list PHYs", e))?
                 .into_iter()
                 .filter(|p| is_hwsim_phy(&p.name))
                 .collect();
@@ -357,7 +356,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 let fd = env
                     .handle(node)?
                     .open_fd()
-                    .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
+                    .map_err(|e| Error::nlink(format!("open ns fd for '{node}'"), e))?;
                 nl.set_wiphy_netns(phy.index, &fd).await.map_err(|e| {
                     Error::deploy_failed(format!(
                         "failed to move phy{} to namespace '{node}': {e}",
@@ -370,18 +369,14 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let root = ApplyEnv::root()?;
             root.add_link(nlink::netlink::link::BridgeLink::new(name))
                 .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!("failed to create mgmt bridge '{name}': {e}"))
-                })?;
+                .map_err(|e| Error::nlink(format!("failed to create mgmt bridge '{name}'"), e))?;
             journal.record(Undo::DeleteHostLink { name: name.clone() });
-            root.set_link_up(name.as_str()).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up mgmt bridge '{name}': {e}"))
-            })?;
+            root.set_link_up(name.as_str())
+                .await
+                .map_err(|e| Error::nlink(format!("failed to bring up mgmt bridge '{name}'"), e))?;
             add_addr_nodad(&root, name, *ip, *prefix)
                 .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!("failed to assign IP to mgmt bridge: {e}"))
-                })?;
+                .map_err(|e| Error::nlink("failed to assign IP to mgmt bridge", e))?;
         }
         Op::CreateMgmtVeth {
             node,
@@ -394,30 +389,28 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let fd = env
                 .handle(node)?
                 .open_fd()
-                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("open ns fd for '{node}'"), e))?;
             let veth = nlink::netlink::link::VethLink::new(peer, "mgmt0").peer_netns_fd(&fd);
             root.add_link(veth).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to create mgmt veth for node '{node}': {e}"))
+                Error::nlink(format!("failed to create mgmt veth for node '{node}'"), e)
             })?;
             journal.record(Undo::DeleteHostLink { name: peer.clone() });
             env.mgmt_peers.insert(node.clone(), peer.clone());
             root.set_link_master(peer.as_str(), bridge.as_str())
                 .await
                 .map_err(|e| {
-                    Error::deploy_failed(format!("failed to attach '{peer}' to mgmt bridge: {e}"))
+                    Error::nlink(format!("failed to attach '{peer}' to mgmt bridge"), e)
                 })?;
             root.set_link_up(peer.as_str())
                 .await
-                .map_err(|e| Error::deploy_failed(format!("failed to bring up '{peer}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("failed to bring up '{peer}'"), e))?;
             let conn = env.route(node)?;
             add_addr_nodad(&conn, "mgmt0", *node_ip, *prefix)
                 .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!("failed to assign mgmt IP to '{node}': {e}"))
-                })?;
-            conn.set_link_up("mgmt0").await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up mgmt0 on '{node}': {e}"))
-            })?;
+                .map_err(|e| Error::nlink(format!("failed to assign mgmt IP to '{node}'"), e))?;
+            conn.set_link_up("mgmt0")
+                .await
+                .map_err(|e| Error::nlink(format!("failed to bring up mgmt0 on '{node}'"), e))?;
         }
         Op::CreateMgmtNamespace { ns } => {
             namespace::create(ns).map_err(|e| Error::Namespace {
@@ -436,7 +429,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             mtu,
         } => {
             let conn: Connection<Route> = Connection::new_in(ns.as_str())
-                .map_err(|e| Error::deploy_failed(format!("connection for '{ns}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("connection for '{ns}'"), e))?;
             let mut bridge = nlink::netlink::link::BridgeLink::new(name);
             if *vlan_filtering {
                 bridge = bridge.vlan_filtering(true);
@@ -445,17 +438,18 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 bridge = bridge.mtu(*mtu);
             }
             conn.add_link(bridge).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to create bridge '{name}' for network '{network}': {e}"
-                ))
+                Error::nlink(
+                    format!("failed to create bridge '{name}' for network '{network}'"),
+                    e,
+                )
             })?;
             journal.record(Undo::DeleteLink {
                 ns: NsRef::Named { name: ns.clone() },
                 iface: name.clone(),
             });
-            conn.set_link_up(name.as_str()).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up bridge '{name}': {e}"))
-            })?;
+            conn.set_link_up(name.as_str())
+                .await
+                .map_err(|e| Error::nlink(format!("failed to bring up bridge '{name}'"), e))?;
         }
         Op::CreateNetworkVeth {
             node,
@@ -467,9 +461,9 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             mtu,
         } => {
             let mgmt_fd = namespace::open(mgmt_ns)
-                .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
+                .map_err(|e| Error::nlink("failed to open mgmt namespace", e))?;
             let mgmt_conn: Connection<Route> = Connection::new_in(mgmt_ns.as_str())
-                .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("connection for '{mgmt_ns}'"), e))?;
             let node_conn = env.route(node)?;
             let mut veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
             // The kernel moves a bridge to its smallest port's MTU as each
@@ -479,9 +473,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 veth = veth.mtu(*mtu).peer_mtu(*mtu);
             }
             node_conn.add_link(veth).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to create veth for bridge '{bridge}' member '{node}:{iface}' (mgmt peer '{peer}'): {e}"
-                ))
+                Error::nlink(format!("failed to create veth for bridge '{bridge}' member '{node}:{iface}' (mgmt peer '{peer}')"), e)
             })?;
             journal.record(Undo::DeleteLink {
                 ns: env.handle(node)?.clone(),
@@ -491,13 +483,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .set_link_master(peer.as_str(), bridge.as_str())
                 .await
                 .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to attach '{peer}' to bridge '{bridge}': {e}"
-                    ))
+                    Error::nlink(format!("failed to attach '{peer}' to bridge '{bridge}'"), e)
                 })?;
-            mgmt_conn.set_link_up(peer.as_str()).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to bring up bridge port '{peer}': {e}"))
-            })?;
+            mgmt_conn
+                .set_link_up(peer.as_str())
+                .await
+                .map_err(|e| Error::nlink(format!("failed to bring up bridge port '{peer}'"), e))?;
             if let Some(pv) = vlans {
                 for &vid in &pv.vlans {
                     let mut v = BridgeVlanBuilder::new(vid).dev(peer);
@@ -508,9 +499,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         v = v.pvid().untagged();
                     }
                     mgmt_conn.add_bridge_vlan(v).await.map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add VLAN {vid} to port '{peer}' on bridge '{bridge}': {e}"
-                        ))
+                        Error::nlink(
+                            format!(
+                                "failed to add VLAN {vid} to port '{peer}' on bridge '{bridge}'"
+                            ),
+                            e,
+                        )
                     })?;
                 }
                 if let Some(pvid) = pv.pvid
@@ -518,9 +512,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 {
                     let v = BridgeVlanBuilder::new(pvid).dev(peer).pvid().untagged();
                     mgmt_conn.add_bridge_vlan(v).await.map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to add PVID {pvid} to port '{peer}' on bridge '{bridge}': {e}"
-                        ))
+                        Error::nlink(
+                            format!(
+                                "failed to add PVID {pvid} to port '{peer}' on bridge '{bridge}'"
+                            ),
+                            e,
+                        )
                     })?;
                 }
             }
@@ -569,7 +566,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let fd = env
                 .handle(node)?
                 .open_fd()
-                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("open ns fd for '{node}'"), e))?;
             host.set_link_netns_fd(cfg.name.as_str(), &fd)
                 .await
                 .map_err(|e| {
@@ -601,7 +598,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let fd = env
                 .handle(node)?
                 .open_fd()
-                .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
+                .map_err(|e| Error::nlink(format!("open ns fd for '{node}'"), e))?;
             host.set_link_netns_fd(cfg.name.as_str(), &fd)
                 .await
                 .map_err(|e| {
@@ -615,9 +612,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let conn = env.route(node)?;
             for iface in ifaces {
                 conn.set_link_up(iface.as_str()).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to bring up interface '{iface}' in '{node}': {e}"
-                    ))
+                    Error::nlink(
+                        format!("failed to bring up interface '{iface}' in '{node}'"),
+                        e,
+                    )
                 })?;
             }
         }
@@ -627,7 +625,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
             env.handle(node)?.set_sysctls(&entries).map_err(|e| {
-                Error::deploy_failed(format!("failed to apply sysctls for node '{node}': {e}"))
+                Error::nlink(format!("failed to apply sysctls for node '{node}'"), e)
             })?;
         }
         Op::Stack { node, cfg } => {
@@ -847,9 +845,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                             &super::freq_from_channel(wifi.channel.unwrap_or(1)),
                         ]);
                         let output = handle.spawn_output(cmd).map_err(|e| {
-                            Error::deploy_failed(format!(
-                                "failed to join mesh '{mesh_id}' on '{node}': {e}"
-                            ))
+                            Error::nlink(format!("failed to join mesh '{mesh_id}' on '{node}'"), e)
                         })?;
                         if !output.status.success() {
                             tracing::warn!(
@@ -1027,9 +1023,10 @@ fn exec_op(
         let mut cmd = std::process::Command::new(&exec.cmd[0]);
         cmd.args(&exec.cmd[1..]);
         let output = handle.spawn_output(cmd).map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to run command on '{node}' exec[{index}]: {e}"
-            ))
+            Error::nlink(
+                format!("failed to run command on '{node}' exec[{index}]"),
+                e,
+            )
         })?;
         if !output.status.success() {
             return Err(Error::deploy_failed(format!(
@@ -1099,9 +1096,10 @@ fn exec_op(
         })?
     } else {
         handle.spawn_detached(cmd).map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to spawn background process on '{node}' exec[{index}]: {e}"
-            ))
+            Error::nlink(
+                format!("failed to spawn background process on '{node}' exec[{index}]"),
+                e,
+            )
         })?
     };
     let started = crate::running::host_starttime(pid);
@@ -1187,7 +1185,7 @@ fn start_wifi_daemon(
     let _ = std::fs::remove_file(pidfile);
     let output = handle
         .spawn_output(cmd)
-        .map_err(|e| Error::deploy_failed(format!("failed to start {what} on '{node}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
     if !output.status.success() {
         return Err(Error::deploy_failed(format!(
             "{what} on '{node}' exited with {}: {}",
@@ -1224,7 +1222,7 @@ fn start_forking_daemon(
         .stderr(std::process::Stdio::from(stderr));
     let mut child = handle
         .spawn(cmd)
-        .map_err(|e| Error::deploy_failed(format!("failed to start {what} on '{node}': {e}")))?;
+        .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
     let status = child
         .wait()
         .map_err(|e| Error::deploy_failed(format!("failed to wait for {what} on '{node}': {e}")))?;

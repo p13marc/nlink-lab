@@ -49,7 +49,7 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .stderr(std::process::Stdio::inherit());
         let status = NetnsCommand::new(ns, cmd)
             .and_then(|c| c.etc_overlay(Overlay::BestEffort).spawn())
-            .map_err(|e| nlink_lab::Error::deploy_failed(format!("shell in '{node}': {e}")))?
+            .map_err(|e| nlink_lab::Error::nlink(format!("shell in '{node}'"), e))?
             .wait()
             .map_err(|e| nlink_lab::Error::deploy_failed(format!("shell in '{node}': {e}")))?;
         pass_through_status(status);

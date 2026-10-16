@@ -4,9 +4,9 @@ use crate::error::{Error, Result};
 
 /// Name of the nftables table that nlink-lab owns on every
 /// node carrying firewall / NAT rules. Rules outside this
-/// table (or rules in this table without an `nlink-lab/`
-/// USERDATA-keyed comment) are treated as foreign and left
-/// alone by the reconcile path.
+/// table, and rules in it that carry no `nlink-lab/` key, are
+/// foreign and left alone by the reconcile path, together with
+/// the chains, sets and objects they use (nlink #459).
 pub(crate) const NLINK_LAB_TABLE: &str = "nlink-lab";
 
 /// Build the declarative [`NftablesConfig`] for a node's
@@ -18,8 +18,9 @@ pub(crate) const NLINK_LAB_TABLE: &str = "nlink-lab";
 /// `NftablesDiff::apply` then commits every chain/rule/table mutation in one
 /// atomic kernel batch.
 ///
-/// Each rule carries a stable `nlink-lab/{fw,nat}/<chain>/<idx>` USERDATA
-/// key (the `"nlink:"` prefix is auto-prepended by the library). Stable keys
+/// Each rule carries a stable `nlink-lab/{fw,nat}/<chain>/<idx>` key, which
+/// nlink keeps in a userdata TLV of its own (since 0.32, nlink #527; `nft
+/// list` no longer shows it as a `comment "nlink:…"`). Stable keys
 /// make idempotent re-apply produce zero kernel ops and in-place edits
 /// (e.g. `dport 80` → `dport 8080`) replace the rule body without losing its
 /// position.

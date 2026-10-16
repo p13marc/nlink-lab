@@ -23,7 +23,7 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
                 name: format!("{}-{}", topology.lab.prefix(), node_name),
                 image: image.clone(),
                 pull: node.pull.clone(),
-                opts: build_create_opts(node, dns_extra_hosts),
+                opts: Box::new(build_create_opts(node, dns_extra_hosts)),
             });
         } else {
             ops.push(Op::CreateNamespace {

@@ -1,8 +1,10 @@
-//! Pure planner: NLL impairments → netem qdisc config.
+//! Pure planner: NLL impairments → netem config, `qdisc` blocks → the
+//! qdisc nlink declares.
 
 use crate::error::Result;
 use crate::helpers::{parse_duration, parse_percent, parse_rate_bps};
 use nlink::netlink::tc::NetemConfig;
+use nlink::netlink::tc_spec::QdiscSpec;
 
 /// What an impairment's `loss` says, in `tc`'s own grammar: a percent of
 /// independent loss (`1%`), or one of netem's Markov loss models,
@@ -78,18 +80,11 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
     Ok(netem)
 }
 
-/// A built non-netem root qdisc, ready for `Connection::replace_qdisc`.
-pub(crate) enum BuiltQdisc {
-    Tbf(nlink::netlink::tc::TbfConfig),
-    FqCodel(nlink::netlink::tc::FqCodelConfig),
-    Sfq(nlink::netlink::tc::SfqConfig),
-    Prio(nlink::netlink::tc::PrioConfig),
-}
-
-/// Translate a [`QdiscConfig`](crate::types::QdiscConfig) into nlink's
-/// imperative qdisc config (issue #67). Values are parsed with the same
-/// helpers the NLL lowering validated them with.
-pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<BuiltQdisc> {
+/// Translate a [`QdiscConfig`](crate::types::QdiscConfig) into the qdisc
+/// nlink declares (issue #67, #108). Values are parsed with the same
+/// helpers the NLL lowering validated them with. A `prio` declared at the
+/// root gets handle `1:`, so `classify 1:N` picks its bands (#167).
+pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<QdiscSpec> {
     use crate::helpers::{parse_duration, parse_rate_bps, parse_size};
     use crate::types::QdiscKind;
     use nlink::netlink::tc::{FqCodelConfig, PrioConfig, SfqConfig, TbfConfig};
@@ -115,7 +110,7 @@ pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<BuiltQdisc>
             if let Some(m) = mtu {
                 t = t.mtu(*m);
             }
-            BuiltQdisc::Tbf(t)
+            QdiscSpec::Tbf(t)
         }
         QdiscKind::FqCodel {
             target,
@@ -144,7 +139,7 @@ pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<BuiltQdisc>
             if *ecn {
                 f = f.ecn(true);
             }
-            BuiltQdisc::FqCodel(f)
+            QdiscSpec::FqCodel(f)
         }
         QdiscKind::Sfq {
             perturb,
@@ -162,14 +157,14 @@ pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<BuiltQdisc>
             if let Some(b) = quantum {
                 q = q.quantum(*b);
             }
-            BuiltQdisc::Sfq(q)
+            QdiscSpec::Sfq(q)
         }
         QdiscKind::Prio { bands } => {
             let mut p = PrioConfig::new();
             if let Some(b) = bands {
                 p = p.bands(i32::from(*b));
             }
-            BuiltQdisc::Prio(p)
+            QdiscSpec::Prio(p)
         }
     })
 }

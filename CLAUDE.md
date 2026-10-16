@@ -104,7 +104,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (68 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (69 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -295,7 +295,9 @@ execute**:
                  carrying its master — addresses, routes incl. VRF tables)
    nftables.rs   topology_to_nftables_config (firewall + NAT, one table)
    wireguard.rs  key material + WireguardConfig per node
-   qdisc.rs      build_netem
+   qdisc.rs      build_netem, build_qdisc (QdiscSpec)
+   tc.rs         declare_node_tc: netem, qdisc blocks, RateLimiter::declare,
+                 PerPeerImpairer::declare, partitions — into the Stack
    process.rs    depends_on order, container create options
  apply.rs      the ONLY kernel/host-touching module: execute(plan) runs
                ops in stage order and journals every inverse
@@ -305,20 +307,24 @@ execute**:
 ```
 
 Stages, in order (`Stage`): Namespaces → Hwsim → MgmtBridge → Networks →
-Links → HostLinks → LinksUp → Sysctls → Stack → Tc → Dns →
+Links → HostLinks → LinksUp → Sysctls → Stack → Dns →
 RoutingDaemons → Processes → Wifi. Removals in an apply run first, in reverse stage order.
 A declared link whose kind parameters change (VLAN id, VNI, bond mode, VRF
-table…) is recreated by nlink inside Stack, which keeps its Tc
-(`preserve_undeclared_tc`) and puts its declared routes back; `apply` runs a
+table…) is recreated by nlink inside Stack, which puts its declared Tc and
+routes back (and keeps undeclared Tc, `preserve_undeclared_tc`); `apply` runs a
 read-only preflight so a recreate nlink would refuse fails before anything
 changes. Every
 netlink resource still commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig`, planned and
 applied per node as one `nlink::facade::Stack` (`apply_reconcile_in`;
 zero kernel calls when unchanged). In apply mode the network layer purges
-and plans against `previous` (the running topology's config), so a
-declared link the topology no longer has is deleted; a declared link's
-per-interface sysctls are devconf on its declaration. Namespaces created by nlink-lab carry
+and plans against `previous` (the running lab's plan, runtime impairments
+and partitions included), so a declared link, qdisc or Tc tree the topology
+no longer has is deleted; a declared link's per-interface sysctls are
+devconf on its declaration. Traffic control is declared too
+(`plan/tc.rs`): a runtime `impair`/`--partition`/`--heal` reconciles the
+node's Tc-only config (`deploy::reconcile_node_tc`); a partition is a
+clsact matchall drop on both hooks, under whatever root the endpoint has. Namespaces created by nlink-lab carry
 an ownership tag (`/run/nlink-lab/netns/<ns>`, `netns_tag.rs`) and
 `destroy --orphans` only ever reaps tagged ones. `deploy --dry-run`
 prints the plan; `validate { … }` assertions run after the state file is

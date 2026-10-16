@@ -95,11 +95,13 @@ pub struct Args {
     #[arg(long)]
     pub in_rate: Option<String>,
 
-    /// Simulate a network partition (save impairments, apply 100% loss).
+    /// Simulate a network partition: drop everything the endpoint sends and
+    /// receives. Its qdiscs (netem, `qdisc` block, rate limit, per-pair
+    /// matrix) stay as they are.
     #[arg(long)]
     pub partition: bool,
 
-    /// Restore pre-partition impairments.
+    /// End a partition: traffic flows again, through what the endpoint had.
     #[arg(long)]
     pub heal: bool,
 }

@@ -42,16 +42,6 @@ pub enum Undo {
         ns: NsRef,
         iface: String,
     },
-    ClearQdisc {
-        ns: NsRef,
-        iface: String,
-    },
-    /// A `rate` limit: the root shaper, the `ffff:` ingress qdisc with its
-    /// redirect filter, and the `ifb_<iface>` device ingress shaping uses.
-    RemoveRateLimit {
-        ns: NsRef,
-        iface: String,
-    },
     RemoveHosts {
         lab: String,
     },
@@ -210,20 +200,6 @@ impl Journal {
                         tracing::warn!("rollback: delete link '{iface}' in {ns:?}: {e}");
                     }
                 }
-                Undo::ClearQdisc { ns, iface } => {
-                    if let Ok(conn) = ns.connection::<Route>() {
-                        let _ = conn
-                            .del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
-                            .await;
-                    }
-                }
-                Undo::RemoveRateLimit { ns, iface } => {
-                    if let Ok(conn) = ns.connection::<Route>() {
-                        let _ = nlink::netlink::ratelimit::RateLimiter::new(iface)
-                            .remove(&conn)
-                            .await;
-                    }
-                }
                 Undo::RemoveHosts { lab } => {
                     let _ = crate::dns::remove_hosts(lab);
                 }
@@ -289,10 +265,7 @@ impl Drop for Journal {
                 }
                 Undo::RemoveCgroups { lab } => crate::cgroup::remove_lab(lab),
                 Undo::CleanupWifiConfigs { lab } => crate::wifi::cleanup_configs(lab),
-                Undo::DeleteHostLink { .. }
-                | Undo::DeleteLink { .. }
-                | Undo::ClearQdisc { .. }
-                | Undo::RemoveRateLimit { .. } => {}
+                Undo::DeleteHostLink { .. } | Undo::DeleteLink { .. } => {}
             }
         }
         // The file stays so `destroy --orphans` can finish the netlink half.

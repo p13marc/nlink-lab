@@ -1319,19 +1319,20 @@ declarations.
 
 ### Partition and Heal
 
-Simulate network partitions with automatic baseline preservation:
+Simulate network partitions without losing what the link carries:
 
 ```bash
-sudo nlink-lab impair mylab router:wan0 --partition  # 100% loss, saves baseline
+sudo nlink-lab impair mylab router:wan0 --partition  # drops everything, both ways
 # ... test failure detection ...
-sudo nlink-lab impair mylab router:wan0 --heal       # restores original impairments
+sudo nlink-lab impair mylab router:wan0 --heal       # traffic flows again
 ```
 
 **Semantics:**
-- `--partition` saves the current netem config for the endpoint to the state file, then replaces it with 100% packet loss
-- `--heal` restores the saved config (e.g., original `delay 50ms` from the NLL file). If no impairment existed before partition, heal clears the qdisc entirely
-- Double partition is a no-op — the original saved config is preserved, not overwritten
-- Partition/heal operates on a single endpoint (unidirectional). For bidirectional partition, call it on both endpoints
+- `--partition` drops everything the endpoint sends and receives: a matchall drop filter on both hooks of a clsact qdisc, ahead of any other filter. Its root qdisc and the tree under it (an `impair` netem, a `qdisc` block, a `rate` limit, a network's per-pair matrix) stay as they are
+- `--heal` takes the filters away; the link is exactly as it was before the partition
+- An `apply` while partitioned keeps the partition (`--reset-impairments` drops it); `--check` and `verify` do not report it as drift
+- Double partition is a no-op
+- `--clear` removes the endpoint's impairment and its partition
 
 ### CLI Parameter Passing
 

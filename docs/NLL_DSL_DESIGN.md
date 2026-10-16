@@ -684,8 +684,15 @@ there; for `fq_codel`/`sfq` it is a packet count). A TBF with no limit
 has no queue and drops every packet, so it is a parse error, and a zero
 limit is a validation error (`invalid-qdisc-value`). A parameter of another kind is
 a parse error. An interface has exactly one root qdisc, so `qdisc`
-cannot share an endpoint with `impair` or `rate` (`qdisc-conflicts`).
-`apply` replaces a changed block and clears a removed one;
+cannot share an endpoint with `impair` or `rate` (`qdisc-conflicts`),
+nor with the source interface of a network's per-pair `impair` matrix
+(`network-impair-conflicts`). An `impair` on such a source is the
+matrix's default: it applies to traffic to the peers no pair rule names.
+
+Traffic control is declared with the node's links and addresses, so
+`apply` changes a changed block in place (its handle and counters stay),
+removes a removed one, and puts back one deleted by hand; `apply --check`
+and `verify` report the difference. A `prio` gets handle `1:`.
 `edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` edits a running
 lab. See `examples/qdisc-kinds.nll`.
 

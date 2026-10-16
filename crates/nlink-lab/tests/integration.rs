@@ -1541,15 +1541,6 @@ async fn apply_recreates_vlan_and_reinstalls_netem_and_vrf_route() {
     assert!(ok, "h cannot reach r over the recreated VLAN");
 
     // Converged: nothing left to do.
-    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
-    assert!(
-        !plan
-            .ops
-            .iter()
-            .any(|o| matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. })),
-        "{:?}",
-        plan.ops
-    );
     let layered = nlink_lab::compute_layered_diff(&lab, &desired)
         .await
         .expect("compute_layered_diff failed");
@@ -3649,11 +3640,22 @@ async fn proc_stat_many_samples_a_whole_node(mut lab: RunningLab) {
 
 // ─── Plan 156 PR A — partition cycles fix ───────────────
 
+/// Whether `node:iface` drops what it sends and receives: a partition's
+/// matchall drop on both clsact hooks (#168).
+fn blocked(lab: &RunningLab, node: &str, iface: &str) -> bool {
+    ["ingress", "egress"].iter().all(|hook| {
+        lab.exec(node, "tc", &["filter", "show", "dev", iface, hook])
+            .unwrap()
+            .stdout
+            .contains("action drop")
+    })
+}
+
 // Round-4 §1: `partition` was a silent no-op on the second call after
 // `clear`, because the stale `saved_impairments` entry survived
 // `clear_impairment`. This test cycles partition+clear five times
-// and asserts each `--partition` actually installs a netem qdisc.
-// Before the fix this fails on cycle 2 with "no netem on interface".
+// and asserts each `--partition` actually installs its drop filters.
+// Before the fix this fails on cycle 2.
 #[lab_test("examples/simple.nll")]
 async fn partition_clear_cycles_are_idempotent(mut lab: RunningLab) {
     let endpoint = "host:eth0";
@@ -3663,13 +3665,9 @@ async fn partition_clear_cycles_are_idempotent(mut lab: RunningLab) {
         });
 
         // The partition must actually be live — assert via `tc`.
-        let qd = lab
-            .exec("host", "tc", &["qdisc", "show", "dev", "eth0"])
-            .unwrap();
         assert!(
-            qd.stdout.contains("loss 100%"),
-            "cycle {cycle}: expected loss 100% qdisc after partition; got: {}",
-            qd.stdout
+            blocked(&lab, "host", "eth0"),
+            "cycle {cycle}: expected the drop filters after partition"
         );
 
         lab.clear_impairment(endpoint).await.unwrap_or_else(|e| {
@@ -3766,7 +3764,7 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
 // network-only topology, partitions a member endpoint, and asserts:
 //   1. `topology_endpoints` includes the bridge member.
 //   2. `is_partitioned(member)` is true after partition.
-//   3. The kernel actually has the netem qdisc on the member's iface.
+//   3. The kernel actually drops on the member's iface.
 // Together these prove the `--show --json` flow can see endpoints
 // declared via networks, end-to-end.
 #[lab_test("examples/vlan-trunk.nll")]
@@ -3782,16 +3780,10 @@ async fn impair_show_includes_network_members(mut lab: RunningLab) {
     lab.partition("host1:eth0").await.unwrap();
     assert!(lab.is_partitioned("host1:eth0"));
 
-    let qd = lab
-        .exec("host1", "tc", &["qdisc", "show", "dev", "eth0"])
-        .unwrap();
     assert!(
-        qd.stdout.contains("loss 100%"),
-        "expected a loss 100% qdisc on host1:eth0 after partition; tc said: {}",
-        qd.stdout
+        blocked(&lab, "host1", "eth0"),
+        "expected the drop filters on host1:eth0 after partition"
     );
-    let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout).unwrap();
-    assert_eq!(parsed.loss_pct, Some(100.0));
 }
 
 // `is_partitioned` should reflect partition/heal lifecycle, not raw
@@ -4284,6 +4276,259 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 
 // ─── #108: a changed impairment is replaced, not torn down ───
 
+/// The average round-trip time `from` measures to `to`, in ms.
+fn avg_rtt_ms(lab: &RunningLab, from: &str, to: &str) -> f64 {
+    let out = lab
+        .exec(from, "ping", &["-c", "4", "-i", "0.2", "-q", to])
+        .unwrap();
+    let line = out
+        .stdout
+        .lines()
+        .find(|l| l.contains("min/avg/max"))
+        .unwrap_or_else(|| panic!("no rtt from {from} to {to}: {}{}", out.stdout, out.stderr));
+    line.split('=')
+        .nth(1)
+        .unwrap()
+        .trim()
+        .split('/')
+        .nth(1)
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+/// The root qdisc line of `node:iface`, and its `Sent` bytes.
+fn root_qdisc(lab: &RunningLab, node: &str, iface: &str) -> (String, u64) {
+    let out = lab
+        .exec(node, "tc", &["-s", "qdisc", "show", "dev", iface, "root"])
+        .unwrap()
+        .stdout;
+    let head = out.lines().next().unwrap_or_default().to_string();
+    let sent = out
+        .split_whitespace()
+        .skip_while(|w| *w != "Sent")
+        .nth(1)
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    (head, sent)
+}
+
+/// Traffic control is declared (#108): a re-apply changes nothing (same
+/// handle, counters kept, empty diff), a qdisc deleted by hand is drift
+/// that `--check` reports, and `apply` puts it back.
+#[tokio::test]
+async fn declared_tc_reapplies_as_nothing_and_repairs_drift() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping declared_tc_reapplies_as_nothing_and_repairs_drift: requires root");
+        return;
+    }
+    let lab_name = format!("dtc-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+impair a:eth0 delay 10ms
+qdisc b:eth0 prio {{ bands 3 }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert!(avg_rtt_ms(&lab, "b", "10.0.0.1") >= 9.0);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(
+        layered.is_empty(),
+        "fresh deploy should be converged:\n{layered}"
+    );
+    let (netem, sent) = root_qdisc(&lab, "a", "eth0");
+    assert!(netem.contains("netem") && sent > 0, "{netem} sent {sent}");
+
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("re-apply failed");
+    let (netem_after, sent_after) = root_qdisc(&lab, "a", "eth0");
+    assert_eq!(netem, netem_after, "the netem is the same qdisc");
+    assert!(sent_after >= sent, "counters kept: {sent} -> {sent_after}");
+
+    // Deleted by hand: drift `--check` reports, `apply` repairs.
+    let del = lab
+        .exec("a", "tc", &["qdisc", "del", "dev", "eth0", "root"])
+        .unwrap();
+    assert_eq!(del.exit_code, 0, "{}", del.stderr);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    let a = layered.network.get("a").expect("a's network layer drifted");
+    // The kernel put its default root back: the netem replaces it.
+    assert_eq!(
+        a.qdiscs_to_add.len() + a.qdiscs_to_replace.len(),
+        1,
+        "{layered}"
+    );
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("apply failed");
+    assert!(root_qdisc(&lab, "a", "eth0").0.contains("netem"));
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// A partition drops both directions and leaves the root alone (#168):
+/// the `prio` is still there while partitioned, an `apply` meanwhile keeps
+/// the partition, and heal finds the prio as it was.
+#[tokio::test]
+async fn partition_and_heal_keep_a_prio() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping partition_and_heal_keep_a_prio: requires root");
+        return;
+    }
+    let lab_name = format!("pprio-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+qdisc a:eth0 prio {{ bands 3 }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let ping = |lab: &RunningLab, from: &str, to: &str| {
+        lab.exec(from, "ping", &["-c", "1", "-W", "1", to])
+            .unwrap()
+            .exit_code
+            == 0
+    };
+    assert!(ping(&lab, "a", "10.0.0.2"));
+
+    lab.partition("a:eth0").await.expect("partition failed");
+    assert!(!ping(&lab, "a", "10.0.0.2"), "a still sends");
+    assert!(!ping(&lab, "b", "10.0.0.1"), "a still receives");
+    assert!(root_qdisc(&lab, "a", "eth0").0.contains("prio 1: root"));
+
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("apply failed");
+    assert!(lab.is_partitioned("a:eth0"));
+    assert!(blocked(&lab, "a", "eth0"), "the apply kept the partition");
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "a partition is not drift:\n{layered}");
+
+    lab.heal("a:eth0").await.expect("heal failed");
+    assert!(ping(&lab, "a", "10.0.0.2") && ping(&lab, "b", "10.0.0.1"));
+    assert!(
+        root_qdisc(&lab, "a", "eth0").0.contains("prio 1: root"),
+        "heal must find the prio"
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// An `impair` on the source of a network's per-pair matrix is the
+/// matrix's default (#169): traffic to a peer no rule names gets it,
+/// the pair rule's peer gets the rule. It used to be silently lost.
+/// Removing the matrix removes its tree.
+#[tokio::test]
+async fn endpoint_impair_is_the_default_of_a_pair_matrix() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping endpoint_impair_is_the_default_of_a_pair_matrix: requires root");
+        return;
+    }
+    let lab_name = format!("pdef-{}", std::process::id());
+    let src = |rules: &str| {
+        format!(
+            r#"lab "{lab_name}"
+node a
+node b
+node c
+network lan {{
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.50.0.0/24
+  {rules}
+}}
+impair a:eth0 delay 100ms
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("impair a -- b { delay 20ms }")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let ip = |n: &str| {
+        lab.topology().networks["lan"].ports[&format!("{n}:eth0")].addresses[0]
+            .split('/')
+            .next()
+            .unwrap()
+            .to_string()
+    };
+    let (b, c) = (ip("b"), ip("c"));
+    let to_b = avg_rtt_ms(&lab, "a", &b);
+    let to_c = avg_rtt_ms(&lab, "a", &c);
+    assert!(
+        (18.0..60.0).contains(&to_b),
+        "a -> b is the pair rule's 20ms: {to_b}"
+    );
+    assert!(to_c >= 98.0, "a -> c is the default 100ms: {to_c}");
+
+    // Without the rules, the endpoint's own netem is its root again.
+    let plain = nlink_lab::parser::parse(&src("")).unwrap();
+    nlink_lab::apply(&mut lab, &plain)
+        .await
+        .expect("apply failed");
+    let (root, _) = root_qdisc(&lab, "a", "eth0");
+    assert!(root.contains("netem"), "{root}");
+    assert!(avg_rtt_ms(&lab, "a", &b) >= 98.0);
+    let layered = nlink_lab::compute_layered_diff(&lab, &plain).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// Removing a network's only per-pair rule removes the tree (it stayed:
+/// the old op had nothing to undo it with).
+#[tokio::test]
+async fn removing_a_pair_matrix_removes_its_tree() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping removing_a_pair_matrix_removes_its_tree: requires root");
+        return;
+    }
+    let lab_name = format!("prm-{}", std::process::id());
+    let src = |rules: &str| {
+        format!(
+            r#"lab "{lab_name}"
+node a
+node b
+network lan {{
+  members [a:eth0, b:eth0]
+  subnet 10.51.0.0/24
+  {rules}
+}}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("impair a -- b { delay 20ms }")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert!(root_qdisc(&lab, "a", "eth0").0.contains("htb 1: root"));
+    let plain = nlink_lab::parser::parse(&src("")).unwrap();
+    nlink_lab::apply(&mut lab, &plain)
+        .await
+        .expect("apply failed");
+    let (root, _) = root_qdisc(&lab, "a", "eth0");
+    assert!(!root.contains("htb"), "the per-pair tree stayed: {root}");
+    let layered = nlink_lab::compute_layered_diff(&lab, &plain).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// Changing one netem property used to go netem -> `noqueue` -> a new
 /// netem with a new handle and a new seed: a moment with no impairment
 /// at all, and the accumulated byte counters gone with it. A consumer
@@ -4506,19 +4751,21 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
     );
     assert!(lab.live_impairments().contains_key("a:eth0"));
 
-    // … a partition on top saves the live value for heal …
+    // … a partition on top drops everything and leaves the netem be …
     lab.partition("a:eth0").await.unwrap();
+    assert!(blocked(&lab, "a", "eth0"));
     assert!(
-        qdisc(&lab, "a").contains("loss 100%"),
-        "{}",
+        qdisc(&lab, "a").contains("50"),
+        "the netem stays under the partition: {}",
         qdisc(&lab, "a")
     );
     let (st, tp) = nlink_lab::state::load(&lab_name).unwrap();
     nlink_lab::state::snapshot_save(&lab_name, "chaos", None, &st, &tp).unwrap();
     lab.heal("a:eth0").await.unwrap();
+    assert!(!blocked(&lab, "a", "eth0"));
     assert!(
         qdisc(&lab, "a").contains("50"),
-        "heal restores the live value: {}",
+        "heal leaves the live value: {}",
         qdisc(&lab, "a")
     );
 
@@ -4542,11 +4789,8 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
     nlink_lab::restore(&mut lab, &chaos)
         .await
         .expect("restore chaos failed");
-    assert!(
-        qdisc(&lab, "a").contains("loss 100%"),
-        "{}",
-        qdisc(&lab, "a")
-    );
+    assert!(blocked(&lab, "a", "eth0"));
+    assert!(qdisc(&lab, "a").contains("50"), "{}", qdisc(&lab, "a"));
     assert!(lab.is_partitioned("a:eth0"));
     assert!(lab.topology().nodes.contains_key("c"));
 
@@ -4557,6 +4801,7 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
         .expect("restore base failed");
     assert!(!lab.topology().nodes.contains_key("c"));
     assert!(!lab.is_partitioned("a:eth0"));
+    assert!(!blocked(&lab, "a", "eth0"));
     let out = qdisc(&lab, "a");
     assert!(out.contains("1ms") || out.contains("1.0ms"), "{out}");
     assert!(!out.contains("loss"), "{out}");

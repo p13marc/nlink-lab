@@ -5,14 +5,12 @@
 
 use nlink::netlink::namespace;
 use nlink::{Connection, Route};
-use std::collections::BTreeMap;
-use std::net::IpAddr;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::{Error, Result};
-use crate::helpers::parse_rate_bps;
 use crate::running::RunningLab;
 use crate::state::{self, LabState};
-use crate::types::{EndpointRef, Impairment, Topology};
+use crate::types::{Impairment, Topology};
 
 mod apply;
 pub mod op;
@@ -24,7 +22,6 @@ use rollback::{Journal, Undo};
 pub use op::{NsRef, Op, Plan, StackConfig, Stage};
 pub(crate) use plan::network::*;
 pub(crate) use plan::nftables::*;
-pub(crate) use plan::qdisc::*;
 #[cfg(feature = "wireguard")]
 pub(crate) use plan::wireguard::WgKeys;
 #[cfg(all(test, feature = "wireguard"))]
@@ -203,59 +200,80 @@ pub struct ApplyOptions {
     pub reset_impairments: bool,
 }
 
-/// Runtime impairments (`impair` at the CLI) are not in either topology.
-/// Unless the topology *changed* that endpoint's declaration (or the
-/// caller asked for a reset), the live value stays: it is overlaid onto
-/// both the current and the desired topology so the plan diff sees no
-/// change there. Returns the overlaid pair and the live entries kept.
+/// A running lab's topology with what runtime commands added to it: the
+/// live impairments (`impair` at the CLI), and the partitioned endpoints.
+/// What its traffic control really is.
+pub(crate) fn live_view(running: &RunningLab) -> (Topology, BTreeSet<String>) {
+    let mut topo = running.topology().clone();
+    for (ep, live) in running.live_impairments() {
+        if *live == Impairment::default() {
+            topo.impairments.remove(ep);
+        } else {
+            topo.impairments.insert(ep.clone(), live.clone());
+        }
+    }
+    (topo, running.partitions().keys().cloned().collect())
+}
+
+/// The two sides of an apply, with the runtime state carried over.
+pub(crate) struct Overlay {
+    /// The running lab's [`live_view`].
+    pub current: Topology,
+    pub current_partitions: BTreeSet<String>,
+    /// The desired topology, with the live impairments it keeps.
+    pub desired: Topology,
+    pub desired_partitions: BTreeSet<String>,
+    /// The live impairments kept (overlaid onto `desired`).
+    pub kept: BTreeMap<String, Impairment>,
+}
+
+/// Runtime impairments and partitions are in neither topology. Unless the
+/// topology *changed* that endpoint's declaration (or the caller asked for
+/// a reset), a live impairment stays: it is overlaid onto both sides so the
+/// plan sees no change there. A partition stays unless reset, as long as
+/// its endpoint does: it drops traffic under whatever root qdisc the
+/// endpoint gets (#168).
 pub(crate) fn overlay_live_impairments(
     running: &RunningLab,
     desired_in: &Topology,
     opts: &ApplyOptions,
-) -> (Topology, Topology, BTreeMap<String, Impairment>) {
-    let mut current = running.topology().clone();
+) -> Overlay {
+    let (current, current_partitions) = live_view(running);
     let mut desired = desired_in.clone();
     let mut kept = BTreeMap::new();
-    let overlay = |topo: &mut Topology, ep: &str, live: &Impairment| {
-        if *live == Impairment::default() {
-            topo.impairments.remove(ep);
-        } else {
-            topo.impairments.insert(ep.to_string(), live.clone());
-        }
-    };
     let unchanged =
         |ep: &str| running.topology().impairments.get(ep) == desired_in.impairments.get(ep);
     for (ep, live) in running.live_impairments() {
-        // The current plan must describe what is really installed, or
-        // the diff sees "declared == declared" and never touches tc.
-        overlay(&mut current, ep, live);
         if opts.reset_impairments || !unchanged(ep) {
             // Reset, or the topology changed this endpoint: its
             // declaration wins.
             continue;
         }
-        overlay(&mut desired, ep, live);
+        if *live == Impairment::default() {
+            desired.impairments.remove(ep);
+        } else {
+            desired.impairments.insert(ep.clone(), live.clone());
+        }
         kept.insert(ep.clone(), live.clone());
     }
-    // A partitioned endpoint really carries 100% loss. It stays
-    // partitioned across an apply unless reset was asked for or the
-    // topology changed that endpoint; `apply_with` drops the partition
-    // record for every endpoint the plan touched.
-    let partition_imp = Impairment {
-        loss: Some("100%".to_string()),
-        ..Default::default()
+    let desired_partitions = if opts.reset_impairments {
+        BTreeSet::new()
+    } else {
+        let endpoints: BTreeSet<String> = crate::impair_parse::topology_endpoints(&desired)
+            .into_iter()
+            .collect();
+        current_partitions
+            .intersection(&endpoints)
+            .cloned()
+            .collect()
     };
-    for ep in running.partitions().keys() {
-        current
-            .impairments
-            .insert(ep.clone(), partition_imp.clone());
-        if !opts.reset_impairments && unchanged(ep) {
-            desired
-                .impairments
-                .insert(ep.clone(), partition_imp.clone());
-        }
+    Overlay {
+        current,
+        current_partitions,
+        desired,
+        desired_partitions,
+        kept,
     }
-    (current, desired, kept)
 }
 
 fn plan_apply(
@@ -263,20 +281,21 @@ fn plan_apply(
     desired: &Topology,
     opts: &ApplyOptions,
 ) -> Result<(PlanInputs, Plan)> {
-    let (inputs, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
+    let (inputs, _, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
     Ok((inputs, Plan::diff(&cur_plan, &des_plan)))
 }
 
-/// The current and desired plans of an apply, planned with the keys of
+/// The current and desired plans of an apply, with the runtime state
+/// overlaid ([`overlay_live_impairments`]) and planned with the keys of
 /// the WireGuard interfaces that already exist, so `apply` does not rotate
 /// every peer's key and `apply --check` compares the keys in use.
 fn apply_plans(
     running: &RunningLab,
     desired: &Topology,
     opts: &ApplyOptions,
-) -> Result<(PlanInputs, Plan, Plan)> {
-    let (current, desired, _) = overlay_live_impairments(running, desired, opts);
-    let desired = &desired;
+) -> Result<(PlanInputs, Overlay, Plan, Plan)> {
+    let overlay = overlay_live_impairments(running, desired, opts);
+    let desired = &overlay.desired;
 
     #[cfg(feature = "wireguard")]
     let inputs = {
@@ -301,9 +320,17 @@ fn apply_plans(
     #[cfg(not(feature = "wireguard"))]
     let inputs = PlanInputs::for_deploy(desired)?;
 
-    let cur_plan = plan::plan(&current, &inputs)?;
+    let cur_inputs = PlanInputs {
+        partitions: overlay.current_partitions.clone(),
+        ..inputs.clone()
+    };
+    let inputs = PlanInputs {
+        partitions: overlay.desired_partitions.clone(),
+        ..inputs
+    };
+    let cur_plan = plan::plan(&overlay.current, &cur_inputs)?;
     let des_plan = plan::plan(desired, &inputs)?;
-    Ok((inputs, cur_plan, des_plan))
+    Ok((inputs, overlay, cur_plan, des_plan))
 }
 
 pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<ApplyReport> {
@@ -318,8 +345,8 @@ pub async fn apply_with(
 ) -> Result<ApplyReport> {
     desired.validate().bail()?;
     let _lock = state::lock(running.name())?;
-    let (_, _, kept_live) = overlay_live_impairments(running, desired, opts);
-    let (inputs, diff) = plan_apply(running, desired, opts)?;
+    let (inputs, overlay, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
+    let diff = Plan::diff(&cur_plan, &des_plan);
     let report = ApplyReport {
         ops: diff.ops.len(),
         removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
@@ -328,7 +355,7 @@ pub async fn apply_with(
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     preflight_recreates(running, desired).await?;
 
-    let env = apply::ApplyEnv::from_running(running, desired)?;
+    let env = apply::ApplyEnv::from_running(running, desired, &cur_plan)?;
     let journal = Journal::new(running.name());
     let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
     if let Err(e) = res {
@@ -360,19 +387,8 @@ pub async fn apply_with(
     }
 
     running.set_topology(desired.clone());
-    running.set_live_impairments(kept_live);
-    // Partitions whose qdisc the plan replaced or cleared are healed.
-    let touched: std::collections::BTreeSet<String> = diff
-        .ops
-        .iter()
-        .filter_map(|o| match o {
-            Op::Netem { node, iface, .. }
-            | Op::ClearQdisc { node, iface }
-            | Op::Qdisc { node, iface, .. } => Some(format!("{node}:{iface}")),
-            _ => None,
-        })
-        .collect();
-    running.retain_partitions(|ep| !touched.contains(ep));
+    running.set_live_impairments(overlay.kept);
+    running.retain_partitions(|ep| overlay.desired_partitions.contains(ep));
     running.absorb_apply(
         env.namespace_names,
         env.containers,
@@ -492,7 +508,17 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
             desired.impairments.insert(ep.clone(), live.clone());
         }
     }
-    let inputs = PlanInputs::for_deploy(&desired)?;
+    // A partition of a lost link end died with the veth.
+    let partitions: BTreeSet<String> = running
+        .partitions()
+        .keys()
+        .filter(|ep| !lost.contains(*ep))
+        .cloned()
+        .collect();
+    let inputs = PlanInputs {
+        partitions,
+        ..PlanInputs::for_deploy(&desired)?
+    };
     let cur_plan = plan::plan(&current, &inputs)?;
     let des_plan = plan::plan(&desired, &inputs)?;
     let diff = Plan::diff(&cur_plan, &des_plan);
@@ -506,7 +532,7 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
         lost.len(),
         report.ops
     );
-    let env = apply::ApplyEnv::from_running(running, &desired)?;
+    let env = apply::ApplyEnv::from_running(running, &desired, &cur_plan)?;
     let journal = Journal::new(running.name());
     let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
     if let Err(e) = res {
@@ -628,141 +654,6 @@ mod wireguard_secrets {
     }
 }
 
-/// Apply per-pair network impairments using `PerPeerImpairer`.
-///
-/// For each network with impairments, group rules by source node and
-/// install one HTB+netem+flower tree per source interface.
-///
-/// This uses `reconcile()`, which dumps the live tree, diffs it and
-/// emits only the operations needed to converge — so re-applying an
-/// unchanged topology makes zero kernel calls. `apply()` would be
-/// wrong here: it opens with `del_qdisc(ROOT)` and rebuilds from
-/// scratch, and because `Op::NetworkImpairments` is one of the ops
-/// `Plan::diff` always re-runs, that happened on *every* apply, even
-/// one that changed an unrelated node. Each time, the link spent a
-/// moment with no impairment at all and came back with new handles and
-/// zeroed counters (#135).
-///
-/// `fallback_to_apply` covers the first deploy, where the live root is
-/// `noqueue` rather than HTB: reconcile refuses a wrong-kind root by
-/// default, and there is genuinely nothing to converge incrementally.
-async fn apply_network_impairments(
-    topology: &Topology,
-    node_handles: &BTreeMap<String, NsRef>,
-) -> Result<()> {
-    use nlink::netlink::impair::{PeerImpairment, PerPeerImpairer};
-    use nlink::netlink::tc_recipe::ReconcileOptions;
-    use nlink::util::Rate;
-
-    let networks_with_impair: Vec<_> = topology
-        .networks
-        .iter()
-        .filter(|(_, n)| !n.impairments.is_empty())
-        .collect();
-
-    if networks_with_impair.is_empty() {
-        return Ok(());
-    }
-
-    tracing::info!(
-        "step 14b: applying per-pair network impairments ({} network(s))",
-        networks_with_impair.len()
-    );
-
-    for (net_name, network) in networks_with_impair {
-        // Map node name → its interface in this network (taken from
-        // the first member entry that names the node).
-        let mut node_ifaces: BTreeMap<String, String> = BTreeMap::new();
-        // Map node name → its IP on this network (first address from
-        // the auto-assigned subnet).
-        let mut node_ips: BTreeMap<String, IpAddr> = BTreeMap::new();
-
-        for member in &network.members {
-            let Some(ep) = EndpointRef::parse(member) else {
-                continue;
-            };
-            node_ifaces
-                .entry(ep.node.clone())
-                .or_insert_with(|| ep.iface.clone());
-
-            if let Some(port) = network.ports.get(member)
-                && let Some(addr_with_prefix) = port.addresses.first()
-                && let Some((addr_str, _)) = addr_with_prefix.split_once('/')
-                && let Ok(ip) = addr_str.parse::<IpAddr>()
-            {
-                node_ips.entry(ep.node.clone()).or_insert(ip);
-            }
-        }
-
-        // Group impairments by source node.
-        let mut by_source: BTreeMap<&str, Vec<&crate::types::NetworkImpairment>> = BTreeMap::new();
-        for imp in &network.impairments {
-            by_source.entry(&imp.src[..]).or_default().push(imp);
-        }
-
-        for (src_node, rules) in by_source {
-            let Some(src_iface) = node_ifaces.get(src_node) else {
-                return Err(Error::deploy_failed(format!(
-                    "network '{net_name}': src node '{src_node}' has no interface in this network"
-                )));
-            };
-            let Some(src_handle) = node_handles.get(src_node) else {
-                return Err(Error::deploy_failed(format!(
-                    "network '{net_name}': src node '{src_node}' has no namespace handle"
-                )));
-            };
-
-            let mut impairer = PerPeerImpairer::new(src_iface.as_str());
-
-            for rule in rules {
-                let Some(dst_ip) = node_ips.get(&rule.dst) else {
-                    return Err(Error::deploy_failed(format!(
-                        "network '{net_name}' impair {} -- {}: cannot resolve IP for dst node \
-                         '{}' (network needs a subnet, or the dst must have an explicit address)",
-                        rule.src, rule.dst, rule.dst
-                    )));
-                };
-
-                let netem = build_netem(&rule.impairment)?;
-                let mut peer = PeerImpairment::new(netem);
-                if let Some(rc) = &rule.rate_cap {
-                    let bits = parse_rate_bps(rc).map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "network '{net_name}' impair {} -- {}: bad rate-cap '{rc}': {e}",
-                            rule.src, rule.dst
-                        ))
-                    })?;
-                    peer = peer.rate_cap(Rate::bits_per_sec(bits));
-                }
-
-                impairer = impairer.impair_dst_ip(*dst_ip, peer);
-            }
-
-            let conn: Connection<Route> = src_handle.connection().map_err(|e| {
-                Error::deploy_failed(format!(
-                    "network '{net_name}': connection for '{src_node}': {e}"
-                ))
-            })?;
-
-            let report = impairer
-                .reconcile_with_options(&conn, ReconcileOptions::new().with_fallback_to_apply(true))
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "network '{net_name}': failed to apply per-pair impairment on \
-                         '{src_node}:{src_iface}': {e}"
-                    ))
-                })?;
-            tracing::debug!(
-                "network '{net_name}': {src_node}:{src_iface} reconciled, {} change(s)",
-                report.changes_made
-            );
-        }
-    }
-
-    Ok(())
-}
-
 /// The options a node's network layer is planned with, in an apply and
 /// in `apply --check` alike:
 ///
@@ -793,20 +684,19 @@ pub(crate) fn network_plan_options(
     opts
 }
 
-/// Every node's network config in `current` (the running lab's
-/// topology), as `PlanOptions::previous`. A node whose config does not
-/// build is left out: it gets no removals.
-pub(crate) fn previous_network_configs(
-    current: &Topology,
+/// Each node's network config in `plan` (links, addresses, routes,
+/// traffic control), as `PlanOptions::previous` for the plan that
+/// replaces it: what it declared and the new one does not is removed.
+pub(crate) fn stack_networks(
+    plan: &Plan,
 ) -> BTreeMap<String, std::sync::Arc<nlink::netlink::config::NetworkConfig>> {
-    let autos = auto_routes_for(current);
-    current
-        .nodes
+    plan.ops
         .iter()
-        .filter_map(|(name, node)| {
-            topology_to_network_config(name, node, current, autos.get(name))
-                .ok()
-                .map(|cfg| (name.clone(), std::sync::Arc::new(cfg)))
+        .filter_map(|op| match op {
+            Op::Stack { node, cfg } => {
+                Some((node.clone(), std::sync::Arc::new(cfg.network.clone())))
+            }
+            _ => None,
         })
         .collect()
 }
@@ -866,6 +756,39 @@ pub(crate) async fn apply_stack_for_node(
     Ok(())
 }
 
+/// Converge one node's traffic control after a runtime `impair`,
+/// `--clear`, `--partition` or `--heal` (#108, #168): its Tc alone,
+/// declared from `after` (a [`live_view`]) and planned against what
+/// `before` declared, so what the change dropped is removed. Its links,
+/// addresses and routes are not part of the config, and not touched.
+pub(crate) async fn reconcile_node_tc(
+    handle: &NsRef,
+    node: &str,
+    before: (&Topology, &BTreeSet<String>),
+    after: (&Topology, &BTreeSet<String>),
+) -> Result<()> {
+    use nlink::netlink::config::{ApplyOptions, NetworkConfig, PlanOptions};
+    let declare = |(topology, partitions): (&Topology, &BTreeSet<String>)| {
+        plan::tc::declare_node_tc(NetworkConfig::new(), node, topology, partitions)
+    };
+    let previous = std::sync::Arc::new(declare(before)?);
+    let cfg = declare(after)?;
+    let conn: Connection<Route> = handle
+        .connection()
+        .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))?;
+    let mut apply = ApplyOptions::default();
+    apply.plan = PlanOptions::default().previous(previous);
+    let retry = nlink::reconcile::ReconcileOptions::new()
+        .with_max_retries(2)
+        .with_backoff(std::time::Duration::from_millis(50));
+    let report = cfg
+        .apply_reconcile_with_options(&conn, retry, apply)
+        .await
+        .map_err(|e| Error::deploy_failed(format!("traffic control on '{node}': {e}")))?;
+    tracing::info!(node = %node, changes = report.changes_made, "traffic control reconciled");
+    Ok(())
+}
+
 /// Compute the full layered diff between a running lab's live
 /// state and a desired topology. Plan 158f Phase 2.
 ///
@@ -885,8 +808,8 @@ pub async fn compute_layered_diff(
     desired: &Topology,
 ) -> Result<crate::diff::LayeredDiff> {
     let topology = crate::diff::diff_topologies(running.topology(), desired);
-    let (_, _, des_plan) = apply_plans(running, desired, &ApplyOptions::default())?;
-    let previous = previous_network_configs(running.topology());
+    let (_, _, cur_plan, des_plan) = apply_plans(running, desired, &ApplyOptions::default())?;
+    let previous = stack_networks(&cur_plan);
 
     let mut network = BTreeMap::new();
     let mut nftables = BTreeMap::new();
@@ -1211,93 +1134,113 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         running
     }
 
+    /// The delay of the netem `plan` declares on `node:iface`.
+    fn declared_delay(plan: &Plan, node: &str, iface: &str) -> Option<std::time::Duration> {
+        plan.ops.iter().find_map(|o| match o {
+            Op::Stack { node: n, cfg } if n == node => {
+                cfg.network
+                    .qdiscs()
+                    .iter()
+                    .find_map(|q| match q.qdisc_type() {
+                        nlink::netlink::tc_spec::QdiscSpec::Netem(netem) if q.dev() == iface => {
+                            netem.delay
+                        }
+                        _ => None,
+                    })
+            }
+            _ => None,
+        })
+    }
+
+    const LINK_1MS: &str = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n";
+    const LINK_2MS: &str = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 2ms }\n";
+    const MS: fn(u64) -> Option<std::time::Duration> =
+        |ms| Some(std::time::Duration::from_millis(ms));
+
     #[test]
     fn overlay_keeps_live_impairment_when_topology_unchanged() {
-        let topo = crate::parser::parse(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
-        )
-        .unwrap();
+        let topo = crate::parser::parse(LINK_1MS).unwrap();
         let running =
             running_with_live(&topo, &[("a:eth0", Some("50ms")), ("b:eth0", Some("7ms"))]);
-        let (cur, des, kept) = overlay_live_impairments(&running, &topo, &ApplyOptions::default());
-        // both sides carry the live values → no tc change in the plan
-        assert_eq!(cur.impairments["a:eth0"].delay.as_deref(), Some("50ms"));
-        assert_eq!(des.impairments["a:eth0"].delay.as_deref(), Some("50ms"));
-        assert_eq!(des.impairments["b:eth0"].delay.as_deref(), Some("7ms"));
-        assert_eq!(kept.len(), 2);
-        let plan = plan_apply(&running, &topo, &ApplyOptions::default())
-            .unwrap()
-            .1;
-        assert!(
-            plan.ops
-                .iter()
-                .all(|o| !matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. }))
+        let o = overlay_live_impairments(&running, &topo, &ApplyOptions::default());
+        // both sides carry the live values → the stacks do not change
+        assert_eq!(
+            o.current.impairments["a:eth0"].delay.as_deref(),
+            Some("50ms")
         );
+        assert_eq!(
+            o.desired.impairments["a:eth0"].delay.as_deref(),
+            Some("50ms")
+        );
+        assert_eq!(
+            o.desired.impairments["b:eth0"].delay.as_deref(),
+            Some("7ms")
+        );
+        assert_eq!(o.kept.len(), 2);
+        let (_, _, cur, des) = apply_plans(&running, &topo, &ApplyOptions::default()).unwrap();
+        assert_eq!(stack_networks(&cur), stack_networks(&des));
+        assert_eq!(declared_delay(&des, "a", "eth0"), MS(50));
     }
 
     #[test]
     fn overlay_drops_live_impairment_when_topology_changes_the_endpoint() {
-        let topo = crate::parser::parse(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
-        )
-        .unwrap();
-        let desired = crate::parser::parse(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 2ms }\n",
-        )
-        .unwrap();
+        let topo = crate::parser::parse(LINK_1MS).unwrap();
+        let desired = crate::parser::parse(LINK_2MS).unwrap();
         let running = running_with_live(&topo, &[("a:eth0", Some("50ms"))]);
-        let (_, des, kept) = overlay_live_impairments(&running, &desired, &ApplyOptions::default());
-        assert_eq!(des.impairments["a:eth0"].delay.as_deref(), Some("2ms"));
-        assert!(kept.is_empty());
-        let plan = plan_apply(&running, &desired, &ApplyOptions::default())
-            .unwrap()
-            .1;
-        assert!(plan.ops.iter().any(|o| matches!(o, Op::Netem { .. })));
+        let o = overlay_live_impairments(&running, &desired, &ApplyOptions::default());
+        assert_eq!(
+            o.desired.impairments["a:eth0"].delay.as_deref(),
+            Some("2ms")
+        );
+        assert!(o.kept.is_empty());
+        let (_, _, cur, des) = apply_plans(&running, &desired, &ApplyOptions::default()).unwrap();
+        assert_eq!(declared_delay(&cur, "a", "eth0"), MS(50));
+        assert_eq!(declared_delay(&des, "a", "eth0"), MS(2));
     }
 
     #[test]
     fn overlay_reset_and_cleared_live_impairment() {
-        let topo = crate::parser::parse(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
-        )
-        .unwrap();
+        let topo = crate::parser::parse(LINK_1MS).unwrap();
         // `impair --clear` on a declared endpoint records an empty value:
         // the overlay removes the declaration on both sides.
         let running = running_with_live(&topo, &[("a:eth0", None)]);
-        let (cur, des, kept) = overlay_live_impairments(&running, &topo, &ApplyOptions::default());
-        assert!(!cur.impairments.contains_key("a:eth0"));
-        assert!(!des.impairments.contains_key("a:eth0"));
-        assert_eq!(kept.len(), 1);
-        // --reset-impairments: the topology wins again → a Netem op.
+        let o = overlay_live_impairments(&running, &topo, &ApplyOptions::default());
+        assert!(!o.current.impairments.contains_key("a:eth0"));
+        assert!(!o.desired.impairments.contains_key("a:eth0"));
+        assert_eq!(o.kept.len(), 1);
+        // --reset-impairments: the topology wins again.
         let reset = ApplyOptions {
             reset_impairments: true,
         };
-        let (cur, des, kept) = overlay_live_impairments(&running, &topo, &reset);
+        let o = overlay_live_impairments(&running, &topo, &reset);
         assert!(
-            !cur.impairments.contains_key("a:eth0"),
+            !o.current.impairments.contains_key("a:eth0"),
             "current reflects the kernel"
         );
-        assert_eq!(des.impairments["a:eth0"].delay.as_deref(), Some("1ms"));
-        assert!(kept.is_empty());
-        let plan = plan_apply(&running, &topo, &reset).unwrap().1;
-        assert!(
-            plan.ops.iter().any(|o| matches!(o, Op::Netem { .. })),
-            "reset must re-install the declaration"
+        assert_eq!(
+            o.desired.impairments["a:eth0"].delay.as_deref(),
+            Some("1ms")
+        );
+        assert!(o.kept.is_empty());
+        let (_, _, cur, des) = apply_plans(&running, &topo, &reset).unwrap();
+        assert_eq!(declared_delay(&cur, "a", "eth0"), None);
+        assert_eq!(
+            declared_delay(&des, "a", "eth0"),
+            MS(1),
+            "reset re-installs it"
         );
         // A live value different from the declaration is replaced too.
         let running = running_with_live(&topo, &[("a:eth0", Some("50ms"))]);
-        let plan = plan_apply(&running, &topo, &reset).unwrap().1;
-        assert!(
-            plan.ops.iter().any(|o| matches!(o, Op::Netem { impairment, .. } if impairment.delay.as_deref() == Some("1ms")))
-        );
+        let (_, _, _, des) = apply_plans(&running, &topo, &reset).unwrap();
+        assert_eq!(declared_delay(&des, "a", "eth0"), MS(1));
     }
 
+    /// A partition is drop filters under the root (#168): it survives an
+    /// apply, even one that changes the endpoint's impairment, unless
+    /// reset or the endpoint is gone.
     #[test]
-    fn overlay_partitions_survive_unless_reset_or_changed() {
-        let topo = crate::parser::parse(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }\n",
-        )
-        .unwrap();
+    fn overlay_partitions_survive_unless_reset_or_gone() {
+        let topo = crate::parser::parse(LINK_1MS).unwrap();
         let mut running = running_with_live(&topo, &[]);
         running.set_partitions(BTreeMap::from([(
             "a:eth0".to_string(),
@@ -1306,34 +1249,30 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
                 ..Default::default()
             },
         )]));
-        // unchanged topology: the partition stays (no Tc op)
-        let plan = plan_apply(&running, &topo, &ApplyOptions::default())
-            .unwrap()
-            .1;
-        assert!(
-            plan.ops
-                .iter()
-                .all(|o| !matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. }))
+        let parts = |desired: &Topology, opts: &ApplyOptions| {
+            overlay_live_impairments(&running, desired, opts).desired_partitions
+        };
+        let a: BTreeSet<String> = ["a:eth0".to_string()].into();
+        assert_eq!(parts(&topo, &ApplyOptions::default()), a);
+        let (_, _, cur, des) = apply_plans(&running, &topo, &ApplyOptions::default()).unwrap();
+        assert_eq!(stack_networks(&cur), stack_networks(&des), "partition kept");
+        assert_eq!(
+            declared_delay(&des, "a", "eth0"),
+            MS(1),
+            "under it, the netem"
         );
-        // reset: the declaration replaces the 100% loss
+
+        let changed = crate::parser::parse(LINK_2MS).unwrap();
+        assert_eq!(parts(&changed, &ApplyOptions::default()), a);
+        let (_, _, _, des) = apply_plans(&running, &changed, &ApplyOptions::default()).unwrap();
+        assert_eq!(declared_delay(&des, "a", "eth0"), MS(2));
+
         let reset = ApplyOptions {
             reset_impairments: true,
         };
-        let plan = plan_apply(&running, &topo, &reset).unwrap().1;
-        assert!(plan.ops.iter().any(
-            |o| matches!(o, Op::Netem { impairment, .. } if impairment.delay.as_deref() == Some("1ms"))
-        ));
-        // topology change on that endpoint: the new declaration replaces it
-        let desired = crate::parser::parse(
-            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay 2ms }\n",
-        )
-        .unwrap();
-        let plan = plan_apply(&running, &desired, &ApplyOptions::default())
-            .unwrap()
-            .1;
-        assert!(plan.ops.iter().any(
-            |o| matches!(o, Op::Netem { impairment, .. } if impairment.delay.as_deref() == Some("2ms"))
-        ));
+        assert!(parts(&topo, &reset).is_empty());
+        let gone = crate::parser::parse("lab \"t\"\nnode a\nnode b\n").unwrap();
+        assert!(parts(&gone, &ApplyOptions::default()).is_empty());
     }
 
     #[test]

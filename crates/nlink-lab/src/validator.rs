@@ -50,6 +50,7 @@ pub const RULE_IDS: &[&str] = &[
     "network-impair-needs-subnet",
     "network-impair-self-pair",
     "network-impair-member",
+    "network-impair-conflicts",
     "rate-limit-ref-valid",
     "qdisc-ref-valid",
     "qdisc-conflicts",
@@ -845,6 +846,40 @@ fn validate_impairment_refs(
                         location: Some(format!("networks.{net_name}.impairments[{i}].{which}")),
                     });
                 }
+            }
+        }
+
+        // A source's interface carries the per-pair tree as its root
+        // qdisc. An `impair` there becomes the tree's default impairment
+        // (#169); a `qdisc` block or a rate limit cannot share the root.
+        let mut sources: Vec<&str> = network.impairments.iter().map(|i| &i.src[..]).collect();
+        sources.sort();
+        sources.dedup();
+        for src in sources {
+            let Some(ep) = network
+                .members
+                .iter()
+                .find(|m| EndpointRef::parse(m).is_some_and(|e| e.node == src))
+            else {
+                continue;
+            };
+            let other = if let Some(q) = topology.qdiscs.get(ep) {
+                Some(format!("a `qdisc {}`", q.kind.name()))
+            } else if topology.rate_limits.contains_key(ep) {
+                Some("a `rate`".to_string())
+            } else {
+                None
+            };
+            if let Some(other) = other {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "network-impair-conflicts",
+                    message: format!(
+                        "'{ep}' is the source of network '{net_name}''s per-pair impairments \
+                         and has {other}: an interface has one root qdisc"
+                    ),
+                    location: Some(format!("networks.{net_name}.impairments")),
+                });
             }
         }
     }
@@ -3073,6 +3108,48 @@ impair a:eth99 delay 10ms
         );
         assert!(result.has_errors());
         assert!(result.errors().any(|e| e.rule == "impairment-ref-valid"));
+    }
+
+    #[test]
+    fn network_impair_source_conflicts_with_its_root() {
+        let lab = |extra: &str| {
+            parse_and_validate(&format!(
+                r#"lab "src"
+node a
+node b
+network lan {{
+  members [a:eth0, b:eth0]
+  subnet 10.0.0.0/24
+  impair a -- b {{ delay 10ms }}
+}}
+{extra}
+"#
+            ))
+        };
+        for extra in [
+            "qdisc a:eth0 fq_codel { limit 1000 }",
+            "rate a:eth0 egress 10mbit",
+        ] {
+            let result = lab(extra);
+            assert!(
+                result
+                    .errors()
+                    .any(|e| e.rule == "network-impair-conflicts"),
+                "{extra}: {:?}",
+                result.errors().collect::<Vec<_>>()
+            );
+        }
+        // An impair on the source composes: it is the tree's default (#169).
+        let result = lab("impair a:eth0 delay 100ms");
+        assert!(
+            !result
+                .errors()
+                .any(|e| e.rule == "network-impair-conflicts"),
+            "{:?}",
+            result.errors().collect::<Vec<_>>()
+        );
+        // And on the destination, nothing is shared.
+        assert!(!lab("qdisc b:eth0 fq_codel { limit 1000 }").has_errors());
     }
 
     #[test]

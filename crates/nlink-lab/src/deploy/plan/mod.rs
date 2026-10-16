@@ -7,21 +7,26 @@ pub(crate) mod network;
 pub(crate) mod nftables;
 pub(crate) mod process;
 pub(crate) mod qdisc;
+pub(crate) mod tc;
 pub(crate) mod topology;
 #[cfg(feature = "wireguard")]
 pub(crate) mod wireguard;
 
 use crate::deploy::op::{Op, Plan, StackConfig};
 use crate::error::Result;
-use crate::types::{DnsMode, EndpointRef, Topology};
+use crate::types::{DnsMode, Topology};
 
 /// Inputs a plan needs that are not derivable from the topology
 /// alone: WireGuard key material (random, or persisted from a previous
-/// deploy so `apply` keeps peers' keys stable).
-#[derive(Debug, Default)]
+/// deploy so `apply` keeps peers' keys stable), and the endpoints a
+/// runtime `impair --partition` cut off.
+#[derive(Debug, Default, Clone)]
 pub struct PlanInputs {
     #[cfg(feature = "wireguard")]
     pub wg_keys: Option<wireguard::WgKeys>,
+    /// Partitioned endpoints (`node:iface`): their traffic is dropped by
+    /// a filter on both hooks, under whatever qdisc they have (#168).
+    pub partitions: std::collections::BTreeSet<String>,
 }
 
 impl PlanInputs {
@@ -36,12 +41,13 @@ impl PlanInputs {
                 } else {
                     None
                 },
+                partitions: Default::default(),
             })
         }
         #[cfg(not(feature = "wireguard"))]
         {
             let _ = topology;
-            Ok(Self {})
+            Ok(Self::default())
         }
     }
 }
@@ -82,6 +88,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
             topology,
             auto_routes.get(node_name),
         )?;
+        let net = tc::declare_node_tc(net, node_name, topology, &inputs.partitions)?;
         #[cfg(feature = "wireguard")]
         let wg = match (&inputs.wg_keys, node.wireguard.is_empty()) {
             (Some(keys), false) => Some(wireguard::topology_to_wireguard_config(
@@ -89,8 +96,6 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
             )?),
             _ => None,
         };
-        #[cfg(not(feature = "wireguard"))]
-        let _ = inputs;
         ops.push(Op::Stack {
             node: node_name.clone(),
             cfg: Box::new(StackConfig {
@@ -102,53 +107,6 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
                 #[cfg(feature = "wireguard")]
                 wireguard: wg,
             }),
-        });
-    }
-
-    // ── traffic control ──
-    for (endpoint, impairment) in &topology.impairments {
-        let ep = EndpointRef::parse(endpoint).ok_or_else(|| crate::Error::InvalidEndpoint {
-            endpoint: endpoint.clone(),
-        })?;
-        ops.push(Op::Netem {
-            node: ep.node,
-            iface: ep.iface,
-            impairment: impairment.clone(),
-        });
-    }
-    if topology
-        .networks
-        .values()
-        .any(|n| !n.impairments.is_empty())
-    {
-        ops.push(Op::NetworkImpairments);
-    }
-    for (endpoint, qdisc) in &topology.qdiscs {
-        // Conflicts with `impair`/`rate` on the same endpoint are
-        // validator errors (`qdisc-conflicts`); the plan just emits.
-        let ep = EndpointRef::parse(endpoint).ok_or_else(|| crate::Error::InvalidEndpoint {
-            endpoint: endpoint.clone(),
-        })?;
-        ops.push(Op::Qdisc {
-            node: ep.node,
-            iface: ep.iface,
-            qdisc: qdisc.clone(),
-        });
-    }
-    for (endpoint, limit) in &topology.rate_limits {
-        if topology.impairments.contains_key(endpoint) {
-            tracing::warn!(
-                "rate limit on '{endpoint}' skipped: netem impairment already configured (use impairment.rate instead)"
-            );
-            continue;
-        }
-        let ep = EndpointRef::parse(endpoint).ok_or_else(|| crate::Error::InvalidEndpoint {
-            endpoint: endpoint.clone(),
-        })?;
-        ops.push(Op::RateLimit {
-            node: ep.node,
-            iface: ep.iface,
-            limit: limit.clone(),
         });
     }
 
@@ -347,8 +305,10 @@ node c image "alpine" {
         assert!(d.iter().any(|s| s.contains("veth r:eth0 ↔ h:eth0")));
         assert!(d.iter().any(|s| s.starts_with("r: 1 sysctl")));
         assert_eq!(p.stage(Stage::Stack).count(), 2);
-        assert!(d.iter().any(|s| s == "netem on r:eth0"));
-        assert!(d.iter().any(|s| s == "netem on h:eth0"));
+        // the impairment rides in each end's stack
+        for n in ["r", "h"] {
+            assert_eq!(stack_of(&p, n).network.qdiscs().len(), 1, "{n}");
+        }
     }
 
     #[test]
@@ -432,7 +392,7 @@ node c image "alpine" {
         assert!(
             !removals
                 .iter()
-                .any(|o| matches!(o, Op::ClearQdisc { node, .. } if node == "x")),
+                .any(|o| matches!(o, Op::DeleteLink { node, .. } if node == "x")),
             "{removals:?}"
         );
         // removals precede additions
@@ -465,15 +425,36 @@ node c image "alpine" {
         )));
     }
 
+    fn stack_of<'a>(p: &'a Plan, n: &str) -> &'a StackConfig {
+        p.ops
+            .iter()
+            .find_map(|o| match o {
+                Op::Stack { node, cfg } if node == n => Some(&**cfg),
+                _ => None,
+            })
+            .expect("stack op")
+    }
+
+    /// Traffic control is declared in the stack (#108). An impairment
+    /// removed from the topology is a qdisc the desired stack no longer
+    /// declares; the apply removes it through `PlanOptions::previous`.
     #[test]
-    fn diff_removed_impairment_clears_the_qdisc() {
+    fn impairments_are_declared_in_the_stack() {
         let cur = plan_of(SIMPLE);
+        let q = stack_of(&cur, "r").network.qdiscs();
+        assert_eq!(q.len(), 1, "{q:?}");
+        assert_eq!(q[0].dev(), "eth0");
+        assert!(matches!(
+            q[0].qdisc_type(),
+            nlink::netlink::tc_spec::QdiscSpec::Netem(_)
+        ));
         let des = plan_of(&SIMPLE.replace("  delay 5ms", ""));
+        assert!(stack_of(&des, "r").network.qdiscs().is_empty());
         let d = Plan::diff(&cur, &des);
         assert!(
-            d.ops.iter().any(
-                |o| matches!(o, Op::ClearQdisc { node, iface } if node == "r" && iface == "eth0")
-            ),
+            d.ops
+                .iter()
+                .all(|o| matches!(o, Op::Stack { .. } | Op::LinksUp { .. })),
             "{:?}",
             d.ops
         );
@@ -493,53 +474,116 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
 "#;
 
     #[test]
-    fn plan_emits_qdisc_ops_in_tc_stage_and_diff_replaces_them() {
+    fn qdisc_blocks_are_declared_in_the_stack() {
+        use nlink::netlink::tc_spec::QdiscSpec;
         let src = |kind: &str| {
-            format!(
+            plan_of(&format!(
                 r#"lab "q"
 node a
 node b
 link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 qdisc a:eth0 {kind}
 "#
-            )
+            ))
         };
-        let plan = plan_of(&src("tbf { rate 10mbit burst 32kb limit 100kb }"));
-        let q: Vec<&Op> = plan
-            .ops
-            .iter()
-            .filter(|o| matches!(o, Op::Qdisc { .. }))
-            .collect();
-        assert_eq!(q.len(), 1);
-        assert_eq!(q[0].stage(), Stage::Tc);
-        assert_eq!(q[0].key(), "qdisc:a:eth0");
-        assert!(matches!(q[0].inverse(), Some(Op::ClearQdisc { .. })));
+        let kind = |p: &Plan| match stack_of(p, "a").network.qdiscs() {
+            [q] if q.dev() == "eth0" => q.qdisc_type().clone(),
+            other => panic!("{other:?}"),
+        };
+        assert!(matches!(
+            kind(&src("tbf { rate 10mbit burst 32kb limit 100kb }")),
+            QdiscSpec::Tbf(_)
+        ));
+        assert!(matches!(
+            kind(&src("sfq { perturb 10s }")),
+            QdiscSpec::Sfq(_)
+        ));
+    }
 
-        // A changed qdisc is one op, not a teardown and a re-add.
-        // `replace_qdisc` sends `NLM_F_CREATE | NLM_F_REPLACE`, which
-        // the kernel grafts atomically even across a change of kind;
-        // deleting first would drop the interface to `noqueue` in
-        // between and reset the counters (#108).
-        let changed = plan_of(&src("sfq { perturb 10s }"));
-        let diff = Plan::diff(&plan, &changed);
+    /// One root per interface (#169): a per-pair source's own `impair` is
+    /// the tree's default leaf; a rate limit on an impaired interface is
+    /// skipped; a rate limit's ingress half is a declared IFB.
+    #[test]
+    fn tc_roots_compose_per_interface() {
+        use nlink::netlink::tc_spec::QdiscSpec;
+        let p = plan_of(
+            r#"lab "c"
+node a
+node b
+node c
+network lan {
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.50.0.0/24
+  impair a -- b { delay 20ms }
+}
+impair a:eth0 delay 100ms
+node d
+node e
+link d:eth0 -- e:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  rate egress 10mbit ingress 10mbit }
+link d:eth1 -- e:eth1 { 10.0.1.1/24 -- 10.0.1.2/24  delay 5ms  rate 1mbit }
+"#,
+        );
+        let a = &stack_of(&p, "a").network;
+        assert!(matches!(
+            a.qdiscs(),
+            [q] if q.dev() == "eth0" && matches!(q.qdisc_type(), QdiscSpec::Htb(_))
+        ));
+        let tree = &a.tc_trees()[0];
+        assert_eq!(tree.leaves().len(), 2, "the pair's netem and the default's");
+
+        let d = &stack_of(&p, "d").network;
+        let roots: Vec<(&str, bool)> = d
+            .qdiscs()
+            .iter()
+            .map(|q| (q.dev(), matches!(q.qdisc_type(), QdiscSpec::Netem(_))))
+            .collect();
         assert!(
-            !diff.ops.iter().any(|o| matches!(o, Op::ClearQdisc { .. })),
-            "a changed qdisc must not be torn down first: {:?}",
-            diff.ops
+            roots.contains(&("eth1", true)),
+            "impaired: netem only {roots:?}"
         );
-        assert_eq!(
-            diff.ops
+        assert!(
+            !roots.iter().any(|(dev, netem)| *dev == "eth1" && !netem),
+            "{roots:?}"
+        );
+        assert!(
+            d.links().iter().any(|l| l.name() == "ifb_eth0"),
+            "ingress shaping declares its IFB"
+        );
+    }
+
+    /// A partition is a clsact with a matchall drop on both hooks (#168):
+    /// the interface's root qdisc stays declared.
+    #[test]
+    fn a_partition_keeps_the_root_and_adds_drop_filters() {
+        use nlink::netlink::tc_spec::QdiscSpec;
+        let t = topo(
+            r#"lab "p"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+qdisc a:eth0 prio { bands 3 }
+"#,
+        );
+        let inputs = PlanInputs {
+            partitions: ["a:eth0".to_string()].into(),
+            ..PlanInputs::for_deploy(&t).unwrap()
+        };
+        let p = plan(&t, &inputs).unwrap();
+        let a = &stack_of(&p, "a").network;
+        let kinds: Vec<bool> = a
+            .qdiscs()
+            .iter()
+            .map(|q| matches!(q.qdisc_type(), QdiscSpec::Prio(_)))
+            .collect();
+        assert_eq!(kinds.len(), 2, "prio and clsact: {:?}", a.qdiscs());
+        assert!(kinds.contains(&true));
+        assert!(
+            a.qdiscs()
                 .iter()
-                .filter(|o| matches!(o, Op::Qdisc { qdisc, .. } if qdisc.kind.name() == "sfq"))
-                .count(),
-            1
+                .any(|q| matches!(q.qdisc_type(), QdiscSpec::Clsact))
         );
-        let removed = plan_of(
-            "lab \"q\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n",
-        );
-        let diff = Plan::diff(&plan, &removed);
-        assert!(diff.ops.iter().any(|o| matches!(o, Op::ClearQdisc { .. })));
-        assert!(!diff.ops.iter().any(|o| matches!(o, Op::Qdisc { .. })));
+        assert_eq!(a.tc_trees()[0].filters().len(), 2);
+        assert!(stack_of(&p, "b").network.tc_trees().is_empty());
     }
 
     #[test]

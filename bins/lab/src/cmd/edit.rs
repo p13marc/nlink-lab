@@ -282,11 +282,9 @@ fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::type
                     .cloned()
                     .ok_or_else(|| bad("tbf requires burst=".into()))?,
                 // No limit means no queue: the TBF would drop everything.
-                limit: Some(
-                    kv.get("limit")
-                        .cloned()
-                        .ok_or_else(|| bad("tbf requires limit= (a byte size, e.g. limit=64kb)".into()))?,
-                ),
+                limit: Some(kv.get("limit").cloned().ok_or_else(|| {
+                    bad("tbf requires limit= (a byte size, e.g. limit=64kb)".into())
+                })?),
                 peakrate: kv.get("peakrate").cloned(),
                 mtu: num("mtu")?,
             }

@@ -198,7 +198,10 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
 
     // ── sysctls ──
     for (node_name, node) in &topology.nodes {
-        let entries: BTreeMap<String, String> = topology.effective_sysctls(node);
+        let mut entries: BTreeMap<String, String> = topology.effective_sysctls(node);
+        // A declared link's own keys ride on its declaration in `Stack`
+        // (#160): the link does not exist yet here.
+        entries.retain(|k, v| super::network::link_devconf(node, k, v).is_none());
         if !entries.is_empty() {
             ops.push(Op::Sysctls {
                 node: node_name.clone(),

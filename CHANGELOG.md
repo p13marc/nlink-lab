@@ -106,6 +106,13 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   topology's config, so `apply --check` lists the link under
   `links-to-remove` and `apply` deletes it, along with links stacked on
   it.
+- **A declared interface's own sysctls are set on its declaration**
+  (#160). `net.ipv4.conf.<if>.*` / `net.ipv6.conf.<if>.*` keys of a
+  vlan, vxlan, bond, vrf or dummy are no longer in the node's `sysctls`
+  op (`deploy --dry-run`); nlink sets them when it creates the link and
+  again when it recreates one, and a hand edit is drift in the `network`
+  layer. A key nlink cannot set (an unknown name, a non-integer value)
+  stays a sysctl, as before.
 - **`apply --check --json` / `apply --dry-run --json` / `verify --json`
   have a `wireguard` object** (#170): per node, nlink's
   `WireguardConfigDiff` (public keys only; private and preshared keys as
@@ -251,6 +258,10 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   settle policy, and the step requires a parse tree.
 - **A removed `vlan`/`vxlan`/`bond`/`vrf`/`dummy` stayed in the kernel**
   (#159), invisible to `apply --check` and `verify`. See Migration.
+- **A per-interface sysctl on a declared vlan, vxlan or bond failed the
+  deploy** (#160): `sysctl key not found`, since sysctls were set before
+  the interface existed, and a recreated interface came back with the
+  kernel's defaults. Both are fixed by setting them on the declaration.
 - **WireGuard drift was invisible** (#170): a peer removed by hand stayed
   removed, and `apply --check`, `verify` and `apply` all said there was
   nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`

@@ -607,6 +607,95 @@ link a:eth0 -- b:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
     }
 
     #[test]
+    fn a_declared_links_sysctls_ride_on_its_declaration() {
+        // #160: the Sysctls stage runs before Stack creates vl0, so its
+        // keys are devconf on vl0's declaration; eth0 (a veth, created in
+        // Links) and the global key stay sysctls.
+        let p = plan_of(
+            r#"lab "t"
+node r {
+  vlan vl0 { parent eth0 id 10 address 10.10.0.1/24 }
+  sysctl "net.ipv4.conf.vl0.rp_filter" "2"
+  sysctl "net/ipv6/conf/vl0/accept_dad" "0"
+  sysctl "net.ipv4.conf.eth0.rp_filter" "1"
+  sysctl "net.ipv4.ip_forward" "1"
+}
+node h
+link r:eth0 -- h:eth0
+"#,
+        );
+        let sysctls: Vec<&String> = p
+            .ops
+            .iter()
+            .find_map(|o| match o {
+                Op::Sysctls { node, entries } if node == "r" => Some(entries.keys().collect()),
+                _ => None,
+            })
+            .expect("r's sysctls");
+        assert_eq!(
+            sysctls,
+            ["net.ipv4.conf.eth0.rp_filter", "net.ipv4.ip_forward"],
+            "{sysctls:?}"
+        );
+        let cfg = p
+            .ops
+            .iter()
+            .find_map(|o| match o {
+                Op::Stack { node, cfg } if node == "r" => Some(cfg),
+                _ => None,
+            })
+            .expect("r's stack");
+        let vl0 = cfg
+            .network
+            .links()
+            .iter()
+            .find(|l| l.name() == "vl0")
+            .expect("vl0 declared");
+        let shown = format!("{vl0:?}");
+        assert!(shown.contains(r#""rp_filter": 2"#), "{shown}");
+        assert!(shown.contains(r#""accept_dad": 0"#), "{shown}");
+        assert_eq!(
+            cfg.network
+                .links()
+                .iter()
+                .filter(|l| l.name() == "vl0")
+                .count(),
+            1,
+            "one declaration"
+        );
+    }
+
+    #[test]
+    fn link_devconf_takes_only_settings_nlink_can_set() {
+        use super::network::{LinkDevconf, link_devconf};
+        let t = topo(
+            r#"lab "t"
+node r {
+  vlan vl0 { parent eth0 id 10 }
+  vrf red table 10 { interfaces [vl0] }
+}
+node h
+link r:eth0 -- h:eth0
+"#,
+        );
+        let r = &t.nodes["r"];
+        assert!(matches!(
+            link_devconf(r, "net.ipv4.conf.red.forwarding", "1"),
+            Some((ref i, LinkDevconf::V4(..))) if i == "red"
+        ));
+        assert!(matches!(
+            link_devconf(r, "net.ipv6.conf.vl0.accept_ra", " 2 "),
+            Some((ref i, LinkDevconf::V6(_, 2))) if i == "vl0"
+        ));
+        // not a declared kind, not per-interface, unknown, not a number
+        assert_eq!(link_devconf(r, "net.ipv4.conf.eth0.rp_filter", "1"), None);
+        assert_eq!(link_devconf(r, "net.ipv4.conf.all.rp_filter", "1"), None);
+        assert_eq!(link_devconf(r, "net.ipv4.ip_forward", "1"), None);
+        assert_eq!(link_devconf(r, "net.ipv4.conf.vl0.no_such", "1"), None);
+        assert_eq!(link_devconf(r, "net.ipv4.conf.vl0.rp_filter", "-1"), None);
+    }
+
+    #[test]
     fn plan_declares_vrf_routes_in_the_stack() {
         // VRF-table routes are declared routes again: purge has covered
         // every table a config declares into since nlink 0.27, and a

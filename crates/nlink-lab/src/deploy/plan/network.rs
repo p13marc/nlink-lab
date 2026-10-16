@@ -327,6 +327,18 @@ pub(crate) fn topology_to_network_config(
         cfg = cfg.link(iface, move |b| b.master(&master));
     }
 
+    // Pass 4 — per-interface sysctls of the links declared above, as
+    // devconf on their declarations (#160): nlink sets them before the
+    // link comes up, again after it recreates one, and reports drift.
+    for (key, value) in topology.effective_sysctls(node) {
+        if let Some((iface, setting)) = link_devconf(node, &key, &value) {
+            cfg = cfg.link(&iface, move |b| match setting {
+                LinkDevconf::V4(s, v) => b.ipv4_conf(s, v),
+                LinkDevconf::V6(s, v) => b.ipv6_conf(s, v),
+            });
+        }
+    }
+
     // ── Addresses, in the same order step 9 used to apply them ──
     // 1. From per-link endpoint addresses.
     for link in &topology.links {
@@ -470,6 +482,62 @@ pub(crate) fn topology_to_network_config(
 /// Handles the "default" → "0.0.0.0/0" / "::/0" translation
 /// (nlink's `RouteBuilder` only accepts proper CIDR
 /// destinations).
+/// A per-device setting of a link the `Stack` stage declares.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum LinkDevconf {
+    V4(nlink::netlink::devconf::Ipv4Devconf, u32),
+    V6(nlink::netlink::devconf::Ipv6Devconf, i32),
+}
+
+/// The link and setting a sysctl names, when it is a per-interface key
+/// (`net.ipv4.conf.<iface>.<name>`, `net.ipv6.conf.<iface>.<name>`, also
+/// with `/`) of an interface `node` declares as a vlan, vxlan, bond, dummy
+/// or vrf, and nlink can set it. Those links do not exist yet when the
+/// `Sysctls` stage runs, and a recreated one comes back with the kernel's
+/// defaults, so they ride on the link's declaration instead (#160). Every
+/// other key (`all`, `default`, a veth's) stays a sysctl.
+pub(crate) fn link_devconf(
+    node: &crate::types::Node,
+    key: &str,
+    value: &str,
+) -> Option<(String, LinkDevconf)> {
+    use crate::types::InterfaceKind;
+    use nlink::netlink::devconf::{Ipv4Devconf, Ipv6Devconf};
+
+    let (v6, rest) = [
+        ("net.ipv4.conf.", false),
+        ("net/ipv4/conf/", false),
+        ("net.ipv6.conf.", true),
+        ("net/ipv6/conf/", true),
+    ]
+    .into_iter()
+    .find_map(|(prefix, v6)| key.strip_prefix(prefix).map(|rest| (v6, rest)))?;
+    let sep = if key.contains('/') { '/' } else { '.' };
+    let (iface, name) = rest.rsplit_once(sep)?;
+    let declared = node.vrfs.contains_key(iface)
+        || node.interfaces.get(iface).is_some_and(|c| {
+            matches!(
+                c.kind,
+                Some(
+                    InterfaceKind::Dummy
+                        | InterfaceKind::Bond
+                        | InterfaceKind::Vxlan
+                        | InterfaceKind::Vlan
+                )
+            )
+        });
+    if !declared {
+        return None;
+    }
+    let value = value.trim();
+    let setting = if v6 {
+        LinkDevconf::V6(Ipv6Devconf::from_name(name)?, value.parse().ok()?)
+    } else {
+        LinkDevconf::V4(Ipv4Devconf::from_name(name)?, value.parse().ok()?)
+    };
+    Some((iface.to_string(), setting))
+}
+
 pub(crate) fn push_route(
     cfg: nlink::netlink::config::NetworkConfig,
     node_name: &str,

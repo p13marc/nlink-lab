@@ -1621,6 +1621,88 @@ link r:eth0 -- h:eth0
     lab.destroy().await.expect("destroy failed");
 }
 
+/// A per-interface sysctl on a declared VLAN (#160): the deploy failed,
+/// since the Sysctls stage ran before Stack created the VLAN. It is devconf
+/// on the VLAN's declaration now, so it is there after the deploy, after a
+/// VLAN-id change recreates the link, and after a hand edit and an apply.
+#[tokio::test]
+async fn declared_vlan_sysctl_survives_deploy_recreate_and_drift() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping declared_vlan_sysctl_survives_deploy_recreate_and_drift: requires root"
+        );
+        return;
+    }
+    if !recreate_modules_present("declared_vlan_sysctl_survives_deploy_recreate_and_drift") {
+        return;
+    }
+    let lab_name = format!("vsc-{}", std::process::id());
+    let src = |id: u16| {
+        format!(
+            r#"lab "{lab_name}"
+node r {{
+  vlan vl0 {{ parent eth0 id {id} address 10.10.0.1/24 }}
+  sysctl "net.ipv4.conf.vl0.rp_filter" "2"
+}}
+node h {{
+  vlan vl0 {{ parent eth0 id {id} address 10.10.0.2/24 }}
+}}
+link r:eth0 -- h:eth0
+"#
+        )
+    };
+    let rp_filter = |lab: &RunningLab| {
+        lab.exec("r", "cat", &["/proc/sys/net/ipv4/conf/vl0/rp_filter"])
+            .unwrap()
+            .stdout
+            .trim()
+            .to_string()
+    };
+    let topo = nlink_lab::parser::parse(&src(10)).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert_eq!(rp_filter(&lab), "2", "after deploy");
+
+    let desired = nlink_lab::parser::parse(&src(20)).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let link = lab.exec("r", "ip", &["-d", "link", "show", "vl0"]).unwrap();
+    assert!(
+        link.stdout.contains("id 20"),
+        "not recreated: {}",
+        link.stdout
+    );
+    assert_eq!(rp_filter(&lab), "2", "after the recreate");
+
+    let set = lab
+        .exec(
+            "r",
+            "sh",
+            &["-c", "echo 0 > /proc/sys/net/ipv4/conf/vl0/rp_filter"],
+        )
+        .unwrap();
+    assert_eq!(set.exit_code, 0, "{}", set.stderr);
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(
+        layered.network.get("r").is_some_and(|d| !d.is_empty()),
+        "a hand-edited rp_filter should be drift:\n{layered}"
+    );
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    assert_eq!(rp_filter(&lab), "2", "after the drift apply");
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// A recreate nlink would refuse — the VLAN carries a permanent neighbour
 /// the topology cannot declare — fails before anything changes.
 #[tokio::test]

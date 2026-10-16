@@ -310,6 +310,17 @@ pub enum WatchEventKind {
     Other {
         raw: String,
     },
+    /// The node's subscription ended — a stream error its resync does not
+    /// recover from — and is subscribed again in `retry_in_ms` (#175).
+    /// Changes made in between are not seen.
+    Ended {
+        reason: String,
+        retry_in_ms: u64,
+    },
+    /// The node's namespace is gone (the lab destroyed, the node removed or
+    /// its container stopped): its watch stops, and its socket no longer
+    /// keeps the namespace alive (#175).
+    Gone,
 }
 
 impl WatchEventKind {
@@ -796,6 +807,11 @@ fn short_kind(k: &WatchEventKind) -> String {
         ),
         WatchEventKind::DelObject { table, name, .. } => format!("DelObject {table}/{name}"),
         WatchEventKind::Other { raw } => format!("Other {raw}"),
+        WatchEventKind::Ended {
+            reason,
+            retry_in_ms,
+        } => format!("watch ended: {reason}; resubscribing in {retry_in_ms} ms"),
+        WatchEventKind::Gone => "namespace gone; watch stopped".to_string(),
         other => format!("{other:?}"),
     }
 }
@@ -927,9 +943,10 @@ pub fn watch_stream(lab: &RunningLab, opts: &WatchOpts) -> Result<Option<WatchSt
             let node = node.clone();
             let r = resolver.clone();
             tasks.push(tokio::spawn(async move {
-                if let Err(e) = run_route_subscription(&node, r, tx, include_snapshot).await {
-                    eprintln!("[{node}/Route] subscription failed: {e}");
-                }
+                supervise(&node, WatchFamily::Route, &r, &tx, || {
+                    run_route_subscription(&node, r.clone(), tx.clone(), include_snapshot)
+                })
+                .await
             }));
         }
         if opts.family.wants_nftables() {
@@ -937,9 +954,10 @@ pub fn watch_stream(lab: &RunningLab, opts: &WatchOpts) -> Result<Option<WatchSt
             let node = node.clone();
             let r = resolver.clone();
             tasks.push(tokio::spawn(async move {
-                if let Err(e) = run_nftables_subscription(&node, r, tx, include_snapshot).await {
-                    eprintln!("[{node}/Nftables] subscription failed: {e}");
-                }
+                supervise(&node, WatchFamily::Nftables, &r, &tx, || {
+                    run_nftables_subscription(&node, r.clone(), tx.clone(), include_snapshot)
+                })
+                .await
             }));
         }
     }
@@ -958,12 +976,72 @@ async fn futures_join_all(tasks: Vec<tokio::task::JoinHandle<()>>) {
     }
 }
 
+/// Why a node's subscription returned.
+enum Stop {
+    /// The receiver is gone: the watch is over.
+    Closed,
+    /// The stream ended, with the last error it reported.
+    Ended(String),
+    /// The node's namespace no longer exists.
+    Gone,
+}
+
+/// How often a subscription checks that its node's namespace still
+/// exists. A socket keeps a namespace alive after its name is removed,
+/// so the stream itself would never end (#175).
+const NAMESPACE_CHECK: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Keep a node's subscription running (#175). nlink's resync stream ends
+/// after an error other than ENOBUFS; the node's watch used to stop for
+/// good then, silently. Now its end is an event, and it is subscribed
+/// again after a backoff (200 ms, doubling to 5 s), until the namespace is
+/// gone or the watch is over.
+async fn supervise<F, Fut>(
+    node: &str,
+    family: WatchFamily,
+    resolver: &NsResolver,
+    tx: &tokio::sync::mpsc::Sender<WatchEvent>,
+    mut subscribe: F,
+) where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<Stop>>,
+{
+    let mut backoff = std::time::Duration::from_millis(200);
+    loop {
+        let reason = match subscribe().await {
+            Ok(Stop::Closed) => return,
+            Ok(Stop::Gone) => None,
+            Ok(Stop::Ended(reason)) => Some(reason),
+            Err(e) => Some(e.to_string()),
+        };
+        let event = |kind| WatchEvent {
+            node: node.to_owned(),
+            family,
+            kind,
+            from_snapshot: false,
+        };
+        let Some(reason) = reason.filter(|_| resolver.netns().is_ok()) else {
+            let _ = tx.send(event(WatchEventKind::Gone)).await;
+            return;
+        };
+        let ended = WatchEventKind::Ended {
+            reason,
+            retry_in_ms: u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX),
+        };
+        if tx.send(event(ended)).await.is_err() {
+            return;
+        }
+        tokio::time::sleep(backoff).await;
+        backoff = (backoff * 2).min(std::time::Duration::from_secs(5));
+    }
+}
+
 async fn run_route_subscription(
     node: &str,
     resolver: NsResolver,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
-) -> Result<()> {
+) -> Result<Stop> {
     let conn: Connection<Route> = resolver
         .connection::<Route>()
         .map_err(|e| Error::deploy_failed(format!("watch: route connection for '{node}': {e}")))?;
@@ -979,11 +1057,26 @@ async fn run_route_subscription(
         .await
         .map_err(|e| Error::deploy_failed(format!("watch: route subscribe for '{node}': {e}")))?;
 
-    while let Some(item) = stream.next().await {
+    let mut last_error = String::from("the stream ended");
+    let mut check = tokio::time::interval(NAMESPACE_CHECK);
+    loop {
+        let item = tokio::select! {
+            item = stream.next() => item,
+            _ = check.tick() => {
+                if resolver.netns().is_err() {
+                    return Ok(Stop::Gone);
+                }
+                continue;
+            }
+        };
+        let Some(item) = item else {
+            return Ok(Stop::Ended(last_error));
+        };
         let item = match item {
             Ok(i) => i,
             Err(e) => {
                 tracing::warn!(node = %node, "watch: route stream error: {e}");
+                last_error = e.to_string();
                 continue;
             }
         };
@@ -1003,10 +1096,9 @@ async fn run_route_subscription(
             from_snapshot,
         };
         if tx.send(watch_ev).await.is_err() {
-            break;
+            return Ok(Stop::Closed);
         }
     }
-    Ok(())
 }
 
 async fn run_nftables_subscription(
@@ -1014,7 +1106,7 @@ async fn run_nftables_subscription(
     resolver: NsResolver,
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
-) -> Result<()> {
+) -> Result<Stop> {
     let conn: Connection<Nftables> = resolver.connection::<Nftables>().map_err(|e| {
         Error::deploy_failed(format!("watch: nftables connection for '{node}': {e}"))
     })?;
@@ -1029,11 +1121,26 @@ async fn run_nftables_subscription(
         Error::deploy_failed(format!("watch: nftables subscribe for '{node}': {e}"))
     })?;
 
-    while let Some(item) = stream.next().await {
+    let mut last_error = String::from("the stream ended");
+    let mut check = tokio::time::interval(NAMESPACE_CHECK);
+    loop {
+        let item = tokio::select! {
+            item = stream.next() => item,
+            _ = check.tick() => {
+                if resolver.netns().is_err() {
+                    return Ok(Stop::Gone);
+                }
+                continue;
+            }
+        };
+        let Some(item) = item else {
+            return Ok(Stop::Ended(last_error));
+        };
         let item = match item {
             Ok(i) => i,
             Err(e) => {
                 tracing::warn!(node = %node, "watch: nftables stream error: {e}");
+                last_error = e.to_string();
                 continue;
             }
         };
@@ -1056,15 +1163,48 @@ async fn run_nftables_subscription(
             from_snapshot,
         };
         if tx.send(watch_ev).await.is_err() {
-            break;
+            return Ok(Stop::Closed);
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stream that ends is reported, with its error, and subscribed
+    /// again after the backoff (#175); the watch stops when the receiver
+    /// is gone.
+    #[tokio::test(start_paused = true)]
+    async fn a_subscription_that_ends_is_reported_and_restarted() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        supervise("n", WatchFamily::Route, &NsResolver::Root, &tx, || {
+            let n = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async move {
+                match n {
+                    0 => Ok(Stop::Ended("EBADF".into())),
+                    1 => Err(Error::deploy_failed("subscribe refused")),
+                    _ => Ok(Stop::Closed),
+                }
+            }
+        })
+        .await;
+        assert_eq!(calls.into_inner(), 3);
+        let kinds: Vec<WatchEventKind> = std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|e| e.kind)
+            .collect();
+        assert!(
+            matches!(
+                kinds.as_slice(),
+                [
+                    WatchEventKind::Ended { reason: a, retry_in_ms: 200 },
+                    WatchEventKind::Ended { reason: b, retry_in_ms: 400 },
+                ] if a == "EBADF" && b.contains("subscribe refused")
+            ),
+            "{kinds:?}"
+        );
+    }
 
     #[test]
     fn watch_family_subscription_flags() {

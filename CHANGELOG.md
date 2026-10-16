@@ -123,6 +123,11 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   JSON (marcpardo/nlink#876).
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
+- **`watch --json` has two new records** (#175): `{"kind": "ended",
+  "reason": …, "retry_in_ms": …}` when a node's stream ends and it is
+  subscribed again, and `{"kind": "gone"}` when its namespace is gone and
+  its watch stops. `watch` (and a backend's drift stream) exits once every
+  node's watch has stopped, which destroying the lab now causes.
 - **`impair --show` prints one line per endpoint** (its root qdisc, netem's
   values, `(partitioned)`), not each node's `tc qdisc show` output; both
   it and `--show --json` read the qdisc over netlink (#179). The JSON is
@@ -326,6 +331,13 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   removed, and `apply --check`, `verify` and `apply` all said there was
   nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`
   converges it.
+- **A node's `watch` stopped for good on its first stream error** (#175),
+  with only a log line: nlink's resync stream ends after any error other
+  than ENOBUFS, and the task returned. The end is an event now, and the
+  node is subscribed again (200 ms, doubling to 5 s) until its namespace
+  is gone. Each subscription also checks every 2 s that its namespace
+  still exists, so a running `watch` stops pinning a destroyed lab's
+  namespaces with its sockets.
 - **Shell-outs replaced with nlink** (#179). `validate { tcp-connect … }`
   and `wait-for --tcp`'s fallback connect from a socket in the node's
   namespace (they needed `bash` in the node, which a container image may

@@ -290,6 +290,11 @@ pub enum Commands {
     /// generation marker the kernel sends after every committed
     /// batch is not shown. Elements a rule adds from the packet path
     /// (`add @set`) are not notified by the kernel.
+    ///
+    /// A node whose stream ends prints `watch ended: <error>` (an `ended`
+    /// record in `--json`) and is subscribed again after a backoff; one
+    /// whose namespace is gone prints `namespace gone` (`gone`) and stops.
+    /// The command exits when every node's watch has stopped.
     Watch(cmd::watch::Args),
 
     /// Wait for a service or condition inside a lab node.

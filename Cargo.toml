@@ -43,9 +43,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 libc = "0.2"
 
 # Crypto (WireGuard key generation)
-x25519-dalek = { version = "3", features = ["static_secrets"] }
-base64 = "0.23"
-getrandom = "0.4"
 time = { version = "0.3", features = ["formatting"] }
 
 # Zenoh pub/sub

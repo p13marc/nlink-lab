@@ -7,39 +7,30 @@ use std::collections::BTreeMap;
 use std::net::IpAddr;
 
 #[cfg(feature = "wireguard")]
-/// Generate a random WireGuard private key.
+/// Generate a random WireGuard private key, clamped, as `wg genkey` does
+/// (nlink's `PrivateKey`).
 pub(crate) fn generate_wg_private_key() -> Result<[u8; 32]> {
-    let mut key = [0u8; 32];
-    getrandom::fill(&mut key)
-        .map_err(|e| Error::deploy_failed(format!("failed to generate WireGuard key: {e}")))?;
-    // Clamp per Curve25519 convention
-    key[0] &= 248;
-    key[31] &= 127;
-    key[31] |= 64;
-    Ok(key)
+    nlink::netlink::genl::wireguard::PrivateKey::generate()
+        .map(|k| *k.as_bytes())
+        .map_err(|e| Error::nlink("failed to generate WireGuard key", e))
 }
 
 #[cfg(feature = "wireguard")]
-/// Derive a WireGuard public key from a private key.
+/// Derive a WireGuard public key from a private key, as `wg pubkey` does.
 pub(crate) fn derive_wg_public_key(private_key: &[u8; 32]) -> [u8; 32] {
-    let secret = x25519_dalek::StaticSecret::from(*private_key);
-    let public = x25519_dalek::PublicKey::from(&secret);
-    public.to_bytes()
+    nlink::netlink::genl::wireguard::PrivateKey::from_bytes(*private_key)
+        .public_key()
+        .0
 }
 
 #[cfg(feature = "wireguard")]
-/// Decode a base64-encoded WireGuard key.
+/// Decode a base64-encoded WireGuard private key (clamped, as the kernel
+/// stores it).
 pub(crate) fn decode_wg_key(s: &str) -> std::result::Result<[u8; 32], String> {
-    use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(s)
-        .map_err(|e| format!("base64 decode: {e}"))?;
-    if bytes.len() != 32 {
-        return Err(format!("expected 32 bytes, got {}", bytes.len()));
-    }
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&bytes);
-    Ok(key)
+    s.trim()
+        .parse::<nlink::netlink::genl::wireguard::PrivateKey>()
+        .map(|k| *k.as_bytes())
+        .map_err(|_| "not a base64 32-byte key".to_string())
 }
 
 /// The address `peer` has on a link or network it shares with `node`: the

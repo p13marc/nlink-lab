@@ -419,6 +419,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   stack with `Stack::plan_in`, saved WireGuard keys included.
 - `Plan::diff` compares ops by value (`PartialEq`) rather than by their
   `Debug` text.
+- WireGuard keys are generated, derived and encoded by nlink's
+  `PrivateKey`/`PublicKey` (its `wireguard-keys` feature): nlink-lab no
+  longer depends on `x25519-dalek`, `getrandom` or `base64`. Saved keys
+  (`secrets.json`, `wg_public_keys` in the state) keep their format; an
+  upgraded lab keeps its peers' keys, and its first `apply` only adds the
+  routes the peers carry to their allowed-ips (#147).
 - Traffic control is planned in `deploy/plan/tc.rs` (`QdiscSpec`,
   `RateLimiter::declare`, `PerPeerImpairer::declare`) and applied with
   each node's `Stack`; a runtime `impair`, `--clear`, `--partition` or

@@ -157,10 +157,13 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   `noecn`, `None` the kernel's default (on). A JSON topology with
   `"ecn": false` used to mean the default and now turns ECN off; state
   files never wrote `false`, so they keep their meaning.
-- **One-time replaces on the first `apply` after upgrading:** a `qdisc`
-  block's root, and a per-pair tree's, if what nlink reads back differs
-  from what it declares (handles and defaults are the ones the
-  imperative path used, so most labs see none).
+- **What the first `apply` after upgrading from 0.13.0 replaces once**,
+  now that traffic control is compared (measured by deploying every
+  example with 0.13.0, then `apply --check`): a `prio`'s root, which
+  moves to handle `1:`; a netem whose loss nlink now rounds as tc does,
+  at a root or a per-pair leaf (nlink #633); and a rate limit's ingress
+  redirect and IFB alias, which is how #149's fix reaches a lab deployed
+  before it. Labs deployed by a build of this release see no change.
 
 ### Added
 
@@ -255,8 +258,9 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   nlink redirected ingress traffic to the IFB with a mirred *ingress*
   redirect, so packets never reached the shaper or the stack; it is a
   matchall egress redirect now. `examples/iperf-benchmark.nll` shapes
-  both directions again. A lab deployed with an older nlink-lab keeps
-  the old redirect until its rate limit is applied again.
+  both directions again. A lab deployed with an older nlink-lab gets the
+  new redirect on its first `apply`, since traffic control is declared
+  and compared (#108).
 - **An `fq_codel` with `flows` could not be edited (#171)**: every apply
   after the first was EINVAL. nlink-lab's own sfq delete-and-re-add
   workaround goes, as nlink now replaces both itself.

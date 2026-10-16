@@ -188,7 +188,7 @@ pub struct PortVlans {
 }
 
 /// Per-node declarative stack: what step 11c applies.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StackConfig {
     pub network: nlink::netlink::config::NetworkConfig,
     pub firewall: Option<crate::types::FirewallConfig>,
@@ -202,7 +202,7 @@ pub struct StackConfig {
 /// Ops are pure data: building them touches nothing. `apply.rs` is
 /// the only place that turns them into kernel/host mutations, and
 /// every mutation records its inverse (`rollback::Undo`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     CreateNamespace {
         node: String,
@@ -724,7 +724,7 @@ impl Plan {
                     // an edited exec is stopped (background) and re-run;
                     // an unchanged one is left alone (#84)
                     Op::Exec { node, .. } => {
-                        if format!("{existing:?}") != format!("{op:?}") {
+                        if *existing != op {
                             if let Some(inv) = existing.inverse() {
                                 removals.push(inv);
                             }
@@ -733,8 +733,7 @@ impl Plan {
                         }
                     }
                     Op::Healthcheck { node, .. } => {
-                        if restarted.contains(node) || format!("{existing:?}") != format!("{op:?}")
-                        {
+                        if restarted.contains(node) || *existing != op {
                             changes.push(op.clone());
                         }
                     }
@@ -744,7 +743,7 @@ impl Plan {
                     // need its member veths re-attached after the re-create;
                     // until then bridge edits are not applied.
                     Op::CreateBridge { .. } => {
-                        if format!("{existing:?}") != format!("{op:?}") {
+                        if *existing != op {
                             tracing::warn!(
                                 "apply: bridge {} changed but bridge edits are not applied yet",
                                 op.key()
@@ -773,13 +772,13 @@ impl Plan {
                     // neither side, so it comes from the removal pass
                     // above, which this arm does not touch.
                     Op::Netem { .. } | Op::Qdisc { .. } => {
-                        if format!("{existing:?}") != format!("{op:?}") {
+                        if *existing != op {
                             changes.push(op.clone());
                         }
                     }
                     // everything else: re-create when the payload changed
                     _ => {
-                        if format!("{existing:?}") != format!("{op:?}") {
+                        if *existing != op {
                             if let Some(inv) = existing.inverse() {
                                 removals.push(inv);
                             }

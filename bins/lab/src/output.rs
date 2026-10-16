@@ -89,8 +89,8 @@ mod tests {
 pub struct DryRunReport<'a> {
     /// Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`
     /// fields (Plan 160 / 0.7.0) — use `topology` / `network` /
-    /// `nftables` / `removals`. `topology` was added later and is
-    /// additive, so the marker did not move.
+    /// `nftables` / `wireguard` / `removals`. `topology` and `wireguard`
+    /// were added later and are additive, so the marker did not move.
     pub schema_version: u32,
     pub lab: &'a str,
     pub no_op: bool,
@@ -104,14 +104,18 @@ pub struct DryRunReport<'a> {
     /// (#108). Elided when empty.
     #[serde(skip_serializing_if = "nlink_lab::diff::TopologyDiff::is_empty")]
     pub topology: &'a nlink_lab::diff::TopologyDiff,
-    /// Typed per-namespace `NetworkConfig` diff. Empty map elided.
+    /// Typed per-node `NetworkConfig` diff. Empty map elided.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub network: &'a std::collections::BTreeMap<String, nlink_lab::diff::ConfigDiff>,
-    /// Typed per-namespace `NftablesDiff`. Empty map elided.
+    /// Typed per-node `NftablesDiff`. Empty map elided.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub nftables: &'a std::collections::BTreeMap<String, nlink_lab::diff::NftablesDiff>,
+    /// Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and
+    /// allowed-ips that differ from the declared tunnels (public keys
+    /// only; private and preshared keys as presence flags). Empty map
+    /// elided. Additive, so the marker stays `3`.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub wireguard: &'a std::collections::BTreeMap<String, nlink_lab::diff::WireguardConfigDiff>,
     /// Removal ops from the plan diff (deleted nodes, links, VRF-table
     /// routes, …), one description per op. Elided when empty.
     #[serde(skip_serializing_if = "<[String]>::is_empty")]
@@ -132,6 +136,7 @@ impl<'a> DryRunReport<'a> {
             topology: &layered.topology,
             network: &layered.network,
             nftables: &layered.nftables,
+            wireguard: &layered.wireguard,
             removals,
         }
     }

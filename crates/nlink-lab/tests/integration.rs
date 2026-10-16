@@ -1557,6 +1557,70 @@ async fn apply_recreates_vlan_and_reinstalls_netem_and_vrf_route() {
     lab.destroy().await.expect("destroy failed");
 }
 
+/// Removing a declared interface from the topology deletes it (#159):
+/// nlink plans against the previous config, so the VLAN it declared and
+/// this one does not is a link to remove, listed by `--check`.
+#[tokio::test]
+async fn apply_deletes_a_removed_vlan_and_check_lists_it() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_deletes_a_removed_vlan_and_check_lists_it: requires root");
+        return;
+    }
+    if !recreate_modules_present("apply_deletes_a_removed_vlan_and_check_lists_it") {
+        return;
+    }
+    let lab_name = format!("rmv-{}", std::process::id());
+    let src = |vl1: &str| {
+        format!(
+            r#"lab "{lab_name}"
+node r {{
+  vlan vl0 {{ parent eth0 id 10 address 10.10.0.1/24 }}
+  {vl1}
+}}
+node h
+link r:eth0 -- h:eth0
+"#
+        )
+    };
+    let topo =
+        nlink_lab::parser::parse(&src("vlan vl1 { parent eth0 id 11 address 10.11.0.1/24 }"))
+            .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    assert_eq!(
+        lab.exec("r", "ip", &["link", "show", "vl1"])
+            .unwrap()
+            .exit_code,
+        0
+    );
+    let desired = nlink_lab::parser::parse(&src("")).unwrap();
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    let removed: Vec<&str> = layered
+        .network
+        .get("r")
+        .map(|d| d.links_to_remove.iter().map(|l| l.name.as_str()).collect())
+        .unwrap_or_default();
+    assert_eq!(removed, ["vl1"], "--check should list vl1:\n{layered}");
+
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+    let gone = lab.exec("r", "ip", &["link", "show", "vl1"]).unwrap();
+    assert_ne!(gone.exit_code, 0, "vl1 is still there: {}", gone.stdout);
+    let kept = lab.exec("r", "ip", &["-o", "addr", "show", "vl0"]).unwrap();
+    assert!(kept.stdout.contains("10.10.0.1/24"), "{}", kept.stdout);
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// A recreate nlink would refuse — the VLAN carries a permanent neighbour
 /// the topology cannot declare — fails before anything changes.
 #[tokio::test]
@@ -1699,12 +1763,7 @@ async fn wireguard_config_reapply_is_zero_ops() {
         out.stdout
     );
 
-    // apply_diff with the same topology must be a no-op on the
-    // WG layer. `compute_layered_diff` reports the network +
-    // nftables view; the WG view isn't represented in
-    // `LayeredDiff` yet — assert via `apply_diff` succeeding
-    // without errors (any WG-layer mutation would be a churn
-    // indicator in the trace).
+    // apply with the same topology must be a no-op on the WG layer.
     nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("reapply failed");
@@ -1745,6 +1804,39 @@ async fn wireguard_config_reapply_is_zero_ops() {
         checked += 1;
     }
     assert!(checked >= 2, "expected both gateways to carry WireGuard");
+
+    // A peer removed by hand is drift (#170): `--check` reports it in the
+    // WireGuard layer, and an `apply` of the same topology puts it back.
+    let peers = lab.exec("gw-a", "wg", &["show", "wg0", "peers"]).unwrap();
+    let peer = peers.stdout.trim().to_string();
+    assert!(!peer.is_empty(), "gw-a has no peer to remove");
+    let rm = lab
+        .exec("gw-a", "wg", &["set", "wg0", "peer", &peer, "remove"])
+        .unwrap();
+    assert_eq!(rm.exit_code, 0, "{}", rm.stderr);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(
+        layered.wireguard.get("gw-a").is_some_and(|d| !d.is_empty())
+            && layered.wireguard.len() == 1
+            && layered.network.is_empty()
+            && layered.nftables.is_empty(),
+        "the removed peer, and only it, should be drift:\n{layered}"
+    );
+    assert!(
+        layered.to_string().contains("WireguardConfigDiff (gw-a"),
+        "{layered}"
+    );
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("apply after a hand-removed peer failed");
+    let back = lab.exec("gw-a", "wg", &["show", "wg0", "peers"]).unwrap();
+    assert_eq!(back.stdout.trim(), peer, "the peer is not restored");
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
 
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");

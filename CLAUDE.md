@@ -285,7 +285,7 @@ execute**:
 
 ```
  mod.rs        deploy(), apply(), compute_layered_diff(), plan_for(); the
-               per-node stack appliers (network / nftables / WireGuard)
+               per-node Stack (network + nftables + WireGuard, one nlink Stack)
  op.rs         NsRef (Root | Named | Container), Stage, Op, Plan::diff
  plan/         PURE planners — nothing here touches the kernel:
    topology.rs   namespaces, containers, hwsim, mgmt bridge, bridge
@@ -313,9 +313,12 @@ table…) is recreated by nlink inside Stack, which keeps its Tc
 read-only preflight so a recreate nlink would refuse fails before anything
 changes. Every
 netlink resource still commits through nlink's declarative
-`NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile paths
-(zero kernel calls when unchanged); in apply mode the network layer uses
-`ApplyOptions::with_purge(true)`. Namespaces created by nlink-lab carry
+`NetworkConfig` / `NftablesConfig` / `WireguardConfig`, planned and
+applied per node as one `nlink::facade::Stack` (`apply_reconcile_in`;
+zero kernel calls when unchanged). In apply mode the network layer purges
+and plans against `previous` (the running topology's config), so a
+declared link the topology no longer has is deleted; a declared link's
+per-interface sysctls are devconf on its declaration. Namespaces created by nlink-lab carry
 an ownership tag (`/run/nlink-lab/netns/<ns>`, `netns_tag.rs`) and
 `destroy --orphans` only ever reaps tagged ones. `deploy --dry-run`
 prints the plan; `validate { … }` assertions run after the state file is
@@ -324,10 +327,10 @@ written and ride on `RunningLab::assertion_results()`.
 `apply_diff` (live reconcile) shares the declarative builders
 with the initial-deploy path. `compute_layered_diff(running,
 desired)` (Plan 158f Phase 2) is the dry-run preview that walks
-every node, builds the same per-namespace `NetworkConfig` /
-`NftablesConfig`, and emits a single `LayeredDiff` bundle for
+every node, plans the same `Stack` apply would (`Stack::plan_in`), and
+emits a single `LayeredDiff` bundle (network, nftables, WireGuard) for
 `apply --check` / `apply --dry-run`. Plan 159d ships
-`apply --check --json` with typed `network` + `nftables` fields;
+`apply --check --json` with typed `network` + `nftables` (+ `wireguard`) fields;
 Plan 160 (0.7.0) bumped it to **schema v3**, removing the v1
 `diff` / `layered_summary` / `layered_summary_deprecated`
 fallback fields after their one-release deprecation window.

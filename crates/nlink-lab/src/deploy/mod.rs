@@ -3,8 +3,6 @@
 //! Takes a validated [`Topology`] and creates the actual network lab using
 //! nlink APIs. Follows the deployment sequence from the design document.
 
-#[cfg(feature = "wireguard")]
-use nlink::Wireguard;
 use nlink::netlink::namespace;
 use nlink::{Connection, Route};
 use std::collections::BTreeMap;
@@ -23,7 +21,7 @@ pub mod rollback;
 
 use rollback::{Journal, Undo};
 
-pub use op::{NsRef, Op, Plan, Stage};
+pub use op::{NsRef, Op, Plan, StackConfig, Stage};
 pub(crate) use plan::network::*;
 pub(crate) use plan::nftables::*;
 pub(crate) use plan::qdisc::*;
@@ -265,6 +263,18 @@ fn plan_apply(
     desired: &Topology,
     opts: &ApplyOptions,
 ) -> Result<(PlanInputs, Plan)> {
+    let (inputs, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
+    Ok((inputs, Plan::diff(&cur_plan, &des_plan)))
+}
+
+/// The current and desired plans of an apply, planned with the keys of
+/// the WireGuard interfaces that already exist, so `apply` does not rotate
+/// every peer's key and `apply --check` compares the keys in use.
+fn apply_plans(
+    running: &RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+) -> Result<(PlanInputs, Plan, Plan)> {
     let (current, desired, _) = overlay_live_impairments(running, desired, opts);
     let desired = &desired;
 
@@ -293,7 +303,7 @@ fn plan_apply(
 
     let cur_plan = plan::plan(&current, &inputs)?;
     let des_plan = plan::plan(desired, &inputs)?;
-    Ok((inputs, Plan::diff(&cur_plan, &des_plan)))
+    Ok((inputs, cur_plan, des_plan))
 }
 
 pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<ApplyReport> {
@@ -618,78 +628,6 @@ mod wireguard_secrets {
     }
 }
 
-/// Apply the unified `nlink-lab` nftables table for a node.
-/// Plan 158a.
-///
-/// Builds an [`NftablesConfig`] covering firewall + NAT
-/// chains and rules from the desired state and commits it via
-/// `NftablesDiff::apply_reconcile`. Idempotent re-apply makes
-/// zero kernel calls; in-place edits replace rule bodies
-/// atomically without rebuilding the chain.
-async fn apply_nftables_for_node(
-    node_handle: &NsRef,
-    node_name: &str,
-    fw: Option<&crate::types::FirewallConfig>,
-    nat: Option<&crate::types::NatConfig>,
-) -> Result<()> {
-    use nlink::netlink::Nftables;
-    use nlink::netlink::nftables::config::ReconcileOptions;
-
-    // Phase 0: validate user-supplied literals so the
-    // declarative closures can `.expect()` cleanly.
-    if let Some(nat) = nat {
-        validate_nat_rule_literals(nat)?;
-    }
-
-    let cfg = topology_to_nftables_config(fw, nat)?;
-
-    let nft_conn: Connection<Nftables> = node_handle.connection().map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to create nftables connection for '{node_name}': {e}"
-        ))
-    })?;
-
-    // Nothing declared at all: an empty `NftablesConfig` declares no
-    // table, so its diff has nothing to reconcile against and a table
-    // left from an earlier deploy/apply would survive. Delete it
-    // outright (idempotent) so `apply` after removing a node's last
-    // firewall/NAT block really clears the rules.
-    if fw.is_none() && nat.is_none() {
-        let removed = nft_conn
-            .del_table_if_exists(NLINK_LAB_TABLE, nlink::netlink::nftables::Family::Inet)
-            .await
-            .map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to remove nftables table on '{node_name}': {e}"
-                ))
-            })?;
-        if removed {
-            tracing::info!(node = %node_name, "nftables: removed table {NLINK_LAB_TABLE}");
-        }
-        return Ok(());
-    }
-
-    // The config-level reconcile diffs again on every attempt: since nlink
-    // 0.31 a diff applies only to the ruleset it was taken from, and is
-    // refused with ERESTART if anything committed in between (#482).
-    let report = cfg
-        .apply_reconcile(&nft_conn, ReconcileOptions::default())
-        .await
-        .map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to apply nftables config on '{node_name}': {e}"
-            ))
-        })?;
-
-    tracing::info!(
-        node = %node_name,
-        attempts = report.attempts,
-        changes = report.changes_made,
-        "nftables reconcile"
-    );
-    Ok(())
-}
-
 /// Apply per-pair network impairments using `PerPeerImpairer`.
 ///
 /// For each network with impairments, group rules by source node and
@@ -825,12 +763,6 @@ async fn apply_network_impairments(
     Ok(())
 }
 
-// NOTE: the imperative `apply_nat(...)` body (Plan 152 era)
-// is deleted by Plan 158a. All NAT rule application now goes
-// through `apply_nftables_for_node` which builds a single
-// `NftablesConfig` covering firewall + NAT and commits it
-// via `NftablesDiff::apply_reconcile`.
-
 /// The options a node's network layer is planned with, in an apply and
 /// in `apply --check` alike:
 ///
@@ -838,6 +770,9 @@ async fn apply_network_impairments(
 ///   routes into before (`previous_vrf_tables`): a table it no longer
 ///   declares into is not in the config, so purge would otherwise leave
 ///   its routes behind;
+/// * `previous`, the node's config as the running lab has it: what it
+///   declared and this one no longer does is removed, declared links
+///   included (#159, nlink #512);
 /// * `preserve_undeclared_tc`: a link nlink recreates (a VLAN id, a VNI, a
 ///   bond mode changed, nlink #417) keeps nlink-lab's netem, `qdisc`,
 ///   rate limit and per-pair tree, which nlink snapshots before the
@@ -846,206 +781,87 @@ async fn apply_network_impairments(
 pub(crate) fn network_plan_options(
     purge: bool,
     previous_vrf_tables: &[u32],
+    previous: Option<&std::sync::Arc<nlink::netlink::config::NetworkConfig>>,
 ) -> nlink::netlink::config::PlanOptions {
-    nlink::netlink::config::PlanOptions::default()
+    let mut opts = nlink::netlink::config::PlanOptions::default()
         .purge(purge)
         .purge_tables(previous_vrf_tables.iter().copied())
-        .preserve_undeclared_tc(true)
+        .preserve_undeclared_tc(true);
+    if let Some(prev) = previous {
+        opts = opts.previous(prev.clone());
+    }
+    opts
 }
 
-/// Apply the declarative [`NetworkConfig`] for one node.
-/// Plan 158e Slice 1.
-///
-/// Wraps `cfg.diff(&conn).await?.apply(&conn, …).await?`.
-/// Idempotent re-apply makes zero kernel calls for the
-/// address + route layer.
-async fn apply_network_config_for_node(
-    node_handle: &NsRef,
+/// Every node's network config in `current` (the running lab's
+/// topology), as `PlanOptions::previous`. A node whose config does not
+/// build is left out: it gets no removals.
+pub(crate) fn previous_network_configs(
+    current: &Topology,
+) -> BTreeMap<String, std::sync::Arc<nlink::netlink::config::NetworkConfig>> {
+    let autos = auto_routes_for(current);
+    current
+        .nodes
+        .iter()
+        .filter_map(|(name, node)| {
+            topology_to_network_config(name, node, current, autos.get(name))
+                .ok()
+                .map(|cfg| (name.clone(), std::sync::Arc::new(cfg)))
+        })
+        .collect()
+}
+
+/// A node's declarative layers as one nlink `Stack` (nlink #519): its
+/// network config, its nftables table, and its WireGuard devices. With no
+/// firewall and no NAT the table is declared absent, so one an earlier
+/// apply left behind is deleted (and reported by `apply --check`).
+pub(crate) fn node_stack(cfg: &StackConfig) -> Result<nlink::facade::Stack> {
+    use nlink::netlink::nftables::{Family, config::NftablesConfig};
+    let nftables = if cfg.firewall.is_none() && cfg.nat.is_none() {
+        NftablesConfig::new().absent_table(NLINK_LAB_TABLE, Family::Inet)
+    } else {
+        topology_to_nftables_config(cfg.firewall.as_ref(), cfg.nat.as_ref())?
+    };
+    #[allow(unused_mut)]
+    let mut stack = nlink::facade::Stack::new()
+        .network(cfg.network.clone())
+        .nftables(nftables);
+    #[cfg(feature = "wireguard")]
+    if let Some(wg) = &cfg.wireguard {
+        stack = stack.wireguard(wg.clone());
+    }
+    Ok(stack)
+}
+
+/// Apply a node's stack. nlink plans every layer once and applies that
+/// plan: WireGuard links first (created and up, so their addresses land on
+/// existing devices), then the network config, the nftables table, and
+/// WireGuard's keys and peers. What a concurrent change can cause — EBUSY,
+/// EAGAIN, an interrupted dump, an nftables commit refused because the
+/// ruleset moved since the plan (ERESTART) — is planned and applied again,
+/// twice at most, 50 ms apart and doubling. An unchanged node is zero
+/// kernel changes.
+pub(crate) async fn apply_stack_for_node(
+    handle: &NsRef,
     node_name: &str,
-    cfg: nlink::netlink::config::NetworkConfig,
+    cfg: &StackConfig,
     plan: nlink::netlink::config::PlanOptions,
 ) -> Result<()> {
-    // Skip the round-trip when the declared config is empty (no
-    // addresses, no routes, no links, no qdiscs) — unless purging,
-    // where "nothing declared" means "remove what is there".
-    if !plan.purge
-        && cfg.links().is_empty()
-        && cfg.addresses().is_empty()
-        && cfg.routes().is_empty()
-        && cfg.qdiscs().is_empty()
-    {
-        return Ok(());
-    }
-
-    let conn: Connection<Route> = node_handle.connection().map_err(|e| {
-        Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
-    })?;
-
-    // Diff + apply, with the diff recomputed on each attempt and a small
-    // EBUSY/EAGAIN retry budget (three attempts, 50 ms doubling), like the
-    // nftables and WireGuard layers (#75). Idempotent — an unchanged
-    // topology is zero changes. In apply mode undeclared global addresses
-    // and static routes in the tables the node owns are removed (qdiscs
-    // are never touched). Any error is returned: without
-    // `continue_on_error` nlink stops at the first.
-    let opts = nlink::reconcile::ReconcileOptions::new()
-        .with_max_retries(2)
-        .with_backoff(std::time::Duration::from_millis(50));
+    let stack = node_stack(cfg)?;
     let mut apply = nlink::netlink::config::ApplyOptions::default();
     apply.plan = plan;
-    let report = cfg
-        .apply_reconcile_with_options(&conn, opts, apply)
+    let retry = nlink::reconcile::ReconcileOptions::new()
+        .with_max_retries(2)
+        .with_backoff(std::time::Duration::from_millis(50));
+    let report = stack
+        .apply_reconcile_in(handle.spec(), retry, apply)
         .await
-        .map_err(|e| Error::deploy_failed(format!("NetworkConfig::apply on '{node_name}': {e}")))?;
-
-    tracing::info!(
-        node = %node_name,
-        changes = report.changes_made,
-        attempts = report.attempts,
-        "NetworkConfig reconcile (addresses + routes)"
-    );
-    Ok(())
-}
-
-/// Plan 159c — per-node Stack-pattern orchestrator.
-///
-/// Bundles the three declarative reconcile calls
-/// (`apply_network_config_for_node`, `apply_nftables_for_node`,
-/// `apply_wireguard_for_node`) into a single per-node call site
-/// with one aggregated `tracing::info!` for the whole stack.
-/// Close to upstream `facade::Stack::apply_in_with`, still not adopted —
-/// but for different reasons than before nlink 0.27, which fixed three of
-/// the four:
-///
-/// * ordering: 0.27 creates (and raises) declared WireGuard links before
-///   the network layer, which is what our `ensure_devices` call does here;
-/// * options: `apply_in_with(ns, ApplyOptions)` can purge now;
-/// * containers: it takes a `NamespaceSpec`, which has `Pid`, so it is no
-///   longer name-only.
-///
-/// What still keeps us on our own path: `apply_in_with` runs an
-/// unconditional pre-flight `diff_in_with` across **all three layers**
-/// before applying, with no way to opt out — a second full dump per node
-/// per apply, which a 200-node lab pays for — and `facade::apply::
-/// network_in_with` calls `apply_with_options` directly, so it has no
-/// EBUSY/EAGAIN retry (see `apply_network_config_for_node`). Routing through
-/// `NsRef::connection<P>()` also keeps the container
-/// (`connection_for_pid`) and bare-namespace cases on one code path.
-#[cfg(feature = "wireguard")]
-async fn apply_stack_for_node(
-    node_handle: &NsRef,
-    node_name: &str,
-    network: nlink::netlink::config::NetworkConfig,
-    fw: Option<&crate::types::FirewallConfig>,
-    nat: Option<&crate::types::NatConfig>,
-    wireguard: Option<nlink::netlink::genl::wireguard::WireguardConfig>,
-    plan: nlink::netlink::config::PlanOptions,
-) -> Result<()> {
-    // Plan 160 — bootstrap WG links *before* the NetworkConfig apply
-    // so their tunnel addresses (declared on the network layer) land
-    // on an existing interface. `ensure_devices` is idempotent, so
-    // the live-reconcile path re-runs it harmlessly.
-    if let Some(cfg) = &wireguard {
-        ensure_wireguard_devices_for_node(node_handle, node_name, cfg).await?;
-    }
-    apply_network_config_for_node(node_handle, node_name, network, plan).await?;
-    apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
-    if let Some(cfg) = wireguard {
-        apply_wireguard_for_node(node_handle, node_name, cfg).await?;
-    }
-    tracing::info!(node = %node_name, "stack reconcile complete");
-    Ok(())
-}
-
-/// Plan 159c — WG-less variant for builds without
-/// `--features wireguard`.
-#[cfg(not(feature = "wireguard"))]
-async fn apply_stack_for_node(
-    node_handle: &NsRef,
-    node_name: &str,
-    network: nlink::netlink::config::NetworkConfig,
-    fw: Option<&crate::types::FirewallConfig>,
-    nat: Option<&crate::types::NatConfig>,
-    _wireguard: Option<()>,
-    plan: nlink::netlink::config::PlanOptions,
-) -> Result<()> {
-    apply_network_config_for_node(node_handle, node_name, network, plan).await?;
-    apply_nftables_for_node(node_handle, node_name, fw, nat).await?;
-    tracing::info!(node = %node_name, "stack reconcile complete");
-    Ok(())
-}
-
-/// Bootstrap a node's declared WireGuard links (Plan 160, nlink
-/// 0.24 #169). `WireguardConfig::ensure_devices` creates any
-/// declared-but-absent WG interface idempotently (swallowing
-/// already-exists) through a same-namespace Route connection —
-/// covering both the bare-namespace and container
-/// (`connection_for_pid`) cases via `NsRef`, which the
-/// name-only `facade::apply::wireguard*` helpers would not. Runs
-/// before the `NetworkConfig` apply so the WG interfaces exist — and,
-/// since nlink 0.27, are already **up** — when their tunnel addresses
-/// are assigned; this retired the imperative step-6c pre-create loop.
-#[cfg(feature = "wireguard")]
-async fn ensure_wireguard_devices_for_node(
-    node_handle: &NsRef,
-    node_name: &str,
-    cfg: &nlink::netlink::genl::wireguard::WireguardConfig,
-) -> Result<()> {
-    let route_conn: Connection<Route> = node_handle.connection().map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to open Route connection for WireGuard bootstrap on '{node_name}': {e}"
-        ))
-    })?;
-    // Since nlink 0.27 `ensure_devices` raises every declared device on
-    // every call, not just the ones it created — `add_link` makes a link
-    // administratively down and the kernel refuses a nexthop on a down
-    // device, so the loop we used to run here is now redundant (nlink
-    // #330; the 0.26→0.27 migration guide names it).
-    cfg.ensure_devices(&route_conn).await.map_err(|e| {
-        Error::deploy_failed(format!(
-            "WireguardConfig::ensure_devices on '{node_name}': {e}"
-        ))
-    })?;
-    Ok(())
-}
-
-/// Apply a node's `WireguardConfig` via `apply_reconcile`.
-/// Plan 159a Phase 2 — mirrors `apply_network_config_for_node` /
-/// `apply_nftables_for_node` shape for the WG GENL layer.
-/// The WG link is bootstrapped earlier (via
-/// `ensure_wireguard_devices_for_node`) so `NetworkConfig` can
-/// assign its addresses; this fn only configures the GENL device.
-#[cfg(feature = "wireguard")]
-async fn apply_wireguard_for_node(
-    node_handle: &NsRef,
-    node_name: &str,
-    cfg: nlink::netlink::genl::wireguard::WireguardConfig,
-) -> Result<()> {
-    use nlink::netlink::nftables::config::ReconcileOptions;
-
-    let wg_conn = node_handle
-        .connection_async::<Wireguard>()
-        .await
-        .map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to create WireGuard connection for '{node_name}': {e}"
-            ))
-        })?;
-
-    let report = cfg
-        .apply_reconcile(&wg_conn, ReconcileOptions::default())
-        .await
-        .map_err(|e| {
-            Error::deploy_failed(format!(
-                "WireguardConfig::apply_reconcile on '{node_name}': {e}"
-            ))
-        })?;
-
+        .map_err(|e| Error::deploy_failed(format!("stack apply on '{node_name}': {e}")))?;
     tracing::info!(
         node = %node_name,
         attempts = report.attempts,
-        changes = report.changes_made,
-        "WireguardConfig reconcile complete",
+        changes = report.change_count(),
+        "stack reconcile complete"
     );
     Ok(())
 }
@@ -1053,89 +869,62 @@ async fn apply_wireguard_for_node(
 /// Compute the full layered diff between a running lab's live
 /// state and a desired topology. Plan 158f Phase 2.
 ///
-/// Aggregates three views:
-/// - Lab-graph differences (nodes/links/impair/sysctls/etc.) via
-///   [`crate::diff::diff_topologies`].
-/// - Per-namespace RTNETLINK diff (links/addresses/routes/qdiscs)
-///   by building the same [`nlink::netlink::config::NetworkConfig`]
-///   step 11c of the deploy uses and calling its `diff()` against
-///   a per-node `Connection<Route>`.
-/// - Per-namespace nftables diff by building the same
-///   [`nlink::netlink::nftables::config::NftablesConfig`] step 13
-///   uses and calling its `diff()` against a per-node
-///   `Connection<Nftables>`.
+/// Aggregates the lab-graph differences (nodes/links/impair/sysctls/…,
+/// [`crate::diff::diff_topologies`]) with what each node's `Stack` would
+/// change: the same stack `apply` builds (saved WireGuard keys included),
+/// planned the way `apply` plans it (purge, removals against the running
+/// topology's config, recreates that keep their Tc) with
+/// `Stack::plan_in`: its network, nftables and WireGuard diffs.
 ///
-/// Used by `nlink-lab apply --check` and `apply --dry-run` so
-/// CI and operators see the full set of kernel changes that
-/// `apply` would commit — not just the lab-graph subset that
-/// `TopologyDiff` covers.
-///
-/// Re-computing the upstream subdiffs on every call costs one
-/// dump round-trip per node per protocol family. For a 50-node
-/// lab that's 100 dumps; in practice ms-scale on a quiet host.
+/// Used by `nlink-lab apply --check`, `apply --dry-run` and `verify`, so
+/// CI and operators see the full set of kernel changes `apply` would
+/// commit — not just the lab-graph subset that `TopologyDiff` covers.
+/// One dump round-trip per node per layer; ms-scale on a quiet host.
 pub async fn compute_layered_diff(
     running: &RunningLab,
     desired: &Topology,
 ) -> Result<crate::diff::LayeredDiff> {
-    use nlink::netlink::Nftables;
-
     let topology = crate::diff::diff_topologies(running.topology(), desired);
-
-    let auto_routes = auto_routes_for(desired);
+    let (_, _, des_plan) = apply_plans(running, desired, &ApplyOptions::default())?;
+    let previous = previous_network_configs(running.topology());
 
     let mut network = BTreeMap::new();
     let mut nftables = BTreeMap::new();
-
-    for (node_name, node) in &desired.nodes {
-        // The handle lookup uses the running-lab state. A node
-        // listed in `desired` but not in `running` (i.e. a
-        // newly-added node) is captured by the lab-graph diff
-        // (`topology.nodes_added`) and gets full creation work
-        // during apply. We skip it here to avoid a spurious error.
-        let handle = match node_handle_for(running, node_name) {
-            Ok(h) => h,
-            Err(_) => continue,
+    let mut wireguard = BTreeMap::new();
+    for op in &des_plan.ops {
+        let Op::Stack {
+            node: node_name,
+            cfg,
+        } = op
+        else {
+            continue;
         };
-
-        // RTNETLINK side.
-        let cfg = topology_to_network_config(node_name, node, desired, auto_routes.get(node_name))?;
-        let cfg_is_empty = cfg.links().is_empty()
-            && cfg.addresses().is_empty()
-            && cfg.routes().is_empty()
-            && cfg.qdiscs().is_empty();
-        if !cfg_is_empty {
-            let conn: Connection<Route> = handle.connection().map_err(|e| {
-                Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
-            })?;
-            // Purge-aware: undeclared addresses / main-table static
-            // routes on managed interfaces are drift too — `apply`
-            // removes them, so `apply --check` / `verify` must report
-            // them (found by `verify` missing a hand-added address).
-            let previous: Vec<u32> = running
-                .topology()
-                .nodes
-                .get(node_name)
-                .map(|n| n.vrfs.values().map(|v| v.table).collect())
-                .unwrap_or_default();
-            let opts = network_plan_options(true, &previous);
-            let diff = cfg.diff_with_options(&conn, opts).await.map_err(|e| {
-                Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
-            })?;
-            network.insert(node_name.clone(), diff);
+        // A node `desired` adds has no namespace yet: the lab-graph diff
+        // (`topology.nodes_added`) reports it.
+        let Ok(handle) = node_handle_for(running, node_name) else {
+            continue;
+        };
+        // Planned the way `apply` plans it: purge, the previous config's
+        // removals, the Tc a recreate keeps.
+        let tables: Vec<u32> = running
+            .topology()
+            .nodes
+            .get(node_name)
+            .map(|n| n.vrfs.values().map(|v| v.table).collect())
+            .unwrap_or_default();
+        let opts = network_plan_options(true, &tables, previous.get(node_name));
+        let plan = node_stack(cfg)?
+            .plan_in(handle.spec(), opts)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("stack plan on '{node_name}': {e}")))?;
+        if let Some(d) = plan.network.filter(|d| !d.is_empty()) {
+            network.insert(node_name.clone(), d);
         }
-
-        // nftables side.
-        let fw = desired.effective_firewall(node);
-        let nat = node.nat.as_ref();
-        if fw.is_some() || nat.is_some() {
-            let cfg = topology_to_nftables_config(fw.as_deref(), nat)?;
-            let nft_conn: Connection<Nftables> = handle.connection().map_err(|e| {
-                Error::deploy_failed(format!("Nftables connection on '{node_name}': {e}"))
-            })?;
-            let diff = cfg.diff(&nft_conn).await.map_err(|e| {
-                Error::deploy_failed(format!("NftablesConfig::diff on '{node_name}': {e}"))
-            })?;
-            nftables.insert(node_name.clone(), diff);
+        if let Some(d) = plan.nftables.filter(|d| !d.is_empty()) {
+            nftables.insert(node_name.clone(), d);
+        }
+        if let Some(d) = plan.wireguard.filter(|d| !d.is_empty()) {
+            wireguard.insert(node_name.clone(), d);
         }
     }
 
@@ -1143,6 +932,7 @@ pub async fn compute_layered_diff(
         topology,
         network,
         nftables,
+        wireguard,
     })
 }
 
@@ -1180,9 +970,10 @@ async fn preflight_recreates(running: &RunningLab, desired: &Topology) -> Result
                 .map_err(|e| {
                     Error::deploy_failed(format!("NetworkConfig connection on '{node_name}': {e}"))
                 })?;
-        let previous: Vec<u32> = prev.vrfs.values().map(|v| v.table).collect();
+        let tables: Vec<u32> = prev.vrfs.values().map(|v| v.table).collect();
+        let previous = std::sync::Arc::new(cur_cfg);
         let diff = des_cfg
-            .diff_with_options(&conn, network_plan_options(true, &previous))
+            .diff_with_options(&conn, network_plan_options(true, &tables, Some(&previous)))
             .await
             .map_err(|e| {
                 Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))

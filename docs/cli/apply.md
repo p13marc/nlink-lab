@@ -37,7 +37,7 @@ respawn — apply leaves them alone.
 |------|-------------|
 | `--dry-run` | Print the diff and what would change; don't make kernel calls. |
 | `--check` | Drift gate — exit non-zero if the live lab differs from the NLL. Implies `--dry-run`. |
-| `--json` | Emit a structured report. With `--dry-run`/`--check`: the schema-v3 envelope (`{schema_version: 3, lab, no_op, change_count, topology: {…}, network: {…}, nftables: {…}}`, see `docs/json-schemas/layered-diff.v3.schema.json`) suitable for CI. Traffic-control changes live in `topology`. |
+| `--json` | Emit a structured report. With `--dry-run`/`--check`: the schema-v3 envelope (`{schema_version: 3, lab, no_op, change_count, topology: {…}, network: {…}, nftables: {…}, wireguard: {…}}`, see `docs/json-schemas/layered-diff.v3.schema.json`) suitable for CI. Traffic-control changes live in `topology`. |
 | `-v`, `--verbose` | Print every reconcile step. |
 | `-q`, `--quiet` | Suppress non-error output. |
 
@@ -140,6 +140,32 @@ object collections. `rules-to-add` items carry the rule and where it goes
 in the chain (`"Append"`, `{"Before": handle}`, `{"After": handle}`), and
 `generation` is the ruleset generation the diff was taken from (an apply
 of it is refused if the ruleset moved since).
+
+`links-to-remove` lists a declared `vlan`/`vxlan`/`bond`/`vrf`/`dummy`
+the topology no longer has, which `apply` deletes. `wireguard` is nlink's
+`WireguardConfigDiff` per node: a peer removed by hand shows as
+
+```json
+"wireguard": {
+  "gw-a": {
+    "devices-to-modify": [
+      [ "wg0", {
+          "private-key-set": false, "listen-port-set": false, "fwmark-set": false,
+          "peers-to-add": [
+            { "public-key": "4XjmA/FZ+ScYXFEIYPAIoPEqmtZDCfxPsGgrWpUdrjQ=",
+              "endpoint": "10.0.0.2:51820",
+              "allowed-ips": [ { "addr": "192.168.255.2", "cidr": 32 } ], … }
+          ],
+          "peers-to-modify": [], "peers-to-remove": []
+      } ]
+    ],
+    "devices-to-add": []
+  }
+}
+```
+
+Keys never appear in it: peers by public key, private and preshared keys
+as `*-set` flags.
 
 **Traffic-control changes appear only under `topology`.** Impairments,
 per-pair `impair` matrices, `qdisc` blocks and rate limits are applied

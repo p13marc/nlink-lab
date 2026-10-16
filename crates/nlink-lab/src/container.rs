@@ -29,7 +29,7 @@ pub struct ContainerInfo {
 }
 
 /// Options for container creation.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CreateOpts {
     /// Command to run (overrides image CMD).
     pub cmd: Option<Vec<String>>,

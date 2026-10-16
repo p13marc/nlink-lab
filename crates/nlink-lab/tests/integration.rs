@@ -5045,6 +5045,109 @@ async fn firewall_observability_example_counts() {
     lab.destroy().await.expect("destroy failed");
 }
 
+/// Renaming a named counter or set on a running lab, or dropping a chain
+/// whose rule uses a named counter, applies (#174). Before nlink 0.31 the
+/// batch deleted the object, set or chain before replacing the rules that
+/// still used it, and every such apply failed with EBUSY (nlink #460). A
+/// rule added by hand with an inline set no longer blocks the apply
+/// either: its anonymous set is left alone (nlink #459).
+#[tokio::test]
+async fn firewall_renames_and_foreign_inline_sets_apply() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_renames_and_foreign_inline_sets_apply: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_renames_and_foreign_inline_sets_apply: no nftables");
+        return;
+    }
+    let lab_name = format!("fwrn-{}", std::process::id());
+    let src = |counter: &str, set: &str, output: bool| {
+        let output = if output {
+            "    output policy accept {\n      drop tcp dport 9 counter name x\n    }\n"
+        } else {
+            ""
+        };
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b {{
+  firewall {{
+    set {set} [10.0.9.9]
+    input policy accept {{
+      drop tcp dport 22 counter name {counter}
+      drop src @{set}
+    }}
+{output}  }}
+}}
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("a", "blocked", true)).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let ruleset = |lab: &RunningLab| {
+        lab.exec("b", "nft", &["list", "table", "inet", "nlink-lab"])
+            .unwrap()
+            .stdout
+    };
+
+    // a hand-added rule with an inline set, in nlink-lab's own table
+    let foreign = lab
+        .exec(
+            "b",
+            "nft",
+            &[
+                "add",
+                "rule",
+                "inet",
+                "nlink-lab",
+                "input",
+                "tcp",
+                "dport",
+                "{ 4001, 4002 }",
+                "accept",
+            ],
+        )
+        .unwrap();
+    assert_eq!(foreign.exit_code, 0, "{}", foreign.stderr);
+
+    for (step, desired) in [
+        ("counter a -> b", src("b", "blocked", true)),
+        ("set blocked -> deny", src("b", "deny", true)),
+        (
+            "output chain using counter x dropped",
+            src("b", "deny", false),
+        ),
+    ] {
+        let desired = nlink_lab::parser::parse(&desired).unwrap();
+        nlink_lab::apply(&mut lab, &desired)
+            .await
+            .unwrap_or_else(|e| panic!("apply ({step}) failed: {e}"));
+        let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+            .await
+            .unwrap();
+        assert!(layered.is_empty(), "{step}: not converged:\n{layered}");
+    }
+    let rs = ruleset(&lab);
+    assert!(
+        rs.contains("counter b ") || rs.contains("counter name \"b\""),
+        "{rs}"
+    );
+    assert!(rs.contains("set deny"), "{rs}");
+    assert!(!rs.contains("set blocked"), "{rs}");
+    assert!(!rs.contains("chain output"), "{rs}");
+    assert!(
+        rs.contains("4001"),
+        "the hand-added rule must be left alone: {rs}"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// A `log` rule installs and converges. Skipped where the host has no
 /// nftables logger (`nf_log_syslog`): the kernel then refuses the batch.
 #[tokio::test]

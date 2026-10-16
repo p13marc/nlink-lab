@@ -4564,6 +4564,79 @@ link c:eth1 -- s:eth1 {{ 10.0.1.1/24 -- 10.0.1.2/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+/// A firewall policy edit on a running lab reaches the kernel. Before
+/// nlink 0.31 a declared chain's policy change was sent as a chain *add*
+/// with `NLM_F_EXCL`, which the kernel refuses with EEXIST for a chain that
+/// exists (nlink #456): no policy edit ever applied, including the forward
+/// chain's flip to `accept` on labs upgraded across #164. The chain's rule
+/// keeps its handle.
+#[tokio::test]
+async fn firewall_policy_edit_applies_to_a_running_lab() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_policy_edit_applies_to_a_running_lab: requires root");
+        return;
+    }
+    if !has_nftables() {
+        eprintln!("skipping firewall_policy_edit_applies_to_a_running_lab: no nftables");
+        return;
+    }
+    let lab_name = format!("fwpe-{}", std::process::id());
+    let src = |policy: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node c
+node s {{
+  firewall policy {policy} {{
+    accept ct established,related
+  }}
+}}
+link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("drop")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let chain = |lab: &RunningLab| {
+        lab.exec(
+            "s",
+            "nft",
+            &["-a", "list", "chain", "inet", "nlink-lab", "input"],
+        )
+        .unwrap()
+        .stdout
+    };
+    let ping = |lab: &RunningLab| {
+        lab.exec("c", "ping", &["-c", "1", "-W", "1", "10.0.0.2"])
+            .unwrap()
+            .exit_code
+    };
+    let before = chain(&lab);
+    assert!(before.contains("policy drop"), "{before}");
+    assert_ne!(ping(&lab), 0, "policy drop must drop the ping");
+
+    let desired = nlink_lab::parser::parse(&src("accept")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (policy accept) failed");
+    let after = chain(&lab);
+    assert!(after.contains("policy accept"), "{after}");
+    assert_eq!(ping(&lab), 0, "policy accept must let the ping through");
+    assert_eq!(
+        collect_rule_handles(&before),
+        collect_rule_handles(&after),
+        "a policy edit must not replace the chain's rules"
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// A router's input `policy drop` no longer drops what it routes, and a
 /// forward chain filters routed traffic (examples/firewall-router.nll,
 /// whose assertions cover both directions and the router itself).

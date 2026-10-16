@@ -122,6 +122,8 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   free-form.
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
+- **A `network { mtu }` lab deployed by an older nlink-lab keeps its
+  1500-byte member veths** until it is redeployed (#161).
 
 ### Added
 
@@ -262,6 +264,10 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   deploy** (#160): `sysctl key not found`, since sysctls were set before
   the interface existed, and a recreated interface came back with the
   kernel's defaults. Both are fixed by setting them on the declaration.
+- **`network { mtu }` was not applied** (#161). The member veths got no
+  MTU, so as each joined, the kernel moved the bridge back to 1500. Both
+  ends of every member veth now get the network's MTU, and the bridge
+  keeps it.
 - **WireGuard drift was invisible** (#170): a peer removed by hand stayed
   removed, and `apply --check`, `verify` and `apply` all said there was
   nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`

@@ -463,13 +463,20 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             mgmt_ns,
             bridge,
             vlans,
+            mtu,
         } => {
             let mgmt_fd = namespace::open(mgmt_ns)
                 .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
             let mgmt_conn: Connection<Route> = Connection::new_in(mgmt_ns.as_str())
                 .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
             let node_conn = env.route(node)?;
-            let veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
+            let mut veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
+            // The kernel moves a bridge to its smallest port's MTU as each
+            // port joins: without the network's MTU on its ports, the
+            // bridge fell back to 1500 (#161).
+            if let Some(mtu) = mtu {
+                veth = veth.mtu(*mtu).peer_mtu(*mtu);
+            }
             node_conn.add_link(veth).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to create veth for bridge '{bridge}' member '{node}:{iface}' (mgmt peer '{peer}'): {e}"

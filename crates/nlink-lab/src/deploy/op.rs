@@ -248,6 +248,8 @@ pub enum Op {
         mgmt_ns: String,
         bridge: String,
         vlans: Option<PortVlans>,
+        /// The network's MTU, on both ends (#161).
+        mtu: Option<u32>,
     },
     CreateVeth {
         a: EndpointRef,

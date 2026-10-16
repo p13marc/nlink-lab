@@ -108,6 +108,7 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
                     mgmt_ns: mgmt_ns.clone(),
                     bridge: bridge.clone(),
                     vlans,
+                    mtu: network.mtu,
                 });
             }
         }

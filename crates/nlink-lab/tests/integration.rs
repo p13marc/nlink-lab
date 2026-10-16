@@ -1703,6 +1703,75 @@ link r:eth0 -- h:eth0
     lab.destroy().await.expect("destroy failed");
 }
 
+/// `network { mtu 9000 }` (#161): the member veths, both ends, get the
+/// MTU, so the bridge keeps it once its ports join; a 9000-byte frame
+/// crosses unfragmented.
+#[tokio::test]
+async fn network_mtu_reaches_bridge_and_members() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping network_mtu_reaches_bridge_and_members: requires root");
+        return;
+    }
+    let lab_name = format!("nmtu-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+network lan {{
+  mtu 9000
+  members [a:eth0, b:eth0]
+  port a:eth0 {{ 10.50.0.1/24 }}
+  port b:eth0 {{ 10.50.0.2/24 }}
+}}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    for node in ["a", "b"] {
+        let out = lab
+            .exec(node, "ip", &["-o", "link", "show", "eth0"])
+            .unwrap();
+        assert!(
+            out.stdout.contains("mtu 9000"),
+            "{node}:eth0: {}",
+            out.stdout
+        );
+    }
+    let mgmt = format!("{}-mgmt", topo.lab.prefix());
+    let out = std::process::Command::new("ip")
+        .args(["-n", &mgmt, "-o", "link", "show"])
+        .output()
+        .unwrap();
+    let links = String::from_utf8_lossy(&out.stdout);
+    let bridge = nlink_lab::types::network_bridge_name_for("lan");
+    let lines: Vec<&str> = links.lines().collect();
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains(&format!(" {bridge}:")) && l.contains("mtu 9000")),
+        "bridge {bridge} is not at 9000:\n{links}"
+    );
+    let ports: Vec<&&str> = lines
+        .iter()
+        .filter(|l| l.contains(&format!("master {bridge}")))
+        .collect();
+    assert_eq!(ports.len(), 2, "{links}");
+    assert!(ports.iter().all(|l| l.contains("mtu 9000")), "{links}");
+
+    let ping = lab
+        .exec(
+            "a",
+            "ping",
+            &["-c", "2", "-W", "2", "-M", "do", "-s", "8972", "10.50.0.2"],
+        )
+        .unwrap();
+    assert_eq!(ping.exit_code, 0, "{}{}", ping.stdout, ping.stderr);
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// A recreate nlink would refuse — the VLAN carries a permanent neighbour
 /// the topology cannot declare — fails before anything changes.
 #[tokio::test]

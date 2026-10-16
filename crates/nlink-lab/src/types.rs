@@ -810,14 +810,15 @@ impl XmitHashPolicy {
         }
     }
 
-    /// Kernel `xmit_hash_policy` value (`IFLA_BOND_XMIT_HASH_POLICY`).
-    pub fn kernel_value(&self) -> u8 {
+    /// nlink's policy of the same name.
+    pub fn to_nlink(self) -> nlink::netlink::config::BondXmitHashPolicy {
+        use nlink::netlink::config::BondXmitHashPolicy as P;
         match self {
-            XmitHashPolicy::Layer2 => 0,
-            XmitHashPolicy::Layer34 => 1,
-            XmitHashPolicy::Layer23 => 2,
-            XmitHashPolicy::Encap23 => 3,
-            XmitHashPolicy::Encap34 => 4,
+            XmitHashPolicy::Layer2 => P::Layer2,
+            XmitHashPolicy::Layer34 => P::Layer34,
+            XmitHashPolicy::Layer23 => P::Layer23,
+            XmitHashPolicy::Encap23 => P::Encap23,
+            XmitHashPolicy::Encap34 => P::Encap34,
         }
     }
 }

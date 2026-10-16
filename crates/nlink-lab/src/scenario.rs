@@ -227,7 +227,7 @@ async fn set_link_state(lab: &RunningLab, endpoint: &str, up: bool) -> Result<()
         endpoint: endpoint.to_string(),
     })?;
     let ns_name = lab.namespace_for(&ep.node)?;
-    let conn: Connection<Route> = nlink::netlink::namespace::connection_for(ns_name)
+    let conn: Connection<Route> = Connection::new_in(ns_name)
         .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
     if up {
         conn.set_link_up(&ep.iface)
@@ -247,7 +247,7 @@ async fn clear_impairment(lab: &RunningLab, endpoint: &str) -> Result<()> {
         endpoint: endpoint.to_string(),
     })?;
     let ns_name = lab.namespace_for(&ep.node)?;
-    let conn: Connection<Route> = nlink::netlink::namespace::connection_for(ns_name)
+    let conn: Connection<Route> = Connection::new_in(ns_name)
         .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
     // Delete root qdisc — this removes all child qdiscs too
     let _ = conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT).await;

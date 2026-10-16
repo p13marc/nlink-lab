@@ -924,7 +924,7 @@ async fn ext_ack_surfaces_from_real_kernel_error() {
     // collision.
     let ns_name = lab.namespace_for("router").unwrap().to_string();
     let conn: nlink::Connection<nlink::Route> =
-        nlink::netlink::namespace::connection_for(&ns_name).expect("connection_for failed");
+        nlink::Connection::new_in(ns_name).expect("connection_for failed");
 
     let dummy_a = nlink::netlink::link::DummyLink::new("ext-ack-dup");
     conn.add_link(dummy_a)
@@ -1876,7 +1876,7 @@ network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
     // netlink (an `ip -n` child is not reliable in every CI container).
     async fn mgmt_bridges() -> Vec<String> {
         let conn: nlink::Connection<nlink::Route> =
-            nlink::netlink::namespace::connection_for("apply-net-rm-mgmt").unwrap();
+            nlink::Connection::new_in("apply-net-rm-mgmt").unwrap();
         conn.get_links()
             .await
             .unwrap()

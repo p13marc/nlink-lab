@@ -407,15 +407,16 @@ impl RunningLab {
     /// namespace nodes, so container nodes got `NodeNotFound` (issue #39).
     pub(crate) fn route_conn_for(&self, node: &str) -> Result<Connection<Route>> {
         if let Some(container) = self.containers.get(node) {
-            return namespace::connection_for_pid(container.pid).map_err(|e| {
-                Error::deploy_failed(format!(
-                    "connection for container node '{node}' (pid {}): {e}",
-                    container.pid
-                ))
-            });
+            return Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "connection for container node '{node}' (pid {}): {e}",
+                        container.pid
+                    ))
+                });
         }
         let ns_name = self.namespace_for(node)?;
-        namespace::connection_for(ns_name)
+        Connection::new_in(ns_name)
             .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))
     }
 
@@ -1029,15 +1030,16 @@ impl RunningLab {
     /// probes ask the kernel instead of shelling `bash`/`cat`).
     fn sockdiag_conn_for(&self, node: &str) -> Result<Connection<nlink::netlink::SockDiag>> {
         if let Some(container) = self.containers.get(node) {
-            return namespace::connection_for_pid(container.pid).map_err(|e| {
-                Error::deploy_failed(format!(
-                    "sock_diag connection for container node '{node}' (pid {}): {e}",
-                    container.pid
-                ))
-            });
+            return Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
+                .map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "sock_diag connection for container node '{node}' (pid {}): {e}",
+                        container.pid
+                    ))
+                });
         }
         let ns_name = self.namespace_for(node)?;
-        namespace::connection_for(ns_name)
+        Connection::new_in(ns_name)
             .map_err(|e| Error::deploy_failed(format!("sock_diag connection for '{ns_name}': {e}")))
     }
 
@@ -1320,7 +1322,6 @@ impl RunningLab {
     /// nlink-lab otherwise only sets an MTU when it creates a veth; this is
     /// the runtime path (`edit --set-mtu`) a path-MTU fault needs.
     pub async fn set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> Result<()> {
-        use nlink::netlink::namespace;
         let peer = self.peer_endpoint(endpoint)?;
         for ep in [endpoint.to_string(), peer] {
             let r = EndpointRef::parse(&ep).ok_or_else(|| Error::InvalidEndpoint {
@@ -1331,12 +1332,9 @@ impl RunningLab {
                 .ok_or_else(|| Error::NodeNotFound {
                     name: r.node.clone(),
                 })?;
-            let conn: nlink::Connection<nlink::Route> = match &ns {
-                crate::deploy::NsRef::Named { name } => namespace::connection_for(name),
-                crate::deploy::NsRef::Container { pid, .. } => namespace::connection_for_pid(*pid),
-                crate::deploy::NsRef::Root => namespace::connection_for_path("/proc/self/ns/net"),
-            }
-            .map_err(|e| Error::deploy_failed(format!("netlink in '{}': {e}", r.node)))?;
+            let conn: nlink::Connection<nlink::Route> = ns
+                .connection()
+                .map_err(|e| Error::deploy_failed(format!("netlink in '{}': {e}", r.node)))?;
             conn.set_link_mtu(r.iface.as_str(), mtu)
                 .await
                 .map_err(|e| Error::deploy_failed(format!("set mtu {mtu} on {ep}: {e}")))?;
@@ -1545,7 +1543,7 @@ impl RunningLab {
             {
                 continue;
             }
-            let conn: Connection<Route> = namespace::connection_for(ns_name)
+            let conn: Connection<Route> = Connection::new_in(ns_name)
                 .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))?;
             let diag = Diagnostics::new(conn);
             let report = diag.scan().await.map_err(|e| {
@@ -1566,9 +1564,10 @@ impl RunningLab {
                 continue;
             }
             let conn: Connection<Route> =
-                namespace::connection_for_pid(container.pid).map_err(|e| {
-                    Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
-                })?;
+                Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
+                    .map_err(|e| {
+                        Error::deploy_failed(format!("connection for container '{node_name}': {e}"))
+                    })?;
             let diag = Diagnostics::new(conn);
             let report = diag.scan().await.map_err(|e| {
                 Error::deploy_failed(format!("diagnostics scan for container '{node_name}': {e}"))

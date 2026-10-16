@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
-use nlink::netlink::{Connection, SockDiag, namespace};
+use nlink::netlink::{Connection, SockDiag};
 use nlink::sockdiag::{SocketFilter, SocketOwnerMap, SocketRateTracker};
 use nlink_lab::RunningLab;
 use nlink_lab::deploy::NsRef;
@@ -107,11 +107,7 @@ impl MetricsCollector {
     ) -> Vec<SocketRateMetric> {
         // A bare namespace by name, a container by its init pid: both are
         // a network namespace sockdiag can be opened in.
-        let conn: Result<Connection<SockDiag>, _> = match ns {
-            NsRef::Named { name } => namespace::connection_for(name),
-            NsRef::Container { pid, .. } => namespace::connection_for_pid(*pid),
-            NsRef::Root => namespace::connection_for_path("/proc/self/ns/net"),
-        };
+        let conn: Result<Connection<SockDiag>, _> = ns.connection();
         let conn = match conn {
             Ok(c) => c,
             Err(e) => {

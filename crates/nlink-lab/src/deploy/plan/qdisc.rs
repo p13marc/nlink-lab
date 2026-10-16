@@ -72,7 +72,7 @@ pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<Netem
         let packets: u32 = limit.trim().parse().map_err(|_| {
             crate::Error::invalid_topology(format!("limit {limit:?}: expected a packet count"))
         })?;
-        netem = netem.limit(packets);
+        netem = netem.limit(nlink::Packets::new(packets));
     }
 
     Ok(netem)
@@ -133,7 +133,7 @@ pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<BuiltQdisc>
                 f = f.interval(parse_duration(i)?);
             }
             if let Some(l) = limit {
-                f = f.limit(*l);
+                f = f.limit(nlink::Packets::new(*l));
             }
             if let Some(n) = flows {
                 f = f.flows(*n);
@@ -157,7 +157,7 @@ pub(crate) fn build_qdisc(cfg: &crate::types::QdiscConfig) -> Result<BuiltQdisc>
                 q = q.perturb(i32::try_from(secs).unwrap_or(i32::MAX));
             }
             if let Some(l) = limit {
-                q = q.limit(*l);
+                q = q.limit(nlink::Packets::new(*l));
             }
             if let Some(b) = quantum {
                 q = q.quantum(*b);

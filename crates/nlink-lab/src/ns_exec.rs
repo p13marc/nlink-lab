@@ -531,7 +531,7 @@ fn etc_binds(ns_name: &str) -> NlResult<Vec<(CString, CString)>> {
 
 fn cstr(s: &str) -> NlResult<CString> {
     CString::new(s).map_err(|_| {
-        nlink::netlink::Error::Io(std::io::Error::new(
+        nlink::netlink::Error::from(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "null byte in path",
         ))

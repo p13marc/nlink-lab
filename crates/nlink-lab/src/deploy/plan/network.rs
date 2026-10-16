@@ -109,7 +109,7 @@ pub(crate) fn topology_to_network_config(
                             });
                         }
                         if let Some(policy) = o.xmit_hash {
-                            b = b.xmit_hash_policy(policy.kernel_value());
+                            b = b.xmit_hash_policy(policy.to_nlink());
                         }
                         if let Some(n) = o.min_links {
                             b = b.min_links(n);

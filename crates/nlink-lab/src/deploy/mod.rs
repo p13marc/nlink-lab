@@ -89,8 +89,11 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     let inputs = PlanInputs::for_deploy(topology)?;
     let plan = plan::plan(topology, &inputs)?;
     tracing::info!("plan: {} op(s)", plan.ops.len());
-    let mut env = apply::ApplyEnv::for_deploy(topology)?;
-    apply::execute(&plan, &mut env, journal).await?;
+    let env = apply::ApplyEnv::for_deploy(topology)?;
+    let owned = std::mem::replace(journal, Journal::ephemeral(&topology.lab.name));
+    let (res, env, owned) = apply::execute_isolated(plan.clone(), env, owned).await;
+    *journal = owned;
+    res?;
 
     // ── state file ──
     #[cfg(feature = "wireguard")]
@@ -314,9 +317,10 @@ pub async fn apply_with(
     };
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
 
-    let mut env = apply::ApplyEnv::from_running(running, desired)?;
-    let mut journal = Journal::new(running.name());
-    if let Err(e) = apply::execute(&diff, &mut env, &mut journal).await {
+    let env = apply::ApplyEnv::from_running(running, desired)?;
+    let journal = Journal::new(running.name());
+    let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
+    if let Err(e) = res {
         tracing::warn!(
             "apply to '{}' failed: {e}; rolling back this apply",
             running.name()
@@ -491,9 +495,10 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
         lost.len(),
         report.ops
     );
-    let mut env = apply::ApplyEnv::from_running(running, &desired)?;
-    let mut journal = Journal::new(running.name());
-    if let Err(e) = apply::execute(&diff, &mut env, &mut journal).await {
+    let env = apply::ApplyEnv::from_running(running, &desired)?;
+    let journal = Journal::new(running.name());
+    let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
+    if let Err(e) = res {
         tracing::warn!("reattach '{node}' failed: {e}; rolling back");
         journal.unwind().await;
         return Err(e);
@@ -663,13 +668,10 @@ async fn apply_nftables_for_node(
         return Ok(());
     }
 
-    let diff = cfg.diff(&nft_conn).await.map_err(|e| {
-        Error::deploy_failed(format!(
-            "failed to diff nftables config on '{node_name}': {e}"
-        ))
-    })?;
-
-    let report = diff
+    // The config-level reconcile diffs again on every attempt: since nlink
+    // 0.31 a diff applies only to the ruleset it was taken from, and is
+    // refused with ERESTART if anything committed in between (#482).
+    let report = cfg
         .apply_reconcile(&nft_conn, ReconcileOptions::default())
         .await
         .map_err(|e| {
@@ -681,7 +683,7 @@ async fn apply_nftables_for_node(
     tracing::info!(
         node = %node_name,
         attempts = report.attempts,
-        changes = report.change_count,
+        changes = report.changes_made,
         "nftables reconcile"
     );
     Ok(())
@@ -1064,7 +1066,7 @@ async fn apply_wireguard_for_node(
     tracing::info!(
         node = %node_name,
         attempts = report.attempts,
-        changes = report.change_count,
+        changes = report.changes_made,
         "WireguardConfig reconcile complete",
     );
     Ok(())
@@ -1132,7 +1134,7 @@ pub async fn compute_layered_diff(
             // routes on managed interfaces are drift too — `apply`
             // removes them, so `apply --check` / `verify` must report
             // them (found by `verify` missing a hand-added address).
-            let opts = nlink::netlink::config::DiffOptions::default().purge(true);
+            let opts = nlink::netlink::config::PlanOptions::default().purge(true);
             let diff = cfg.diff_with_options(&conn, opts).await.map_err(|e| {
                 Error::deploy_failed(format!("NetworkConfig::diff on '{node_name}': {e}"))
             })?;

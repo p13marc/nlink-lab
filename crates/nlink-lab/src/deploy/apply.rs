@@ -318,13 +318,20 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let nl = nlink::Connection::<Nl80211>::new_async()
                 .await
                 .map_err(|e| Error::deploy_failed(format!("nl80211 connection: {e}")))?;
-            let phys = nl
+            // Only hwsim radios: nlink 0.31 made `set_wiphy_netns` really
+            // move a wiphy (it was acked and ignored, nlink #604), so taking
+            // the first N would move a host's own Wi-Fi card into a lab.
+            let mut phys: Vec<_> = nl
                 .get_phys()
                 .await
-                .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?;
+                .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?
+                .into_iter()
+                .filter(|p| is_hwsim_phy(&p.name))
+                .collect();
+            phys.sort_by_key(|p| p.index);
             if phys.len() < order.len() {
                 return Err(Error::deploy_failed(format!(
-                    "expected {} hwsim PHYs but found {}",
+                    "expected {} mac80211_hwsim radios but found {}",
                     order.len(),
                     phys.len()
                 )));
@@ -335,14 +342,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     .handle(node)?
                     .open_fd()
                     .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-                nl.set_wiphy_netns(phy.index, fd.as_raw_fd())
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to move phy{} to namespace '{node}': {e}",
-                            phy.index
-                        ))
-                    })?;
+                nl.set_wiphy_netns(phy.index, &fd).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to move phy{} to namespace '{node}': {e}",
+                        phy.index
+                    ))
+                })?;
             }
         }
         Op::CreateMgmtBridge { name, ip, prefix } => {
@@ -374,8 +379,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .handle(node)?
                 .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-            let veth =
-                nlink::netlink::link::VethLink::new(peer, "mgmt0").peer_netns_fd(fd.as_raw_fd());
+            let veth = nlink::netlink::link::VethLink::new(peer, "mgmt0").peer_netns_fd(&fd);
             root.add_link(veth).await.map_err(|e| {
                 Error::deploy_failed(format!("failed to create mgmt veth for node '{node}': {e}"))
             })?;
@@ -415,7 +419,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             vlan_filtering,
             mtu,
         } => {
-            let conn: Connection<Route> = namespace::connection_for(ns)
+            let conn: Connection<Route> = Connection::new_in(ns.as_str())
                 .map_err(|e| Error::deploy_failed(format!("connection for '{ns}': {e}")))?;
             let mut bridge = nlink::netlink::link::BridgeLink::new(name);
             if *vlan_filtering {
@@ -447,11 +451,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         } => {
             let mgmt_fd = namespace::open(mgmt_ns)
                 .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
-            let mgmt_conn: Connection<Route> = namespace::connection_for(mgmt_ns)
+            let mgmt_conn: Connection<Route> = Connection::new_in(mgmt_ns.as_str())
                 .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
             let node_conn = env.route(node)?;
-            let veth =
-                nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(mgmt_fd.as_raw_fd());
+            let veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
             node_conn.add_link(veth).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to create veth for bridge '{bridge}' member '{node}:{iface}' (mgmt peer '{peer}'): {e}"
@@ -504,8 +507,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 Error::deploy_failed(format!("failed to open namespace for '{}': {e}", b.node))
             })?;
             let conn_a = env.route(&a.node)?;
-            let mut veth = nlink::netlink::link::VethLink::new(&a.iface, &b.iface)
-                .peer_netns_fd(fd_b.as_raw_fd());
+            let mut veth =
+                nlink::netlink::link::VethLink::new(&a.iface, &b.iface).peer_netns_fd(&fd_b);
             if let Some(mtu) = mtu {
                 veth = veth.mtu(*mtu);
             }
@@ -544,7 +547,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .handle(node)?
                 .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-            host.set_link_netns_fd(cfg.name.as_str(), fd.as_raw_fd())
+            host.set_link_netns_fd(cfg.name.as_str(), &fd)
                 .await
                 .map_err(|e| {
                     Error::deploy_failed(format!(
@@ -576,7 +579,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .handle(node)?
                 .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-            host.set_link_netns_fd(cfg.name.as_str(), fd.as_raw_fd())
+            host.set_link_netns_fd(cfg.name.as_str(), &fd)
                 .await
                 .map_err(|e| {
                     Error::deploy_failed(format!(
@@ -945,7 +948,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
 
         // ── removals (apply diffs) ──
-        Op::DeleteBridge { ns, name } => match namespace::connection_for(ns) {
+        Op::DeleteBridge { ns, name } => match Connection::new_in(ns.as_str()) {
             Ok(conn) => {
                 let conn: Connection<Route> = conn;
                 if let Err(e) = conn.del_link_if_exists(name.as_str()).await {
@@ -1434,5 +1437,43 @@ fn track_pidfile(what: &str, node: &str, pidfile: &str, env: &mut ApplyEnv, jour
             }
         }
         None => tracing::warn!("{what} on '{node}' wrote no pidfile at {pidfile}; not tracked"),
+    }
+}
+
+/// Whether wiphy `name` (`phy3`) is a `mac80211_hwsim` radio: its device
+/// lives under `/sys/devices/virtual/mac80211_hwsim/`.
+fn is_hwsim_phy(name: &str) -> bool {
+    std::fs::canonicalize(format!("/sys/class/ieee80211/{name}/device"))
+        .is_ok_and(|p| p.to_string_lossy().contains("mac80211_hwsim"))
+}
+
+/// [`execute`] on a thread and a current-thread runtime of its own.
+///
+/// nlink 0.32's request futures, composed the way `execute_one` composes
+/// them (borrowed names and local connections held across awaits), trip
+/// rustc's higher-ranked `Send` check (rust-lang/rust#102211). The plan's
+/// future is therefore not `Send`, and neither would `deploy()`/`apply()`
+/// be: a caller could no longer `tokio::spawn` them. Running the plan here
+/// keeps theirs `Send`. The plan, env and journal travel by value and come
+/// back; a panic in the plan resumes in the caller.
+pub(super) async fn execute_isolated(
+    plan: Plan,
+    env: ApplyEnv,
+    journal: Journal,
+) -> (Result<()>, ApplyEnv, Journal) {
+    let task = tokio::task::spawn_blocking(move || {
+        let (mut env, mut journal) = (env, journal);
+        let res = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt.block_on(execute(&plan, &mut env, &mut journal)),
+            Err(e) => Err(Error::deploy_failed(format!("plan runtime: {e}"))),
+        };
+        (res, env, journal)
+    });
+    match task.await {
+        Ok(out) => out,
+        Err(e) => std::panic::resume_unwind(e.into_panic()),
     }
 }

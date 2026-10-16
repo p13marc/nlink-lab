@@ -56,7 +56,7 @@ impl NsRef {
     >(
         &self,
     ) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
-        self.spec().connection()
+        Connection::<P>::new_in(self.spec())
     }
 
     /// Async-initialised connection (GENL families such as WireGuard).
@@ -65,7 +65,7 @@ impl NsRef {
     >(
         &self,
     ) -> std::result::Result<Connection<P>, nlink::netlink::Error> {
-        self.spec().connection_async().await
+        Connection::<P>::new_in_async(self.spec()).await
     }
 
     /// Open the namespace as a file descriptor (for `peer_netns_fd` /

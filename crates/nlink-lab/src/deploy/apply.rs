@@ -663,33 +663,13 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 super::BuiltQdisc::Sfq(c) => conn.replace_qdisc(iface.as_str(), c).await,
                 super::BuiltQdisc::Prio(c) => conn.replace_qdisc(iface.as_str(), c).await,
             };
-            let mut res = replace(super::build_qdisc(qdisc)?).await;
-            // A root qdisc is replaced in place (#108), which the kernel
-            // turns into `qdisc_change()` when the kind is unchanged —
-            // and `sch_sfq` sets `.change = NULL`, so it answers EINVAL
-            // with "Change operation not supported by specified qdisc".
-            // sfq is the only kind here without a change op; netem, tbf,
-            // fq_codel and prio all have one. Delete and re-add for it,
-            // which is the only sequence the kernel offers. A *kind*
-            // change is unaffected — that takes create-and-graft, not
-            // change — so this costs a transient window only where there
-            // is no alternative.
-            //
-            // nlink 0.28 grew the same fallback (nlink#361), but in its
-            // *declarative* applier. This path is the imperative
-            // `Connection::replace_qdisc` — the side path #108 is about
-            // — so it does not inherit it. Removing this on the 0.28
-            // bump put the EINVAL straight back.
-            if res.is_err() && matches!(qdisc.kind, crate::types::QdiscKind::Sfq { .. }) {
-                conn.del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to clear {kind} qdisc on '{node}:{iface}': {e}"
-                        ))
-                    })?;
-                res = replace(super::build_qdisc(qdisc)?).await;
-            }
+            // A root qdisc is replaced in place (#108). nlink 0.31's
+            // `replace_qdisc` looks at the slot first (nlink #486): sfq,
+            // which has no change op, and an fq_codel whose `flows`
+            // changed are grafted anew, and the same `flows` is not sent
+            // again (the kernel refuses any `flows` on a live fq_codel).
+            // It used to be EINVAL for both; nlink-lab worked around sfq.
+            let res = replace(super::build_qdisc(qdisc)?).await;
             res.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to apply {kind} qdisc on '{node}:{iface}': {e}"

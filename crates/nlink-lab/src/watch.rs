@@ -771,10 +771,16 @@ fn short_kind(k: &WatchEventKind) -> String {
             format!("DelFilter if={ifindex} handle={handle}")
         }
         WatchEventKind::NewSetElements {
-            table, set, elements, ..
+            table,
+            set,
+            elements,
+            ..
         } => format!("NewSetElements {table}/{set} +{elements}"),
         WatchEventKind::DelSetElements {
-            table, set, elements, ..
+            table,
+            set,
+            elements,
+            ..
         } => format!("DelSetElements {table}/{set} -{elements}"),
         WatchEventKind::NewObject {
             table,
@@ -783,7 +789,10 @@ fn short_kind(k: &WatchEventKind) -> String {
             ..
         } => format!(
             "NewObject {table}/{name}{}",
-            object_type.as_deref().map(|t| format!(" ({t})")).unwrap_or_default()
+            object_type
+                .as_deref()
+                .map(|t| format!(" ({t})"))
+                .unwrap_or_default()
         ),
         WatchEventKind::DelObject { table, name, .. } => format!("DelObject {table}/{name}"),
         WatchEventKind::Other { raw } => format!("Other {raw}"),

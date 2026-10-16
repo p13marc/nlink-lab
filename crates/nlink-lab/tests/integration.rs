@@ -1738,7 +1738,10 @@ async fn wireguard_config_reapply_is_zero_ops() {
             .await
             .expect("wireguard connection");
         let diff = wg.diff(&conn).await.expect("WireguardConfig::diff");
-        assert!(diff.is_empty(), "{node}: WireGuard diff after reapply: {diff:?}");
+        assert!(
+            diff.is_empty(),
+            "{node}: WireGuard diff after reapply: {diff:?}"
+        );
         checked += 1;
     }
     assert!(checked >= 2, "expected both gateways to carry WireGuard");
@@ -3977,6 +3980,39 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
         "sfq must still be installed, with the new period: {out}"
     );
 
+    // An fq_codel that sets `flows`, edited on a live lab (#171): the
+    // kernel refuses any `flows` on a live fq_codel, and nlink before 0.31
+    // always sent it, so every apply after the first was EINVAL.
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 fq_codel { flows 512 limit 1000 }\nqdisc b:eth0 prio { bands 2 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (fq_codel flows, prio bands 2) failed");
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 fq_codel { flows 512 limit 2000 }\nqdisc b:eth0 prio { bands 2 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (fq_codel limit edit) failed");
+    let out = show(&lab);
+    assert!(
+        out.contains("qdisc fq_codel") && out.contains("limit 2000p") && out.contains("flows 512"),
+        "{out}"
+    );
+    // `prio { bands 2 }` installs (#172): nlink fits the default 3-band
+    // priomap to it; it used to be EINVAL.
+    let out_b = lab
+        .exec("b", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap()
+        .stdout;
+    assert!(
+        out_b.contains("qdisc prio") && out_b.contains("bands 2"),
+        "{out_b}"
+    );
+
     lab.destroy().await.expect("destroy failed");
 }
 
@@ -4392,11 +4428,15 @@ validate {{ reach a b }}
 #[tokio::test]
 async fn watch_types_set_elements_and_objects_and_drops_generations() {
     if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping watch_types_set_elements_and_objects_and_drops_generations: requires root");
+        eprintln!(
+            "skipping watch_types_set_elements_and_objects_and_drops_generations: requires root"
+        );
         return;
     }
     if !has_nftables() {
-        eprintln!("skipping watch_types_set_elements_and_objects_and_drops_generations: no nftables");
+        eprintln!(
+            "skipping watch_types_set_elements_and_objects_and_drops_generations: no nftables"
+        );
         return;
     }
     let lab_name = format!("wnft-{}", std::process::id());
@@ -4452,7 +4492,10 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     for want in ["new_table", "new_set", "new_set_elements", "new_object"] {
         assert!(kinds.iter().any(|k| k == want), "no {want} event: {raw:?}");
     }
-    assert!(!kinds.iter().any(|k| k == "other"), "untyped event: {raw:?}");
+    assert!(
+        !kinds.iter().any(|k| k == "other"),
+        "untyped event: {raw:?}"
+    );
     let all = serde_json::to_string(&raw).unwrap();
     assert!(!all.contains("NewGen"), "generation event leaked: {all}");
     assert!(all.contains(r#""set":"s""#), "set name missing: {all}");

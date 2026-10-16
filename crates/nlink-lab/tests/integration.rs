@@ -2570,8 +2570,8 @@ node a { cpu 0.5  memory 64m  run ["sleep", "1000"] background }
 }
 
 // Issue #83: a VRF-table route removed from the topology must be
-// deleted on apply. nlink's purge only converges the main table, so the
-// engine owns non-main-table routes as explicit ops.
+// deleted on apply. VRF routes are declared in the node's config, and
+// purge covers every table it declares into, and the ones it did before.
 #[tokio::test]
 async fn apply_removes_vrf_route() {
     if unsafe { libc::geteuid() } != 0 {

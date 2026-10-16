@@ -510,18 +510,12 @@ impl RunningLab {
     /// and heal used to go through `namespace_for`, which only knows
     /// namespace nodes, so container nodes got `NodeNotFound` (issue #39).
     pub(crate) fn route_conn_for(&self, node: &str) -> Result<Connection<Route>> {
-        if let Some(container) = self.containers.get(node) {
-            return Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
-                .map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "connection for container node '{node}' (pid {}): {e}",
-                        container.pid
-                    ))
-                });
-        }
-        let ns_name = self.namespace_for(node)?;
-        Connection::new_in(ns_name)
-            .map_err(|e| Error::deploy_failed(format!("connection for '{ns_name}': {e}")))
+        self.ns_resolver_of(node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node.to_string(),
+            })?
+            .connection()
+            .map_err(|e| Error::deploy_failed(format!("connection for '{node}': {e}")))
     }
 
     /// Replace the process/log/mgmt bookkeeping after an `apply`.

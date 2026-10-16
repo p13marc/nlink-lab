@@ -272,8 +272,15 @@ mod tests {
         assert_eq!(e.ext_ack(), Some("busy"));
         assert_eq!(e.ext_ack_offset(), Some(36));
         let text = e.to_string();
-        assert!(text.starts_with("failed to apply nftables config on 'b': "), "{text}");
-        assert!(!Error::deploy_failed("x").to_string().contains("deploy failed"));
+        assert!(
+            text.starts_with("failed to apply nftables config on 'b': "),
+            "{text}"
+        );
+        assert!(
+            !Error::deploy_failed("x")
+                .to_string()
+                .contains("deploy failed")
+        );
     }
 
     #[test]

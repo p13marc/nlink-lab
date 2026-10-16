@@ -748,6 +748,164 @@ link r:eth0 -- h:eth0
         assert_eq!(link_devconf(r, "net.ipv4.conf.vl0.rp_filter", "-1"), None);
     }
 
+    /// The WireGuard devices `node`'s stack declares, by name.
+    #[cfg(feature = "wireguard")]
+    fn wg_devices<'a>(
+        p: &'a Plan,
+        n: &str,
+    ) -> std::collections::BTreeMap<&'a str, &'a nlink::netlink::genl::wireguard::DeclaredWgDevice>
+    {
+        stack_of(p, n)
+            .wireguard
+            .as_ref()
+            .map(|w| w.devices().iter().map(|d| (d.ifname.as_str(), d)).collect())
+            .unwrap_or_default()
+    }
+
+    /// #147: two tunnels between two hubs. Each tunnel gets its own peer
+    /// (by interface name, with that interface's key), the WAN address as
+    /// its endpoint, and the far site's prefix in its allowed-ips.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn wireguard_peers_pair_by_name_and_carry_the_routes() {
+        let t = crate::parser::parse_file(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/cookbook/multi-tenant-wan.nll"
+        ))
+        .unwrap();
+        let p = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap();
+        let (a, b) = (wg_devices(&p, "hub-a"), wg_devices(&p, "hub-b"));
+        for (dev, port, far, tunnel) in [
+            ("wg-red", 51820, "10.20.0.0/16", "192.168.255.2/32"),
+            ("wg-blue", 51821, "10.21.0.0/16", "192.168.255.4/32"),
+        ] {
+            let peers = &a[dev].peers;
+            assert_eq!(peers.len(), 1, "{dev}: {peers:?}");
+            let peer = &peers[0];
+            let b_pub = super::wireguard::derive_wg_public_key(&b[dev].private_key.unwrap());
+            assert_eq!(peer.public_key, b_pub, "{dev}: the peer is b's {dev}");
+            assert_eq!(
+                peer.endpoint,
+                Some(format!("10.0.0.2:{port}").parse().unwrap()),
+                "{dev}: the WAN address, not a customer one"
+            );
+            let ips: Vec<String> = peer
+                .allowed_ips
+                .iter()
+                .map(|ai| format!("{}/{}", ai.addr, ai.cidr))
+                .collect();
+            assert_eq!(ips, [tunnel, far], "{dev}");
+        }
+    }
+
+    /// A hub's spokes get their tunnel address as a host each, not the
+    /// shared /24 (which overlapped), and a route into the tunnel goes to
+    /// the spoke its gateway is.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn wireguard_hub_peers_do_not_overlap() {
+        let src = |hub_route: &str| {
+            format!(
+                r#"lab "hub"
+node hub {{
+  wireguard wg0 {{ key auto listen 51820 address 10.99.0.1/24 peers [s1, s2] }}
+  {hub_route}
+}}
+node s1 {{ wireguard wg0 {{ key auto listen 51820 address 10.99.0.2/24 peers [hub] }} }}
+node s2 {{ wireguard wg0 {{ key auto listen 51820 address 10.99.0.3/24 peers [hub] }} }}
+link hub:eth0 -- s1:eth0 {{ 10.0.1.1/30 -- 10.0.1.2/30 }}
+link hub:eth1 -- s2:eth0 {{ 10.0.2.1/30 -- 10.0.2.2/30 }}
+"#
+            )
+        };
+        let t = topo(&src("route 172.16.0.0/16 via 10.99.0.3 dev wg0"));
+        assert!(!t.validate().has_errors());
+        let p = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap();
+        let hub = wg_devices(&p, "hub");
+        let ips: Vec<Vec<String>> = hub["wg0"]
+            .peers
+            .iter()
+            .map(|peer| {
+                peer.allowed_ips
+                    .iter()
+                    .map(|ai| format!("{}/{}", ai.addr, ai.cidr))
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            ips,
+            [vec!["10.99.0.2/32"], vec!["10.99.0.3/32", "172.16.0.0/16"]],
+            "{ips:?}"
+        );
+        // Without a gateway the route names no spoke: a warning.
+        let t = topo(&src("route 172.16.0.0/16 dev wg0"));
+        let result = t.validate();
+        assert!(
+            result.warnings().any(|w| w.rule == "wireguard-route-peer"),
+            "{:?}",
+            result.warnings().collect::<Vec<_>>()
+        );
+    }
+
+    /// A longhand `peer` block replaces the inference (#147), and renders
+    /// back as itself.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn wireguard_longhand_peer_overrides_the_inference() {
+        let t = topo(
+            r#"lab "lh"
+node a {
+  wireguard wg0 {
+    key auto listen 51820 address 10.99.0.1/32
+    peer b { endpoint 192.0.2.7:5555 allowed-ips [10.99.0.2/32, 172.16.0.0/12] }
+  }
+}
+node b { wireguard wg0 { key auto listen 51820 address 10.99.0.2/32 peers [a] } }
+link a:eth0 -- b:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }
+"#,
+        );
+        assert_eq!(t.nodes["a"].wireguard["wg0"].peers, ["b"]);
+        assert!(!t.validate().has_errors());
+        let p = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap();
+        let peer = &wg_devices(&p, "a")["wg0"].peers[0];
+        assert_eq!(peer.endpoint, Some("192.0.2.7:5555".parse().unwrap()));
+        assert_eq!(peer.allowed_ips.len(), 2);
+        let rendered = crate::render::try_render(&t).unwrap();
+        assert!(
+            rendered.contains(
+                "peer b { endpoint 192.0.2.7:5555 allowed-ips [10.99.0.2/32, 172.16.0.0/12] }"
+            ),
+            "{rendered}"
+        );
+        assert_eq!(
+            crate::parser::parse(&rendered).unwrap().nodes["a"].wireguard,
+            t.nodes["a"].wireguard
+        );
+        // NLL refuses a bad endpoint as it parses; a JSON or builder
+        // topology is checked by the validator.
+        assert!(crate::parser::parse(&rendered.replace("192.0.2.7:5555", "nowhere")).is_err());
+        let mut bad = t.clone();
+        let peer = bad
+            .nodes
+            .get_mut("a")
+            .unwrap()
+            .wireguard
+            .get_mut("wg0")
+            .unwrap()
+            .peer_settings
+            .get_mut("b")
+            .unwrap();
+        peer.endpoint = Some("nowhere".into());
+        peer.allowed_ips = vec!["10.0.0.0/33".into()];
+        let errs: Vec<_> = bad
+            .validate()
+            .errors()
+            .filter(|e| e.rule == "wireguard-peer-settings")
+            .map(|e| e.message.clone())
+            .collect();
+        assert_eq!(errs.len(), 2, "{errs:?}");
+    }
+
     #[test]
     fn plan_declares_vrf_routes_in_the_stack() {
         // VRF-table routes are declared routes again: purge has covered

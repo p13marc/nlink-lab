@@ -2842,6 +2842,7 @@ node host
                 fwmark: None,
                 addresses: vec!["10.0.0.1/24".into()],
                 peers: vec![],
+                peer_settings: Default::default(),
             },
         );
         let mut topo = topo;
@@ -2873,6 +2874,7 @@ node host
                 fwmark: None,
                 addresses: vec![],
                 peers: vec![],
+                peer_settings: Default::default(),
             },
         );
         let mut topo = topo;
@@ -2906,6 +2908,7 @@ node b
                 fwmark: None,
                 addresses: vec!["10.99.0.1/24".into()],
                 peers: vec!["b".into()],
+                peer_settings: Default::default(),
             },
         );
         topo.nodes.insert("a".into(), a);
@@ -2919,6 +2922,7 @@ node b
                 fwmark: None,
                 addresses: vec!["10.99.0.2/24".into()],
                 peers: vec!["a".into()],
+                peer_settings: Default::default(),
             },
         );
         topo.nodes.insert("b".into(), b);
@@ -2963,6 +2967,7 @@ node b
                 fwmark: None,
                 addresses: vec!["10.99.0.1/24".into()],
                 peers: vec!["b".into()],
+                peer_settings: Default::default(),
             },
         );
         topo.nodes.insert("a".into(), a);

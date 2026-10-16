@@ -538,6 +538,35 @@ node gw : gateway {
 }
 ```
 
+`peers [gw-b]` resolves each peer from the topology (#147):
+
+- **Which tunnel.** The peer's interfaces that list this node back; with
+  several (a tunnel per tenant), the one with the same name.
+- **Endpoint.** The address the peer has on a link or network the two nodes
+  share — the underlay, never an address inside what the tunnel carries —
+  with the peer interface's `listen` port.
+- **Allowed IPs.** The peer's tunnel addresses, each as a host (`/32`,
+  `/128`), and what this node routes into the tunnel towards it: every
+  `route … dev wg0` when the tunnel has that one peer, else the routes whose
+  `via` is the peer's tunnel address (`wireguard-route-peer` warns about one
+  that names no peer).
+
+Where that is wrong, write the peer out; what a `peer` block sets replaces
+the inference, and the peer need not be listed in `peers`:
+
+```nll-ignore
+wireguard wg-red {
+  key auto
+  listen 51820
+  address 192.168.255.1/32
+  peer hub-b { endpoint ${hub-b.wan0}:51820 allowed-ips [192.168.255.2/32, 10.20.0.0/16] }
+}
+```
+
+`endpoint` is `IP`, `IP:PORT` or `[IPv6]:PORT` (the port defaulting to the
+peer's `listen`); `allowed-ips` a list of prefixes (`default` is
+`0.0.0.0/0`). A malformed one is `wireguard-peer-settings`.
+
 ### 10. Process Execution
 
 ```nll-ignore

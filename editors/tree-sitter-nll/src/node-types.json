@@ -1091,6 +1091,10 @@
         {
           "type": "string",
           "named": true
+        },
+        {
+          "type": "wireguard_peer",
+          "named": true
         }
       ]
     }
@@ -3638,6 +3642,33 @@
     }
   },
   {
+    "type": "socket_address",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "source_file",
     "named": true,
     "root": true,
@@ -3879,6 +3910,37 @@
     }
   },
   {
+    "type": "wireguard_peer",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "glob",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "socket_address",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "!=",
     "named": false
   },
@@ -3980,6 +4042,10 @@
   },
   {
     "type": "address",
+    "named": false
+  },
+  {
+    "type": "allowed-ips",
     "named": false
   },
   {
@@ -4189,6 +4255,10 @@
   },
   {
     "type": "egress",
+    "named": false
+  },
+  {
+    "type": "endpoint",
     "named": false
   },
   {
@@ -4578,6 +4648,10 @@
   },
   {
     "type": "peakrate",
+    "named": false
+  },
+  {
+    "type": "peer",
     "named": false
   },
   {

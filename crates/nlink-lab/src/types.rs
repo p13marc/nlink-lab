@@ -1700,7 +1700,7 @@ pub struct VrfConfig {
 }
 
 /// WireGuard interface configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WireguardConfig {
     /// Private key ("auto" to auto-generate).
     pub private_key: Option<String>,
@@ -1721,6 +1721,26 @@ pub struct WireguardConfig {
     /// Peer node names (resolved during deployment).
     #[serde(default)]
     pub peers: Vec<String>,
+
+    /// Peers written out longhand (`peer hub-b { endpoint … allowed-ips
+    /// […] }`), by node name: what to use instead of what the planner
+    /// infers for them (#147). Each is in `peers` too.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub peer_settings: BTreeMap<String, WireguardPeer>,
+}
+
+/// What a longhand `peer` block sets for one WireGuard peer (#147).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WireguardPeer {
+    /// `IP`, `IP:PORT` or `[IPv6]:PORT`; the port defaults to the peer
+    /// interface's `listen` port. Without it, the address the two nodes
+    /// share a link or network on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Prefixes routed to this peer, in place of its tunnel addresses and
+    /// the node's routes into the tunnel.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_ips: Vec<String>,
 }
 
 /// macvlan interface configuration.

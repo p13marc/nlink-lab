@@ -64,6 +64,7 @@ pub const RULE_IDS: &[&str] = &[
     "route-gateway-type",
     "interface-name-length",
     "wireguard-peer-exists",
+    "wireguard-peer-settings",
     "vrf-table-unique",
     "duplicate-link-endpoint",
     "link-endpoints-same-subnet",
@@ -108,6 +109,7 @@ pub const RULE_IDS: &[&str] = &[
     "firewall-iface-exists",
     "firewall-set-unused",
     "firewall-classify-no-effect",
+    "wireguard-route-peer",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -131,6 +133,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "firewall-iface-exists",
     "firewall-set-unused",
     "firewall-classify-no-effect",
+    "wireguard-route-peer",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -1334,6 +1337,67 @@ fn validate_wireguard_peers(topology: &Topology, issues: &mut Vec<ValidationIssu
                         ),
                         location: Some(format!("nodes.{node_name}.wireguard.{wg_name}.peers")),
                     });
+                }
+            }
+            // Longhand `peer` blocks (#147): an endpoint is an address with
+            // an optional port, allowed-ips are prefixes. An unresolved
+            // `${…}` is reported by `unresolved-interpolation`.
+            for (peer, p) in &wg_config.peer_settings {
+                let loc = format!("nodes.{node_name}.wireguard.{wg_name}.peer.{peer}");
+                let mut bad = |what: String| {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "wireguard-peer-settings",
+                        message: format!("{node_name}:{wg_name} peer '{peer}': {what}"),
+                        location: Some(loc.clone()),
+                    })
+                };
+                if let Some(ep) = p.endpoint.as_deref().filter(|e| !e.contains("${")) {
+                    let host = ep.trim_start_matches('[').trim_end_matches(']');
+                    if ep.parse::<std::net::SocketAddr>().is_err()
+                        && host.parse::<std::net::IpAddr>().is_err()
+                    {
+                        bad(format!("endpoint '{ep}' is not an address or address:port"));
+                    }
+                }
+                for a in p.allowed_ips.iter().filter(|a| !a.contains("${")) {
+                    if a != "default"
+                        && crate::helpers::parse_cidr(a).is_err()
+                        && a.parse::<std::net::IpAddr>().is_err()
+                    {
+                        bad(format!("allowed-ips '{a}' is not a prefix"));
+                    }
+                }
+            }
+            // A route into a tunnel with several peers belongs to the one its
+            // gateway is the tunnel address of; without a gateway it goes to
+            // none of them (the planner cannot pick), unless a longhand peer
+            // lists what it carries.
+            if wg_config.peers.len() > 1
+                && wg_config
+                    .peer_settings
+                    .values()
+                    .all(|p| p.allowed_ips.is_empty())
+            {
+                let routes = node
+                    .routes
+                    .iter()
+                    .chain(node.vrfs.values().flat_map(|v| v.routes.iter()));
+                for (dst, r) in routes {
+                    if r.dev.as_deref() == Some(wg_name.as_str()) && r.via.is_none() {
+                        issues.push(ValidationIssue {
+                            severity: Severity::Warning,
+                            rule: "wireguard-route-peer",
+                            message: format!(
+                                "route {dst} dev {wg_name} on '{node_name}' names none of the \
+                                 tunnel's {} peers: it is in no peer's allowed-ips. Give it \
+                                 `via` a peer's tunnel address, or list it in a `peer` block's \
+                                 `allowed-ips`",
+                                wg_config.peers.len()
+                            ),
+                            location: Some(format!("nodes.{node_name}.routes")),
+                        });
+                    }
                 }
             }
         }

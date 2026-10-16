@@ -2188,6 +2188,7 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
     let mut fwmark = None;
     let mut addresses = Vec::new();
     let mut peers = Vec::new();
+    let mut peer_settings = Vec::new();
 
     expect(tokens, pos, &Token::LBrace)?;
     loop {
@@ -2195,7 +2196,9 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
         if eat(tokens, pos, &Token::RBrace) {
             break;
         }
-        if eat_kw(tokens, pos, "key") {
+        if eat_kw(tokens, pos, "peer") {
+            peer_settings.push(parse_wireguard_peer(tokens, pos)?);
+        } else if eat_kw(tokens, pos, "key") {
             key = Some(parse_value(tokens, pos)?);
         } else if eat_kw(tokens, pos, "listen") {
             listen_port = Some(expect_port(tokens, pos, "listen port")?);
@@ -2232,6 +2235,65 @@ fn parse_wireguard_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Wireg
         fwmark,
         addresses,
         peers,
+        peer_settings,
+    })
+}
+
+/// `peer NAME { endpoint IP[:PORT] allowed-ips [CIDR, …] }` (#147): a peer
+/// written out longhand, where the planner's inference does not fit.
+fn parse_wireguard_peer(tokens: &[Spanned], pos: &mut usize) -> Result<ast::WireguardPeerDef> {
+    let name = parse_name(tokens, pos)?;
+    let mut endpoint = None;
+    let mut allowed_ips = Vec::new();
+    expect(tokens, pos, &Token::LBrace)?;
+    loop {
+        skip_newlines(tokens, pos);
+        if eat(tokens, pos, &Token::RBrace) {
+            break;
+        }
+        if eat_kw(tokens, pos, "endpoint") {
+            // `[fd00::2]:51820`: brackets keep an IPv6 address apart from
+            // its port, as in `dnat … to`.
+            let bracketed = eat(tokens, pos, &Token::LBracket);
+            let addr = parse_cidr_or_name(tokens, pos)?;
+            if bracketed {
+                expect(tokens, pos, &Token::RBracket)?;
+            }
+            let mut ep = if bracketed { format!("[{addr}]") } else { addr };
+            if eat(tokens, pos, &Token::Colon) {
+                let port = expect_port(tokens, pos, "endpoint port")?;
+                ep = format!("{ep}:{port}");
+            }
+            endpoint = Some(ep);
+        } else if eat_kw(tokens, pos, "allowed-ips") {
+            expect(tokens, pos, &Token::LBracket)?;
+            loop {
+                skip_newlines(tokens, pos);
+                if eat(tokens, pos, &Token::RBracket) {
+                    break;
+                }
+                allowed_ips.push(parse_cidr_or_name(tokens, pos)?);
+                eat(tokens, pos, &Token::Comma);
+            }
+        } else {
+            return Err(match at(tokens, *pos) {
+                Some(other) => err(
+                    tokens,
+                    *pos,
+                    format!("unexpected {other} in wireguard peer block (endpoint, allowed-ips)"),
+                ),
+                None => err(
+                    tokens,
+                    *pos,
+                    "unexpected end of input in wireguard peer block".into(),
+                ),
+            });
+        }
+    }
+    Ok(ast::WireguardPeerDef {
+        name,
+        endpoint,
+        allowed_ips,
     })
 }
 

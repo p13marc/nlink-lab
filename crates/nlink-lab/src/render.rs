@@ -977,6 +977,21 @@ fn render_node_body(out: &mut String, node: &Node) -> Result<()> {
         if !wg.peers.is_empty() {
             writeln!(out, "    peers {}", ident_list(&wg.peers)?).unwrap();
         }
+        for (peer, p) in &wg.peer_settings {
+            write!(out, "    peer {} {{", nll_ident(peer)?).unwrap();
+            if let Some(ep) = &p.endpoint {
+                write!(out, " endpoint {ep}").unwrap();
+            }
+            if !p.allowed_ips.is_empty() {
+                let ips: Vec<String> = p
+                    .allowed_ips
+                    .iter()
+                    .map(|a| nll_addr(a).map(str::to_string))
+                    .collect::<Result<_>>()?;
+                write!(out, " allowed-ips [{}]", ips.join(", ")).unwrap();
+            }
+            out.push_str(" }\n");
+        }
         out.push_str("  }\n");
     }
 

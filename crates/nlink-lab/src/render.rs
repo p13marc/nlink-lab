@@ -1415,7 +1415,10 @@ fn render_network(out: &mut String, name: &str, net: &Network) -> Result<()> {
         if implied.contains(key) {
             continue;
         }
-        if port.interface.is_some() {
+        // an `interface` the key already names is `port node:iface` (the
+        // builder's ports); any other has no NLL syntax
+        let named = key.split_once(':').map(|(_, iface)| iface);
+        if port.interface.is_some() && port.interface.as_deref() != named {
             return Err(unrepresentable(
                 "network port",
                 key,

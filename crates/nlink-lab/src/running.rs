@@ -1880,27 +1880,48 @@ impl RunningLab {
         let wanted = |name: &str| node.is_none_or(|filter| filter == name);
         let mut results = Vec::new();
 
+        // Over every node, one that cannot be read (a container that
+        // exited or was restarted) is left out: it failed the whole scan,
+        // and the backend and `top` showed nothing for any node (#218).
+        // Asked for by name, its error is the answer.
+        let skip_or_fail = |name: &str, e: Error| -> Result<()> {
+            if node.is_some() {
+                return Err(e);
+            }
+            tracing::warn!("diagnostics: node '{name}' left out: {e}");
+            Ok(())
+        };
         for (node_name, ns_name) in self.namespace_names.iter().filter(|(n, _)| wanted(n)) {
-            let conn: Connection<Route> = Connection::new_in(ns_name)
-                .map_err(|e| Error::nlink(format!("connection for '{ns_name}'"), e))?;
-            let report = scan_node(conn, previous_of(previous, node_name))
-                .await
-                .map_err(|e| Error::nlink(format!("diagnostics scan for '{node_name}'"), e))?;
-            results.push(NodeDiagnostic::from_report(node_name, report));
+            let scanned = match Connection::<Route>::new_in(ns_name) {
+                Ok(conn) => scan_node(conn, previous_of(previous, node_name))
+                    .await
+                    .map_err(|e| Error::nlink(format!("diagnostics scan for '{node_name}'"), e)),
+                Err(e) => Err(Error::nlink(format!("connection for '{ns_name}'"), e)),
+            };
+            match scanned {
+                Ok(report) => results.push(NodeDiagnostic::from_report(node_name, report)),
+                Err(e) => skip_or_fail(node_name, e)?,
+            }
         }
 
         for (node_name, container) in self.containers.iter().filter(|(n, _)| wanted(n)) {
-            let conn: Connection<Route> =
-                Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
+            let scanned = match Connection::<Route>::new_in(
+                nlink::netlink::namespace::NetnsRef::Pid(container.pid),
+            ) {
+                Ok(conn) => scan_node(conn, previous_of(previous, node_name))
+                    .await
                     .map_err(|e| {
-                        Error::nlink(format!("connection for container '{node_name}'"), e)
-                    })?;
-            let report = scan_node(conn, previous_of(previous, node_name))
-                .await
-                .map_err(|e| {
-                    Error::nlink(format!("diagnostics scan for container '{node_name}'"), e)
-                })?;
-            results.push(NodeDiagnostic::from_report(node_name, report));
+                        Error::nlink(format!("diagnostics scan for container '{node_name}'"), e)
+                    }),
+                Err(e) => Err(Error::nlink(
+                    format!("connection for container '{node_name}'"),
+                    e,
+                )),
+            };
+            match scanned {
+                Ok(report) => results.push(NodeDiagnostic::from_report(node_name, report)),
+                Err(e) => skip_or_fail(node_name, e)?,
+            }
         }
 
         Ok(results)

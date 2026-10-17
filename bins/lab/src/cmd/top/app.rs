@@ -210,8 +210,9 @@ impl App {
             .collect();
         sort_rows(&mut rows, self.sort);
         // The first sample is the socket tracker's baseline: flow rates
-        // only exist from the second one on.
-        if self.tick > 0 && rows.iter().any(|r| !r.flows.is_empty()) {
+        // only exist from the second one on, with flows or without (a lab
+        // without TCP traffic said "collecting" forever, #218).
+        if self.tick > 0 {
             self.flows_baseline = false;
         }
         self.nodes = rows;
@@ -776,14 +777,14 @@ mod tests {
     }
 
     #[test]
-    fn a_second_sample_without_flows_stays_at_baseline() {
+    fn a_second_sample_without_flows_ends_the_baseline() {
         let mut a = app();
         let mut no_flows = snapshot();
         for n in no_flows.nodes.values_mut() {
             n.sockets.clear();
         }
         a.apply_snapshot(no_flows, &[]);
-        assert!(a.flows_baseline);
+        assert!(!a.flows_baseline);
     }
 
     #[test]

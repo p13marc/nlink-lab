@@ -105,7 +105,8 @@ fn lex_interp(lex: &mut logos::Lexer<Token>) -> Option<String> {
 /// top-level structural keywords that start statements are reserved.
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(error = LexError)]
-#[logos(skip r"[ \t]+")]
+// `\r` too: a CRLF file failed on its first line end (#218)
+#[logos(skip r"[ \t\r]+")]
 // Line comments run to end-of-line; the greedy `*` is bounded by `\n`,
 // so opt out of logos 0.16's unbounded-repetition lint.
 // `#` and `//` line comments (#113). NLL already accepts C-style `/* ... */`,
@@ -417,6 +418,18 @@ pub fn lex(input: &str) -> Result<Vec<Spanned>> {
     strip_newlines(&mut tokens);
 
     Ok(tokens)
+}
+
+/// [`lex`] that skips what it cannot lex instead of failing: for an
+/// editor, whose buffer is half-typed most of the time. A lone `$` failed
+/// the whole lex, and completion had no tokens to work from (#218).
+pub fn lex_lenient(input: &str) -> Vec<Spanned> {
+    let mut tokens: Vec<Spanned> = Token::lexer(input)
+        .spanned()
+        .filter_map(|(t, span)| t.ok().map(|token| Spanned { token, span }))
+        .collect();
+    strip_newlines(&mut tokens);
+    tokens
 }
 
 /// 1-based (line, column) of a byte offset; the column counts chars.

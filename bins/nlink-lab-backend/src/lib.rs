@@ -404,6 +404,18 @@ pub async fn serve(
     loop {
         tokio::select! {
             _ = metrics_interval.tick() => {
+                // The lab as it is now: loaded once, a container restart,
+                // an exited container or an `apply` left the collector on
+                // stale namespaces for good, and a destroyed lab was served
+                // on (#218).
+                if !nlink_lab::state::exists(&lab_name) {
+                    info!(lab = lab_name, "lab destroyed; shutting down");
+                    break;
+                }
+                match RunningLab::load(&lab_name) {
+                    Ok(fresh) => lab = fresh,
+                    Err(e) => warn!("reload lab state: {e}"),
+                }
                 // New lifecycle lines since the last tick.
                 if let Ok(meta) = std::fs::metadata(&lifecycle_path) {
                     if meta.len() < lifecycle_offset {

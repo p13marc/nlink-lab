@@ -50,7 +50,9 @@ fn scan_gap<'a>(gap: &'a str, out: &mut Vec<Item<'a>>) -> Result<()> {
                 newlines += 1;
                 i += 1;
             }
-            b'#' => {
+            // `//` too, which the lexer skips like `#`: the formatter
+            // dropped every one of them (#218)
+            b'#' | b'/' if b[i] == b'#' || b.get(i + 1) == Some(&b'/') => {
                 flush(&mut newlines, out);
                 let end = gap[i..].find('\n').map_or(b.len(), |n| i + n);
                 out.push(Item::LineComment(gap[i..end].trim_end()));
@@ -258,6 +260,16 @@ pub fn token_texts(src: &str) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `//` comments are kept like `#` ones: the formatter dropped them,
+    /// and format-on-save with them (#218). CRLF input formats.
+    #[test]
+    fn slash_comments_and_crlf_survive() {
+        let out = format("lab \"t\"\r\n// own line\r\nnode a // trailing\r\n").unwrap();
+        assert!(out.contains("// own line\n"), "{out:?}");
+        assert!(out.contains("node a  // trailing"), "{out:?}");
+        assert!(!out.contains('\r'), "{out:?}");
+    }
 
     #[test]
     fn normalises_layout_and_keeps_comments() {

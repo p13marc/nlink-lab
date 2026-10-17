@@ -448,7 +448,12 @@ fn completions_at(a: &Analysis, pos: Position) -> Vec<CompletionItem> {
         if matches!(a.tokens[p].token, Token::Colon)
             && let Some(Token::Ident(node)) = p.checked_sub(1).map(|k| &a.tokens[k].token)
         {
-            if let Some(topo) = a.topology.as_ref()
+            // `node NAME :` takes profiles; any other `NAME:` an interface
+            let node_head = p
+                .checked_sub(2)
+                .is_some_and(|k| matches!(a.tokens[k].token, Token::Node));
+            if !node_head
+                && let Some(topo) = a.topology.as_ref()
                 && let Some(n) = topo.nodes.get(node)
             {
                 // `Node::interfaces` only holds *explicitly declared*
@@ -471,7 +476,25 @@ fn completions_at(a: &Analysis, pos: Position) -> Vec<CompletionItem> {
                     .map(|i| item(i, CompletionItemKind::FIELD, None))
                     .collect();
             }
-            // Unknown node after a colon inside a `node` head: profiles.
+            // A buffer that does not parse (`link r1:` being typed): the
+            // interfaces the tokens name for that node. It offered
+            // profiles, which a link end cannot take (#218).
+            if !node_head {
+                let mut seen: std::collections::BTreeSet<String> = Default::default();
+                for w in a.tokens.windows(3) {
+                    if let (Token::Ident(n), Token::Colon, Token::Ident(iface)) =
+                        (&w[0].token, &w[1].token, &w[2].token)
+                        && n == node
+                    {
+                        seen.insert(iface.clone());
+                    }
+                }
+                return seen
+                    .into_iter()
+                    .map(|i| item(i, CompletionItemKind::FIELD, None))
+                    .collect();
+            }
+            // After a colon inside a `node` head: profiles.
             return names(symbols::DefKind::Profile)
                 .into_iter()
                 .map(|n| item(n, CompletionItemKind::INTERFACE, None))
@@ -726,6 +749,21 @@ mod tests {
         let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
         assert!(labels.contains(&"members"), "{labels:?}");
         assert!(labels.contains(&"r1"), "{labels:?}");
+    }
+
+    /// In the states the trigger characters produce: a lone `$` did not
+    /// lex, so there were no tokens; `link r1:` at the end did not parse,
+    /// and profiles were offered (#218).
+    #[test]
+    fn completion_works_right_after_its_trigger_characters() {
+        let a = doc("lab \"t\"\nlet base = \"x\"\nnode a {\n  sysctl net.x=$");
+        let items = completions_at(&a, Position::new(3, 16));
+        assert!(items.iter().any(|i| i.label == "${base}"), "{items:?}");
+        let a =
+            doc("lab \"t\"\nprofile p { }\nnode r1\nnode r2\nlink r1:eth0 -- r2:eth0\nlink r1:");
+        let items = completions_at(&a, Position::new(5, 8));
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, vec!["eth0"]);
     }
 
     #[test]

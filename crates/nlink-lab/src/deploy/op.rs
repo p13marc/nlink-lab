@@ -207,6 +207,17 @@ pub struct StackConfig {
     pub wireguard: Option<nlink::netlink::genl::wireguard::WireguardConfig>,
 }
 
+impl StackConfig {
+    /// The WireGuard interfaces the config declares.
+    pub fn wireguard_ifnames(&self) -> Vec<String> {
+        #[cfg(feature = "wireguard")]
+        if let Some(wg) = &self.wireguard {
+            return wg.devices().iter().map(|d| d.ifname.clone()).collect();
+        }
+        Vec::new()
+    }
+}
+
 /// One unit of work in a deploy or apply plan.
 ///
 /// Ops are pure data: building them touches nothing. `apply.rs` is
@@ -522,6 +533,25 @@ impl Op {
         })
     }
 
+    /// Whether the op creates something inside `node`'s network namespace
+    /// (or a veth with an end there), or runs a process in it: what a new
+    /// namespace for the node needs again.
+    pub fn lives_in_node(&self, node: &str) -> bool {
+        use Op::*;
+        match self {
+            CreateVeth { a, b, .. } => a.node == node || b.node == node,
+            CreateNetworkVeth { node: n, .. }
+            | CreateMgmtVeth { node: n, .. }
+            | CreateMacvlan { node: n, .. }
+            | CreateIpvlan { node: n, .. }
+            | Sysctls { node: n, .. }
+            | Exec { node: n, .. }
+            | Healthcheck { node: n, .. }
+            | WifiDaemon { node: n, .. } => n == node,
+            _ => false,
+        }
+    }
+
     /// True for the diff-only removal ops.
     pub fn is_removal(&self) -> bool {
         use Op::*;
@@ -635,6 +665,24 @@ impl Plan {
         self
     }
 
+    /// The ops that do more than a diff always re-runs (each node's
+    /// `Stack`, links up, the DNS overlays, which change nothing when
+    /// nothing changed) and more than remove: creating or re-creating
+    /// something (a container whose options changed), starting a process.
+    /// A plan whose `work` and removals are empty has nothing to do.
+    pub fn work(&self) -> impl Iterator<Item = &Op> {
+        self.ops.iter().filter(|o| {
+            !o.is_removal()
+                && !matches!(
+                    o,
+                    Op::Stack { .. }
+                        | Op::LinksUp { .. }
+                        | Op::DnsInject { .. }
+                        | Op::DnsNetnsEtc { .. }
+                )
+        })
+    }
+
     /// Ops of one stage, in order.
     pub fn stage(&self, stage: Stage) -> impl Iterator<Item = &Op> {
         self.ops.iter().filter(move |op| op.stage() == stage)
@@ -656,6 +704,27 @@ impl Plan {
             .filter(|o| !des.contains_key(&o.key()))
             .filter_map(|o| o.inverse())
             .collect();
+        // A WireGuard interface is created by the node's Stack, and neither
+        // its network layer (which purges only what it declares) nor its
+        // WireGuard layer (which has no device removal) deletes one the
+        // topology drops: it stayed up with its key and peers (#204).
+        for (key, op) in &cur {
+            if let (Op::Stack { node, cfg }, Some(Op::Stack { cfg: wanted, .. })) =
+                (op, des.get(key))
+            {
+                let keep = wanted.wireguard_ifnames();
+                for iface in cfg
+                    .wireguard_ifnames()
+                    .into_iter()
+                    .filter(|i| !keep.contains(i))
+                {
+                    removals.push(Op::DeleteLink {
+                        node: node.clone(),
+                        iface,
+                    });
+                }
+            }
+        }
         // Do not delete links/qdiscs of a namespace that is going away.
         let dying: std::collections::BTreeSet<String> = removals
             .iter()
@@ -674,10 +743,17 @@ impl Plan {
                 _ => None,
             })
             .collect();
+        // A namespace deletion kills nothing: a removed node's processes
+        // (its `run` commands, wifi daemons, what `spawn` started) kept
+        // running and kept the namespace alive (#204). Stop them all, and
+        // drop their bookkeeping, before the node goes.
+        for node in &dying {
+            removals.push(Op::KillNodeProcesses { node: node.clone() });
+        }
         removals.retain(|o| match o {
             Op::DeleteBridge { ns, .. } => !dying_ns.contains(ns.as_str()),
+            // `KillNodeProcesses` (above) stops these for a dying node.
             Op::DeleteLink { node, .. }
-            | Op::KillNodeProcesses { node }
             | Op::KillExec { node, .. }
             | Op::KillWifiDaemon { node, .. } => !dying.contains(node.as_str()),
             _ => true,
@@ -690,6 +766,10 @@ impl Plan {
         let mut changes: Vec<Op> = Vec::new();
         // nodes whose background exec was restarted → healthcheck again
         let mut restarted: std::collections::BTreeSet<String> = Default::default();
+        // container nodes re-created: their namespace is new, see below
+        let mut recreated: std::collections::BTreeSet<String> = Default::default();
+        // (node, iface) of re-created radios: their netdev is new
+        let mut radios: std::collections::BTreeSet<(String, String)> = Default::default();
         for op in &desired.ops {
             match cur.get(&op.key()) {
                 None => changes.push(op.clone()),
@@ -728,6 +808,33 @@ impl Plan {
                             );
                         }
                     }
+                    // A container's `extra_hosts` lists every address of a
+                    // `dns hosts` lab: adding a node elsewhere changed it,
+                    // and re-created every container (#204). It is not a
+                    // reason to; the new names reach the container when it
+                    // is next re-created.
+                    Op::CreateContainer { node, .. } => {
+                        if !same_container(existing, op) {
+                            if let Some(inv) = existing.inverse() {
+                                removals.push(inv);
+                            }
+                            changes.push(op.clone());
+                            recreated.insert(node.clone());
+                        }
+                    }
+                    // A radio is re-created when its `maker` changes (a Wi-Fi
+                    // node added or removed first in name order moves every
+                    // radio to a new netgroup); its daemon is restarted
+                    // below.
+                    Op::CreateRadio { node, iface, .. } => {
+                        if *existing != op {
+                            if let Some(inv) = existing.inverse() {
+                                removals.push(inv);
+                            }
+                            changes.push(op.clone());
+                            radios.insert((node.clone(), iface.clone()));
+                        }
+                    }
                     // everything else: re-create when the payload changed
                     _ => {
                         if *existing != op {
@@ -740,11 +847,62 @@ impl Plan {
                 },
             }
         }
+        // A re-created container has a new namespace: every veth, port and
+        // sysctl that lived in the old one died with it (both ends of a
+        // veth), and its processes too. Unchanged, the diff would leave
+        // them out, and the first `LinksUp` failed on a missing interface.
+        for op in &desired.ops {
+            if recreated.iter().any(|n| op.lives_in_node(n)) && !changes.contains(op) {
+                changes.push(op.clone());
+            }
+        }
+        // The hostapd / wpa_supplicant of a re-created radio was bound to
+        // the netdev that went with the old one: unchanged, it was left
+        // running on nothing (#204).
+        for op in &desired.ops {
+            if let Op::WifiDaemon { node, wifi } = op
+                && radios.contains(&(node.clone(), wifi.name.clone()))
+                && !changes.contains(op)
+            {
+                if let Some(inv) = cur.get(&op.key()).and_then(|o| o.inverse()) {
+                    removals.push(inv);
+                }
+                changes.push(op.clone());
+            }
+        }
+        // inverses added above go in stage order too: a daemon is stopped
+        // before its radio is deleted
+        removals.sort_by_key(|o| std::cmp::Reverse(o.stage()));
         changes.sort_by_key(|o| o.stage());
         let mut ops = removals;
         ops.extend(changes);
         Plan { ops }
     }
+}
+
+/// Two `CreateContainer` ops that differ at most in their `extra_hosts`.
+fn same_container(a: &Op, b: &Op) -> bool {
+    let without_hosts = |op: &Op| match op {
+        Op::CreateContainer {
+            node,
+            name,
+            image,
+            pull,
+            opts,
+        } => {
+            let mut opts = opts.clone();
+            opts.extra_hosts.clear();
+            Some((
+                node.clone(),
+                name.clone(),
+                image.clone(),
+                pull.clone(),
+                opts,
+            ))
+        }
+        _ => None,
+    };
+    without_hosts(a) == without_hosts(b)
 }
 
 #[cfg(test)]
@@ -828,5 +986,157 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay {delay} }}
             "{:?}",
             diff.ops
         );
+    }
+
+    fn container_lab(cmd: &str, extra: &str) -> Plan {
+        plan_of(&format!(
+            r#"lab "c" {{ dns hosts }}
+profile router {{ forward ipv4 }}
+node r : router image "alpine:3" cmd ["sleep", "{cmd}"]
+node h
+{extra}
+link r:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+        ))
+    }
+
+    /// Adding a node to a `dns hosts` lab changes every container's
+    /// `extra_hosts`; that alone re-creates none (#204).
+    #[test]
+    fn a_new_hosts_entry_does_not_recreate_a_container() {
+        let cur = container_lab("1000", "");
+        let des = container_lab(
+            "1000",
+            "node x\nlink x:eth0 -- h:eth1 { 10.0.1.1/24 -- 10.0.1.2/24 }",
+        );
+        let diff = Plan::diff(&cur, &des);
+        assert!(
+            !diff
+                .ops
+                .iter()
+                .any(|o| matches!(o, Op::CreateContainer { .. } | Op::RemoveContainer { .. })),
+            "{:?}",
+            diff.ops
+        );
+    }
+
+    /// A container whose own options change is re-created, and what lived
+    /// in its namespace (the veth, the forwarding sysctl) comes back with
+    /// it: the diff used to leave them out as unchanged (#204).
+    #[test]
+    fn a_recreated_container_gets_its_links_and_sysctls_back() {
+        let diff = Plan::diff(&container_lab("1000", ""), &container_lab("2000", ""));
+        let pos = |f: &dyn Fn(&Op) -> bool| diff.ops.iter().position(f);
+        let removed = pos(&|o| matches!(o, Op::RemoveContainer { node, .. } if node == "r"));
+        let created = pos(&|o| matches!(o, Op::CreateContainer { node, .. } if node == "r"));
+        let veth = pos(&|o| matches!(o, Op::CreateVeth { .. }));
+        let sysctls = pos(&|o| matches!(o, Op::Sysctls { node, .. } if node == "r"));
+        assert!(removed < created, "{:?}", diff.ops);
+        assert!(created < veth && veth.is_some(), "{:?}", diff.ops);
+        assert!(sysctls.is_some(), "{:?}", diff.ops);
+    }
+
+    /// A removed node's processes are stopped before its namespace goes:
+    /// deleting the namespace killed nothing, and they kept it alive
+    /// (#204).
+    #[test]
+    fn a_removed_node_has_its_processes_stopped_first() {
+        let lab = |extra: &str| {
+            plan_of(&format!(
+                r#"lab "k"
+node a
+{extra}
+"#
+            ))
+        };
+        let cur = lab("node b { run background [\"sleep\", \"100\"] }");
+        let diff = Plan::diff(&cur, &lab(""));
+        let kill = diff
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::KillNodeProcesses { node } if node == "b"));
+        let delete = diff
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DeleteNamespace { node, .. } if node == "b"));
+        assert!(kill.is_some() && kill < delete, "{:?}", diff.ops);
+        assert!(
+            !diff.ops.iter().any(|o| matches!(o, Op::KillExec { .. })),
+            "the node-wide kill covers its execs: {:?}",
+            diff.ops
+        );
+    }
+
+    /// A WireGuard interface the topology drops is deleted: the node's
+    /// Stack creates one but never removes it (#204).
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn a_dropped_wireguard_interface_is_deleted() {
+        let lab = |wg: bool| {
+            let tunnel = |addr: &str, peer: &str| {
+                if wg {
+                    format!(
+                        "{{ wireguard wg0 {{ key auto listen 51820 address {addr} peers [{peer}] }} }}"
+                    )
+                } else {
+                    String::new()
+                }
+            };
+            plan_of(&format!(
+                "lab \"w\"\nnode a {}\nnode b {}\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/30 -- 10.0.0.2/30 }}\n",
+                tunnel("192.168.255.1/32", "b"),
+                tunnel("192.168.255.2/32", "a"),
+            ))
+        };
+        let diff = Plan::diff(&lab(true), &lab(false));
+        for n in ["a", "b"] {
+            assert!(
+                diff.ops.iter().any(
+                    |o| matches!(o, Op::DeleteLink { node, iface } if node == n && iface == "wg0")
+                ),
+                "{n}: {:?}",
+                diff.ops
+            );
+        }
+        assert!(
+            !Plan::diff(&lab(true), &lab(true))
+                .ops
+                .iter()
+                .any(|o| o.is_removal()),
+            "an unchanged tunnel stays"
+        );
+    }
+
+    /// Radios are made in the first Wi-Fi node's namespace: a Wi-Fi node
+    /// added before it re-creates every radio, and the daemons bound to
+    /// the old netdevs are restarted on the new ones, each stopped before
+    /// its radio is deleted (#204).
+    #[test]
+    fn a_recreated_radio_restarts_its_daemon() {
+        let lab = |extra: &str| {
+            plan_of(&format!(
+                r#"lab "r"
+{extra}
+node m {{ wifi wlan0 mode ap {{ ssid "x" channel 6 10.0.0.1/24 }} }}
+node s {{ wifi wlan0 mode station {{ ssid "x" 10.0.0.2/24 }} }}
+"#
+            ))
+        };
+        let diff = Plan::diff(
+            &lab(""),
+            &lab(r#"node a { wifi wlan0 mode station { ssid "x" 10.0.0.3/24 } }"#),
+        );
+        let pos = |f: &dyn Fn(&Op) -> bool| diff.ops.iter().position(f);
+        for n in ["m", "s"] {
+            let kill = pos(&|o| matches!(o, Op::KillWifiDaemon { node, .. } if node == n));
+            let delete = pos(&|o| matches!(o, Op::DeleteRadio { node, .. } if node == n));
+            let create = pos(&|o| matches!(o, Op::CreateRadio { node, .. } if node == n));
+            let start = pos(&|o| matches!(o, Op::WifiDaemon { node, .. } if node == n));
+            assert!(
+                kill.is_some() && kill < delete && delete < create && create < start,
+                "{n}: {:?}",
+                diff.ops
+            );
+        }
     }
 }

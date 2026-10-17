@@ -429,6 +429,13 @@ pub fn create_netns_etc(ns_name: &str, entries: &[HostsEntry]) -> Result<()> {
     Ok(())
 }
 
+/// The `hosts` file [`create_netns_etc`] writes for `ns_name`.
+pub fn netns_hosts_path(ns_name: &str) -> std::path::PathBuf {
+    std::path::Path::new(crate::netns_tag::NETNS_ETC_DIR)
+        .join(ns_name)
+        .join("hosts")
+}
+
 /// Remove per-namespace `/etc/netns/<ns_name>/` directory.
 ///
 /// Removes the whole directory: it is the lab's own overlay (a legacy

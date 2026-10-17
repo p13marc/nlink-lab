@@ -37,6 +37,11 @@ fn lab_dir(lab: &str) -> PathBuf {
     Path::new(ROOT).join("nlink-lab").join(lab)
 }
 
+/// Whether the lab's cgroup subtree exists.
+pub fn lab_exists(lab: &str) -> bool {
+    lab_dir(lab).is_dir()
+}
+
 /// The node's cgroup path (whether or not it exists).
 pub fn node_dir(lab: &str, node: &str) -> PathBuf {
     lab_dir(lab).join(node)

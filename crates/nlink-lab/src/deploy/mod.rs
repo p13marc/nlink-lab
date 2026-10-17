@@ -186,8 +186,18 @@ pub struct ApplyReport {
 /// order). No kernel access; used by `apply --dry-run` / `--check` to
 /// show what the layered diff cannot (e.g. VRF-table route removals).
 pub fn apply_plan(running: &RunningLab, desired: &Topology) -> Result<Plan> {
+    apply_plan_with(running, desired, &ApplyOptions::default())
+}
+
+/// [`apply_plan`] for an [`apply_with`] with these options: what `apply
+/// --reset-impairments` and `restore` will run.
+pub fn apply_plan_with(
+    running: &RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+) -> Result<Plan> {
     desired.validate().bail()?;
-    Ok(plan_apply(running, desired, &ApplyOptions::default())?.1)
+    Ok(plan_apply(running, desired, opts)?.1)
 }
 
 /// Knobs for [`apply_with`].
@@ -242,10 +252,15 @@ pub(crate) fn overlay_live_impairments(
     let mut kept = BTreeMap::new();
     let unchanged =
         |ep: &str| running.topology().impairments.get(ep) == desired_in.impairments.get(ep);
+    let endpoints: BTreeSet<String> = crate::impair_parse::topology_endpoints(desired_in)
+        .into_iter()
+        .collect();
     for (ep, live) in running.live_impairments() {
-        if opts.reset_impairments || !unchanged(ep) {
+        if opts.reset_impairments || !unchanged(ep) || !endpoints.contains(ep) {
             // Reset, or the topology changed this endpoint: its
-            // declaration wins.
+            // declaration wins. Or the endpoint is gone with its link or
+            // node: a netem on it would be declared on a missing
+            // interface, and every apply after failed (#204).
             continue;
         }
         if *live == Impairment::default() {
@@ -258,9 +273,6 @@ pub(crate) fn overlay_live_impairments(
     let desired_partitions = if opts.reset_impairments {
         BTreeSet::new()
     } else {
-        let endpoints: BTreeSet<String> = crate::impair_parse::topology_endpoints(&desired)
-            .into_iter()
-            .collect();
         current_partitions
             .intersection(&endpoints)
             .cloned()
@@ -296,32 +308,48 @@ fn apply_plans(
     let overlay = overlay_live_impairments(running, desired, opts);
     let desired = &overlay.desired;
 
-    #[cfg(feature = "wireguard")]
-    let inputs = {
-        let mut inputs = PlanInputs::for_deploy(desired)?;
-        // keep the keys of interfaces that already exist so `apply` does
-        // not rotate every peer's key
-        if let Some(fresh) = inputs.wg_keys.as_mut()
-            && let Some(saved) = wireguard_secrets::load(running.name())
+    // Each side planned with its own interfaces' keys, the saved ones where
+    // they exist: the current side's too, so an interface the desired
+    // topology drops is in the current plan's Stack and `Plan::diff`
+    // removes it (#204).
+    let with_saved_keys = |topology: &Topology| -> Result<PlanInputs> {
+        #[cfg(feature = "wireguard")]
         {
-            for (node, ifaces) in saved {
-                if let Some(target) = fresh.get_mut(&node) {
-                    for (iface, keys) in ifaces {
-                        if target.contains_key(&iface) {
-                            target.insert(iface, keys);
+            let mut inputs = PlanInputs::for_deploy(topology)?;
+            // keep the keys of `key auto` interfaces that already exist so
+            // `apply` does not rotate every peer's key; a key the topology
+            // writes is the one it gets (#204)
+            if let Some(fresh) = inputs.wg_keys.as_mut()
+                && let Some(saved) = wireguard_secrets::load(running.name())
+            {
+                for (node, ifaces) in saved {
+                    if let Some(target) = fresh.get_mut(&node) {
+                        for (iface, keys) in ifaces {
+                            let auto = topology
+                                .nodes
+                                .get(&node)
+                                .and_then(|n| n.wireguard.get(&iface))
+                                .is_some_and(|wg| {
+                                    matches!(wg.private_key.as_deref(), None | Some("auto"))
+                                });
+                            if auto && target.contains_key(&iface) {
+                                target.insert(iface, keys);
+                            }
                         }
                     }
                 }
             }
+            Ok(inputs)
         }
-        inputs
+        #[cfg(not(feature = "wireguard"))]
+        PlanInputs::for_deploy(topology)
     };
-    #[cfg(not(feature = "wireguard"))]
-    let inputs = PlanInputs::for_deploy(desired)?;
+    let inputs = with_saved_keys(desired)?;
+    let current_inputs = with_saved_keys(&overlay.current)?;
 
     let cur_inputs = PlanInputs {
         partitions: overlay.current_partitions.clone(),
-        ..inputs.clone()
+        ..current_inputs
     };
     let inputs = PlanInputs {
         partitions: overlay.desired_partitions.clone(),
@@ -363,6 +391,7 @@ pub async fn apply_with(
             running.name()
         );
         journal.unwind().await;
+        restore_dns(running, &cur_plan);
         crate::events::record(
             running.name(),
             crate::events::LifecycleKind::ApplyFailed {
@@ -458,6 +487,26 @@ pub async fn restore(
     Ok(report)
 }
 
+/// After a failed apply's rollback: the lab's `/etc/hosts` section and
+/// per-node overlays as the running topology has them. The apply rewrote
+/// them for the desired topology, and what existed before it is not the
+/// journal's to remove (#204).
+fn restore_dns(running: &RunningLab, current: &Plan) {
+    let entries = crate::dns::generate_hosts_entries(running.topology());
+    for op in &current.ops {
+        let res = match op {
+            Op::DnsInject { lab } => crate::dns::inject_hosts(lab, &entries),
+            Op::DnsNetnsEtc { ns, .. } if crate::dns::netns_hosts_path(ns).exists() => {
+                crate::dns::create_netns_etc(ns, &entries)
+            }
+            _ => continue,
+        };
+        if let Err(e) = res {
+            tracing::warn!("rollback: DNS entries not restored: {e}");
+        }
+    }
+}
+
 /// Re-create every link of `node` after its container was restarted.
 ///
 /// `docker restart` gives the container a new network namespace: every
@@ -470,8 +519,8 @@ pub async fn restore(
 /// runtime partition (the qdisc died with the veth); a live impairment set
 /// with `impair` is re-installed.
 ///
-/// Bridge-network ports (`network { members [...] }`) are not re-attached
-/// yet; callers refuse such nodes up front.
+/// The node's bridge-network ports, sysctls, mgmt veth and `run` commands
+/// lived in the old namespace as well, and are re-created the same way.
 pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<ApplyReport> {
     let mut desired = running.topology().clone();
     desired.validate().bail()?;
@@ -505,7 +554,16 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
     };
     let cur_plan = plan::plan(&current, &inputs)?;
     let des_plan = plan::plan(&desired, &inputs)?;
-    let diff = Plan::diff(&cur_plan, &des_plan);
+    let mut diff = Plan::diff(&cur_plan, &des_plan);
+    // Everything else that lived in the old namespace is gone too, and
+    // the diff sees it as unchanged: the node's sysctls (forwarding), its
+    // bridge-network ports, its mgmt veth and its `run` commands.
+    for op in des_plan.ops.iter().filter(|op| op.lives_in_node(node)) {
+        if !diff.ops.contains(op) {
+            diff.ops.push(op.clone());
+        }
+    }
+    diff.ops.sort_by_key(|o| o.stage());
     let report = ApplyReport {
         ops: diff.ops.len(),
         removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
@@ -778,8 +836,20 @@ pub async fn compute_layered_diff(
     running: &RunningLab,
     desired: &Topology,
 ) -> Result<crate::diff::LayeredDiff> {
+    compute_layered_diff_with(running, desired, &ApplyOptions::default()).await
+}
+
+/// [`compute_layered_diff`] for an [`apply_with`] with these options:
+/// with `reset_impairments`, the runtime impairments and partitions it
+/// would drop are part of the diff. Without it they were not, so `apply
+/// --reset-impairments` on an unchanged topology found nothing to do.
+pub async fn compute_layered_diff_with(
+    running: &RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+) -> Result<crate::diff::LayeredDiff> {
     let topology = crate::diff::diff_topologies(running.topology(), desired);
-    let (_, _, cur_plan, des_plan) = apply_plans(running, desired, &ApplyOptions::default())?;
+    let (_, _, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
     let previous = stack_networks(&cur_plan);
 
     let mut network = BTreeMap::new();
@@ -1172,6 +1242,59 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         let running = running_with_live(&topo, &[("a:eth0", Some("50ms"))]);
         let (_, _, _, des) = apply_plans(&running, &topo, &reset).unwrap();
         assert_eq!(declared_delay(&des, "a", "eth0"), MS(1));
+    }
+
+    /// A live impairment on an endpoint whose link the desired topology
+    /// drops is not declared again: a netem on a missing interface failed
+    /// every apply after (#204).
+    #[test]
+    fn overlay_drops_live_impairment_of_a_removed_link() {
+        // only `impair` put a netem there: the declaration did not change
+        let topo = crate::parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n",
+        )
+        .unwrap();
+        let desired = crate::parser::parse("lab \"t\"\nnode a\nnode b\n").unwrap();
+        let running = running_with_live(&topo, &[("a:eth0", Some("50ms"))]);
+        let o = overlay_live_impairments(&running, &desired, &ApplyOptions::default());
+        assert!(!o.desired.impairments.contains_key("a:eth0"));
+        assert!(o.kept.is_empty());
+        let (_, _, _, des) = apply_plans(&running, &desired, &ApplyOptions::default()).unwrap();
+        assert_eq!(declared_delay(&des, "a", "eth0"), None);
+    }
+
+    /// The running lab's plan is made with its own WireGuard keys: planned
+    /// with the desired topology's (none, once it drops its tunnels), the
+    /// current Stack had no WireGuard device and the diff deleted nothing
+    /// (#204).
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn apply_deletes_the_wireguard_interfaces_the_topology_drops() {
+        let wg = |addr: &str, peer: &str| {
+            format!("{{ wireguard wg0 {{ key auto listen 51820 address {addr} peers [{peer}] }} }}")
+        };
+        let link = "link a:eth0 -- b:eth0 { 10.0.0.1/30 -- 10.0.0.2/30 }";
+        let topo = crate::parser::parse(&format!(
+            "lab \"wg-unit-204\"\nnode a {}\nnode b {}\n{link}\n",
+            wg("192.168.255.1/32", "b"),
+            wg("192.168.255.2/32", "a")
+        ))
+        .unwrap();
+        let desired =
+            crate::parser::parse(&format!("lab \"wg-unit-204\"\nnode a\nnode b\n{link}\n"))
+                .unwrap();
+        let running = running_with_live(&topo, &[]);
+        let (_, _, cur, des) = apply_plans(&running, &desired, &ApplyOptions::default()).unwrap();
+        let diff = Plan::diff(&cur, &des);
+        for n in ["a", "b"] {
+            assert!(
+                diff.ops.iter().any(
+                    |o| matches!(o, Op::DeleteLink { node, iface } if node == n && iface == "wg0")
+                ),
+                "{n}: {:?}",
+                diff.ops
+            );
+        }
     }
 
     /// A partition is drop filters under the root (#168): it survives an

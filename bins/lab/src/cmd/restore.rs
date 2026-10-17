@@ -22,7 +22,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut running = nlink_lab::RunningLab::load(&lab)?;
 
     if dry_run {
-        let plan = nlink_lab::apply_plan(&running, &snapshot.topology)?;
+        // What `restore` runs: an apply that resets runtime impairments.
+        let opts = nlink_lab::ApplyOptions {
+            reset_impairments: true,
+        };
+        let plan = nlink_lab::apply_plan_with(&running, &snapshot.topology, &opts)?;
         let ops: Vec<String> = plan.ops.iter().map(|o| o.describe()).collect();
         let live: Vec<&String> = snapshot.state.live_impairments.keys().collect();
         let parts: Vec<&String> = snapshot.state.saved_impairments.keys().collect();

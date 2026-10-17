@@ -91,14 +91,25 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         if topo.nodes.remove(name).is_none() {
             return Err(nlink_lab::Error::NodeNotFound { name: name.clone() });
         }
-        topo.links.retain(|l| {
+        let touches = |l: &nlink_lab::types::Link| {
             l.endpoints
                 .iter()
-                .all(|e| endpoint(e).map(|e| e.node != *name).unwrap_or(true))
-        });
+                .any(|e| endpoint(e).map(|e| e.node == *name).unwrap_or(false))
+        };
+        // Both ends of each removed link: the peer's end goes with it.
+        let ends: Vec<String> = topo
+            .links
+            .iter()
+            .filter(|l| touches(l))
+            .flat_map(|l| l.endpoints.iter().cloned())
+            .collect();
+        topo.links.retain(|l| !touches(l));
+        drop_link_ends(topo, &ends);
         topo.impairments
             .retain(|k, _| endpoint(k).map(|e| e.node != *name).unwrap_or(true));
         topo.rate_limits
+            .retain(|k, _| endpoint(k).map(|e| e.node != *name).unwrap_or(true));
+        topo.qdiscs
             .retain(|k, _| endpoint(k).map(|e| e.node != *name).unwrap_or(true));
         for net in topo.networks.values_mut() {
             net.members
@@ -154,16 +165,19 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
     for ep in &args.remove_link {
         let ep = endpoint(ep)?;
         let key = format!("{}:{}", ep.node, ep.iface);
-        let before = topo.links.len();
-        topo.links.retain(|l| !l.endpoints.contains(&key));
-        if topo.links.len() == before {
+        let ends: Vec<String> = topo
+            .links
+            .iter()
+            .filter(|l| l.endpoints.contains(&key))
+            .flat_map(|l| l.endpoints.iter().cloned())
+            .collect();
+        if ends.is_empty() {
             return Err(nlink_lab::Error::invalid_topology(format!(
                 "no link has endpoint '{key}'"
             )));
         }
-        topo.impairments.remove(&key);
-        topo.rate_limits.remove(&key);
-        topo.qdiscs.remove(&key);
+        topo.links.retain(|l| !l.endpoints.contains(&key));
+        drop_link_ends(topo, &ends);
         log.push(format!("remove link at {key}"));
     }
     for spec in &args.set_impair {
@@ -452,6 +466,17 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     Ok(())
 }
 
+/// Drop what a removed link's ends carried: a link's `delay` is stored on
+/// both endpoints, and an entry left on the peer's end names an interface
+/// that no longer exists, which fails validation (#204).
+fn drop_link_ends(topo: &mut nlink_lab::Topology, ends: &[String]) {
+    for e in ends {
+        topo.impairments.remove(e);
+        topo.rate_limits.remove(e);
+        topo.qdiscs.remove(e);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -502,8 +527,26 @@ mod tests {
         apply_edits(&mut t, &a).unwrap();
         assert!(!t.nodes.contains_key("b"));
         assert!(t.links.is_empty());
-        assert!(!t.impairments.contains_key("a:eth0") || true);
+        // The peer's end of the removed link carried the link's delay; it
+        // goes too, or the topology names a missing interface (#204).
+        assert!(!t.impairments.contains_key("a:eth0"), "{:?}", t.impairments);
         assert_eq!(t.networks["lan"].members, vec!["a:eth1".to_string()]);
+        assert!(t.validate().bail().is_ok(), "{:?}", t.validate());
+    }
+
+    #[test]
+    fn remove_link_drops_both_ends() {
+        let mut t = topo();
+        let mut a = args();
+        a.remove_link = vec!["a:eth0".into()];
+        apply_edits(&mut t, &a).unwrap();
+        assert!(t.links.is_empty());
+        assert!(
+            !t.impairments.contains_key("a:eth0") && !t.impairments.contains_key("b:eth0"),
+            "{:?}",
+            t.impairments
+        );
+        assert!(t.validate().bail().is_ok(), "{:?}", t.validate());
     }
 
     #[test]

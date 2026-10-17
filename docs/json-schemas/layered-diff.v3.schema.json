@@ -29,6 +29,13 @@
     "no_op": {
       "type": "boolean"
     },
+    "ops": {
+      "description": "The plan's other work, one description per op: what neither the\nlab graph nor the declarative layers show, such as a container\nre-created because its options changed, or a process restarted\n(#204). Elided when empty; additive, so the marker stays `3`.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "removals": {
       "description": "Removal ops from the plan diff (deleted nodes, links, VRF-table\nroutes, …), one description per op. Elided when empty.",
       "type": "array",

@@ -612,13 +612,20 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         Op::DnsInject { lab } => {
             let entries = crate::dns::generate_hosts_entries(&env.topology);
             crate::dns::inject_hosts(lab, &entries)?;
-            journal.record(Undo::RemoveHosts { lab: lab.clone() });
+            // A section the running lab already had is not this run's to
+            // remove: a failed apply puts the old one back (#204).
+            if !env.dns_injected {
+                journal.record(Undo::RemoveHosts { lab: lab.clone() });
+            }
             env.dns_injected = true;
         }
         Op::DnsNetnsEtc { node: _, ns } => {
             let entries = crate::dns::generate_hosts_entries(&env.topology);
+            let existed = crate::dns::netns_hosts_path(ns).exists();
             crate::dns::create_netns_etc(ns, &entries)?;
-            journal.record(Undo::RemoveNetnsEtc { ns: ns.clone() });
+            if !existed {
+                journal.record(Undo::RemoveNetnsEtc { ns: ns.clone() });
+            }
         }
         Op::StartupDelay { node, delay } => {
             let d = crate::helpers::parse_duration(delay).map_err(|e| {
@@ -677,8 +684,11 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             })?;
             let handle = env.handle(node)?.clone();
             for dir in frr::runtime_dirs(&env.lab, node, &spec.pathspace) {
+                let existed = dir.exists();
                 frr_dir(&dir, ids)?;
-                journal.record(Undo::RemoveDir { path: dir });
+                if !existed {
+                    journal.record(Undo::RemoveDir { path: dir });
+                }
             }
             for (d, text) in &spec.confs {
                 frr_file(&frr::conf_path(&env.lab, node, *d), text, ids)?;
@@ -765,6 +775,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
         Op::WifiDaemon { node, wifi } => {
             let handle = env.handle(node)?.clone();
+            // The lab's other daemons' configs live there too (#204).
+            let had_configs = crate::wifi::config_dir(&env.lab).exists();
             match wifi.mode {
                 crate::types::WifiMode::Ap => {
                     let conf = crate::wifi::write_config(
@@ -776,9 +788,11 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                             &crate::wifi::make_ctrl_dir(&env.lab, node)?,
                         ),
                     )?;
-                    journal.record(Undo::CleanupWifiConfigs {
-                        lab: env.lab.clone(),
-                    });
+                    if !had_configs {
+                        journal.record(Undo::CleanupWifiConfigs {
+                            lab: env.lab.clone(),
+                        });
+                    }
                     let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("hostapd");
                     cmd.args(["-B", "-P", &pidfile, &conf]);
@@ -794,9 +808,11 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                             &crate::wifi::make_ctrl_dir(&env.lab, node)?,
                         ),
                     )?;
-                    journal.record(Undo::CleanupWifiConfigs {
-                        lab: env.lab.clone(),
-                    });
+                    if !had_configs {
+                        journal.record(Undo::CleanupWifiConfigs {
+                            lab: env.lab.clone(),
+                        });
+                    }
                     let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("wpa_supplicant");
                     cmd.args(["-B", "-P", &pidfile, "-i", &wifi.name, "-c", &conf]);
@@ -1085,12 +1101,18 @@ fn exec_op(
     cmd.stderr(std::fs::File::create(&stderr_path)?);
     let pid = if container_id.is_some() {
         // The container is already in its own namespaces; this runs the runtime
-        // binary on the host.
-        cmd.spawn().map(|child| child.id()).map_err(|e| {
-            Error::deploy_failed(format!(
-                "failed to spawn background process in container '{node}' exec[{index}]: {e}"
-            ))
-        })?
+        // binary (`podman exec …`) on the host, detached like every other
+        // background process: a plain `spawn` made it the deploying
+        // process's child, and its zombie once the container went (#204).
+        crate::ns_exec::spawn_detached_path(std::path::Path::new("/proc/self/ns/net"), cmd)
+            .map_err(|e| {
+                Error::nlink(
+                    format!(
+                        "failed to spawn background process in container '{node}' exec[{index}]"
+                    ),
+                    e,
+                )
+            })?
     } else {
         handle.spawn_detached(cmd).map_err(|e| {
             Error::nlink(
@@ -1111,14 +1133,20 @@ fn exec_op(
     env.exec_pids.insert(format!("{node}:{index}"), pid);
     // cgroup v2 limits for namespace nodes (#66); containers get theirs
     // from the runtime.
+    let had_cgroups = crate::cgroup::lab_exists(&env.lab);
     if container_id.is_none()
         && let Some(n) = env.topology.nodes.get(node)
         && let Some(dir) =
             crate::cgroup::ensure_node(&env.lab, node, n.cpu.as_deref(), n.memory.as_deref())?
     {
-        journal.record(Undo::RemoveCgroups {
-            lab: env.lab.clone(),
-        });
+        // Removing the lab's subtree kills every node's processes in it:
+        // only a run that created it may (#204). The kill above takes
+        // this process.
+        if !had_cgroups {
+            journal.record(Undo::RemoveCgroups {
+                lab: env.lab.clone(),
+            });
+        }
         if let Err(e) = crate::cgroup::attach(&dir, pid) {
             tracing::warn!(
                 "node '{node}': cannot move pid {pid} into {}: {e}",

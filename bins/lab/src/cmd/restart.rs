@@ -24,20 +24,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     })?;
     // `docker restart` recreates the container's network namespace, so
     // every veth the deployer moved into it is gone afterwards (issue
-    // #31). Point-to-point links are re-created below; bridge-network
-    // ports are not handled yet, so refuse those up front.
-    if let Some(net) = running
-        .topology()
-        .networks
-        .iter()
-        .find(|(_, n)| n.members.iter().any(|m| m == &node))
-        .map(|(name, _)| name.clone())
-    {
-        return Err(nlink_lab::Error::deploy_failed(format!(
-            "node '{node}' is a member of network '{net}'; restarting would drop its bridge \
-             port and re-attaching network ports is not supported yet (issue #31)"
-        )));
-    }
+    // #31); `reattach_node` re-creates them, its bridge-network ports and
+    // its mgmt veth included, with its sysctls and `run` commands.
     let links = node_link_count(running.topology(), &node);
     let rt =
         nlink_lab::container::Runtime::with_binary(running.runtime_binary().unwrap_or("docker"));
@@ -67,12 +55,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let old_pid = container.pid;
     running.set_container_pid(&node, pid)?;
     running.save_state()?;
-    let mut ops = 0;
-    if links > 0 {
-        // The new namespace has no veths: put the node's links back.
-        let report = nlink_lab::reattach_node(&mut running, &node).await?;
-        ops = report.ops;
-    }
+    // The new namespace has none of what the old one had: its links, and
+    // its sysctls and `run` commands too, even on a node with no links.
+    let ops = nlink_lab::reattach_node(&mut running, &node).await?.ops;
     if ctx.json {
         println!(
             "{}",

@@ -100,8 +100,8 @@ pub use builder::Lab;
 #[allow(deprecated)]
 pub use deploy::apply_diff;
 pub use deploy::{
-    ApplyOptions, ApplyReport, NsRef, Op, Plan, Stage, apply, apply_plan, apply_with,
-    compute_layered_diff, plan_for, reattach_node, restore,
+    ApplyOptions, ApplyReport, NsRef, Op, Plan, Stage, apply, apply_plan, apply_plan_with,
+    apply_with, compute_layered_diff, compute_layered_diff_with, plan_for, reattach_node, restore,
 };
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};

@@ -75,6 +75,21 @@ pub fn declared_params(input: &str) -> Result<Vec<String>> {
         .collect())
 }
 
+/// The `param`s an NLL source declares, with their defaults, in order.
+/// A param without a default must be given (`--set`).
+pub fn declared_param_defs(input: &str) -> Result<Vec<(String, Option<String>)>> {
+    let tokens = lexer::lex(input)?;
+    let ast = parser::parse_tokens(&tokens, input)?;
+    Ok(ast
+        .statements
+        .iter()
+        .filter_map(|s| match s {
+            ast::Statement::Param(p) => Some((p.name.clone(), p.default.clone())),
+            _ => None,
+        })
+        .collect())
+}
+
 /// Parse an NLL string, producing rich diagnostics with source context on error.
 pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
     parse(input).map_err(|e| attach_source(e, input, filename))

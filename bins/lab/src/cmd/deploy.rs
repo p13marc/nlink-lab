@@ -123,6 +123,21 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let start = Instant::now();
     let lab = topo.deploy().await?;
     let elapsed = start.elapsed();
+    // what it came from, for a later `apply` (#234)
+    let source = nlink_lab::state::LabSource {
+        path: std::path::absolute(&topology)
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned()),
+        params: crate::ctx::parse_set_params(&params)?,
+        suffix: if unique {
+            Some(std::process::id().to_string())
+        } else {
+            suffix.clone()
+        },
+    };
+    if let Err(e) = nlink_lab::state::set_source(lab.name(), &source) {
+        tracing::warn!("could not record the source of '{}': {e}", lab.name());
+    }
     let assertions_failed = lab.assertions_failed();
 
     if ctx.json {

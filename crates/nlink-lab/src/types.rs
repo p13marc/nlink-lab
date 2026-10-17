@@ -92,6 +92,12 @@ pub struct Topology {
     /// Performance benchmarks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub benchmarks: Vec<Benchmark>,
+
+    /// The nodes each `site` block declared, by site (#234). The node
+    /// names already carry the site's prefix; this keeps the group, for
+    /// views that draw it. `render` writes the flat topology without it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sites: BTreeMap<String, Vec<String>>,
 }
 
 /// A performance benchmark definition.
@@ -1957,7 +1963,61 @@ impl std::fmt::Display for EndpointRef {
     }
 }
 
+/// What [`Topology::redacted`] puts where a secret was.
+pub const REDACTED: &str = "<redacted>";
+
 impl Topology {
+    /// This topology without its secrets (#234): WireGuard private keys
+    /// (other than `auto`), Wi-Fi passphrases and container `env` values
+    /// become [`REDACTED`]. For every view of a lab that leaves this
+    /// process: the daemon's API, its telemetry, the GUI.
+    pub fn redacted(&self) -> Topology {
+        let mut t = self.clone();
+        for node in t.nodes.values_mut() {
+            for wg in node.wireguard.values_mut() {
+                if let Some(key) = &mut wg.private_key
+                    && key != "auto"
+                {
+                    *key = REDACTED.to_string();
+                }
+            }
+            for wifi in &mut node.wifi {
+                if let Some(pass) = &mut wifi.passphrase {
+                    *pass = REDACTED.to_string();
+                }
+            }
+            if let Some(env) = &mut node.env {
+                for value in env.values_mut() {
+                    *value = REDACTED.to_string();
+                }
+            }
+        }
+        t
+    }
+
+    /// Make the containers' host paths absolute against `base` (#234):
+    /// `config` sources, `overlay` and `env-file`. A relative one meant the
+    /// directory `nlink-lab` ran in, which a daemon does not share.
+    /// `volumes` stay as written: a bare name there is a named volume.
+    pub fn absolutize_host_paths(&mut self, base: &std::path::Path) {
+        let abs = |p: &mut String| {
+            if !std::path::Path::new(p.as_str()).is_absolute() {
+                *p = base.join(p.as_str()).to_string_lossy().into_owned();
+            }
+        };
+        for node in self.nodes.values_mut() {
+            for (host, _) in &mut node.configs {
+                abs(host);
+            }
+            if let Some(dir) = &mut node.overlay {
+                abs(dir);
+            }
+            if let Some(file) = &mut node.env_file {
+                abs(file);
+            }
+        }
+    }
+
     /// Deploy this topology, creating all namespaces and network configuration.
     ///
     /// Validates the topology first, then creates the lab. Returns a
@@ -2048,6 +2108,91 @@ impl Topology {
 #[cfg(test)]
 mod name_hash_tests {
     use super::*;
+
+    #[test]
+    fn a_redacted_topology_has_no_secrets() {
+        // #234: the backend published WireGuard keys and passphrases
+        let t = crate::parser::parse(
+            r#"lab "s"
+node a {
+  wireguard wg0 { key "YNqHbfBQKaGvzefSSS8HAXBFOtFmGWd1mz0UXbb3eUs=" address 10.9.0.1/32 }
+  wifi wlan0 mode ap { ssid "lab" wpa2 "a passphrase" 10.0.0.1/24 }
+}
+node b { wireguard wg0 { key auto address 10.9.0.2/32 } }
+node c image "alpine" { env ["TOKEN=s3cret"] }
+"#,
+        )
+        .unwrap();
+        let r = t.redacted();
+        let json = serde_json::to_string(&r).unwrap();
+        for secret in ["YNqHbfBQ", "a passphrase", "s3cret"] {
+            assert!(!json.contains(secret), "{secret} in {json}");
+        }
+        assert_eq!(
+            r.nodes["b"].wireguard["wg0"].private_key.as_deref(),
+            Some("auto")
+        );
+        assert_eq!(r.nodes["c"].env.as_ref().unwrap()["TOKEN"], REDACTED);
+        // the original is untouched
+        assert_eq!(t.nodes["c"].env.as_ref().unwrap()["TOKEN"], "s3cret");
+    }
+
+    #[test]
+    fn host_paths_become_absolute_but_volumes_stay() {
+        let mut t = crate::parser::parse(
+            r#"lab "p"
+node c image "alpine" {
+  config "conf/a.conf" "/etc/a.conf"
+  config "/abs/b.conf" "/etc/b.conf"
+  overlay "ov"
+  env-file "c.env"
+  volumes ["data:/data"]
+}
+"#,
+        )
+        .unwrap();
+        t.absolutize_host_paths(std::path::Path::new("/work"));
+        let c = &t.nodes["c"];
+        assert_eq!(c.configs[0].0, "/work/conf/a.conf");
+        assert_eq!(c.configs[1].0, "/abs/b.conf");
+        assert_eq!(c.overlay.as_deref(), Some("/work/ov"));
+        assert_eq!(c.env_file.as_deref(), Some("/work/c.env"));
+        assert_eq!(
+            c.volumes.as_ref().unwrap()[0],
+            "data:/data",
+            "a named volume"
+        );
+    }
+
+    #[test]
+    fn site_blocks_are_remembered_with_their_prefixes() {
+        // #234: lowering only prefixed the names
+        let t = crate::parser::parse(
+            r#"lab "s"
+site dc1 {
+  node r
+  site rack1 { node h1 node h2 }
+}
+site dc2 { node r }
+node lone
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            t.sites,
+            BTreeMap::from([
+                (
+                    "dc1".into(),
+                    vec!["dc1-r".into(), "dc1-rack1-h1".into(), "dc1-rack1-h2".into()]
+                ),
+                (
+                    "dc1-rack1".into(),
+                    vec!["dc1-rack1-h1".into(), "dc1-rack1-h2".into()]
+                ),
+                ("dc2".into(), vec!["dc2-r".into()]),
+            ])
+        );
+    }
 
     #[test]
     fn a_suffix_renames_the_prefix_too() {

@@ -51,6 +51,15 @@ pub fn declared_params<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
         .map_err(|e| nll::attach_source(e, &contents, &path.display().to_string()))
 }
 
+/// The `param`s a topology file declares, with their defaults (a form
+/// for them, completion of `--set` keys).
+pub fn declared_param_defs<P: AsRef<Path>>(path: P) -> Result<Vec<(String, Option<String>)>> {
+    let path = path.as_ref();
+    let contents = std::fs::read_to_string(path)?;
+    nll::declared_param_defs(&contents)
+        .map_err(|e| nll::attach_source(e, &contents, &path.display().to_string()))
+}
+
 /// Parse a topology file with import resolution and CLI parameters.
 ///
 /// Parameters are matched against `param` declarations in the file.

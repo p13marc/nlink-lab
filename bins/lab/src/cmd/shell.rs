@@ -28,7 +28,8 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         return Err(nlink_lab::Error::NodeNotFound { name: node });
     }
     if let Some(container) = running.container_for(&node) {
-        let rt = running.runtime_binary().unwrap_or("docker");
+        let runtime = running.runtime();
+        let rt = runtime.binary();
         let status = std::process::Command::new(rt)
             .args(["exec", "-it", &container.id, &shell])
             .stdin(std::process::Stdio::inherit())

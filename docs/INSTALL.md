@@ -191,11 +191,21 @@ sudo nlink-lab exec simple host -- ping -c 3 10.0.0.1
 sudo nlink-lab destroy simple
 ```
 
-State for running labs lives in
-`$XDG_STATE_HOME/nlink-lab/labs/<name>/` (usually
-`~/.local/state/nlink-lab/labs/<name>/`), or
-`/var/lib/nlink-lab/labs/` when there is no `HOME` — a systemd
-unit, for instance.
+State for running labs lives in one place for the whole host,
+`/var/lib/nlink-lab/labs/<name>/` (or under `$NLINK_LAB_STATE_DIR`
+when it is set), whoever deploys. Root writes it. Members of the
+`nlink-lab` group can read it, so `status`, `logs` and the other
+read-only commands work for them without sudo:
+
+```bash
+sudo groupadd --system nlink-lab
+sudo usermod -aG nlink-lab "$USER"     # log in again to pick it up
+```
+
+Labs deployed by nlink-lab 0.13 or older live in the deploying user's
+`~/.local/state/nlink-lab`. `nlink-lab doctor` lists them; destroy them
+with the old version before upgrading, or move them as described in
+the 0.14 CHANGELOG.
 
 ---
 
@@ -242,7 +252,7 @@ sudo nlink-lab destroy --all          # tear down running labs first
 just uninstall                        # removes /usr/local/bin/nlink-lab
 sudo rm -f /usr/local/bin/nlink-lab-backend
 sudo rm -f /usr/local/share/man/man1/nlink-lab.1
-rm -rf ~/.local/state/nlink-lab       # state, logs, snapshots, events
+sudo rm -rf /var/lib/nlink-lab        # state, logs, snapshots, events
 flatpak uninstall --user com.github.p13marc.NlinkLab
 ```
 

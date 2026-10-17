@@ -17,7 +17,31 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   (nlink #398), a WireGuard re-apply that is a true no-op (nlink
   #410–#414).
 
+0.14 also redesigns the CLI and the desktop app, with a host daemon
+under both (#233). Its waves land one by one below.
+
 ### Migration
+
+- **One state root, `/var/lib/nlink-lab`** (#234), for every user:
+  `$NLINK_LAB_STATE_DIR` moves it, and `XDG_STATE_HOME` and `HOME` are
+  no longer read.
+  - Root writes it. When a `nlink-lab` group exists, the root is setgid
+    `2750 root:nlink-lab`, so its members can read every lab; otherwise
+    it is `0700`. Files are `0640`; secrets and the journal are `0600`.
+  - Reading it without permission is now an error ("permission denied …
+    join the `nlink-lab` group"), not an empty list.
+  - Labs deployed by 0.13 or older stay in the deploying user's
+    `~/.local/state/nlink-lab`. `doctor` lists them; loading one says
+    where it is; the orphan reaper never reaps their namespaces. Destroy
+    them with 0.13 before upgrading, or move them with
+    `nlink_lab::state::migrate_lab` (the CLI's `doctor --fix` comes in a
+    later wave).
+- **New error variants** (library API): `Locked`, `Busy`, `Cancelled`,
+  `PermissionDenied`, `Privileges`, `Runtime`, `Unsupported` and
+  `MovedState`. A held lab lock is `Error::Locked` (it was a
+  `DeployFailed` with the same message).
+- **`Topology` has a `sites` field** (library API and JSON), and
+  `LabState` a `source` field; both are skipped when empty.
 
 - **A `qdisc … tbf` block needs a `limit`.** Without one the kernel gives
   the TBF no queue, and it drops every packet. On 0.29 such a qdisc
@@ -463,6 +487,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Added
 
+- **Library groundwork for the 0.14 CLI, daemon and GUI** (#234):
+  - `Topology::redacted()` hides WireGuard keys, Wi-Fi passphrases and
+    container env values, for every view that leaves the process;
+  - `Topology::absolutize_host_paths(base)` makes container `config`,
+    `overlay` and `env-file` paths absolute;
+  - `Topology.sites` keeps which nodes each `site` block declared;
+  - `state::{context_get, context_set}` store a per-user current lab;
+    `state::{set_source, source_of}` what a lab was deployed from (the
+    CLI records it);
+  - `state::{legacy_roots, legacy_labs, migrate_lab}`;
+  - `RunningLab` is `Clone`; `RunningLab::runtime()`;
+  - `parser::declared_param_defs` lists params with their defaults.
+
 - **`rate RATE` on an `iperf3` benchmark test** (#208): iperf3's `-b`. A
   `udp` test without it runs at iperf3's 1 Mbit/s default.
 - **`apply_plan_with` and `compute_layered_diff_with`** (library API,
@@ -592,6 +629,13 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   now carry the set's name.
 
 ### Fixed
+
+- **A lab was invisible to every user but the one who deployed it**
+  (#234): state lived in the deploying user's home, so `sudo deploy`
+  then `status` found nothing, the orphan reaper (`destroy --orphans`)
+  could reap the live lab of another identity (the sudo user's labs
+  were not its own), and each identity drew from its own "host-wide"
+  subnet pool.
 
 - **`exec` and the waits** (#226):
   - `exec --timeout` on a container node stopped the runtime's client

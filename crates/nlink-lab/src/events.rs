@@ -237,10 +237,14 @@ pub fn append(lab: &str, event: &LifecycleEvent) -> Result<()> {
         // O_APPEND: one write per line, so concurrent CLI invocations
         // never interleave inside a record (lines are far below
         // PIPE_BUF).
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
+        let mut f = {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .mode(0o640)
+                .open(&path)?
+        };
         // Rotation under an exclusive lock on the file, and only while
         // the path still names it: two writers both rotated, the second
         // renaming the first one's fresh file over `events.1` (#210).
@@ -294,7 +298,7 @@ mod tests {
     fn with_state_dir<T>(f: impl FnOnce() -> T) -> T {
         let _guard = crate::state::xdg_state_lock_for_tests();
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
         std::fs::create_dir_all(crate::state::state_dir("ev-lab")).unwrap();
         f()
     }

@@ -129,6 +129,45 @@ pub enum Error {
         detail: String,
         path: PathBuf,
     },
+
+    /// Another process holds the lab's lock: a deploy, apply or destroy
+    /// is running (#234). It was a "deploy failed".
+    #[error("lab '{name}' is locked by another process")]
+    Locked { name: String },
+
+    /// The lab is busy with another operation and cannot take this one now.
+    #[error("{0}")]
+    Busy(String),
+
+    /// The operation was cancelled; what it had done was rolled back.
+    #[error("cancelled: {0}")]
+    Cancelled(String),
+
+    /// The state root (or a file in it) cannot be read or written by this
+    /// user (#234). `hint` says what to do: run as root, or join the
+    /// `nlink-lab` group to read.
+    #[error("permission denied: {path}: {hint}")]
+    PermissionDenied { path: PathBuf, hint: String },
+
+    /// The operation needs privileges this process does not have: root,
+    /// or CAP_NET_ADMIN + CAP_SYS_ADMIN.
+    #[error("{0}")]
+    Privileges(String),
+
+    /// The container runtime (docker or podman) failed or is missing.
+    #[error("container runtime: {0}")]
+    Runtime(String),
+
+    /// Something nlink-lab does not do (yet), or not for this kind of node.
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+
+    /// The lab's state is in a per-user root an older nlink-lab used
+    /// (#234): `doctor --fix` moves it into the state root.
+    #[error(
+        "lab '{name}' is in the old state directory {path}: run `sudo nlink-lab doctor --fix` to move it"
+    )]
+    MovedState { name: String, path: PathBuf },
 }
 
 /// Rich NLL parse error with source context for miette rendering.

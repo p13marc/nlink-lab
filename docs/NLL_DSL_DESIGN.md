@@ -284,7 +284,7 @@ When parallel labs share a host, hard-coded subnets risk collision.
 Use `auto/<prefix>` (or just `auto`, which defaults to `/24`)
 anywhere a CIDR is accepted in a `network` block. At deploy time,
 nlink-lab draws a free subnet from a host-wide pool
-(`$XDG_STATE_HOME/nlink-lab/subnet-pool.json`, flock-protected) and
+(`/var/lib/nlink-lab/subnet-pool.json`, flock-protected) and
 substitutes it. Subnets are released when the lab is destroyed.
 
 ```nll-ignore

@@ -77,14 +77,14 @@ say "== doctor / verify (rootless)"
 set +e; "$bin" --json doctor > "$tmp/doctor.json" 2>/dev/null; rc=$?; set -e
 [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || { say "FAIL: doctor exited $rc"; fail=1; }
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "checks" in d and isinstance(d["ok"], bool), d' "$tmp/doctor.json" || { say "FAIL doctor --json"; fail=1; }
-set +e; XDG_STATE_HOME="$tmp/state" "$bin" verify no-such-lab >/dev/null 2>&1; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" verify no-such-lab >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 1 ] || { say "FAIL: verify on a missing lab exited $rc (expected 1)"; fail=1; }
 
 say "== completions"
 for sh in bash zsh fish; do "$bin" completions "$sh" >/dev/null || { say "FAIL completions $sh"; fail=1; }; done
 
 say "== status (no labs) --json is valid JSON"
-XDG_STATE_HOME="$tmp/state" "$bin" status --json | python3 -c 'import json,sys; json.load(sys.stdin)' || { say "FAIL status --json"; fail=1; }
+NLINK_LAB_STATE_DIR="$tmp/state" "$bin" status --json | python3 -c 'import json,sys; json.load(sys.stdin)' || { say "FAIL status --json"; fail=1; }
 
 say "== lsp (stdio JSON-RPC)"
 # EOF on stdin must end the server cleanly, never hang.
@@ -98,11 +98,11 @@ printf 'Content-Length: %d\r\n\r\n%s' "${#req}" "$req" \
 
 say "== top (headless)"
 # `--once` on a missing lab: a clean exit 1, never a hang.
-set +e; XDG_STATE_HOME="$tmp/state" timeout 10 "$bin" top no-such-lab --once >/dev/null 2>&1; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" timeout 10 "$bin" top no-such-lab --once >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 1 ] || { say "FAIL: top --once on a missing lab exited $rc (expected 1)"; fail=1; }
 # Without a tty the interactive form must refuse immediately, not hang or
 # garble the terminal.
-set +e; XDG_STATE_HOME="$tmp/state" timeout 10 "$bin" top no-such-lab </dev/null >/dev/null 2>&1; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" timeout 10 "$bin" top no-such-lab </dev/null >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -ne 124 ] || { say "FAIL: top hung without a tty"; fail=1; }
 "$bin" top --help | grep -- '--once' >/dev/null || { say "FAIL: top --help lacks --once"; fail=1; }
 

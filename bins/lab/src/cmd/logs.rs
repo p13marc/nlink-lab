@@ -77,7 +77,8 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             "node '{node}' is not a container. Logs are only available for container nodes."
         ))
     })?;
-    let rt = running.runtime_binary().unwrap_or("docker");
+    let runtime = running.runtime();
+    let rt = runtime.binary();
     let mut args = vec!["logs".to_string()];
     if follow {
         args.push("--follow".to_string());

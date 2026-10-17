@@ -277,22 +277,83 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
         });
     }
 
-    let base = nlink_lab::state::state_dir("");
-    let base = base
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or(base);
-    let state_ok = writable_dir(&base);
-    checks.push(check(
-        "state dir",
-        state_ok,
-        true,
-        format!(
-            "{}{}",
-            base.display(),
-            if state_ok { "" } else { " is not writable" }
-        ),
-    ));
+    // One state root for every user (#234): root writes it, members of
+    // the `nlink-lab` group read it.
+    let root = nlink_lab::state::root_dir();
+    let group = nlink_lab::state::group_gid();
+    if privileged {
+        let created = nlink_lab::state::ensure_state_root();
+        let ok = created.is_ok() && writable_dir(&root);
+        checks.push(check(
+            "state dir",
+            ok,
+            true,
+            format!(
+                "{}{}",
+                root.display(),
+                if ok {
+                    " is writable"
+                } else {
+                    " is not writable"
+                }
+            ),
+        ));
+    } else {
+        let (status, detail) = match std::fs::read_dir(root.join("labs")) {
+            Ok(_) => (Status::Ok, format!("{} is readable", root.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
+                Status::Info,
+                format!(
+                    "{} does not exist yet (the first deploy makes it)",
+                    root.display()
+                ),
+            ),
+            Err(_) => (
+                Status::Warn,
+                format!(
+                    "{} is not readable: join the `{}` group to see the labs",
+                    root.display(),
+                    nlink_lab::state::GROUP
+                ),
+            ),
+        };
+        checks.push(Check {
+            name: "state dir",
+            status,
+            detail,
+        });
+    }
+    checks.push(Check {
+        name: "state group",
+        status: Status::Info,
+        detail: match group {
+            Some(gid) => format!(
+                "`{}` (gid {gid}): its members can read every lab",
+                nlink_lab::state::GROUP
+            ),
+            None => format!(
+                "no `{}` group: only root can read the labs (groupadd --system {})",
+                nlink_lab::state::GROUP,
+                nlink_lab::state::GROUP
+            ),
+        },
+    });
+    let legacy = nlink_lab::state::legacy_labs();
+    if !legacy.is_empty() {
+        let names: Vec<String> = legacy
+            .iter()
+            .map(|(root, name)| format!("{name} ({})", root.display()))
+            .collect();
+        checks.push(Check {
+            name: "old state dirs",
+            status: Status::Warn,
+            detail: format!(
+                "{} lab(s) deployed by an older nlink-lab, not moved yet: {}",
+                legacy.len(),
+                names.join(", ")
+            ),
+        });
+    }
 
     let labs = nlink_lab::state::list().unwrap_or_default();
     let pending = nlink_lab::state::labs_with_pending_journal();

@@ -145,6 +145,7 @@ fn lower_with_base_dir_and_params(
     // Third pass: lower to Topology
     let mut topology = types::Topology::default();
     topology.lab = lower_lab(&file.lab)?;
+    topology.sites = ctx.sites.borrow().clone();
 
     // Resolve imports before lowering statements
     if !file.imports.is_empty() {
@@ -502,6 +503,12 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
     for key in &imported.directional_impairments {
         main.directional_impairments
             .insert(prefix_endpoint(alias, key));
+    }
+    for (site, members) in &imported.sites {
+        main.sites.insert(
+            format!("{alias}-{site}"),
+            members.iter().map(|n| format!("{alias}-{n}")).collect(),
+        );
     }
 
     // Merge rate limits with prefixed endpoint keys
@@ -1044,6 +1051,10 @@ struct LowerCtx {
     default_rate: Option<ast::RateProps>,
     pools: BTreeMap<String, PoolState>,
     link_profiles: BTreeMap<String, ast::DefaultsDef>,
+    /// The nodes each `site` block declared, by (prefixed) site name: the
+    /// expansion only prefixes names, so nothing else remembers the group
+    /// (#234).
+    sites: std::cell::RefCell<BTreeMap<String, Vec<String>>>,
 }
 
 impl LowerCtx {
@@ -1056,6 +1067,7 @@ impl LowerCtx {
             default_impair: None,
             default_rate: None,
             pools: BTreeMap::new(),
+            sites: Default::default(),
         }
     }
 
@@ -1172,8 +1184,10 @@ impl LowerCtx {
                     }
                 }
                 ast::Statement::Site(site) => {
-                    let prefix = format!("{}-", interpolate(&site.name, vars));
+                    let site_name = interpolate(&site.name, vars);
+                    let prefix = format!("{site_name}-");
                     let saved = vars.clone();
+                    let sites_before = self.sites.borrow().clone();
                     let mut inner = self.expand_into(&site.body, vars)?;
                     *vars = saved.clone();
                     // A cross-reference names a node of the site as the
@@ -1190,10 +1204,42 @@ impl LowerCtx {
                         for n in &local {
                             vars.insert(format!("{SITE_NODE}{n}"), format!("{prefix}{n}"));
                         }
+                        // expanded again: the sites inside are recorded again
+                        *self.sites.borrow_mut() = sites_before.clone();
                         inner = self.expand_into(&site.body, vars)?;
                         *vars = saved;
                     }
-                    result.extend(inner.into_iter().map(|st| prefix_statement(st, &prefix)));
+                    let inner: Vec<ast::Statement> = inner
+                        .into_iter()
+                        .map(|st| prefix_statement(st, &prefix))
+                        .collect();
+                    {
+                        // a site inside this one gets its prefix too
+                        let mut sites = self.sites.borrow_mut();
+                        let nested: Vec<String> = sites
+                            .keys()
+                            .filter(|k| !sites_before.contains_key(*k))
+                            .cloned()
+                            .collect();
+                        for k in nested {
+                            let members = sites.remove(&k).unwrap_or_default();
+                            sites.insert(
+                                format!("{prefix}{k}"),
+                                members
+                                    .into_iter()
+                                    .map(|n| format!("{prefix}{n}"))
+                                    .collect(),
+                            );
+                        }
+                        let members = sites.entry(site_name).or_default();
+                        members.extend(inner.iter().filter_map(|st| match st {
+                            ast::Statement::Node(n) => Some(n.name.clone()),
+                            _ => None,
+                        }));
+                        members.sort();
+                        members.dedup();
+                    }
+                    result.extend(inner);
                 }
                 other => {
                     result.push(expand_statement(other, vars)?);
@@ -6183,6 +6229,21 @@ node app image "myapp" {
         );
         assert_eq!(topo.nodes["app"].depends_on, vec!["db"]);
         assert!(topo.nodes["db"].depends_on.is_empty());
+    }
+
+    #[test]
+    fn declared_params_come_with_their_defaults() {
+        let defs = crate::parser::nll::declared_param_defs(
+            "param delay default 10ms\nparam loss\nlab \"p\"\nnode a\n",
+        )
+        .unwrap();
+        assert_eq!(
+            defs,
+            vec![
+                ("delay".to_string(), Some("10ms".to_string())),
+                ("loss".to_string(), None),
+            ]
+        );
     }
 
     #[test]

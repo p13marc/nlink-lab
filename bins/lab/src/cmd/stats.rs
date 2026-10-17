@@ -62,7 +62,8 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     let mut container_table = String::new();
     if !containers.is_empty() {
-        let rt = running.runtime_binary().unwrap_or("docker");
+        let runtime = running.runtime();
+        let rt = runtime.binary();
         let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
         let format = "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}";
         let output = std::process::Command::new(rt)

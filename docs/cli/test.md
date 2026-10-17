@@ -26,6 +26,15 @@ Options:
       --fail-fast
           Stop on first failure
 
+      --scenarios
+          Also run every `scenario` block of each topology after its `validate` assertions: each action is one more result
+
+      --benchmarks
+          Also run every `benchmark` block: each test is one more result
+
+      --keep
+          Leave a lab whose test failed deployed, for inspection (destroy it with `nlink-lab destroy LAB`)
+
   -h, --help
           Print help
 ```

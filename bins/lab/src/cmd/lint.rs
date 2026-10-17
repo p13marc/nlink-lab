@@ -47,10 +47,10 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     } = args;
     if list_rules {
         if ctx.json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(nlink_lab::LINT_RULE_IDS)?
-            );
+            crate::output::emit_json(
+                ctx,
+                &serde_json::json!({ "rules": nlink_lab::LINT_RULE_IDS }),
+            )?;
         } else {
             for id in nlink_lab::LINT_RULE_IDS {
                 println!("{id}");
@@ -70,13 +70,13 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let topo = parse_topology(&topology, &params)?;
     let findings = nlink_lab::lint(&topo, &allow);
     if ctx.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&LintReport {
+        crate::output::emit_json(
+            ctx,
+            &LintReport {
                 lab: &topo.lab.name,
                 findings: &findings,
-            })?
-        );
+            },
+        )?;
     } else if findings.is_empty() {
         if !ctx.quiet {
             println!("Topology {:?}: no lint findings", topo.lab.name);

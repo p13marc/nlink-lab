@@ -1,6 +1,6 @@
 //! The JSON schemas `docs-gen --schemas` writes (`docs/json-schemas/`).
 
-use super::{DryRunReport, RuleInfo, ValidateReport};
+use super::{DryRunReport, ValidateReport};
 
 /// The schema of what nlink-lab *prints* as `T`: generated for the
 /// serialize contract, so a field it leaves out when empty
@@ -21,8 +21,14 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             "layered-diff.v3",
             output_schema_for::<DryRunReport<'static>>(),
         ),
-        ("validate", output_schema_for::<ValidateReport<'static>>()),
-        ("validate-rules", output_schema_for::<Vec<RuleInfo>>()),
+        (
+            "validate",
+            output_schema_for::<super::Document<'static, ValidateReport<'static>>>(),
+        ),
+        (
+            "validate-rules",
+            output_schema_for::<super::Document<'static, super::RuleList>>(),
+        ),
         (
             "deploy",
             output_schema_for::<super::Document<'static, crate::cmd::deploy::DeployReport>>(),
@@ -69,7 +75,7 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
         ),
         (
             "lint",
-            output_schema_for::<crate::cmd::lint::LintReport<'static>>(),
+            output_schema_for::<super::Document<'static, crate::cmd::lint::LintReport<'static>>>(),
         ),
         // the daemon API (docs/API.md): what clients send and receive
         (

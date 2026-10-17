@@ -77,7 +77,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             warnings: result.warnings().count(),
             issues: result.issues(),
         };
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        crate::output::emit_json(ctx, &report)?;
         if result.has_errors() {
             set_exit_code(EXIT_VALIDATION);
         }
@@ -141,8 +141,7 @@ fn print_rules(ctx: &Ctx) -> nlink_lab::Result<()> {
         })
         .collect();
     if ctx.json {
-        println!("{}", serde_json::to_string_pretty(&rules)?);
-        return Ok(());
+        return crate::output::emit_json(ctx, &crate::output::RuleList { rules });
     }
     println!("{:<36} SEVERITY", "RULE");
     for r in &rules {

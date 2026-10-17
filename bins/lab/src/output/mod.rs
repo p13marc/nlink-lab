@@ -178,6 +178,12 @@ pub fn print_layered(layered: &nlink_lab::diff::LayeredDiff, removals: &[String]
     }
 }
 
+/// `validate --list-rules --json`.
+#[derive(serde::Serialize, schemars::JsonSchema)]
+pub struct RuleList {
+    pub rules: Vec<RuleInfo>,
+}
+
 /// `validate --json` envelope.
 #[derive(serde::Serialize, schemars::JsonSchema)]
 #[schemars(title = "nlink-lab validate --json")]

@@ -41,6 +41,10 @@ pub const REMOVED: &[Removed] = &[
         instead: "nlink-lab node restart NODE",
     },
     Removed {
+        name: "graph",
+        instead: "nlink-lab render --diagram dot FILE (or --diagram mermaid)",
+    },
+    Removed {
         name: "watch",
         instead: "nlink-lab events -f --source drift",
     },
@@ -183,6 +187,21 @@ pub const REMOVED_FLAGS: &[RemovedFlag] = &[
         command: "impair",
         flag: "--in-rate",
         instead: "nlink-lab impair EP rate VALUE --dir in",
+    },
+    RemovedFlag {
+        command: "render",
+        flag: "--dot",
+        instead: "nlink-lab render --diagram dot FILE",
+    },
+    RemovedFlag {
+        command: "render",
+        flag: "--mermaid",
+        instead: "nlink-lab render --diagram mermaid FILE",
+    },
+    RemovedFlag {
+        command: "render",
+        flag: "--ascii",
+        instead: "nlink-lab render --diagram ascii FILE",
     },
 ];
 

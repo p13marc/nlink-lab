@@ -64,7 +64,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     if check {
         if ctx.json {
-            println!("{}", serde_json::to_string_pretty(&changed)?);
+            crate::output::emit_json(ctx, &serde_json::json!({ "changed": changed }))?;
         } else {
             for p in &changed {
                 println!("{}", p.display());

@@ -64,12 +64,12 @@ say "== --color"
 { "$bin" validate "$tmp/bad1.nll" 2>&1 || true; } | grep $'\e\[' >/dev/null && { say "FAIL: colour on a pipe"; fail=1; }
 { "$bin" --color never validate "$tmp/bad1.nll" 2>&1 || true; } | grep $'\e\[' >/dev/null && { say "FAIL: --color never colours"; fail=1; }
 
-say "== validate --json / graph --mermaid / exit codes"
+say "== validate --json / render --diagram / exit codes"
 "$bin" --json validate examples/simple.nll | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["valid"] is True, d' || { say "FAIL validate --json"; fail=1; }
 set +e; "$bin" --json validate "$tmp/bad1.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: validate --json on a bad file exited $rc (expected 2)"; fail=1; }
-"$bin" graph --mermaid examples/simple.nll | grep '^graph LR' >/dev/null || { say "FAIL graph --mermaid"; fail=1; }
-"$bin" render --mermaid examples/cookbook/satellite-mesh.nll | grep 'net_' >/dev/null || { say "FAIL render --mermaid"; fail=1; }
+"$bin" render --diagram mermaid examples/simple.nll | grep '^graph LR' >/dev/null || { say "FAIL render --diagram mermaid"; fail=1; }
+"$bin" render --diagram mermaid examples/cookbook/satellite-mesh.nll | grep 'net_' >/dev/null || { say "FAIL: render --diagram mermaid ignores networks"; fail=1; }
 "$bin" validate --list-rules | grep 'unreferenced-node *warning' >/dev/null || { say "FAIL validate --list-rules"; fail=1; }
 printf 'lab "w"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\nnode lonely\n' > "$tmp/warn.nll"
 set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
@@ -77,7 +77,7 @@ set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 "$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep WARN >/dev/null && { say "FAIL: --allow did not silence the warning"; fail=1; }
 set +e; "$bin" validate --allow no-such-rule "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 1 ] || { say "FAIL: validate --allow of an unknown rule exited $rc (expected 1)"; fail=1; }
-"$bin" graph examples/cookbook/satellite-mesh.nll | grep 'net:' >/dev/null || { say "FAIL: graph ignores network blocks"; fail=1; }
+"$bin" render --diagram dot examples/cookbook/satellite-mesh.nll | grep 'net:' >/dev/null || { say "FAIL: render --diagram dot ignores network blocks"; fail=1; }
 
 say "== fmt"
 printf 'lab "f"\nnode   a{forward ipv4}\n' | "$bin" fmt - | grep '^node a { forward ipv4 }$' >/dev/null || { say "FAIL fmt -"; fail=1; }

@@ -8320,3 +8320,53 @@ async fn wait_all_reports_progress_and_stops_on_cancel(lab: RunningLab) {
     assert!(matches!(r, Err(nlink_lab::Error::Cancelled(_))), "{r:?}");
     assert!(started.elapsed() < Duration::from_secs(5));
 }
+
+/// C7: `test --scenarios` runs every scenario after the assertions, each
+/// action one more result; `keep_failed` leaves a failed lab deployed.
+#[tokio::test]
+async fn a_test_runs_scenarios_and_keeps_a_failed_lab() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: needs root");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let name = format!("tsc-{}", std::process::id());
+    let file = dir.path().join("t.nll");
+    std::fs::write(
+        &file,
+        format!(
+            "lab \"{name}\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}\n\
+             scenario \"flap\" {{\n  at 0s {{ down a:eth0 }}\n  at 100ms {{ up a:eth0 }}\n  at 200ms {{ exec a \"false\" }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    let _guard = LabCleanup { name: name.clone() };
+    let opts = nlink_lab::test_runner::TestOptions {
+        scenarios: true,
+        benchmarks: false,
+        keep_failed: true,
+    };
+    let r = nlink_lab::test_runner::run_test_opts(&file, &[], opts, &nlink_lab::OpCtx::default())
+        .await
+        .expect("test ran");
+    let rows: Vec<(&str, bool)> = r
+        .assertions
+        .iter()
+        .map(|a| (a.description.as_str(), a.passed))
+        .collect();
+    assert!(
+        rows.iter()
+            .any(|(d, ok)| d.starts_with("scenario flap: down a:eth0") && *ok),
+        "{rows:?}"
+    );
+    // `exec a false` fails: the test fails, and the lab is kept
+    assert!(!r.passed, "{rows:?}");
+    assert_eq!(r.kept.as_deref(), Some(name.as_str()));
+    assert!(nlink_lab::state::exists(&name));
+    std::mem::forget(_guard);
+    nlink_lab::RunningLab::load(&name)
+        .unwrap()
+        .destroy()
+        .await
+        .unwrap();
+}

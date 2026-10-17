@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "nlink-lab lint --json",
-  "description": "`lint --json` envelope.",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
   "type": "object",
   "properties": {
     "findings": {
@@ -12,9 +12,15 @@
     },
     "lab": {
       "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
     }
   },
   "required": [
+    "schema_version",
     "lab",
     "findings"
   ],

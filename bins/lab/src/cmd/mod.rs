@@ -20,7 +20,6 @@ pub mod events;
 pub mod exec;
 pub mod export;
 pub mod fmt;
-pub mod graph;
 pub mod impair;
 pub mod init;
 pub mod ip;
@@ -75,7 +74,6 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Scenario(args) => scenario::run(ctx, args).await,
         Commands::Benchmark(args) => benchmark::run(ctx, args).await,
         Commands::DocsGen(args) => docs_gen::run(ctx, args),
-        Commands::Graph(args) => graph::run(ctx, args),
         Commands::Render(args) => render::run(ctx, args),
         Commands::Shell(args) => shell::run(ctx, args),
         Commands::Ps(args) => ps::run(ctx, args),

@@ -301,6 +301,27 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   additive under `apply --check --json`'s `topology`). `diff --json`
   prints the whole diff plus `total_changes`, instead of a summary with
   link counts.
+- **Containers** (#217):
+  - `cap-add` adds to the default `NET_ADMIN` and `NET_RAW` instead of
+    replacing them, and `cap-drop` removes a default (`cap-drop [ALL]`
+    drops both). A `cap-drop` of a default failed on podman ("cannot be
+    dropped and added") and did nothing on docker;
+  - the hostname is the node name unless `hostname` sets one (it was the
+    container id);
+  - `pull never` fails the deploy when the image is absent (the runtime
+    pulled it), and a `pull` other than `always`, `missing` or `never`
+    is an error (new rule `container-pull`);
+  - an `env` entry without `=` is an error; it was dropped;
+  - a key other than `interval`, `timeout` or `retries` in a
+    `healthcheck { … }` block is an error; it was skipped.
+- **OSPF covers a router's own interfaces** (#217): a loopback or dummy
+  with an IPv4 address joins the area as passive, so it is advertised,
+  and a VLAN, bond or VXLAN interface joins as a normal one. Only link
+  and network ends did. The `ospfd` config of a router with such an
+  interface changes, so the first `apply` after upgrading restarts its
+  FRR daemons once.
+- **BGP `network`s and neighbours that are IPv6 go under `address-family
+  ipv6 unicast`** (#217), not `ipv4 unicast`, where FRR refused them.
 - **OpenMetrics: interface series lose the `state` label** (#218); the
   new `nlink_lab_iface_up` gauge carries it. A link going down changed
   the series identity of its counters, which broke `rate()`.
@@ -513,6 +534,29 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **A container's healthcheck ran on the host** (#217), in the
+  container's network namespace only, with the host's binaries:
+  `examples/container-lifecycle.nll` timed out on a host without
+  `pg_isready`. It runs inside the container now. Its `retries` was
+  parsed and dropped; it now ends the wait after that many failed probes.
+  A probe that hangs is killed at the timeout, which it held the deploy
+  past.
+- **`depends-on` did not order container creation** (#217): containers
+  were created in name order. A node's `exec`, `run` and healthcheck were
+  already ordered; its `cmd` still starts when its container is created
+  (documented).
+- **The FRR convergence wait counted adjacencies that never form**
+  (#217): a BGP-only router, and every other router on a shared segment,
+  where two DROthers stay 2-Way. On a bridge of three OSPF routers the
+  deploy waited its 30 s and warned. It now waits for the peer of a
+  point-to-point segment and for two (DR and BDR) on a shared one.
+- **Docs** (#217): the USER_GUIDE's container example used `cmd "sleep
+  infinity"`, one program name; the healthcheck cookbook described
+  defaults, logs and ordering nlink-lab does not have, and its example
+  ran `pip install` in a lab without internet.
+- **`examples/cookbook/multi-tenant-wan.nll` retries its assertions**: a
+  `reach` is one ping, and when the WAN's 0.3 % loss took the first
+  WireGuard handshake, the next came 5 s later.
 - **`fmt -w` and the LSP's format-on-save deleted `//` comments** (#218),
   and **a CRLF file did not parse** (#218): the lexer took `\r` for an
   unexpected character.

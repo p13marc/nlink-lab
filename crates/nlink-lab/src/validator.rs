@@ -95,6 +95,7 @@ pub const RULE_IDS: &[&str] = &[
     "assertion-endpoint-exists",
     "container-requires-image",
     "empty-image",
+    "container-pull",
     "depends-on-exists",
     "depends-on-cycle",
     "loss-model-excludes-correlation",
@@ -3489,6 +3490,23 @@ fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIss
         }
     }
 
+    // Container option values the runtime would misread (#217)
+    for (node_name, node) in &topology.nodes {
+        if node.image.is_none() {
+            continue;
+        }
+        if let Some(pull) = &node.pull
+            && !matches!(pull.as_str(), "always" | "missing" | "never")
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "container-pull",
+                message: format!("pull '{pull}' is not one of always, missing, never"),
+                location: Some(format!("nodes.{node_name}.pull")),
+            });
+        }
+    }
+
     // Validate depends-on references
     for (node_name, node) in &topology.nodes {
         for dep in &node.depends_on {
@@ -4236,6 +4254,22 @@ link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                 .errors()
                 .any(|e| e.rule == "container-requires-image")
         );
+    }
+
+    #[test]
+    fn container_pull_values_are_checked() {
+        // #217: `pull allways` validated, and the runtime pulled anyway
+        let r = parse_and_validate(
+            r#"lab "c"
+node a image "alpine" { pull allways }
+node c image "alpine" { pull never }
+node d image "alpine" { pull missing }
+"#,
+        );
+        let errors: Vec<_> = r.errors().filter(|e| e.rule == "container-pull").collect();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].message.contains("'allways'"), "{errors:?}");
+        assert_eq!(errors[0].location.as_deref(), Some("nodes.a.pull"));
     }
 
     #[test]

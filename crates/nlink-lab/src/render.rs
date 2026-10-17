@@ -947,13 +947,19 @@ fn render_node_body(out: &mut String, node: &Node) -> Result<()> {
     }
     if let Some(hc) = &node.healthcheck {
         write!(out, "  healthcheck {}", nll_string(hc)?).unwrap();
-        if node.healthcheck_interval.is_some() || node.healthcheck_timeout.is_some() {
+        if node.healthcheck_interval.is_some()
+            || node.healthcheck_timeout.is_some()
+            || node.healthcheck_retries.is_some()
+        {
             out.push_str(" {");
             if let Some(iv) = &node.healthcheck_interval {
                 write!(out, " interval {}", lit_value(iv)?).unwrap();
             }
             if let Some(to) = &node.healthcheck_timeout {
                 write!(out, " timeout {}", lit_value(to)?).unwrap();
+            }
+            if let Some(r) = node.healthcheck_retries {
+                write!(out, " retries {r}").unwrap();
             }
             out.push_str(" }");
         }
@@ -2601,7 +2607,7 @@ node app image "python:3-slim" {
   pull missing
   exec "pip install x"
   exec "echo done"
-  healthcheck "curl -f localhost" { interval 5s timeout 3s }
+  healthcheck "curl -f localhost" { interval 5s timeout 3s retries 4 }
   startup-delay 3s
   env-file "configs/app.env"
   config "./nginx.conf" "/etc/nginx/nginx.conf"
@@ -2630,6 +2636,7 @@ node db image "postgres:16" {
         let app = &topo2.nodes["app"];
         assert_eq!(app.env.as_ref().unwrap()["A"], "b=c");
         assert_eq!(app.cap_drop, vec!["SYS_ADMIN"]);
+        assert_eq!(app.healthcheck_retries, Some(4), "{rendered}");
     }
 
     #[test]

@@ -802,6 +802,7 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     let mut healthcheck = None;
     let mut healthcheck_interval = None;
     let mut healthcheck_timeout = None;
+    let mut healthcheck_retries = None;
     let mut startup_delay = None;
     let mut env_file = None;
     let mut configs = Vec::new();
@@ -874,12 +875,16 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
                         } else if eat_kw(tokens, pos, "timeout") {
                             healthcheck_timeout = Some(expect_duration(tokens, pos)?);
                         } else if eat_kw(tokens, pos, "retries") {
-                            // retries stored in timeout field for now
-                            // (can be split later)
-                            let _ = parse_value(tokens, pos)?;
+                            // parsed and dropped before (#217)
+                            healthcheck_retries = Some(expect_u32(tokens, pos, "retries", 1)?);
                         } else {
-                            // Skip unknown properties
-                            let _ = parse_value(tokens, pos)?;
+                            // an unknown key was skipped silently (#217)
+                            return Err(err(
+                                tokens,
+                                *pos,
+                                "expected interval, timeout or retries in a healthcheck block"
+                                    .into(),
+                            ));
                         }
                     }
                 }
@@ -938,6 +943,7 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         healthcheck,
         healthcheck_interval,
         healthcheck_timeout,
+        healthcheck_retries,
         startup_delay,
         env_file,
         configs,

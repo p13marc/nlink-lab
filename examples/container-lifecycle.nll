@@ -14,7 +14,8 @@ node router : router {
   cmd ["sleep", "infinity"]
 }
 
-/* Database: starts first, has health check */
+/* Database: created first; the deploy waits for its health check,
+   which runs inside the container. */
 node db image "postgres:16" {
   env ["POSTGRES_PASSWORD=secret"]
   cpu 1
@@ -23,14 +24,16 @@ node db image "postgres:16" {
   startup-delay 3s
 }
 
-/* App: depends on database */
+/* App: created after db. Its `cmd` starts with the container; its
+   `exec` runs only once db is healthy. The lab has no internet, so a
+   setup step cannot download anything. */
 node app image "python:3-slim" {
   cmd ["python", "-m", "http.server", "8080"]
   /* A workdir must already exist in the image: docker creates a
      missing one, podman refuses with "workdir does not exist". */
   workdir "/tmp"
   depends-on [db]
-  exec "pip install psycopg2-binary"
+  exec "echo db is up > /tmp/ready"
 }
 
 link router:eth0 -- db:eth0 { subnet 10.0.1.0/24 }

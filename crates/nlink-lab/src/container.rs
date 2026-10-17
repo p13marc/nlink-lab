@@ -68,6 +68,40 @@ pub struct CreateOpts {
     pub overlay: Option<String>,
 }
 
+/// The capabilities a container is created with: privileged, or
+/// NET_ADMIN and NET_RAW plus `cap-add`, minus `cap-drop`.
+///
+/// A `cap-add` replaced the two defaults, and a dropped default was still
+/// added, so `cap-drop [NET_RAW]` did nothing on docker (#217). `ALL` in
+/// `cap-drop` drops the defaults too; `cap-add` still adds.
+fn capability_args(opts: &CreateOpts) -> Vec<String> {
+    if opts.privileged {
+        return vec!["--privileged".to_string()];
+    }
+    // the runtimes take `net_raw` and `CAP_NET_RAW` alike
+    let norm = |c: &String| {
+        let c = c.to_ascii_uppercase();
+        c.strip_prefix("CAP_").map(str::to_string).unwrap_or(c)
+    };
+    let dropped: Vec<String> = opts.cap_drop.iter().map(norm).collect();
+    let drop_all = dropped.iter().any(|c| c == "ALL");
+    let mut caps: Vec<String> = Vec::new();
+    let defaults = ["NET_ADMIN", "NET_RAW"].map(String::from);
+    for cap in defaults.iter().filter(|_| !drop_all).chain(&opts.cap_add) {
+        let cap = norm(cap);
+        if !dropped.contains(&cap) && !caps.contains(&cap) {
+            caps.push(cap);
+        }
+    }
+    let mut args: Vec<String> = opts
+        .cap_drop
+        .iter()
+        .map(|c| format!("--cap-drop={c}"))
+        .collect();
+    args.extend(caps.iter().map(|c| format!("--cap-add={c}")));
+    args
+}
+
 /// Make a host path absolute, resolving relatives against the current directory.
 ///
 /// Docker and podman read a **relative** `--volume` source as the name of a
@@ -173,16 +207,19 @@ impl Runtime {
         &self.binary
     }
 
-    /// Pull an image if not already present locally.
-    pub fn ensure_image(&self, image: &str) -> Result<()> {
-        // Check if image exists locally
-        let check = Command::new(&self.binary)
+    /// Whether the image is present locally.
+    pub fn has_image(&self, image: &str) -> bool {
+        Command::new(&self.binary)
             .args(["image", "inspect", image])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status();
+            .status()
+            .is_ok_and(|s| s.success())
+    }
 
-        if check.is_ok_and(|s| s.success()) {
+    /// Pull an image if not already present locally.
+    pub fn ensure_image(&self, image: &str) -> Result<()> {
+        if self.has_image(image) {
             return Ok(());
         }
 
@@ -248,22 +285,7 @@ impl Runtime {
             "--network=none".to_string(),
         ];
 
-        // Capabilities: privileged OR fine-grained caps (default: NET_ADMIN + NET_RAW)
-        if opts.privileged {
-            args.push("--privileged".to_string());
-        } else {
-            let caps = if opts.cap_add.is_empty() {
-                vec!["NET_ADMIN".to_string(), "NET_RAW".to_string()]
-            } else {
-                opts.cap_add.clone()
-            };
-            for cap in &caps {
-                args.push(format!("--cap-add={cap}"));
-            }
-            for cap in &opts.cap_drop {
-                args.push(format!("--cap-drop={cap}"));
-            }
-        }
+        args.extend(capability_args(opts));
 
         // Resource limits
         if let Some(cpu) = &opts.cpu {
@@ -456,6 +478,43 @@ fn parse_pid(raw: &str, id: &str) -> Result<u32> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn capabilities_are_the_defaults_plus_adds_minus_drops() {
+        let args = |add: &[&str], drop: &[&str]| {
+            super::capability_args(&super::CreateOpts {
+                cap_add: add.iter().map(|s| s.to_string()).collect(),
+                cap_drop: drop.iter().map(|s| s.to_string()).collect(),
+                ..Default::default()
+            })
+        };
+        assert_eq!(args(&[], &[]), ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"]);
+        // an add keeps the defaults
+        assert_eq!(
+            args(&["SYS_ADMIN"], &[]),
+            [
+                "--cap-add=NET_ADMIN",
+                "--cap-add=NET_RAW",
+                "--cap-add=SYS_ADMIN"
+            ]
+        );
+        // a dropped default is not added back
+        assert_eq!(
+            args(&[], &["cap_net_raw"]),
+            ["--cap-drop=cap_net_raw", "--cap-add=NET_ADMIN"]
+        );
+        // ALL drops the defaults, an add still adds
+        assert_eq!(
+            args(&["NET_ADMIN"], &["ALL"]),
+            ["--cap-drop=ALL", "--cap-add=NET_ADMIN"]
+        );
+        let privileged = super::capability_args(&super::CreateOpts {
+            privileged: true,
+            cap_drop: vec!["NET_RAW".into()],
+            ..Default::default()
+        });
+        assert_eq!(privileged, ["--privileged"]);
+    }
 
     #[test]
     fn overlay_mounts_maps_each_top_level_entry_to_root() {

@@ -6970,6 +6970,8 @@ async fn frr_ospf_converges_and_apply_restarts_daemons() {
         route.contains("proto ospf") || route.contains("proto 188"),
         "expected an OSPF-installed route: {route}"
     );
+    // a loopback is in the area too: only link ends were (#217)
+    wait_route(&lab, "r2", "1.1.1.1", "via 10.0.12.1", 60).await;
     let mut ok = false;
     for _ in 0..10 {
         let ping = lab.exec("h1", "ping", &["-c1", "-W2", "10.3.0.2"]).unwrap();
@@ -7752,4 +7754,79 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
+}
+
+/// #217: a container's healthcheck ran on the host (only in the container's
+/// network namespace), its `retries` were dropped, `pull never` let the
+/// runtime pull, a `cap-drop` of a default capability was added back, and
+/// the hostname was the container id instead of the node name.
+#[tokio::test]
+async fn container_options_reach_the_container() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("kco-{}", std::process::id());
+    let parse = |name: &str, node: &str| {
+        nlink_lab::parser::parse(&format!(
+            "lab \"{name}\" {{ runtime \"podman\" }}\n{node}\n"
+        ))
+        .unwrap()
+    };
+    // /etc/alpine-release exists in the container, not on the host
+    let topo = parse(
+        &lab_name,
+        r#"node c image "alpine:latest" cmd ["sleep", "infinity"] {
+  cap-drop [NET_RAW]
+  healthcheck "test -f /etc/alpine-release" { interval 200ms timeout 20s }
+}"#,
+    );
+    let lab = topo
+        .deploy()
+        .await
+        .expect("deploy failed: the healthcheck did not run in the container");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let hostname = lab.exec("c", "hostname", &[]).unwrap().stdout;
+    assert_eq!(hostname.trim(), "c");
+    let status = lab.exec("c", "cat", &["/proc/self/status"]).unwrap().stdout;
+    let cap_eff = status
+        .lines()
+        .find_map(|l| l.strip_prefix("CapEff:"))
+        .map(|v| u64::from_str_radix(v.trim(), 16).unwrap())
+        .unwrap();
+    assert_eq!(cap_eff >> 12 & 1, 1, "NET_ADMIN kept: {cap_eff:x}");
+    assert_eq!(cap_eff >> 13 & 1, 0, "NET_RAW dropped: {cap_eff:x}");
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+
+    // two failed probes end the wait, long before the timeout
+    let failing = parse(
+        &format!("{lab_name}-f"),
+        r#"node c image "alpine:latest" cmd ["sleep", "infinity"] {
+  healthcheck "false" { interval 200ms timeout 60s retries 2 }
+}"#,
+    );
+    let started = std::time::Instant::now();
+    let err = failing
+        .deploy()
+        .await
+        .err()
+        .expect("deploy passed")
+        .to_string();
+    assert!(err.contains("failed 2 time(s)"), "{err}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(30));
+
+    let absent = parse(
+        &format!("{lab_name}-p"),
+        r#"node c image "localhost/nlink-lab-absent:none" { pull never }"#,
+    );
+    let err = absent
+        .deploy()
+        .await
+        .err()
+        .expect("deploy passed")
+        .to_string();
+    assert!(err.contains("not present locally"), "{err}");
 }

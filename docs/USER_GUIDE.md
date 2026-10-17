@@ -707,7 +707,7 @@ See `examples/vrf-multitenant.nll`.
 ### 10. Containers
 
 ```nll-ignore
-node router image "alpine:latest" cmd "sleep infinity"
+node router image "alpine:latest" cmd ["sleep", "infinity"]
 node host { route default via 10.0.0.1 }
 
 link router:eth0 -- host:eth0 {
@@ -716,6 +716,22 @@ link router:eth0 -- host:eth0 {
 ```
 
 Nodes with `image` run as containers (Docker or Podman) instead of bare namespaces. Container nodes and namespace nodes can be mixed freely.
+
+A `cmd` string is one program name: `cmd "sleep infinity"` looks for a binary
+called `sleep infinity`, so split the words into a list (the validator warns).
+
+| key | effect |
+|---|---|
+| `cap-add [...]` / `cap-drop [...]` | added to / removed from the default `NET_ADMIN` and `NET_RAW`; `cap-drop [ALL]` drops the defaults too |
+| `hostname "NAME"` | defaults to the node name |
+| `pull always\|missing\|never` | `missing` (the default) pulls an absent image, `never` fails the deploy instead |
+| `env ["KEY=VALUE", ...]` | every entry needs a `=` |
+| `healthcheck "CMD" { interval 1s timeout 30s retries N }` | runs `sh -c CMD` inside the container every `interval` until it exits 0; the deploy fails after `timeout` in all, or after `retries` failed probes |
+| `depends-on [a, b]` | creates the container after `a` and `b`, and runs its `exec`/`run` commands and healthcheck after theirs passed |
+
+`depends-on` cannot hold back a container's own `cmd`: it starts when the
+container is created, before the lab's links exist. Start what needs a
+dependency with `exec` or `run` instead, or make it retry.
 
 **Getting host files into a container**
 

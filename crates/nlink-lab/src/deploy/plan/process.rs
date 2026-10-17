@@ -8,7 +8,11 @@ use std::collections::BTreeMap;
 /// `configs`, `env_file` and `overlay` are passed straight through for the
 /// runtime layer to expand: all three need host I/O (path absolutisation and, for
 /// `overlay`, a directory listing) and this planner is pure (#111).
-pub(crate) fn build_create_opts(node: &crate::types::Node, extra_hosts: &[String]) -> CreateOpts {
+pub(crate) fn build_create_opts(
+    name: &str,
+    node: &crate::types::Node,
+    extra_hosts: &[String],
+) -> CreateOpts {
     CreateOpts {
         cmd: node.cmd.clone(),
         env: node.env.clone().unwrap_or_default(),
@@ -19,7 +23,12 @@ pub(crate) fn build_create_opts(node: &crate::types::Node, extra_hosts: &[String
         cap_add: node.cap_add.clone(),
         cap_drop: node.cap_drop.clone(),
         entrypoint: node.entrypoint.clone(),
-        hostname: node.hostname.clone(),
+        // the node name, as documented: none was passed, and the
+        // container was named after its id (#217)
+        hostname: node
+            .hostname
+            .clone()
+            .or_else(|| is_hostname(name).then(|| name.to_string())),
         workdir: node.workdir.clone(),
         labels: node.labels.clone(),
         extra_hosts: extra_hosts.to_vec(),
@@ -27,6 +36,15 @@ pub(crate) fn build_create_opts(node: &crate::types::Node, extra_hosts: &[String
         env_file: node.env_file.clone(),
         overlay: node.overlay.clone(),
     }
+}
+
+/// An RFC 1123 host name label, which the runtimes accept for `--hostname`.
+fn is_hostname(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 63
+        && !name.starts_with('-')
+        && !name.ends_with('-')
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
 /// Topologically sort nodes by `depends_on` (Kahn's algorithm).

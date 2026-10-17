@@ -210,6 +210,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
                 cmd: cmd.clone(),
                 interval: node.healthcheck_interval.clone(),
                 timeout: node.healthcheck_timeout.clone(),
+                retries: node.healthcheck_retries,
             });
         }
     }
@@ -289,6 +290,35 @@ link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
 "#;
 
     #[test]
+    fn containers_are_created_in_depends_on_order() {
+        // #217: created in name order, `app` before the `db` it depends on
+        let p = plan_of(
+            r#"lab "t"
+node app image "alpine" { depends-on [db] healthcheck "true" { retries 3 } }
+node db image "alpine" { healthcheck "true" }
+"#,
+        );
+        let created: Vec<&str> = p
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::CreateContainer { node, .. } => Some(node.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(created, ["db", "app"]);
+        let checks: Vec<(&str, Option<u32>)> = p
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Healthcheck { node, retries, .. } => Some((node.as_str(), *retries)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(checks, [("db", None), ("app", Some(3))]);
+    }
+
+    #[test]
     fn container_exec_becomes_foreground_exec_ops() {
         // #111: `exec "..."` inside a container block parsed, validated and was
         // then dropped -- the command never ran.
@@ -344,7 +374,20 @@ node c image "alpine" {
 }
 "#,
         );
-        let opts = process::build_create_opts(&t.nodes["c"], &[]);
+        let opts = process::build_create_opts("c", &t.nodes["c"], &[]);
+        // the hostname defaults to the node name (#217)
+        assert_eq!(opts.hostname.as_deref(), Some("c"));
+        let named = crate::types::Node {
+            hostname: Some("web".into()),
+            ..t.nodes["c"].clone()
+        };
+        let opts2 = process::build_create_opts("c", &named, &[]);
+        assert_eq!(opts2.hostname.as_deref(), Some("web"));
+        let odd = process::build_create_opts("not_a_hostname", &t.nodes["c"], &[]);
+        assert_eq!(
+            odd.hostname, None,
+            "left to the runtime when not a hostname"
+        );
         assert_eq!(
             opts.volumes,
             vec!["/pre:/pre".to_string()],

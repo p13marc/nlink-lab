@@ -244,6 +244,9 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   a PID that is not in the node's network namespace is now refused
   ("node 'x' has no process N"); it used to be sampled anyway, the
   host's init for `--pid 1`.
+- **Waits that give up return `Error::TimedOut`** (#202), a new variant
+  (library API), and the CLI exits 124 for them: `wait`, `wait-for`
+  and `spawn --wait-*` used to exit 1 or 2 on a timeout.
 
 ### Added
 
@@ -370,6 +373,29 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **Concurrent commands on one lab lost each other's state** (#202).
+  `save_state` wrote the whole in-memory copy back: two `spawn`s loaded
+  before either saved kept only one process tracked, and a spawn waiting
+  on an `apply` wrote the pre-apply namespaces back, so `destroy` left
+  the new nodes behind. A save, and `apply`'s, now writes only what that
+  handle changed since it loaded, merged into the file as it is.
+- **A non-UTF-8 byte in `/etc/hosts` replaced the file with the lab's
+  section** (#202): a failed read counted as an empty file. Injection
+  now fails and leaves the file as it is.
+- **`exec --timeout` deadlocked on output over 64 KiB** (#202), and lost
+  it: the pipes were read only after the child exited. They are drained
+  as it runs, and a background grandchild holding them open no longer
+  keeps the call past its deadline.
+- **A container node whose init exited was reached through its reused
+  PID** (#202): every namespace operation opened `/proc/<pid>/ns/net` of
+  whatever process had the PID next, possibly a host one. The init's
+  start time is recorded, and a lab loaded with a mismatch has PID 0 for
+  the node, so its operations fail.
+- `nlink-lab ip` works on container nodes and reports the `mgmt0`
+  address deploy gave the node: it numbered over namespace nodes only.
+  `ps` reports a tracked PID that now belongs to another process as
+  dead. Two spawns of one command on one node no longer share a
+  temporary log file (#202).
 - **`destroy --orphans` tore down a deploy that was still running**
   (#200). A deploy journals its steps and tags its namespaces as it
   goes, but writes `state.json` only at the end. The reaper unwound

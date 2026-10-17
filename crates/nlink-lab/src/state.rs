@@ -307,7 +307,7 @@ pub fn logs_dir(name: &str) -> PathBuf {
 }
 
 /// Persisted state for a container node.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContainerState {
     /// Container ID.
     pub id: String,
@@ -317,6 +317,11 @@ pub struct ContainerState {
     pub image: String,
     /// Current init PID (captured at deploy, refreshed by `restart`).
     pub pid: u32,
+    /// The init's start time (`/proc/<pid>/stat` field 22) when its PID
+    /// was recorded. A PID with another start time is another process:
+    /// the container's init exited and the number was reused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starttime: Option<u64>,
 }
 
 /// Summary info about a running lab (for status listing).

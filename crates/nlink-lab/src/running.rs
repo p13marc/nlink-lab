@@ -51,6 +51,65 @@ pub struct RunningLab {
     /// Empty when the topology has no assertions or the lab was
     /// [`load`](Self::load)ed from state (results are not persisted).
     assertion_results: Vec<crate::test_runner::AssertionResult>,
+    /// The state this handle last read or wrote. A save writes only what
+    /// changed since, merged into the file as it is then, so two
+    /// processes saving the same lab keep each other's changes.
+    baseline: std::sync::Mutex<Baseline>,
+}
+
+/// The persisted part of a [`RunningLab`], as of its last load or save.
+#[derive(Clone, Default)]
+struct Baseline {
+    namespaces: BTreeMap<String, String>,
+    containers: BTreeMap<String, ContainerState>,
+    runtime: Option<String>,
+    dns_injected: bool,
+    wifi_loaded: bool,
+    pids: Vec<(String, u32)>,
+    starttimes: BTreeMap<u32, u64>,
+    exec_pids: BTreeMap<String, u32>,
+    mgmt_peers: BTreeMap<String, String>,
+    saved_impairments: BTreeMap<String, crate::types::Impairment>,
+    live_impairments: BTreeMap<String, crate::types::Impairment>,
+    process_logs: BTreeMap<u32, (String, String)>,
+    /// The topology, serialized: `Topology` has no `PartialEq`.
+    topology: String,
+}
+
+/// `fresh` becomes `mine` where this handle changed it since `base`.
+fn take_changed<T: PartialEq + Clone>(fresh: &mut T, base: &T, mine: &T) {
+    if mine != base {
+        *fresh = mine.clone();
+    }
+}
+
+/// This handle's own insertions, changes and removals since `base`,
+/// applied to the file's `fresh` map.
+fn merge_map<K: Ord + Clone, V: PartialEq + Clone>(
+    fresh: &mut BTreeMap<K, V>,
+    base: &BTreeMap<K, V>,
+    mine: &BTreeMap<K, V>,
+) {
+    for (k, v) in mine {
+        if base.get(k) != Some(v) {
+            fresh.insert(k.clone(), v.clone());
+        }
+    }
+    for k in base.keys() {
+        if !mine.contains_key(k) {
+            fresh.remove(k);
+        }
+    }
+}
+
+/// [`merge_map`] for the tracked `(node, pid)` list.
+fn merge_pids(fresh: &mut Vec<(String, u32)>, base: &[(String, u32)], mine: &[(String, u32)]) {
+    fresh.retain(|p| mine.contains(p) || !base.contains(p));
+    for p in mine {
+        if !base.contains(p) && !fresh.contains(p) {
+            fresh.push(p.clone());
+        }
+    }
 }
 
 /// Output from executing a command in a lab node.
@@ -232,7 +291,32 @@ impl RunningLab {
             live_impairments: BTreeMap::new(),
             process_logs: BTreeMap::new(),
             assertion_results: Vec::new(),
+            baseline: Default::default(),
         }
+    }
+
+    /// The persisted fields as they are now.
+    fn snapshot(&self) -> Baseline {
+        Baseline {
+            namespaces: self.namespace_names.clone(),
+            containers: self.containers.clone(),
+            runtime: self.runtime_binary.clone(),
+            dns_injected: self.dns_injected,
+            wifi_loaded: self.wifi_loaded,
+            pids: self.pids.clone(),
+            starttimes: self.starttimes.clone(),
+            exec_pids: self.exec_pids.clone(),
+            mgmt_peers: self.mgmt_peers.clone(),
+            saved_impairments: self.saved_impairments.clone(),
+            live_impairments: self.live_impairments.clone(),
+            process_logs: self.process_logs.clone(),
+            topology: serde_json::to_string(&self.topology).unwrap_or_default(),
+        }
+    }
+
+    /// This handle's state is what is on disk now: deploy just wrote it.
+    pub(crate) fn mark_saved(&self) {
+        *self.baseline.lock().unwrap_or_else(|p| p.into_inner()) = self.snapshot();
     }
 
     /// Get the topology used to deploy this lab.
@@ -594,10 +678,6 @@ impl RunningLab {
         &self.process_logs
     }
 
-    pub(crate) fn saved_impairments_map(&self) -> &BTreeMap<String, crate::types::Impairment> {
-        &self.saved_impairments
-    }
-
     /// Impairments set at runtime with [`set_impairment`](Self::set_impairment),
     /// keyed by endpoint. They override the topology's `impair` until the
     /// topology changes that endpoint (see [`crate::apply`]).
@@ -710,20 +790,14 @@ impl RunningLab {
             let mut command = std::process::Command::new(rt_binary);
             command.args(&all_args);
             if let Some(timeout) = opts.timeout {
-                let mut child = command
+                let child = command
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .spawn()
                     .map_err(|e| {
                         Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
                     })?;
-                wait_with_timeout(&mut child, timeout)?;
-                let output = child.wait_with_output().map_err(Error::Io)?;
-                Ok(ExecOutput {
-                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                    exit_code: output.status.code().unwrap_or(-1),
-                })
+                output_with_timeout(child, timeout)
             } else {
                 let output = command.output().map_err(|e| {
                     Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
@@ -747,15 +821,9 @@ impl RunningLab {
             if let Some(timeout) = opts.timeout {
                 command.stdout(std::process::Stdio::piped());
                 command.stderr(std::process::Stdio::piped());
-                let mut child = crate::ns_exec::spawn(ns_name, command)
+                let child = crate::ns_exec::spawn(ns_name, command)
                     .map_err(|e| Error::nlink(format!("exec in '{node}' failed"), e))?;
-                wait_with_timeout(&mut child, timeout)?;
-                let output = child.wait_with_output().map_err(Error::Io)?;
-                Ok(ExecOutput {
-                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                    exit_code: output.status.code().unwrap_or(-1),
-                })
+                output_with_timeout(child, timeout)
             } else {
                 let output = crate::ns_exec::spawn_output(ns_name, command)
                     .map_err(|e| Error::nlink(format!("exec in '{node}' failed"), e))?;
@@ -889,24 +957,64 @@ impl RunningLab {
     }
 
     /// Re-save the current state to disk (e.g., after spawning a new process).
+    ///
+    /// Only what this handle changed since it was loaded (or last saved)
+    /// is written, merged into the state file as it is now: a process it
+    /// spawned, one it killed, an impairment it set. A concurrent command
+    /// that saved meanwhile keeps its own changes: they used to be
+    /// overwritten with this handle's stale copy, nodes an `apply` added
+    /// included.
     pub fn save_state(&self) -> Result<()> {
         // Take turns with a concurrent deploy/apply/destroy: this is a
         // read-modify-write of state.json (issue #38).
         let _lock = crate::state::lock_blocking(&self.topology.lab.name)?;
-        let (mut lab_state, _) = state::load(&self.topology.lab.name)?;
-        lab_state.namespaces = self.namespace_names.clone();
-        lab_state.containers = self.containers.clone();
-        lab_state.runtime = self.runtime_binary.clone();
-        lab_state.dns_injected = self.dns_injected;
-        lab_state.wifi_loaded = self.wifi_loaded;
-        lab_state.pids = self.pids.clone();
-        lab_state.starttimes = self.starttimes.clone();
-        lab_state.exec_pids = self.exec_pids.clone();
-        lab_state.mgmt_peers = self.mgmt_peers.clone();
-        lab_state.saved_impairments = self.saved_impairments.clone();
-        lab_state.live_impairments = self.live_impairments.clone();
-        lab_state.process_logs = self.process_logs.clone();
-        state::save(&lab_state, &self.topology)
+        self.save_merged(None)
+    }
+
+    /// The merge [`save_state`](Self::save_state) does, for a caller that
+    /// holds the lab's lock. `topology` is written as given; `None` writes
+    /// this handle's when it changed one, else keeps the file's.
+    pub(crate) fn save_merged(&self, topology: Option<&Topology>) -> Result<()> {
+        let (mut fresh, fresh_topology) = state::load(&self.topology.lab.name)?;
+        let mine = self.snapshot();
+        let mut base = self.baseline.lock().unwrap_or_else(|p| p.into_inner());
+        fresh.schema_version = state::SCHEMA_VERSION;
+        take_changed(&mut fresh.namespaces, &base.namespaces, &mine.namespaces);
+        take_changed(&mut fresh.containers, &base.containers, &mine.containers);
+        take_changed(&mut fresh.runtime, &base.runtime, &mine.runtime);
+        take_changed(
+            &mut fresh.dns_injected,
+            &base.dns_injected,
+            &mine.dns_injected,
+        );
+        take_changed(&mut fresh.wifi_loaded, &base.wifi_loaded, &mine.wifi_loaded);
+        take_changed(&mut fresh.mgmt_peers, &base.mgmt_peers, &mine.mgmt_peers);
+        merge_pids(&mut fresh.pids, &base.pids, &mine.pids);
+        merge_map(&mut fresh.starttimes, &base.starttimes, &mine.starttimes);
+        merge_map(&mut fresh.exec_pids, &base.exec_pids, &mine.exec_pids);
+        merge_map(
+            &mut fresh.saved_impairments,
+            &base.saved_impairments,
+            &mine.saved_impairments,
+        );
+        merge_map(
+            &mut fresh.live_impairments,
+            &base.live_impairments,
+            &mine.live_impairments,
+        );
+        merge_map(
+            &mut fresh.process_logs,
+            &base.process_logs,
+            &mine.process_logs,
+        );
+        let topology = match topology {
+            Some(t) => t,
+            None if mine.topology != base.topology => &self.topology,
+            None => &fresh_topology,
+        };
+        state::save(&fresh, topology)?;
+        *base = mine;
+        Ok(())
     }
 
     /// Record a container node's new init PID (after `restart`) so every
@@ -915,6 +1023,7 @@ impl RunningLab {
         match self.containers.get_mut(node) {
             Some(c) => {
                 c.pid = pid;
+                c.starttime = host_starttime(pid);
                 Ok(())
             }
             None => Err(Error::NodeNotFound {
@@ -997,11 +1106,19 @@ impl RunningLab {
             .and_then(|f| f.to_str())
             .unwrap_or("cmd");
 
-        let stdout_path = log_dir.join(format!("{node}-{cmd_basename}.stdout"));
-        let stderr_path = log_dir.join(format!("{node}-{cmd_basename}.stderr"));
-
-        let stdout_file = std::fs::File::create(&stdout_path)?;
-        let stderr_file = std::fs::File::create(&stderr_path)?;
+        // A name of its own until the pid is known: two spawns of the same
+        // command on one node used to open (and truncate) the same file,
+        // and the second one's rename then failed silently.
+        let temp_log = |ext: &str| -> Result<(std::fs::File, std::path::PathBuf)> {
+            tempfile::Builder::new()
+                .prefix(&format!("{node}-{cmd_basename}."))
+                .suffix(&format!(".{ext}"))
+                .tempfile_in(&log_dir)?
+                .keep()
+                .map_err(|e| Error::Io(e.error))
+        };
+        let (stdout_file, stdout_path) = temp_log("stdout")?;
+        let (stderr_file, stderr_path) = temp_log("stderr")?;
 
         let mut command = if let Some(id) = &container {
             let rt = self
@@ -1056,11 +1173,28 @@ impl RunningLab {
             ),
         );
 
-        // Rename files to include PID
-        let final_stdout = log_dir.join(format!("{node}-{cmd_basename}-{pid}.stdout"));
-        let final_stderr = log_dir.join(format!("{node}-{cmd_basename}-{pid}.stderr"));
-        let _ = std::fs::rename(&stdout_path, &final_stdout);
-        let _ = std::fs::rename(&stderr_path, &final_stderr);
+        // Rename files to include PID; where a rename fails, the log is
+        // recorded where it is.
+        let rename =
+            |from: &std::path::Path, to: std::path::PathBuf| match std::fs::rename(from, &to) {
+                Ok(()) => to,
+                Err(e) => {
+                    tracing::warn!(
+                        "keeping log {}: rename to {}: {e}",
+                        from.display(),
+                        to.display()
+                    );
+                    from.to_path_buf()
+                }
+            };
+        let final_stdout = rename(
+            &stdout_path,
+            log_dir.join(format!("{node}-{cmd_basename}-{pid}.stdout")),
+        );
+        let final_stderr = rename(
+            &stderr_path,
+            log_dir.join(format!("{node}-{cmd_basename}-{pid}.stderr")),
+        );
         self.process_logs.insert(
             pid,
             (
@@ -1092,8 +1226,12 @@ impl RunningLab {
         &self,
         node: &str,
     ) -> Result<std::collections::BTreeMap<String, Vec<String>>> {
-        // Verify node exists
-        self.namespace_for(node)?;
+        // Verify node exists: a namespace node or a container node.
+        if !self.topology.nodes.contains_key(node) {
+            return Err(Error::NodeNotFound {
+                name: node.to_string(),
+            });
+        }
 
         let mut addrs: std::collections::BTreeMap<String, Vec<String>> =
             std::collections::BTreeMap::new();
@@ -1152,11 +1290,11 @@ impl RunningLab {
         if self.topology.lab.mgmt_host_reachable
             && let Some(ref mgmt_subnet) = self.topology.lab.mgmt_subnet
         {
-            // Nodes get the 2nd, 3rd, ... host address in sorted order
-            // (same as deploy: `helpers::mgmt_addresses`).
-            let mut sorted_nodes: Vec<&str> =
-                self.namespace_names.keys().map(|s| s.as_str()).collect();
-            sorted_nodes.sort();
+            // Nodes get the 2nd, 3rd, ... host address in name order, over
+            // every node as deploy numbers them, containers included: over
+            // the namespace nodes alone, a lab with a container reported
+            // another node's address.
+            let sorted_nodes: Vec<&str> = self.topology.nodes.keys().map(String::as_str).collect();
             if let Some(idx) = sorted_nodes.iter().position(|&n| n == node)
                 && let Ok(mgmt) = crate::helpers::mgmt_addresses(mgmt_subnet, sorted_nodes.len())
             {
@@ -1251,7 +1389,7 @@ impl RunningLab {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::deploy_failed(format!(
+                return Err(Error::TimedOut(format!(
                     "timeout waiting for {ip}:{port} on node '{node}'"
                 )));
             }
@@ -1274,7 +1412,7 @@ impl RunningLab {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::deploy_failed(format!(
+                return Err(Error::TimedOut(format!(
                     "timeout waiting for command to succeed on node '{node}': {cmd}"
                 )));
             }
@@ -1318,7 +1456,7 @@ impl RunningLab {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::deploy_failed(format!(
+                return Err(Error::TimedOut(format!(
                     "timeout waiting for log line matching '{}' on PID {pid}",
                     pattern.as_str()
                 )));
@@ -1371,7 +1509,7 @@ impl RunningLab {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::deploy_failed(format!(
+                return Err(Error::TimedOut(format!(
                     "timeout waiting for TCP listener on port {port} for PID {pid}"
                 )));
             }
@@ -1418,7 +1556,7 @@ impl RunningLab {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::deploy_failed(format!(
+                return Err(Error::TimedOut(format!(
                     "timeout waiting for fd-count to stabilise on PID {pid}"
                 )));
             }
@@ -1441,7 +1579,7 @@ impl RunningLab {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::deploy_failed(format!(
+                return Err(Error::TimedOut(format!(
                     "timeout waiting for file '{path}' on node '{node}'"
                 )));
             }
@@ -1946,8 +2084,25 @@ impl RunningLab {
 
     /// Load a running lab from saved state.
     pub fn load(name: &str) -> Result<Self> {
-        let (lab_state, topology) = state::load(name)?;
-        Ok(Self {
+        let (mut lab_state, topology) = state::load(name)?;
+        // A container whose init PID now names a process that started at
+        // another time is not running: the PID was reused, possibly by a
+        // host process, and every `/proc/<pid>/ns/net` reached through it
+        // would be that process's namespace. PID 0 names none, so whatever
+        // the node is asked fails instead.
+        for (node, c) in lab_state.containers.iter_mut() {
+            if let Some(t) = c.starttime
+                && host_starttime(c.pid) != Some(t)
+            {
+                tracing::warn!(
+                    "container node '{node}': its init (pid {}) is gone; `nlink-lab restart` \
+                     reattaches a restarted container",
+                    c.pid
+                );
+                c.pid = 0;
+            }
+        }
+        let lab = Self {
             topology,
             namespace_names: lab_state.namespaces,
             containers: lab_state.containers,
@@ -1962,7 +2117,10 @@ impl RunningLab {
             exec_pids: lab_state.exec_pids,
             mgmt_peers: lab_state.mgmt_peers,
             assertion_results: Vec::new(),
-        })
+            baseline: Default::default(),
+        };
+        lab.mark_saved();
+        Ok(lab)
     }
 
     /// List all saved labs.
@@ -1983,7 +2141,13 @@ impl RunningLab {
         self.pids
             .iter()
             .map(|(node, pid)| {
-                let alive = pid_is_alive(*pid);
+                // A PID whose start time is not the one recorded at spawn is
+                // another process now: ours exited and the number was reused.
+                let reused = self
+                    .starttimes
+                    .get(pid)
+                    .is_some_and(|&t| host_starttime(*pid).is_some_and(|now| now != t));
+                let alive = pid_is_alive(*pid) && !reused;
                 let logs = self.process_logs.get(pid);
                 ProcessInfo {
                     node: node.clone(),
@@ -2449,6 +2613,62 @@ fn wait_with_timeout(child: &mut std::process::Child, timeout: std::time::Durati
 /// child's exit code on normal exit, [`Error::Timeout`] when the deadline
 /// fires. Used by the *attached* exec path where stdio is inherited and
 /// no output capture is needed.
+/// `child`'s exit code and output, killing it after `timeout`.
+///
+/// Both pipes are drained while it runs. A child that wrote more than a
+/// pipe holds (64 KiB) used to block on its write until the timeout killed
+/// it, losing everything it printed. After it exits, end-of-file is waited
+/// for only until the deadline: a background grandchild that keeps the
+/// pipe open used to make the read ignore the timeout.
+fn output_with_timeout(
+    mut child: std::process::Child,
+    timeout: std::time::Duration,
+) -> Result<ExecOutput> {
+    use std::io::Read;
+    use std::sync::{Arc, Mutex, mpsc};
+    let deadline = std::time::Instant::now() + timeout;
+    fn drain(
+        pipe: Option<impl Read + Send + 'static>,
+    ) -> (Arc<Mutex<Vec<u8>>>, mpsc::Receiver<()>) {
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let (done, eof) = mpsc::channel();
+        match pipe {
+            Some(mut pipe) => {
+                let sink = Arc::clone(&buf);
+                std::thread::spawn(move || {
+                    let mut chunk = [0u8; 8192];
+                    while let Ok(n @ 1..) = pipe.read(&mut chunk) {
+                        sink.lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .extend_from_slice(&chunk[..n]);
+                    }
+                    let _ = done.send(());
+                });
+            }
+            None => {
+                let _ = done.send(());
+            }
+        }
+        (buf, eof)
+    }
+    let (stdout, stdout_eof) = drain(child.stdout.take());
+    let (stderr, stderr_eof) = drain(child.stderr.take());
+    wait_with_timeout(&mut child, timeout)?;
+    for eof in [&stdout_eof, &stderr_eof] {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let _ = eof.recv_timeout(left.max(std::time::Duration::from_millis(100)));
+    }
+    let status = child.wait().map_err(Error::Io)?;
+    let text = |buf: &Arc<Mutex<Vec<u8>>>| {
+        String::from_utf8_lossy(&buf.lock().unwrap_or_else(|p| p.into_inner())).into_owned()
+    };
+    Ok(ExecOutput {
+        stdout: text(&stdout),
+        stderr: text(&stderr),
+        exit_code: status.code().unwrap_or(-1),
+    })
+}
+
 fn run_with_optional_timeout(
     command: &mut std::process::Command,
     timeout: Option<std::time::Duration>,
@@ -2943,4 +3163,126 @@ async fn read_firewall_counters(ns: &crate::deploy::NsRef) -> Result<Vec<Firewal
             _ => None,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod state_merge_tests {
+    use super::*;
+
+    /// A tracked PID that is alive but started at another time is another
+    /// process: `ps` reports ours as dead rather than the stranger as it.
+    #[test]
+    fn a_reused_pid_is_not_alive() {
+        let me = std::process::id();
+        let started = host_starttime(me).unwrap();
+        let lab = |start: u64| {
+            let mut lab = RunningLab::new(
+                Topology::default(),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                None,
+                vec![("n".into(), me)],
+                false,
+                false,
+            );
+            lab.set_starttimes([(me, start)].into());
+            lab
+        };
+        assert!(lab(started).process_status()[0].alive);
+        assert!(!lab(started + 1).process_status()[0].alive);
+    }
+
+    /// `ip … --iface mgmt0` reports the address deploy gives the node's
+    /// mgmt veth, for a container node and for a namespace node beside
+    /// it: it numbered over namespace nodes alone, and refused containers.
+    #[test]
+    fn node_addresses_match_the_planned_mgmt_addresses() {
+        let topo = crate::parser::parse(
+            r#"lab "m" { mgmt 172.31.0.0/24 host-reachable }
+node app image "alpine:latest"
+node db
+link app:eth0 -- db:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let plan = crate::deploy::plan_for(&topo).unwrap();
+        let planned: BTreeMap<String, String> = plan
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                crate::deploy::Op::CreateMgmtVeth {
+                    node,
+                    node_ip,
+                    prefix,
+                    ..
+                } => Some((node.clone(), format!("{node_ip}/{prefix}"))),
+                _ => None,
+            })
+            .collect();
+        let container = ContainerState {
+            id: "c".into(),
+            name: "m-app".into(),
+            image: "alpine:latest".into(),
+            pid: 1,
+            starttime: None,
+        };
+        let lab = RunningLab::new(
+            topo,
+            [("db".to_string(), "m-db".to_string())].into(),
+            [("app".to_string(), container)].into(),
+            Some("podman".into()),
+            Vec::new(),
+            false,
+            false,
+        );
+        for node in ["app", "db"] {
+            let addrs = lab.node_addresses(node).unwrap();
+            assert_eq!(addrs["mgmt0"], [planned[node].clone()], "{node}: {addrs:?}");
+        }
+        assert!(lab.node_addresses("nope").is_err());
+    }
+
+    /// Two handles of one lab, each saving its own change: the merge keeps
+    /// both, and a removal by one does not resurrect or drop the other's.
+    #[test]
+    fn saves_merge_each_handles_own_changes() {
+        let base: Vec<(String, u32)> = vec![("a".into(), 1)];
+        // B saved first: added 3. A, loaded before that, added 2.
+        let mut fresh = vec![("a".into(), 1), ("b".into(), 3)];
+        merge_pids(&mut fresh, &base, &[("a".into(), 1), ("a".into(), 2)]);
+        assert_eq!(
+            fresh,
+            [
+                ("a".to_string(), 1),
+                ("b".to_string(), 3),
+                ("a".to_string(), 2)
+            ]
+        );
+        // A killed 1 and added nothing; B's 3 stays.
+        let mut fresh = vec![("a".into(), 1), ("b".into(), 3)];
+        merge_pids(&mut fresh, &base, &[]);
+        assert_eq!(fresh, [("b".to_string(), 3)]);
+
+        let m = |kv: &[(&str, u32)]| -> BTreeMap<String, u32> {
+            kv.iter().map(|(k, v)| (k.to_string(), *v)).collect()
+        };
+        let mut fresh = m(&[("x", 1), ("y", 9), ("z", 5)]);
+        // Mine changed x, removed z, added w; y is someone else's.
+        merge_map(
+            &mut fresh,
+            &m(&[("x", 1), ("z", 5)]),
+            &m(&[("x", 2), ("w", 7)]),
+        );
+        assert_eq!(fresh, m(&[("w", 7), ("x", 2), ("y", 9)]));
+
+        let mut ns = m(&[("h3", 1)]);
+        take_changed(&mut ns, &m(&[]), &m(&[]));
+        assert_eq!(
+            ns,
+            m(&[("h3", 1)]),
+            "unchanged here: the file's value stays"
+        );
+        take_changed(&mut ns, &m(&[]), &m(&[("h1", 1)]));
+        assert_eq!(ns, m(&[("h1", 1)]));
+    }
 }

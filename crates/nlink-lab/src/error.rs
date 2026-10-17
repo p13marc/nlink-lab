@@ -110,6 +110,12 @@ pub enum Error {
     #[error("command timed out after {0:?}")]
     Timeout(std::time::Duration),
 
+    /// A wait gave up at its deadline: `wait`, `wait-for`, `spawn
+    /// --wait-*`. The message says what it waited for. The CLI maps it to
+    /// exit code 124, like [`Error::Timeout`].
+    #[error("{0}")]
+    TimedOut(String),
+
     /// State file error.
     #[error("{op} state: {detail} (path: {path})")]
     State {

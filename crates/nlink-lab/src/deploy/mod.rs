@@ -145,6 +145,8 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     running.set_exec_pids(env.exec_pids);
     running.set_mgmt_peers(env.mgmt_peers);
     running.set_process_logs(env.process_logs);
+    // What it holds is what was just written.
+    running.mark_saved();
 
     // ── validate { … } assertions ──
     // Never fails the deploy; the structured results ride on the
@@ -397,25 +399,10 @@ pub async fn apply_with(
         env.dns_injected,
         env.wifi_loaded,
     );
-    // Read-modify-write: created_at / wg_public_keys survive (#28).
-    let mut lab_state = match state::load(running.name()) {
-        Ok((existing, _)) => existing,
-        Err(_) => LabState::new(running.name().to_string(), now_iso8601()),
-    };
-    lab_state.schema_version = state::SCHEMA_VERSION;
-    lab_state.namespaces = running.namespace_names().clone();
-    lab_state.pids = running.pids().to_vec();
-    lab_state.starttimes = running.starttimes().clone();
-    lab_state.exec_pids = running.exec_pids().clone();
-    lab_state.mgmt_peers = running.mgmt_peers().clone();
-    lab_state.containers = running.containers().clone();
-    lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
-    lab_state.dns_injected = running.dns_injected();
-    lab_state.wifi_loaded = running.wifi_loaded();
-    lab_state.process_logs = running.process_logs_map().clone();
-    lab_state.saved_impairments = running.saved_impairments_map().clone();
-    lab_state.live_impairments = running.live_impairments().clone();
-    state::save(&lab_state, desired)?;
+    // This handle's changes, merged into the file as it is: created_at
+    // and wg_public_keys survive (#28), and so does a process spawned or
+    // an impairment set since this lab was loaded.
+    running.save_merged(Some(desired))?;
 
     // ── validate { … } assertions, exactly as after deploy (#86) ──
     // Never fails the apply; results ride on `running` for `--strict`.
@@ -552,24 +539,10 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
     );
     // The lab lock is held: write state.json directly, as `apply` does
     // (`save_state` would take the lock again and block on itself).
-    let mut lab_state = match state::load(running.name()) {
-        Ok((existing, _)) => existing,
-        Err(_) => LabState::new(running.name().to_string(), now_iso8601()),
-    };
-    lab_state.schema_version = state::SCHEMA_VERSION;
-    lab_state.namespaces = running.namespace_names().clone();
-    lab_state.pids = running.pids().to_vec();
-    lab_state.starttimes = running.starttimes().clone();
-    lab_state.exec_pids = running.exec_pids().clone();
-    lab_state.mgmt_peers = running.mgmt_peers().clone();
-    lab_state.containers = running.containers().clone();
-    lab_state.runtime = running.runtime_binary().map(|s| s.to_string());
-    lab_state.dns_injected = running.dns_injected();
-    lab_state.wifi_loaded = running.wifi_loaded();
-    lab_state.process_logs = running.process_logs_map().clone();
-    lab_state.saved_impairments = running.saved_impairments_map().clone();
-    lab_state.live_impairments = running.live_impairments().clone();
-    state::save(&lab_state, running.topology())?;
+    // This handle's changes, merged into the file as it is: created_at
+    // and wg_public_keys survive (#28), and so does a process spawned or
+    // an impairment set since this lab was loaded.
+    running.save_merged(Some(running.topology()))?;
     crate::events::record(
         running.name(),
         crate::events::LifecycleKind::Applied {

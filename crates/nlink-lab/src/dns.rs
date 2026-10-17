@@ -105,7 +105,18 @@ pub(crate) fn inject_hosts_to(path: &str, lab_name: &str, entries: &[HostsEntry]
         return Ok(());
     }
 
-    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    // Only a missing file is an empty one. Any other failure — a byte
+    // that is not UTF-8, a permission — used to read as empty too, and the
+    // whole file was then rewritten as just this lab's section.
+    let existing = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            return Err(Error::deploy_failed(format!(
+                "failed to read {path}, which is left as it is: {e}"
+            )));
+        }
+    };
     let cleaned = remove_section(&existing, lab_name);
 
     let start = section_start(lab_name);
@@ -562,6 +573,33 @@ link router:eth1 -- h2:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         assert!(content.contains("10.0.0.1\tserver\tserver-eth0"));
         assert!(content.contains("10.0.0.2\tclient\tclient-eth0"));
         assert!(content.contains("###### NLINK-LAB-mylab-END ######"));
+    }
+
+    /// A hosts file that cannot be read as text is left as it is: a
+    /// Latin-1 comment used to make injection rewrite it as just the lab's
+    /// section, dropping localhost and every other entry.
+    #[test]
+    fn an_unreadable_hosts_file_is_not_rewritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        let original = b"127.0.0.1\tlocalhost\n# caf\xe9\n10.1.1.1\tbuild-server\n".to_vec();
+        std::fs::write(&path, &original).unwrap();
+        let entries = vec![HostsEntry {
+            ip: "10.0.0.1".into(),
+            names: vec!["server".into()],
+        }];
+        let err = inject_hosts_to(path.to_str().unwrap(), "mylab", &entries).unwrap_err();
+        assert!(err.to_string().contains("left as it is"), "{err}");
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+
+        // A missing file is still an empty one.
+        let missing = dir.path().join("none");
+        inject_hosts_to(missing.to_str().unwrap(), "mylab", &entries).unwrap();
+        assert!(
+            std::fs::read_to_string(&missing)
+                .unwrap()
+                .contains("10.0.0.1\tserver")
+        );
     }
 
     #[test]

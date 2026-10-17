@@ -313,6 +313,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     name: info.name.clone(),
                     image: image.clone(),
                     pid: info.pid,
+                    starttime: crate::running::host_starttime(info.pid),
                 },
             );
             env.ns.insert(

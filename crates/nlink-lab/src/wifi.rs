@@ -54,15 +54,28 @@ pub fn generate_hostapd_conf(config: &WifiConfig, ctrl_dir: &str) -> String {
     );
 
     if let Some(pass) = &config.passphrase {
+        // 64 hex digits are the PSK itself, which hostapd takes as
+        // `wpa_psk`; as `wpa_passphrase` it is refused (#223)
+        let key = if is_raw_psk(pass) {
+            format!("wpa_psk={pass}")
+        } else {
+            format!("wpa_passphrase={pass}")
+        };
         conf.push_str(&format!(
             "wpa=2\n\
-             wpa_passphrase={pass}\n\
+             {key}\n\
              wpa_key_mgmt=WPA-PSK\n\
              rsn_pairwise=CCMP\n"
         ));
     }
 
     conf
+}
+
+/// A WPA key given as the 256-bit PSK: 64 hex digits. Anything else is a
+/// passphrase, 8 to 63 printable ASCII characters (`wifi-passphrase`).
+pub fn is_raw_psk(pass: &str) -> bool {
+    pass.len() == 64 && pass.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// Generate a wpa_supplicant configuration file for a station node.
@@ -72,11 +85,17 @@ pub fn generate_wpa_conf(config: &WifiConfig, ctrl_dir: &str) -> String {
     let ssid = config.ssid.as_deref().unwrap_or("nlink-lab");
 
     if let Some(pass) = &config.passphrase {
+        // a raw PSK is written bare; quoted, it is a passphrase
+        let psk = if is_raw_psk(pass) {
+            pass.clone()
+        } else {
+            format!("\"{pass}\"")
+        };
         format!(
             "ctrl_interface={ctrl_dir}\n\
              network={{\n\
              \tssid=\"{ssid}\"\n\
-             \tpsk=\"{pass}\"\n\
+             \tpsk={psk}\n\
              \tkey_mgmt=WPA-PSK\n\
              }}\n"
         )
@@ -287,6 +306,34 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
+
+    #[test]
+    fn a_64_hex_key_is_written_as_the_psk() {
+        // #223: as `wpa_passphrase=` / a quoted `psk=` both daemons refuse it
+        let psk = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let config = WifiConfig {
+            name: "wlan0".into(),
+            mode: crate::types::WifiMode::Ap,
+            ssid: Some("lab".into()),
+            channel: None,
+            passphrase: Some(psk.into()),
+            mesh_id: None,
+            addresses: vec![],
+        };
+        let ap = generate_hostapd_conf(&config, "/run/x");
+        assert!(ap.contains(&format!("\nwpa_psk={psk}\n")), "{ap}");
+        assert!(!ap.contains("wpa_passphrase"), "{ap}");
+        let sta = generate_wpa_conf(&config, "/run/x");
+        assert!(sta.contains(&format!("\tpsk={psk}\n")), "{sta}");
+        let quoted = generate_wpa_conf(
+            &WifiConfig {
+                passphrase: Some("a passphrase".into()),
+                ..config
+            },
+            "/run/x",
+        );
+        assert!(quoted.contains("\tpsk=\"a passphrase\"\n"), "{quoted}");
+    }
 
     #[test]
     fn test_generate_hostapd_conf_wpa2() {

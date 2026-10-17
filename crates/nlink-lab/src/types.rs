@@ -47,6 +47,12 @@ pub struct Topology {
     #[serde(default)]
     pub impairments: BTreeMap<String, Impairment>,
 
+    /// The endpoints of [`impairments`](Self::impairments) a link's `->` or
+    /// `<-` declared: one direction, on purpose. Read by `lint` and
+    /// `render` (#223); not persisted, and no part of what a lab is.
+    #[serde(skip)]
+    pub directional_impairments: std::collections::BTreeSet<String>,
+
     /// Per-interface rate limiting.
     #[serde(default)]
     pub rate_limits: BTreeMap<String, RateLimit>,

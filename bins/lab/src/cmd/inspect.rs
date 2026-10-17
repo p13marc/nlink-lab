@@ -62,13 +62,30 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         return Ok(());
     }
 
+    // Impairments as they are: what `impair` set at runtime replaces the
+    // declaration, and a cleared one is gone; only the declared ones were
+    // shown (#223).
+    let live = running.live_impairments();
+    let mut impairments: Vec<(&String, &nlink_lab::types::Impairment, bool)> = topo
+        .impairments
+        .iter()
+        .filter(|(ep, _)| !live.contains_key(*ep))
+        .map(|(ep, imp)| (ep, imp, false))
+        .chain(
+            live.iter()
+                .filter(|(_, imp)| **imp != nlink_lab::types::Impairment::default())
+                .map(|(ep, imp)| (ep, imp, true)),
+        )
+        .collect();
+    impairments.sort_by(|a, b| a.0.cmp(b.0));
+
     // Header
     println!("{}", bold(&format!("Lab: {}", running.name())));
     println!(
         "Nodes: {}  Links: {}  Impairments: {}",
         running.namespace_count(),
         topo.links.len(),
-        topo.impairments.len()
+        impairments.len()
     );
 
     // Node table
@@ -108,10 +125,9 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
     }
 
-    // Impairments
-    if !topo.impairments.is_empty() {
+    if !impairments.is_empty() {
         println!("\n  {}", bold("IMPAIRMENTS"));
-        for (ep, imp) in &topo.impairments {
+        for (ep, imp, live) in impairments {
             let mut parts = Vec::new();
             if let Some(d) = &imp.delay {
                 parts.push(format!("delay={d}"));
@@ -125,7 +141,16 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             if let Some(r) = &imp.rate {
                 parts.push(format!("rate={r}"));
             }
+            if live {
+                parts.push("(runtime)".to_string());
+            }
             println!("  {:<24} {}", ep, parts.join("  "));
+        }
+    }
+    if !running.partitions().is_empty() {
+        println!("\n  {}", bold("PARTITIONED"));
+        for ep in running.partitions().keys() {
+            println!("  {ep}");
         }
     }
 

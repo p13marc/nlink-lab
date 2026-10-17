@@ -301,6 +301,24 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   additive under `apply --check --json`'s `topology`). `diff --json`
   prints the whole diff plus `total_changes`, instead of a summary with
   link counts.
+- **Wi-Fi, `lint`, `inspect`, `stats`** (#223):
+  - new validation errors: `wifi-passphrase` (a `wpa2` key of 8 to 63
+    printable ASCII characters or 64 hex digits; none on a mesh point),
+    `wifi-ssid` (1 to 32 bytes; none on a mesh point) and
+    `wifi-mesh-channel` (a mesh's points on one channel);
+  - a 64-hex `wpa2` key is written as the PSK (`wpa_psk=`, a bare `psk=`);
+  - hostapd and wpa_supplicant configs are per interface,
+    `NODE-IFACE-hostapd.conf` / `NODE-IFACE-wpa.conf`;
+  - `lint` counts Wi-Fi nodes that share an SSID or mesh-id as connected,
+    and no longer reports a link's `->` / `<-` as `asymmetric-impairment`;
+    `render` writes those back as `->` / `<-`;
+  - `validate --allow`/`--deny` of an unknown rule exits 1, as `lint`'s;
+  - `stats --json` rows are all `{node, kind, cpu_usec, memory_bytes,
+    memory_max, cpu_max, pids}`: a container's comes from its cgroup, not
+    the runtime's own JSON;
+  - `inspect` shows runtime impairments (marked) and partitions;
+  - nlink's per-ack warnings are hidden unless `RUST_LOG` or `--verbose`
+    asks for them.
 - **`#[lab_test]`** (#222):
   - the test's suffix goes on the topology's `prefix` too, so a prefixed
     topology's namespaces are `PREFIX-test-FN-PID-NODE`;
@@ -562,6 +580,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **Wi-Fi input hostapd or wpa_supplicant refused passed validation**
+  (#223): a short `wpa2` key, a 64-hex one (written as a passphrase),
+  an empty or long SSID. A mesh point's `wpa2` and `ssid` were ignored,
+  and mesh points on different channels never peered. A node's second
+  AP or station overwrote the first one's config file.
+- **`lint --strict` failed the Wi-Fi examples** as disconnected, and every
+  link with a `->` as an asymmetric impairment (#223).
+- **`impair --partition` printed two nlink `WARN … errno=-2` lines**: since
+  warnings show by default (#209), nlink's log of the error acks its
+  caller handles reached the terminal (#223).
+- **Docs** (#223): `validate`'s and `inspect`'s exit codes, `inspect`'s
+  description, and the README quickstart's `ping router` (the example has
+  no `dns hosts`).
 - **`#[lab_test]`** (#222):
   - two tests of a topology with `prefix` deployed on the same namespaces;
     the second failed, and its cleanup swept the first's;

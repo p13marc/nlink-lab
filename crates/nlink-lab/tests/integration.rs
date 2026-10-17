@@ -5375,6 +5375,9 @@ validate {{ reach a b }}
             Ok(Some(ev)) => {
                 let json = serde_json::to_string(&ev).unwrap();
                 if ev.node == "a" && json.contains("10.9.9.9") {
+                    // nlink's view of the address (#195).
+                    assert_eq!(ev.kind.name(), "new_address", "{json}");
+                    assert!(json.contains(r#""cidr":"10.9.9.9/32""#), "{json}");
                     seen = true;
                     break;
                 }
@@ -6472,9 +6475,8 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     while std::time::Instant::now() < deadline {
         match tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await {
             Ok(Some(ev)) if ev.node == "a" => {
-                let json = serde_json::to_value(&ev).unwrap();
-                kinds.push(json["kind"]["kind"].as_str().unwrap_or("?").to_string());
-                raw.push(json);
+                kinds.push(ev.kind.name());
+                raw.push(serde_json::to_value(&ev).unwrap());
             }
             Ok(Some(_)) => {}
             Ok(None) => break,
@@ -6484,16 +6486,22 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     for t in tasks {
         t.abort();
     }
-    for want in ["new_table", "new_set", "new_set_elements", "new_object"] {
+    // nlink's views (#195), named `<action>_<object>`.
+    for want in [
+        "new_nft_table",
+        "new_nft_set",
+        "new_nft_set_elements",
+        "new_nft_object",
+    ] {
         assert!(kinds.iter().any(|k| k == want), "no {want} event: {raw:?}");
     }
     assert!(
-        !kinds.iter().any(|k| k == "other"),
-        "untyped event: {raw:?}"
+        !kinds.iter().any(|k| k.contains("nft_gen")),
+        "generation event leaked: {raw:?}"
     );
     let all = serde_json::to_string(&raw).unwrap();
-    assert!(!all.contains("NewGen"), "generation event leaked: {all}");
     assert!(all.contains(r#""set":"s""#), "set name missing: {all}");
+    assert!(all.contains(r#""object_type":"counter""#), "{all}");
     lab.destroy().await.expect("destroy failed");
 }
 

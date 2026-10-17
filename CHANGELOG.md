@@ -223,7 +223,21 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   lists the radios. `wifi::generate_hostapd_conf` and
   `generate_wpa_conf` take the node's control directory
   (`wifi::ctrl_dir`).
-
+- **`watch --json` records carry nlink's event view** (#195). A record
+  was `{"node":…,"family":…,"kind":{"kind":"new_link","ifindex":7,…}}`.
+  It is now `{"node":…,"family":…,"kind":"event","event":{"object":
+  "link","action":"new","ifindex":7,…}}`, the `event` being nlink 0.32's
+  `EventView` (one shape for both families, with stable names), or a
+  flat `{"kind":"ended","reason":…,"retry_in_ms":…}` / `{"kind":"gone"}`.
+  Some names change with it: neighbor is `neighbour`, the nftables
+  objects are `nft_table`, `nft_chain`, `nft_rule`, …, and an address's
+  `scope` is lowercase. The text line reads `[r1/route] new_link
+  ifindex=7 mtu=1500 name=d0 …` (was `NewLink idx=7 …`). Library API:
+  `WatchEventKind` is `Event { event }`, `Ended` or `Gone`, with
+  `name()` and `detail()`.
+- `events --kind` drift names are `<action>_<object>`: `new_address`,
+  `del_route`, `new_nft_rule` (was `new_rule`), `new_neighbour`, plus
+  `ended` and `gone`. An ip rule is `new_rule` now.
 ### Added
 
 - **Validator warning `sysctl-host-global`** (#162): a profile or node
@@ -342,6 +356,14 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   now carry the set's name.
 
 ### Fixed
+
+- **`events --follow` drift was blank and `--kind` never matched it**
+  (#195). The drift record read the event's name from a top-level
+  `kind` string, but watch nested the event as an object, so every
+  record printed as `drift router:drift` with no detail, and
+  `events --kind new_address` showed nothing. Records now name and
+  print the event: `drift a:new_address cidr=10.0.0.9/32 ifindex=2
+  scope=global`.
 
 - **`examples/multi-profile.nll` could not deploy** (#162): its
   `monitored` profile set `net.core.rmem_max` / `wmem_max`, which are

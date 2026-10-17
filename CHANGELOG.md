@@ -370,6 +370,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`destroy --orphans` tore down a deploy that was still running**
+  (#200). A deploy journals its steps and tags its namespaces as it
+  goes, but writes `state.json` only at the end. The reaper unwound
+  every journal of a lab without state and reaped every tagged
+  namespace whose owner had none, without checking the lab's lock, which
+  the deploy holds throughout. A lab whose `state.json` did not parse was
+  reaped the same way. Both are left alone now, and the reaper holds an
+  owner's lock while it removes what it owned.
+- **`destroy --all` exited 0 with labs left standing** (#200). It
+  counted labs that failed to load as destroyed, and stopped at the
+  first lab whose destroy failed. It destroys the rest, counts what it
+  destroyed and fails naming the others. `destroy NAME --orphans`
+  ignored `--orphans`; it reaps after the named lab.
 - **`import` wrote archive entries outside the extract directory**
   (#199). Each entry went to `<dir>/<entry name>`, with the name taken
   raw from the archive, and entries the manifest did not list were

@@ -18,8 +18,10 @@ pub struct Args {
 
     /// Also reap mgmt bridges / veths / namespaces with no state file
     /// (left behind by a crashed deploy), and remove lock files of labs
-    /// that no longer exist. Implies best-effort cleanup; can be combined
-    /// with --all or used on its own.
+    /// that no longer exist. A lab whose lock is held (a deploy still
+    /// running) or whose state file does not parse is left alone.
+    /// Implies best-effort cleanup; can be combined with a lab name or
+    /// --all, or used on its own.
     #[arg(long)]
     pub orphans: bool,
 }
@@ -38,24 +40,42 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             println!("No running labs.");
             return Ok(());
         }
+        // One lab failing does not stop the others; the count says what
+        // was destroyed, and the exit code that something was not.
+        let mut destroyed = 0;
+        let mut failed = Vec::new();
         for info in &labs {
-            match nlink_lab::RunningLab::load(&info.name) {
-                Ok(lab) => {
-                    lab.destroy().await?;
-                    println!("Destroyed '{}'", info.name);
-                }
+            let result = match nlink_lab::RunningLab::load(&info.name) {
+                Ok(lab) => lab.destroy().await.map(|()| "Destroyed"),
                 Err(_) if force => {
                     force_cleanup(&info.name).await;
-                    println!("Force-cleaned '{}'", info.name);
+                    Ok("Force-cleaned")
                 }
-                Err(e) => eprintln!("Failed to destroy '{}': {e}", info.name),
+                Err(e) => Err(e),
+            };
+            match result {
+                Ok(what) => {
+                    println!("{what} '{}'", info.name);
+                    destroyed += 1;
+                }
+                Err(e) => {
+                    eprintln!("Failed to destroy '{}': {e}", info.name);
+                    failed.push(info.name.clone());
+                }
             }
         }
         if !labs.is_empty() {
-            println!("{} lab(s) destroyed", labs.len());
+            println!("{destroyed} lab(s) destroyed");
         }
         if orphans {
-            reap_orphans(&labs).await;
+            reap_orphans(&nlink_lab::RunningLab::list()?).await;
+        }
+        if !failed.is_empty() {
+            return Err(nlink_lab::Error::deploy_failed(format!(
+                "{} lab(s) not destroyed: {}",
+                failed.len(),
+                failed.join(", ")
+            )));
         }
         return Ok(());
     }
@@ -95,6 +115,11 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             // Idempotent: destroying a non-existent lab is a no-op
         }
         Err(e) => return Err(e),
+    }
+    // `destroy NAME --orphans`: the named lab, then the reaping the flag
+    // asks for. It used to be ignored with a name.
+    if orphans {
+        reap_orphans(&nlink_lab::RunningLab::list()?).await;
     }
     Ok(())
 }

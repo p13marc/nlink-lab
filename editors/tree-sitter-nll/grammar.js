@@ -692,6 +692,7 @@ module.exports = grammar({
         seq("duration", $.duration),
         seq("streams", $.integer),
         "udp",
+        seq("rate", choice($.rate, $.interpolation)),
         seq("count", $.integer),
         seq("assert", $.identifier, choice("above", "below"), $._value),
       ),

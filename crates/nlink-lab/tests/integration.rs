@@ -6328,12 +6328,12 @@ async fn firewall_observability_example_counts() {
         "/../../examples/firewall-observability.nll"
     ))
     .unwrap();
-    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
     let _guard = LabCleanup {
         name: lab.name().to_string(),
     };
     assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
-    let result = nlink_lab::scenario::run_scenario(&lab, &topo.scenarios[0])
+    let result = nlink_lab::scenario::run_scenario(&mut lab, &topo.scenarios[0])
         .await
         .expect("scenario failed to run");
     assert!(result.passed, "{result:?}");
@@ -6749,12 +6749,12 @@ async fn firewall_qos_example_classifies_and_converges() {
         "/../../examples/firewall-qos.nll"
     ))
     .unwrap();
-    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
     let _guard = LabCleanup {
         name: lab.name().to_string(),
     };
     assert!(!lab.assertions_failed(), "{:?}", lab.assertion_results());
-    let result = nlink_lab::scenario::run_scenario(&lab, &topo.scenarios[0])
+    let result = nlink_lab::scenario::run_scenario(&mut lab, &topo.scenarios[0])
         .await
         .expect("scenario failed to run");
     assert!(result.passed, "{result:?}");
@@ -7514,6 +7514,112 @@ link a:eth1 -- c:eth0 { 10.0.1.1/30 -- 10.0.1.2/30 }"#,
         a_hosts.contains("10.0.0.2") && !a_hosts.contains("10.0.0.5"),
         "a's overlay is not the running lab's: {a_hosts:?}"
     );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #208: a scenario's `down` / `up` / `clear` on a container node (they
+/// resolved namespace nodes only and failed), and `clear` is
+/// `impair --clear`: the netem goes, the declared rate limit stays, and
+/// the state file records the clear. It deleted the whole root qdisc and
+/// told nobody.
+#[tokio::test]
+async fn a_scenario_acts_on_a_container_node_and_clears_like_impair() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("scn-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}" {{ runtime "podman" }}
+node c image "alpine:latest" cmd ["sleep", "infinity"]
+node h
+link c:eth0 -- h:eth0 {{
+  10.0.0.1/24 -- 10.0.0.2/24
+  delay 50ms
+  rate egress 10mbit
+}}
+scenario "flap" {{
+  at 0s {{ down c:eth0 }}
+  at 1s {{ up c:eth0 }}
+  at 2s {{ clear c:eth0 }}
+}}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let result = nlink_lab::scenario::run_scenario(&mut lab, &topo.scenarios[0])
+        .await
+        .expect("scenario failed to run");
+    assert!(result.passed, "{result:?}");
+
+    let conn: nlink::Connection<nlink::Route> =
+        lab.ns_resolver_of("c").unwrap().connection().unwrap();
+    let link = conn.get_link_by_name("eth0").await.unwrap().unwrap();
+    assert!(link.is_up(), "c:eth0 is not up again");
+    let root = conn.get_root_qdisc_by_name("eth0").await.unwrap();
+    let kind = root.as_ref().and_then(|q| q.kind()).map(str::to_string);
+    assert!(
+        kind.is_some() && kind.as_deref() != Some("netem"),
+        "the rate limit should stay and the netem go: root is {kind:?}"
+    );
+    let reloaded = RunningLab::load(lab.name()).unwrap();
+    assert_eq!(
+        reloaded.live_impairments().get("c:eth0"),
+        Some(&nlink_lab::types::Impairment::default()),
+        "the clear is not recorded"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #208: benchmark thresholds in any unit the lexer takes (`1s` parsed
+/// as nothing and never passed), and a UDP iperf3 at the rate asked: it
+/// ran at iperf3's 1 Mbit/s default, whatever the link.
+#[tokio::test]
+async fn benchmarks_read_any_unit_and_run_udp_at_the_rate_asked() {
+    let iperf3 = std::process::Command::new("iperf3")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if unsafe { libc::geteuid() } != 0 || !iperf3 {
+        eprintln!("skipping: needs root and iperf3");
+        return;
+    }
+    let lab_name = format!("bmk-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+benchmark "b" {{
+  ping a b {{
+    count 3
+    assert avg below 1s
+    assert loss below 1%
+  }}
+  iperf3 a b {{
+    duration 2s
+    udp
+    rate 20mbit
+    assert bandwidth above 10mbit
+    assert loss below 5%
+  }}
+}}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let result = nlink_lab::benchmark::run_benchmark(&lab, &topo.benchmarks[0]).unwrap();
+    assert!(result.passed, "{result:#?}");
 
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");

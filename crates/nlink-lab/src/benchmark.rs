@@ -22,6 +22,11 @@ pub struct BenchmarkTestResult {
     pub metrics: std::collections::BTreeMap<String, f64>,
     pub assertions: Vec<AssertionEval>,
     pub passed: bool,
+    /// Why the test produced no measurement (no address for the target,
+    /// a missing tool, a failed run). A failed test used to give no
+    /// reason (#208).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 /// Evaluation of a single assertion.
@@ -34,6 +39,54 @@ pub struct AssertionEval {
     pub passed: bool,
 }
 
+/// What a benchmark metric is measured in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricUnit {
+    /// Milliseconds (a duration threshold: `500us`, `20ms`, `1s`).
+    Millis,
+    /// Bits per second (a rate threshold: `900mbit`, `1g`, `10mbyte`).
+    BitsPerSecond,
+    /// A percentage (`1%`).
+    Percent,
+}
+
+/// The unit of `metric` for `test`, or `None` when the test does not
+/// report it: ping reports `min`, `avg`, `max`, `p99` and `loss`; iperf3
+/// `bandwidth`, and with `udp` also `jitter` and `loss`.
+pub fn metric_unit(test: &BenchmarkTest, metric: &str) -> Option<MetricUnit> {
+    match (test, metric) {
+        (BenchmarkTest::Ping { .. }, "min" | "avg" | "max" | "p99") => Some(MetricUnit::Millis),
+        (BenchmarkTest::Ping { .. }, "loss") => Some(MetricUnit::Percent),
+        (BenchmarkTest::Iperf3 { .. }, "bandwidth") => Some(MetricUnit::BitsPerSecond),
+        (BenchmarkTest::Iperf3 { udp: true, .. }, "jitter") => Some(MetricUnit::Millis),
+        (BenchmarkTest::Iperf3 { udp: true, .. }, "loss") => Some(MetricUnit::Percent),
+        _ => None,
+    }
+}
+
+/// A threshold in `unit`, with the units the NLL lexer accepts: any
+/// duration (`1s`, `100ns`) as milliseconds, any rate (`1g`, `10mbyte`) as
+/// bit/s, a percentage. A bare number is taken in the metric's unit. Only
+/// `ms`, `us`, `%` and `*bit` used to parse; anything else never passed.
+pub fn parse_threshold(unit: MetricUnit, value: &str) -> Option<f64> {
+    let v = value.trim();
+    if let Ok(n) = v.parse::<f64>() {
+        return n.is_finite().then_some(n);
+    }
+    match unit {
+        MetricUnit::Millis => crate::helpers::parse_duration(v)
+            .ok()
+            .map(|d| d.as_secs_f64() * 1000.0),
+        MetricUnit::BitsPerSecond => crate::helpers::parse_rate_bps(v).ok().map(|b| b as f64),
+        MetricUnit::Percent => v
+            .strip_suffix('%')?
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|n| n.is_finite()),
+    }
+}
+
 /// Run all tests in a benchmark.
 pub fn run_benchmark(lab: &RunningLab, benchmark: &Benchmark) -> Result<BenchmarkResult> {
     let ip_map = crate::ipmap::build_ip_map(lab.topology());
@@ -44,26 +97,27 @@ pub fn run_benchmark(lab: &RunningLab, benchmark: &Benchmark) -> Result<Benchmar
     for test in &benchmark.tests {
         let result = match test {
             BenchmarkTest::Ping {
-                from,
-                to,
-                count,
-                assertions,
-            } => run_ping_benchmark(lab, from, to, *count, assertions, &ip_map),
+                from, to, count, ..
+            } => run_ping_benchmark(lab, test, from, to, *count, &ip_map),
             BenchmarkTest::Iperf3 {
                 from,
                 to,
                 duration,
                 streams,
                 udp,
-                assertions,
+                rate,
+                ..
             } => run_iperf3_benchmark(
                 lab,
-                from,
-                to,
-                duration.as_deref(),
-                *streams,
-                *udp,
-                assertions,
+                test,
+                Iperf3Run {
+                    from,
+                    to,
+                    duration: duration.as_deref(),
+                    streams: *streams,
+                    udp: *udp,
+                    rate: rate.as_deref(),
+                },
                 &ip_map,
             ),
         };
@@ -80,48 +134,86 @@ pub fn run_benchmark(lab: &RunningLab, benchmark: &Benchmark) -> Result<Benchmar
     })
 }
 
+fn assertions_of(test: &BenchmarkTest) -> &[BenchmarkAssertion] {
+    match test {
+        BenchmarkTest::Ping { assertions, .. } | BenchmarkTest::Iperf3 { assertions, .. } => {
+            assertions
+        }
+    }
+}
+
+/// A test that measured nothing: every assertion fails, with `detail`.
+fn not_measured(test: &BenchmarkTest, desc: String, detail: String) -> BenchmarkTestResult {
+    let metrics = Default::default();
+    BenchmarkTestResult {
+        description: desc,
+        assertions: evaluate_assertions(test, &metrics),
+        metrics,
+        passed: false,
+        detail: Some(detail),
+    }
+}
+
 fn run_ping_benchmark(
     lab: &RunningLab,
+    test: &BenchmarkTest,
     from: &str,
     to: &str,
     count: Option<u32>,
-    assertions: &[BenchmarkAssertion],
     ip_map: &std::collections::BTreeMap<String, String>,
 ) -> BenchmarkTestResult {
     let desc = format!("ping {from} -> {to}");
     let count = count.unwrap_or(10);
 
     let Some(target_ip) = ip_map.get(to) else {
-        return BenchmarkTestResult {
-            description: desc,
-            metrics: Default::default(),
-            assertions: vec![],
-            passed: false,
-        };
+        return not_measured(test, desc, format!("no address for '{to}'"));
     };
 
     let count_str = count.to_string();
     let output = match lab.exec(from, "ping", &["-c", &count_str, "-q", target_ip]) {
         Ok(out) => out,
-        Err(_) => {
-            return BenchmarkTestResult {
-                description: desc,
-                metrics: Default::default(),
-                assertions: vec![],
-                passed: false,
-            };
-        }
+        Err(e) => return not_measured(test, desc, format!("ping on '{from}': {e}")),
     };
+    let metrics = parse_ping(&output.stdout);
+    if metrics.is_empty() {
+        return not_measured(
+            test,
+            desc,
+            format!(
+                "no ping statistics (exit {}): {}",
+                output.exit_code,
+                output.stderr.trim()
+            ),
+        );
+    }
+    let evals = evaluate_assertions(test, &metrics);
+    let passed = evals.iter().all(|e| e.passed);
 
+    BenchmarkTestResult {
+        description: desc,
+        metrics,
+        assertions: evals,
+        passed,
+        detail: None,
+    }
+}
+
+/// `min` / `avg` / `max` / `p99` (ms) and `loss` (%) from `ping -q`
+/// output: iputils' `rtt min/avg/max/mdev = a/b/c/d ms`, or busybox's
+/// `round-trip min/avg/max = a/b/c ms`, whose three fields gave no RTT
+/// metrics at all (#208).
+fn parse_ping(stdout: &str) -> std::collections::BTreeMap<String, f64> {
     let mut metrics = std::collections::BTreeMap::new();
-
-    // Parse ping output: "rtt min/avg/max/mdev = 0.1/0.2/0.3/0.1 ms"
-    for line in output.stdout.lines() {
+    for line in stdout.lines() {
         if line.contains("min/avg/max")
             && let Some(stats_part) = line.split('=').nth(1)
         {
-            let parts: Vec<&str> = stats_part.trim().split('/').collect();
-            if parts.len() >= 4 {
+            let parts: Vec<&str> = stats_part
+                .trim()
+                .trim_end_matches("ms")
+                .split('/')
+                .collect();
+            if parts.len() >= 3 {
                 if let Ok(min) = parts[0].trim().parse::<f64>() {
                     metrics.insert("min".into(), min);
                 }
@@ -135,7 +227,7 @@ fn run_ping_benchmark(
                 }
             }
         }
-        // Parse loss: "5 packets transmitted, 5 received, 0% packet loss"
+        // "5 packets transmitted, 5 received, 0% packet loss"
         if line.contains("packet loss")
             && let Some(pct) = line.split(',').find(|s| s.contains("packet loss"))
         {
@@ -145,92 +237,81 @@ fn run_ping_benchmark(
             }
         }
     }
-
-    let evals = evaluate_assertions(assertions, &metrics);
-    let passed = evals.iter().all(|e| e.passed);
-
-    BenchmarkTestResult {
-        description: desc,
-        metrics,
-        assertions: evals,
-        passed,
-    }
+    metrics
 }
 
-#[allow(clippy::too_many_arguments)]
-fn run_iperf3_benchmark(
-    lab: &RunningLab,
-    from: &str,
-    to: &str,
-    duration: Option<&str>,
+/// One iperf3 test's settings.
+struct Iperf3Run<'a> {
+    from: &'a str,
+    to: &'a str,
+    duration: Option<&'a str>,
     streams: Option<u32>,
     udp: bool,
-    assertions: &[BenchmarkAssertion],
+    rate: Option<&'a str>,
+}
+
+fn run_iperf3_benchmark(
+    lab: &RunningLab,
+    test: &BenchmarkTest,
+    run: Iperf3Run<'_>,
     ip_map: &std::collections::BTreeMap<String, String>,
 ) -> BenchmarkTestResult {
+    let Iperf3Run { from, to, .. } = run;
     let desc = format!("iperf3 {from} -> {to}");
 
     let Some(target_ip) = ip_map.get(to) else {
-        return BenchmarkTestResult {
-            description: desc,
-            metrics: Default::default(),
-            assertions: vec![],
-            passed: false,
-        };
+        return not_measured(test, desc, format!("no address for '{to}'"));
     };
 
-    // Check if iperf3 is available. `exec` returns `Ok` with a
-    // non-zero exit code when `which` finds nothing, so the exit code
-    // is the signal — `is_err()` only fires when the exec itself fails.
-    let iperf3_present = matches!(
-        lab.exec(from, "which", &["iperf3"]),
-        Ok(out) if out.exit_code == 0
-    );
-    if !iperf3_present {
-        tracing::warn!("iperf3 not found in namespace '{from}'; skipping benchmark");
-        return BenchmarkTestResult {
-            description: desc,
-            metrics: Default::default(),
-            assertions: assertions
-                .iter()
-                .map(|a| AssertionEval {
-                    metric: a.metric.clone(),
-                    op: format!("{:?}", a.op),
-                    threshold: a.value.clone(),
-                    actual: None,
-                    passed: false,
-                })
-                .collect(),
-            passed: false,
-        };
+    // Both ends run iperf3. `exec` returns `Ok` with a non-zero exit code
+    // when `which` finds nothing, so the exit code is the signal.
+    for node in [from, to] {
+        let present = matches!(lab.exec(node, "which", &["iperf3"]), Ok(out) if out.exit_code == 0);
+        if !present {
+            tracing::warn!("iperf3 not found on '{node}'; skipping benchmark");
+            return not_measured(test, desc, format!("iperf3 not found on '{node}'"));
+        }
     }
 
-    let dur = duration.unwrap_or("5s");
-    let secs = crate::helpers::parse_duration(dur)
-        .map(|d| d.as_secs().max(1))
+    // Whole seconds, rounded up: iperf3's `-t` takes an integer
+    let secs = crate::helpers::parse_duration(run.duration.unwrap_or("5s"))
+        .map(|d| (d.as_secs_f64().ceil() as u64).max(1))
         .unwrap_or(5);
     let secs_str = secs.to_string();
+    let rate_bps = run
+        .rate
+        .and_then(|r| crate::helpers::parse_rate_bps(r).ok());
 
-    // Start iperf3 server in target namespace
-    // We use exec to run it in foreground with a timeout
-    let server_cmd = format!("timeout {} iperf3 -s -1 &>/dev/null &", secs + 5);
-    let _ = lab.exec(to, "bash", &["-c", &server_cmd]);
+    // A one-shot server in the target namespace, in the background; `sh`,
+    // since a busybox image has no bash
+    let server_cmd = format!("timeout {} iperf3 -s -1 >/dev/null 2>&1 &", secs + 5);
+    let _ = lab.exec(to, "sh", &["-c", &server_cmd]);
 
     // Brief pause for server to start
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    // Run client
-    let args = iperf3_client_args(target_ip, &secs_str, streams, udp);
+    let args = iperf3_client_args(target_ip, &secs_str, run.streams, run.udp, rate_bps);
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = lab.exec(from, "iperf3", &arg_refs);
+    let output = match lab.exec(from, "iperf3", &arg_refs) {
+        Ok(out) => out,
+        Err(e) => return not_measured(test, desc, format!("iperf3 on '{from}': {e}")),
+    };
 
     let mut metrics = std::collections::BTreeMap::new();
-
-    if let Ok(out) = &output {
-        parse_iperf3_json(&out.stdout, &mut metrics);
+    parse_iperf3_json(&output.stdout, &mut metrics);
+    if metrics.is_empty() {
+        let why = serde_json::from_str::<serde_json::Value>(&output.stdout)
+            .ok()
+            .and_then(|j| j.get("error")?.as_str().map(str::to_string))
+            .unwrap_or_else(|| output.stderr.trim().to_string());
+        return not_measured(
+            test,
+            desc,
+            format!("iperf3 gave no result (exit {}): {why}", output.exit_code),
+        );
     }
 
-    let evals = evaluate_assertions(assertions, &metrics);
+    let evals = evaluate_assertions(test, &metrics);
     let passed = evals.iter().all(|e| e.passed);
 
     BenchmarkTestResult {
@@ -238,16 +319,19 @@ fn run_iperf3_benchmark(
         metrics,
         assertions: evals,
         passed,
+        detail: None,
     }
 }
 
 /// Build the iperf3 client argument list. `streams` maps to `-P`, `udp`
-/// to `-u`; both were previously parsed from NLL and silently dropped.
+/// to `-u`, `rate` to `-b` (bit/s): without it a UDP test runs at
+/// iperf3's 1 Mbit/s default, whatever the link (#208).
 fn iperf3_client_args(
     target_ip: &str,
     secs_str: &str,
     streams: Option<u32>,
     udp: bool,
+    rate_bps: Option<u64>,
 ) -> Vec<String> {
     let mut args = vec![
         "-c".to_string(),
@@ -263,14 +347,20 @@ fn iperf3_client_args(
     if udp {
         args.push("-u".to_string());
     }
+    if let Some(bps) = rate_bps {
+        args.push("-b".to_string());
+        args.push(bps.to_string());
+    }
     args
 }
 
 /// Extract `bandwidth` / `jitter` / `loss` from `iperf3 -J` output.
 ///
-/// TCP runs report the sender side under `end.sum_sent`; UDP runs
-/// (and multi-stream summaries) put everything under `end.sum`, which
-/// also carries `jitter_ms` and `lost_percent`.
+/// A TCP run's bandwidth is what the receiver got (`end.sum_received`):
+/// the sender's figure counts what is still queued, which overstates a
+/// short run through a shaper. UDP runs (and multi-stream summaries) put
+/// everything under `end.sum`, which also carries `jitter_ms` and
+/// `lost_percent`.
 fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::BTreeMap<String, f64>) {
     let Ok(json) = serde_json::from_str::<serde_json::Value>(stdout) else {
         return;
@@ -283,7 +373,10 @@ fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::BTreeMap<Stri
             .and_then(|s| s.get("bits_per_second"))
             .and_then(|v| v.as_f64())
     };
-    if let Some(bps) = bps_of("sum_sent").or_else(|| bps_of("sum")) {
+    if let Some(bps) = bps_of("sum_received")
+        .or_else(|| bps_of("sum"))
+        .or_else(|| bps_of("sum_sent"))
+    {
         metrics.insert("bandwidth".into(), bps);
     }
     if let Some(sum) = end.get("sum") {
@@ -296,27 +389,33 @@ fn parse_iperf3_json(stdout: &str, metrics: &mut std::collections::BTreeMap<Stri
     }
 }
 
+/// `above` / `below` / `==` …: the NLL spelling of an operator. The
+/// iperf3-missing path printed the enum (`Gt`).
+fn op_word(op: CompareOp) -> &'static str {
+    match op {
+        CompareOp::Gt => "above",
+        CompareOp::Lt => "below",
+        other => other.as_str(),
+    }
+}
+
 fn evaluate_assertions(
-    assertions: &[BenchmarkAssertion],
+    test: &BenchmarkTest,
     metrics: &std::collections::BTreeMap<String, f64>,
 ) -> Vec<AssertionEval> {
-    assertions
+    assertions_of(test)
         .iter()
         .map(|a| {
             let actual = metrics.get(&a.metric).copied();
-            let threshold = parse_metric_value(&a.value);
+            let threshold =
+                metric_unit(test, &a.metric).and_then(|unit| parse_threshold(unit, &a.value));
             let passed = match (actual, threshold) {
                 (Some(actual), Some(threshold)) => a.op.holds(actual, threshold),
                 _ => false,
             };
-            let op_str = match a.op {
-                CompareOp::Gt => "above",
-                CompareOp::Lt => "below",
-                other => other.as_str(),
-            };
             AssertionEval {
                 metric: a.metric.clone(),
-                op: op_str.into(),
+                op: op_word(a.op).into(),
                 threshold: a.value.clone(),
                 actual,
                 passed,
@@ -325,42 +424,69 @@ fn evaluate_assertions(
         .collect()
 }
 
-/// Parse a metric value string to f64.
-/// Supports: "5ms" -> 5.0, "1%" -> 1.0, "900mbit" -> 900_000_000.0
-fn parse_metric_value(s: &str) -> Option<f64> {
-    let s = s.trim();
-    if let Some(v) = s.strip_suffix("ms") {
-        return v.trim().parse().ok();
-    }
-    if let Some(v) = s.strip_suffix("us") {
-        return v.trim().parse::<f64>().ok().map(|v| v / 1000.0);
-    }
-    if let Some(v) = s.strip_suffix('%') {
-        return v.trim().parse().ok();
-    }
-    if let Some(v) = s.strip_suffix("gbit") {
-        return v.trim().parse::<f64>().ok().map(|v| v * 1_000_000_000.0);
-    }
-    if let Some(v) = s.strip_suffix("mbit") {
-        return v.trim().parse::<f64>().ok().map(|v| v * 1_000_000.0);
-    }
-    if let Some(v) = s.strip_suffix("kbit") {
-        return v.trim().parse::<f64>().ok().map(|v| v * 1_000.0);
-    }
-    s.parse().ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_metric_value() {
-        assert_eq!(parse_metric_value("5ms"), Some(5.0));
-        assert_eq!(parse_metric_value("100us"), Some(0.1));
-        assert_eq!(parse_metric_value("1%"), Some(1.0));
-        assert_eq!(parse_metric_value("900mbit"), Some(900_000_000.0));
-        assert_eq!(parse_metric_value("1gbit"), Some(1_000_000_000.0));
+    fn test_parse_threshold() {
+        use MetricUnit::*;
+        assert_eq!(parse_threshold(Millis, "5ms"), Some(5.0));
+        assert_eq!(parse_threshold(Millis, "100us"), Some(0.1));
+        assert_eq!(parse_threshold(Percent, "1%"), Some(1.0));
+        assert_eq!(
+            parse_threshold(BitsPerSecond, "900mbit"),
+            Some(900_000_000.0)
+        );
+        assert_eq!(
+            parse_threshold(BitsPerSecond, "1gbit"),
+            Some(1_000_000_000.0)
+        );
+        // every unit the lexer accepts (#208)
+        assert_eq!(parse_threshold(Millis, "1s"), Some(1000.0));
+        assert_eq!(parse_threshold(Millis, "500ns"), Some(0.0005));
+        assert_eq!(parse_threshold(BitsPerSecond, "1g"), Some(1e9));
+        assert_eq!(parse_threshold(BitsPerSecond, "10mbyte"), Some(80e6));
+        assert_eq!(parse_threshold(Millis, "1%"), None);
+    }
+
+    #[test]
+    fn metrics_a_test_does_not_report_are_unknown() {
+        let ping = BenchmarkTest::Ping {
+            from: "a".into(),
+            to: "b".into(),
+            count: None,
+            assertions: vec![],
+        };
+        let iperf = |udp| BenchmarkTest::Iperf3 {
+            from: "a".into(),
+            to: "b".into(),
+            duration: None,
+            streams: None,
+            udp,
+            rate: None,
+            assertions: vec![],
+        };
+        assert_eq!(metric_unit(&ping, "avg"), Some(MetricUnit::Millis));
+        assert_eq!(metric_unit(&ping, "jitter"), None);
+        assert_eq!(metric_unit(&iperf(false), "jitter"), None);
+        assert_eq!(
+            metric_unit(&iperf(true), "jitter"),
+            Some(MetricUnit::Millis)
+        );
+    }
+
+    /// Busybox's three-field summary (Alpine) gave no RTT metrics (#208).
+    #[test]
+    fn busybox_ping_output_parses() {
+        let m = parse_ping(
+            "--- 10.0.0.2 ping statistics ---\n4 packets transmitted, 4 packets received, 0% packet loss\nround-trip min/avg/max = 0.064/0.070/0.077 ms\n",
+        );
+        assert_eq!(m.get("avg"), Some(&0.070));
+        assert_eq!(m.get("max"), Some(&0.077));
+        assert_eq!(m.get("loss"), Some(&0.0));
+        let m = parse_ping("rtt min/avg/max/mdev = 0.1/0.2/0.3/0.05 ms\n");
+        assert_eq!(m.get("min"), Some(&0.1));
     }
 
     #[test]
@@ -380,27 +506,35 @@ mod tests {
         let mut metrics = std::collections::BTreeMap::new();
         metrics.insert("avg".into(), 10.0);
         metrics.insert("loss".into(), 0.0);
+        let test = BenchmarkTest::Ping {
+            from: "a".into(),
+            to: "b".into(),
+            count: None,
+            assertions,
+        };
 
-        let evals = evaluate_assertions(&assertions, &metrics);
+        let evals = evaluate_assertions(&test, &metrics);
         assert!(evals[0].passed); // 10 < 50
         assert!(evals[1].passed); // 0 < 5
     }
 
     #[test]
     fn test_iperf3_client_args_defaults() {
-        let args = iperf3_client_args("10.0.0.2", "5", None, false);
+        let args = iperf3_client_args("10.0.0.2", "5", None, false, None);
         assert_eq!(args, vec!["-c", "10.0.0.2", "-t", "5", "-J"]);
         // A single stream is iperf3's default; don't emit a no-op -P 1.
-        let args = iperf3_client_args("10.0.0.2", "5", Some(1), false);
+        let args = iperf3_client_args("10.0.0.2", "5", Some(1), false, None);
         assert_eq!(args, vec!["-c", "10.0.0.2", "-t", "5", "-J"]);
     }
 
     #[test]
     fn test_iperf3_client_args_streams_and_udp() {
-        let args = iperf3_client_args("10.0.0.2", "10", Some(4), true);
+        let args = iperf3_client_args("10.0.0.2", "10", Some(4), true, Some(50_000_000));
         assert_eq!(
             args,
-            vec!["-c", "10.0.0.2", "-t", "10", "-J", "-P", "4", "-u"]
+            vec![
+                "-c", "10.0.0.2", "-t", "10", "-J", "-P", "4", "-u", "-b", "50000000"
+            ]
         );
     }
 
@@ -409,7 +543,8 @@ mod tests {
         let json = r#"{"end":{"sum_sent":{"bits_per_second":941000000.0},"sum_received":{"bits_per_second":939000000.0}}}"#;
         let mut m = std::collections::BTreeMap::new();
         parse_iperf3_json(json, &mut m);
-        assert_eq!(m.get("bandwidth"), Some(&941000000.0));
+        // what the receiver got
+        assert_eq!(m.get("bandwidth"), Some(&939000000.0));
         assert!(!m.contains_key("jitter"));
     }
 
@@ -440,8 +575,15 @@ mod tests {
         }];
         let mut metrics = std::collections::BTreeMap::new();
         metrics.insert("avg".into(), 10.0);
+        let test = BenchmarkTest::Ping {
+            from: "a".into(),
+            to: "b".into(),
+            count: None,
+            assertions,
+        };
 
-        let evals = evaluate_assertions(&assertions, &metrics);
+        let evals = evaluate_assertions(&test, &metrics);
         assert!(!evals[0].passed); // 10 > 5 — fails
+        assert_eq!(evals[0].op, "below");
     }
 }

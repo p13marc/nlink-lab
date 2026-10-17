@@ -53,3 +53,24 @@ node r1 : router {
               (ipv4_address))
             (known_property
               (cidr))))))))
+
+================
+iperf3 benchmark with a rate
+================
+benchmark "b" {
+  iperf3 a b { udp rate 50mbit assert loss below 1% }
+}
+---
+
+(source_file
+  (benchmark_block
+    (string)
+    (benchmark_test
+      (identifier)
+      (identifier)
+      (benchmark_property)
+      (benchmark_property
+        (rate))
+      (benchmark_property
+        (identifier)
+        (percent)))))

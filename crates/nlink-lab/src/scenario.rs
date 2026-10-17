@@ -43,8 +43,9 @@ pub struct ActionResult {
     pub detail: Option<String>,
 }
 
-/// Run a scenario against a deployed lab.
-pub async fn run_scenario(lab: &RunningLab, scenario: &Scenario) -> Result<ScenarioResult> {
+/// Run a scenario against a deployed lab. Mutable: `clear` records what it
+/// cleared, as `impair --clear` does.
+pub async fn run_scenario(lab: &mut RunningLab, scenario: &Scenario) -> Result<ScenarioResult> {
     let start = std::time::Instant::now();
     let mut step_results = Vec::new();
     let mut all_passed = true;
@@ -74,7 +75,7 @@ pub async fn run_scenario(lab: &RunningLab, scenario: &Scenario) -> Result<Scena
 }
 
 async fn execute_step(
-    lab: &RunningLab,
+    lab: &mut RunningLab,
     scenario_name: &str,
     step: &ScenarioStep,
 ) -> Result<StepResult> {
@@ -101,7 +102,7 @@ async fn execute_step(
     })
 }
 
-async fn execute_action(lab: &RunningLab, action: &ScenarioAction) -> ActionResult {
+async fn execute_action(lab: &mut RunningLab, action: &ScenarioAction) -> ActionResult {
     match action {
         ScenarioAction::Down(endpoint) => {
             let desc = format!("down {endpoint}");
@@ -135,7 +136,7 @@ async fn execute_action(lab: &RunningLab, action: &ScenarioAction) -> ActionResu
         }
         ScenarioAction::Clear(endpoint) => {
             let desc = format!("clear {endpoint}");
-            match clear_impairment(lab, endpoint).await {
+            match lab.clear_impairment(endpoint).await {
                 Ok(()) => ActionResult {
                     description: desc,
                     ok: true,
@@ -226,8 +227,13 @@ async fn set_link_state(lab: &RunningLab, endpoint: &str, up: bool) -> Result<()
     let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
         endpoint: endpoint.to_string(),
     })?;
-    let ns_name = lab.namespace_for(&ep.node)?;
-    let conn: Connection<Route> = Connection::new_in(ns_name)
+    // a container node too: `namespace_for` knew namespace nodes only
+    let conn: Connection<Route> = lab
+        .ns_resolver_of(&ep.node)
+        .ok_or_else(|| Error::NodeNotFound {
+            name: ep.node.clone(),
+        })?
+        .connection()
         .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
     if up {
         conn.set_link_up(&ep.iface)
@@ -238,19 +244,6 @@ async fn set_link_state(lab: &RunningLab, endpoint: &str, up: bool) -> Result<()
             .await
             .map_err(|e| Error::nlink(format!("failed to bring down {endpoint}"), e))?;
     }
-    Ok(())
-}
-
-/// Remove all TC qdiscs from an interface (clear impairments).
-async fn clear_impairment(lab: &RunningLab, endpoint: &str) -> Result<()> {
-    let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
-        endpoint: endpoint.to_string(),
-    })?;
-    let ns_name = lab.namespace_for(&ep.node)?;
-    let conn: Connection<Route> = Connection::new_in(ns_name)
-        .map_err(|e| Error::deploy_failed(format!("connection for '{}': {e}", ep.node)))?;
-    // Delete root qdisc — this removes all child qdiscs too
-    let _ = conn.del_qdisc(&ep.iface, nlink::TcHandle::ROOT).await;
     Ok(())
 }
 

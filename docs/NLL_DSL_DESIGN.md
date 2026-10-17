@@ -1633,8 +1633,12 @@ action         = "down" endpoint | "up" endpoint | "clear" endpoint
 benchmark      = "benchmark" STRING "{" bench_test* "}"
 bench_test     = ("iperf3" | "ping") IDENT IDENT bench_block?
 bench_block    = "{" bench_prop* "}"
-bench_prop     = "duration" DURATION | "streams" INT | "udp"
+bench_prop     = "duration" DURATION | "streams" INT | "udp" | "rate" RATE
                | "count" INT | "assert" IDENT ("above"|"below") value
+                 (* metrics: ping min/avg/max/p99 (durations) and loss (%);
+                    iperf3 bandwidth (a rate, as the receiver got it) and,
+                    with `udp`, jitter and loss. `rate` is iperf3's -b:
+                    without it a UDP test runs at 1 Mbit/s *)
 
 # ── IP computation functions ────────────────────
 # Built-in functions evaluated at lowering time (IPv4 and IPv6):

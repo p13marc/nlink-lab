@@ -266,6 +266,29 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`apply` deletes a WireGuard interface the topology drops, and sets
   a `key` the topology writes** (#204). Both used to report no change.
   A `key auto` interface keeps its saved key, as before.
+- **Assertions and benchmarks judge what they claim to** (#208):
+  - `dns-resolves` compares the address column exactly: it passed on a
+    substring (`10.0.0.1` for `10.0.0.12`, or any name);
+  - `no-reach` fails when `ping` could not run (exit 125–127, a refused
+    socket); it passed on a container without `ping`;
+  - an iperf3 TCP `bandwidth` is the receiver's figure, not the
+    sender's;
+  - a benchmark metric the test does not report, or a threshold not in
+    its unit, is a validation error (new rule `benchmark-metric`).
+    Thresholds take any duration or rate (`1s`, `1g`, `10mbyte`); only
+    `ms`, `us`, `%` and `*bit` used to work.
+- **`nlink-lab test` no longer re-runs the assertions `deploy` ran** (#208),
+  so a failing lab's retry budget is no longer doubled. A file that fails
+  to parse, validate, deploy or destroy is an error in the JUnit and TAP
+  reports (`errors="1"`, `not ok … severity: error`); it was missing.
+  TAP messages are YAML block scalars.
+- **Library API** (#208):
+  - `scenario::run_scenario` takes `&mut RunningLab`;
+  - `BenchmarkTest::Iperf3` has a `rate` field;
+  - `TestResult` has `error` (with `TestResult::errored`);
+  - `BenchmarkTestResult` has `detail`.
+
+  Struct literals need the new fields.
 - **NLL lowering fixes that change what a topology deploys** (#205):
   - `defaults rate { … }` applies to every link without its own `rate`.
     It was parsed and ignored.
@@ -287,6 +310,8 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Added
 
+- **`rate RATE` on an `iperf3` benchmark test** (#208): iperf3's `-b`. A
+  `udp` test without it runs at iperf3's 1 Mbit/s default.
 - **`apply_plan_with` and `compute_layered_diff_with`** (library API,
   #204): `apply_plan` / `compute_layered_diff` with `ApplyOptions`, for
   the plan an `apply_with` runs. Also `Plan::work` (the ops that create
@@ -415,6 +440,17 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **Scenario `down` / `up` / `clear` failed on container nodes** (#208),
+  and `clear` deleted the endpoint's whole root qdisc without telling the
+  state file. It is `impair --clear` now: the netem goes, a declared rate
+  limit or `qdisc` block stays, and the clear is recorded.
+- **Benchmarks** (#208):
+  - busybox `ping` output (Alpine) gave no RTT metrics;
+  - a test that measured nothing said nothing, and now gives its reason;
+  - iperf3 is checked on both nodes, and its server starts under `sh`
+    (an image without bash had none);
+  - the iperf3-missing path printed `Gt` for `above`.
+- **`tcp-connect … retries 0` made no attempt** (#208); it makes one.
 - **Nested interpolation did not parse** (#205). `${leaf${i}.eth0}`
   failed: the lexer ended an interpolation at its first `}`. The
   tree-sitter grammar and the VS Code highlighting had the same rule.

@@ -1972,6 +1972,7 @@ fn render_benchmarks(out: &mut String, topo: &Topology) -> Result<()> {
                     duration,
                     streams,
                     udp,
+                    rate,
                     assertions,
                 } => {
                     writeln!(out, "  iperf3 {} {} {{", nll_ident(from)?, nll_ident(to)?).unwrap();
@@ -1983,6 +1984,9 @@ fn render_benchmarks(out: &mut String, topo: &Topology) -> Result<()> {
                     }
                     if *udp {
                         out.push_str("    udp\n");
+                    }
+                    if let Some(r) = rate {
+                        writeln!(out, "    rate {}", lit_rate(r)?).unwrap();
                     }
                     render_benchmark_assertions(out, assertions)?;
                     out.push_str("  }\n");

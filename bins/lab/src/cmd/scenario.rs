@@ -16,7 +16,7 @@ pub struct Args {
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, name } = args;
-    let running = nlink_lab::RunningLab::load(&lab)?;
+    let mut running = nlink_lab::RunningLab::load(&lab)?;
     let scenarios = &running.topology().scenarios;
     let Some(name) = name else {
         if ctx.json {
@@ -41,7 +41,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             ))
         })?;
     require_root()?;
-    let result = nlink_lab::scenario::run_scenario(&running, &scenario).await?;
+    let result = nlink_lab::scenario::run_scenario(&mut running, &scenario).await?;
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {

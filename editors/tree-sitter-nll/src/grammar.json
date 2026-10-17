@@ -4901,6 +4901,28 @@
           "members": [
             {
               "type": "STRING",
+              "value": "rate"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "rate"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "interpolation"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
               "value": "count"
             },
             {

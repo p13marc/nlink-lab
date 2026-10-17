@@ -420,12 +420,20 @@ Common fixes:
 
 ### Wi-Fi nodes can't see each other
 
-`mac80211_hwsim` is loaded but the radios aren't grouped:
-- Wi-Fi nodes share a *radio space* by SSID. Make sure all peers
-  declare the same SSID + same passphrase.
-- Channel mismatches silently fail. Set `channel` consistently.
-- For mesh mode, use `mode mesh` on every node — APs and stations
-  don't mesh.
+Every Wi-Fi interface of a lab has a radio of its own, and the lab's
+radios hear one another (and no other lab's), so what is left is the
+configuration:
+- Stations associate with an AP by SSID and passphrase. Make sure
+  all peers declare the same SSID and passphrase.
+- Channel mismatches fail silently. Set `channel` consistently.
+- For mesh mode, use `mode mesh` with the same `mesh-id` and `channel`
+  on every node — APs and stations don't mesh. Peering takes a moment
+  after the deploy: give `validate` a `retries`/`interval`
+  (`examples/wifi-mesh.nll`).
+- `sudo nlink-lab exec <lab> <node> -- iw dev` shows the interface,
+  its type and channel, when `iw` is installed. A station's
+  wpa_supplicant answers `wpa_cli -p /run/nlink-lab/wifi/<lab>/<node>
+  status`; an AP's hostapd answers `hostapd_cli` with the same `-p`.
 
 ---
 

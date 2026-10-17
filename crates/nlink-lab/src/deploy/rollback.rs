@@ -29,8 +29,16 @@ pub enum Undo {
         binary: String,
         id: String,
     },
+    /// Written by 0.13, which loaded `mac80211_hwsim` for a lab's radios.
+    /// Radios are made over netlink now ([`Undo::DeleteRadio`]): nothing
+    /// to undo, the variant only reads old journals.
     ReleaseHwsim {
         lab: String,
+    },
+    /// A `mac80211_hwsim` radio in `ns` (#176).
+    DeleteRadio {
+        ns: NsRef,
+        radio: String,
     },
     /// A link in the root namespace (mgmt bridge/peers, a macvlan not
     /// yet moved) — deleted through netlink.
@@ -183,8 +191,11 @@ impl Journal {
                         .stderr(std::process::Stdio::null())
                         .status();
                 }
-                Undo::ReleaseHwsim { lab } => {
-                    crate::wifi::release_hwsim(lab);
+                Undo::ReleaseHwsim { .. } => {}
+                Undo::DeleteRadio { ns, radio } => {
+                    if let Err(e) = crate::wifi::delete_radio(ns, radio).await {
+                        tracing::warn!("rollback: {e}");
+                    }
                 }
                 Undo::DeleteHostLink { name } => {
                     if let Some(conn) = &root
@@ -250,9 +261,9 @@ impl Drop for Journal {
                         .stderr(std::process::Stdio::null())
                         .status();
                 }
-                Undo::ReleaseHwsim { lab } => {
-                    let _ = crate::wifi::release_hwsim(lab);
-                }
+                // Needs the async connection; a radio made in a lab
+                // namespace also goes with the namespace, deleted here.
+                Undo::ReleaseHwsim { .. } | Undo::DeleteRadio { .. } => {}
                 Undo::RemoveHosts { lab } => {
                     let _ = crate::dns::remove_hosts(lab);
                 }

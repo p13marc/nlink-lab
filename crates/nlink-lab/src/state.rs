@@ -61,7 +61,8 @@ pub struct LabState {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dns_injected: bool,
 
-    /// Whether mac80211_hwsim was loaded for this lab.
+    /// Whether the lab made Wi-Fi radios. Before 0.14 (#176): whether it
+    /// loaded `mac80211_hwsim`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wifi_loaded: bool,
 

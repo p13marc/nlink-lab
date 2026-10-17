@@ -1004,33 +1004,6 @@ fn guard_namespace_absent(ns_name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Convert WiFi channel number to frequency in MHz (as string for iw).
-fn freq_from_channel(channel: u32) -> String {
-    let freq = match channel {
-        1 => 2412,
-        2 => 2417,
-        3 => 2422,
-        4 => 2427,
-        5 => 2432,
-        6 => 2437,
-        7 => 2442,
-        8 => 2447,
-        9 => 2452,
-        10 => 2457,
-        11 => 2462,
-        12 => 2467,
-        13 => 2472,
-        14 => 2484,
-        // 5 GHz channels
-        36 => 5180,
-        40 => 5200,
-        44 => 5220,
-        48 => 5240,
-        _ => 2412, // default to channel 1
-    };
-    freq.to_string()
-}
-
 pub(crate) fn now_iso8601() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)

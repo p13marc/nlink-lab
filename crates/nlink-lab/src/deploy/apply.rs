@@ -323,47 +323,18 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 },
             );
         }
-        Op::LoadHwsim { radios, order } => {
-            let _ = crate::wifi::load_hwsim_for(&env.lab, *radios)?;
-            journal.record(Undo::ReleaseHwsim {
-                lab: env.lab.clone(),
-            });
+        Op::CreateRadio {
+            node,
+            iface,
+            radio,
+            mode,
+            maker,
+        } => {
+            crate::wifi::ensure_hwsim()?;
+            let maker = env.handle(maker)?.clone();
+            let target = env.handle(node)?.clone();
+            create_radio(&maker, &target, node, iface, radio, mode, journal).await?;
             env.wifi_loaded = true;
-            use nlink::netlink::Nl80211;
-            let nl = nlink::Connection::<Nl80211>::new_async()
-                .await
-                .map_err(|e| Error::nlink("nl80211 connection", e))?;
-            // Only hwsim radios: nlink 0.31 made `set_wiphy_netns` really
-            // move a wiphy (it was acked and ignored, nlink #604), so taking
-            // the first N would move a host's own Wi-Fi card into a lab.
-            let mut phys: Vec<_> = nl
-                .get_phys()
-                .await
-                .map_err(|e| Error::nlink("failed to list PHYs", e))?
-                .into_iter()
-                .filter(|p| is_hwsim_phy(&p.name))
-                .collect();
-            phys.sort_by_key(|p| p.index);
-            if phys.len() < order.len() {
-                return Err(Error::deploy_failed(format!(
-                    "expected {} mac80211_hwsim radios but found {}",
-                    order.len(),
-                    phys.len()
-                )));
-            }
-            for (i, (node, _iface)) in order.iter().enumerate() {
-                let phy = &phys[i];
-                let fd = env
-                    .handle(node)?
-                    .open_fd()
-                    .map_err(|e| Error::nlink(format!("open ns fd for '{node}'"), e))?;
-                nl.set_wiphy_netns(phy.index, &fd).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to move phy{} to namespace '{node}': {e}",
-                        phy.index
-                    ))
-                })?;
-            }
         }
         Op::CreateMgmtBridge { name, ip, prefix } => {
             let root = ApplyEnv::root()?;
@@ -799,7 +770,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         &env.lab,
                         node,
                         "hostapd.conf",
-                        &crate::wifi::generate_hostapd_conf(wifi),
+                        &crate::wifi::generate_hostapd_conf(
+                            wifi,
+                            &crate::wifi::make_ctrl_dir(&env.lab, node)?,
+                        ),
                     )?;
                     journal.record(Undo::CleanupWifiConfigs {
                         lab: env.lab.clone(),
@@ -814,7 +788,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         &env.lab,
                         node,
                         "wpa.conf",
-                        &crate::wifi::generate_wpa_conf(wifi),
+                        &crate::wifi::generate_wpa_conf(
+                            wifi,
+                            &crate::wifi::make_ctrl_dir(&env.lab, node)?,
+                        ),
                     )?;
                     journal.record(Undo::CleanupWifiConfigs {
                         lab: env.lab.clone(),
@@ -833,27 +810,36 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     )?;
                 }
                 crate::types::WifiMode::Mesh => {
-                    if let Some(mesh_id) = &wifi.mesh_id {
-                        let mut cmd = std::process::Command::new("iw");
-                        cmd.args([
-                            "dev",
-                            &wifi.name,
-                            "mesh",
-                            "join",
-                            mesh_id,
-                            "freq",
-                            &super::freq_from_channel(wifi.channel.unwrap_or(1)),
-                        ]);
-                        let output = handle.spawn_output(cmd).map_err(|e| {
-                            Error::nlink(format!("failed to join mesh '{mesh_id}' on '{node}'"), e)
+                    // `wifi-mesh-id` and `wifi-channel-range` refuse these
+                    // before a deploy; a builder topology can still get here.
+                    let mesh_id = wifi.mesh_id.as_deref().ok_or_else(|| {
+                        Error::deploy_failed(format!(
+                            "Wi-Fi '{node}:{}' is a mesh point without a mesh-id",
+                            wifi.name
+                        ))
+                    })?;
+                    let channel = wifi.channel.unwrap_or(1);
+                    let freq = crate::wifi::freq_mhz(channel).ok_or_else(|| {
+                        Error::deploy_failed(format!(
+                            "Wi-Fi '{node}:{}': no frequency for channel {channel}",
+                            wifi.name
+                        ))
+                    })?;
+                    let nl: Connection<nlink::netlink::Nl80211> =
+                        handle.connection_async().await.map_err(|e| {
+                            Error::nlink(format!("nl80211 connection for '{node}'"), e)
                         })?;
-                        if !output.status.success() {
-                            tracing::warn!(
-                                "mesh join failed on '{node}': {}",
-                                String::from_utf8_lossy(&output.stderr)
-                            );
-                        }
-                    }
+                    nl.join_mesh(&wifi.name, mesh_id.as_bytes(), freq)
+                        .await
+                        .map_err(|e| {
+                            Error::nlink(
+                                format!(
+                                    "failed to join mesh '{mesh_id}' on '{node}:{}'",
+                                    wifi.name
+                                ),
+                                e,
+                            )
+                        })?;
                 }
             }
         }
@@ -873,9 +859,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             match mode {
                 crate::types::WifiMode::Mesh => {
                     if let Ok(handle) = env.handle(node) {
-                        let mut cmd = std::process::Command::new("iw");
-                        cmd.args(["dev", name, "mesh", "leave"]);
-                        if let Err(e) = handle.spawn_output(cmd) {
+                        let left = match handle.connection_async::<nlink::netlink::Nl80211>().await
+                        {
+                            Ok(nl) => nl.leave_mesh(name).await,
+                            Err(e) => Err(e),
+                        };
+                        if let Err(e) = left {
                             tracing::warn!("mesh leave on '{node}:{name}': {e}");
                         }
                     }
@@ -902,6 +891,13 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     }
                     let _ = std::fs::remove_file(&pidfile);
                 }
+            }
+        }
+        Op::DeleteRadio { node, radio, .. } => {
+            if let Ok(ns) = env.handle(node)
+                && let Err(e) = crate::wifi::delete_radio(ns, radio).await
+            {
+                tracing::warn!("{e}");
             }
         }
         Op::DeleteNamespace { node, ns } => {
@@ -1187,10 +1183,16 @@ fn start_wifi_daemon(
         .spawn_output(cmd)
         .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
     if !output.status.success() {
+        // hostapd and wpa_supplicant report on stdout.
+        let said = [&output.stderr, &output.stdout]
+            .map(|b| String::from_utf8_lossy(b).trim().to_string())
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
         return Err(Error::deploy_failed(format!(
-            "{what} on '{node}' exited with {}: {}",
+            "{what} on '{node}' exited with {}: {said}",
             output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
     track_pidfile(what, node, pidfile, env, journal);
@@ -1268,11 +1270,75 @@ fn track_pidfile(what: &str, node: &str, pidfile: &str, env: &mut ApplyEnv, jour
     }
 }
 
-/// Whether wiphy `name` (`phy3`) is a `mac80211_hwsim` radio: its device
-/// lives under `/sys/devices/virtual/mac80211_hwsim/`.
-fn is_hwsim_phy(name: &str) -> bool {
-    std::fs::canonicalize(format!("/sys/class/ieee80211/{name}/device"))
-        .is_ok_and(|p| p.to_string_lossy().contains("mac80211_hwsim"))
+/// [`Op::CreateRadio`]: a radio with no interface, made in `maker`'s
+/// namespace (the lab's netgroup), its wiphy moved to `target`, and the
+/// declared interface created on it there (#176). Deleting the radio
+/// takes the interface with it.
+async fn create_radio(
+    maker: &NsRef,
+    target: &NsRef,
+    node: &str,
+    iface: &str,
+    radio: &str,
+    mode: &crate::types::WifiMode,
+    journal: &mut Journal,
+) -> Result<()> {
+    use nlink::netlink::genl::hwsim::NewRadio;
+    use nlink::netlink::{Hwsim, Nl80211};
+
+    let hwsim: Connection<Hwsim> = maker
+        .connection_async()
+        .await
+        .map_err(|e| Error::nlink("hwsim connection", e))?;
+    hwsim
+        .new_radio(NewRadio::new().name(radio).no_vif())
+        .await
+        .map_err(|e| {
+            Error::nlink(
+                format!("failed to create radio '{radio}' for '{node}:{iface}'"),
+                e,
+            )
+        })?;
+    journal.record(Undo::DeleteRadio {
+        ns: maker.clone(),
+        radio: radio.to_string(),
+    });
+
+    let nl: Connection<Nl80211> = maker
+        .connection_async()
+        .await
+        .map_err(|e| Error::nlink("nl80211 connection", e))?;
+    let phy = nl
+        .get_phy_by_name(radio)
+        .await
+        .map_err(|e| Error::nlink(format!("failed to find the wiphy of radio '{radio}'"), e))?
+        .ok_or_else(|| Error::deploy_failed(format!("radio '{radio}' has no wiphy")))?;
+    if target != maker {
+        let fd = target
+            .open_fd()
+            .map_err(|e| Error::nlink(format!("open ns fd for '{node}'"), e))?;
+        nl.set_wiphy_netns(phy.index, &fd)
+            .await
+            .map_err(|e| Error::nlink(format!("failed to move radio '{radio}' to '{node}'"), e))?;
+        journal.record(Undo::DeleteRadio {
+            ns: target.clone(),
+            radio: radio.to_string(),
+        });
+    }
+
+    let nl: Connection<Nl80211> = target
+        .connection_async()
+        .await
+        .map_err(|e| Error::nlink(format!("nl80211 connection for '{node}'"), e))?;
+    nl.new_interface(phy.index, iface, crate::wifi::interface_type(mode))
+        .await
+        .map_err(|e| {
+            Error::nlink(
+                format!("failed to create Wi-Fi interface '{node}:{iface}'"),
+                e,
+            )
+        })?;
+    Ok(())
 }
 
 /// [`execute`] on a thread and a current-thread runtime of its own.

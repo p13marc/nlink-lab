@@ -1136,6 +1136,86 @@ node sta { wifi wlan0 mode station { ssid "labnet" wpa2 "testpassword" 10.0.0.2/
         );
     }
 
+    /// One radio per Wi-Fi interface, all made in the first Wi-Fi node's
+    /// namespace (one netgroup), named after the namespace (#176).
+    #[test]
+    fn every_wifi_interface_gets_a_radio_made_in_one_namespace() {
+        let radios: Vec<_> = plan_of(WIFI)
+            .ops
+            .into_iter()
+            .filter_map(|o| match o {
+                Op::CreateRadio {
+                    node,
+                    iface,
+                    radio,
+                    mode,
+                    maker,
+                } => Some((node, iface, radio, mode, maker)),
+                _ => None,
+            })
+            .collect();
+        use crate::types::WifiMode::{Ap, Station};
+        let r = |n: &str, radio: &str, m| (n.into(), "wlan0".into(), radio.into(), m, "ap".into());
+        assert_eq!(
+            radios,
+            [r("ap", "w-ap-wlan0", Ap), r("sta", "w-sta-wlan0", Station)]
+        );
+        assert!(
+            plan_of(SIMPLE)
+                .ops
+                .iter()
+                .all(|o| !matches!(o, Op::CreateRadio { .. }))
+        );
+    }
+
+    /// A removed Wi-Fi interface loses its radio after its daemon stops; a
+    /// changed mode makes the radio again (the interface type is set when
+    /// it is created).
+    #[test]
+    fn diff_removed_or_retyped_wifi_deletes_its_radio() {
+        let cur = plan_of(WIFI);
+        let des = plan_of(&WIFI.replace(
+            "node sta { wifi wlan0 mode station { ssid \"labnet\" wpa2 \"testpassword\" 10.0.0.2/24 } }\n",
+            "node sta\n",
+        ));
+        let d = Plan::diff(&cur, &des);
+        let kill = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::KillWifiDaemon { node, .. } if node == "sta"));
+        let delete = d.ops.iter().position(
+            |o| matches!(o, Op::DeleteRadio { node, radio, .. } if node == "sta" && radio == "w-sta-wlan0"),
+        );
+        assert!(
+            kill.is_some() && delete.is_some() && kill < delete,
+            "{:?}",
+            d.ops
+        );
+        assert!(
+            !d.ops.iter().any(|o| matches!(o, Op::CreateRadio { .. })),
+            "{:?}",
+            d.ops
+        );
+
+        let des = plan_of(&WIFI.replace(
+            "mode station { ssid \"labnet\" wpa2 \"testpassword\"",
+            "mode mesh { mesh-id \"labmesh\"",
+        ));
+        let d = Plan::diff(&cur, &des);
+        let delete = d
+            .ops
+            .iter()
+            .position(|o| matches!(o, Op::DeleteRadio { node, .. } if node == "sta"));
+        let create = d.ops.iter().position(|o| {
+            matches!(o, Op::CreateRadio { node, mode: crate::types::WifiMode::Mesh, .. } if node == "sta")
+        });
+        assert!(
+            delete.is_some() && create.is_some() && delete < create,
+            "{:?}",
+            d.ops
+        );
+    }
+
     #[test]
     fn diff_one_shot_process_ops_only_run_for_new_nodes() {
         let src = format!("{SIMPLE}\nnode s {{ run [\"sleep\", \"1\"] background }}\n");

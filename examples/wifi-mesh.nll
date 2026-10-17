@@ -1,0 +1,27 @@
+# Wi-Fi mesh: three 802.11s mesh points on one channel.
+#
+# Each interface gets a mac80211_hwsim radio of its own, made for the
+# lab: its radios hear one another and no other lab's. The interfaces
+# join mesh "labmesh" on channel 1 and peer directly; open mesh peering
+# needs no daemon.
+#
+# Requires: the mac80211_hwsim kernel module.
+#
+# After deploying:
+#   sudo nlink-lab exec wifi-mesh m1 -- ping -c1 10.0.0.3
+
+lab "wifi-mesh" {
+  description "Three 802.11s mesh points on mac80211_hwsim"
+  tags [wifi]
+}
+
+node m1 { wifi wlan0 mode mesh { mesh-id "labmesh" channel 1 10.0.0.1/24 } }
+node m2 { wifi wlan0 mode mesh { mesh-id "labmesh" channel 1 10.0.0.2/24 } }
+node m3 { wifi wlan0 mode mesh { mesh-id "labmesh" channel 1 10.0.0.3/24 } }
+
+# Peering takes a moment after the joins.
+validate retries 20 interval 500ms {
+  reach m1 m2
+  reach m1 m3
+  reach m2 m3
+}

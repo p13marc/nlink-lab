@@ -2150,6 +2150,29 @@ impl RunningLab {
 
     /// Destroy the lab: kill processes, remove containers, delete namespaces, remove state.
     pub async fn destroy(self) -> Result<()> {
+        self.destroy_with(&crate::ops::OpCtx::default()).await
+    }
+
+    /// [`destroy`](Self::destroy), reporting its phases to `ctx` (#236).
+    /// It is not cancelled: a half-destroyed lab is worse than either.
+    pub async fn destroy_with(self, ctx: &crate::ops::OpCtx) -> Result<()> {
+        ctx.set_lab(self.name());
+        ctx.started();
+        let result = self.destroy_ctx(ctx).await;
+        ctx.finished(&result, false);
+        result
+    }
+
+    async fn destroy_ctx(self, ctx: &crate::ops::OpCtx) -> Result<()> {
+        const PHASES: [&str; 6] = [
+            "stopped processes",
+            "removed radios and containers",
+            "removed the management bridge",
+            "deleted namespaces",
+            "removed DNS entries and configs",
+            "removed the state",
+        ];
+        let step = |n: usize| ctx.step(n, PHASES.len(), || PHASES[n - 1].to_string());
         // Acquire exclusive lock
         let lock = crate::state::lock(&self.topology.lab.name)?;
 
@@ -2175,6 +2198,7 @@ impl RunningLab {
 
         // 1b. Drop the lab's cgroups now that its processes are gone
         crate::cgroup::remove_lab(&self.topology.lab.name);
+        step(1);
 
         // 1c. Delete the Wi-Fi radios, each from the namespace it is in:
         // hwsim takes a request for a radio only from there (#176).
@@ -2201,6 +2225,8 @@ impl RunningLab {
                     .status();
             }
         }
+
+        step(2);
 
         // 3. Delete root-namespace mgmt bridge + veth peers explicitly.
         // We must delete each veth peer individually — bridge cascade doesn't
@@ -2241,6 +2267,8 @@ impl RunningLab {
             }
         }
 
+        step(3);
+
         // 4. Delete namespaces (and their ownership tags)
         for ns_name in self.namespace_names.values() {
             if namespace::exists(ns_name)
@@ -2262,6 +2290,8 @@ impl RunningLab {
             }
             crate::netns_tag::untag(&mgmt_ns);
         }
+
+        step(4);
 
         // 5. Remove DNS hosts entries from /etc/hosts
         if self.dns_injected
@@ -2285,6 +2315,8 @@ impl RunningLab {
         // 5d. FRR runtime directories (daemons were killed in step 1)
         crate::frr::cleanup(&self.topology);
 
+        step(5);
+
         // 6. Remove state file
         // Recorded before the state directory (and the log with it) goes
         // away: an `events --follow` reader sees the line first.
@@ -2297,6 +2329,7 @@ impl RunningLab {
         // The lab is gone, so its lock file should be too (issue #103) —
         // unlinked while we still hold it, which is what makes it safe.
         lock.remove_file();
+        step(6);
 
         Ok(())
     }

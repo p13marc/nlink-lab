@@ -63,6 +63,28 @@ pub async fn run_test(path: &Path) -> Result<TestResult> {
 
 /// [`run_test`] with `param` values (`--set key=value`) applied to the file.
 pub async fn run_test_with_params(path: &Path, params: &[(String, String)]) -> Result<TestResult> {
+    run_test_with(path, params, &crate::ops::OpCtx::default()).await
+}
+
+/// [`run_test_with_params`], reporting the deploy (stages, waits,
+/// assertions) and the destroy to `ctx` (#236). A cancel during the
+/// deploy rolls it back; the test then fails with `Error::Cancelled`.
+pub async fn run_test_with(
+    path: &Path,
+    params: &[(String, String)],
+    ctx: &crate::ops::OpCtx,
+) -> Result<TestResult> {
+    ctx.started();
+    let result = test_ctx(path, params, ctx).await;
+    ctx.finished(&result, false);
+    result
+}
+
+async fn test_ctx(
+    path: &Path,
+    params: &[(String, String)],
+    ctx: &crate::ops::OpCtx,
+) -> Result<TestResult> {
     let file = path.display().to_string();
     let total_start = Instant::now();
 
@@ -76,7 +98,7 @@ pub async fn run_test_with_params(path: &Path, params: &[(String, String)]) -> R
 
     // Deploy
     let deploy_start = Instant::now();
-    let lab = topology.deploy().await?;
+    let lab = topology.deploy_with(ctx).await?;
     let deploy_ms = deploy_start.elapsed().as_millis() as u64;
 
     // `deploy()` ran the assertions once already and kept the outcome.
@@ -87,7 +109,7 @@ pub async fn run_test_with_params(path: &Path, params: &[(String, String)]) -> R
     // A lab that does not destroy is an error of the test, but its
     // assertion results still stand.
     let error = lab
-        .destroy()
+        .destroy_with(ctx)
         .await
         .err()
         .map(|e| format!("destroy failed: {e}"));

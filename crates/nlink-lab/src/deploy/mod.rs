@@ -34,6 +34,38 @@ pub use plan::{PlanInputs, plan};
 /// behind by an interrupted earlier run of the same lab is unwound
 /// first.
 pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
+    deploy_with(topology, &crate::ops::OpCtx::default()).await
+}
+
+/// [`deploy`], reporting its progress to `ctx` and stopping (rolled back)
+/// when `ctx` is cancelled (#236).
+pub async fn deploy_with(topology: &Topology, ctx: &crate::ops::OpCtx) -> Result<RunningLab> {
+    ctx.set_lab(&topology.lab.name);
+    ctx.started();
+    let mut rolled_back = false;
+    let result = deploy_ctx(topology, ctx, &mut rolled_back).await;
+    ctx.finished(&result, rolled_back);
+    result
+}
+
+/// The stages of `plan` in order, with their op counts.
+fn plan_stages(plan: &Plan) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = Vec::new();
+    for op in &plan.ops {
+        let name = op.stage().name();
+        match out.last_mut() {
+            Some((s, n)) if s == name => *n += 1,
+            _ => out.push((name.to_string(), 1)),
+        }
+    }
+    out
+}
+
+async fn deploy_ctx(
+    topology: &Topology,
+    ctx: &crate::ops::OpCtx,
+    rolled_back: &mut bool,
+) -> Result<RunningLab> {
     topology.validate().bail()?;
     let _lock = state::lock(&topology.lab.name)?;
     if state::exists(&topology.lab.name) {
@@ -46,6 +78,13 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
             "lab '{}': unwinding {} journal entries left by an interrupted run",
             topology.lab.name,
             pending.entries().len()
+        );
+        ctx.log(
+            "warn",
+            format!(
+                "unwinding {} journal entries left by an interrupted run",
+                pending.entries().len()
+            ),
         );
         pending.unwind().await;
     }
@@ -67,24 +106,39 @@ pub async fn deploy(topology: &Topology) -> Result<RunningLab> {
         });
     }
 
-    match deploy_inner(topology, &mut journal).await {
+    match deploy_inner(topology, &mut journal, ctx).await {
         Ok(running) => {
             journal.discard();
             Ok(running)
         }
         Err(e) => {
             tracing::warn!("deploy of '{lab_name}' failed: {e}; rolling back");
+            ctx.emit(nlink_lab_shared::api::OpPhase::RollingBack {
+                reason: e.to_string(),
+                entries: journal.entries().len(),
+            });
             journal.unwind().await;
+            *rolled_back = true;
             Err(e)
         }
     }
 }
 
-async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<RunningLab> {
+async fn deploy_inner(
+    topology: &Topology,
+    journal: &mut Journal,
+    ctx: &crate::ops::OpCtx,
+) -> Result<RunningLab> {
     let inputs = PlanInputs::for_deploy(topology)?;
     let plan = plan::plan(topology, &inputs)?;
     tracing::info!("plan: {} op(s)", plan.ops.len());
-    let env = apply::ApplyEnv::for_deploy(topology)?;
+    ctx.emit(nlink_lab_shared::api::OpPhase::Planned {
+        stages: plan_stages(&plan),
+        ops: plan.ops.len(),
+        removals: 0,
+    });
+    let mut env = apply::ApplyEnv::for_deploy(topology)?;
+    env.ctx = ctx.clone();
     let owned = std::mem::replace(journal, Journal::ephemeral(&topology.lab.name));
     let (res, env, owned) = apply::execute_isolated(plan.clone(), env, owned).await;
     *journal = owned;
@@ -155,7 +209,27 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     // returned lab so callers (`deploy --strict`) can decide.
     if !topology.assertions.is_empty() {
         tracing::info!("running validate assertions");
-        let results = run_assertions(&running, topology);
+        if topology.assertion_retries.is_some_and(|r| r > 1) {
+            ctx.waiting(
+                nlink_lab_shared::api::WaitKind::AssertionRetries,
+                Some(format!("{} assertion(s)", topology.assertions.len())),
+                None,
+            );
+        }
+        // blocking (pings, retries with sleeps): off the async thread
+        let results = {
+            let (lab, topo) = (running.clone(), topology.clone());
+            tokio::task::spawn_blocking(move || run_assertions(&lab, &topo))
+                .await
+                .map_err(|e| Error::deploy_failed(format!("assertions: {e}")))?
+        };
+        for r in &results {
+            ctx.emit(nlink_lab_shared::api::OpPhase::Assertion {
+                description: r.description.clone(),
+                passed: r.passed,
+                detail: r.detail.clone(),
+            });
+        }
         running.set_assertion_results(results);
     }
 
@@ -398,6 +472,32 @@ pub async fn apply_with(
     desired: &Topology,
     opts: &ApplyOptions,
 ) -> Result<ApplyReport> {
+    apply_with_ctx(running, desired, opts, &crate::ops::OpCtx::default()).await
+}
+
+/// [`apply_with`], reporting its progress to `ctx` and stopping (rolled
+/// back) when `ctx` is cancelled (#236).
+pub async fn apply_with_ctx(
+    running: &mut RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+    ctx: &crate::ops::OpCtx,
+) -> Result<ApplyReport> {
+    ctx.set_lab(running.name());
+    ctx.started();
+    let mut rolled_back = false;
+    let result = apply_ctx(running, desired, opts, ctx, &mut rolled_back).await;
+    ctx.finished(&result, rolled_back);
+    result
+}
+
+async fn apply_ctx(
+    running: &mut RunningLab,
+    desired: &Topology,
+    opts: &ApplyOptions,
+    ctx: &crate::ops::OpCtx,
+    rolled_back: &mut bool,
+) -> Result<ApplyReport> {
     let desired = &with_running_subnets(running, desired)?;
     desired.validate().bail()?;
     let _lock = state::lock(running.name())?;
@@ -409,9 +509,15 @@ pub async fn apply_with(
         applied: diff.ops.iter().map(|o| o.describe()).collect(),
     };
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
+    ctx.emit(nlink_lab_shared::api::OpPhase::Planned {
+        stages: plan_stages(&diff),
+        ops: report.ops,
+        removals: report.removed,
+    });
     preflight_recreates(running, desired).await?;
 
-    let env = apply::ApplyEnv::from_running(running, desired, &cur_plan)?;
+    let mut env = apply::ApplyEnv::from_running(running, desired, &cur_plan)?;
+    env.ctx = ctx.clone();
     let journal = Journal::new(running.name());
     let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
     if let Err(e) = res {
@@ -419,7 +525,12 @@ pub async fn apply_with(
             "apply to '{}' failed: {e}; rolling back this apply",
             running.name()
         );
+        ctx.emit(nlink_lab_shared::api::OpPhase::RollingBack {
+            reason: e.to_string(),
+            entries: journal.entries().len(),
+        });
         journal.unwind().await;
+        *rolled_back = true;
         restore_dns(running, &cur_plan);
         crate::events::record(
             running.name(),
@@ -469,7 +580,19 @@ pub async fn apply_with(
         running.set_assertion_results(Vec::new());
     } else {
         tracing::info!("running validate assertions");
-        let results = run_assertions(running, desired);
+        let results = {
+            let (lab, topo) = (running.clone(), desired.clone().into_owned());
+            tokio::task::spawn_blocking(move || run_assertions(&lab, &topo))
+                .await
+                .map_err(|e| Error::deploy_failed(format!("assertions: {e}")))?
+        };
+        for r in &results {
+            ctx.emit(nlink_lab_shared::api::OpPhase::Assertion {
+                description: r.description.clone(),
+                passed: r.passed,
+                detail: r.detail.clone(),
+            });
+        }
         running.set_assertion_results(results);
     }
     Ok(report)
@@ -486,13 +609,22 @@ pub async fn restore(
     running: &mut RunningLab,
     snapshot: &crate::state::Snapshot,
 ) -> Result<ApplyReport> {
+    restore_with(running, snapshot, &crate::ops::OpCtx::default()).await
+}
+
+/// [`restore`], reporting its progress to `ctx` (#236).
+pub async fn restore_with(
+    running: &mut RunningLab,
+    snapshot: &crate::state::Snapshot,
+    ctx: &crate::ops::OpCtx,
+) -> Result<ApplyReport> {
     let opts = ApplyOptions {
         reset_impairments: true,
     };
     // With reset the plan replaces every runtime impairment and every
     // partition by the snapshot topology's declarations, and the
     // bookkeeping is dropped with them.
-    let report = apply_with(running, &snapshot.topology, &opts).await?;
+    let report = apply_with_ctx(running, &snapshot.topology, &opts, ctx).await?;
 
     // Runtime impairments, then partitions on top (a partition saves the
     // live value as what `heal` restores).
@@ -552,6 +684,27 @@ fn restore_dns(running: &RunningLab, current: &Plan) {
 /// The node's bridge-network ports, sysctls, mgmt veth and `run` commands
 /// lived in the old namespace as well, and are re-created the same way.
 pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<ApplyReport> {
+    reattach_node_with(running, node, &crate::ops::OpCtx::default()).await
+}
+
+/// [`reattach_node`], reporting its progress to `ctx` (#236).
+pub async fn reattach_node_with(
+    running: &mut RunningLab,
+    node: &str,
+    ctx: &crate::ops::OpCtx,
+) -> Result<ApplyReport> {
+    ctx.set_lab(running.name());
+    ctx.started();
+    let result = reattach_ctx(running, node, ctx).await;
+    ctx.finished(&result, result.is_err());
+    result
+}
+
+async fn reattach_ctx(
+    running: &mut RunningLab,
+    node: &str,
+    ctx: &crate::ops::OpCtx,
+) -> Result<ApplyReport> {
     // The lab as it is, runtime impairments included: every node's Stack
     // is re-applied, so planning from the declared values undid an
     // `impair` anywhere in the lab, not only on the restarted node (#221).
@@ -605,7 +758,13 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
         lost.len(),
         report.ops
     );
-    let env = apply::ApplyEnv::from_running(running, &desired, &cur_plan)?;
+    ctx.emit(nlink_lab_shared::api::OpPhase::Planned {
+        stages: plan_stages(&diff),
+        ops: report.ops,
+        removals: report.removed,
+    });
+    let mut env = apply::ApplyEnv::from_running(running, &desired, &cur_plan)?;
+    env.ctx = ctx.clone();
     let journal = Journal::new(running.name());
     let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
     if let Err(e) = res {

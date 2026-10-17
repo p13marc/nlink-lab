@@ -77,6 +77,19 @@ adjacencies, Wi-Fi association, assertion retries), `assertion` for each
 `validate` result, `rolling_back` when it fails or is cancelled, and
 `finished` with its outcome.
 
+A test is one operation: its deploy and destroy report their stages
+inside it, between one `started` and one `finished`.
+
+In the library, an `nlink_lab::OpCtx` collects the events:
+
+```rust
+let cancel = nlink_lab::CancelToken::new();
+let ctx = nlink_lab::OpCtx::new("deploy", "")
+    .with_sink(std::sync::Arc::new(|e: nlink_lab::api::OpEvent| println!("{e:?}")))
+    .with_cancel(cancel.clone());
+let lab = topology.deploy_with(&ctx).await?; // cancel.cancel() rolls it back
+```
+
 ```json
 {"t": "event", "item": "op", "event": {"op": "op-12", "lab": "wan",
  "seq": 7, "ts_ms": 1760000000000, "phase": "step", "done": 31,

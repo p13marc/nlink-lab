@@ -502,6 +502,22 @@ under both (#233). Its waves land one by one below.
   `delay 50ms loss 1%` or `delay=50ms,loss=1%`, and a `loss` value runs
   to the next property, so a netem loss model is one value (`loss gemodel
   1% 30% 70% 0.1%`), which the prompt refused.
+- **Progress and cancellation in the library** (#236): `OpCtx` carries
+  an operation's id, who asked, a `ProgressSink` and a `CancelToken`.
+  `deploy_with`, `apply_with_ctx`, `restore_with`, `reattach_node_with`,
+  `RunningLab::destroy_with`, `scenario::run_scenario_with`,
+  `benchmark::run_benchmark_with` and `test_runner::run_test_with` report
+  `OpEvent`s through it: the plan, each stage and its steps, the waits
+  (image pulls, healthchecks, FRR adjacencies, Wi-Fi association,
+  assertion retries), each assertion and scenario action, the rollback
+  and the outcome. Cancelling a deploy, apply or restore stops it before
+  its next op or in the middle of a wait (healthcheck, `startup-delay`,
+  settle times) and rolls it back through the journal; a scenario or
+  benchmark stops between steps. The existing functions report nothing
+  and are not cancelled, as before. `validate` assertions now run off the
+  async runtime's threads, and a lab whose FRR does not converge in time
+  says so in a warning (it was silent). `nlink_lab::api` re-exports the
+  wire types.
 - **Library groundwork for the 0.14 CLI, daemon and GUI** (#234):
   - `Topology::redacted()` hides WireGuard keys, Wi-Fi passphrases and
     container env values, for every view that leaves the process;

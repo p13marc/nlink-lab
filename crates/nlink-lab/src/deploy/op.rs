@@ -189,6 +189,27 @@ pub enum Stage {
     Wifi,
 }
 
+impl Stage {
+    /// The stage's name in progress reports: `namespaces`, `mgmt-bridge`, …
+    pub fn name(self) -> &'static str {
+        match self {
+            Stage::Namespaces => "namespaces",
+            Stage::Hwsim => "hwsim",
+            Stage::MgmtBridge => "mgmt-bridge",
+            Stage::Networks => "networks",
+            Stage::Links => "links",
+            Stage::HostLinks => "host-links",
+            Stage::LinksUp => "links-up",
+            Stage::Sysctls => "sysctls",
+            Stage::Stack => "stack",
+            Stage::Dns => "dns",
+            Stage::RoutingDaemons => "routing-daemons",
+            Stage::Processes => "processes",
+            Stage::Wifi => "wifi",
+        }
+    }
+}
+
 /// Bridge-port VLAN settings for one network member.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortVlans {

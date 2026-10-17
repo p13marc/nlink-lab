@@ -4,8 +4,9 @@
 //! executing commands, spawning processes, modifying impairments, and destroying.
 
 use std::collections::BTreeMap;
+use std::time::Instant;
 
-use nlink::netlink::diagnostics::{Diagnostics, InterfaceDiag, Issue};
+use nlink::netlink::diagnostics::{DiagnosticReport, Diagnostics, InterfaceDiag, Issue, RouteDiag};
 use nlink::netlink::namespace;
 use nlink::{Connection, Route};
 
@@ -154,14 +155,55 @@ pub struct ProcessInfo {
 }
 
 /// Diagnostic results for a single node.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeDiagnostic {
     /// Node name.
     pub node: String,
+    /// When the link counters were read: the end of the link dump.
+    /// [`RunningLab::diagnose_since`] takes rates over the time since.
+    pub taken_at: Instant,
     /// Per-interface diagnostics.
     pub interfaces: Vec<InterfaceDiag>,
     /// Issues detected.
     pub issues: Vec<Issue>,
+}
+
+impl NodeDiagnostic {
+    fn from_report(node: &str, report: DiagnosticReport) -> Self {
+        Self {
+            node: node.to_string(),
+            taken_at: report.timestamp,
+            interfaces: report.interfaces,
+            issues: report.issues,
+        }
+    }
+}
+
+/// The node's entry in an earlier [`RunningLab::diagnose`] result.
+fn previous_of<'a>(previous: &'a [NodeDiagnostic], node: &str) -> Option<&'a NodeDiagnostic> {
+    previous.iter().find(|d| d.node == node)
+}
+
+/// One node's scan, with rates since `previous` when there is one.
+async fn scan_node(
+    conn: Connection<Route>,
+    previous: Option<&NodeDiagnostic>,
+) -> nlink::Result<DiagnosticReport> {
+    let diag = Diagnostics::new(conn);
+    match previous {
+        // Only the timestamp and the interfaces' names, ifindexes and
+        // counters are read back.
+        Some(prev) => {
+            diag.scan_since(&DiagnosticReport {
+                timestamp: prev.taken_at,
+                interfaces: prev.interfaces.clone(),
+                routes: RouteDiag::default(),
+                issues: Vec::new(),
+            })
+            .await
+        }
+        None => diag.scan().await,
+    }
 }
 
 impl RunningLab {
@@ -1619,61 +1661,51 @@ impl RunningLab {
 
     /// Run diagnostics on the lab, optionally filtered to a single node.
     ///
-    /// **The `rates` on each returned `InterfaceDiag` are always
-    /// `LinkRates::default()` — all zeros.** nlink computes rates from
-    /// the previous sample held by the `Diagnostics` runner, and this
-    /// method builds a fresh runner per node per call, so there is never
-    /// a previous sample to difference against. That is inherent to a
-    /// one-shot API and not worth a cached runner: a caller sampling on
-    /// a cadence wants to own the window anyway.
-    ///
-    /// Use the cumulative `stats` counters and difference them yourself
-    /// — which is what the backend collector does (#133).
+    /// The `rates` on each returned `InterfaceDiag` are zero: there is no
+    /// previous sample to take them against. A caller sampling on a
+    /// cadence keeps the result and passes it to
+    /// [`diagnose_since`](Self::diagnose_since).
     pub async fn diagnose(&self, node: Option<&str>) -> Result<Vec<NodeDiagnostic>> {
+        self.diagnose_since(node, &[]).await
+    }
+
+    /// [`diagnose`](Self::diagnose), with each interface's `rates` taken
+    /// since `previous` — what an earlier call returned — over the time
+    /// between the two reads of the counters (nlink's
+    /// `Diagnostics::scan_since`, #191).
+    ///
+    /// A node or interface missing from `previous`, a link recreated since
+    /// (its counters went backwards), or another link at the same ifindex
+    /// has zero rates.
+    pub async fn diagnose_since(
+        &self,
+        node: Option<&str>,
+        previous: &[NodeDiagnostic],
+    ) -> Result<Vec<NodeDiagnostic>> {
+        let wanted = |name: &str| node.is_none_or(|filter| filter == name);
         let mut results = Vec::new();
 
-        // Diagnose bare namespace nodes
-        for (node_name, ns_name) in &self.namespace_names {
-            if let Some(filter) = node
-                && node_name != filter
-            {
-                continue;
-            }
+        for (node_name, ns_name) in self.namespace_names.iter().filter(|(n, _)| wanted(n)) {
             let conn: Connection<Route> = Connection::new_in(ns_name)
                 .map_err(|e| Error::nlink(format!("connection for '{ns_name}'"), e))?;
-            let diag = Diagnostics::new(conn);
-            let report = diag
-                .scan()
+            let report = scan_node(conn, previous_of(previous, node_name))
                 .await
                 .map_err(|e| Error::nlink(format!("diagnostics scan for '{node_name}'"), e))?;
-            results.push(NodeDiagnostic {
-                node: node_name.clone(),
-                interfaces: report.interfaces,
-                issues: report.issues,
-            });
+            results.push(NodeDiagnostic::from_report(node_name, report));
         }
 
-        // Diagnose container nodes
-        for (node_name, container) in &self.containers {
-            if let Some(filter) = node
-                && node_name != filter
-            {
-                continue;
-            }
+        for (node_name, container) in self.containers.iter().filter(|(n, _)| wanted(n)) {
             let conn: Connection<Route> =
                 Connection::new_in(nlink::netlink::namespace::NetnsRef::Pid(container.pid))
                     .map_err(|e| {
                         Error::nlink(format!("connection for container '{node_name}'"), e)
                     })?;
-            let diag = Diagnostics::new(conn);
-            let report = diag.scan().await.map_err(|e| {
-                Error::nlink(format!("diagnostics scan for container '{node_name}'"), e)
-            })?;
-            results.push(NodeDiagnostic {
-                node: node_name.clone(),
-                interfaces: report.interfaces,
-                issues: report.issues,
-            });
+            let report = scan_node(conn, previous_of(previous, node_name))
+                .await
+                .map_err(|e| {
+                    Error::nlink(format!("diagnostics scan for container '{node_name}'"), e)
+                })?;
+            results.push(NodeDiagnostic::from_report(node_name, report));
         }
 
         Ok(results)

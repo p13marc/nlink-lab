@@ -115,6 +115,47 @@ async fn exec_ping(lab: RunningLab) {
     );
 }
 
+/// `diagnose_since` takes an interface's rates since the previous call,
+/// over the time between the two reads of its counters; `diagnose` alone
+/// has no previous sample and reports none (#191).
+#[lab_test("examples/simple.nll")]
+async fn diagnose_since_reports_real_rates(lab: RunningLab) {
+    let eth0 = |d: &[nlink_lab::NodeDiagnostic]| {
+        d[0].interfaces
+            .iter()
+            .find(|i| i.name == "eth0")
+            .cloned()
+            .expect("router eth0")
+    };
+    let first = lab.diagnose(Some("router")).await.unwrap();
+    assert_eq!(eth0(&first).rates.rx_bytes_per_sec, 0.0);
+
+    // 200 echo requests of 1042 bytes on the wire arrive on router:eth0.
+    let out = lab
+        .exec(
+            "host",
+            "ping",
+            &["-q", "-c", "200", "-i", "0.002", "-s", "1000", "10.0.0.1"],
+        )
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}{}", out.stdout, out.stderr);
+
+    let second = lab.diagnose_since(Some("router"), &first).await.unwrap();
+    let (before, after) = (eth0(&first), eth0(&second));
+    let bytes = after.stats.rx_bytes() - before.stats.rx_bytes();
+    assert!(bytes >= 200 * 1042, "{bytes} bytes received");
+    let secs = (second[0].taken_at - first[0].taken_at).as_secs_f64();
+    let rate = after.rates.rx_bytes_per_sec;
+    let expected = bytes as f64 / secs;
+    assert!(
+        (rate - expected).abs() < expected * 0.01,
+        "rx {rate:.0} B/s, {bytes} bytes over {secs:.3}s is {expected:.0} B/s"
+    );
+
+    let again = lab.diagnose(Some("router")).await.unwrap();
+    assert_eq!(eth0(&again).rates.rx_bytes_per_sec, 0.0);
+}
+
 #[lab_test("examples/simple.nll")]
 async fn sysctl_forwarding(lab: RunningLab) {
     let output = lab

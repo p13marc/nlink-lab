@@ -232,21 +232,31 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
         return Ok(());
     };
 
-    let printer = tokio::spawn(async move {
+    // Ends when stdout does: `println!` panicked on a closed pipe
+    // (`watch --json | head -1`), and the watch then hung (#226).
+    let mut printer = tokio::spawn(async move {
+        use std::io::Write;
         while let Some(ev) = rx.recv().await {
-            if print_json {
+            let line = if print_json {
                 match serde_json::to_string(&ev) {
-                    Ok(line) => println!("{line}"),
-                    Err(e) => eprintln!("[watch] json encode failed: {e}"),
+                    Ok(line) => line,
+                    Err(e) => {
+                        eprintln!("[watch] json encode failed: {e}");
+                        continue;
+                    }
                 }
             } else {
-                println!("{}", ev.render_line());
+                ev.render_line()
+            };
+            let mut out = std::io::stdout().lock();
+            if writeln!(out, "{line}").and_then(|()| out.flush()).is_err() {
+                return;
             }
         }
     });
 
-    // Wait for Ctrl-C OR every subscription task to finish (the
-    // latter happens if every node fails to subscribe).
+    // Wait for Ctrl-C, every subscription task to finish (the latter
+    // happens if every node fails to subscribe), or the output to close.
     let all_subs = futures_join_all(tasks);
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
@@ -255,9 +265,11 @@ pub async fn watch_loop(lab: &RunningLab, opts: WatchOpts) -> Result<()> {
         _ = all_subs => {
             tracing::info!("watch: all subscriptions ended");
         }
+        _ = &mut printer => {
+            tracing::info!("watch: output closed");
+        }
     }
-    // Drop the printer task (channel closes when tasks exit).
-    drop(printer);
+    printer.abort();
     Ok(())
 }
 
@@ -269,7 +281,8 @@ pub type WatchStream = (
 
 /// Subscribe to the lab's drift events and hand back the stream.
 ///
-/// Returns `None` when no node matches `opts.node`. The channel closes
+/// Returns `None` for a lab without nodes, and [`Error::NodeNotFound`]
+/// when `opts.node` names none of its nodes. The channel closes
 /// once every subscription task has exited; drop the receiver (or abort
 /// the tasks) to stop. `opts.json` is ignored — rendering is the
 /// caller's business. Used by [`watch_loop`] and `nlink-lab events`.
@@ -285,11 +298,11 @@ pub fn watch_stream(lab: &RunningLab, opts: &WatchOpts) -> Result<Option<WatchSt
         .cloned()
         .collect();
     if node_names.is_empty() {
-        if opts.node.is_some() {
-            eprintln!(
-                "watch: no nodes match the --node filter (target: {:?})",
-                opts.node
-            );
+        // an unknown `--node` exited 0, printing "no nodes match" (#226)
+        if let Some(target) = &opts.node {
+            return Err(Error::NodeNotFound {
+                name: target.clone(),
+            });
         }
         return Ok(None);
     }
@@ -311,14 +324,18 @@ pub fn watch_stream(lab: &RunningLab, opts: &WatchOpts) -> Result<Option<WatchSt
                 continue;
             }
         };
+        let Some(ns) = ns_identity(&resolver) else {
+            tracing::warn!(node = %node, "skipping watch — its namespace is gone");
+            continue;
+        };
 
         if opts.family.wants_route() {
             let tx = tx.clone();
             let node = node.clone();
             let r = resolver.clone();
             tasks.push(tokio::spawn(async move {
-                supervise(&node, WatchFamily::Route, &r, &tx, || {
-                    run_route_subscription(&node, r.clone(), tx.clone(), include_snapshot)
+                supervise(&node, WatchFamily::Route, &r, ns, &tx, || {
+                    run_route_subscription(&node, r.clone(), ns, tx.clone(), include_snapshot)
                 })
                 .await
             }));
@@ -328,8 +345,8 @@ pub fn watch_stream(lab: &RunningLab, opts: &WatchOpts) -> Result<Option<WatchSt
             let node = node.clone();
             let r = resolver.clone();
             tasks.push(tokio::spawn(async move {
-                supervise(&node, WatchFamily::Nftables, &r, &tx, || {
-                    run_nftables_subscription(&node, r.clone(), tx.clone(), include_snapshot)
+                supervise(&node, WatchFamily::Nftables, &r, ns, &tx, || {
+                    run_nftables_subscription(&node, r.clone(), ns, tx.clone(), include_snapshot)
                 })
                 .await
             }));
@@ -365,6 +382,21 @@ enum Stop {
 /// so the stream itself would never end (#175).
 const NAMESPACE_CHECK: std::time::Duration = std::time::Duration::from_secs(2);
 
+/// Which namespace a node's name stands for: the device and inode of its
+/// nsfs file. A watch compares it on every check: after `destroy` and
+/// `deploy` of the same lab the name opened again, on a new namespace, so
+/// the watch stayed on the dead one and reported nothing more (#226).
+fn ns_identity(resolver: &NsResolver) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(resolver.ns_path()).ok()?;
+    Some((meta.dev(), meta.ino()))
+}
+
+/// Whether the node's name still stands for the namespace the watch began on.
+fn same_namespace(resolver: &NsResolver, ns: (u64, u64)) -> bool {
+    ns_identity(resolver) == Some(ns)
+}
+
 /// Keep a node's subscription running (#175). nlink's resync stream ends
 /// after an error other than ENOBUFS; the node's watch used to stop for
 /// good then, silently. Now its end is an event, and it is subscribed
@@ -374,6 +406,7 @@ async fn supervise<F, Fut>(
     node: &str,
     family: WatchFamily,
     resolver: &NsResolver,
+    ns: (u64, u64),
     tx: &tokio::sync::mpsc::Sender<WatchEvent>,
     mut subscribe: F,
 ) where
@@ -382,7 +415,12 @@ async fn supervise<F, Fut>(
 {
     let mut backoff = std::time::Duration::from_millis(200);
     loop {
-        let reason = match subscribe().await {
+        let result = subscribe().await;
+        // Not allowed in the namespace: retrying cannot help, and an
+        // unprivileged watch retried forever (#226).
+        let denied = matches!(&result, Err(e)
+            if matches!(e.errno(), Some(libc::EPERM | libc::EACCES)));
+        let reason = match result {
             Ok(Stop::Closed) => return,
             Ok(Stop::Gone) => None,
             Ok(Stop::Ended(reason)) => Some(reason),
@@ -394,7 +432,7 @@ async fn supervise<F, Fut>(
             kind,
             from_snapshot: false,
         };
-        let Some(reason) = reason.filter(|_| resolver.netns().is_ok()) else {
+        let Some(reason) = reason.filter(|_| same_namespace(resolver, ns)) else {
             let _ = tx.send(event(WatchEventKind::Gone)).await;
             return;
         };
@@ -402,7 +440,7 @@ async fn supervise<F, Fut>(
             reason,
             retry_in_ms: u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX),
         };
-        if tx.send(event(ended)).await.is_err() {
+        if tx.send(event(ended)).await.is_err() || denied {
             return;
         }
         tokio::time::sleep(backoff).await;
@@ -413,6 +451,7 @@ async fn supervise<F, Fut>(
 async fn run_route_subscription(
     node: &str,
     resolver: NsResolver,
+    ns: (u64, u64),
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
 ) -> Result<Stop> {
@@ -437,7 +476,10 @@ async fn run_route_subscription(
         let item = tokio::select! {
             item = stream.next() => item,
             _ = check.tick() => {
-                if resolver.netns().is_err() {
+                if tx.is_closed() {
+                    return Ok(Stop::Closed);
+                }
+                if !same_namespace(&resolver, ns) {
                     return Ok(Stop::Gone);
                 }
                 continue;
@@ -477,6 +519,7 @@ async fn run_route_subscription(
 async fn run_nftables_subscription(
     node: &str,
     resolver: NsResolver,
+    ns: (u64, u64),
     tx: tokio::sync::mpsc::Sender<WatchEvent>,
     include_snapshot: bool,
 ) -> Result<Stop> {
@@ -501,7 +544,10 @@ async fn run_nftables_subscription(
         let item = tokio::select! {
             item = stream.next() => item,
             _ = check.tick() => {
-                if resolver.netns().is_err() {
+                if tx.is_closed() {
+                    return Ok(Stop::Closed);
+                }
+                if !same_namespace(&resolver, ns) {
                     return Ok(Stop::Gone);
                 }
                 continue;
@@ -552,7 +598,8 @@ mod tests {
     async fn a_subscription_that_ends_is_reported_and_restarted() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
         let calls = std::sync::atomic::AtomicUsize::new(0);
-        supervise("n", WatchFamily::Route, &NsResolver::Root, &tx, || {
+        let ns = ns_identity(&NsResolver::Root).unwrap();
+        supervise("n", WatchFamily::Route, &NsResolver::Root, ns, &tx, || {
             let n = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             async move {
                 match n {
@@ -577,6 +624,43 @@ mod tests {
             ),
             "{kinds:?}"
         );
+    }
+
+    /// #226: unprivileged, every subscription failed with EPERM and was
+    /// retried forever; after a redeploy the name opened on a new
+    /// namespace and the watch went on.
+    #[tokio::test(start_paused = true)]
+    async fn a_denied_or_replaced_namespace_ends_the_watch() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let ns = ns_identity(&NsResolver::Root).unwrap();
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        supervise("n", WatchFamily::Route, &NsResolver::Root, ns, &tx, || {
+            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async {
+                let denied = std::io::Error::from_raw_os_error(libc::EPERM);
+                Err(Error::nlink("watch", nlink::Error::from(denied)))
+            }
+        })
+        .await;
+        assert_eq!(calls.into_inner(), 1, "EPERM was retried");
+        assert!(matches!(
+            rx.try_recv().map(|e| e.kind),
+            Ok(WatchEventKind::Ended { .. })
+        ));
+        // another namespace behind the name: gone, not resubscribed
+        supervise(
+            "n",
+            WatchFamily::Route,
+            &NsResolver::Root,
+            (0, 0),
+            &tx,
+            || async { Ok(Stop::Ended("EBADF".into())) },
+        )
+        .await;
+        assert!(matches!(
+            rx.try_recv().map(|e| e.kind),
+            Ok(WatchEventKind::Gone)
+        ));
     }
 
     #[test]

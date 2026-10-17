@@ -54,6 +54,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         include_snapshot,
     } = args;
     let running = nlink_lab::RunningLab::load(&lab)?;
+    // unprivileged, every subscription failed with EPERM, retried (#226)
+    crate::ctx::require_root()?;
     let opts = nlink_lab::WatchOpts {
         family: family.into(),
         json: ctx.json,

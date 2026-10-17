@@ -185,18 +185,24 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
             ),
         },
     ));
-    let runtime = ["podman", "docker"].iter().find(|b| on_path(b).is_some());
+    // What deploy does: a runtime counts when `BIN version` answers. On
+    // PATH alone was "ok" with docker's daemon stopped (#226).
+    let on_path_rt = ["podman", "docker"].iter().find(|b| on_path(b).is_some());
+    let (status, detail) = match (nlink_lab::container::Runtime::detect(), on_path_rt) {
+        (Ok(rt), _) => (Status::Ok, format!("{} answers `version`", rt.binary())),
+        (Err(_), Some(b)) => (
+            Status::Warn,
+            format!("{b} is on PATH but `{b} version` fails (is its daemon running?)"),
+        ),
+        (Err(_), None) => (
+            Status::Info,
+            "none (container nodes need podman or docker)".into(),
+        ),
+    };
     checks.push(Check {
         name: "container runtime",
-        status: if runtime.is_some() {
-            Status::Ok
-        } else {
-            Status::Info
-        },
-        detail: match runtime {
-            Some(b) => format!("{b} on PATH"),
-            None => "none (container nodes need podman or docker)".into(),
-        },
+        status,
+        detail,
     });
 
     for (module, why) in [
@@ -250,17 +256,26 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
     });
 
     let sysnet = std::path::Path::new("/proc/sys/net/ipv4/ip_forward");
-    let sysctl_ok = !privileged || std::fs::OpenOptions::new().write(true).open(sysnet).is_ok();
-    checks.push(check(
-        "sysctl",
-        sysctl_ok,
-        true,
-        if sysctl_ok {
-            "/proc/sys/net is writable".to_string()
-        } else {
-            "/proc/sys/net is read-only (container without --privileged?)".into()
-        },
-    ));
+    if privileged {
+        let sysctl_ok = std::fs::OpenOptions::new().write(true).open(sysnet).is_ok();
+        checks.push(check(
+            "sysctl",
+            sysctl_ok,
+            true,
+            if sysctl_ok {
+                "/proc/sys/net is writable".to_string()
+            } else {
+                "/proc/sys/net is read-only (container without --privileged?)".into()
+            },
+        ));
+    } else {
+        // unprivileged it said "writable" without looking (#226)
+        checks.push(Check {
+            name: "sysctl",
+            status: Status::Info,
+            detail: "not checked: /proc/sys/net is writable by root only".into(),
+        });
+    }
 
     let base = nlink_lab::state::state_dir("");
     let base = base

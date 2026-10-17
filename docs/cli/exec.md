@@ -37,7 +37,7 @@ captures stdout/stderr to log files.
 | `--env KEY=VALUE` | Set environment variables. Repeatable. |
 | `--workdir DIR` | Working directory. For namespace nodes this is `chdir()` on the host filesystem; for container nodes it's passed as `-w <path>` to docker/podman. |
 | `--json` | Buffer output and emit `{exit_code, stdout, stderr, duration_ms}`. Streams are not visible until the command completes. |
-| `-v`, `--verbose` | Print the resolved namespace path or container ID before running. |
+| `-v`, `--verbose` | Log at info level, on stderr (the global flag). |
 | `-q`, `--quiet` | Suppress non-error output (the exec'd command's stdio still shows). |
 
 ## Examples
@@ -104,13 +104,9 @@ sudo nlink-lab exec simple client -- curl http://$SERVER_IP:8080/
 
 | Code | Meaning |
 |------|---------|
-| (passthrough) | The exit code of the command run inside the node |
-| 1 | Could not start the command (binary not found, etc.) |
-| 2 | Lab or node not found |
-| 5 | Insufficient capabilities |
-
-If you need to distinguish "the command exited with 1" from "exec
-itself failed," use `--json`.
+| (passthrough) | The exit code of the command run inside the node; `128 + signo` when a signal ended it (137 for SIGKILL), as a shell reports it |
+| 124 | `--timeout` expired; the command is stopped, inside a container too |
+| 1 | The command could not start, the lab or node does not exist, or the privileges are missing |
 
 ## See also
 

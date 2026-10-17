@@ -271,6 +271,12 @@ pub enum Commands {
     ProcStat(cmd::proc_stat::Args),
 
     /// Run diagnostics on a lab.
+    ///
+    /// Per node: each interface's state, MTU, counters and issues, then the
+    /// node's other issues; an interface is marked with its worst issue's
+    /// severity (INFO, WARN, ERROR, CRITICAL). With `--json`, one object per
+    /// node: `{node, interfaces: [{name, state, mtu, rx_bytes, tx_bytes,
+    /// issues}], issues}`, each issue `{severity, message}`.
     Diagnose(cmd::diagnose::Args),
 
     /// Capture packets on an interface using netring.
@@ -301,8 +307,12 @@ pub enum Commands {
     ///
     /// A node whose stream ends prints `watch ended: <error>` (an `ended`
     /// record in `--json`) and is subscribed again after a backoff; one
-    /// whose namespace is gone prints `namespace gone` (`gone`) and stops.
-    /// The command exits when every node's watch has stopped.
+    /// whose namespace is gone, or was replaced by a redeploy of the lab,
+    /// prints `namespace gone` (`gone`) and stops. The command exits when
+    /// every node's watch has stopped, or when its output is closed.
+    ///
+    /// Every change is shown, whoever made it: what a concurrent `apply`,
+    /// `impair`, `edit` or `restart` does prints like a hand edit.
     Watch(cmd::watch::Args),
 
     /// Wait for a service or condition inside a lab node.

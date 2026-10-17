@@ -11,16 +11,16 @@ Save a checkpoint of a running lab (topology + runtime impairments + partitions)
 
 JSON OUTPUT (with `--json`): the snapshot's metadata; with `--list` an array of them. Schema: docs/json-schemas/snapshot-list.schema.json
 
-Usage: nlink-lab snapshot [OPTIONS] <LAB> [NAME]
+Usage: nlink-lab snapshot [OPTIONS] [NAME]
 
 Arguments:
-  <LAB>
-          Lab name
-
   [NAME]
           Snapshot name to create (letters, digits, `-`, `_`, `.`)
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --description <DESCRIPTION>
           Free-text description stored with the snapshot
 

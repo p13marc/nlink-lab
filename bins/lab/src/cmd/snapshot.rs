@@ -4,9 +4,8 @@ use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Snapshot name to create (letters, digits, `-`, `_`, `.`).
     #[arg(required_unless_present_any = ["list", "delete"], conflicts_with_all = ["list", "delete"])]
@@ -33,6 +32,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         list,
         delete,
     } = args;
+    let lab = lab.resolve()?;
     if !nlink_lab::state::exists(&lab) {
         return Err(nlink_lab::Error::NotFound { name: lab });
     }

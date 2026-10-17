@@ -187,7 +187,7 @@ Then deploy something:
 ```bash
 git clone https://git.marcpardo.eu/marcpardo/nlink-lab.git
 sudo nlink-lab deploy nlink-lab/examples/simple.nll
-sudo nlink-lab exec simple host -- ping -c 3 10.0.0.1
+sudo nlink-lab exec -L simple host -- ping -c 3 10.0.0.1
 sudo nlink-lab destroy simple
 ```
 
@@ -217,7 +217,7 @@ lab and needs root:
 
 ```bash
 sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab daemon simple --interval 2s --http 127.0.0.1:9464
+sudo nlink-lab daemon -L simple --interval 2s --http 127.0.0.1:9464
 ```
 
 - `--http ADDR` serves `/metrics` (OpenMetrics) and

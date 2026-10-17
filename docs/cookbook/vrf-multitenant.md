@@ -54,7 +54,7 @@ sudo nlink-lab deploy examples/vrf-multitenant.nll
 Tenant-A should reach the PE in its VRF:
 
 ```bash
-sudo nlink-lab exec vrf-multitenant tenant-a -- ping -c 2 10.10.0.1
+sudo nlink-lab exec -L vrf-multitenant tenant-a -- ping -c 2 10.10.0.1
 # 0% packet loss
 ```
 
@@ -62,16 +62,16 @@ Tenant-A should NOT reach tenant-B even though both addresses
 exist on the same PE node:
 
 ```bash
-sudo nlink-lab exec vrf-multitenant tenant-a -- ping -c 2 10.20.0.10
+sudo nlink-lab exec -L vrf-multitenant tenant-a -- ping -c 2 10.20.0.10
 # 100% packet loss — destination unreachable
 ```
 
 Inspect the VRFs on the PE:
 
 ```bash
-sudo nlink-lab exec vrf-multitenant pe -- ip vrf show
-sudo nlink-lab exec vrf-multitenant pe -- ip route show vrf red
-sudo nlink-lab exec vrf-multitenant pe -- ip route show vrf blue
+sudo nlink-lab exec -L vrf-multitenant pe -- ip vrf show
+sudo nlink-lab exec -L vrf-multitenant pe -- ip route show vrf red
+sudo nlink-lab exec -L vrf-multitenant pe -- ip route show vrf blue
 ```
 
 ### Tear down

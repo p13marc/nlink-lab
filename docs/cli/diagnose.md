@@ -28,16 +28,16 @@ Run diagnostics on a lab.
 
 Per node: each interface's state, MTU, counters and issues, then the node's other issues; an interface is marked with its worst issue's severity (INFO, WARN, ERROR, CRITICAL). With `--json`, one object per node: `{node, interfaces: [{name, state, mtu, rx_bytes, tx_bytes, issues}], issues}`, each issue `{severity, message}`.
 
-Usage: nlink-lab diagnose <LAB> [NODE]
+Usage: nlink-lab diagnose [OPTIONS] [NODE]
 
 Arguments:
-  <LAB>
-          Lab name
-
   [NODE]
           Node name (omit to diagnose all)
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -h, --help
           Print help (see a summary with '-h')
 ```

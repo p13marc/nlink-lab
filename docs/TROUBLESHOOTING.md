@@ -201,9 +201,9 @@ sudo nlink-lab deploy -v examples/simple.nll
 nlink-lab validate examples/simple.nll
 
 # Inspect a running lab
-sudo nlink-lab exec <lab> <node> -- ip addr
-sudo nlink-lab exec <lab> <node> -- ip route
-sudo nlink-lab exec <lab> <node> -- ping -c 1 <target>
+sudo nlink-lab exec -L <lab> <node> -- ip addr
+sudo nlink-lab exec -L <lab> <node> -- ip route
+sudo nlink-lab exec -L <lab> <node> -- ping -c 1 <target>
 ```
 
 ---
@@ -240,8 +240,8 @@ would otherwise have to either kill them (data loss) or accept
 that the new command is wrong (state divergence). Use:
 
 ```bash
-nlink-lab kill <lab> <pid>
-nlink-lab spawn <lab> <node> -- /usr/bin/new-cmd
+nlink-lab kill -L <lab> <pid>
+nlink-lab spawn -L <lab> <node> -- /usr/bin/new-cmd
 ```
 
 Or redeploy.
@@ -410,7 +410,7 @@ Often firewall + conntrack:
 The route default is missing or points at a wrong gateway. Check:
 
 ```bash
-sudo nlink-lab exec <lab> <node> -- ip route
+sudo nlink-lab exec -L <lab> <node> -- ip route
 ```
 
 Common fixes:
@@ -433,7 +433,7 @@ configuration:
   on every node — APs and stations don't mesh. Peering takes a moment
   after the deploy: give `validate` a `retries`/`interval`
   (`examples/wifi-mesh.nll`).
-- `sudo nlink-lab exec <lab> <node> -- iw dev` shows the interface,
+- `sudo nlink-lab exec -L <lab> <node> -- iw dev` shows the interface,
   its type and channel, when `iw` is installed. A station's
   wpa_supplicant answers `wpa_cli -p /run/nlink-lab/wifi/<lab>/<node>
   status`; an AP's hostapd answers `hostapd_cli` with the same `-p`.
@@ -462,7 +462,7 @@ For network behavior bugs, also include:
 
 ```bash
 # A short pcap from the failing path
-sudo nlink-lab capture <lab> <ep> -o bug.pcap --duration 5s
+sudo nlink-lab capture -L <lab> <ep> -o bug.pcap --duration 5s
 ```
 
 The pcap + the `.nlz` archive are usually enough to repro

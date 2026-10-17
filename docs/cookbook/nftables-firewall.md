@@ -71,7 +71,7 @@ sudo nlink-lab deploy examples/firewall.nll
 ### Verify the rules from inside the server
 
 ```bash
-sudo nlink-lab exec firewall server -- nft list ruleset
+sudo nlink-lab exec -L firewall server -- nft list ruleset
 ```
 
 You'll see the chain with all five rules.
@@ -82,10 +82,10 @@ Allowed: TCP port 8080.
 
 ```bash
 # Spawn a quick listener
-sudo nlink-lab spawn firewall server -- python3 -m http.server 8080 --bind 0.0.0.0
+sudo nlink-lab spawn -L firewall server -- python3 -m http.server 8080 --bind 0.0.0.0
 
 # Client should connect
-sudo nlink-lab exec firewall client -- curl -fsS --max-time 3 http://server:8080/
+sudo nlink-lab exec -L firewall client -- curl -fsS --max-time 3 http://server:8080/
 ```
 
 Blocked: anything not on the accept list.
@@ -93,7 +93,7 @@ Blocked: anything not on the accept list.
 ```bash
 # Server isn't running on port 9999, but firewall blocks before that:
 # Connection times out (drop), not refused (accept-then-rst).
-sudo nlink-lab exec firewall client -- timeout 2 nc -v server 9999
+sudo nlink-lab exec -L firewall client -- timeout 2 nc -v server 9999
 echo "exit code: $?"   # non-zero (timeout)
 ```
 
@@ -103,7 +103,7 @@ Conditional: SSH from trusted subnet only.
 # Trusted client (10.0.1.0/24): would connect (no ssh server is
 # running here, but the SYN gets through and connection is
 # refused at the application layer).
-sudo nlink-lab exec firewall client -- timeout 2 nc -v server 22
+sudo nlink-lab exec -L firewall client -- timeout 2 nc -v server 22
 
 # An "untrusted" simulator (drops outside 10.0.1.0/24 don't apply
 # in this lab — to test, add a third client in a different subnet).
@@ -112,7 +112,7 @@ sudo nlink-lab exec firewall client -- timeout 2 nc -v server 22
 ### Inspect conntrack
 
 ```bash
-sudo nlink-lab exec firewall server -- conntrack -L
+sudo nlink-lab exec -L firewall server -- conntrack -L
 ```
 
 Active connections appear; the `ESTABLISHED` state is what `accept

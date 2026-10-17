@@ -4,9 +4,8 @@ use crate::ctx::{Ctx, require_root};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Node name.
     #[arg(add = crate::ctx::node_completer())]
@@ -60,6 +59,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         pidfile_glob,
         watch,
     } = args;
+    let lab = lab.resolve()?;
     if pid.is_none() && pid_flag.is_empty() && !all && pidfile_glob.is_none() {
         return Err(nlink_lab::Error::deploy_failed(
             "name a PID, or pass --pid <PID> (repeatable), --all or --pidfile-glob <PATTERN>",

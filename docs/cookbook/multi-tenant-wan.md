@@ -145,7 +145,7 @@ to turn assertion failures into exit code 2.
 
 ```bash
 # red-a → red-b through wg-red on hub-a → wg-red on hub-b
-sudo nlink-lab exec multi-tenant-wan red-a -- ping -c 3 10.20.0.10
+sudo nlink-lab exec -L multi-tenant-wan red-a -- ping -c 3 10.20.0.10
 ```
 
 Latency reflects the 30ms WAN underlay impairment plus WG
@@ -155,11 +155,11 @@ overhead.
 
 ```bash
 # red-a should NOT reach blue-a (same site, different VRF)
-sudo nlink-lab exec multi-tenant-wan red-a -- ping -c 3 -W 2 10.11.0.10
+sudo nlink-lab exec -L multi-tenant-wan red-a -- ping -c 3 -W 2 10.11.0.10
 # Expected: 100% packet loss
 
 # red-a should NOT reach blue-b (different site, different VRF)
-sudo nlink-lab exec multi-tenant-wan red-a -- ping -c 3 -W 2 10.21.0.10
+sudo nlink-lab exec -L multi-tenant-wan red-a -- ping -c 3 -W 2 10.21.0.10
 # Expected: 100% packet loss
 ```
 
@@ -167,15 +167,15 @@ sudo nlink-lab exec multi-tenant-wan red-a -- ping -c 3 -W 2 10.21.0.10
 
 ```bash
 # VRF tables on hub-a
-sudo nlink-lab exec multi-tenant-wan hub-a -- ip vrf show
-sudo nlink-lab exec multi-tenant-wan hub-a -- ip route show vrf red
-sudo nlink-lab exec multi-tenant-wan hub-a -- ip route show vrf blue
+sudo nlink-lab exec -L multi-tenant-wan hub-a -- ip vrf show
+sudo nlink-lab exec -L multi-tenant-wan hub-a -- ip route show vrf red
+sudo nlink-lab exec -L multi-tenant-wan hub-a -- ip route show vrf blue
 
 # WG tunnels
-sudo nlink-lab exec multi-tenant-wan hub-a -- wg show
+sudo nlink-lab exec -L multi-tenant-wan hub-a -- wg show
 
 # Firewall policy
-sudo nlink-lab exec multi-tenant-wan hub-a -- nft list ruleset
+sudo nlink-lab exec -L multi-tenant-wan hub-a -- nft list ruleset
 ```
 
 ### Tear down

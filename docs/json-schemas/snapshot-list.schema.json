@@ -7,7 +7,7 @@
   },
   "$defs": {
     "SnapshotInfo": {
-      "description": "Listing entry for `nlink-lab snapshot <lab> --list`.",
+      "description": "Listing entry for `nlink-lab snapshot --list`.",
       "type": "object",
       "properties": {
         "created_at": {

@@ -213,7 +213,7 @@ v3**; the v1 `diff` / `layered_summary` /
 `layered_summary_deprecated` fields were removed in 0.7.0 after
 their deprecation window.
 
-`nlink-lab watch <lab>` subscribes to every node's nftables and
+`nlink-lab watch -L <lab>` subscribes to every node's nftables and
 RTNETLINK multicast and prints one line per drift — the way to
 catch hand-edits that bypass `apply`.
 
@@ -297,8 +297,8 @@ If you need to read `fd/` or other UID-restricted paths from a
 non-root host shell, route the read through `nlink-lab` itself:
 
 ```bash
-sudo nlink-lab proc-stat <lab> <node> <pid> --json
-sudo nlink-lab exec <lab> <node> -- ls /proc/<pid>/fd
+sudo nlink-lab proc-stat -L <lab> <node> <pid> --json
+sudo nlink-lab exec -L <lab> <node> -- ls /proc/<pid>/fd
 ```
 
 `proc-stat` (Plan 157 PR C) exists specifically to abstract over

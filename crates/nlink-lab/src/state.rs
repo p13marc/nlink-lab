@@ -174,7 +174,7 @@ pub struct Snapshot {
     pub state: LabState,
 }
 
-/// Listing entry for `nlink-lab snapshot <lab> --list`.
+/// Listing entry for `nlink-lab snapshot --list`.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SnapshotInfo {
     /// Snapshot name (unique per lab).
@@ -682,6 +682,41 @@ fn adopt_tree(dir: &Path) -> Result<()> {
                 let mode = if secret { 0o600 } else { 0o640 };
                 std::fs::set_permissions(e.path(), std::fs::Permissions::from_mode(mode))?;
             }
+        }
+    }
+    Ok(())
+}
+
+/// Give the whole state root its ownership and modes again (`doctor
+/// --fix`), as [`ensure_state_root`] would have made it with the group:
+/// after the `nlink-lab` group is created, a root made without it is
+/// `0700` and unreadable to the group. The `context/` directory stays
+/// sticky `1770`, and the files in it stay their users'.
+pub fn adopt_root() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let root = ensure_state_root()?;
+    let gid = group_gid();
+    let as_root = unsafe { libc::geteuid() } == 0;
+    let mode = if gid.is_some() { 0o2750 } else { 0o700 };
+    if as_root {
+        let _ = std::os::unix::fs::chown(&root, Some(0), gid);
+    }
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(mode))?;
+    for e in std::fs::read_dir(&root)? {
+        let e = e?;
+        let ty = e.file_type()?;
+        if ty.is_dir() && e.file_name() == "context" {
+            if as_root {
+                let _ = std::os::unix::fs::chown(e.path(), Some(0), gid);
+            }
+            std::fs::set_permissions(e.path(), std::fs::Permissions::from_mode(0o1770))?;
+        } else if ty.is_dir() {
+            adopt_tree(&e.path())?;
+        } else if ty.is_file() {
+            if as_root {
+                let _ = std::os::unix::fs::chown(e.path(), Some(0), gid);
+            }
+            std::fs::set_permissions(e.path(), std::fs::Permissions::from_mode(0o640))?;
         }
     }
     Ok(())

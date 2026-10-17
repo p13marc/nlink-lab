@@ -5,9 +5,8 @@ use crate::output::{Report, Table, emit};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Hide processes whose tracked PID has exited (alive == false).
     /// Useful for "is X still running?" polling loops where exited
@@ -54,6 +53,7 @@ impl Report for PsReport {
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, alive_only } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let processes = if alive_only {
         running.process_status_alive_only()

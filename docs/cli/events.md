@@ -9,13 +9,12 @@ Show a lab's lifecycle log (deploy, apply, spawn, kill, impair, partition, snaps
 
 JSON OUTPUT (with `--json`): one record per line tagged `source: lifecycle | drift | runtime`. Schema: docs/json-schemas/events.schema.json
 
-Usage: nlink-lab events [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab events [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -f, --follow
           Keep running: tail new lifecycle events and merge live drift (`watch`) and runtime events (process exits, interface state). Drift and runtime sources need root; without it only the lifecycle log is followed
 

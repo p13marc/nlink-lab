@@ -24,7 +24,7 @@ already-deployed lab and needs root:
 
 ```bash
 sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab daemon simple --interval 2s
+sudo nlink-lab daemon -L simple --interval 2s
 ```
 
 It publishes on `nlink-lab/<lab>/…`:
@@ -53,9 +53,9 @@ the one to run under systemd.
 A terminal dashboard, no extra install, no GUI stack:
 
 ```bash
-sudo nlink-lab top simple            # collect locally (needs root)
-nlink-lab top simple --zenoh         # read a running daemon (no root)
-nlink-lab top simple --once          # one text frame, for pipes and CI
+sudo nlink-lab top -L simple         # collect locally (needs root)
+nlink-lab top -L simple --zenoh      # read a running daemon (no root)
+nlink-lab top -L simple --once       # one text frame, for pipes and CI
 ```
 
 Collecting locally needs root; reading a running `daemon` over
@@ -89,7 +89,7 @@ need the backend (above); on one host zenoh peer scouting finds it
 with no flags. Across machines:
 
 ```bash
-sudo nlink-lab daemon simple --zenoh-listen tcp/0.0.0.0:7447
+sudo nlink-lab daemon -L simple --zenoh-listen tcp/0.0.0.0:7447
 nlink-lab-topoviewer --lab simple --zenoh-connect tcp/<host>:7447
 ```
 

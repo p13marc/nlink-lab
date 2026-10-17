@@ -128,7 +128,7 @@ test) but does not run named scenarios. To execute the
 `partition-and-heal` scenario:
 
 ```bash
-sudo nlink-lab scenario p2p-partition partition-and-heal
+sudo nlink-lab scenario -L p2p-partition partition-and-heal
 ```
 
 Output:
@@ -203,7 +203,7 @@ Run as part of an integration suite:
 
 ```bash
 sudo nlink-lab deploy examples/cookbook/p2p-partition.nll
-sudo nlink-lab --json scenario p2p-partition partition-and-heal > /tmp/result.json
+sudo nlink-lab --json scenario -L p2p-partition partition-and-heal > /tmp/result.json
 RC=$?
 sudo nlink-lab destroy p2p-partition
 exit $RC

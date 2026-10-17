@@ -15,6 +15,13 @@
       "format": "uint",
       "minimum": 0
     },
+    "fixes": {
+      "description": "What `--fix` did, before the checks ran.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "ok": {
       "description": "`false` when a required check failed (exit 1).",
       "type": "boolean"

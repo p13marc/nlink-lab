@@ -9,13 +9,12 @@ Check a running lab for drift against its topology (exit 2 on drift).
 
 Compares every node's live links/addresses/routes, nftables and WireGuard peers with what the topology declares — the same view `apply --check` shows — and prints the differences. Meant for CI and monitoring: exit 0 means the lab is exactly what its file says.
 
-Usage: nlink-lab verify [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab verify [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --topology <FILE>
           Compare the live lab against this topology file instead of the one it was deployed from (what `apply` would converge to)
 

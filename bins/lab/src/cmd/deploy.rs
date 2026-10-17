@@ -161,11 +161,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 topo.lab.name
             );
             println!(
-                "  nlink-lab exec {} {} -- ip addr",
+                "  nlink-lab exec -L {} {} -- ip addr",
                 topo.lab.name, first_node
             );
             println!(
-                "  nlink-lab shell {} {}        # interactive shell",
+                "  nlink-lab shell -L {} {}     # interactive shell",
                 topo.lab.name, first_node
             );
             println!("  nlink-lab destroy {}         # tear down", topo.lab.name);

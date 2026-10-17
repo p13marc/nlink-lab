@@ -50,20 +50,20 @@ nlink-lab status
 nlink-lab status --scan
 
 # Execute in a lab node (stdio streams live — good for services, tail -f, ping)
-sudo nlink-lab exec simple router -- ip addr
+sudo nlink-lab exec -L simple router -- ip addr
 
 # Execute with JSON output (buffered; exit_code, stdout, stderr, duration_ms)
-sudo nlink-lab exec --json simple router -- ip addr
+sudo nlink-lab exec --json -L simple router -- ip addr
 
 # Spawn a background process (tracked by ps/kill)
-sudo nlink-lab spawn simple server -- /usr/bin/my-service --port 8080
+sudo nlink-lab spawn -L simple server -- /usr/bin/my-service --port 8080
 
 # Wait for a service to be ready
-sudo nlink-lab wait-for simple server --tcp 127.0.0.1:8080 --timeout 30s
+sudo nlink-lab wait-for -L simple server --tcp 127.0.0.1:8080 --timeout 30s
 
 # Show node IP addresses (including mgmt0 for host-reachable labs)
-nlink-lab ip simple server --iface eth0
-nlink-lab ip simple server --iface mgmt0
+nlink-lab ip -L simple server --iface eth0
+nlink-lab ip -L simple server --iface mgmt0
 
 # Deploy with JSON output (machine-parseable)
 sudo nlink-lab deploy --json examples/simple.nll
@@ -78,14 +78,14 @@ nlink-lab validate --show-ips examples/multi-site.nll
 nlink-lab render examples/spine-leaf.nll
 
 # Capture packets on an interface (uses netring, zero-copy AF_PACKET)
-sudo nlink-lab capture simple router:eth0
-sudo nlink-lab capture simple router:eth0 -o trace.pcap
-sudo nlink-lab capture simple router:eth0 --filter-tcp --filter-port 80 -c 100 --duration 30s
+sudo nlink-lab capture -L simple router:eth0
+sudo nlink-lab capture -L simple router:eth0 -o trace.pcap
+sudo nlink-lab capture -L simple router:eth0 --filter-tcp --filter-port 80 -c 100 --duration 30s
 
 # Show process logs (captured automatically for all background processes)
-nlink-lab logs simple --pid 12345
-nlink-lab logs simple --pid 12345 --stderr --tail 50
-nlink-lab logs simple --pid 12345 --follow          # tail -F a spawned process
+nlink-lab logs -L simple --pid 12345
+nlink-lab logs -L simple --pid 12345 --stderr --tail 50
+nlink-lab logs -L simple --pid 12345 --follow       # tail -F a spawned process
 ```
 
 ## Architecture
@@ -255,7 +255,8 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (47 total): `deploy` (with `--set`, `--unique`, `--suffix`, `--json`),
+CLI commands (48 total; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+`deploy` (with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
 `destroy` (with `--all`, `--orphans`), `apply` (`--reset-impairments`),
 `snapshot` (`--list`, `--delete`), `restore` (`--dry-run`),
 `events` (`--follow`, `--since`, `--kind`, `--socket`),
@@ -353,7 +354,7 @@ Plan 160 (0.7.0) bumped it to **schema v3**, removing the v1
 `diff` / `layered_summary` / `layered_summary_deprecated`
 fallback fields after their one-release deprecation window.
 
-`nlink-lab watch <lab>` (Plan 159b) subscribes to every node's
+`nlink-lab watch -L <lab>` (Plan 159b) subscribes to every node's
 nftables + RTNETLINK multicast and prints one line per drift —
 useful for spotting hand-edits that bypass `apply`. Powered by
 0.19's `Connection<P>::subscribe_all_with_resync`.

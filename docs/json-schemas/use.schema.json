@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "from": {
+      "description": "`flag`, `env` (`NLINK_LAB`), `context` (`nlink-lab use`), `only`\n(the only running lab).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LabFrom"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lab": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "note": {
+      "description": "Why there is none, or what overrides the one just set.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema_version",
+    "lab",
+    "from"
+  ],
+  "$defs": {
+    "LabFrom": {
+      "description": "Where the lab of a command came from.",
+      "oneOf": [
+        {
+          "description": "`-L LAB`.",
+          "type": "string",
+          "const": "flag"
+        },
+        {
+          "description": "`NLINK_LAB`.",
+          "type": "string",
+          "const": "env"
+        },
+        {
+          "description": "`nlink-lab use LAB`.",
+          "type": "string",
+          "const": "context"
+        },
+        {
+          "description": "The only lab running.",
+          "type": "string",
+          "const": "only"
+        }
+      ]
+    }
+  }
+}

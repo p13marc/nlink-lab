@@ -23,7 +23,6 @@ use `exec` for one-shot commands (ping, curl, scripted tests).
 
 | Argument | Description |
 |----------|-------------|
-| `<LAB>` | Lab name. |
 | `<NODE>` | Node name. |
 | `<CMD>...` | Command and arguments. |
 
@@ -31,6 +30,7 @@ use `exec` for one-shot commands (ping, curl, scripted tests).
 
 | Flag | Description |
 |------|-------------|
+| `-L`, `--lab LAB` | The lab (default: `$NLINK_LAB`, then `nlink-lab use`, then the only running lab). |
 | `--env KEY=VALUE` | Set environment variables. Repeatable. |
 | `--workdir DIR` | Working directory before `exec()`. |
 | `--log-dir DIR` | Where to capture stdout/stderr. Default: `~/.local/state/nlink-lab/labs/<lab>/logs/`. |
@@ -43,18 +43,18 @@ use `exec` for one-shot commands (ping, curl, scripted tests).
 ### Spawn an HTTP server and wait for readiness
 
 ```bash
-sudo nlink-lab spawn lab server \
+sudo nlink-lab spawn -L lab server \
   --wait-tcp 0.0.0.0:8080 \
   -- /usr/bin/my-http-server --port 8080
 
 # By the time spawn returns, port 8080 accepts connections.
-sudo nlink-lab exec lab client -- curl -fsS http://server:8080/
+sudo nlink-lab exec -L lab client -- curl -fsS http://server:8080/
 ```
 
 ### Spawn with a config and a working directory
 
 ```bash
-sudo nlink-lab spawn lab worker \
+sudo nlink-lab spawn -L lab worker \
   --workdir /tmp/work \
   --env LOG_LEVEL=info \
   --env CONFIG=/etc/myapp.toml \
@@ -64,20 +64,20 @@ sudo nlink-lab spawn lab worker \
 ### Capture logs to a custom dir for CI artifact upload
 
 ```bash
-sudo nlink-lab spawn lab svc --log-dir /tmp/lab-logs -- /usr/bin/svc
+sudo nlink-lab spawn -L lab svc --log-dir /tmp/lab-logs -- /usr/bin/svc
 # CI step later: tar /tmp/lab-logs and upload as artifact.
 ```
 
 ### List spawned processes
 
 ```bash
-nlink-lab ps lab
+nlink-lab ps -L lab
 ```
 
 ### Tail a spawned process's logs
 
 ```bash
-nlink-lab logs lab --pid 12345 --follow
+nlink-lab logs -L lab --pid 12345 --follow
 ```
 
 `logs` doesn't require root.
@@ -109,18 +109,15 @@ Stdout/stderr are captured to per-process log files at:
 
 `/var/lib/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
 
-(under `$NLINK_LAB_STATE_DIR` when it is set). The path is stable; consumers can read it directly, or use `nlink-lab logs <lab> --pid <pid>`.
+(under `$NLINK_LAB_STATE_DIR` when it is set). The path is stable; consumers can read it directly, or use `nlink-lab logs -L <lab> --pid <pid>`.
 
 JSON OUTPUT (with `--json`): { "command": str, "node": str, "pid": int, "host_pid": int } Schema: docs/json-schemas/spawn.schema.json
 
 `pid` and `host_pid` are aliases — equal values today because nlink-lab does not use `CLONE_NEWPID`. See ARCHITECTURE.md "Process & namespace model" for why.
 
-Usage: nlink-lab spawn [OPTIONS] <LAB> <NODE> <CMD>...
+Usage: nlink-lab spawn [OPTIONS] <NODE> <CMD>...
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name
 
@@ -128,6 +125,9 @@ Arguments:
           Command and arguments
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --log-dir <LOG_DIR>
           Directory for stdout/stderr log files (default: lab state dir)
 

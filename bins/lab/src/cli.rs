@@ -30,6 +30,17 @@ pub enum Commands {
     /// Tear down a running lab.
     Destroy(cmd::destroy::Args),
 
+    /// Select the current lab: the one lab-scoped commands act on.
+    ///
+    /// A command's lab is `-L LAB` when given, else `$NLINK_LAB`, else
+    /// the lab `use` selected (per user, `sudo` included), else the only
+    /// running lab. Without LAB, prints the current lab and where it
+    /// comes from; `--clear` forgets it.
+    ///
+    /// JSON OUTPUT: { "schema_version": 1, "lab": str | null,
+    ///   "from": "flag" | "env" | "context" | "only" | null, "note"?: str }
+    Use(cmd::use_lab::Args),
+
     /// Show running labs or details of a specific lab.
     ///
     /// JSON OUTPUT (with `--json`, no lab name):
@@ -61,7 +72,7 @@ pub enum Commands {
     ///
     /// (under `$NLINK_LAB_STATE_DIR` when it is set). The
     /// path is stable; consumers can read it directly, or use
-    /// `nlink-lab logs <lab> --pid <pid>`.
+    /// `nlink-lab logs -L <lab> --pid <pid>`.
     ///
     /// JSON OUTPUT (with `--json`):
     ///   { "command": str, "node": str, "pid": int, "host_pid": int }
@@ -412,6 +423,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "deploy",
             "apply",
             "destroy",
+            "use",
             "status",
             "inspect",
             "containers",

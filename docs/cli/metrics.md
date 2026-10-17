@@ -40,13 +40,12 @@ For an interactive view of the same data, see [`top`](top.md).
 ```text
 Stream live metrics from a lab via Zenoh (no root required)
 
-Usage: nlink-lab metrics [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab metrics [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --node <NODE>
           Filter to specific node
 

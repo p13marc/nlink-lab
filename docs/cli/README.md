@@ -14,6 +14,7 @@ The day-to-day commands.
 |---------|------|
 | [`deploy`](deploy.md) | Bring a topology up |
 | [`destroy`](destroy.md) | Tear a topology down |
+| [`use`](use.md) | Select the current lab that lab-scoped commands act on |
 | [`validate`](validate.md) | Parse + validate without deploying |
 | [`edit`](edit.md) | Edit a running lab in place (nodes, links, impairments) |
 | [`snapshot`](snapshot.md) | Checkpoint a running lab |
@@ -97,6 +98,11 @@ These are accepted by every subcommand:
 | `--color auto\|always\|never` | Colour the output: `auto` colours a stream that is a terminal, unless `NO_COLOR` is set (`CLICOLOR` and `CLICOLOR_FORCE` are honoured too). Decided per stream |
 | `-v`, `-vv` | Show deployment steps and `info` logs; `-vv` adds `debug` |
 | `--quiet`, `-q` | Suppress non-error output; list commands (`ps`) print only ids |
+
+Commands that act on a running lab (`exec`, `ps`, `impair`, `capture`,
+…) take `-L LAB`; without it the lab is `$NLINK_LAB`, else the one
+[`use`](use.md) selected, else the only running lab. Completion offers
+that lab's nodes and endpoints.
 
 `--skip-validate` belongs to `deploy` only (it drops the `validate {}`
 assertions); `--set KEY=VALUE` is accepted by every command that reads a

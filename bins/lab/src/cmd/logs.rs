@@ -6,9 +6,8 @@ use nlink_lab::logs::tail_lines_at;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
     /// Node name (for container logs).
     #[arg(add = crate::ctx::node_completer())]
     pub node: Option<String>,
@@ -38,6 +37,7 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         follow,
         tail,
     } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
 
     // Process logs mode (--pid)
@@ -120,7 +120,7 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         );
         for p in &bg {
             eprintln!(
-                "  nlink-lab logs {lab} --pid {}{}",
+                "  nlink-lab logs -L {lab} --pid {}{}",
                 p.pid,
                 if p.alive { "" } else { "   (exited)" }
             );

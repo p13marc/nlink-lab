@@ -5,9 +5,8 @@ use crate::host_scan::node_link_count;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
     /// Node name (must be a container node).
     #[arg(add = crate::ctx::node_completer())]
     pub node: String,
@@ -15,6 +14,7 @@ pub struct Args {
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, node } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let mut running = nlink_lab::RunningLab::load(&lab)?;
     let container = running.container_for(&node).cloned().ok_or_else(|| {

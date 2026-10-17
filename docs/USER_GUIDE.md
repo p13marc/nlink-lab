@@ -80,9 +80,16 @@ Now validate, deploy, smoke-test, and tear down:
 ```bash
 nlink-lab validate wan.nll        # syntax + validator rules
 sudo nlink-lab deploy wan.nll     # ~200ms; state in /var/lib/nlink-lab/labs/wan/
-sudo nlink-lab exec wan site-a-client -- ping -c 3 10.0.1.1
+sudo nlink-lab exec -L wan site-a-client -- ping -c 3 10.0.1.1
 sudo nlink-lab destroy wan
 ```
+
+A command that acts on a running lab finds it the way `kubectl` finds
+its namespace: `-L LAB` when you give it, else `$NLINK_LAB`, else the lab
+`nlink-lab use` selected, else the only lab running. With one lab up,
+`sudo nlink-lab exec site-a-client -- ping -c 3 10.0.1.1` is enough;
+with several, `nlink-lab use wan` once picks one (per user, `sudo`
+included) and `nlink-lab use` says which and why.
 
 Every lab's state lives in one directory for the whole host,
 `/var/lib/nlink-lab/labs/` (`$NLINK_LAB_STATE_DIR` moves it), whoever
@@ -144,7 +151,7 @@ But pinging across will still fail:
 
 ```bash
 sudo nlink-lab deploy wan.nll
-sudo nlink-lab exec wan site-a-client -- ping -c 2 10.0.2.10
+sudo nlink-lab exec -L wan site-a-client -- ping -c 2 10.0.2.10
 # 100% packet loss
 ```
 
@@ -169,7 +176,7 @@ sudo nlink-lab apply wan.nll
 Now the path is end-to-end:
 
 ```bash
-sudo nlink-lab exec wan site-a-client -- ping -c 3 site-b-server
+sudo nlink-lab exec -L wan site-a-client -- ping -c 3 site-b-server
 # 0% loss
 ```
 
@@ -197,7 +204,7 @@ link site-a-router:wan -- site-b-router:wan {
 
 ```bash
 sudo nlink-lab apply wan.nll
-sudo nlink-lab exec wan site-a-client -- ping -c 5 site-b-server
+sudo nlink-lab exec -L wan site-a-client -- ping -c 5 site-b-server
 ```
 
 The pings now show ~30ms RTT with occasional drops — netem in
@@ -263,7 +270,7 @@ Apply and verify:
 
 ```bash
 sudo nlink-lab apply wan.nll
-sudo nlink-lab exec wan site-a-router -- wg show
+sudo nlink-lab exec -L wan site-a-router -- wg show
 ```
 
 You'll see `site-b-router`'s public key listed as a peer with a
@@ -308,17 +315,17 @@ node site-b-server {
 
 ```bash
 # Spawn a tiny HTTP server inside the namespace
-sudo nlink-lab spawn wan site-b-server -- \
+sudo nlink-lab spawn -L wan site-b-server -- \
     python3 -m http.server 80 --bind 0.0.0.0
 
 # A wait-for: block until the port accepts connections
-sudo nlink-lab wait-for wan site-b-server --tcp 0.0.0.0:80 --timeout 5s
+sudo nlink-lab wait-for -L wan site-b-server --tcp 0.0.0.0:80 --timeout 5s
 
 # From site-a-client: HTTP works (port 80 accept)
-sudo nlink-lab exec wan site-a-client -- curl -fsS site-b-server/
+sudo nlink-lab exec -L wan site-a-client -- curl -fsS site-b-server/
 
 # From site-a-client: blocked port times out (default-drop, no RST)
-sudo nlink-lab exec wan site-a-client -- timeout 2 nc -v site-b-server 9999
+sudo nlink-lab exec -L wan site-a-client -- timeout 2 nc -v site-b-server 9999
 echo "exit code: $?"   # nonzero — firewall dropped (no RST, just timeout)
 ```
 
@@ -370,7 +377,7 @@ Run it:
 
 ```bash
 sudo nlink-lab apply wan.nll
-sudo nlink-lab scenario wan wan-flap
+sudo nlink-lab scenario -L wan wan-flap
 ```
 
 The scenario runner emits a timeline:
@@ -422,7 +429,7 @@ step), so a CI gate that wants both is:
 
 ```bash
 sudo nlink-lab deploy wan.nll --strict
-sudo nlink-lab scenario wan wan-flap; rc=$?
+sudo nlink-lab scenario -L wan wan-flap; rc=$?
 sudo nlink-lab destroy wan
 exit $rc
 ```
@@ -882,7 +889,7 @@ lab "mylab" {
 
 All nodes get a `mgmt0` interface on one bridge, with a sequential IP
 from the subnet: the first host address is the bridge's, then the nodes in
-name order (`nlink-lab ip LAB NODE --iface mgmt0` prints a node's). With
+name order (`nlink-lab ip -L LAB NODE --iface mgmt0` prints a node's). With
 `mgmt SUBNET host-reachable` the bridge sits in the root namespace with
 that first address, so the host reaches every node; without it the bridge
 is in the lab's own `<lab>-mgmt` namespace.
@@ -973,16 +980,16 @@ has no queue and drops everything; optional `peakrate`, `mtu`),
 `fq_codel` (`target`, `interval`, `limit`, `flows`, `quantum`, `ecn`),
 `sfq` (`perturb`, `limit`, `quantum`), `prio` (`bands`). One root qdisc
 per interface — a `qdisc` endpoint cannot also carry `impair` or
-`rate`. At runtime: `nlink-lab edit mylab --set-qdisc hub:eth0=sfq,perturb=10s`
-and `nlink-lab impair mylab --show` to see what tc installed.
+`rate`. At runtime: `nlink-lab edit -L mylab --set-qdisc hub:eth0=sfq,perturb=10s`
+and `nlink-lab impair -L mylab --show` to see what tc installed.
 
 ### 20. Container Management
 
 ```bash
-nlink-lab containers mylab               # list container nodes
-nlink-lab logs mylab web --follow        # stream logs
-nlink-lab stats mylab                    # live CPU/memory
-sudo nlink-lab restart mylab web         # restart one container
+nlink-lab containers -L mylab            # list container nodes
+nlink-lab logs -L mylab web --follow     # stream logs
+nlink-lab stats -L mylab                 # live CPU/memory
+sudo nlink-lab restart -L mylab web      # restart one container
 nlink-lab pull topology.nll              # pre-pull all images
 ```
 
@@ -1026,11 +1033,11 @@ two-AS eBGP peering). Inspect the daemons with FRR's own shell, one
 pathspace per node:
 
 ```bash
-sudo nlink-lab exec ospf-demo r1 -- vtysh -N nl-ospf-demo-r1 -c "show ip ospf neighbor"
-sudo nlink-lab exec ospf-demo r1 -- ip route          # OSPF routes carry `proto ospf`
-sudo nlink-lab watch ospf-demo --family route         # watch reconvergence live
-sudo nlink-lab impair ospf-demo r1:eth0 --partition   # then watch the reroute
-nlink-lab ps ospf-demo                                # zebra/ospfd are tracked pids
+sudo nlink-lab exec -L ospf-demo r1 -- vtysh -N nl-ospf-demo-r1 -c "show ip ospf neighbor"
+sudo nlink-lab exec -L ospf-demo r1 -- ip route       # OSPF routes carry `proto ospf`
+sudo nlink-lab watch -L ospf-demo --family route      # watch reconvergence live
+sudo nlink-lab impair -L ospf-demo r1:eth0 --partition   # then watch the reroute
+nlink-lab ps -L ospf-demo                             # zebra/ospfd are tracked pids
 ```
 
 Logs are in `/run/nlink-lab/frr/<lab>/<node>/`; `apply` restarts a
@@ -1062,12 +1069,16 @@ limits are documented in [`docs/cli/lsp.md`](cli/lsp.md).
 
 ## CLI Reference
 
+Commands that act on a running lab take `-L LAB`, or use the current
+lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
+
 ### Commands
 
 | Command | Description |
 |---------|-------------|
 | `deploy` | Deploy a lab from a topology file |
 | `destroy` | Tear down a running lab |
+| `use` | Select the current lab (`-L` overrides it) |
 | `apply` | Apply topology changes to a running lab |
 | `status` | Show running labs or details of a specific lab |
 | `exec` | Run a command inside a lab node |
@@ -1115,15 +1126,15 @@ sudo nlink-lab destroy <lab-name> [--force]
 ### exec
 
 ```bash
-sudo nlink-lab exec <lab> <node> -- <command> [args...]
+sudo nlink-lab exec -L <lab> <node> -- <command> [args...]
 ```
 
 Everything after `--` is passed to the command. Examples:
 
 ```bash
-sudo nlink-lab exec mylab router -- ip route show
-sudo nlink-lab exec mylab host -- iperf3 -c 10.0.0.1 -t 10
-sudo nlink-lab exec mylab host -- bash
+sudo nlink-lab exec -L mylab router -- ip route show
+sudo nlink-lab exec -L mylab host -- iperf3 -c 10.0.0.1 -t 10
+sudo nlink-lab exec -L mylab host -- bash
 ```
 
 ### status
@@ -1145,9 +1156,9 @@ Hot-reload: compares the new topology against the running lab and applies only t
 ### impair
 
 ```bash
-sudo nlink-lab impair <lab> <endpoint> --delay 50ms --jitter 5ms --loss 1%
-sudo nlink-lab impair <lab> --show
-sudo nlink-lab impair <lab> <endpoint> --clear
+sudo nlink-lab impair -L <lab> <endpoint> --delay 50ms --jitter 5ms --loss 1%
+sudo nlink-lab impair -L <lab> --show
+sudo nlink-lab impair -L <lab> <endpoint> --clear
 ```
 
 Modify netem parameters at runtime without redeploying. `--show` displays current impairments on all interfaces. `--clear` removes all impairments from an endpoint.
@@ -1155,7 +1166,7 @@ Modify netem parameters at runtime without redeploying. `--show` displays curren
 ### capture
 
 ```bash
-sudo nlink-lab capture <lab> <endpoint> [-o capture.pcap] [-c 100] [--filter-tcp --filter-port 80]
+sudo nlink-lab capture -L <lab> <endpoint> [-o capture.pcap] [-c 100] [--filter-tcp --filter-port 80]
 ```
 
 Reads packets in the node's namespace through an AF_PACKET ring. `-o` writes a pcap file. `-c` limits the packet count. `--filter-*` builds a BPF filter.
@@ -1163,7 +1174,7 @@ Reads packets in the node's namespace through an AF_PACKET ring. `-o` writes a p
 ### daemon
 
 ```bash
-sudo nlink-lab daemon <lab> [--interval 2s] [--zenoh-mode peer] [--zenoh-listen tcp/0.0.0.0:7447]
+sudo nlink-lab daemon -L <lab> [--interval 2s] [--zenoh-mode peer] [--zenoh-listen tcp/0.0.0.0:7447]
 ```
 
 Starts the Zenoh backend. Publishes per-interface metrics at the specified interval. See "Daemon Mode and TopoViewer" below.
@@ -1171,7 +1182,7 @@ Starts the Zenoh backend. Publishes per-interface metrics at the specified inter
 ### metrics
 
 ```bash
-nlink-lab metrics <lab> [--node router] [--format table] [--count 10] [--zenoh-connect tcp/127.0.0.1:7447]
+nlink-lab metrics -L <lab> [--node router] [--format table] [--count 10] [--zenoh-connect tcp/127.0.0.1:7447]
 ```
 
 Subscribes to live metrics from a running daemon. Does not require root. `--count` exits after N samples. `--format json` for machine-readable output.
@@ -1194,9 +1205,9 @@ Creates a topology file from a built-in template. Use `--list` to see available 
 No redeployment needed. Change delay, jitter, loss, or rate on any interface:
 
 ```bash
-sudo nlink-lab impair mylab router:wan0 --delay 100ms --loss 5%
-sudo nlink-lab impair mylab router:wan0 --clear
-sudo nlink-lab impair mylab --show
+sudo nlink-lab impair -L mylab router:wan0 --delay 100ms --loss 5%
+sudo nlink-lab impair -L mylab router:wan0 --clear
+sudo nlink-lab impair -L mylab --show
 ```
 
 ### Packet Capture
@@ -1204,7 +1215,7 @@ sudo nlink-lab impair mylab --show
 Capture traffic on any interface:
 
 ```bash
-sudo nlink-lab capture mylab router:eth0 -o /tmp/router-eth0.pcap --filter-icmp
+sudo nlink-lab capture -L mylab router:eth0 -o /tmp/router-eth0.pcap --filter-icmp
 ```
 
 Open the pcap with Wireshark or tcpdump for analysis.
@@ -1212,8 +1223,8 @@ Open the pcap with Wireshark or tcpdump for analysis.
 ### Diagnostics
 
 ```bash
-sudo nlink-lab diagnose mylab
-sudo nlink-lab diagnose mylab router
+sudo nlink-lab diagnose -L mylab
+sudo nlink-lab diagnose -L mylab router
 ```
 
 Checks interface state, address assignment, route tables, and connectivity for all nodes or a specific node.
@@ -1231,8 +1242,8 @@ sudo nlink-lab apply topology.nll             # apply
 ### Process Management
 
 ```bash
-sudo nlink-lab ps mylab                       # list background processes
-sudo nlink-lab kill mylab <pid>               # kill a specific process
+sudo nlink-lab ps -L mylab                    # list background processes
+sudo nlink-lab kill -L mylab <pid>            # kill a specific process
 ```
 
 Background processes are those started with `run background [...]` in the topology.
@@ -1243,29 +1254,29 @@ Start services after deployment and wait for readiness:
 
 ```bash
 # Spawn a background process (tracked by ps/kill)
-sudo nlink-lab spawn mylab server -- /usr/bin/my-service --port 8080
+sudo nlink-lab spawn -L mylab server -- /usr/bin/my-service --port 8080
 
 # Wait for TCP port to accept connections
-sudo nlink-lab wait-for mylab server --tcp 127.0.0.1:8080 --timeout 30s
+sudo nlink-lab wait-for -L mylab server --tcp 127.0.0.1:8080 --timeout 30s
 # Port-only shorthand resolves to 127.0.0.1 inside the namespace
 # Use the full IP if the service binds to a specific interface address
-sudo nlink-lab wait-for mylab server --tcp 8080 --timeout 30s
+sudo nlink-lab wait-for -L mylab server --tcp 8080 --timeout 30s
 
 # Wait for a command to succeed
-sudo nlink-lab wait-for mylab server --exec "curl -sf http://localhost:8080/health"
+sudo nlink-lab wait-for -L mylab server --exec "curl -sf http://localhost:8080/health"
 
 # Wait for a file to exist
-sudo nlink-lab wait-for mylab server --file /var/run/service.pid
+sudo nlink-lab wait-for -L mylab server --file /var/run/service.pid
 ```
 
 All background processes (both `run background` in NLL and `nlink-lab spawn`)
 automatically capture stdout/stderr to log files -- on namespace **and**
 container nodes alike.
 
-> On a container node, `nlink-lab logs <lab> <node>` shows the container's PID 1
+> On a container node, `nlink-lab logs -L <lab> <node>` shows the container's PID 1
 > (it runs `docker|podman logs`). A process started with `run ... background`
 > is a *separate* process, so it has its own capture: use
-> `nlink-lab logs <lab> --pid <pid>`, which `nlink-lab ps <lab>` and the footer
+> `nlink-lab logs -L <lab> --pid <pid>`, which `nlink-lab ps -L <lab>` and the footer
 > printed by `logs <lab> <node>` both point you at.
 
 **Default log location:** `/var/lib/nlink-lab/labs/{lab}/logs/`
@@ -1274,10 +1285,10 @@ container nodes alike.
 Use `--log-dir` to override the default location:
 
 ```bash
-sudo nlink-lab spawn mylab server --log-dir /tmp/logs -- my-service
-nlink-lab logs mylab --pid 12345                # view stdout
-nlink-lab logs mylab --pid 12345 --stderr       # view stderr
-nlink-lab logs mylab --pid 12345 --tail 50      # last 50 lines
+sudo nlink-lab spawn -L mylab server --log-dir /tmp/logs -- my-service
+nlink-lab logs -L mylab --pid 12345             # view stdout
+nlink-lab logs -L mylab --pid 12345 --stderr    # view stderr
+nlink-lab logs -L mylab --pid 12345 --tail 50   # last 50 lines
 ```
 
 Log paths are also included in `nlink-lab ps --json` output (`stdout_log`, `stderr_log` fields).
@@ -1287,7 +1298,7 @@ Log paths are also included in `nlink-lab ps --json` output (`stdout_log`, `stde
 Get structured output from commands:
 
 ```bash
-sudo nlink-lab exec --json mylab host -- ping -c1 10.0.0.1
+sudo nlink-lab exec --json -L mylab host -- ping -c1 10.0.0.1
 # {"exit_code": 0, "stdout": "...", "stderr": "", "duration_ms": 1023}
 ```
 
@@ -1296,11 +1307,11 @@ sudo nlink-lab exec --json mylab host -- ping -c1 10.0.0.1
 Query node addresses without parsing topology JSON:
 
 ```bash
-nlink-lab ip mylab server                      # all interfaces
-nlink-lab ip mylab server --iface eth0         # bare IP (10.0.0.1)
-nlink-lab ip mylab server --iface eth0 --cidr  # with prefix (10.0.0.1/24)
-nlink-lab ip mylab server --iface mgmt0        # management IP (host-reachable)
-nlink-lab ip --json mylab server               # JSON output
+nlink-lab ip -L mylab server                   # all interfaces
+nlink-lab ip -L mylab server --iface eth0      # bare IP (10.0.0.1)
+nlink-lab ip -L mylab server --iface eth0 --cidr  # with prefix (10.0.0.1/24)
+nlink-lab ip -L mylab server --iface mgmt0     # management IP (host-reachable)
+nlink-lab ip --json -L mylab server            # JSON output
 ```
 
 ### Asymmetric Impairments
@@ -1308,8 +1319,8 @@ nlink-lab ip --json mylab server               # JSON output
 Apply different impairments per direction:
 
 ```bash
-sudo nlink-lab impair mylab router:wan0 --out-delay 50ms --in-delay 200ms
-sudo nlink-lab impair mylab router:wan0 --out-loss 0% --in-loss 5%
+sudo nlink-lab impair -L mylab router:wan0 --out-delay 50ms --in-delay 200ms
+sudo nlink-lab impair -L mylab router:wan0 --out-loss 0% --in-loss 5%
 ```
 
 ### Events
@@ -1318,11 +1329,11 @@ Every operation on a lab is logged; `events` shows the history and can
 follow it live, merged with kernel drift and process/interface events:
 
 ```bash
-nlink-lab events mylab                        # deployed, spawned, impaired, …
-nlink-lab events mylab --since 10m --kind impaired --kind partitioned
-sudo nlink-lab events mylab --follow          # + drift (RTNETLINK/nftables) + runtime
-sudo nlink-lab events mylab --follow --json --socket /run/mylab-events.sock
-nlink-lab daemon mylab --http 127.0.0.1:9100  # then GET /api/v1/events, /api/v1/events/stream (SSE)
+nlink-lab events -L mylab                     # deployed, spawned, impaired, …
+nlink-lab events -L mylab --since 10m --kind impaired --kind partitioned
+sudo nlink-lab events -L mylab --follow       # + drift (RTNETLINK/nftables) + runtime
+sudo nlink-lab events -L mylab --follow --json --socket /run/mylab-events.sock
+nlink-lab daemon -L mylab --http 127.0.0.1:9100  # then GET /api/v1/events, /api/v1/events/stream (SSE)
 ```
 
 Lifecycle lines live in `<state>/<lab>/events.ndjson` (rotated at 10 MB);
@@ -1334,14 +1345,14 @@ Save a checkpoint of a running lab and come back to it later — after a
 chaos run, before a risky `apply`, or to hand a colleague a known state:
 
 ```bash
-sudo nlink-lab snapshot mylab before-chaos --description "clean baseline"
-sudo nlink-lab impair mylab wan:eth0 --loss 30%
-sudo nlink-lab impair mylab core:eth1 --partition
-sudo nlink-lab snapshot mylab chaos
-sudo nlink-lab snapshot mylab --list
-sudo nlink-lab restore mylab before-chaos          # back to the baseline
-sudo nlink-lab restore mylab chaos --dry-run       # what would change
-sudo nlink-lab snapshot mylab --delete chaos
+sudo nlink-lab snapshot -L mylab before-chaos --description "clean baseline"
+sudo nlink-lab impair -L mylab wan:eth0 --loss 30%
+sudo nlink-lab impair -L mylab core:eth1 --partition
+sudo nlink-lab snapshot -L mylab chaos
+sudo nlink-lab snapshot -L mylab --list
+sudo nlink-lab restore -L mylab before-chaos       # back to the baseline
+sudo nlink-lab restore -L mylab chaos --dry-run    # what would change
+sudo nlink-lab snapshot -L mylab --delete chaos
 ```
 
 A snapshot holds the topology plus the runtime impairments and
@@ -1360,9 +1371,9 @@ declarations.
 Simulate network partitions without losing what the link carries:
 
 ```bash
-sudo nlink-lab impair mylab router:wan0 --partition  # drops everything, both ways
+sudo nlink-lab impair -L mylab router:wan0 --partition  # drops everything, both ways
 # ... test failure detection ...
-sudo nlink-lab impair mylab router:wan0 --heal       # traffic flows again
+sudo nlink-lab impair -L mylab router:wan0 --heal    # traffic flows again
 ```
 
 **Semantics:**
@@ -1454,8 +1465,8 @@ sudo nlink-lab deploy topology.nll --daemon
 Or attach to a lab that is already running:
 
 ```bash
-sudo nlink-lab daemon mylab --interval 2s
-sudo nlink-lab daemon mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
+sudo nlink-lab daemon -L mylab --interval 2s
+sudo nlink-lab daemon -L mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
 ```
 
 It publishes under `nlink-lab/<lab>/`:
@@ -1489,9 +1500,9 @@ series.
 `nlink-lab top` puts the same data on one screen, refreshed in place:
 
 ```bash
-sudo nlink-lab top mylab            # collect locally (needs root)
-nlink-lab top mylab --zenoh         # read a running daemon (no root)
-nlink-lab top mylab --once          # one plain-text frame, for scripts
+sudo nlink-lab top -L mylab         # collect locally (needs root)
+nlink-lab top -L mylab --zenoh      # read a running daemon (no root)
+nlink-lab top -L mylab --once       # one plain-text frame, for scripts
 ```
 
 Three panes — nodes, the selected node's interfaces (with the impairment in
@@ -1505,8 +1516,8 @@ partition and heal the selected interface using the same calls as
 Subscribe from any machine (no root required):
 
 ```bash
-nlink-lab metrics mylab
-nlink-lab metrics mylab --node router --format json --count 5
+nlink-lab metrics -L mylab
+nlink-lab metrics -L mylab --node router --format json --count 5
 ```
 
 Table output shows per-interface rx/tx rates, packet counts, errors, and drops.

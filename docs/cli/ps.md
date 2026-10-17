@@ -34,13 +34,12 @@ Exited processes remain in the listing with `alive: false` so post-mortem inspec
 
 JSON OUTPUT (with `--json`): { "schema_version": 2, "lab": str, "processes": [ { "node": str, "pid": int, "host_pid": int, "alive": bool, "exit_code": int | null, "stdout_log": str | null, "stderr_log": str | null }, ... ] } Schema: docs/json-schemas/ps.schema.json. With `--quiet`, the PIDs, one per line.
 
-Usage: nlink-lab ps [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab ps [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --alive-only
           Hide processes whose tracked PID has exited (alive == false). Useful for "is X still running?" polling loops where exited post-mortem entries would otherwise be misread as alive
 

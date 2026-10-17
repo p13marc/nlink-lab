@@ -9,13 +9,12 @@ Edit a running lab in place: add/remove nodes and links, set impairments.
 
 The edits are applied to the lab's stored topology and reconciled with `apply`, so the state file stays the source of truth; use `render`/`export` afterwards to get the updated NLL.
 
-Usage: nlink-lab edit [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab edit [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --add-node <NAME[:PROFILE]>
           Add a namespace node: NAME or NAME:PROFILE (repeatable)
 

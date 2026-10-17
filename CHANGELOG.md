@@ -33,9 +33,9 @@ under both (#233). Its waves land one by one below.
   - Labs deployed by 0.13 or older stay in the deploying user's
     `~/.local/state/nlink-lab`. `doctor` lists them; loading one says
     where it is; the orphan reaper never reaps their namespaces. Destroy
-    them with 0.13 before upgrading, or move them with
-    `nlink_lab::state::migrate_lab` (the CLI's `doctor --fix` comes in a
-    later wave).
+    them with 0.13 before upgrading, or move the idle ones with
+    `sudo nlink-lab doctor --fix` (#243), which also creates the group
+    and gives an existing root its group and modes.
 - **New error variants** (library API): `Locked`, `Busy`, `Cancelled`,
   `PermissionDenied`, `Privileges`, `Runtime`, `Unsupported` and
   `MovedState`. A held lab lock is `Error::Locked` (it was a
@@ -55,6 +55,22 @@ under both (#233). Its waves land one by one below.
 - **`ps --json` is an object** (#241): `{"schema_version": 2, "lab": …,
   "processes": [ … ]}`, not a bare array. Every JSON document gets a
   `schema_version` as the CLI waves reach its command.
+- **The lab is `-L LAB`, not the first argument** (#243), on every
+  command that acts on a running lab (`exec`, `shell`, `spawn`,
+  `wait-for`, `ps`, `kill`, `logs`, `stats`, `proc-stat`, `restart`,
+  `impair`, `edit`, `ip`, `capture`, `events`, `watch`, `top`,
+  `metrics`, `diagnose`, `snapshot`, `restore`, `verify`, `scenario`,
+  `benchmark`, `containers`, `daemon`). Without `-L` it is `$NLINK_LAB`,
+  then the lab `nlink-lab use` selected, then the only running lab.
+
+  | Was | Now |
+  |---|---|
+  | `nlink-lab exec wan r1 -- ip a` | `nlink-lab exec -L wan r1 -- ip a`, or `nlink-lab use wan` once, then `nlink-lab exec r1 -- ip a` |
+  | `nlink-lab ps wan` | `nlink-lab ps -L wan` (`nlink-lab ps` with one lab up) |
+  | `nlink-lab impair wan r1:eth0 --delay 50ms` | `nlink-lab impair -L wan r1:eth0 --delay 50ms` |
+
+  The old order fails as a usage error with a hint: `'wan' is a lab:
+  select it with -L wan`.
 - **Durations need a unit** (#242): `--timeout`, `--interval`,
   `--duration`, `--watch`, `--rotate`, `--wait-timeout` and
   `--wait-fd-stable` read `500ms`, `30s`, `2m`. A bare number is refused
@@ -563,6 +579,14 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`nlink-lab use [LAB]`** (#243): the current lab, per user (`sudo`
+  included, through `SUDO_UID`); without a name it says which lab
+  commands act on and why, `--clear` forgets it. Completion offers the
+  nodes and endpoints of that lab (or of a `-L` already typed), not every
+  lab's.
+- **`doctor --fix`** (#243): creates the `nlink-lab` group, gives the
+  state root its owner, group and modes, moves the idle labs of older
+  versions into it and removes stale lock files, then checks.
 - **One value grammar** (#242): `--set` and `--env` (`exec`/`spawn`
   have `-e` now) are `KEY=VALUE`, endpoints `NODE:IFACE`, signals,
   TCP targets, byte sizes, `--wait-log` regexes and `edit`'s impairment,

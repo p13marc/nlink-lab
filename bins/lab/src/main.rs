@@ -91,6 +91,15 @@ fn usage_error(e: clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
         Some(r) => format!("`nlink-lab {}` was removed: use `{}`", r.name, r.instead),
         None => e.render().to_string().trim_end().to_string(),
     };
+    // `ps LAB`: the lab is `-L LAB` now
+    let lab_hint = (e.kind() == ErrorKind::UnknownArgument)
+        .then(|| e.get(clap::error::ContextKind::InvalidArg))
+        .flatten()
+        .and_then(|v| match v {
+            clap::error::ContextValue::String(s) => Some(s.clone()),
+            _ => None,
+        })
+        .filter(|arg| !arg.starts_with('-') && nlink_lab::state::exists(arg));
     if wants_json {
         let mut api = nlink_lab::api::ApiError::new(
             nlink_lab::api::ErrorCode::InvalidArgument,
@@ -109,6 +118,12 @@ fn usage_error(e: clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
         anstream::eprintln!("{} {message}", output::style::red("error:"));
     } else {
         let _ = e.print();
+    }
+    if let Some(lab) = lab_hint {
+        anstream::eprintln!(
+            "  {} '{lab}' is a lab: select it with -L {lab}",
+            output::style::bold("hint:")
+        );
     }
     ExitCode::from(EXIT_USAGE)
 }

@@ -94,7 +94,7 @@ are three separate nodes with three separate ring topologies.
 nlink-lab validate examples/imports/use-ring.nll
 nlink-lab render examples/imports/use-ring.nll  # see expanded NLL
 sudo nlink-lab deploy examples/imports/use-ring.nll
-sudo nlink-lab exec ring-with-monitor monitor -- ping -c 2 backbone.r1
+sudo nlink-lab exec -L ring-with-monitor monitor -- ping -c 2 backbone.r1
 sudo nlink-lab destroy ring-with-monitor
 ```
 

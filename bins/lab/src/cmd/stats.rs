@@ -4,9 +4,8 @@ use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 }
 
 /// One row of `stats --json`: a node's cgroup v2 usage, for namespace and
@@ -22,6 +21,7 @@ pub struct NodeStats<'a> {
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
 
     // Namespace nodes with cpu/memory limits: cgroup usage (#66).

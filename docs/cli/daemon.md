@@ -39,13 +39,12 @@ Options:
 ```text
 Start the Zenoh backend daemon for a running lab
 
-Usage: nlink-lab daemon [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name (must be deployed)
+Usage: nlink-lab daemon [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -i, --interval <DURATION>
           Metrics collection interval
           

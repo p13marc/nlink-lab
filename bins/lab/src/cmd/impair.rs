@@ -6,12 +6,11 @@ use nlink_lab::impair_parse::collect_show as collect_impair_show;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Endpoint (e.g., "router:eth0"). Not required with --show.
-    #[arg(value_parser = crate::args::endpoint)]
+    #[arg(value_parser = crate::args::endpoint, add = crate::ctx::endpoint_completer())]
     pub endpoint: Option<String>,
 
     /// Show every endpoint's root qdisc, one line each: netem's delay,
@@ -137,6 +136,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         partition,
         heal,
     } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let mut running = nlink_lab::RunningLab::load(&lab)?;
 

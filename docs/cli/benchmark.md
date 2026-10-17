@@ -11,16 +11,16 @@ Collects the metrics the block asks for (`ping` latency/loss, `iperf3` throughpu
 
 JSON OUTPUT (with `--json`): the full `BenchmarkResult` (per test: the metric map, every assertion with its actual value, and the pass flag). Exit 2 when any assertion fails.
 
-Usage: nlink-lab benchmark <LAB> [NAME]
+Usage: nlink-lab benchmark [OPTIONS] [NAME]
 
 Arguments:
-  <LAB>
-          Lab name (must be deployed)
-
   [NAME]
           Benchmark name as declared in the topology (`benchmark "name" { … }`). Omit to list the benchmarks the lab defines
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -h, --help
           Print help (see a summary with '-h')
 ```

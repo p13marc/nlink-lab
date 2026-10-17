@@ -45,6 +45,7 @@ pub mod stats;
 pub mod status;
 pub mod test;
 pub mod top;
+pub mod use_lab;
 pub mod validate;
 pub mod verify;
 pub mod wait;
@@ -58,6 +59,7 @@ use crate::ctx::Ctx;
 pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
     match cmd {
         Commands::Deploy(args) => deploy::run(ctx, args).await,
+        Commands::Use(args) => use_lab::run(ctx, args),
         Commands::Apply(args) => apply::run(ctx, args).await,
         Commands::Destroy(args) => destroy::run(ctx, args).await,
         Commands::Status(args) => status::run(ctx, args).await,

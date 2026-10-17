@@ -78,7 +78,7 @@ sudo nlink-lab deploy examples/wireguard-vpn.nll
 ### Verify the tunnel
 
 ```bash
-sudo nlink-lab exec wireguard-vpn gw-a -- wg show
+sudo nlink-lab exec -L wireguard-vpn gw-a -- wg show
 ```
 
 You should see `gw-b`'s public key listed as a peer with a recent
@@ -89,7 +89,7 @@ handshake.
 `host-a` reaches `host-b` through the encrypted WG tunnel:
 
 ```bash
-sudo nlink-lab exec wireguard-vpn host-a -- ping -c 5 192.168.2.10
+sudo nlink-lab exec -L wireguard-vpn host-a -- ping -c 5 192.168.2.10
 ```
 
 The latency reflects the 50ms underlay impairment plus WG's small

@@ -31,16 +31,16 @@ Options:
 ```text
 Open an interactive shell in a lab node
 
-Usage: nlink-lab shell [OPTIONS] <LAB> <NODE>
+Usage: nlink-lab shell [OPTIONS] <NODE>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --shell <SHELL>
           Shell to use (default: /bin/sh)
           

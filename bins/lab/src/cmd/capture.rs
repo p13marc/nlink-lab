@@ -7,12 +7,11 @@ use crate::util::{compile_legacy_bpf_filter, parse_filter_cidr};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Endpoint (e.g., "router:eth0").
-    #[arg(value_parser = crate::args::endpoint)]
+    #[arg(value_parser = crate::args::endpoint, add = crate::ctx::endpoint_completer())]
     pub endpoint: String,
 
     /// Write a pcap file (default: print summaries to stdout).
@@ -177,6 +176,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         keep,
         ..
     } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let ep = nlink_lab::EndpointRef::parse(&endpoint).ok_or_else(|| {
@@ -453,7 +453,7 @@ mod tests {
     }
 
     fn filter(flags: &[&str]) -> netring::BpfFilter {
-        let argv = ["capture", "lab", "a:eth0"].iter().chain(flags);
+        let argv = ["capture", "a:eth0"].iter().chain(flags);
         build_filter(&Cli::parse_from(argv).args).unwrap().unwrap()
     }
 

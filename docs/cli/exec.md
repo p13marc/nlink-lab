@@ -26,7 +26,6 @@ captures stdout/stderr to log files.
 
 | Argument | Description |
 |----------|-------------|
-| `<LAB>` | Lab name (created by `deploy`). |
 | `<NODE>` | Node name within the lab. |
 | `<CMD>...` | Command and arguments. The `--` separator is recommended to disambiguate flags. |
 
@@ -34,6 +33,7 @@ captures stdout/stderr to log files.
 
 | Flag | Description |
 |------|-------------|
+| `-L`, `--lab LAB` | The lab (default: `$NLINK_LAB`, then `nlink-lab use`, then the only running lab). |
 | `-e`, `--env KEY=VALUE` | Set environment variables. Repeatable. |
 | `-t`, `--timeout DURATION` | Kill the command after this long (`30s`); exit 124. |
 | `--workdir DIR` | Working directory. For namespace nodes this is `chdir()` on the host filesystem; for container nodes it's passed as `-w <path>` to docker/podman. |
@@ -46,13 +46,13 @@ captures stdout/stderr to log files.
 ### Run a one-shot command
 
 ```bash
-sudo nlink-lab exec simple host -- ping -c 3 router
+sudo nlink-lab exec -L simple host -- ping -c 3 router
 ```
 
 ### Stream long-running output
 
 ```bash
-sudo nlink-lab exec simple router -- tail -f /var/log/syslog
+sudo nlink-lab exec -L simple router -- tail -f /var/log/syslog
 ```
 
 Press Ctrl-C to detach (the remote process is killed).
@@ -60,14 +60,14 @@ Press Ctrl-C to detach (the remote process is killed).
 ### Capture structured output for assertion
 
 ```bash
-RESULT=$(sudo nlink-lab exec --json simple client -- curl -fsS http://server:8080/health)
+RESULT=$(sudo nlink-lab exec --json -L simple client -- curl -fsS http://server:8080/health)
 echo "$RESULT" | jq -e '.exit_code == 0 and (.stdout | contains("ok"))'
 ```
 
 ### Run with environment variables
 
 ```bash
-sudo nlink-lab exec simple worker \
+sudo nlink-lab exec -L simple worker \
   --env LOG_LEVEL=debug \
   --env CONFIG=/etc/myapp.toml \
   -- /usr/bin/myapp --once
@@ -76,7 +76,7 @@ sudo nlink-lab exec simple worker \
 ### Run in a specific working directory
 
 ```bash
-sudo nlink-lab exec simple builder \
+sudo nlink-lab exec -L simple builder \
   --workdir /tmp/build \
   -- cargo test --release
 ```
@@ -84,7 +84,7 @@ sudo nlink-lab exec simple builder \
 ### Run a shell pipeline
 
 ```bash
-sudo nlink-lab exec simple host -- sh -c 'ip route | grep default'
+sudo nlink-lab exec -L simple host -- sh -c 'ip route | grep default'
 ```
 
 `exec` doesn't expand shell metacharacters itself; wrap pipelines
@@ -93,8 +93,8 @@ in `sh -c '...'` if needed.
 ### Resolve a node's address dynamically
 
 ```bash
-SERVER_IP=$(nlink-lab ip simple server --iface eth0)
-sudo nlink-lab exec simple client -- curl http://$SERVER_IP:8080/
+SERVER_IP=$(nlink-lab ip -L simple server --iface eth0)
+sudo nlink-lab exec -L simple client -- curl http://$SERVER_IP:8080/
 ```
 
 `ip` doesn't require root.
@@ -123,12 +123,9 @@ sudo nlink-lab exec simple client -- curl http://$SERVER_IP:8080/
 ```text
 Run a command in a lab node
 
-Usage: nlink-lab exec [OPTIONS] <LAB> <NODE> <CMD>...
+Usage: nlink-lab exec [OPTIONS] <NODE> <CMD>...
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name
 
@@ -136,6 +133,9 @@ Arguments:
           Command and arguments
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -e, --env <KEY=VALUE>
           Set an environment variable (repeatable: -e KEY=VALUE)
 

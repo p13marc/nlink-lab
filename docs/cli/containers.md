@@ -23,13 +23,12 @@ Options:
 ```text
 List container nodes in a running lab
 
-Usage: nlink-lab containers <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab containers [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -h, --help
           Print help
 ```

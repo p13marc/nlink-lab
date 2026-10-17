@@ -4,9 +4,8 @@ use crate::ctx::{Ctx, require_root};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name (must be deployed).
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Metrics collection interval.
     #[arg(short, long, value_name = "DURATION", default_value = "2s", value_parser = crate::args::interval)]
@@ -39,6 +38,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         zenoh_connect,
         http,
     } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     // The real backend (nlink-lab-backend as a library): RPC

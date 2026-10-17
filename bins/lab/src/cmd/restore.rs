@@ -5,11 +5,10 @@ use anstream::{print, println};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
-    /// Snapshot name (see `nlink-lab snapshot <lab> --list`).
+    /// Snapshot name (see `nlink-lab snapshot --list`).
     pub name: String,
 
     /// Show the plan without changing anything.
@@ -19,6 +18,7 @@ pub struct Args {
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, name, dry_run } = args;
+    let lab = lab.resolve()?;
     let snapshot = nlink_lab::state::snapshot_load(&lab, &name)?;
     let mut running = nlink_lab::RunningLab::load(&lab)?;
 

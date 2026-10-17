@@ -24,6 +24,8 @@ have no typed struct yet.
 | `nlink-lab status --json <LAB>` | `status-lab.schema.json` | hand-written |
 | `nlink-lab spawn --json` | `spawn.schema.json` | hand-written |
 | `nlink-lab impair --show --json` | `impair-show.schema.json` | hand-written |
+| daemon API, client → daemon ([API.md](../API.md)) | `api-client.v1.schema.json` | generated (`api::ClientMsg`) |
+| daemon API, daemon → client | `api-server.v1.schema.json` | generated (`api::ServerMsg`) |
 
 The upstream `nlink::ConfigDiff` / `nlink::NftablesDiff` values inside
 the layered diff are free-form objects in the schema (their shape is

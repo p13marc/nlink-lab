@@ -1115,6 +1115,100 @@ fn netem_correlated_rate(loss_pct: f64, corr_pct: f64) -> f64 {
 }
 
 impl Impairment {
+    /// Parse an impairment as people type it (#233): `delay 50ms loss 1%`,
+    /// or `delay=50ms,loss=1%`, the grammar of `impair`, `top`'s prompt and
+    /// the GUI. A `loss` value runs up to the next property, so a netem
+    /// Markov model (`loss gemodel 1% 30% 70% 0.1%`) is one value. Obvious
+    /// mistakes (a duration without a unit, a percentage over 100%, an
+    /// unknown key) are refused here, where they can be corrected.
+    pub fn parse_spec(input: &str) -> Result<Impairment, String> {
+        let mut words: Vec<String> = Vec::new();
+        for token in input
+            .split([' ', '\t', '\n', ','])
+            .filter(|t| !t.is_empty())
+        {
+            match token.split_once('=') {
+                Some((k, v)) => {
+                    words.push(k.to_string());
+                    words.push(v.to_string());
+                }
+                None => words.push(token.to_string()),
+            }
+        }
+        if words.is_empty() {
+            return Err("empty impairment spec — try: delay 50ms loss 1%".to_string());
+        }
+        let is_key = |w: &str| Self::PROPERTIES.contains(&w.to_ascii_lowercase().as_str());
+        let mut imp = Impairment::default();
+        let mut seen: Vec<String> = Vec::new();
+        let mut i = 0;
+        while i < words.len() {
+            let key = words[i].to_ascii_lowercase();
+            if !is_key(&key) {
+                return Err(format!(
+                    "unknown impairment {key:?}: one of {}",
+                    Self::PROPERTIES.join(", ")
+                ));
+            }
+            let mut end = i + 2;
+            if key == "loss" {
+                while end < words.len() && !is_key(&words[end]) {
+                    end += 1;
+                }
+            }
+            let Some(value) =
+                (i + 1 < words.len()).then(|| words[i + 1..end.min(words.len())].join(" "))
+            else {
+                return Err(format!(
+                    "{key:?}: expected a value (KEY VALUE pairs, e.g. delay 50ms loss 1%)"
+                ));
+            };
+            if seen.contains(&key) {
+                return Err(format!("duplicate key {key:?}"));
+            }
+            Self::validate_property(&key, &value)?;
+            imp.set_property(&key, &value)?;
+            seen.push(key);
+            i = end;
+        }
+        Ok(imp)
+    }
+
+    /// Refuse a value that is wrong whatever tc's rules: an empty one, a
+    /// duration without a unit, a percentage outside 0..100, a packet
+    /// count that is not a number. `rate` is left to tc's own spelling.
+    pub fn validate_property(key: &str, value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Err(format!("{key:?}: empty value"));
+        }
+        let percent = |v: &str| -> Result<(), String> {
+            let n: f64 = v
+                .trim_end_matches('%')
+                .parse()
+                .map_err(|_| format!("{key:?}: expected a percentage, got {v:?}"))?;
+            if !(0.0..=100.0).contains(&n) {
+                return Err(format!("{key:?}: {v} is outside 0%..100%"));
+            }
+            Ok(())
+        };
+        match key {
+            "delay" | "jitter" => crate::helpers::parse_duration(value)
+                .map(|_| ())
+                .map_err(|e| format!("{key:?}: {e}")),
+            "limit" => value
+                .parse::<u32>()
+                .map(|_| ())
+                .map_err(|_| format!("{key:?}: expected a packet count, got {value:?}")),
+            // a Markov model: its parameters are percentages
+            "loss" if value.starts_with("gemodel ") || value.starts_with("state ") => {
+                value.split_whitespace().skip(1).try_for_each(percent)
+            }
+            "loss" | "corrupt" | "reorder" | "duplicate" | "delay-correlation"
+            | "loss-correlation" => percent(value),
+            _ => Ok(()),
+        }
+    }
+
     /// The warning to show when `loss` is combined with `loss-correlation`,
     /// or `None`.
     ///
@@ -1286,6 +1380,103 @@ pub enum QdiscKind {
 }
 
 impl QdiscKind {
+    /// Parse a qdisc as written on the command line (#233):
+    /// `KIND[,K=V…]`, e.g. `tbf,rate=10mbit,burst=32kb,limit=64kb`,
+    /// `fq_codel,target=5ms,noecn`, `prio,bands=3`. Bare `ecn`/`noecn` set
+    /// fq_codel's ECN (the kernel's default is on).
+    pub fn parse_spec(spec: &str) -> Result<QdiscKind, String> {
+        let mut items = spec.split(',').map(str::trim).filter(|s| !s.is_empty());
+        let kind = items
+            .next()
+            .ok_or_else(|| "missing qdisc kind".to_string())?;
+        let mut kv: BTreeMap<&str, String> = BTreeMap::new();
+        let mut ecn: Option<bool> = None;
+        for item in items {
+            match item.split_once('=') {
+                Some((k, v)) => {
+                    kv.insert(k.trim(), v.trim().to_string());
+                }
+                None if item == "ecn" || item == "noecn" => {
+                    let on = item == "ecn";
+                    if ecn.is_some_and(|was| was != on) {
+                        return Err("`ecn` and `noecn` contradict each other".into());
+                    }
+                    ecn = Some(on);
+                }
+                None => return Err(format!("bad item {item:?} (expected K=V)")),
+            }
+        }
+        let num = |k: &str| -> Result<Option<u32>, String> {
+            kv.get(k)
+                .map(|v| {
+                    v.parse::<u32>()
+                        .map_err(|_| format!("{k}: expected an integer, got {v:?}"))
+                })
+                .transpose()
+        };
+        let allowed = |names: &[&str]| -> Result<(), String> {
+            match kv.keys().find(|k| !names.contains(k)) {
+                Some(k) => Err(format!(
+                    "unknown {kind} parameter {k:?} (allowed: {})",
+                    names.join(", ")
+                )),
+                None => Ok(()),
+            }
+        };
+        if ecn.is_some() && kind != "fq_codel" {
+            return Err(format!("`ecn`/`noecn` is a fq_codel setting, not {kind}'s"));
+        }
+        Ok(match kind {
+            "tbf" => {
+                allowed(&["rate", "burst", "limit", "peakrate", "mtu"])?;
+                QdiscKind::Tbf {
+                    rate: kv.get("rate").cloned().ok_or("tbf requires rate=")?,
+                    burst: kv.get("burst").cloned().ok_or("tbf requires burst=")?,
+                    // No limit means no queue: the TBF would drop everything.
+                    limit: Some(
+                        kv.get("limit")
+                            .cloned()
+                            .ok_or("tbf requires limit= (a byte size, e.g. limit=64kb)")?,
+                    ),
+                    peakrate: kv.get("peakrate").cloned(),
+                    mtu: num("mtu")?,
+                }
+            }
+            "fq_codel" => {
+                allowed(&["target", "interval", "limit", "flows", "quantum"])?;
+                QdiscKind::FqCodel {
+                    target: kv.get("target").cloned(),
+                    interval: kv.get("interval").cloned(),
+                    limit: num("limit")?,
+                    flows: num("flows")?,
+                    quantum: num("quantum")?,
+                    ecn,
+                }
+            }
+            "sfq" => {
+                allowed(&["perturb", "limit", "quantum"])?;
+                QdiscKind::Sfq {
+                    perturb: kv.get("perturb").cloned(),
+                    limit: num("limit")?,
+                    quantum: num("quantum")?,
+                }
+            }
+            "prio" => {
+                allowed(&["bands"])?;
+                QdiscKind::Prio {
+                    bands: num("bands")?
+                        .map(|b| u8::try_from(b).map_err(|_| format!("bands {b} out of range")))
+                        .transpose()?,
+                }
+            }
+            other => {
+                return Err(format!(
+                    "unknown qdisc kind {other:?} (tbf, fq_codel, sfq, prio)"
+                ));
+            }
+        })
+    }
+
     /// The tc kind name (`tbf`, `fq_codel`, `sfq`, `prio`).
     pub fn name(&self) -> &'static str {
         match self {
@@ -1963,6 +2154,40 @@ impl std::fmt::Display for EndpointRef {
     }
 }
 
+impl From<&Impairment> for nlink_lab_shared::api::ImpairmentSpec {
+    fn from(i: &Impairment) -> Self {
+        Self {
+            delay: i.delay.clone(),
+            jitter: i.jitter.clone(),
+            loss: i.loss.clone(),
+            rate: i.rate.clone(),
+            corrupt: i.corrupt.clone(),
+            reorder: i.reorder.clone(),
+            duplicate: i.duplicate.clone(),
+            delay_correlation: i.delay_correlation.clone(),
+            loss_correlation: i.loss_correlation.clone(),
+            limit: i.limit.clone(),
+        }
+    }
+}
+
+impl From<&nlink_lab_shared::api::ImpairmentSpec> for Impairment {
+    fn from(s: &nlink_lab_shared::api::ImpairmentSpec) -> Self {
+        Self {
+            delay: s.delay.clone(),
+            jitter: s.jitter.clone(),
+            loss: s.loss.clone(),
+            rate: s.rate.clone(),
+            corrupt: s.corrupt.clone(),
+            reorder: s.reorder.clone(),
+            duplicate: s.duplicate.clone(),
+            delay_correlation: s.delay_correlation.clone(),
+            loss_correlation: s.loss_correlation.clone(),
+            limit: s.limit.clone(),
+        }
+    }
+}
+
 /// What [`Topology::redacted`] puts where a secret was.
 pub const REDACTED: &str = "<redacted>";
 
@@ -2108,6 +2333,50 @@ impl Topology {
 #[cfg(test)]
 mod name_hash_tests {
     use super::*;
+
+    #[test]
+    fn impairment_specs_parse_in_every_spelling() {
+        let words = Impairment::parse_spec("delay 50ms loss 1%").unwrap();
+        assert_eq!(Impairment::parse_spec("delay=50ms,loss=1%").unwrap(), words);
+        assert_eq!(Impairment::parse_spec("delay=50ms loss=1%").unwrap(), words);
+        // a loss model is one value, up to the next property
+        let ge = Impairment::parse_spec("loss gemodel 1% 30% 70% 0.1% delay 10ms").unwrap();
+        assert_eq!(ge.loss.as_deref(), Some("gemodel 1% 30% 70% 0.1%"));
+        assert_eq!(ge.delay.as_deref(), Some("10ms"));
+        assert!(Impairment::parse_spec("loss gemodel 1% 130%").is_err());
+        assert!(Impairment::parse_spec("delay 50").is_err(), "no unit");
+        assert!(
+            Impairment::parse_spec("bogus 1")
+                .unwrap_err()
+                .contains("delay")
+        );
+        // the API's spec carries the same values
+        let spec = nlink_lab_shared::api::ImpairmentSpec::from(&ge);
+        assert_eq!(Impairment::from(&spec), ge);
+    }
+
+    #[test]
+    fn qdisc_specs_parse() {
+        assert!(matches!(
+            QdiscKind::parse_spec("fq_codel,target=5ms,noecn").unwrap(),
+            QdiscKind::FqCodel { ecn: Some(false), target: Some(t), .. } if t == "5ms"
+        ));
+        assert!(
+            QdiscKind::parse_spec("tbf,rate=1mbit,burst=32kb")
+                .unwrap_err()
+                .contains("limit")
+        );
+        assert!(
+            QdiscKind::parse_spec("sfq,ecn")
+                .unwrap_err()
+                .contains("fq_codel")
+        );
+        assert!(
+            QdiscKind::parse_spec("cake")
+                .unwrap_err()
+                .contains("unknown")
+        );
+    }
 
     #[test]
     fn a_redacted_topology_has_no_secrets() {

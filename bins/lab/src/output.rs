@@ -353,5 +353,14 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             "lint",
             output_schema_for::<crate::cmd::lint::LintReport<'static>>(),
         ),
+        // the daemon API (docs/API.md): what clients send and receive
+        (
+            "api-client.v1",
+            output_schema_for::<nlink_lab_shared::api::ClientMsg>(),
+        ),
+        (
+            "api-server.v1",
+            output_schema_for::<nlink_lab_shared::api::ServerMsg>(),
+        ),
     ]
 }

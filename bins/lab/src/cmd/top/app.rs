@@ -578,72 +578,10 @@ pub fn effective_impairments(
     out
 }
 
-/// Parse the `i` prompt: `delay 50ms loss 1%`, or `delay=50ms loss=1%`.
-///
-/// Values are kept verbatim (the tc planner parses units), but obvious
-/// mistakes are rejected here rather than at the netlink call, because
-/// the prompt can be corrected in place.
+/// Parse the `i` prompt: `delay 50ms loss 1%`, or `delay=50ms loss=1%`
+/// ([`Impairment::parse_spec`], shared with `impair` and the GUI).
 pub fn parse_impair_spec(input: &str) -> Result<Impairment, String> {
-    let mut words: Vec<String> = Vec::new();
-    for token in input.split_whitespace() {
-        match token.split_once('=') {
-            Some((k, v)) => {
-                words.push(k.to_string());
-                words.push(v.to_string());
-            }
-            None => words.push(token.to_string()),
-        }
-    }
-    if words.is_empty() {
-        return Err("empty impairment spec — try: delay 50ms loss 1%".to_string());
-    }
-    let mut imp = Impairment::default();
-    let mut seen: Vec<String> = Vec::new();
-    let mut i = 0;
-    while i < words.len() {
-        let key = words[i].to_ascii_lowercase();
-        let Some(value) = words.get(i + 1) else {
-            return Err(format!(
-                "{key:?}: expected a value (KEY VALUE pairs, e.g. delay 50ms loss 1%)"
-            ));
-        };
-        if seen.contains(&key) {
-            return Err(format!("duplicate key {key:?}"));
-        }
-        validate_value(&key, value)?;
-        imp.set_property(&key, value)?;
-        seen.push(key);
-        i += 2;
-    }
-    Ok(imp)
-}
-
-/// Reject the mistakes that are unambiguous without knowing tc's rules.
-fn validate_value(key: &str, value: &str) -> Result<(), String> {
-    if value.is_empty() {
-        return Err(format!("{key:?}: empty value"));
-    }
-    match key {
-        "delay" | "jitter" => nlink_lab::helpers::parse_duration(value)
-            .map(|_| ())
-            .map_err(|e| format!("{key:?}: {e}")),
-        "limit" => value
-            .parse::<u32>()
-            .map(|_| ())
-            .map_err(|_| format!("{key:?}: expected a packet count, got {value:?}")),
-        "loss" | "corrupt" | "reorder" | "duplicate" | "delay-correlation" | "loss-correlation" => {
-            let n: f64 = value
-                .trim_end_matches('%')
-                .parse()
-                .map_err(|_| format!("{key:?}: expected a percentage, got {value:?}"))?;
-            if !(0.0..=100.0).contains(&n) {
-                return Err(format!("{key:?}: {value} is outside 0%..100%"));
-            }
-            Ok(())
-        }
-        // `rate` takes tc's own spelling (`100mbit`, `1gbit`); leave it.
-        _ => Ok(()),
-    }
+    Impairment::parse_spec(input)
 }
 
 /// `1h 04m` / `12m 03s` / `41s`.

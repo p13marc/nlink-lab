@@ -26,6 +26,7 @@ wireguard = []
 legacy-tcpdump-filter = []
 
 [dependencies]
+nlink-lab-shared = { workspace = true }
 nlink = { workspace = true }
 tokio = { workspace = true }
 # Plan 159b — `watch` module consumes nlink's

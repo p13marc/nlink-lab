@@ -305,6 +305,64 @@ impl Error {
         self.first_nlink_error()?.root_cause().ext_ack_offset()
     }
 
+    /// This error as the daemon API reports it (#233), with the same exit
+    /// code the CLI uses: 2 for a topology that does not parse or
+    /// validate, 124 for a timeout, 130 for a cancel, 1 otherwise.
+    pub fn to_api(&self) -> nlink_lab_shared::api::ApiError {
+        use nlink_lab_shared::api::{ApiError, ErrorCode};
+        let code = match self {
+            Error::Io(e) => match e.kind() {
+                std::io::ErrorKind::PermissionDenied => ErrorCode::PermissionDenied,
+                std::io::ErrorKind::NotFound => ErrorCode::NotFound,
+                _ => ErrorCode::Io,
+            },
+            Error::Json(_) | Error::DeployFailed(_) | Error::Runtime(_) => ErrorCode::Internal,
+            Error::Nlink(_) | Error::NlinkOp { .. } | Error::Namespace { .. } => ErrorCode::Kernel,
+            Error::Validation(_)
+            | Error::ValidationErrors(_)
+            | Error::InvalidTopology(_)
+            | Error::NllParse(_)
+            | Error::NllParseAt { .. }
+            | Error::NllDiagnostic(_) => ErrorCode::Validation,
+            Error::AlreadyExists { .. } => ErrorCode::AlreadyExists,
+            Error::NotFound { .. } | Error::NodeNotFound { .. } | Error::MovedState { .. } => {
+                ErrorCode::NotFound
+            }
+            Error::InvalidEndpoint { .. } | Error::InvalidArgument(_) => ErrorCode::InvalidArgument,
+            Error::Capture(_) | Error::State { .. } => ErrorCode::Io,
+            Error::Timeout(_) | Error::TimedOut(_) => ErrorCode::Timeout,
+            Error::Locked { .. } => ErrorCode::Locked,
+            Error::Busy(_) => ErrorCode::Busy,
+            Error::Cancelled(_) => ErrorCode::Cancelled,
+            Error::PermissionDenied { .. } | Error::Privileges(_) => ErrorCode::PermissionDenied,
+            Error::Unsupported(_) => ErrorCode::Unsupported,
+        };
+        let mut api = ApiError::new(code, self.to_string());
+        let mut src: &dyn std::error::Error = self;
+        loop {
+            api.chain.push(src.to_string());
+            match src.source() {
+                Some(next) => src = next,
+                None => break,
+            }
+        }
+        api.errno = self.errno();
+        api.ext_ack = self.ext_ack().map(str::to_string);
+        api.netns = self
+            .nlink_error()
+            .and_then(|e| e.netns().or(e.root_cause().netns()))
+            .map(str::to_string);
+        api.hint = match self {
+            Error::PermissionDenied { hint, .. } => Some(hint.clone()),
+            Error::MovedState { .. } => Some("sudo nlink-lab doctor --fix".into()),
+            _ => None,
+        };
+        if let Error::ValidationErrors(issues) = self {
+            api.issues = serde_json::to_value(issues).ok();
+        }
+        api
+    }
+
     /// Return the kernel errno from the source chain, if any.
     /// nlink 0.19 normalizes errno via `.abs()`, so the value
     /// is always the positive errno number regardless of how
@@ -317,6 +375,32 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn errors_map_to_api_codes_and_exit_codes() {
+        use nlink_lab_shared::api::ErrorCode;
+        let api = Error::NotFound { name: "x".into() }.to_api();
+        assert_eq!((api.code, api.exit_code), (ErrorCode::NotFound, 1));
+        assert_eq!(api.message, "lab not found: x");
+        let v = Error::Validation("bad".into()).to_api();
+        assert_eq!((v.code, v.exit_code), (ErrorCode::Validation, 2));
+        let t = Error::TimedOut("waited".into()).to_api();
+        assert_eq!(t.exit_code, 124);
+        let c = Error::Cancelled("deploy".into()).to_api();
+        assert_eq!(c.exit_code, 130);
+        let m = Error::MovedState {
+            name: "x".into(),
+            path: "/old".into(),
+        }
+        .to_api();
+        assert!(m.hint.unwrap().contains("doctor --fix"));
+        let kernel = nlink::Error::from_errno_ext_ack(16, Some("busy".into()), None);
+        let k = Error::nlink("apply nftables on 'b'", kernel).to_api();
+        assert_eq!(k.code, ErrorCode::Kernel);
+        assert_eq!(k.errno, Some(16));
+        assert_eq!(k.ext_ack.as_deref(), Some("busy"));
+        assert!(k.chain.len() >= 2, "{:?}", k.chain);
+    }
 
     /// An nlink failure keeps its errno and extended ack under the
     /// context it happened in, and prints no "deploy failed" (#177).

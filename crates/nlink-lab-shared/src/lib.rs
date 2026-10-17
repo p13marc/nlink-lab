@@ -32,6 +32,7 @@
 //! *misinterpret* (a renamed field, a changed unit); purely additive
 //! fields need no bump.
 
+pub mod api;
 pub mod messages;
 pub mod metrics;
 pub mod topics;

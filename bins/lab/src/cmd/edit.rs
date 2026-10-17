@@ -244,111 +244,11 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
     Ok(log)
 }
 
-/// `KIND[,K=V…]` → [`QdiscKind`](nlink_lab::types::QdiscKind). Bare
-/// `ecn` / `noecn` turn fq_codel's ECN on or off (the kernel's default is
-/// on).
+/// `KIND[,K=V…]` → [`QdiscKind`](nlink_lab::types::QdiscKind), through
+/// [`QdiscKind::parse_spec`](nlink_lab::types::QdiscKind::parse_spec).
 fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::types::QdiscKind> {
-    use nlink_lab::types::QdiscKind;
-    let bad =
-        |what: String| nlink_lab::Error::invalid_argument(format!("--set-qdisc {spec:?}: {what}"));
-    let mut items = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
-    let kind = items
-        .next()
-        .ok_or_else(|| bad("missing qdisc kind".into()))?;
-    let mut kv: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
-    let mut ecn: Option<bool> = None;
-    for item in items {
-        match item.split_once('=') {
-            Some((k, v)) => {
-                kv.insert(k.trim(), v.trim().to_string());
-            }
-            None if item == "ecn" || item == "noecn" => {
-                let on = item == "ecn";
-                if ecn.is_some_and(|was| was != on) {
-                    return Err(bad("`ecn` and `noecn` contradict each other".into()));
-                }
-                ecn = Some(on);
-            }
-            None => return Err(bad(format!("bad item {item:?} (expected K=V)"))),
-        }
-    }
-    let num = |k: &str| -> nlink_lab::Result<Option<u32>> {
-        kv.get(k)
-            .map(|v| {
-                v.parse::<u32>()
-                    .map_err(|_| bad(format!("{k}: expected an integer, got {v:?}")))
-            })
-            .transpose()
-    };
-    let allowed = |names: &[&str]| -> nlink_lab::Result<()> {
-        for k in kv.keys() {
-            if !names.contains(k) {
-                return Err(bad(format!(
-                    "unknown {kind} parameter {k:?} (allowed: {})",
-                    names.join(", ")
-                )));
-            }
-        }
-        Ok(())
-    };
-    Ok(match kind {
-        _ if ecn.is_some() && kind != "fq_codel" => {
-            return Err(bad(format!(
-                "`ecn`/`noecn` is a fq_codel setting, not {kind}'s"
-            )));
-        }
-        "tbf" => {
-            allowed(&["rate", "burst", "limit", "peakrate", "mtu"])?;
-            QdiscKind::Tbf {
-                rate: kv
-                    .get("rate")
-                    .cloned()
-                    .ok_or_else(|| bad("tbf requires rate=".into()))?,
-                burst: kv
-                    .get("burst")
-                    .cloned()
-                    .ok_or_else(|| bad("tbf requires burst=".into()))?,
-                // No limit means no queue: the TBF would drop everything.
-                limit: Some(kv.get("limit").cloned().ok_or_else(|| {
-                    bad("tbf requires limit= (a byte size, e.g. limit=64kb)".into())
-                })?),
-                peakrate: kv.get("peakrate").cloned(),
-                mtu: num("mtu")?,
-            }
-        }
-        "fq_codel" => {
-            allowed(&["target", "interval", "limit", "flows", "quantum"])?;
-            QdiscKind::FqCodel {
-                target: kv.get("target").cloned(),
-                interval: kv.get("interval").cloned(),
-                limit: num("limit")?,
-                flows: num("flows")?,
-                quantum: num("quantum")?,
-                ecn,
-            }
-        }
-        "sfq" => {
-            allowed(&["perturb", "limit", "quantum"])?;
-            QdiscKind::Sfq {
-                perturb: kv.get("perturb").cloned(),
-                limit: num("limit")?,
-                quantum: num("quantum")?,
-            }
-        }
-        "prio" => {
-            allowed(&["bands"])?;
-            QdiscKind::Prio {
-                bands: num("bands")?
-                    .map(|b| u8::try_from(b).map_err(|_| bad(format!("bands {b} out of range"))))
-                    .transpose()?,
-            }
-        }
-        other => {
-            return Err(bad(format!(
-                "unknown qdisc kind {other:?} (tbf, fq_codel, sfq, prio)"
-            )));
-        }
-    })
+    nlink_lab::types::QdiscKind::parse_spec(rest)
+        .map_err(|e| nlink_lab::Error::invalid_argument(format!("--set-qdisc {spec:?}: {e}")))
 }
 
 /// `NODE:IFACE=MTU` -> (endpoint, mtu).

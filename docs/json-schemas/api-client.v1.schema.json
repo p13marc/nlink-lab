@@ -1,0 +1,1882 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientMsg",
+  "description": "A client's message.",
+  "oneOf": [
+    {
+      "description": "The first message: the client's API version (`\"1.0\"`), name and\nfeatures.",
+      "type": "object",
+      "properties": {
+        "api": {
+          "type": "string"
+        },
+        "client": {
+          "type": "string"
+        },
+        "features": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "t": {
+          "type": "string",
+          "const": "hello"
+        }
+      },
+      "required": [
+        "t",
+        "api",
+        "client",
+        "features"
+      ]
+    },
+    {
+      "description": "Start a call (its id is the frame's).",
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "call"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "ping"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "description": "The daemon's version, host and the caller's identity and role.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "who_am_i"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "daemon_status"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "list_labs"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "get_lab"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "get_topology"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "redact": {
+                  "type": "boolean",
+                  "default": true
+                }
+              },
+              "required": [
+                "lab",
+                "redact"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "list_processes"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "get_impairments"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "list_snapshots"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "Lifecycle events from `since` (a cursor from an earlier read), at\nmost `limit`, of these `kinds` (all when empty).",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "read_events"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "kinds": {
+                  "type": "array",
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "since": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "lab",
+                "kinds"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "get_metrics"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "diagnose"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "node_addresses"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "node"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "proc_stat"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                },
+                "pids": {
+                  "type": "array",
+                  "default": [],
+                  "items": {
+                    "type": "integer",
+                    "format": "uint32",
+                    "minimum": 0
+                  }
+                }
+              },
+              "required": [
+                "lab",
+                "node",
+                "pids"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "stats"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "list_ops"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "description": "Follow an operation started earlier (by this or another client):\nits events so far, then the rest.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "attach_op"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "op"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "A stream of notifications: of one lab, or of all with `lab: null`.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "subscribe"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "interval_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "lab": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "topics": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Topic"
+                  }
+                }
+              },
+              "required": [
+                "topics"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "deploy"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "options": {
+                  "$ref": "#/$defs/DeployOptions",
+                  "default": {
+                    "force": false,
+                    "skip_assertions": false,
+                    "strict": false
+                  }
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SourceBundle"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "topology": true
+              },
+              "required": [
+                "topology",
+                "options"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "The deploy plan, without deploying.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "plan_deploy"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "topology": true
+              },
+              "required": [
+                "topology"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "apply"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "options": {
+                  "$ref": "#/$defs/ApplyOptions",
+                  "default": {
+                    "reset_impairments": false,
+                    "strict": false
+                  }
+                },
+                "topology": true
+              },
+              "required": [
+                "lab",
+                "topology",
+                "options"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "What an apply would change, without changing it.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "check_apply"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "options": {
+                  "$ref": "#/$defs/ApplyOptions",
+                  "default": {
+                    "reset_impairments": false,
+                    "strict": false
+                  }
+                },
+                "topology": true
+              },
+              "required": [
+                "lab",
+                "topology",
+                "options"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "Drift between the lab and its topology.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "verify"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "destroy"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "Orphans and stale labs on the host.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "scan_host"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "reap_orphans"
+            }
+          },
+          "required": [
+            "method"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "restart"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "node"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "snapshot"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "delete_snapshot"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "restore"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "dry_run": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "name",
+                "dry_run"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "run_scenario"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "run_benchmark"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "run_assertions"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "pull_images"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "topology": true
+              },
+              "required": [
+                "topology"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "cancel_op"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "op"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "impair"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "$ref": "#/$defs/Direction",
+                  "default": "out"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "spec": {
+                  "$ref": "#/$defs/ImpairmentSpec"
+                }
+              },
+              "required": [
+                "lab",
+                "endpoint",
+                "direction",
+                "spec"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "clear_impairment"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "endpoint"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "partition"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "endpoint"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "heal"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "endpoint"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "A network's per-pair impairment from `src` to `dst`; `None` clears it.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "set_pair_impairment"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "dst": {
+                  "type": "string"
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "network": {
+                  "type": "string"
+                },
+                "rate_cap": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "spec": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ImpairmentSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "src": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "network",
+                "src",
+                "dst"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "spawn"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "argv": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "env": {
+                  "type": "array",
+                  "default": [],
+                  "items": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                },
+                "wait": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/WaitSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "workdir": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "lab",
+                "node",
+                "argv",
+                "env"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "kill"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "pid": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "signal": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "lab",
+                "pid"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "Run a command; its output streams as data, then `Exited`. With\n`stdin`, the client streams input; with `tty`, it runs on a pty.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "exec"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "argv": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "env": {
+                  "type": "array",
+                  "default": [],
+                  "items": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                },
+                "stdin": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "timeout_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "tty": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "workdir": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "lab",
+                "node",
+                "argv",
+                "env",
+                "stdin",
+                "tty"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "An interactive shell on a pty of `rows` × `cols`.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "shell"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "cols": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "maximum": 65535,
+                  "minimum": 0
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "maximum": 65535,
+                  "minimum": 0
+                },
+                "shell": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "lab",
+                "node",
+                "rows",
+                "cols"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "logs"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "follow": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "pid": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "stream": {
+                  "$ref": "#/$defs/LogStream",
+                  "default": "stdout"
+                },
+                "tail": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "lab",
+                "pid",
+                "stream",
+                "follow"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "Capture packets on an endpoint; the pcap streams as data.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "capture"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "duration_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "filter": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "endpoint"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "wait_for"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "cond": {
+                  "$ref": "#/$defs/WaitSpec"
+                },
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab",
+                "node",
+                "cond"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "The lab as an `.nlz` archive, streamed as data.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "export"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "lab"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        }
+      ],
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "cancel"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "description": "Leave a long operation running and stop following it.",
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "detach"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "description": "End of the call's stdin.",
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "eof"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "cols": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "rows": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "t": {
+          "type": "string",
+          "const": "resize"
+        }
+      },
+      "required": [
+        "t",
+        "rows",
+        "cols"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "signal": {
+          "type": "string"
+        },
+        "t": {
+          "type": "string",
+          "const": "signal"
+        }
+      },
+      "required": [
+        "t",
+        "signal"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "ping"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    }
+  ],
+  "$defs": {
+    "ApplyOptions": {
+      "description": "Options of an apply.",
+      "type": "object",
+      "properties": {
+        "reset_impairments": {
+          "description": "Drop runtime impairments and partitions.",
+          "type": "boolean",
+          "default": false
+        },
+        "strict": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "reset_impairments",
+        "strict"
+      ]
+    },
+    "DeployOptions": {
+      "description": "Options of a deploy.",
+      "type": "object",
+      "properties": {
+        "force": {
+          "description": "Destroy a lab of that name first.",
+          "type": "boolean",
+          "default": false
+        },
+        "skip_assertions": {
+          "description": "Skip the `validate { … }` assertions.",
+          "type": "boolean",
+          "default": false
+        },
+        "strict": {
+          "description": "A failed assertion fails the deploy.",
+          "type": "boolean",
+          "default": false
+        },
+        "suffix": {
+          "description": "Appended to the lab's name and prefix.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "force",
+        "skip_assertions",
+        "strict"
+      ]
+    },
+    "Direction": {
+      "description": "Which way an impairment acts on an endpoint's link: out of it (its\negress), into it (the peer's egress), or both.",
+      "type": "string",
+      "enum": [
+        "out",
+        "in",
+        "both"
+      ]
+    },
+    "ImpairmentSpec": {
+      "description": "An impairment (netem), every knob optional: what `impair` sets and the\nGUI's editor edits. Values are in NLL's units (`\"10ms\"`, `\"1%\"`,\n`\"100mbit\"`).",
+      "type": "object",
+      "properties": {
+        "corrupt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay_correlation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duplicate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jitter": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss_correlation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reorder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LogStream": {
+      "description": "A process's output stream.",
+      "type": "string",
+      "enum": [
+        "stdout",
+        "stderr",
+        "both"
+      ]
+    },
+    "SourceBundle": {
+      "description": "Where a lab's topology came from, sent with a deploy: the file's text\nand the files it imports (keyed by their path relative to it), so the\ndaemon never reads a client's files by path.",
+      "type": "object",
+      "properties": {
+        "imports": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "params": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "path": {
+          "description": "The entry file's path, as the client knows it (for messages only).",
+          "type": "string",
+          "default": ""
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "text",
+        "imports",
+        "params"
+      ]
+    },
+    "Topic": {
+      "description": "What a subscription delivers.",
+      "oneOf": [
+        {
+          "description": "Labs appearing, changing, going away.",
+          "type": "string",
+          "const": "labs"
+        },
+        {
+          "description": "The lab's lifecycle events (deployed, applied, impaired, …).",
+          "type": "string",
+          "const": "lifecycle"
+        },
+        {
+          "description": "Interfaces going up or down, processes exiting.",
+          "type": "string",
+          "const": "runtime"
+        },
+        {
+          "description": "Metrics snapshots, every interval.",
+          "type": "string",
+          "const": "metrics"
+        },
+        {
+          "description": "A new topology after an apply or restore.",
+          "type": "string",
+          "const": "topology"
+        },
+        {
+          "description": "Progress of operations.",
+          "type": "string",
+          "const": "ops"
+        },
+        {
+          "description": "Changes nobody made through nlink-lab (hand edits).",
+          "type": "string",
+          "const": "drift"
+        }
+      ]
+    },
+    "WaitSpec": {
+      "description": "A condition a `wait_for` (or a spawn) waits for. Conditions given\ntogether must all hold.",
+      "type": "object",
+      "properties": {
+        "exec": {
+          "description": "A command that exits 0.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "A file that exists.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listening": {
+          "description": "A port a process of the node listens on.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "log": {
+          "description": "A regex a (spawned) process's log line matches.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tcp": {
+          "description": "`IP:PORT` that accepts a TCP connection.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "timeout_ms"
+      ]
+    }
+  }
+}

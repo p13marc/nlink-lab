@@ -301,6 +301,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   additive under `apply --check --json`'s `topology`). `diff --json`
   prints the whole diff plus `total_changes`, instead of a summary with
   link counts.
+- **OpenMetrics: interface series lose the `state` label** (#218); the
+  new `nlink_lab_iface_up` gauge carries it. A link going down changed
+  the series identity of its counters, which broke `rate()`.
+- **The backend daemon follows the lab** (#218). It reloads the state
+  file on every tick, and exits once the lab is destroyed; it kept
+  serving a destroyed lab. An `rpc/exec` runs in its own task and is
+  killed after 60 s.
+- **Builder DSL** (#218):
+  - a port with an interface is keyed `node:iface`, as NLL keys it;
+  - a concrete `subnet` assigns member addresses;
+  - `member()` adds an endpoint once;
+  - `build_validated` refuses a node, network or profile declared
+    twice.
 - **A bad argument exits 1, not 2, and says "invalid argument"** (#209):
   `--set noequals`, an unknown template, signal, lint rule, scenario or
   benchmark name, a bad regex or `--env`, a missing `--tcp`/`--exec`/
@@ -500,6 +513,25 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`fmt -w` and the LSP's format-on-save deleted `//` comments** (#218),
+  and **a CRLF file did not parse** (#218): the lexer took `\r` for an
+  unexpected character.
+- **The backend and `top` stopped producing metrics for every node when
+  one could not be read** (#218): a restarted or exited container, a
+  node an `apply` removed. A full diagnose leaves an unreadable node out,
+  and both reload the lab as they go. An `rpc/exec` without an end
+  (`ping` without `-c`) stalled the daemon.
+- **LSP** (#218):
+  - completion right after `$` or `NODE:` offered nothing useful (a lone
+    `$` failed the lex, an unfinished `link` the parse);
+  - diagnostics of an assertion in a second `validate` block, the
+    second of two equal addresses, and a duplicate name pointed at the
+    first one.
+- **`top`** (#218):
+  - its panes scroll to the selected row;
+  - a lab without TCP flows no longer says "collecting" forever;
+  - `--once` no longer says "need a second sample" under its flows;
+  - `--once --zenoh` exits 124 on a timeout.
 - **`kill`, `kill -s` and an `apply` re-run stopped only the `exec` client
   on a container node** (#215). A background process there is
   `docker`/`podman exec … CMD`, and neither forwards a signal from the

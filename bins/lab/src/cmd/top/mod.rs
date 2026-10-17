@@ -143,6 +143,21 @@ impl Source {
         })
     }
 
+    /// The lab as its state file has it now. Loaded once, a container
+    /// restart, an exited container or an `apply` left `top` reading stale
+    /// namespaces (no metrics at all) and stale impairments (#218).
+    fn refresh(&mut self) {
+        let lab = match self {
+            Source::Local { lab, .. } => Some(lab),
+            Source::Zenoh { lab, .. } => lab.as_mut(),
+        };
+        if let Some(lab) = lab
+            && let Ok(fresh) = nlink_lab::RunningLab::load(lab.name())
+        {
+            *lab = fresh;
+        }
+    }
+
     fn lab(&self) -> Option<&nlink_lab::RunningLab> {
         match self {
             Source::Local { lab, .. } => Some(lab),
@@ -184,6 +199,7 @@ impl Source {
 
     /// One local collection. Never called on the Zenoh source.
     async fn collect(&mut self) -> nlink_lab::Result<MetricsSnapshot> {
+        self.refresh();
         match self {
             Source::Local { lab, collector } => {
                 let (snap, _events) = collector.snapshot(lab).await?;
@@ -198,6 +214,7 @@ impl Source {
     /// Perform a write. Errors come back as strings for the status line:
     /// a failed impairment must never take the TUI down.
     async fn act(&mut self, action: Action) -> Result<String, String> {
+        self.refresh();
         let Source::Local { lab, .. } = self else {
             return Err("this source is read-only".to_string());
         };
@@ -292,7 +309,10 @@ async fn run_once(
             // Collect twice: the first pass is the collector's baseline
             // and carries no rates (#133), so a one-shot frame built from
             // it would report every interface as idle.
-            let _baseline = source.collect().await?;
+            let baseline = source.collect().await?;
+            // the frame follows from it, as in the live view: printed
+            // alone it said "need a second sample" under its flows (#218)
+            app.apply_snapshot(baseline, &container_nodes(source));
             tokio::time::sleep(RATE_WINDOW).await;
             source.collect().await?
         }
@@ -300,15 +320,20 @@ async fn run_once(
             // Bounded so a daemon that is not publishing cannot hang CI.
             let wait = (interval * 5).max(Duration::from_secs(10));
             match tokio::time::timeout(wait, rx.recv()).await {
-                Ok(Some(snap)) => snap,
+                // the daemon has been sampling: past its baseline
+                Ok(Some(snap)) => {
+                    app.flows_baseline = false;
+                    snap
+                }
                 Ok(None) => {
                     return Err(nlink_lab::Error::deploy_failed(
                         "the daemon's metrics stream ended",
                     ));
                 }
+                // a timeout, exit 124: the exit code set here was replaced
+                // by the error's, 1 (#218)
                 Err(_) => {
-                    crate::output::set_exit_code(crate::output::EXIT_TIMEOUT);
-                    return Err(nlink_lab::Error::deploy_failed(format!(
+                    return Err(nlink_lab::Error::TimedOut(format!(
                         "no metrics published within {}s — is `nlink-lab daemon` running?",
                         wait.as_secs()
                     )));
@@ -375,6 +400,7 @@ async fn event_loop(
                 Err(e) => app.set_error(e),
             },
             Step::Due(Due::Snapshot(snapshot)) => {
+                source.refresh();
                 app.apply_snapshot(snapshot, &container_nodes(source));
                 refresh_impairments(app, source);
             }

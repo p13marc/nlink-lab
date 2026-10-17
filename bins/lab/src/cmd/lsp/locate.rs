@@ -309,25 +309,28 @@ impl<'a> Resolver<'a> {
         n: usize,
     ) -> Option<std::ops::Range<usize>> {
         let range = symbols::block_range(self.tokens, head).unwrap_or(head..self.tokens.len());
-        let mut seen = 0;
-        let mut fallback = None;
-        for t in &self.tokens[range] {
-            let text = match &t.token {
-                Token::Cidr(s) | Token::Ipv6Cidr(s) | Token::Ipv4Addr(s) | Token::Ipv6Addr(s) => s,
-                Token::Interp(s) => s,
-                _ => continue,
-            };
-            if let Some(want) = want
-                && text == want
-            {
-                return Some(t.span.clone());
-            }
-            if seen == n {
-                fallback = Some(t.span.clone());
-            }
-            seen += 1;
+        let addresses: Vec<(&str, std::ops::Range<usize>)> = self.tokens[range]
+            .iter()
+            .filter_map(|t| match &t.token {
+                Token::Cidr(s)
+                | Token::Ipv6Cidr(s)
+                | Token::Ipv4Addr(s)
+                | Token::Ipv6Addr(s)
+                | Token::Interp(s) => Some((s.as_str(), t.span.clone())),
+                _ => None,
+            })
+            .collect();
+        // The n-th one when it is the value asked for: by value first, the
+        // second of two equal addresses pointed at the first (#218).
+        match (addresses.get(n), want) {
+            (Some((text, span)), Some(want)) if *text == want => Some(span.clone()),
+            (_, Some(want)) => addresses
+                .iter()
+                .find(|(text, _)| *text == want)
+                .or(addresses.get(n))
+                .map(|(_, span)| span.clone()),
+            (at, None) => at.map(|(_, span)| span.clone()),
         }
-        fallback
     }
 
     /// `impairments."a:eth0"` and friends: the statement whose endpoint
@@ -362,21 +365,32 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// `assertions[i]`: the i-th statement inside the `validate` block.
+    /// `assertions[i]`: the i-th statement over the `validate` blocks, in
+    /// order. Only the first block was searched, so an assertion in a
+    /// second one pointed at the first `validate` (#218).
     fn nth_in_block(&self, kw: impl Fn(&Token) -> bool, rest: &str) -> Resolved {
-        let Some(head) = self.head(&kw, None) else {
+        let Some(first) = self.head(&kw, None) else {
             return Resolved::Unknown;
         };
-        let Some(block) = symbols::block_range(self.tokens, head) else {
-            return Resolved::Statement(self.tokens[head].span.clone());
+        let fallback = Resolved::Statement(self.tokens[first].span.clone());
+        let Some((mut idx, _)) = take_index(rest) else {
+            return fallback;
         };
-        let Some((idx, _)) = take_index(rest) else {
-            return Resolved::Statement(self.tokens[head].span.clone());
-        };
-        match self.nth_statement(block, idx) {
-            Some(span) => Resolved::Exact(span),
-            None => Resolved::Statement(self.tokens[head].span.clone()),
+        let heads = (0..self.tokens.len())
+            .filter(|&i| kw(&self.tokens[i].token) && symbols::is_stmt_start(self.tokens, i));
+        for head in heads {
+            let Some(block) = symbols::block_range(self.tokens, head) else {
+                continue;
+            };
+            if let Some(span) = self.nth_statement(block.clone(), idx) {
+                return Resolved::Exact(span);
+            }
+            let count = (0..)
+                .take_while(|&k| self.nth_statement(block.clone(), k).is_some())
+                .count();
+            idx -= count;
         }
+        fallback
     }
 
     /// `scenarios[i]…` / `benchmarks[i]…`: the i-th such declaration.

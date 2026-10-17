@@ -45,32 +45,60 @@ async fn reply_json<T: serde::Serialize>(
     }
 }
 
+/// How long an `rpc/exec` command may run before it is killed.
+pub const EXEC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// `rpc/exec`: run a command in a node and reply with its output.
+///
+/// In a task of its own, on a fresh copy of the lab, killed after
+/// [`EXEC_TIMEOUT`]: run inline and unbounded, a `ping` without `-c`
+/// stalled metrics, health and every other RPC for good (#218).
 pub async fn handle_exec(lab: &RunningLab, query: zenoh::query::Query) {
     let lab_name = lab.name().to_string();
     let Some(request) = decode_request::<ExecRequest>("exec", &query) else {
         return;
     };
-
-    let args: Vec<&str> = request.args.iter().map(|s| s.as_str()).collect();
-    let response = match lab.exec(&request.node, &request.cmd, &args) {
-        Ok(output) => ExecResponse {
-            wire_version: WIRE_VERSION,
-            success: output.exit_code == 0,
-            exit_code: output.exit_code,
-            stdout: output.stdout,
-            stderr: output.stderr,
-        },
-        Err(e) => ExecResponse {
-            wire_version: WIRE_VERSION,
-            success: false,
-            exit_code: -1,
-            stdout: String::new(),
-            stderr: e.to_string(),
-        },
-    };
-
-    reply_json("exec", &query, topics::rpc_exec(&lab_name), &response).await;
+    tokio::spawn(async move {
+        let name = lab_name.clone();
+        let ran = tokio::task::spawn_blocking(move || {
+            let lab = RunningLab::load(&name)?;
+            let args: Vec<&str> = request.args.iter().map(|s| s.as_str()).collect();
+            lab.exec_with_opts(
+                &request.node,
+                &request.cmd,
+                &args,
+                nlink_lab::ExecOpts {
+                    timeout: Some(EXEC_TIMEOUT),
+                    ..Default::default()
+                },
+            )
+        })
+        .await;
+        let response = match ran {
+            Ok(Ok(output)) => ExecResponse {
+                wire_version: WIRE_VERSION,
+                success: output.exit_code == 0,
+                exit_code: output.exit_code,
+                stdout: output.stdout,
+                stderr: output.stderr,
+            },
+            Ok(Err(e)) => ExecResponse {
+                wire_version: WIRE_VERSION,
+                success: false,
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: e.to_string(),
+            },
+            Err(e) => ExecResponse {
+                wire_version: WIRE_VERSION,
+                success: false,
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: format!("exec task failed: {e}"),
+            },
+        };
+        reply_json("exec", &query, topics::rpc_exec(&lab_name), &response).await;
+    });
 }
 
 /// `rpc/impairment`: set or clear the netem impairment on `node:interface`.

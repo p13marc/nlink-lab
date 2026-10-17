@@ -1446,7 +1446,10 @@ afterwards: a rate is already averaged over the collector's tick, so
 it cannot be re-windowed, while two counter samples give you the
 bytes in whatever window you choose later. The counters restart at
 zero if the interface is recreated, so detect a backwards step rather
-than assuming they only ever grow.
+than assuming they only ever grow. The series are labelled `lab`, `node`
+and `iface`; whether an interface is up is its own gauge,
+`nlink_lab_iface_up`, so a link going down does not change the counters'
+series.
 
 ### Live TUI
 

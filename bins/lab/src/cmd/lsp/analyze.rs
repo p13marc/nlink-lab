@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use nlink_lab::parser::nll::lexer::{Spanned, lex};
+use nlink_lab::parser::nll::lexer::{Spanned, lex_lenient};
 use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, NumberOrString};
 
 use super::locate::{Resolved, Resolver};
@@ -37,7 +37,7 @@ pub struct Analysis {
 /// reports that it needs a file-backed document.
 pub fn analyze(text: &str, path: Option<&Path>) -> Analysis {
     let index = LineIndex::new(text);
-    let tokens = lex(text).unwrap_or_default();
+    let tokens = lex_lenient(text);
 
     // A long-lived server must survive a panic in the analysis pipeline:
     // lowering, the validator and the lints index a lot of collections,
@@ -229,10 +229,16 @@ fn quoted_anchor(tokens: &[Spanned], message: &str) -> Option<std::ops::Range<us
     if quoted.is_empty() {
         return None;
     }
-    tokens
+    let mut named = tokens
         .iter()
-        .find(|t| symbols::word(&t.token).as_deref() == Some(quoted))
-        .map(|t| t.span.clone())
+        .filter(|t| symbols::word(&t.token).as_deref() == Some(quoted));
+    // a duplicate is the later one: the first is the original (#218)
+    let hit = if message.contains("duplicate ") {
+        named.next_back()
+    } else {
+        named.next()
+    };
+    hit.map(|t| t.span.clone())
 }
 
 #[cfg(test)]
@@ -284,15 +290,49 @@ mod tests {
         assert_eq!(d.range.start.line, 3);
     }
 
+    /// A diagnostic lands on its own statement: an assertion in a second
+    /// `validate` block, the second of two equal addresses, the second
+    /// declaration of a name (#218).
+    #[test]
+    fn diagnostics_land_on_the_offender_not_the_first_lookalike() {
+        let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\nvalidate { reach a b }\nvalidate { reach a ghost }\n";
+        let a = analyze(src, None);
+        let lines: Vec<u32> = a.diagnostics.iter().map(|d| d.range.start.line).collect();
+        assert!(
+            lines.contains(&5),
+            "the ghost is on line 5: {:?}",
+            a.diagnostics
+        );
+        assert!(!lines.contains(&4), "{:?}", a.diagnostics);
+
+        let src =
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.1/24 }\n";
+        let a = analyze(src, None);
+        let d = a
+            .diagnostics
+            .iter()
+            .find(|d| d.message.contains("duplicate address"))
+            .expect("a duplicate-address warning");
+        assert_eq!(d.range.start.character, 39, "{d:?}");
+
+        let src = "lab \"t\"\nnode a\nnode a\n";
+        let a = analyze(src, None);
+        assert_eq!(a.diagnostics[0].range.start.line, 2, "{:?}", a.diagnostics);
+    }
+
     #[test]
     fn a_lex_error_points_at_the_bad_character() {
         let src = "lab \"t\"\nnode a\n~\n";
         let a = analyze(src, None);
         let d = &a.diagnostics[0];
         assert_eq!(text_at(src, d), "~");
+        // the tokens around it are kept, for completion and symbols (#218)
         assert!(
-            a.tokens.is_empty(),
-            "a file that does not lex has no tokens"
+            a.tokens.iter().any(
+                |t| matches!(&t.token, nlink_lab::parser::nll::lexer::Token::Ident(n) if n == "a")
+            ),
+            "{:?}",
+            a.tokens
         );
     }
 

@@ -313,15 +313,31 @@ pub fn openmetrics(state: &State) -> String {
                 let mut ifaces: Vec<&nlink_lab_shared::metrics::InterfaceMetrics> =
                     nm.interfaces.iter().collect();
                 ifaces.sort_by(|a, b| a.name.cmp(&b.name));
+                // No `state` label: a link going down changed the series
+                // identity of its counters, which broke `rate()` (#218).
+                // `nlink_lab_iface_up` carries it.
                 for m in ifaces {
                     out += &format!(
-                        "{name}{{lab=\"{lab}\",node=\"{}\",iface=\"{}\",state=\"{}\"}} {}\n",
+                        "{name}{{lab=\"{lab}\",node=\"{}\",iface=\"{}\"}} {}\n",
                         esc(node),
                         esc(&m.name),
-                        esc(&m.state),
                         get(m)
                     );
                 }
+            }
+        }
+        out += "# TYPE nlink_lab_iface_up gauge\n# HELP nlink_lab_iface_up 1 when the interface's operational state is up.\n";
+        for (node, nm) in &nodes {
+            let mut ifaces: Vec<&nlink_lab_shared::metrics::InterfaceMetrics> =
+                nm.interfaces.iter().collect();
+            ifaces.sort_by(|a, b| a.name.cmp(&b.name));
+            for m in ifaces {
+                out += &format!(
+                    "nlink_lab_iface_up{{lab=\"{lab}\",node=\"{}\",iface=\"{}\"}} {}\n",
+                    esc(node),
+                    esc(&m.name),
+                    u8::from(m.state == "up")
+                );
             }
         }
         out += "# TYPE nlink_lab_socket_tx_bytes_per_second gauge\n# HELP nlink_lab_socket_tx_bytes_per_second Per-flow transmit rate (top flows).\n";
@@ -433,11 +449,26 @@ mod tests {
             text.contains("# TYPE nlink_lab_iface_rx_dropped counter\n"),
             "{text}"
         );
-        assert!(text.contains("nlink_lab_iface_rx_dropped_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 3\n"), "{text}");
-        assert!(text.contains("nlink_lab_iface_tc_qlen{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 5\n"), "{text}");
+        assert!(
+            text.contains(
+                "nlink_lab_iface_rx_dropped_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\"} 3\n"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "nlink_lab_iface_tc_qlen{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\"} 5\n"
+            ),
+            "{text}"
+        );
+        // the state is its own series, not a label of the counters (#218)
+        assert!(
+            text.contains("nlink_lab_iface_up{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\"} 1\n"),
+            "{text}"
+        );
         // #134: the interface rate is bits, so it must not be named
         // bytes — the per-flow gauges below are the genuine bytes ones.
-        assert!(text.contains("nlink_lab_iface_rx_bits_per_second{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 10\n"), "{text}");
+        assert!(text.contains("nlink_lab_iface_rx_bits_per_second{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\"} 10\n"), "{text}");
         assert!(
             !text.contains("nlink_lab_iface_rx_bytes_per_second"),
             "{text}"
@@ -448,8 +479,18 @@ mod tests {
             text.contains("# TYPE nlink_lab_iface_rx_bytes counter\n"),
             "{text}"
         );
-        assert!(text.contains("nlink_lab_iface_rx_bytes_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 6000\n"), "{text}");
-        assert!(text.contains("nlink_lab_iface_tx_packets_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\",state=\"up\"} 70\n"), "{text}");
+        assert!(
+            text.contains(
+                "nlink_lab_iface_rx_bytes_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\"} 6000\n"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "nlink_lab_iface_tx_packets_total{lab=\"l\\\"ab\",node=\"r1\",iface=\"eth0\"} 70\n"
+            ),
+            "{text}"
+        );
         assert!(
             text.contains("nlink_lab_node_issues{lab=\"l\\\"ab\",node=\"r1\"} 1\n"),
             "{text}"

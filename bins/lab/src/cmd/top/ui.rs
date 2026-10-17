@@ -87,6 +87,13 @@ fn selected_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED)
 }
 
+/// A table state that scrolls `cursor` into view: rendered statelessly, a
+/// pane always showed its first rows, and the selected one could be off
+/// screen while `i` / `p` acted on it (#218).
+fn scrolled_to(cursor: usize) -> ratatui::widgets::TableState {
+    ratatui::widgets::TableState::default().with_selected(Some(cursor))
+}
+
 fn table<'a>(columns: &[&'a str], rows: Vec<Row<'a>>, widths: Vec<Constraint>) -> Table<'a> {
     let header = Row::new(
         columns
@@ -138,9 +145,10 @@ fn nodes_pane(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(11),
         Constraint::Length(6),
     ];
-    frame.render_widget(
+    frame.render_stateful_widget(
         table(&NODE_COLUMNS, rows, widths).block(pane_block(app, Pane::Nodes, &extra)),
         area,
+        &mut scrolled_to(app.node_cursor),
     );
 }
 
@@ -195,9 +203,10 @@ fn interfaces_pane(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(10),
         Constraint::Min(16),
     ];
-    frame.render_widget(
+    frame.render_stateful_widget(
         table(&IFACE_COLUMNS, rows, widths).block(pane_block(app, Pane::Interfaces, &extra)),
         area,
+        &mut scrolled_to(app.iface_cursor),
     );
 }
 
@@ -255,9 +264,10 @@ fn flows_pane(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(11),
         Constraint::Length(6),
     ];
-    frame.render_widget(
+    frame.render_stateful_widget(
         table(&FLOW_COLUMNS, rows, widths).block(pane_block(app, Pane::Flows, "")),
         area,
+        &mut scrolled_to(app.flow_cursor),
     );
 }
 
@@ -602,6 +612,30 @@ mod tests {
         for (w, h) in [(20, 6), (40, 10), (8, 3), (200, 60)] {
             let _ = lines(&app, w, h);
         }
+    }
+
+    /// The selected node stays on screen: the panes always showed their
+    /// first rows (#218).
+    #[test]
+    fn the_selected_row_is_scrolled_into_view() {
+        let mut snap = snapshot();
+        let template = snap.nodes.values().next().unwrap().clone();
+        for i in 0..20 {
+            snap.nodes.insert(format!("n{i:02}"), template.clone());
+        }
+        let mut app = App::new("lab", Duration::from_secs(1), 900, true);
+        app.apply_snapshot(snap, &[]);
+        let last = app.visible_nodes().last().unwrap().name.clone();
+        while app.selected_node().unwrap().name != last {
+            app.select_next();
+        }
+        let frame = lines(&app, 100, 24);
+        // its row in the Nodes pane (the Interfaces title names it too)
+        assert!(
+            frame.iter().any(|l| l.starts_with(&format!("│{last} "))),
+            "{last}'s row is off screen:\n{}",
+            frame.join("\n")
+        );
     }
 
     #[test]

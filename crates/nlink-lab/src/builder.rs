@@ -36,6 +36,10 @@ use crate::types::{
 /// Top-level lab builder.
 pub struct Lab {
     topology: Topology,
+    /// Names declared twice (`node "a"`, `network "lan"`, `profile "p"`):
+    /// the later one replaced the earlier silently, where NLL refuses it
+    /// (#218). [`Lab::build_validated`] reports them.
+    duplicates: Vec<String>,
 }
 
 impl Lab {
@@ -49,6 +53,7 @@ impl Lab {
                 },
                 ..Default::default()
             },
+            duplicates: Vec::new(),
         }
     }
 
@@ -79,18 +84,28 @@ impl Lab {
     /// Add a reusable profile.
     pub fn profile(mut self, name: &str, f: impl FnOnce(ProfileBuilder) -> ProfileBuilder) -> Self {
         let builder = f(ProfileBuilder::new());
-        self.topology
+        if self
+            .topology
             .profiles
-            .insert(name.to_string(), builder.build());
+            .insert(name.to_string(), builder.build())
+            .is_some()
+        {
+            self.duplicates.push(format!("profile '{name}'"));
+        }
         self
     }
 
     /// Add a node.
     pub fn node(mut self, name: &str, f: impl FnOnce(NodeBuilder) -> NodeBuilder) -> Self {
         let builder = f(NodeBuilder::new());
-        self.topology
+        if self
+            .topology
             .nodes
-            .insert(name.to_string(), builder.build());
+            .insert(name.to_string(), builder.build())
+            .is_some()
+        {
+            self.duplicates.push(format!("node '{name}'"));
+        }
         self
     }
 
@@ -109,9 +124,14 @@ impl Lab {
     /// Add a shared L2 network (bridge).
     pub fn network(mut self, name: &str, f: impl FnOnce(NetworkBuilder) -> NetworkBuilder) -> Self {
         let builder = f(NetworkBuilder::new());
-        self.topology
+        if self
+            .topology
             .networks
-            .insert(name.to_string(), builder.build());
+            .insert(name.to_string(), builder.build())
+            .is_some()
+        {
+            self.duplicates.push(format!("network '{name}'"));
+        }
         self
     }
 
@@ -152,13 +172,23 @@ impl Lab {
 
     /// Finalize and return the topology.
     pub fn build(self) -> Topology {
+        for d in &self.duplicates {
+            tracing::warn!("builder: {d} declared twice; the later one is kept");
+        }
         self.topology
     }
 
     /// Finalize, validate, and return the topology.
     ///
-    /// Returns an error if the topology has validation errors.
+    /// Returns an error if the topology has validation errors, or if a
+    /// node, network or profile name was declared twice.
     pub fn build_validated(self) -> crate::error::Result<Topology> {
+        if !self.duplicates.is_empty() {
+            return Err(crate::Error::invalid_topology(format!(
+                "declared twice: {}",
+                self.duplicates.join(", ")
+            )));
+        }
         let topo = self.build();
         topo.validate().bail()?;
         Ok(topo)
@@ -508,9 +538,12 @@ impl NetworkBuilder {
         self
     }
 
-    /// Add a member endpoint.
+    /// Add a member endpoint (once: a `port` with an interface adds its
+    /// own).
     pub fn member(mut self, endpoint: &str) -> Self {
-        self.network.members.push(endpoint.to_string());
+        if !self.network.members.iter().any(|m| m == endpoint) {
+            self.network.members.push(endpoint.to_string());
+        }
         self
     }
 
@@ -536,24 +569,79 @@ impl NetworkBuilder {
     /// iterates to create veth pairs. Empty members → no veth in
     /// the node namespace → `ip addr show eth0` fails at exec time.
     ///
-    /// The port itself is keyed by `node` (legacy behavior, kept so
-    /// existing builder tests using `network.ports["switch"]` keep
-    /// working). The deploy step recognizes both bare-node keys
-    /// (when `port.interface` is set) and `node:iface` keys (from
-    /// NLL's auto-assignment).
+    /// The port is keyed by its endpoint `node:iface`, as NLL keys it:
+    /// keyed by the bare node, two ports of one node replaced each other,
+    /// and `dns hosts`, WireGuard endpoints, `routing auto` and FRR, which
+    /// read `node:iface` keys, skipped it (#218). A port without an
+    /// interface is keyed by its node until the network is built, which
+    /// resolves it to that node's member.
     pub fn port(mut self, node: &str, f: impl FnOnce(PortBuilder) -> PortBuilder) -> Self {
         let port = f(PortBuilder::new()).build();
-        if let Some(iface) = port.interface.as_deref() {
-            let endpoint = format!("{node}:{iface}");
-            if !self.network.members.iter().any(|m| m == &endpoint) {
-                self.network.members.push(endpoint);
+        let key = match port.interface.as_deref() {
+            Some(iface) => {
+                let endpoint = format!("{node}:{iface}");
+                if !self.network.members.iter().any(|m| m == &endpoint) {
+                    self.network.members.push(endpoint.clone());
+                }
+                endpoint
             }
-        }
-        self.network.ports.insert(node.to_string(), port);
+            None => node.to_string(),
+        };
+        self.network.ports.insert(key, port);
         self
     }
 
-    fn build(self) -> Network {
+    fn build(mut self) -> Network {
+        // a bare-node port: its node's member, when it has one
+        let bare: Vec<String> = self
+            .network
+            .ports
+            .keys()
+            .filter(|k| !k.contains(':'))
+            .cloned()
+            .collect();
+        for node in bare {
+            let mut of_node = self
+                .network
+                .members
+                .iter()
+                .filter(|m| m.split_once(':').is_some_and(|(n, _)| n == node));
+            if let (Some(member), None) = (of_node.next(), of_node.next()) {
+                let member = member.clone();
+                if let Some(port) = self.network.ports.remove(&node) {
+                    self.network.ports.insert(member, port);
+                }
+            }
+        }
+        // `subnet` assigns member addresses, as in NLL: it was stored and
+        // nothing was addressed (#218). `auto/N` waits for deploy.
+        if let Some(subnet) = self.network.subnet.clone() {
+            let explicit: std::collections::BTreeMap<String, Vec<String>> = self
+                .network
+                .ports
+                .iter()
+                .filter(|(_, p)| !p.addresses.is_empty())
+                .map(|(k, p)| (k.clone(), p.addresses.clone()))
+                .collect();
+            match crate::parser::nll::lower::subnet_auto_assign(
+                &subnet,
+                &self.network.members,
+                &explicit,
+            ) {
+                Ok(assigned) => {
+                    for (member, addr) in assigned.into_iter().flatten() {
+                        self.network
+                            .ports
+                            .entry(member)
+                            .or_default()
+                            .addresses
+                            .push(addr);
+                    }
+                }
+                // the validator reports the subnet
+                Err(e) => tracing::warn!("builder: subnet {subnet}: {e}"),
+            }
+        }
         self.network
     }
 }
@@ -1065,9 +1153,36 @@ mod tests {
         assert_eq!(net.vlan_filtering, Some(true));
         assert_eq!(net.vlans.len(), 2);
         assert_eq!(net.vlans[&10].name.as_deref(), Some("engineering"));
-        assert_eq!(net.ports["switch"].vlans, vec![10, 20]);
-        assert_eq!(net.ports["switch"].tagged, Some(true));
-        assert_eq!(net.ports["pc1"].pvid, Some(10));
+        assert_eq!(net.ports["switch:eth0"].vlans, vec![10, 20]);
+        assert_eq!(net.ports["switch:eth0"].tagged, Some(true));
+        assert_eq!(net.ports["pc1:eth0"].pvid, Some(10));
+    }
+
+    /// Ports keyed by endpoint, a concrete subnet assigning addresses, and
+    /// duplicates refused (#218).
+    #[test]
+    fn ports_subnets_and_duplicates_behave_as_in_nll() {
+        let topo = Lab::new("b")
+            .node("a", |n| n)
+            .node("b", |n| n)
+            .network("lan", |net| {
+                net.subnet("10.0.0.0/24")
+                    .member("a:eth0")
+                    .member("b:eth0")
+                    .port("a", |p| p.interface("eth1").pvid(3))
+                    .member("a:eth1")
+            })
+            .build();
+        let lan = &topo.networks["lan"];
+        assert_eq!(lan.ports["a:eth0"].addresses, vec!["10.0.0.1/24"]);
+        assert_eq!(lan.ports["b:eth0"].addresses, vec!["10.0.0.2/24"]);
+        assert_eq!(lan.ports["a:eth1"].pvid, Some(3));
+        assert_eq!(lan.ports["a:eth1"].addresses, vec!["10.0.0.3/24"]);
+        assert!(crate::render::try_render(&topo).is_ok());
+
+        let twice = Lab::new("b").node("a", |n| n).node("a", |n| n);
+        let err = twice.build_validated().unwrap_err().to_string();
+        assert!(err.contains("node 'a'"), "{err}");
     }
 
     #[test]

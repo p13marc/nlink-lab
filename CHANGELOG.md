@@ -42,6 +42,22 @@ under both (#233). Its waves land one by one below.
   `DeployFailed` with the same message).
 - **`Topology` has a `sites` field** (library API and JSON), and
   `LabState` a `source` field; both are skipped when empty.
+- **A command line that does not parse exits 64** (#241), not 2: 2 is
+  "validation failed". A removed command says what replaced it (exit 64
+  too).
+- **The `--json` error document is the daemon API's error** (#241,
+  `docs/API.md`): `code`, `message` (was `error`), `chain` (was
+  `error_chain`), `exit_code`, and when they apply `errno`, `ext_ack`,
+  `netns`, `hint` and `issues`. nlink's `kind`, `object`, `context` and
+  `ext_ack_offset` moved under `nlink`. A parse error is a `validation`
+  error with one issue, `{"rule": "parse", "location": "file:line:col"}`,
+  and its help is the `hint`.
+- **`ps --json` is an object** (#241): `{"schema_version": 2, "lab": …,
+  "processes": [ … ]}`, not a bare array. Every JSON document gets a
+  `schema_version` as the CLI waves reach its command.
+- **The top-level help lists commands by group** (Lifecycle, Run,
+  Network, Observe, Test, Author, Host): a script that read the
+  `Commands:` block reads `nlink-lab docs-gen --list-commands` instead.
 - **`RunningLab::wait_for_port` takes the pid as `Option<u32>`** (#238):
   without one, it reads the node's `/proc/net/tcp`.
 - **`spawn`'s `--wait-*` share one `--wait-timeout`** (#238): it bounds
@@ -523,6 +539,18 @@ under both (#233). Its waves land one by one below.
   async runtime's threads, and a lab whose FRR does not converge in time
   says so in a warning (it was silent). `nlink_lab::api` re-exports the
   wire types.
+- **`--format text|json|ndjson`, `--color auto|always|never`, `-vv`**
+  (#241). `--json` is short for `--format json`; `ndjson` prints one
+  compact document per line. Colours are decided per stream, so a
+  terminal stderr no longer puts escapes in piped stdout; `auto` honours
+  `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
+  diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
+  prints an aligned table, and only PIDs with `--quiet`.
+- **A docs gate and pruned reference pages** (#241): every `nlink-lab …`
+  command line in the README, `CLAUDE.md` and `docs/` shell blocks must
+  parse with the CLI as it is (a unit test). `docs-gen` recurses into
+  nested commands, `--prune` drops the pages of removed commands, and CI
+  fails on generated docs that were not committed.
 - **Shared logic in the library** (#238), for the daemon and the desktop
   app. The CLI prints what these return:
   - `nlink_lab::host`: the orphan scan, the reaper and the forced cleanup.
@@ -682,6 +710,10 @@ under both (#233). Its waves land one by one below.
   now carry the set's name.
 
 ### Fixed
+
+- **The CI matrix cookbook's `test` sweep** (#241): it passed several
+  `--set … FILE` pairs to one `test`, which never parsed; it is a loop
+  now, one run and one JUnit file per value.
 
 - **A lab was invisible to every user but the one who deployed it**
   (#234): state lived in the deploying user's home, so `sudo deploy`

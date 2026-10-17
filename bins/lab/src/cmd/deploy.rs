@@ -1,5 +1,6 @@
 //! `nlink-lab deploy`.
 
+use anstream::{eprintln, println};
 use std::path::PathBuf;
 use std::time::Instant;
 

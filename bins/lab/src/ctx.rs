@@ -2,56 +2,21 @@
 //! flags, colour helpers, topology parsing with `--set`, and the
 //! root / capability check.
 
-use std::io::IsTerminal;
-
+use anstream::eprintln;
 /// Global flags shared by every subcommand handler.
 #[derive(Debug, Clone, Copy)]
 pub struct Ctx {
-    /// `--json`: machine-readable output where supported.
+    /// `--format`.
+    pub format: crate::output::Format,
+    /// `--format json|ndjson` (`--json`): machine-readable output.
     pub json: bool,
     /// `--quiet`: suppress informational output.
     pub quiet: bool,
-    /// `--verbose`: extra detail (also raises the tracing level).
+    /// `-v`: extra detail (also raises the tracing level).
     pub verbose: bool,
 }
 
-// ─── Color helpers ───────────────────────────────────────
-
-fn use_color() -> bool {
-    std::env::var("NO_COLOR").is_err() && std::io::stderr().is_terminal()
-}
-
-pub fn green(s: &str) -> String {
-    if use_color() {
-        format!("\x1b[32m{s}\x1b[0m")
-    } else {
-        s.to_string()
-    }
-}
-
-pub fn red(s: &str) -> String {
-    if use_color() {
-        format!("\x1b[31m{s}\x1b[0m")
-    } else {
-        s.to_string()
-    }
-}
-
-pub fn yellow(s: &str) -> String {
-    if use_color() {
-        format!("\x1b[33m{s}\x1b[0m")
-    } else {
-        s.to_string()
-    }
-}
-
-pub fn bold(s: &str) -> String {
-    if use_color() {
-        format!("\x1b[1m{s}\x1b[0m")
-    } else {
-        s.to_string()
-    }
-}
+pub use crate::output::style::{bold, green, red, yellow};
 
 /// Turn a failed validation into the structured error (exit 2, issues
 /// in the JSON envelope), printing the human-readable list first.

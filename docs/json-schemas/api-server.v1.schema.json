@@ -234,7 +234,7 @@
           ]
         },
         "issues": {
-          "description": "Validation issues, for `Validation`."
+          "description": "Validation issues, for `Validation`; a parse error is one issue\nwith rule `parse` and `location` `file:line:column`."
         },
         "message": {
           "description": "The whole message, as the CLI prints it.",
@@ -246,6 +246,9 @@
             "string",
             "null"
           ]
+        },
+        "nlink": {
+          "description": "What nlink says about a failed netlink call: the `kind` of\nfailure, the `object` it concerns, nlink's own `context`\n(innermost last) and the extended ack's `ext_ack_offset`."
         }
       },
       "required": [

@@ -46,8 +46,9 @@ smoke:
     cargo build -p nlink-lab-cli && ./scripts/cli-smoke.sh target/debug/nlink-lab
 
 # Regenerate the reference blocks in docs/cli/*.md from the clap definitions
+# (and drop the pages of removed commands)
 docs-cli:
-    cargo build -p nlink-lab-cli && target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas
+    cargo build -p nlink-lab-cli && target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas --prune
 
 # Format check
 fmt-check:

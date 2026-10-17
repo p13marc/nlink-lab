@@ -357,9 +357,38 @@ impl Error {
             Error::MovedState { .. } => Some("sudo nlink-lab doctor --fix".into()),
             _ => None,
         };
-        if let Error::ValidationErrors(issues) = self {
-            api.issues = serde_json::to_value(issues).ok();
+        match self {
+            Error::ValidationErrors(issues) => api.issues = serde_json::to_value(issues).ok(),
+            // where in the file, as one issue shaped like the validator's
+            Error::NllDiagnostic(d) => {
+                let text = d.src.inner();
+                let offset = d.span.offset().min(text.len());
+                let before = &text[..offset];
+                let line = before.matches('\n').count() + 1;
+                let column = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
+                api.message = d.message.clone();
+                api.issues = Some(serde_json::json!([{
+                    "severity": "error",
+                    "rule": "parse",
+                    "message": d.message,
+                    "location": format!("{}:{line}:{column}", d.src.name()),
+                }]));
+                api.hint = d.help.clone();
+            }
+            _ => {}
         }
+        // What nlink says about a netlink failure (#177): what kind of
+        // failure, the object it concerns, and nlink's own context,
+        // innermost last.
+        api.nlink = self.nlink_error().map(|e| {
+            let root = e.root_cause();
+            serde_json::json!({
+                "kind": serde_json::to_value(root.kind()).ok(),
+                "object": root.object().and_then(|o| serde_json::to_value(o).ok()),
+                "context": e.context().to_vec(),
+                "ext_ack_offset": self.ext_ack_offset(),
+            })
+        });
         api
     }
 

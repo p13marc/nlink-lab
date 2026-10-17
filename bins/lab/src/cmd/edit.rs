@@ -2,6 +2,7 @@
 
 use crate::ctx::{Ctx, require_root, yellow};
 use crate::output::{DryRunReport, print_layered};
+use anstream::{eprintln, println};
 use nlink_lab::edit::Edit;
 
 #[derive(clap::Args)]

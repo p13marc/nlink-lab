@@ -1,5 +1,6 @@
 //! `nlink-lab lint` — style/portability advice, separate from `validate`.
 
+use anstream::println;
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, parse_topology, yellow};

@@ -12,11 +12,22 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 fail=0
 say() { printf '%s\n' "$*" >&2; }
 
-say "== --help for every subcommand"
+say "== --help for every command"
 "$bin" --help >/dev/null
-for cmd in $("$bin" --help | sed -n '/^Commands:/,/^$/p' | awk 'NR>1 && $1 !~ /^(help|Options:)$/ {print $1}'); do
-  "$bin" "$cmd" --help >/dev/null || { say "FAIL: $cmd --help"; fail=1; }
+"$bin" docs-gen --list-commands > "$tmp/commands"
+[ "$(wc -l < "$tmp/commands")" -gt 30 ] || { say "FAIL: docs-gen --list-commands"; fail=1; }
+while read -r -a cmd; do
+  "$bin" "${cmd[@]}" --help >/dev/null || { say "FAIL: ${cmd[*]} --help"; fail=1; }
+  "$bin" --help | grep "^  ${cmd[0]} " >/dev/null || { say "FAIL: ${cmd[0]} missing from the grouped help"; fail=1; }
+done < "$tmp/commands"
+
+say "== usage errors exit 64"
+for args in "no-such-command" "ps" "--format xml ps lab" "deploy --no-such-flag f.nll"; do
+  set +e; "$bin" $args >/dev/null 2>&1; rc=$?; set -e
+  [ "$rc" -eq 64 ] || { say "FAIL: '$args' exited $rc (expected 64)"; fail=1; }
 done
+set +e; "$bin" --json no-such-command 2>"$tmp/usage.json" >/dev/null; set -e
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["code"] == "invalid_argument" and d["exit_code"] == 64, d' "$tmp/usage.json" || { say "FAIL: --json usage error envelope"; fail=1; }
 
 say "== validate + render every example"
 # examples/imports/ holds parametric modules that are only meaningful when
@@ -45,6 +56,13 @@ for f in "$tmp"/bad*.nll; do
     *) say "FAIL: $f exit $rc (expected 2)"; fail=1 ;;
   esac
 done
+
+say "== --color"
+# an error label is coloured when asked, and never otherwise (a pipe)
+# (validate exits 2 on it: `|| true`, or pipefail fails the check)
+{ "$bin" --color always validate "$tmp/bad1.nll" 2>&1 >/dev/null || true; } | grep $'\e\[' >/dev/null || { say "FAIL: --color always does not colour"; fail=1; }
+{ "$bin" validate "$tmp/bad1.nll" 2>&1 || true; } | grep $'\e\[' >/dev/null && { say "FAIL: colour on a pipe"; fail=1; }
+{ "$bin" --color never validate "$tmp/bad1.nll" 2>&1 || true; } | grep $'\e\[' >/dev/null && { say "FAIL: --color never colours"; fail=1; }
 
 say "== validate --json / graph --mermaid / exit codes"
 "$bin" --json validate examples/simple.nll | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["valid"] is True, d' || { say "FAIL validate --json"; fail=1; }
@@ -82,6 +100,12 @@ set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" verify no-such-lab >/dev/null 2>
 
 say "== completions"
 for sh in bash zsh fish; do "$bin" completions "$sh" >/dev/null || { say "FAIL completions $sh"; fail=1; }; done
+
+say "== ps --json carries a schema_version"
+mkdir -p "$tmp/state"
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" --json ps no-such-lab 2>"$tmp/err.json" >/dev/null; rc=$?; set -e
+[ "$rc" -eq 1 ] || { say "FAIL: ps on a missing lab exited $rc (expected 1)"; fail=1; }
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["code"] == "not_found", d' "$tmp/err.json" || { say "FAIL: ps --json error document"; fail=1; }
 
 say "== status (no labs) --json is valid JSON"
 NLINK_LAB_STATE_DIR="$tmp/state" "$bin" status --json | python3 -c 'import json,sys; json.load(sys.stdin)' || { say "FAIL status --json"; fail=1; }

@@ -51,9 +51,15 @@ pub struct ApiError {
     /// What to do about it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
-    /// Validation issues, for `Validation`.
+    /// Validation issues, for `Validation`; a parse error is one issue
+    /// with rule `parse` and `location` `file:line:column`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issues: Option<serde_json::Value>,
+    /// What nlink says about a failed netlink call: the `kind` of
+    /// failure, the `object` it concerns, nlink's own `context`
+    /// (innermost last) and the extended ack's `ext_ack_offset`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nlink: Option<serde_json::Value>,
     /// The CLI's exit code for it: 1 error, 2 validation, 124 timeout,
     /// 130 cancelled.
     pub exit_code: u8,
@@ -77,6 +83,7 @@ impl ApiError {
             netns: None,
             hint: None,
             issues: None,
+            nlink: None,
             exit_code,
         }
     }

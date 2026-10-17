@@ -1,5 +1,6 @@
 //! `nlink-lab validate`.
 
+use anstream::{eprintln, println};
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, parse_topology, validation_failed, yellow};

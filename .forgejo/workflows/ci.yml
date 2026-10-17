@@ -174,8 +174,13 @@ jobs:
       - run: ./scripts/cli-smoke.sh target/debug/nlink-lab
       # NLL sources are kept fmt-clean (token-level formatter, issue #54)
       - run: target/debug/nlink-lab fmt --check examples
-      # docs/cli reference blocks are generated from clap; a stale page fails here
-      - run: target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas && git diff --exit-code -- docs/cli docs/json-schemas
+      # docs/cli reference blocks are generated from clap; a stale page, a
+      # page of a removed command or one never committed fails here
+      - run: |
+          target/debug/nlink-lab docs-gen --out docs/cli --schemas docs/json-schemas --prune
+          git diff --exit-code -- docs/cli docs/json-schemas
+          untracked=$(git status --porcelain --untracked-files=all -- docs/cli docs/json-schemas)
+          if [ -n "$untracked" ]; then echo "::error::generated docs not committed:"; echo "$untracked"; exit 1; fi
 
   # Editor grammar conformance (issue #27): the committed parser must be
   # what grammar.js generates, the corpus must pass, and every example

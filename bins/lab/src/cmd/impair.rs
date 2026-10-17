@@ -1,6 +1,7 @@
 //! `nlink-lab impair`.
 
 use crate::ctx::{Ctx, require_root};
+use anstream::{eprintln, println};
 use nlink_lab::impair_parse::collect_show as collect_impair_show;
 
 #[derive(clap::Args)]

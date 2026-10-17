@@ -137,7 +137,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (41 top-level; 50 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (42 top-level; 51 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -199,7 +199,8 @@ NLL supports `for` loops (integer ranges and list iteration), `let` variables,
 cross-references (`${node.iface}`), multi-profile inheritance,
 inline impairments (`->` / `<-`), profiles, firewall (input/forward/output
 chains; `src`/`dst`, `iif`/`oif`, `!=`, port ranges; accept/drop/reject
-with `reject with tcp-reset`), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
+with `reject with tcp-reset`; named sets with `@set` lookups, interval and
+concatenated keys), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
 link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
 route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,

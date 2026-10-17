@@ -2207,6 +2207,55 @@ validate {
         assert!(err.to_string().contains("unknown firewall action"), "{err}");
     }
 
+    /// #164 wave C: declared sets reach the config with their key, flags,
+    /// size, timeout and elements; rules look them up.
+    #[test]
+    fn nftables_config_declares_sets_and_lookups() {
+        use nlink::netlink::nftables::types::{SetFlags, SetKeyType};
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node gw {
+  firewall {
+    set blocked [10.0.2.66, 10.0.9.0/24]
+    set pub ipv4 . port [10.0.1.10 . 22, 10.0.1.0/24 . 8000-8999]
+    set q ipv4 dynamic timeout 300s size 1024
+    forward policy drop {
+      drop src @blocked
+      drop src @q
+      accept dst . tcp dport @pub
+    }
+  }
+}
+"#,
+        )
+        .unwrap();
+        let fw = topo.effective_firewall(&topo.nodes["gw"]);
+        let cfg = topology_to_nftables_config(fw.as_deref(), None).unwrap();
+        let t = &cfg.tables()[0];
+        let set = |n: &str| t.sets().iter().find(|s| s.name() == n).unwrap();
+        assert!(matches!(set("blocked").key_type(), SetKeyType::Ipv4Addr));
+        assert!(set("blocked").flags().contains(SetFlags::INTERVAL));
+        assert_eq!(set("blocked").elements().len(), 2);
+        assert!(matches!(set("pub").key_type(), SetKeyType::Concat(k) if k.len() == 2));
+        assert!(set("pub").flags().contains(SetFlags::INTERVAL));
+        assert_eq!(set("q").size(), Some(1024));
+        assert_eq!(
+            set("q").timeout(),
+            Some(std::time::Duration::from_secs(300))
+        );
+        assert!(set("q").flags().contains(SetFlags::EVAL));
+        let lookups = t
+            .rules()
+            .iter()
+            .filter(|r| {
+                r.exprs()
+                    .iter()
+                    .any(|e| matches!(e, nlink::netlink::nftables::Expr::Lookup(_)))
+            })
+            .count();
+        assert_eq!(lookups, 3);
+    }
+
     #[test]
     fn nftables_config_ip_keyword_with_v6_address_errors() {
         let fw = crate::types::FirewallConfig {

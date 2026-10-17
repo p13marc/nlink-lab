@@ -165,8 +165,56 @@ module.exports = grammar({
     firewall_block: ($) =>
       seq(
         "firewall",
-        choice($.firewall_chain, seq("{", repeat($.firewall_chain), "}")),
+        choice(
+          $.firewall_chain,
+          $.firewall_set,
+          seq("{", repeat(choice($.firewall_chain, $.firewall_set)), "}"),
+        ),
       ),
+
+    // `set published ipv4 . port size 64 [10.0.1.10 . 22, 10.0.1.0/24 . 8000-8999]`
+    firewall_set: ($) =>
+      seq(
+        "set",
+        $._name,
+        optional(seq($._set_key, repeat(seq(".", $._set_key)))),
+        repeat(choice(seq("size", $.integer), seq("timeout", $.duration), "dynamic")),
+        optional($.set_elements),
+      ),
+
+    _set_key: ($) => choice("ipv4", "ipv6", "port", "mark"),
+
+    set_elements: ($) =>
+      seq(
+        "[",
+        optional(seq($.set_element, repeat(seq(",", $.set_element)), optional(","))),
+        "]",
+      ),
+
+    set_element: ($) => seq($._set_part, repeat(seq(".", $._set_part))),
+
+    _set_part: ($) =>
+      seq(
+        choice(
+          $.cidr,
+          $.ipv6_cidr,
+          $.ipv6_address,
+          $.ipv4_address,
+          $.integer,
+          $.interpolation,
+        ),
+        optional(seq("-", choice($.ipv6_address, $.ipv4_address, $.integer))),
+      ),
+
+    // `@blocked`
+    set_ref: ($) => seq("@", $._name),
+
+    _set_field: ($) =>
+      choice("src", "dst", seq(choice("tcp", "udp"), choice("dport", "sport")), "mark"),
+
+    // `dst . tcp dport @published`
+    set_concat: ($) =>
+      seq($._set_field, repeat1(seq(".", $._set_field)), optional("!="), $.set_ref),
 
     firewall_chain: ($) =>
       seq(
@@ -192,17 +240,17 @@ module.exports = grammar({
     match_expression: ($) =>
       repeat1(
         choice(
-          seq(choice("src", "dst"), optional("!="), $._value),
+          $.set_concat,
+          seq(choice("src", "dst"), optional("!="), choice($._value, $.set_ref)),
           seq(
             choice("tcp", "udp"),
             choice("dport", "sport"),
             optional("!="),
-            $._value,
-            optional(seq("-", $.integer)),
+            choice(seq($._value, optional(seq("-", $.integer))), $.set_ref),
           ),
           seq(choice("icmp", "icmpv6"), optional($._value)),
           seq("ct", optional("state"), $.ct_states),
-          seq("mark", $._value),
+          seq("mark", optional("!="), choice($._value, $.set_ref)),
           seq(choice("iif", "oif"), optional("!="), $._value),
         ),
       ),

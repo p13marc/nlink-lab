@@ -372,6 +372,50 @@ forward { … } output { … } }`.
   `iif` cannot match in output and `oif` cannot match in input
   (`firewall-chain-context`). A negated port range is not supported.
 
+**Sets.** A set is a list a rule looks up in one step — a blocklist, the
+ports a service listens on, the address/port pairs that are published:
+
+```nll-ignore
+node gw : router {
+  firewall {
+    set blocked [10.0.3.66, 10.0.9.0/24, 10.0.8.1-10.0.8.9]
+    set blocked6 [fd00:2::66]
+    set mgmt port [22, 8000-8999]
+    set published ipv4 . port [10.0.1.10 . 5201, 10.0.1.0/24 . 8000-8999]
+    set quarantine ipv4 dynamic timeout 300s size 1024
+    forward policy drop {
+      accept ct established,related
+      drop src @blocked
+      drop src @blocked6
+      accept dst . tcp dport @published
+      reject with tcp-reset tcp dport @mgmt
+    }
+  }
+}
+```
+
+- `set NAME [KEY (. KEY)*] [size N] [timeout D] [dynamic] [ELEMENTS]`, in
+  a `firewall { … }` group or on its own (`firewall set …`). Keys are
+  `ipv4`, `ipv6`, `port` and `mark`; several joined by `.` make a
+  concatenated key. Left out, the key comes from the first element.
+- Elements are addresses, prefixes and ranges; a concatenation's parts
+  are joined by ` . `. A prefix or a range makes it an interval set
+  (not in a concatenation that has a `mark`, which nlink cannot encode).
+- A set holds one family: an IPv4 and an IPv6 blocklist are two sets.
+  `src @blocked` takes its family from the set.
+- Lookups: `src`/`dst` [`!=`] `@set`, `tcp`/`udp` `dport`/`sport` [`!=`]
+  `@set`, `mark` [`!=`] `@set`, and a concatenation of those fields
+  (`dst . tcp dport @published`).
+- `dynamic`: the set is filled at run time (`nft add element`), and
+  `apply` keeps what it finds. Every other set holds exactly its
+  declared elements; one added by hand is drift that `apply` removes.
+  `timeout` gives elements a lifetime (no minutes: `300s`), `size` caps
+  the count.
+- Editing elements changes only the elements; the rules keep their
+  place. Validation: `firewall-set-undeclared`, `firewall-set-type` (a
+  lookup whose fields do not match the key), `firewall-set-element`,
+  `firewall-set-unused` (a warning).
+
 Each rule's identity is its position (`nlink-lab/fw/<chain>/<index>`):
 an edited rule is replaced in place, and `apply` keeps the chain in
 declared order. Validation rules: `firewall-policy`, `firewall-action`,
@@ -1469,15 +1513,23 @@ route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?
 
 fw_chain       = ("policy" fw_policy | ("input" | "forward" | "output") ("policy" fw_policy)?)
                  "{" firewall_rule* "}"
+               | "set" IDENT (set_key ("." set_key)*)? set_opt* ("[" set_elem ("," set_elem)* "]")?
+set_key        = "ipv4" | "ipv6" | "port" | "mark"
+set_opt        = "size" INT | "timeout" DURATION | "dynamic"
+set_elem       = set_part ("." set_part)*
+set_part       = (IP | CIDR | INT) ("-" (IP | INT))?
 fw_policy      = "accept" | "drop"
 firewall_rule  = ("accept" | "drop" | "reject" ("with" reject_type)?) match_expr*
 reject_type    = "tcp-reset" | "port-unreachable" | "host-unreachable"
                | "no-route" | "admin-prohibited"
 match_expr     = "ct" "state"? IDENT ("," IDENT)*
-               | ("tcp" | "udp") ("dport" | "sport") "!="? (INT | INT "-" INT)
-               | "icmp" INT | "icmpv6" INT | "mark" INT
-               | ("src" | "dst") "!="? CIDR
+               | ("tcp" | "udp") ("dport" | "sport") "!="? (INT | INT "-" INT | set_ref)
+               | "icmp" INT | "icmpv6" INT | "mark" (INT | "!="? set_ref)
+               | ("src" | "dst") "!="? (CIDR | set_ref)
                | ("iif" | "oif") "!="? IDENT
+               | set_field ("." set_field)+ "!="? set_ref
+set_ref        = "@" IDENT
+set_field      = "src" | "dst" | ("tcp" | "udp") ("dport" | "sport") | "mark"
 
 # ── Impairment & rate ────────────────────────────
 addr_pair      = CIDR "--" CIDR

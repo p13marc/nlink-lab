@@ -628,7 +628,14 @@ everything left. `reject` answers ICMP port unreachable; `reject with
 tcp-reset` sends a reset. There is also an `output` chain, and
 `firewall { input … forward … output … }` groups them.
 
-See `examples/firewall.nll` and `examples/firewall-router.nll`.
+Sets let one rule match many values: `set blocked [10.0.3.66,
+10.0.9.0/24]` then `drop src @blocked`; `set mgmt port [22, 8000-8999]`;
+`set published ipv4 . port [10.0.1.10 . 5201]` then `accept dst . tcp
+dport @published`. Sets go in a grouped `firewall { … }` block; editing
+their elements changes nothing else.
+
+See `examples/firewall.nll`, `examples/firewall-router.nll` and
+`examples/firewall-sets.nll`.
 
 ### 7. Bridge Networks with VLANs
 

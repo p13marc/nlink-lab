@@ -109,6 +109,23 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
     `firewall-iface-exists` (warning). Firewalls inherited from profiles
     are now validated too.
   - New example: `examples/firewall-router.nll`.
+- **Firewall sets (#165).** nlink 0.30's nftables sets in NLL:
+  - `set blocked [10.0.3.66, 10.0.9.0/24, 10.0.8.1-10.0.8.9]`;
+    `set mgmt port [22, 8000-8999]`;
+    `set published ipv4 . port [10.0.1.10 . 5201]`.
+  - Lookups: `src @blocked`, `dst != @trusted`, `tcp dport @mgmt`,
+    `mark @m`, and concatenations (`dst . tcp dport @published`).
+  - Keys are `ipv4`, `ipv6`, `port` and `mark`, joined by `.` for a
+    concatenation, and inferred from the first element when left out.
+    Prefixes and ranges make an interval set (pipapo for a
+    concatenation).
+  - `dynamic` sets are filled at run time and keep their elements across
+    `apply`; `timeout` and `size` reach the kernel.
+  - Editing elements changes only the elements; the rules that use the
+    set keep their handles.
+  - New validation rules: `firewall-set-undeclared`, `firewall-set-type`,
+    `firewall-set-element` and `firewall-set-unused` (warning).
+  - New example: `examples/firewall-sets.nll`.
 - **Changing a declared interface on a running lab** (see Migration).
   The network layer is planned with nlink's `preserve_undeclared_tc`, so
   a recreated link keeps nlink-lab's Tc, and with VRF routes declared,

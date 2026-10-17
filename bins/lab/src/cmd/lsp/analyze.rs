@@ -286,10 +286,10 @@ mod tests {
 
     #[test]
     fn a_lex_error_points_at_the_bad_character() {
-        let src = "lab \"t\"\nnode a\n@\n";
+        let src = "lab \"t\"\nnode a\n~\n";
         let a = analyze(src, None);
         let d = &a.diagnostics[0];
-        assert_eq!(text_at(src, d), "@");
+        assert_eq!(text_at(src, d), "~");
         assert!(
             a.tokens.is_empty(),
             "a file that does not lex has no tokens"

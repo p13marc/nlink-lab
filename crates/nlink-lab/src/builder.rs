@@ -28,9 +28,9 @@
 use std::collections::BTreeMap;
 
 use crate::types::{
-    ExecConfig, FirewallChain, FirewallConfig, FirewallRule, Impairment, InterfaceConfig,
-    LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RejectWith, RouteConfig,
-    Topology, VlanConfig, VrfConfig, WireguardConfig,
+    ExecConfig, FirewallChain, FirewallConfig, FirewallRule, FirewallSet, Impairment,
+    InterfaceConfig, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit, RejectWith,
+    RouteConfig, SetKey, Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
 
 /// Top-level lab builder.
@@ -760,6 +760,18 @@ impl FirewallBuilder {
         self
     }
 
+    /// Declare a named set rules look up as `@name` (`"ip saddr @name"`).
+    pub fn set(
+        mut self,
+        name: &str,
+        f: impl FnOnce(FirewallSetBuilder) -> FirewallSetBuilder,
+    ) -> Self {
+        self.config
+            .sets
+            .insert(name.to_string(), f(FirewallSetBuilder::default()).set);
+        self
+    }
+
     fn build(self) -> FirewallConfig {
         self.config
     }
@@ -770,6 +782,45 @@ fn chain_rule(match_expr: &str, action: &str, reject_with: Option<RejectWith>) -
         match_expr: (!match_expr.is_empty()).then(|| match_expr.to_string()),
         action: Some(action.to_string()),
         reject_with,
+    }
+}
+
+/// Builder for a [`FirewallSet`].
+#[derive(Default)]
+pub struct FirewallSetBuilder {
+    set: FirewallSet,
+}
+
+impl FirewallSetBuilder {
+    /// The key: one field, or several for a concatenation.
+    pub fn key(mut self, key: &[SetKey]) -> Self {
+        self.set.key = key.to_vec();
+        self
+    }
+
+    /// Add an element: an address, prefix, range or port, or the parts of
+    /// a concatenated key joined by `" . "`.
+    pub fn element(mut self, element: &str) -> Self {
+        self.set.elements.push(element.to_string());
+        self
+    }
+
+    /// Cap the number of elements.
+    pub fn size(mut self, size: u32) -> Self {
+        self.set.size = Some(size);
+        self
+    }
+
+    /// Give elements a default lifetime (`"300s"`).
+    pub fn timeout(mut self, timeout: &str) -> Self {
+        self.set.timeout = Some(timeout.to_string());
+        self
+    }
+
+    /// The set is filled at run time; `apply` keeps what it finds.
+    pub fn dynamic(mut self) -> Self {
+        self.set.dynamic = true;
+        self
     }
 }
 

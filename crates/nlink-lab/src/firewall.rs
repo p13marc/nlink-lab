@@ -9,11 +9,14 @@
 
 use std::net::IpAddr;
 
+use std::collections::BTreeMap;
+
 use nlink::netlink::nftables::{
-    CmpOp, CtState, Expr, Family, Hook, MetaKey, PayloadBase, Policy, Register, Rule,
+    CmpOp, CtState, Expr, Family, Hook, MetaKey, PacketField, PayloadBase, Policy, Register, Rule,
+    SetElement, SetKeyType,
 };
 
-use crate::types::{FirewallConfig, FirewallRule, RejectWith};
+use crate::types::{FirewallConfig, FirewallRule, FirewallSet, RejectWith, SetKey};
 
 /// The base chains a node's firewall can declare.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -75,9 +78,152 @@ pub(crate) fn policy(p: Option<&str>) -> Result<Policy, String> {
 /// `ct state` names nftables knows.
 const CT_STATES: [&str; 5] = ["established", "related", "new", "invalid", "untracked"];
 
+/// A packet field a set can be keyed on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Field {
+    /// `ip|ip6 saddr|daddr`.
+    Addr { v6: bool, src: bool },
+    /// `tcp|udp dport|sport`.
+    Port { tcp: bool, dport: bool },
+    /// `mark`.
+    Mark,
+}
+
+impl Field {
+    /// The field at `toks[i]`, and the index after it.
+    fn at(toks: &[&str], i: usize) -> Option<(Field, usize)> {
+        match (toks.get(i).copied(), toks.get(i + 1).copied()) {
+            (Some(kw @ ("ip" | "ip6")), Some(dir @ ("saddr" | "daddr"))) => Some((
+                Field::Addr {
+                    v6: kw == "ip6",
+                    src: dir == "saddr",
+                },
+                i + 2,
+            )),
+            (Some(proto @ ("tcp" | "udp")), Some(dir @ ("dport" | "sport"))) => Some((
+                Field::Port {
+                    tcp: proto == "tcp",
+                    dport: dir == "dport",
+                },
+                i + 2,
+            )),
+            (Some("mark"), _) => Some((Field::Mark, i + 1)),
+            _ => None,
+        }
+    }
+
+    /// The stored (nft-like) spelling.
+    fn text(self) -> &'static str {
+        match self {
+            Field::Addr {
+                v6: false,
+                src: true,
+            } => "ip saddr",
+            Field::Addr {
+                v6: false,
+                src: false,
+            } => "ip daddr",
+            Field::Addr {
+                v6: true,
+                src: true,
+            } => "ip6 saddr",
+            Field::Addr {
+                v6: true,
+                src: false,
+            } => "ip6 daddr",
+            Field::Port {
+                tcp: true,
+                dport: true,
+            } => "tcp dport",
+            Field::Port {
+                tcp: true,
+                dport: false,
+            } => "tcp sport",
+            Field::Port {
+                tcp: false,
+                dport: true,
+            } => "udp dport",
+            Field::Port {
+                tcp: false,
+                dport: false,
+            } => "udp sport",
+            Field::Mark => "mark",
+        }
+    }
+
+    /// The NLL spelling.
+    fn nll(self) -> &'static str {
+        match self {
+            Field::Addr { src: true, .. } => "src",
+            Field::Addr { src: false, .. } => "dst",
+            other => other.text(),
+        }
+    }
+
+    /// The set key this field is looked up as.
+    pub(crate) fn key(self) -> SetKey {
+        match self {
+            Field::Addr { v6: false, .. } => SetKey::Ipv4,
+            Field::Addr { v6: true, .. } => SetKey::Ipv6,
+            Field::Port { .. } => SetKey::Port,
+            Field::Mark => SetKey::Mark,
+        }
+    }
+
+    fn packet_field(self) -> PacketField {
+        match self {
+            Field::Addr {
+                v6: false,
+                src: true,
+            } => PacketField::Ip4Saddr,
+            Field::Addr {
+                v6: false,
+                src: false,
+            } => PacketField::Ip4Daddr,
+            Field::Addr {
+                v6: true,
+                src: true,
+            } => PacketField::Ip6Saddr,
+            Field::Addr {
+                v6: true,
+                src: false,
+            } => PacketField::Ip6Daddr,
+            Field::Port {
+                tcp: true,
+                dport: true,
+            } => PacketField::TcpDport,
+            Field::Port {
+                tcp: true,
+                dport: false,
+            } => PacketField::TcpSport,
+            Field::Port {
+                tcp: false,
+                dport: true,
+            } => PacketField::UdpDport,
+            Field::Port {
+                tcp: false,
+                dport: false,
+            } => PacketField::UdpSport,
+            Field::Mark => PacketField::Mark,
+        }
+    }
+}
+
 /// One clause of a match expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Clause {
+    /// `FIELD [!=] @set`.
+    InSet {
+        field: Field,
+        neg: bool,
+        set: String,
+    },
+    /// `FIELD . FIELD … [!=] @set` (a concatenated key).
+    Concat {
+        fields: Vec<Field>,
+        neg: bool,
+        set: String,
+    },
     /// `ip|ip6 saddr|daddr [!=] CIDR`. `text` is the operand as written.
     Addr {
         v6: bool,
@@ -105,9 +251,20 @@ pub(crate) enum Clause {
     Iface { out: bool, neg: bool, name: String },
 }
 
-const SUPPORTED: &str = "Supported: 'ip saddr/daddr [!=] CIDR', 'ip6 saddr/daddr [!=] CIDR', \
-     'ct state ...', 'tcp|udp dport/sport [!=] N[-M]', 'icmp type N', 'icmpv6 type N', \
-     'mark N', 'iifname|oifname [!=] NAME'";
+const SUPPORTED: &str = "Supported: 'ip saddr/daddr [!=] CIDR|@set', 'ip6 saddr/daddr [!=] \
+     CIDR|@set', 'ct state ...', 'tcp|udp dport/sport [!=] N[-M]|@set', 'icmp type N', \
+     'icmpv6 type N', 'mark N|@set', 'iifname|oifname [!=] NAME', 'FIELD . FIELD [!=] @set'";
+
+/// The set name of a `@name` operand.
+fn set_ref(op: &str) -> Result<Option<String>, String> {
+    let Some(name) = op.strip_prefix('@') else {
+        return Ok(None);
+    };
+    if name.is_empty() {
+        return Err("'@' needs a set name in firewall rule".to_string());
+    }
+    Ok(Some(name.to_string()))
+}
 
 /// Parse a stored match expression. An empty expression matches every
 /// packet. Errors name the offending token.
@@ -116,6 +273,42 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < toks.len() {
+        if let Some((field, mut j)) = Field::at(&toks, i) {
+            // `FIELD . FIELD … [!=] @set`
+            if toks.get(j) == Some(&".") {
+                let mut fields = vec![field];
+                while toks.get(j) == Some(&".") {
+                    let Some((f, k)) = Field::at(&toks, j + 1) else {
+                        return Err(format!(
+                            "a concatenation joins fields with ` . ` (ip/ip6 saddr/daddr, \
+                             tcp/udp dport/sport, mark) in expression: '{expr}'"
+                        ));
+                    };
+                    fields.push(f);
+                    j = k;
+                }
+                let neg = toks.get(j) == Some(&"!=");
+                let op = toks.get(j + usize::from(neg)).copied().unwrap_or("");
+                let Some(set) = set_ref(op)? else {
+                    return Err(format!(
+                        "a concatenation can only be matched against a set (`@name`), got \
+                         '{op}' in expression: '{expr}'"
+                    ));
+                };
+                out.push(Clause::Concat { fields, neg, set });
+                i = j + usize::from(neg) + 1;
+                continue;
+            }
+            // `FIELD [!=] @set`
+            let neg = toks.get(j) == Some(&"!=");
+            if let Some(op) = toks.get(j + usize::from(neg))
+                && let Some(set) = set_ref(op)?
+            {
+                out.push(Clause::InSet { field, neg, set });
+                i = j + usize::from(neg) + 1;
+                continue;
+            }
+        }
         let neg = toks.get(i + 2) == Some(&"!=");
         // the operand follows the keyword pair, after an optional `!=`
         let operand = |at: usize| -> Result<&str, String> {
@@ -255,6 +448,16 @@ impl Clause {
     pub(crate) fn to_nll(&self) -> String {
         let ne = |neg: bool| if neg { " !=" } else { "" };
         match self {
+            Clause::InSet { field, neg, set } => format!("{}{} @{set}", field.nll(), ne(*neg)),
+            Clause::Concat { fields, neg, set } => format!(
+                "{}{} @{set}",
+                fields
+                    .iter()
+                    .map(|f| f.nll())
+                    .collect::<Vec<_>>()
+                    .join(" . "),
+                ne(*neg)
+            ),
             Clause::Addr { src, neg, text, .. } => {
                 format!("{}{} {text}", if *src { "src" } else { "dst" }, ne(*neg))
             }
@@ -291,6 +494,24 @@ impl Clause {
     /// forms existed keep the exact bytes deployed labs carry.
     pub(crate) fn lower(&self, rule: Rule) -> Rule {
         match self {
+            Clause::InSet {
+                field,
+                neg: false,
+                set,
+            } => rule.match_in_set(field.packet_field(), set),
+            Clause::InSet {
+                field,
+                neg: true,
+                set,
+            } => rule.match_not_in_set(field.packet_field(), set),
+            Clause::Concat { fields, neg, set } => {
+                let pf: Vec<PacketField> = fields.iter().map(|f| f.packet_field()).collect();
+                if *neg {
+                    rule.match_concat_not_in_set(&pf, set)
+                } else {
+                    rule.match_concat_in_set(&pf, set)
+                }
+            }
             Clause::Addr {
                 src,
                 neg,
@@ -397,6 +618,322 @@ impl Clause {
     }
 }
 
+impl Clause {
+    /// The clause in the stored (nft-like) spelling `parse_match` reads.
+    fn to_match(&self) -> String {
+        let ne = |neg: bool| if neg { " !=" } else { "" };
+        match self {
+            Clause::InSet { field, neg, set } => format!("{}{} @{set}", field.text(), ne(*neg)),
+            Clause::Concat { fields, neg, set } => format!(
+                "{}{} @{set}",
+                fields
+                    .iter()
+                    .map(|f| f.text())
+                    .collect::<Vec<_>>()
+                    .join(" . "),
+                ne(*neg)
+            ),
+            Clause::Addr {
+                v6, src, neg, text, ..
+            } => format!(
+                "{}{} {text}",
+                Field::Addr { v6: *v6, src: *src }.text(),
+                ne(*neg)
+            ),
+            Clause::Port {
+                tcp,
+                dport,
+                neg,
+                lo,
+                hi,
+            } => {
+                let range = if lo == hi {
+                    lo.to_string()
+                } else {
+                    format!("{lo}-{hi}")
+                };
+                format!(
+                    "{}{} {range}",
+                    Field::Port {
+                        tcp: *tcp,
+                        dport: *dport
+                    }
+                    .text(),
+                    ne(*neg)
+                )
+            }
+            Clause::Icmp { v6, ty } => format!("{} type {ty}", if *v6 { "icmpv6" } else { "icmp" }),
+            Clause::CtState(states) => format!("ct state {}", states.join(",")),
+            Clause::Mark(m) => format!("mark {m}"),
+            Clause::Iface { out, neg, name } => format!(
+                "{}{} {name}",
+                if *out { "oifname" } else { "iifname" },
+                ne(*neg)
+            ),
+        }
+    }
+}
+
+/// Make the `ip`/`ip6` of every address field matched against a set agree
+/// with the set's key. NLL's `src @blocked` does not say which family; the
+/// set does. Expressions without a set are returned unchanged.
+pub(crate) fn normalize_set_families(expr: &str, sets: &BTreeMap<String, FirewallSet>) -> String {
+    if !expr.contains('@') {
+        return expr.to_string();
+    }
+    let Ok(mut clauses) = parse_match(expr) else {
+        return expr.to_string(); // the validator reports it
+    };
+    let fix = |field: &mut Field, key: Option<&SetKey>| {
+        if let (Field::Addr { v6, .. }, Some(k @ (SetKey::Ipv4 | SetKey::Ipv6))) = (field, key) {
+            *v6 = *k == SetKey::Ipv6;
+        }
+    };
+    for c in &mut clauses {
+        match c {
+            Clause::InSet { field, set, .. } => {
+                fix(field, sets.get(set.as_str()).and_then(|s| s.key.first()));
+            }
+            Clause::Concat { fields, set, .. } => {
+                if let Some(s) = sets.get(set.as_str()) {
+                    for (f, k) in fields.iter_mut().zip(&s.key) {
+                        fix(f, Some(k));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    clauses
+        .iter()
+        .map(Clause::to_match)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// What is wrong with a rule's set lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SetRefProblem {
+    /// The set is not declared.
+    Undeclared,
+    /// The fields do not match the set's key.
+    WrongKey,
+}
+
+/// Problems with a rule's set lookups.
+pub(crate) fn check_set_refs(
+    clauses: &[Clause],
+    sets: &BTreeMap<String, FirewallSet>,
+) -> Vec<(SetRefProblem, String)> {
+    let keys = |k: &[SetKey]| k.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(" . ");
+    let mut out = Vec::new();
+    for c in clauses {
+        let (fields, set) = match c {
+            Clause::InSet { field, set, .. } => (vec![*field], set),
+            Clause::Concat { fields, set, .. } => (fields.clone(), set),
+            _ => continue,
+        };
+        let Some(declared) = sets.get(set.as_str()) else {
+            out.push((
+                SetRefProblem::Undeclared,
+                format!("set '@{set}' is not declared on this node (`set {set} … [ … ]`)"),
+            ));
+            continue;
+        };
+        let want: Vec<SetKey> = fields.iter().map(|f| f.key()).collect();
+        if declared.key != want {
+            out.push((
+                SetRefProblem::WrongKey,
+                format!(
+                    "`{}` looks up `{}` in set '@{set}', whose key is `{}`",
+                    fields
+                        .iter()
+                        .map(|f| f.nll())
+                        .collect::<Vec<_>>()
+                        .join(" . "),
+                    keys(&want),
+                    keys(&declared.key)
+                ),
+            ));
+        }
+    }
+    out
+}
+
+/// A set's key: as declared, or inferred from its first element (addresses
+/// and ports; a mark key must be written).
+pub(crate) fn set_key(name: &str, set: &FirewallSet) -> Result<Vec<SetKey>, String> {
+    if !set.key.is_empty() {
+        return Ok(set.key.clone());
+    }
+    let Some(first) = set.elements.first() else {
+        return Err(format!(
+            "set '{name}' has no key and no element to infer one from: write it \
+             (`set {name} ipv4 [ ]`)"
+        ));
+    };
+    first
+        .split(" . ")
+        .map(|part| {
+            let lo = part.split_once('-').map_or(part, |(a, _)| a);
+            let addr = lo.split_once('/').map_or(lo, |(a, _)| a);
+            match addr.parse::<IpAddr>() {
+                Ok(IpAddr::V4(_)) => Ok(SetKey::Ipv4),
+                Ok(IpAddr::V6(_)) => Ok(SetKey::Ipv6),
+                Err(_) if addr.parse::<u16>().is_ok() => Ok(SetKey::Port),
+                Err(_) => Err(format!(
+                    "set '{name}': cannot tell the key of element '{first}': write it \
+                     (`set {name} ipv4 . port [ … ]`)"
+                )),
+            }
+        })
+        .collect()
+}
+
+/// One part of an element, for one key field; `true` when it is a prefix
+/// or a range (which needs an interval set).
+fn element_part(key: SetKey, part: &str) -> Result<(SetElement, bool), String> {
+    let bad = |what: &str| format!("'{part}' is not {what}");
+    match key {
+        SetKey::Ipv4 | SetKey::Ipv6 => {
+            let v6 = key == SetKey::Ipv6;
+            let what = if v6 {
+                "an IPv6 address, prefix or range"
+            } else {
+                "an IPv4 address, prefix or range"
+            };
+            let ip = |s: &str| -> Result<IpAddr, String> {
+                match s.parse::<IpAddr>() {
+                    Ok(a) if a.is_ipv6() == v6 => Ok(a),
+                    _ => Err(bad(what)),
+                }
+            };
+            if let Some((a, b)) = part.split_once('-') {
+                let (a, b) = (ip(a)?, ip(b)?);
+                if a > b {
+                    return Err(format!("range '{part}' starts after it ends"));
+                }
+                return Ok(match (a, b) {
+                    (IpAddr::V4(a), IpAddr::V4(b)) => (SetElement::ipv4_range(a, b), true),
+                    (IpAddr::V6(a), IpAddr::V6(b)) => (SetElement::ipv6_range(a, b), true),
+                    _ => unreachable!("same family checked"),
+                });
+            }
+            if let Some((a, len)) = part.split_once('/') {
+                let len: u8 = len.parse().map_err(|_| bad(what))?;
+                let elem = match ip(a)? {
+                    IpAddr::V4(a) => SetElement::ipv4_prefix(a, len),
+                    IpAddr::V6(a) => SetElement::ipv6_prefix(a, len),
+                }
+                .map_err(|e| format!("'{part}': {e}"))?;
+                return Ok((elem, true));
+            }
+            Ok(match ip(part)? {
+                IpAddr::V4(a) => (SetElement::ipv4(a), false),
+                IpAddr::V6(a) => (SetElement::ipv6(a), false),
+            })
+        }
+        SetKey::Port => {
+            let port = |s: &str| s.parse::<u16>().map_err(|_| bad("a port or a port range"));
+            if let Some((a, b)) = part.split_once('-') {
+                let (a, b) = (port(a)?, port(b)?);
+                if a > b {
+                    return Err(format!("range '{part}' starts after it ends"));
+                }
+                return Ok((SetElement::port_range(a, b), true));
+            }
+            Ok((SetElement::port(port(part)?), false))
+        }
+        SetKey::Mark => {
+            if part.contains('-') {
+                return Err(format!(
+                    "'{part}': a mark set cannot hold ranges (nftables byte-swaps marks, \
+                     nlink does not)"
+                ));
+            }
+            let m = part.parse::<u32>().map_err(|_| bad("a mark"))?;
+            Ok((SetElement::mark(m), false))
+        }
+    }
+}
+
+/// A set ready for nlink: its key type, elements, and whether it must be an
+/// interval set.
+pub(crate) struct LoweredSet {
+    pub key_type: SetKeyType,
+    pub elements: Vec<SetElement>,
+    pub interval: bool,
+    pub size: Option<u32>,
+    pub timeout: Option<std::time::Duration>,
+    pub dynamic: bool,
+}
+
+/// Check and lower one declared set.
+pub(crate) fn lower_set(name: &str, set: &FirewallSet) -> Result<LoweredSet, String> {
+    let key = set_key(name, set)?;
+    let field_type = |k: SetKey| match k {
+        SetKey::Ipv4 => SetKeyType::Ipv4Addr,
+        SetKey::Ipv6 => SetKeyType::Ipv6Addr,
+        SetKey::Port => SetKeyType::InetService,
+        SetKey::Mark => SetKeyType::Mark,
+    };
+    let key_type = match key.as_slice() {
+        [one] => field_type(*one),
+        many => SetKeyType::Concat(many.iter().map(|k| field_type(*k)).collect()),
+    };
+    let mut elements = Vec::new();
+    let mut interval = false;
+    for elem in &set.elements {
+        let parts: Vec<&str> = elem.split(" . ").collect();
+        if parts.len() != key.len() {
+            return Err(format!(
+                "set '{name}': element '{elem}' has {} part(s), the key has {}",
+                parts.len(),
+                key.len()
+            ));
+        }
+        let mut lowered = Vec::new();
+        for (k, part) in key.iter().zip(&parts) {
+            let (e, is_interval) =
+                element_part(*k, part.trim()).map_err(|e| format!("set '{name}': {e}"))?;
+            interval |= is_interval;
+            lowered.push(e);
+        }
+        elements.push(if lowered.len() == 1 {
+            lowered.pop().unwrap()
+        } else {
+            SetElement::concat(lowered)
+        });
+    }
+    if interval && key.len() > 1 && key.contains(&SetKey::Mark) {
+        return Err(format!(
+            "set '{name}': a concatenated set with a mark cannot hold prefixes or ranges \
+             (nlink cannot encode a host-order field in an interval concatenation)"
+        ));
+    }
+    if set.dynamic && interval {
+        return Err(format!(
+            "set '{name}': a dynamic set cannot hold prefixes or ranges (the kernel has no \
+             interval set rules can write to)"
+        ));
+    }
+    let timeout = set
+        .timeout
+        .as_deref()
+        .map(|t| {
+            crate::helpers::parse_duration(t).map_err(|e| format!("set '{name}': timeout: {e}"))
+        })
+        .transpose()?;
+    Ok(LoweredSet {
+        key_type,
+        elements,
+        interval,
+        size: set.size,
+        timeout,
+        dynamic: set.dynamic,
+    })
+}
+
 /// ICMPX codes (`NFT_REJECT_ICMPX_*`), which nlink does not name.
 const ICMPX_NO_ROUTE: u8 = 0;
 const ICMPX_PORT_UNREACH: u8 = 1;
@@ -416,9 +953,14 @@ pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(
             "`reject with` on a rule whose action is '{action}'"
         )),
         Some(RejectWith::TcpReset)
-            if !clauses
-                .iter()
-                .any(|c| matches!(c, Clause::Port { tcp: true, .. })) =>
+            if !clauses.iter().any(|c| match c {
+                Clause::Port { tcp: true, .. } => true,
+                Clause::InSet { field, .. } => matches!(field, Field::Port { tcp: true, .. }),
+                Clause::Concat { fields, .. } => fields
+                    .iter()
+                    .any(|f| matches!(f, Field::Port { tcp: true, .. })),
+                _ => false,
+            }) =>
         {
             Err(
                 "`reject with tcp-reset` needs a `tcp dport`/`tcp sport` match: a reset \
@@ -536,6 +1078,10 @@ mod tests {
             r.last(),
             Some(Expr::Reject { reject_type: 1, .. })
         ));
+        // a TCP port in a set lookup is a TCP match too
+        let mut set = rule("tcp dport @mgmt", "reject");
+        set.reject_with = Some(RejectWith::TcpReset);
+        assert!(check_verdict(&set, &parse_match("tcp dport @mgmt").unwrap()).is_ok());
         // a reset answers TCP only
         let mut udp = rule("udp dport 53", "reject");
         udp.reject_with = Some(RejectWith::TcpReset);
@@ -581,6 +1127,126 @@ mod tests {
                 Expr::Cmp { op: CmpOp::Neq, .. }
             ]
         ));
+    }
+
+    fn set(key: &[SetKey], elements: &[&str]) -> FirewallSet {
+        FirewallSet {
+            key: key.to_vec(),
+            elements: elements.iter().map(|e| e.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn set_lookups_and_concatenations_parse_and_render() {
+        let c =
+            parse_match("ip saddr != @blocked tcp dport @web ip daddr . tcp dport @pub").unwrap();
+        let nll: Vec<String> = c.iter().map(Clause::to_nll).collect();
+        assert_eq!(
+            nll,
+            ["src != @blocked", "tcp dport @web", "dst . tcp dport @pub"]
+        );
+        assert!(
+            parse_match("ip saddr . tcp dport 22")
+                .unwrap_err()
+                .contains("only be matched against a set")
+        );
+        assert!(
+            parse_match("ip saddr . frob @x")
+                .unwrap_err()
+                .contains("joins fields")
+        );
+        assert!(
+            parse_match("ip saddr @")
+                .unwrap_err()
+                .contains("needs a set name")
+        );
+    }
+
+    #[test]
+    fn set_lookups_take_the_family_of_their_set() {
+        let mut sets = BTreeMap::new();
+        sets.insert("b6".to_string(), set(&[SetKey::Ipv6], &["fd00::1"]));
+        sets.insert(
+            "p".to_string(),
+            set(&[SetKey::Ipv6, SetKey::Port], &["fd00::1 . 22"]),
+        );
+        assert_eq!(
+            normalize_set_families("ip saddr @b6 tcp dport 22", &sets),
+            "ip6 saddr @b6 tcp dport 22"
+        );
+        assert_eq!(
+            normalize_set_families("ip daddr . tcp dport != @p", &sets),
+            "ip6 daddr . tcp dport != @p"
+        );
+        // no set: untouched, byte for byte
+        assert_eq!(
+            normalize_set_families("ip saddr 10.0.0.1  ", &sets),
+            "ip saddr 10.0.0.1  "
+        );
+    }
+
+    #[test]
+    fn set_keys_infer_and_elements_lower() {
+        let s = set(&[], &["10.0.0.0/24", "10.0.1.1-10.0.1.9", "10.0.2.2"]);
+        assert_eq!(set_key("s", &s).unwrap(), [SetKey::Ipv4]);
+        let l = lower_set("s", &s).unwrap();
+        assert!(l.interval, "a prefix or a range needs an interval set");
+        assert_eq!(l.elements.len(), 3);
+        assert!(matches!(l.key_type, SetKeyType::Ipv4Addr));
+
+        let c = set(&[], &["10.0.1.10 . 22", "10.0.1.0/24 . 8000-8999"]);
+        assert_eq!(set_key("c", &c).unwrap(), [SetKey::Ipv4, SetKey::Port]);
+        let l = lower_set("c", &c).unwrap();
+        assert!(l.interval);
+        assert!(matches!(l.key_type, SetKeyType::Concat(ref k) if k.len() == 2));
+
+        let p = lower_set("p", &set(&[], &["80", "443"])).unwrap();
+        assert!(!p.interval && matches!(p.key_type, SetKeyType::InetService));
+    }
+
+    #[test]
+    fn bad_sets_are_refused() {
+        for (s, want) in [
+            (set(&[SetKey::Ipv4], &["fd00::1"]), "not an IPv4"),
+            (set(&[SetKey::Port], &["9-1"]), "starts after it ends"),
+            (set(&[SetKey::Mark], &["1-2"]), "cannot hold ranges"),
+            (
+                set(&[SetKey::Ipv4, SetKey::Port], &["10.0.0.1"]),
+                "has 1 part(s), the key has 2",
+            ),
+            (set(&[], &[]), "no key and no element"),
+            (
+                set(&[SetKey::Ipv4, SetKey::Mark], &["10.0.0.0/24 . 5"]),
+                "concatenated set with a mark",
+            ),
+            (
+                FirewallSet {
+                    dynamic: true,
+                    ..set(&[SetKey::Ipv4], &["10.0.0.0/8"])
+                },
+                "dynamic set cannot hold prefixes",
+            ),
+        ] {
+            let err = lower_set("s", &s).err().unwrap_or_default();
+            assert!(err.contains(want), "{s:?}: {err}");
+        }
+    }
+
+    #[test]
+    fn set_refs_must_exist_and_match_the_key() {
+        let mut sets = BTreeMap::new();
+        sets.insert("b".to_string(), set(&[SetKey::Ipv4], &["10.0.0.1"]));
+        let probs = |expr: &str| {
+            check_set_refs(&parse_match(expr).unwrap(), &sets)
+                .into_iter()
+                .map(|(p, _)| p)
+                .collect::<Vec<_>>()
+        };
+        assert!(probs("ip saddr @b").is_empty());
+        assert_eq!(probs("ip saddr @nope"), [SetRefProblem::Undeclared]);
+        assert_eq!(probs("tcp dport @b"), [SetRefProblem::WrongKey]);
+        assert_eq!(probs("ip saddr . tcp dport @b"), [SetRefProblem::WrongKey]);
     }
 
     #[test]

@@ -641,6 +641,11 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`nlink-lab-client`** (#257), the Rust client of the daemon API:
+  endpoints (`unix:PATH`, `ssh://HOST` through `nlink-labd dial-stdio`,
+  `cmd:…`, `NLINK_LAB_DAEMON`), one connection with any number of calls,
+  the handshake's version check, and `Call` streams that send stdin,
+  resizes, signals, a cancel or a detach (`docs/API.md`).
 - **Dynamic completion by default** (#256): `completions SHELL` prints
   a script that asks `nlink-lab` what fits — labs, the nodes, endpoints,
   snapshots and tracked PIDs of the lab on the line (or the current

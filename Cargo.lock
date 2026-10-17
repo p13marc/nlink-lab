@@ -3589,6 +3589,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nlink-lab-client"
+version = "0.13.0"
+dependencies = [
+ "nlink-lab-shared",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "nlink-lab-macros"
 version = "0.13.0"
 dependencies = [

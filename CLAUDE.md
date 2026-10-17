@@ -131,6 +131,8 @@ crates/nlink-lab/src/
   logs.rs           # process log tail / cat / follow
   edit.rs           # Edit model: live topology edits (nodes, links, impairments, qdiscs, pairs, MTU)
   wait.rs           # WaitCondition + RunningLab::wait_all (one deadline, progress, cancel)
+crates/nlink-lab-client/src/   # client of the daemon API: Endpoint (unix, ssh dial-stdio,
+                               #   cmd), Client (handshake, multiplexed calls), Call
 crates/nlink-lab-shared/src/
   api/              # daemon API (docs/API.md): Request (+ meta roles), Response,
                     #   StreamItem/Notification, OpEvent progress, ApiError, DTOs,

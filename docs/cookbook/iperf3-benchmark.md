@@ -1,8 +1,9 @@
 # iperf3 benchmark with hard assertions
 
 A throughput and latency benchmark whose pass/fail is part of the
-topology. The lab declares the metric thresholds inline; deploy
-runs the test and fails the build if iperf3 reports below SLA.
+topology. The lab declares the metric thresholds inline;
+`nlink-lab benchmark` runs the test on the deployed lab and exits 2 if
+a metric misses its threshold.
 
 ## When to use this
 
@@ -44,12 +45,19 @@ benchmark "latency" {
 }
 ```
 
-The `benchmark` block declares one or more named tests; each test
-runs at deploy time and asserts metric thresholds.
+The `benchmark` block declares one or more tests; `nlink-lab benchmark
+LAB NAME` runs them and asserts metric thresholds.
 
-Assertion operators: `below`, `above`. Metrics: `avg`, `min`,
-`max`, `mdev`, `loss`, `p50`, `p99` (where the underlying tool
-provides them).
+Assertion operators: `below`, `above`. Metrics:
+
+- `ping`: `min`, `avg`, `max`, `p99` (milliseconds; `p99` is the max of a
+  small sample) and `loss` (%);
+- `iperf3`: `bandwidth` (bit/s, as the receiver got it) and, with `udp`,
+  `jitter` (ms) and `loss` (%).
+
+A threshold is written in the metric's unit: any duration (`500us`,
+`20ms`, `1s`), any rate (`900mbit`, `1g`), a percentage. `validate`
+rejects a metric the test does not report (`benchmark-metric`).
 
 ## NLL: iperf3 throughput
 
@@ -69,9 +77,14 @@ rate client:eth0 egress 100mbit ingress 100mbit
 benchmark "throughput" {
   iperf3 client server {
     duration 10s
-    parallel 4
-    assert sender-bps above 90mbit
-    assert retransmits below 100
+    streams 4
+    assert bandwidth above 90mbit
+  }
+  iperf3 client server {
+    udp
+    rate 50mbit          # iperf3's -b; a UDP test runs at 1 Mbit/s without it
+    assert loss below 1%
+    assert jitter below 2ms
   }
 }
 ```
@@ -82,46 +95,42 @@ lab fails if iperf3 reports under spec.")
 
 ## Run
 
-iperf3 must be installed on the host (the binary is exec'd inside
-the namespaces):
+iperf3 must be installed on both nodes (on the host for namespace
+nodes, in the image for container nodes):
 
 ```bash
 sudo apt-get install iperf3   # or: dnf install iperf3
 sudo nlink-lab deploy examples/benchmark.nll
+sudo nlink-lab benchmark perf-test latency
 ```
 
-Deploy runs the benchmark block as part of step 17 (validation).
 Output looks like:
 
 ```text
-benchmark "latency"
-  ping client → server  count=10
-    avg=2.3ms     ✓ (assert: below 50ms)
-    loss=0%       ✓ (assert: below 5%)
-  PASS
+Benchmark "latency": PASS
+  ok  ping client -> server
+      avg            2.3
+      loss           0
+      ok  assert avg below 50ms (actual 2.3)
+      ok  assert loss below 5% (actual 0)
 ```
 
-If an assertion fails, deploy exits non-zero with the reason.
-
-### Manual run after deploy
-
-You can re-run a benchmark on demand without redeploying:
-
-```bash
-sudo nlink-lab benchmark run perf-test latency
-```
+`nlink-lab benchmark perf-test` without a name lists the lab's
+benchmarks. A test that measured nothing (no address for the target,
+iperf3 missing) says why under its line.
 
 ### CI integration
 
 ```bash
 # CI script
-sudo nlink-lab deploy --json examples/benchmark.nll
+sudo nlink-lab deploy examples/benchmark.nll
+sudo nlink-lab benchmark perf-test latency
 RC=$?
 sudo nlink-lab destroy perf-test
 exit $RC
 ```
 
-The exit code reflects assertion success.
+The exit code is 2 when an assertion fails.
 
 ### Tear down
 
@@ -131,13 +140,14 @@ sudo nlink-lab destroy perf-test
 
 ## How it works
 
-`ping` benchmarks shell out to the system `ping` and parse the
-summary line for `min/avg/max/mdev` and the loss percentage.
+`ping` benchmarks run `ping -q` in the source node and parse its
+summary (iputils' `min/avg/max/mdev` or busybox's `min/avg/max`) and
+the loss percentage.
 
-`iperf3` benchmarks spawn the server in the destination node, run
-the client in the source node with `--json`, and assert against
-fields in the JSON output (`end.sum_sent.bits_per_second`,
-`end.sum_sent.retransmits`, etc.).
+`iperf3` benchmarks start a one-shot server in the destination node,
+run the client in the source node with `-J`, and read the JSON summary
+(`end.sum_received.bits_per_second` for TCP; `end.sum` with
+`jitter_ms` and `lost_percent` for UDP).
 
 Both runners are implemented in
 [`crates/nlink-lab/src/benchmark.rs`](../../crates/nlink-lab/src/benchmark.rs)

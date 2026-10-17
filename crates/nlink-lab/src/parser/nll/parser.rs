@@ -4250,6 +4250,7 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
             let mut duration = None;
             let mut streams = None;
             let mut udp = false;
+            let mut rate = None;
             let mut assertions = Vec::new();
 
             if eat(tokens, pos, &Token::LBrace) {
@@ -4264,6 +4265,8 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                         streams = Some(expect_u32(tokens, pos, "streams", 1)?);
                     } else if eat_kw(tokens, pos, "udp") {
                         udp = true;
+                    } else if eat(tokens, pos, &Token::Rate) {
+                        rate = Some(expect_rate(tokens, pos)?);
                     } else if eat_kw(tokens, pos, "assert") {
                         assertions.push(parse_benchmark_assertion(tokens, pos)?);
                     } else {
@@ -4293,6 +4296,7 @@ fn parse_benchmark(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Benchmark
                 duration,
                 streams,
                 udp,
+                rate,
                 assertions,
             });
         } else if check_kw(tokens, *pos, "ping") {

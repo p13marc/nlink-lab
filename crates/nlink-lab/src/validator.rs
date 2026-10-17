@@ -98,6 +98,7 @@ pub const RULE_IDS: &[&str] = &[
     "depends-on-exists",
     "depends-on-cycle",
     "loss-model-excludes-correlation",
+    "benchmark-metric",
     // Warning-level
     "frr-requires-forwarding",
     "mgmt-subnet-not-network-address",
@@ -427,6 +428,7 @@ impl Topology {
         validate_macvlan_parents(self, &mut issues);
         validate_vrf_interfaces(self, &interfaces, &mut issues);
         validate_test_refs(self, &interfaces, &mut issues);
+        validate_benchmarks(self, &mut issues);
         validate_container_fields(self, &mut issues);
 
         // Warning-level rules
@@ -2799,6 +2801,77 @@ fn validate_test_refs(
     }
 }
 
+/// A benchmark assertion names a metric its test reports, with a
+/// threshold in that metric's unit, and an iperf3 `rate` is a rate. A
+/// metric the test never measures (`jitter` on a ping) or a threshold the
+/// engine cannot read failed every run, after a clean `validate` (#208).
+fn validate_benchmarks(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    use crate::benchmark::{MetricUnit, metric_unit, parse_threshold};
+    for (b, bench) in topology.benchmarks.iter().enumerate() {
+        for (t, test) in bench.tests.iter().enumerate() {
+            let (kind, assertions, reported) = match test {
+                BenchmarkTest::Ping { assertions, .. } => {
+                    ("ping", assertions, "min, avg, max, p99, loss")
+                }
+                BenchmarkTest::Iperf3 {
+                    assertions, udp, ..
+                } => (
+                    "iperf3",
+                    assertions,
+                    if *udp {
+                        "bandwidth, jitter, loss"
+                    } else {
+                        "bandwidth (jitter and loss need `udp`)"
+                    },
+                ),
+            };
+            if let BenchmarkTest::Iperf3 {
+                rate: Some(rate), ..
+            } = test
+                && crate::helpers::parse_rate_bps(rate).is_err()
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "benchmark-metric",
+                    message: format!("iperf3 rate '{rate}' is not a rate"),
+                    location: Some(format!("benchmarks[{b}].tests[{t}].rate")),
+                });
+            }
+            for (k, a) in assertions.iter().enumerate() {
+                let location = Some(format!("benchmarks[{b}].tests[{t}].assertions[{k}]"));
+                let Some(unit) = metric_unit(test, &a.metric) else {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "benchmark-metric",
+                        message: format!(
+                            "{kind} does not report '{}'; it reports {reported}",
+                            a.metric
+                        ),
+                        location,
+                    });
+                    continue;
+                };
+                if parse_threshold(unit, &a.value).is_none() {
+                    let expected = match unit {
+                        MetricUnit::Millis => "a duration (`20ms`, `1s`)",
+                        MetricUnit::BitsPerSecond => "a rate (`900mbit`, `1g`)",
+                        MetricUnit::Percent => "a percentage (`1%`)",
+                    };
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "benchmark-metric",
+                        message: format!(
+                            "'{}' threshold '{}' is not {expected}",
+                            a.metric, a.value
+                        ),
+                        location,
+                    });
+                }
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────
 // Warning-level rules
 // ─────────────────────────────────────────────────────
@@ -3981,6 +4054,44 @@ link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             );
         }
         assert_eq!(rule_ids(), RULE_IDS);
+    }
+
+    /// A metric the test does not report, or a threshold not in the
+    /// metric's unit, never passed (#208).
+    #[test]
+    fn benchmark_metrics_and_thresholds_are_checked() {
+        let topo = parser::parse(
+            r#"lab "b"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+benchmark "x" {
+  ping a b {
+    assert jitter below 1ms
+    assert avg below 5mbit
+    assert max below 1s
+  }
+  iperf3 a b { assert loss below 1%  assert bandwidth above 1g }
+  iperf3 a b { udp  assert loss below 1% }
+}
+"#,
+        )
+        .unwrap();
+        let result = topo.validate();
+        let issues = rules_of(&result, "benchmark-metric");
+        let locations: Vec<_> = issues
+            .iter()
+            .filter_map(|i| i.location.as_deref())
+            .collect();
+        assert_eq!(
+            locations,
+            vec![
+                "benchmarks[0].tests[0].assertions[0]",
+                "benchmarks[0].tests[0].assertions[1]",
+                "benchmarks[0].tests[1].assertions[0]",
+            ],
+            "{issues:?}"
+        );
     }
 
     // ─── Test-block references ────────────────────────

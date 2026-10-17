@@ -59,9 +59,9 @@ pub struct Topology {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertions: Vec<Assertion>,
 
-    /// How many times to re-evaluate a failing assertion before
-    /// reporting it, and how long to wait between attempts
-    /// (`validate retries 20 interval 2s { … }`).
+    /// How many times in all to evaluate a failing assertion before
+    /// reporting it (`retries 1`, or none, is one attempt), and how long
+    /// to wait between attempts (`validate retries 20 interval 2s { … }`).
     ///
     /// Assertions run the moment the deploy finishes, which is too
     /// early for anything that has to converge: a `routing frr { bgp }`
@@ -107,6 +107,10 @@ pub enum BenchmarkTest {
         duration: Option<String>,
         streams: Option<u32>,
         udp: bool,
+        /// Target rate (iperf3 `-b`, e.g. `"50mbit"`). Without it a UDP
+        /// test runs at iperf3's default of 1 Mbit/s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rate: Option<String>,
         assertions: Vec<BenchmarkAssertion>,
     },
     /// Ping latency/loss test.

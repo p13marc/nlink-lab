@@ -144,6 +144,8 @@ pub enum BenchmarkTestDef {
         duration: Option<Val<Duration>>,
         streams: Option<u32>,
         udp: bool,
+        /// Target rate (`-b`); iperf3's UDP default is 1 Mbit/s.
+        rate: Option<Val<Rate>>,
         assertions: Vec<BenchmarkAssertionDef>,
     },
     Ping {

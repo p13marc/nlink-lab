@@ -62,6 +62,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 red("FAIL")
             };
             println!("  {mark}  {}", test.description);
+            if let Some(detail) = &test.detail {
+                println!("      {detail}");
+            }
             // Metrics first: they are the point of the run, and a
             // benchmark with no assertions still has something to say.
             for (metric, value) in &test.metrics {

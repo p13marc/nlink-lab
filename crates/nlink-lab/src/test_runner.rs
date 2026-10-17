@@ -22,6 +22,25 @@ pub struct TestResult {
     pub total_ms: u64,
     /// Whether all assertions passed.
     pub passed: bool,
+    /// Why the test could not run to the end: the file did not parse,
+    /// validate or deploy, or the lab did not destroy. A test with an
+    /// error has not passed; JUnit and TAP report it as an error.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl TestResult {
+    /// A test that failed before its assertions ran.
+    pub fn errored(file: impl Into<String>, error: impl ToString, total_ms: u64) -> Self {
+        Self {
+            file: file.into(),
+            assertions: Vec::new(),
+            deploy_ms: 0,
+            total_ms,
+            passed: false,
+            error: Some(error.to_string()),
+        }
+    }
 }
 
 /// Result of a single assertion.
@@ -60,15 +79,19 @@ pub async fn run_test_with_params(path: &Path, params: &[(String, String)]) -> R
     let lab = topology.deploy().await?;
     let deploy_ms = deploy_start.elapsed().as_millis() as u64;
 
-    // Run assertions. `deploy()` already ran them once (step 19) and
-    // stored the outcome on the lab; re-run here so the test gets a
-    // fresh timing sample rather than the deploy-time one.
-    let assertions = run_assertions(&lab, &topology);
+    // `deploy()` ran the assertions once already and kept the outcome.
+    // Running them again doubled a failing lab's retry budget, and a
+    // stateful assertion (`counter`) saw the first pass's packets.
+    let assertions = lab.assertion_results().to_vec();
 
-    let passed = assertions.iter().all(|a| a.passed);
-
-    // Destroy
-    lab.destroy().await?;
+    // A lab that does not destroy is an error of the test, but its
+    // assertion results still stand.
+    let error = lab
+        .destroy()
+        .await
+        .err()
+        .map(|e| format!("destroy failed: {e}"));
+    let passed = error.is_none() && assertions.iter().all(|a| a.passed);
 
     let total_ms = total_start.elapsed().as_millis() as u64;
 
@@ -78,6 +101,7 @@ pub async fn run_test_with_params(path: &Path, params: &[(String, String)]) -> R
         deploy_ms,
         total_ms,
         passed,
+        error,
     })
 }
 
@@ -163,7 +187,15 @@ fn eval_assertion(
             if let Some(ip) = ip_map.get(to) {
                 match lab.exec(from, "ping", &["-c1", "-W2", ip]) {
                     Ok(out) if out.exit_code == 0 => (desc, true, None),
-                    Ok(out) => (desc, false, Some(out.stderr)),
+                    Ok(out) => {
+                        let err = out.stderr.trim();
+                        let detail = if err.is_empty() {
+                            format!("no reply from {ip}")
+                        } else {
+                            err.to_string()
+                        };
+                        (desc, false, Some(detail))
+                    }
                     Err(e) => (desc, false, Some(e.to_string())),
                 }
             } else {
@@ -174,6 +206,17 @@ fn eval_assertion(
             let desc = format!("no-reach {from} {to}");
             if let Some(ip) = ip_map.get(to) {
                 match lab.exec(from, "ping", &["-c1", "-W2", ip]) {
+                    // A ping that could not run proves nothing: a container
+                    // without `ping` (exit 126/127) used to pass (#208).
+                    Ok(out) if ping_did_not_run(out.exit_code, &out.stderr) => (
+                        desc,
+                        false,
+                        Some(format!(
+                            "ping could not run on '{from}' (exit {}): {}",
+                            out.exit_code,
+                            out.stderr.trim()
+                        )),
+                    ),
                     Ok(out) if out.exit_code != 0 => (desc, true, None),
                     Ok(_) => (
                         desc,
@@ -205,7 +248,8 @@ fn eval_assertion(
                     .ok()
                     .filter(|d| !d.is_zero())
                     .unwrap_or(std::time::Duration::from_secs(3));
-                let max_attempts = retries.unwrap_or(1);
+                // `retries 0` made no attempt and failed without a reason
+                let max_attempts = retries.unwrap_or(1).max(1);
                 let retry_interval = interval
                     .as_deref()
                     .and_then(|i| crate::helpers::parse_duration(i).ok())
@@ -306,7 +350,7 @@ fn eval_assertion(
         } => {
             let desc = format!("dns-resolves {from} {name} {expected_ip}");
             match lab.exec(from, "getent", &["hosts", name]) {
-                Ok(out) if out.exit_code == 0 && out.stdout.contains(expected_ip) => {
+                Ok(out) if out.exit_code == 0 && resolves_to(&out.stdout, expected_ip) => {
                     (desc, true, None)
                 }
                 Ok(out) => (desc, false, Some(format!("got: {}", out.stdout.trim()))),
@@ -381,6 +425,30 @@ pub(crate) fn parse_ping_avg(output: &str) -> Option<f64> {
     None
 }
 
+/// Whether a `ping` exit says it never ran, rather than that the target
+/// did not answer: the runtime could not exec it (125–127: `docker exec`
+/// / `podman exec` failures, not found, not executable), or the kernel
+/// refused its socket.
+fn ping_did_not_run(exit_code: i32, stderr: &str) -> bool {
+    (125..=127).contains(&exit_code)
+        || stderr.contains("Operation not permitted")
+        || stderr.contains("Permission denied")
+}
+
+/// Whether `getent hosts` output lists `expected` as an address: the first
+/// field of a line, compared exactly (as an IP when both parse). A
+/// substring match passed `10.0.0.1` for `10.0.0.12`, and any name (#208).
+fn resolves_to(getent: &str, expected: &str) -> bool {
+    let want = expected.parse::<std::net::IpAddr>().ok();
+    getent
+        .lines()
+        .filter_map(|l| l.split_whitespace().next())
+        .any(|addr| match (want, addr.parse::<std::net::IpAddr>()) {
+            (Some(w), Ok(a)) => w == a,
+            _ => addr == expected,
+        })
+}
+
 // ─── Output Formatters ──────────────────────────────────────
 
 /// Format test results as JUnit XML.
@@ -388,14 +456,25 @@ pub fn format_junit(results: &[TestResult]) -> String {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites>\n");
 
     for result in results {
-        let tests = result.assertions.len();
+        let errors = usize::from(result.error.is_some());
+        let tests = result.assertions.len() + errors;
         let failures = result.assertions.iter().filter(|a| !a.passed).count();
         let time_secs = result.total_ms as f64 / 1000.0;
 
         xml.push_str(&format!(
-            "  <testsuite name=\"{}\" tests=\"{tests}\" failures=\"{failures}\" time=\"{time_secs:.3}\">\n",
+            "  <testsuite name=\"{}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"{errors}\" time=\"{time_secs:.3}\">\n",
             escape_xml(&result.file)
         ));
+        // A file that did not parse, validate, deploy or destroy: it was
+        // missing from the report, which then read as all green (#208).
+        if let Some(err) = &result.error {
+            xml.push_str(&format!(
+                "    <testcase name=\"{}\">\n      <error message=\"{}\">{}</error>\n    </testcase>\n",
+                escape_xml(&result.file),
+                escape_xml(err),
+                escape_xml(err)
+            ));
+        }
 
         for a in &result.assertions {
             let a_time = a.duration_ms as f64 / 1000.0;
@@ -429,25 +508,33 @@ pub fn format_junit(results: &[TestResult]) -> String {
 /// Format test results as TAP (Test Anything Protocol).
 pub fn format_tap(results: &[TestResult]) -> String {
     let mut out = String::from("TAP version 13\n");
-    let total: usize = results.iter().map(|r| r.assertions.len()).sum();
+    let total: usize = results
+        .iter()
+        .map(|r| r.assertions.len() + usize::from(r.error.is_some()))
+        .sum();
     out.push_str(&format!("1..{total}\n"));
 
     let mut n = 0;
     for result in results {
+        if let Some(err) = &result.error {
+            n += 1;
+            out.push_str(&format!("not ok {n} - {}\n", tap_text(&result.file)));
+            tap_yaml(&mut out, err, "error");
+        }
         for a in &result.assertions {
             n += 1;
             let prefix = if a.passed { "ok" } else { "not ok" };
             out.push_str(&format!(
                 "{prefix} {n} - {} ({}ms)\n",
-                a.description, a.duration_ms
+                tap_text(&a.description),
+                a.duration_ms
             ));
-            if !a.passed
-                && let Some(detail) = &a.detail
-            {
-                out.push_str("  ---\n");
-                out.push_str(&format!("  message: \"{detail}\"\n"));
-                out.push_str("  severity: fail\n");
-                out.push_str("  ...\n");
+            if !a.passed {
+                tap_yaml(
+                    &mut out,
+                    a.detail.as_deref().unwrap_or("assertion failed"),
+                    "fail",
+                );
             }
         }
     }
@@ -455,8 +542,34 @@ pub fn format_tap(results: &[TestResult]) -> String {
     out
 }
 
+/// A TAP description: a `#` starts a directive (`# SKIP`), so it is
+/// escaped, and a newline would end the line.
+fn tap_text(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('#', "\\#")
+        .replace('\n', " ")
+}
+
+/// A TAP YAML diagnostic block. The message is a literal block scalar:
+/// written in quotes, a newline, `"` or `\\` in it (raw ping stderr ends
+/// in one) broke the YAML (#208).
+fn tap_yaml(out: &mut String, message: &str, severity: &str) {
+    out.push_str("  ---\n  message: |-\n");
+    for line in message.trim_end().lines() {
+        out.push_str("    ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push_str(&format!("  severity: {severity}\n  ...\n"));
+}
+
 fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
+    // XML 1.0 has no escape for most control characters (a colour code
+    // in a command's stderr): they are dropped
+    s.chars()
+        .filter(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
@@ -465,6 +578,87 @@ fn escape_xml(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `getent hosts` output, exactly: `10.0.0.1` is not `10.0.0.12`, and
+    /// a name is not an address (#208).
+    #[test]
+    fn dns_resolves_compares_the_address_column() {
+        let out = "10.0.0.12       b b-eth0\n";
+        assert!(!resolves_to(out, "10.0.0.1"));
+        assert!(resolves_to(out, "10.0.0.12"));
+        assert!(!resolves_to(out, "b"));
+        assert!(resolves_to("fd00::1   b\n", "fd00:0::1"));
+    }
+
+    /// A ping that could not run is not a `no-reach` pass (#208); one that
+    /// got no answer, or found no route, is.
+    #[test]
+    fn a_ping_that_did_not_run_is_told_apart() {
+        assert!(ping_did_not_run(
+            127,
+            "exec: \"ping\": executable file not found"
+        ));
+        assert!(ping_did_not_run(126, ""));
+        assert!(ping_did_not_run(2, "ping: socket: Operation not permitted"));
+        assert!(!ping_did_not_run(1, ""));
+        assert!(!ping_did_not_run(
+            2,
+            "ping: connect: Network is unreachable"
+        ));
+    }
+
+    /// A file that did not deploy is an error in both reports, and a
+    /// multi-line detail with quotes stays valid TAP YAML (#208).
+    #[test]
+    fn errors_and_awkward_details_reach_the_reports() {
+        let results = vec![
+            TestResult::errored("bad.nll", "deploy failed: <boom> \"x\"", 5),
+            TestResult {
+                file: "good #1.nll".into(),
+                assertions: vec![AssertionResult {
+                    description: "reach a b".into(),
+                    passed: false,
+                    detail: Some(
+                        "ping: connect: Network is unreachable\n\"quoted\" \\ back\n".into(),
+                    ),
+                    duration_ms: 3,
+                }],
+                deploy_ms: 1,
+                total_ms: 9,
+                passed: false,
+                error: None,
+            },
+        ];
+        let tap = format_tap(&results);
+        assert!(tap.contains("1..2\n"), "{tap}");
+        assert!(tap.contains("not ok 1 - bad.nll\n"), "{tap}");
+        assert!(
+            tap.contains("  message: |-\n    ping: connect: Network is unreachable\n    \"quoted\" \\ back\n  severity: fail\n"),
+            "{tap}"
+        );
+        assert!(tap.contains("  severity: error\n"), "{tap}");
+        let xml = format_junit(&results);
+        assert!(
+            xml.contains("tests=\"1\" failures=\"0\" errors=\"1\""),
+            "{xml}"
+        );
+        assert!(
+            xml.contains("<error message=\"deploy failed: &lt;boom&gt; &quot;x&quot;\">"),
+            "{xml}"
+        );
+        assert!(
+            !format_junit(&[TestResult {
+                assertions: vec![AssertionResult {
+                    description: "x".into(),
+                    passed: false,
+                    detail: Some("\u{1b}[31mred".into()),
+                    duration_ms: 0,
+                }],
+                ..TestResult::errored("f", "e", 0)
+            }])
+            .contains('\u{1b}')
+        );
+    }
 
     #[test]
     fn test_format_junit_pass() {
@@ -479,6 +673,7 @@ mod tests {
             deploy_ms: 100,
             total_ms: 700,
             passed: true,
+            error: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("<testsuite name=\"test.nll\" tests=\"1\" failures=\"0\""));
@@ -499,6 +694,7 @@ mod tests {
             deploy_ms: 100,
             total_ms: 400,
             passed: false,
+            error: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("failures=\"1\""));
@@ -526,12 +722,13 @@ mod tests {
             deploy_ms: 100,
             total_ms: 900,
             passed: false,
+            error: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.starts_with("TAP version 13\n1..2\n"));
         assert!(tap.contains("ok 1 - reach a b"));
         assert!(tap.contains("not ok 2 - no-reach a c"));
-        assert!(tap.contains("message: \"host reachable\""));
+        assert!(tap.contains("  message: |-\n    host reachable\n"), "{tap}");
     }
 
     #[test]
@@ -677,6 +874,7 @@ validate {
             deploy_ms: 50,
             total_ms: 50,
             passed: true,
+            error: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.contains("1..0"));

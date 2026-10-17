@@ -195,8 +195,9 @@ pub enum Commands {
     /// Run a `benchmark` block from a deployed lab's topology.
     ///
     /// Collects the metrics the block asks for (`ping` latency/loss,
-    /// `iperf3` throughput/retransmits) and evaluates each `assert`
-    /// against them. Omit the name to list the lab's benchmarks.
+    /// `iperf3` throughput, and with `udp` jitter/loss) and evaluates
+    /// each `assert` against them. A test that measured nothing says why.
+    /// Omit the name to list the lab's benchmarks.
     ///
     /// JSON OUTPUT (with `--json`): the full `BenchmarkResult` (per test:
     /// the metric map, every assertion with its actual value, and the

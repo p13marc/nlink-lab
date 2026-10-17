@@ -2224,6 +2224,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
                         duration,
                         streams,
                         udp,
+                        rate,
                         assertions,
                     } => ast::BenchmarkTestDef::Iperf3 {
                         from: i(from, vars),
@@ -2231,6 +2232,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
                         duration: iv(duration, vars),
                         streams: *streams,
                         udp: *udp,
+                        rate: iv(rate, vars),
                         assertions: assertions.clone(),
                     },
                     ast::BenchmarkTestDef::Ping {
@@ -4145,6 +4147,7 @@ fn lower_benchmark(b: &ast::BenchmarkDef) -> Result<types::Benchmark> {
                 duration,
                 streams,
                 udp,
+                rate,
                 assertions,
             } => Ok(types::BenchmarkTest::Iperf3 {
                 from: from.clone(),
@@ -4152,6 +4155,7 @@ fn lower_benchmark(b: &ast::BenchmarkDef) -> Result<types::Benchmark> {
                 duration: duration.as_ref().map(ast::Val::to_text).transpose()?,
                 streams: *streams,
                 udp: *udp,
+                rate: rate.as_ref().map(ast::Val::to_text).transpose()?,
                 assertions: lower_benchmark_assertions(assertions)?,
             }),
             ast::BenchmarkTestDef::Ping {

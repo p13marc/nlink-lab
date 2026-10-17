@@ -61,6 +61,7 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     for file in &files {
         eprint!("Testing {} ... ", file.display());
+        let started = std::time::Instant::now();
         match nlink_lab::test_runner::run_test_with_params(file, &cli_params).await {
             Ok(result) => {
                 let pass_count = result.assertions.iter().filter(|a| a.passed).count();
@@ -92,11 +93,21 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                     }
                     any_failed = true;
                 }
+                if let Some(err) = &result.error {
+                    eprintln!("  {} {err}", red("ERROR"));
+                }
                 all_results.push(result);
             }
             Err(e) => {
                 eprintln!("{}: {e}", red("ERROR"));
                 any_failed = true;
+                // in the reports too: a file that did not deploy was
+                // missing from them, which then read as green (#208)
+                all_results.push(nlink_lab::test_runner::TestResult::errored(
+                    file.display().to_string(),
+                    &e,
+                    started.elapsed().as_millis() as u64,
+                ));
                 if fail_fast {
                     break;
                 }

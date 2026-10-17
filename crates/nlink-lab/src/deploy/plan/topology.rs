@@ -16,14 +16,20 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
     let mut ops = Vec::new();
 
     // ── namespaces / containers ──
-    for (node_name, node) in &topology.nodes {
+    // In `depends-on` order: a container starts its `cmd` when it is
+    // created, and they were created in name order, `app` before the `db`
+    // it depends on (#217). (The `run`s and healthchecks are ordered too,
+    // in the Processes stage.)
+    for node_name in super::process::topo_sort_nodes(&topology.nodes) {
+        let node = &topology.nodes[&node_name];
+        let node_name = &node_name;
         if let Some(image) = &node.image {
             ops.push(Op::CreateContainer {
                 node: node_name.clone(),
                 name: format!("{}-{}", topology.lab.prefix(), node_name),
                 image: image.clone(),
                 pull: node.pull.clone(),
-                opts: Box::new(build_create_opts(node, dns_extra_hosts)),
+                opts: Box::new(build_create_opts(node_name, node, dns_extra_hosts)),
             });
         } else {
             ops.push(Op::CreateNamespace {

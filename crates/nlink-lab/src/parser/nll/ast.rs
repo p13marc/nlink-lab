@@ -298,6 +298,7 @@ pub struct NodeDef {
     pub healthcheck: Option<String>,
     pub healthcheck_interval: Option<Val<Duration>>,
     pub healthcheck_timeout: Option<Val<Duration>>,
+    pub healthcheck_retries: Option<u32>,
     pub startup_delay: Option<Val<Duration>>,
     pub env_file: Option<String>,
     pub configs: Vec<(String, String)>,

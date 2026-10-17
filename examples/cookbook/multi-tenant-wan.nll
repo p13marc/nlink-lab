@@ -98,8 +98,10 @@ link hub-a:wan0 -- hub-b:wan0 { 10.0.0.1/30 -- 10.0.0.2/30 }
 impair hub-a:wan0 delay 30ms jitter 8ms loss 0.3%
 
 # Smoke tests: each customer host should reach its peer at the
-# other site, BUT not the other customer's host.
-validate {
+# other site, BUT not the other customer's host. A `reach` is one
+# ping: when the WAN's loss eats the first WireGuard handshake, it is
+# only sent again 5s later, so failing assertions are retried.
+validate retries 5 interval 2s {
   reach red-a red-b  # customer red end-to-end
   reach blue-a blue-b  # customer blue end-to-end
   no-reach red-a blue-a  # cross-VRF same-site isolated

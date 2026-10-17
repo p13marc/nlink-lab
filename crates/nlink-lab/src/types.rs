@@ -602,9 +602,14 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub healthcheck_interval: Option<String>,
 
-    /// Health check timeout.
+    /// How long deploy waits for the health check to pass, in all
+    /// (default 30s).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub healthcheck_timeout: Option<String>,
+
+    /// Give up after this many failed probes, before the timeout (#217).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthcheck_retries: Option<u32>,
 
     /// Startup delay before proceeding with deployment.
     #[serde(default, skip_serializing_if = "Option::is_none")]

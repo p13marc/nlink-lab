@@ -2709,7 +2709,7 @@ fn wait_with_timeout(child: &mut std::process::Child, timeout: std::time::Durati
 /// it, losing everything it printed. After it exits, end-of-file is waited
 /// for only until the deadline: a background grandchild that keeps the
 /// pipe open used to make the read ignore the timeout.
-fn output_with_timeout(
+pub(crate) fn output_with_timeout(
     mut child: std::process::Child,
     timeout: std::time::Duration,
 ) -> Result<ExecOutput> {

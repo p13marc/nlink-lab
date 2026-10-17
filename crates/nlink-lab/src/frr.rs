@@ -432,15 +432,47 @@ pub fn build_spec(
     if let Some(ospf) = &cfg.ospf {
         daemons.push(Daemon::Ospfd);
         let router_id = ospf.router_id.clone().or_else(|| router_id_default.clone());
-        // An interface is passive when no FRR router sits on its segment.
+        // The peers that speak OSPF: a BGP-only router forms no adjacency.
+        let ospf_routers: BTreeSet<&String> = routers
+            .iter()
+            .filter(|r| {
+                topology
+                    .nodes
+                    .get(*r)
+                    .and_then(|n| topology.effective_frr(n))
+                    .is_some_and(|f| f.ospf.is_some())
+            })
+            .collect();
+        // An interface is passive when no OSPF router sits on its segment.
         let mut iface_lines = Vec::new();
         for i in &ifaces {
-            let has_router_peer = i.peers.iter().any(|p| routers.contains(p));
-            let passive = ospf.passive.iter().any(|p| p == &i.name) || !has_router_peer;
+            let peers = i.peers.iter().filter(|p| ospf_routers.contains(p)).count();
+            let passive = ospf.passive.iter().any(|p| p == &i.name) || peers == 0;
             if !passive {
-                expected_ospf_neighbors += i.peers.iter().filter(|p| routers.contains(*p)).count();
+                // Full adjacencies to wait for: the peer of a point-to-point
+                // segment; on a shared one at least the DR and the BDR, as
+                // two DROthers stay 2-Way. Every peer was counted, and the
+                // wait never finished on a bridge of three routers (#217).
+                expected_ospf_neighbors += if i.p2p { peers } else { peers.min(2) };
             }
             iface_lines.push((i.name.clone(), passive, i.p2p));
+        }
+        // The node's own interfaces too, after the link and network ends
+        // (whose order a deployed lab's config already has): only those
+        // were in the area, so a loopback was never advertised and routers
+        // that meet over a VLAN ran ospfd on nothing (#217). Loopbacks and
+        // dummies are passive; the others take part, their neighbours not
+        // predicted.
+        for (name, iface) in &node.interfaces {
+            if iface_lines.iter().any(|(n, _, _)| n == name)
+                || !iface.addresses.iter().any(|a| is_v4(a))
+            {
+                continue;
+            }
+            use crate::types::InterfaceKind::{Dummy, Loopback};
+            let stub = name == "lo" || matches!(iface.kind, Some(Dummy | Loopback));
+            let passive = stub || ospf.passive.iter().any(|p| p == name);
+            iface_lines.push((name.clone(), passive, false));
         }
         confs.insert(
             Daemon::Ospfd,
@@ -536,17 +568,41 @@ pub fn generate_bgpd_conf(
     for (addr, asn) in neighbors {
         s.push_str(&format!(" neighbor {addr} remote-as {asn}\n"));
     }
+    // One address family per IP family: an IPv6 network or neighbour
+    // went under `ipv4 unicast`, where FRR refuses the prefix and the
+    // session carries no IPv6 route (#217).
+    let v6_net = |n: &&String| n.contains(':');
+    let (nets6, nets4): (Vec<&String>, Vec<&String>) = bgp.networks.iter().partition(v6_net);
     s.push_str(" !\n address-family ipv4 unicast\n");
-    for n in &bgp.networks {
+    for n in &nets4 {
         s.push_str(&format!("  network {n}\n"));
     }
     for r in &bgp.redistribute {
         s.push_str(&format!("  redistribute {r}\n"));
     }
-    for (addr, _) in neighbors {
+    for (addr, _) in neighbors.iter().filter(|(a, _)| a.is_ipv4()) {
         s.push_str(&format!("  neighbor {addr} activate\n"));
     }
-    s.push_str(" exit-address-family\n!\nline vty\n");
+    s.push_str(" exit-address-family\n");
+    let neighbors6: Vec<&IpAddr> = neighbors
+        .iter()
+        .map(|(a, _)| a)
+        .filter(|a| a.is_ipv6())
+        .collect();
+    if !nets6.is_empty() || !neighbors6.is_empty() {
+        s.push_str(" !\n address-family ipv6 unicast\n");
+        for n in &nets6 {
+            s.push_str(&format!("  network {n}\n"));
+        }
+        for r in &bgp.redistribute {
+            s.push_str(&format!("  redistribute {r}\n"));
+        }
+        for addr in &neighbors6 {
+            s.push_str(&format!("  neighbor {addr} activate\n"));
+        }
+        s.push_str(" exit-address-family\n");
+    }
+    s.push_str("!\nline vty\n");
     s
 }
 
@@ -648,12 +704,85 @@ link r1:eth2 -- h1:eth0 { 10.1.0.1/24 -- 10.1.0.2/24 }
 interface eth0\n ip ospf area 0.0.0.0\n ip ospf network point-to-point\n!\n\
 interface eth1\n ip ospf area 0.0.0.0\n ip ospf network point-to-point\n!\n\
 interface eth2\n ip ospf area 0.0.0.0\n ip ospf network point-to-point\n ip ospf passive\n!\n\
+interface lo\n ip ospf area 0.0.0.0\n ip ospf passive\n!\n\
 router ospf\n ospf router-id 1.1.1.1\n!\nline vty\n"
         );
         // r3 has no loopback → lowest IPv4 is the router-id
         let spec3 = build_spec(&t, "r3", &t.nodes["r3"], &cfg).unwrap();
         assert!(spec3.confs[&Daemon::Ospfd].contains("ospf router-id 10.0.23.2"));
         assert!(spec.integrated.contains("! ---- ospfd"));
+    }
+
+    #[test]
+    fn ospf_covers_node_interfaces_and_waits_only_for_full_adjacencies() {
+        // #217: a VLAN and a loopback never joined the area, and the wait
+        // counted a BGP-only router and every DROther on a bridge
+        let t = topo(
+            r#"lab "s" { routing frr { ospf } }
+profile router { forward ipv4 }
+node r1 : router {
+  lo 1.1.1.1/32
+  vlan eth1.20 { parent eth1 id 20 address 10.20.0.1/24 }
+}
+node r2 : router
+node r3 : router
+node r4 : router
+node r5 : router { frr { bgp { as 65005 } } }
+node r6 : router { vlan eth0.20 { parent eth0 id 20 address 10.20.0.2/24 } }
+network core {
+  members [r1:eth0, r2:eth0, r3:eth0, r4:eth0, r5:eth0]
+  port r1:eth0 { 10.0.0.1/24 }
+  port r2:eth0 { 10.0.0.2/24 }
+  port r3:eth0 { 10.0.0.3/24 }
+  port r4:eth0 { 10.0.0.4/24 }
+  port r5:eth0 { 10.0.0.5/24 }
+}
+link r1:eth1 -- r6:eth0
+"#,
+        );
+        let spec = |n: &str| {
+            let node = &t.nodes[n];
+            build_spec(&t, n, node, &t.effective_frr(node).unwrap()).unwrap()
+        };
+        let r1 = spec("r1");
+        let ospfd = &r1.confs[&Daemon::Ospfd];
+        assert!(
+            ospfd.contains("interface eth1.20\n ip ospf area 0.0.0.0\n!\n"),
+            "{ospfd}"
+        );
+        assert!(
+            ospfd.contains("interface lo\n ip ospf area 0.0.0.0\n ip ospf passive\n!\n"),
+            "{ospfd}"
+        );
+        // three OSPF peers on the bridge (r5 speaks BGP only): the DR and
+        // the BDR reach Full; the eth1 link carries no OSPF peer address
+        assert_eq!(r1.expected_ospf_neighbors, 2, "{ospfd}");
+        let r6 = spec("r6");
+        assert!(r6.confs[&Daemon::Ospfd].contains("interface eth0.20\n"));
+    }
+
+    #[test]
+    fn bgp_ipv6_input_goes_to_the_ipv6_address_family() {
+        let bgp = BgpConfig {
+            asn: 65001,
+            networks: vec!["10.10.0.0/24".into(), "2001:db8:1::/48".into()],
+            ..Default::default()
+        };
+        let neighbors = [
+            ("192.0.2.2".parse().unwrap(), 65002),
+            ("2001:db8::2".parse().unwrap(), 65003),
+        ];
+        let conf = generate_bgpd_conf("r1", &bgp, &neighbors, None);
+        let (v4, v6) = conf.split_once("address-family ipv6 unicast").unwrap();
+        let v4 = v4.split_once("address-family ipv4 unicast").unwrap().1;
+        assert!(v4.contains("  network 10.10.0.0/24\n"), "{conf}");
+        assert!(v4.contains("  neighbor 192.0.2.2 activate\n"), "{conf}");
+        assert!(!v4.contains("2001:db8"), "{conf}");
+        assert!(v6.contains("  network 2001:db8:1::/48\n"), "{conf}");
+        assert!(v6.contains("  neighbor 2001:db8::2 activate\n"), "{conf}");
+        // IPv4 only: no IPv6 family
+        let v4_only = generate_bgpd_conf("r1", &BgpConfig::default(), &neighbors[..1], None);
+        assert!(!v4_only.contains("ipv6"), "{v4_only}");
     }
 
     #[test]

@@ -1554,7 +1554,7 @@ property       = "forward" ("ipv4" | "ipv6")
 container_props = "cpu" value | "memory" value
                | "privileged" | "cap-add" ident_list | "cap-drop" ident_list
                | "entrypoint" STRING | "hostname" STRING | "workdir" STRING
-               | "labels" string_list | "pull" IDENT
+               | "labels" string_list | "pull" ("always" | "missing" | "never")
                | "exec" STRING
                | "healthcheck" STRING healthcheck_block?
                | "startup-delay" DURATION

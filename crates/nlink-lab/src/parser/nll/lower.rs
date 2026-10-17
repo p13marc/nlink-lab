@@ -2376,6 +2376,7 @@ fn interpolate_node(n: &ast::NodeDef, vars: &BTreeMap<String, String>) -> ast::N
         healthcheck: io(&n.healthcheck, vars),
         healthcheck_interval: iv(&n.healthcheck_interval, vars),
         healthcheck_timeout: iv(&n.healthcheck_timeout, vars),
+        healthcheck_retries: n.healthcheck_retries,
         startup_delay: iv(&n.startup_delay, vars),
         env_file: io(&n.env_file, vars),
         configs: n
@@ -3177,6 +3178,7 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
             .as_ref()
             .map(ast::Val::to_text)
             .transpose()?,
+        healthcheck_retries: node.healthcheck_retries,
         startup_delay: node
             .startup_delay
             .as_ref()
@@ -3191,14 +3193,17 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
 
     // Container env/volumes
     if !node.env.is_empty() {
-        let map: BTreeMap<String, String> = node
-            .env
-            .iter()
-            .filter_map(|s| {
-                s.split_once('=')
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-            })
-            .collect();
+        let mut map = BTreeMap::new();
+        for entry in &node.env {
+            // an entry without `=` was dropped silently (#217)
+            let Some((k, v)) = entry.split_once('=').filter(|(k, _)| !k.is_empty()) else {
+                return Err(crate::Error::NllParse(format!(
+                    "node '{}': env entry '{entry}' is not KEY=VALUE",
+                    node.name
+                )));
+            };
+            map.insert(k.to_string(), v.to_string());
+        }
         n.env = Some(map);
     }
     if !node.volumes.is_empty() {
@@ -6168,6 +6173,33 @@ node app image "myapp" {
         );
         assert_eq!(topo.nodes["app"].depends_on, vec!["db"]);
         assert!(topo.nodes["db"].depends_on.is_empty());
+    }
+
+    #[test]
+    fn container_env_and_healthcheck_keys_are_not_dropped() {
+        // #217: `retries` and unknown healthcheck keys were skipped, and an
+        // env entry without `=` vanished
+        let topo = parse_and_lower(
+            r#"lab "t"
+node db image "postgres" { healthcheck "pg_isready" { interval 5s timeout 2s retries 5 } }"#,
+        );
+        let db = &topo.nodes["db"];
+        assert_eq!(db.healthcheck_retries, Some(5));
+        assert_eq!(db.healthcheck_timeout.as_deref(), Some("2s"));
+        let err = crate::parser::parse(
+            r#"lab "t"
+node db image "postgres" { healthcheck "pg_isready" { tries 5 } }"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("interval, timeout or retries"), "{err}");
+        let err = crate::parser::parse(
+            r#"lab "t"
+node db image "postgres" { env ["A=1", "FOO"] }"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("env entry 'FOO' is not KEY=VALUE"), "{err}");
     }
 
     #[test]

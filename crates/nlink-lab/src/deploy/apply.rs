@@ -301,6 +301,13 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .as_ref()
                 .ok_or_else(|| Error::deploy_failed("no container runtime available"))?;
             match pull.as_deref() {
+                // the runtime's `run` pulls a missing image itself, so
+                // `never` pulled anyway (#217)
+                Some("never") if !rt.has_image(image) => {
+                    return Err(Error::deploy_failed(format!(
+                        "node '{node}': image '{image}' is not present locally and pull is `never`"
+                    )));
+                }
                 Some("never") => {}
                 Some("always") => rt.pull_image(image)?,
                 _ => rt.ensure_image(image)?,
@@ -646,6 +653,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             cmd,
             interval,
             timeout,
+            retries,
         } => {
             let parse = |what: &str,
                          v: &Option<String>,
@@ -661,14 +669,57 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let every = parse("healthcheck-interval", interval, 1)?;
             let limit = parse("healthcheck-timeout", timeout, 30)?;
             let handle = env.handle(node)?.clone();
+            // On a container node the probe runs in the container, with its
+            // binaries and files: through the node's handle it ran on the
+            // host, in the container's network namespace only (#217).
+            let container = handle.container_id().map(str::to_string);
             tracing::info!("waiting for healthcheck on '{node}': {cmd}");
             let deadline = std::time::Instant::now() + limit;
+            let mut failed = 0u32;
             loop {
-                let mut probe = std::process::Command::new("sh");
-                probe.args(["-c", cmd]);
-                if handle.spawn_output(probe).is_ok_and(|o| o.status.success()) {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                let child = match &container {
+                    Some(id) => {
+                        let rt = env.runtime.as_ref().ok_or_else(|| {
+                            Error::deploy_failed("no container runtime available")
+                        })?;
+                        let mut probe = std::process::Command::new(rt.binary());
+                        probe.args(["exec", id, "sh", "-c", cmd]);
+                        probe
+                            .stdout(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::piped())
+                            .spawn()
+                            .map_err(|e| {
+                                Error::deploy_failed(format!("healthcheck on '{node}': {e}"))
+                            })
+                    }
+                    None => {
+                        let mut probe = std::process::Command::new("sh");
+                        probe.args(["-c", cmd]);
+                        probe
+                            .stdout(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::piped());
+                        handle
+                            .spawn(probe)
+                            .map_err(|e| Error::nlink(format!("healthcheck on '{node}'"), e))
+                    }
+                }?;
+                // a probe that hangs is killed at the deadline: it held the
+                // deploy past it (#217)
+                let passed = crate::running::output_with_timeout(
+                    child,
+                    remaining.max(std::time::Duration::from_millis(100)),
+                )
+                .is_ok_and(|o| o.exit_code == 0);
+                if passed {
                     tracing::info!("healthcheck passed for '{node}'");
                     break;
+                }
+                failed += 1;
+                if retries.is_some_and(|r| failed >= r) {
+                    return Err(Error::deploy_failed(format!(
+                        "healthcheck for node '{node}' failed {failed} time(s): {cmd}"
+                    )));
                 }
                 if std::time::Instant::now() >= deadline {
                     return Err(Error::deploy_failed(format!(

@@ -327,6 +327,7 @@ pub enum Op {
         cmd: String,
         interval: Option<String>,
         timeout: Option<String>,
+        retries: Option<u32>,
     },
     WifiDaemon {
         node: String,

@@ -147,14 +147,14 @@ pub struct ImportReport {
 /// Build a `.nlz` archive from a deployed lab or an NLL file.
 pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOptions) -> Result<()> {
     // Resolve the entry-point NLL and load the rendered Topology.
-    let (nll_source, lab_name, deploy_state, state_json) = match &source {
+    let (nll_source, lab_name, deploy_state, state_json, topology) = match &source {
         ArchiveSource::Lab { name } => {
-            let (state, _topo) = crate::state::load(name)?;
+            let (state, topo) = crate::state::load(name)?;
             // For deployed labs we expect the topology.toml in state
             // dir is the post-render snapshot. The original NLL isn't
             // tracked today (state stores rendered TOML) — emit the
             // rendered NLL via the renderer as the topology source.
-            let rendered_nll = crate::render::try_render(&_topo)?;
+            let rendered_nll = crate::render::try_render(&topo)?;
             (
                 rendered_nll,
                 state.name.clone(),
@@ -164,6 +164,7 @@ pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOption
                 } else {
                     None
                 },
+                topo,
             )
         }
         ArchiveSource::Nll { path } => {
@@ -174,19 +175,19 @@ pub fn export_archive(source: ArchiveSource, out_path: &Path, opts: ExportOption
             } else {
                 crate::parser::parse_file_with_params(path, &opts.params)?
             };
-            (nll, topo.lab.name.clone(), DeployState::Definition, None)
+            (
+                nll,
+                topo.lab.name.clone(),
+                DeployState::Definition,
+                None,
+                topo,
+            )
         }
     };
-
-    // Re-parse the NLL source to get a Topology for rendering.
-    let topology: Topology = if opts.params.is_empty() {
-        crate::parser::parse(&nll_source)?
-    } else {
-        // Param-aware re-parse only matters for NLL-source export.
-        // For deployed labs the rendered NLL has params already
-        // substituted in, so we re-parse plain.
-        crate::parser::parse(&nll_source)?
-    };
+    // The rendered snapshot is the topology just parsed, with the params
+    // and the file's own directory (for its imports). Re-parsing the
+    // source text without either failed on a required `param` even when
+    // `--set` gave it.
 
     let rendered_toml = if opts.no_rendered {
         None
@@ -283,6 +284,7 @@ pub fn import_archive(
 ) -> Result<ImportReport> {
     let entries = read_archive_entries(archive)?;
     let manifest = parse_manifest(&entries)?;
+    check_entry_names(&entries, &manifest)?;
 
     // Verify checksums for every listed file.
     for (name, expected) in &manifest.checksums {
@@ -299,7 +301,9 @@ pub fn import_archive(
         }
     }
 
-    if manifest.format_version > ARCHIVE_FORMAT_VERSION {
+    // A newer format may carry NLL this build cannot parse; its rendered
+    // topology is what `--no-reparse` is for.
+    if manifest.format_version > ARCHIVE_FORMAT_VERSION && !skip_reparse {
         return Err(Error::invalid_topology(format!(
             "archive format version {} is newer than this nlink-lab supports ({}). \
              Upgrade nlink-lab or pass --no-reparse to use the rendered topology directly.",
@@ -309,7 +313,15 @@ pub fn import_archive(
 
     let dir = match extract_to {
         Some(p) => p.to_path_buf(),
-        None => PathBuf::from(&manifest.lab_name),
+        // The default directory is named after the lab, so the name must
+        // not lead anywhere else (`../x`, `/etc`).
+        None if is_plain_name(&manifest.lab_name) => PathBuf::from(&manifest.lab_name),
+        None => {
+            return Err(Error::invalid_topology(format!(
+                "archive's lab name {:?} is not a plain name; extract with --dir",
+                manifest.lab_name
+            )));
+        }
     };
     fs::create_dir_all(&dir)
         .map_err(|e| Error::invalid_topology(format!("create {}: {e}", dir.display())))?;
@@ -327,10 +339,16 @@ pub fn import_archive(
         if let Some(bytes) = entries.get("rendered.toml") {
             let s = std::str::from_utf8(bytes)
                 .map_err(|e| Error::invalid_topology(format!("rendered.toml not utf-8: {e}")))?;
-            Some(
-                toml::from_str::<Topology>(s)
-                    .map_err(|e| Error::invalid_topology(format!("rendered.toml: {e}")))?,
-            )
+            let topo = toml::from_str::<Topology>(s)
+                .map_err(|e| Error::invalid_topology(format!("rendered.toml: {e}")))?;
+            let v = topo.validate();
+            if v.has_errors() {
+                return Err(Error::invalid_topology(format!(
+                    "imported topology fails validation: {} error(s)",
+                    v.errors().count(),
+                )));
+            }
+            Some(topo)
         } else {
             return Err(Error::invalid_topology(
                 "--no-reparse requested but archive has no rendered.toml",
@@ -439,6 +457,36 @@ fn read_archive_entries(archive: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
         entries.insert(path, buf);
     }
     Ok(entries)
+}
+
+/// Refuse an archive with an entry `export` would not write: anything but
+/// `manifest.json` and the files its checksums cover, and any name that is
+/// not a plain file name. Each entry is written to `<dir>/<name>`, so a
+/// name such as `../x` or `/etc/x` would land outside the extract
+/// directory, as root under `sudo import`.
+fn check_entry_names(entries: &BTreeMap<String, Vec<u8>>, manifest: &Manifest) -> Result<()> {
+    for name in entries.keys().chain(manifest.checksums.keys()) {
+        if !is_plain_name(name) {
+            return Err(Error::invalid_topology(format!(
+                "archive entry {name:?} is not a plain file name"
+            )));
+        }
+    }
+    if let Some(extra) = entries
+        .keys()
+        .find(|n| *n != "manifest.json" && !manifest.checksums.contains_key(*n))
+    {
+        return Err(Error::invalid_topology(format!(
+            "archive entry {extra:?} is not in its manifest"
+        )));
+    }
+    Ok(())
+}
+
+/// One normal path component: no directory part, no `..`, not absolute.
+fn is_plain_name(name: &str) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(parts.next(), Some(std::path::Component::Normal(_))) && parts.next().is_none()
 }
 
 fn parse_manifest(entries: &BTreeMap<String, Vec<u8>>) -> Result<Manifest> {
@@ -617,6 +665,148 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
             err.contains("format version"),
             "expected version-error message, got: {err}"
         );
+    }
+
+    /// An exported archive's entries, rewritten with `extra` appended:
+    /// each `(name, bytes)` goes in with its name bytes set raw, as a
+    /// crafted archive would, since `tar::Builder` refuses `..` itself.
+    fn rewrite_archive(
+        archive: &Path,
+        manifest: impl FnOnce(&mut Manifest),
+        extra: &[(&str, &[u8])],
+    ) {
+        let mut entries = read_archive_entries(archive).unwrap();
+        let mut m: Manifest = serde_json::from_slice(&entries["manifest.json"]).unwrap();
+        manifest(&mut m);
+        entries.insert(
+            "manifest.json".into(),
+            serde_json::to_vec_pretty(&m).unwrap(),
+        );
+        let f = File::create(archive).unwrap();
+        let gz = GzEncoder::new(f, Compression::default());
+        let mut tarball = tar::Builder::new(gz);
+        for (k, v) in &entries {
+            write_tar_entry(&mut tarball, k, v).unwrap();
+        }
+        for (name, bytes) in extra {
+            let mut header = tar::Header::new_gnu();
+            header.as_gnu_mut().unwrap().name[..name.len()].copy_from_slice(name.as_bytes());
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_entry_type(tar::EntryType::Regular);
+            header.set_cksum();
+            tarball.append(&header, *bytes).unwrap();
+        }
+        tarball.into_inner().unwrap().finish().unwrap();
+    }
+
+    fn exported(nll: &str) -> (tempfile::NamedTempFile, tempfile::NamedTempFile) {
+        let src = write_temp_nll(nll);
+        let archive = tempfile::NamedTempFile::new().unwrap();
+        export_archive(
+            ArchiveSource::Nll {
+                path: src.path().into(),
+            },
+            archive.path(),
+            ExportOptions::default(),
+        )
+        .unwrap();
+        (src, archive)
+    }
+
+    /// An entry whose name leads out of the extract directory is refused,
+    /// and nothing is written there or anywhere else.
+    #[test]
+    fn entries_outside_the_extract_directory_are_refused() {
+        for name in ["../escaped.txt", "/tmp/escaped-abs.txt", "dir/nested.txt"] {
+            let (_src, archive) = exported(SIMPLE_NLL);
+            rewrite_archive(archive.path(), |_| {}, &[(name, b"pwned\n")]);
+            let root = tempfile::tempdir().unwrap();
+            let into = root.path().join("x");
+            let err = import_archive(archive.path(), Some(&into), false)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("not a plain file name"), "{name}: {err}");
+            assert!(!root.path().join("escaped.txt").exists(), "{name}");
+            assert!(!into.exists(), "{name}: extracted anyway");
+        }
+    }
+
+    /// Every file `export` writes is in the manifest; anything else is not
+    /// from `export`.
+    #[test]
+    fn an_entry_not_in_the_manifest_is_refused() {
+        let (_src, archive) = exported(SIMPLE_NLL);
+        rewrite_archive(archive.path(), |_| {}, &[("run.sh", b"#!/bin/sh\n")]);
+        let dir = tempfile::tempdir().unwrap();
+        let err = import_archive(archive.path(), Some(dir.path()), false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("\"run.sh\" is not in its manifest"), "{err}");
+    }
+
+    /// The default directory is named after the lab, so a lab name with a
+    /// path in it needs an explicit `--dir`.
+    #[test]
+    fn a_lab_name_that_is_a_path_needs_an_explicit_dir() {
+        let (_src, archive) = exported(SIMPLE_NLL);
+        rewrite_archive(archive.path(), |m| m.lab_name = "../outside".into(), &[]);
+        let err = import_archive(archive.path(), None, false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("not a plain name"), "{err}");
+        let dir = tempfile::tempdir().unwrap();
+        assert!(import_archive(archive.path(), Some(dir.path()), false).is_ok());
+    }
+
+    /// `--no-reparse` is what the newer-format error points to: it loads
+    /// the rendered topology, validated, instead of refusing.
+    #[test]
+    fn a_newer_format_imports_with_no_reparse() {
+        let (_src, archive) = exported(SIMPLE_NLL);
+        rewrite_archive(archive.path(), |m| m.format_version = 999, &[]);
+        let dir = tempfile::tempdir().unwrap();
+        assert!(import_archive(archive.path(), Some(dir.path()), false).is_err());
+        let report = import_archive(archive.path(), Some(dir.path()), true).unwrap();
+        assert_eq!(report.topology.unwrap().nodes.len(), 2);
+    }
+
+    /// A required `param` given with `--set` reaches both the archive's
+    /// rendered topology and the topology `import` hands back for deploy.
+    /// Export re-parsed the source without its params, and failed.
+    #[test]
+    fn params_survive_export_and_import() {
+        let src = write_temp_nll(
+            "param wan_delay\nlab \"p\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {\n  10.0.0.1/24 -- 10.0.0.2/24\n  delay ${wan_delay}\n}\n",
+        );
+        let archive = tempfile::NamedTempFile::new().unwrap();
+        export_archive(
+            ArchiveSource::Nll {
+                path: src.path().into(),
+            },
+            archive.path(),
+            ExportOptions {
+                params: vec![("wan_delay".into(), "37ms".into())],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        for skip_reparse in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let topo = import_archive(archive.path(), Some(dir.path()), skip_reparse)
+                .unwrap()
+                .topology
+                .unwrap();
+            let delays: Vec<_> = topo
+                .impairments
+                .values()
+                .filter_map(|i| i.delay.clone())
+                .collect();
+            assert!(
+                !delays.is_empty() && delays.iter().all(|d| d == "37ms"),
+                "no_reparse={skip_reparse}: {delays:?}"
+            );
+        }
     }
 
     #[test]

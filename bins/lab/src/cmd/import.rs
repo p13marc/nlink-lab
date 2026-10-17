@@ -46,11 +46,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         return Ok(());
     }
-    // Deploy the imported topology. We re-read the extracted
-    // topology.nll so the import path matches what `deploy`
-    // would do for a regular file.
-    let topology_path = report.extracted_to.join("topology.nll");
-    let topo = nlink_lab::parser::parse_file(&topology_path)?;
+    // Deploy the topology `import_archive` validated: parsed with the
+    // archive's params, or its rendered topology under `--no-reparse`.
+    // Re-reading topology.nll here dropped both.
+    let topo = report.topology.ok_or_else(|| {
+        nlink_lab::Error::invalid_topology("archive yielded no topology to deploy")
+    })?;
     let lab = topo.deploy().await?;
     if !ctx.quiet {
         eprintln!("Deployed lab '{}'", lab.name());

@@ -33,7 +33,7 @@ under a second — see
 git clone https://git.marcpardo.eu/marcpardo/nlink-lab && cd nlink-lab
 cargo build --release
 sudo ./target/release/nlink-lab deploy examples/simple.nll
-sudo ./target/release/nlink-lab exec simple host -- ping -c 3 router
+sudo ./target/release/nlink-lab exec simple host -- ping -c 3 10.0.0.1     # router; names resolve with `dns hosts`
 sudo ./target/release/nlink-lab destroy simple
 ```
 

@@ -14,9 +14,11 @@ nlink-lab inspect [OPTIONS] <LAB-OR-PATH>
 Two modes, auto-detected:
 
 - **Lab mode**: argument is a deployed lab name. Output mirrors
-  `status` but with topology details — interfaces, addresses,
-  routes, impairments, networks. Reads from
-  `~/.local/state/nlink-lab/labs/<name>/`.
+  `status` but with topology details: nodes, links and their
+  addresses, impairments as they are (what `impair` set at runtime
+  included, marked), partitions, processes and named firewall
+  counters. `--json` prints the lab's topology as deployed. Reads
+  the lab's state directory.
 - **Archive mode**: argument is a path ending in `.nlz` (or any
   existing path that isn't a known lab). Output is the archive
   manifest + node/link/network counts. Read-only — never
@@ -112,8 +114,7 @@ known deployed-lab name is treated as an archive.
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Bad args / archive malformed |
-| 2 | Lab not found (lab mode) |
+| 1 | Bad args, archive malformed, or lab not found |
 
 ## Disambiguation
 

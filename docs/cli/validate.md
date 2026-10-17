@@ -97,11 +97,11 @@ nlink-lab validate --json examples/wan-impairment.nll | jq '.issues[]'
 | Code | Meaning |
 |------|---------|
 | 0 | Topology is valid (warnings allowed) |
-| 1 | Validation failed |
-| 2 | File not found or unreadable |
+| 1 | File not found or unreadable, or a bad argument (an unknown rule id in `--deny`/`--allow`) |
+| 2 | Validation failed: a parse error or a topology error |
 
-Note: warnings do not affect the exit code. To make warnings fatal,
-parse the JSON output and check `issues[?].severity`.
+Warnings do not affect the exit code unless `--strict` makes them
+errors (or `--deny RULE` makes one rule an error).
 
 ## See also
 

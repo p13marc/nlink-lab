@@ -499,6 +499,10 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
     for (key, imp) in imported.impairments {
         main.impairments.insert(prefix_endpoint(alias, &key), imp);
     }
+    for key in &imported.directional_impairments {
+        main.directional_impairments
+            .insert(prefix_endpoint(alias, key));
+    }
 
     // Merge rate limits with prefixed endpoint keys
     for (key, rl) in imported.rate_limits {
@@ -3784,11 +3788,15 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
     // Lower directional impairments
     if let Some(imp) = &link.left_impair {
         let ep = format!("{}:{}", link.left_node, link.left_iface);
-        topo.impairments.insert(ep, lower_impair_props(imp)?);
+        topo.impairments
+            .insert(ep.clone(), lower_impair_props(imp)?);
+        topo.directional_impairments.insert(ep);
     }
     if let Some(imp) = &link.right_impair {
         let ep = format!("{}:{}", link.right_node, link.right_iface);
-        topo.impairments.insert(ep, lower_impair_props(imp)?);
+        topo.impairments
+            .insert(ep.clone(), lower_impair_props(imp)?);
+        topo.directional_impairments.insert(ep);
     }
 
     // Lower rate (both endpoints; per-link > profile > global). The
@@ -4081,6 +4089,8 @@ fn lower_network(
 
 fn lower_impair(topo: &mut types::Topology, imp: &ast::ImpairDef) -> Result<()> {
     let ep = format!("{}:{}", imp.node, imp.iface);
+    // a top-level `impair` replaces what a link's `->` set there
+    topo.directional_impairments.remove(&ep);
     topo.impairments.insert(ep, lower_impair_props(&imp.props)?);
     Ok(())
 }

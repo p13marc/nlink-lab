@@ -60,8 +60,13 @@ fn main() -> ExitCode {
     let env_filter = if cli.verbose {
         tracing_subscriber::EnvFilter::new("info")
     } else {
-        tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"))
+        // nlink's connection logs every error ack at warn, the ones its
+        // caller expects and handles too (`impair --partition` printed
+        // two ENOENTs): what fails reaches the user as the command's error
+        // (#223)
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            tracing_subscriber::EnvFilter::new("warn,nlink::netlink::connection=error")
+        })
     };
     // Log lines go to stderr: on stdout they corrupted `--json` documents,
     // and `lsp`'s JSON-RPC framing.

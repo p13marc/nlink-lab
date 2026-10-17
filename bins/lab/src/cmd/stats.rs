@@ -9,9 +9,11 @@ pub struct Args {
     pub lab: String,
 }
 
-/// One row of `stats --json` for a namespace node (cgroup v2 usage).
+/// One row of `stats --json`: a node's cgroup v2 usage, for namespace and
+/// container nodes alike. Container rows were the runtime's own objects
+/// (no `node`, sizes as strings) next to these (#223).
 #[derive(serde::Serialize, schemars::JsonSchema)]
-pub struct NamespaceStats<'a> {
+pub struct NodeStats<'a> {
     pub node: &'a str,
     pub kind: &'static str,
     #[serde(flatten)]
@@ -23,13 +25,13 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let running = nlink_lab::RunningLab::load(&lab)?;
 
     // Namespace nodes with cpu/memory limits: cgroup usage (#66).
-    let ns_rows: Vec<NamespaceStats> = running
+    let ns_rows: Vec<NodeStats> = running
         .topology()
         .nodes
         .iter()
         .filter(|(_, n)| n.image.is_none() && (n.cpu.is_some() || n.memory.is_some()))
         .filter_map(|(name, _)| {
-            nlink_lab::cgroup::usage(&lab, name).map(|usage| NamespaceStats {
+            nlink_lab::cgroup::usage(&lab, name).map(|usage| NodeStats {
                 node: name,
                 kind: "namespace",
                 usage,
@@ -38,16 +40,31 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .collect();
 
     let containers = running.containers();
-    let mut container_rows: Vec<serde_json::Value> = Vec::new();
+    if ctx.json {
+        let mut rows: Vec<serde_json::Value> = ns_rows
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<std::result::Result<_, _>>()?;
+        for (name, c) in containers {
+            match nlink_lab::cgroup::process_dir(c.pid)
+                .and_then(|dir| nlink_lab::cgroup::usage_of(&dir))
+            {
+                Some(usage) => rows.push(serde_json::to_value(NodeStats {
+                    node: name,
+                    kind: "container",
+                    usage,
+                })?),
+                None => eprintln!("warning: cannot read the cgroup of container node '{name}'"),
+            }
+        }
+        println!("{}", serde_json::to_string_pretty(&rows)?);
+        return Ok(());
+    }
     let mut container_table = String::new();
     if !containers.is_empty() {
         let rt = running.runtime_binary().unwrap_or("docker");
         let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
-        let format = if ctx.json {
-            "{{json .}}"
-        } else {
-            "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
-        };
+        let format = "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}";
         let output = std::process::Command::new(rt)
             .args(["stats", "--no-stream", "--format", format])
             .args(&ids)
@@ -60,27 +77,9 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 String::from_utf8_lossy(&output.stderr).trim()
             )));
         }
-        if ctx.json {
-            // docker/podman emit one JSON object per line
-            container_rows = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .filter(|l| !l.trim().is_empty())
-                .map(serde_json::from_str)
-                .collect::<std::result::Result<_, _>>()?;
-        } else {
-            container_table = String::from_utf8_lossy(&output.stdout).into_owned();
-        }
+        container_table = String::from_utf8_lossy(&output.stdout).into_owned();
     }
 
-    if ctx.json {
-        let mut rows: Vec<serde_json::Value> = ns_rows
-            .iter()
-            .map(serde_json::to_value)
-            .collect::<std::result::Result<_, _>>()?;
-        rows.extend(container_rows);
-        println!("{}", serde_json::to_string_pretty(&rows)?);
-        return Ok(());
-    }
     if ns_rows.is_empty() && containers.is_empty() {
         println!("No container nodes or cpu/memory-limited namespace nodes in lab '{lab}'.");
         return Ok(());

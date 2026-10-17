@@ -834,10 +834,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let had_configs = crate::wifi::config_dir(&env.lab).exists();
             match wifi.mode {
                 crate::types::WifiMode::Ap => {
+                    // one file per interface: a second AP on the node
+                    // replaced the first one's (#223)
                     let conf = crate::wifi::write_config(
                         &env.lab,
                         node,
-                        "hostapd.conf",
+                        &format!("{}-hostapd.conf", wifi.name),
                         &crate::wifi::generate_hostapd_conf(
                             wifi,
                             &crate::wifi::make_ctrl_dir(&env.lab, node)?,
@@ -857,7 +859,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     let conf = crate::wifi::write_config(
                         &env.lab,
                         node,
-                        "wpa.conf",
+                        &format!("{}-wpa.conf", wifi.name),
                         &crate::wifi::generate_wpa_conf(
                             wifi,
                             &crate::wifi::make_ctrl_dir(&env.lab, node)?,

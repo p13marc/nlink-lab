@@ -55,8 +55,10 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         deny,
         allow,
     };
+    // a bad argument (exit 1), not an invalid topology (exit 2), as for
+    // `lint --allow` (#223)
     opts.check_known()
-        .map_err(nlink_lab::Error::invalid_topology)?;
+        .map_err(nlink_lab::Error::invalid_argument)?;
     let topology = topology.expect("clap: topology is required unless --list-rules");
     let topo = parse_topology(&topology, &params)?;
     let result = topo.validate_with(&opts);

@@ -356,7 +356,12 @@ pub enum Commands {
     /// Pre-pull all container images from a topology.
     Pull(cmd::pull::Args),
 
-    /// Show container resource usage.
+    /// Show resource usage of container nodes and cpu/memory-limited namespace nodes.
+    ///
+    /// With `--json`, one object per node, from its cgroup v2:
+    /// `{node, kind: "namespace" | "container", cpu_usec, memory_bytes,
+    /// memory_max, cpu_max, pids}` (`memory_max` and `cpu_max` are null when
+    /// unlimited).
     Stats(cmd::stats::Args),
 
     /// Restart a container node.

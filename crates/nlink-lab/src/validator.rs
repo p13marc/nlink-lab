@@ -89,6 +89,9 @@ pub const RULE_IDS: &[&str] = &[
     "vxlan-underlay-address",
     "wifi-channel-range",
     "wifi-mesh-id",
+    "wifi-passphrase",
+    "wifi-ssid",
+    "wifi-mesh-channel",
     "macvlan-parent-set",
     "vrf-interface-exists",
     "assertion-node-exists",
@@ -438,6 +441,8 @@ impl Topology {
         validate_wireguard_keys(self, &mut issues);
         validate_wifi_channels(self, &mut issues);
         validate_wifi_mesh_ids(self, &mut issues);
+        validate_wifi_security(self, &mut issues);
+        validate_wifi_mesh_channels(self, &mut issues);
         validate_host_global_sysctls(self, &mut issues);
         validate_macvlan_parents(self, &mut issues);
         validate_vrf_interfaces(self, &interfaces, &mut issues);
@@ -2664,6 +2669,100 @@ fn validate_wifi_mesh_ids(topology: &Topology, issues: &mut Vec<ValidationIssue>
                 rule: "wifi-mesh-id",
                 message: format!("Wi-Fi mesh point '{node_name}:{}' {problem}", wifi.name),
                 location: Some(format!("nodes.{node_name}.wifi[{i}].mesh_id")),
+            });
+        }
+    }
+}
+
+/// What hostapd and wpa_supplicant accept, checked before they refuse it at
+/// deploy (#223): an SSID of 1 to 32 bytes, a WPA key of 8 to 63 printable
+/// ASCII characters or 64 hex digits. A mesh point joins by `mesh-id` and
+/// is open, so an `ssid` or `wpa2` there would be ignored.
+fn validate_wifi_security(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        for (i, wifi) in node.wifi.iter().enumerate() {
+            let at = |field: &str| Some(format!("nodes.{node_name}.wifi[{i}].{field}"));
+            let what = format!("Wi-Fi '{node_name}:{}'", wifi.name);
+            let mesh = wifi.mode == WifiMode::Mesh;
+            if let Some(ssid) = &wifi.ssid {
+                let problem = if mesh {
+                    Some("is a mesh point, which joins by mesh-id: its ssid is ignored".to_string())
+                } else if ssid.is_empty() || ssid.len() > 32 {
+                    Some(format!(
+                        "ssid '{ssid}' is {} bytes; 1 to 32 are allowed",
+                        ssid.len()
+                    ))
+                } else {
+                    None
+                };
+                if let Some(problem) = problem {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "wifi-ssid",
+                        message: format!("{what} {problem}"),
+                        location: at("ssid"),
+                    });
+                }
+            }
+            if let Some(pass) = &wifi.passphrase {
+                let printable = pass.bytes().all(|b| (0x20..=0x7e).contains(&b));
+                let problem = if mesh {
+                    Some("is a mesh point, which nlink-lab sets up open: its wpa2 key would be ignored".to_string())
+                } else if crate::wifi::is_raw_psk(pass)
+                    || (printable && (8..=63).contains(&pass.len()))
+                {
+                    None
+                } else {
+                    Some(format!(
+                        "has a wpa2 key of {} characters; use 8 to 63 printable ASCII characters, or 64 hex digits",
+                        pass.chars().count()
+                    ))
+                };
+                if let Some(problem) = problem {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "wifi-passphrase",
+                        message: format!("{what} {problem}"),
+                        location: at("passphrase"),
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Mesh points of one mesh-id peer only on one channel (default 1): on
+/// different channels they validated and never met (#223).
+fn validate_wifi_mesh_channels(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    let mut meshes: BTreeMap<&str, BTreeMap<u32, Vec<String>>> = BTreeMap::new();
+    for (node_name, node) in sorted(&topology.nodes) {
+        for wifi in &node.wifi {
+            if wifi.mode == WifiMode::Mesh
+                && let Some(id) = wifi.mesh_id.as_deref()
+            {
+                meshes
+                    .entry(id)
+                    .or_default()
+                    .entry(wifi.channel.unwrap_or(1))
+                    .or_default()
+                    .push(format!("{node_name}:{}", wifi.name));
+            }
+        }
+    }
+    for (id, channels) in meshes {
+        if channels.len() > 1 {
+            let on: Vec<String> = channels
+                .iter()
+                .map(|(ch, points)| format!("channel {ch}: {}", points.join(", ")))
+                .collect();
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "wifi-mesh-channel",
+                message: format!(
+                    "mesh '{id}' spans several channels, so its points never peer ({})",
+                    on.join("; ")
+                ),
+                location: Some(format!("wifi.mesh.{id}")),
             });
         }
     }
@@ -5581,6 +5680,42 @@ node sta {
             hits[0].location.as_deref(),
             Some("nodes.ap.wifi[0].channel")
         );
+    }
+
+    #[test]
+    fn wifi_keys_and_ssids_the_daemons_refuse_are_errors() {
+        // #223: each validated, then hostapd or wpa_supplicant refused it
+        let result = parse_and_validate(
+            r#"lab "t"
+node ap {
+  wifi wlan0 mode ap { ssid "this ssid is definitely longer than 32 bytes" channel 6 wpa2 "short" 10.0.0.1/24 }
+  wifi wlan1 mode ap { ssid "" channel 6 wpa2 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" 10.0.1.1/24 }
+  wifi wlan2 mode ap { ssid "ok" channel 6 wpa2 "a fine passphrase" 10.0.3.1/24 }
+}
+node m1 { wifi wlan0 mode mesh { mesh-id "m" ssid "ignored" wpa2 "meshsecret" 10.0.2.1/24 } }
+node m2 { wifi wlan0 mode mesh { mesh-id "m" channel 6 10.0.2.2/24 } }
+"#,
+        );
+        let at = |rule: &str| -> Vec<String> {
+            rules_of(&result, rule)
+                .iter()
+                .map(|h| h.location.clone().unwrap_or_default())
+                .collect()
+        };
+        assert_eq!(
+            at("wifi-ssid"),
+            [
+                "nodes.ap.wifi[0].ssid",
+                "nodes.ap.wifi[1].ssid",
+                "nodes.m1.wifi[0].ssid"
+            ]
+        );
+        // the 64-hex key is a raw PSK, and fine
+        assert_eq!(
+            at("wifi-passphrase"),
+            ["nodes.ap.wifi[0].passphrase", "nodes.m1.wifi[0].passphrase"]
+        );
+        assert_eq!(at("wifi-mesh-channel"), ["wifi.mesh.m"]);
     }
 
     #[test]

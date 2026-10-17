@@ -1328,7 +1328,7 @@ fn render_interface(
 
 fn render_links(out: &mut String, topo: &Topology) -> Result<()> {
     for link in &topo.links {
-        render_link(out, link)?;
+        render_link(out, link, topo)?;
     }
     if !topo.links.is_empty() {
         out.push('\n');
@@ -1336,7 +1336,7 @@ fn render_links(out: &mut String, topo: &Topology) -> Result<()> {
     Ok(())
 }
 
-fn render_link(out: &mut String, link: &Link) -> Result<()> {
+fn render_link(out: &mut String, link: &Link, topo: &Topology) -> Result<()> {
     write!(
         out,
         "link {} -- {}",
@@ -1355,6 +1355,15 @@ fn render_link(out: &mut String, link: &Link) -> Result<()> {
     }
     if let Some(mtu) = link.mtu {
         props.push(format!("mtu {mtu}"));
+    }
+    // a `->` / `<-` stays one: as a top-level `impair` it read as an
+    // impairment someone forgot the other end of (#223)
+    for (ep, arrow) in [(&link.endpoints[0], "->"), (&link.endpoints[1], "<-")] {
+        if topo.directional_impairments.contains(ep)
+            && let Some(imp) = topo.impairments.get(ep)
+        {
+            props.push(format!("{arrow} {}", impairment_props(imp)?));
+        }
     }
     if !props.is_empty() {
         write!(out, " {{ {} }}", props.join(" ")).unwrap();
@@ -1599,6 +1608,11 @@ fn impairment_props(imp: &Impairment) -> Result<String> {
 
 fn render_impairments(out: &mut String, topo: &Topology) -> Result<()> {
     for endpoint in sorted_keys(&topo.impairments) {
+        if topo.directional_impairments.contains(endpoint)
+            && topo.links.iter().any(|l| l.endpoints.contains(endpoint))
+        {
+            continue; // rendered as the link's `->` / `<-`
+        }
         write!(out, "impair {}", nll_endpoint(endpoint)?).unwrap();
         let props = impairment_props(&topo.impairments[endpoint])?;
         if !props.is_empty() {
@@ -2716,6 +2730,28 @@ network radio {
     }
 
     #[test]
+    fn a_directional_impairment_renders_as_an_arrow() {
+        // #223: it came back as a top-level `impair`, which `lint` then
+        // took for a forgotten other end
+        let (_, rendered, topo2) = roundtrip(
+            r#"lab "t"
+node a
+node b
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  -> delay 10ms
+  <- delay 20ms loss 1%
+}
+"#,
+        );
+        assert!(rendered.contains("-> delay 10ms"), "{rendered}");
+        assert!(rendered.contains("<- delay 20ms loss 1%"), "{rendered}");
+        assert!(!rendered.contains("impair a:eth0"), "{rendered}");
+        assert_eq!(topo2.directional_impairments.len(), 2);
+        assert_eq!(topo2.impairments["b:eth0"].loss.as_deref(), Some("1%"));
+    }
+
+    #[test]
     fn test_render_rate_limit_burst_and_impairments() {
         let (_, rendered, topo2) = roundtrip(
             r#"lab "t"
@@ -2735,7 +2771,7 @@ link a:eth0 -- b:eth0 {
         assert!(rendered.contains("mtu 1400"), "{rendered}");
         assert!(
             rendered.contains(
-                "impair b:eth0 delay 100ms jitter 20ms loss 0.5% rate 10mbit corrupt 0.01% reorder 1%"
+                "<- delay 100ms jitter 20ms loss 0.5% rate 10mbit corrupt 0.01% reorder 1%"
             ),
             "{rendered}"
         );

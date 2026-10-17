@@ -57,6 +57,8 @@ printf 'lab "w"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2
 set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: validate --strict exited $rc (expected 2)"; fail=1; }
 "$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep WARN >/dev/null && { say "FAIL: --allow did not silence the warning"; fail=1; }
+set +e; "$bin" validate --allow no-such-rule "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 1 ] || { say "FAIL: validate --allow of an unknown rule exited $rc (expected 1)"; fail=1; }
 "$bin" graph examples/cookbook/satellite-mesh.nll | grep 'net:' >/dev/null || { say "FAIL: graph ignores network blocks"; fail=1; }
 
 say "== fmt"
@@ -66,6 +68,7 @@ printf 'lab "f"\nnode   a{forward ipv4}\n' | "$bin" fmt - | grep '^node a { forw
 say "== lint"
 "$bin" lint --list-rules | grep 'no-assertions' >/dev/null || { say "FAIL lint --list-rules"; fail=1; }
 "$bin" lint examples/simple.nll >/dev/null || { say "FAIL lint"; fail=1; }
+"$bin" lint examples/wifi.nll | grep disconnected >/dev/null && { say "FAIL: lint calls a Wi-Fi lab disconnected"; fail=1; }
 set +e; "$bin" lint --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: lint --strict exited $rc (expected 2)"; fail=1; }
 "$bin" --json lint examples/simple.nll | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "findings" in d, d' || { say "FAIL lint --json"; fail=1; }

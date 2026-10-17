@@ -183,7 +183,19 @@ pub struct Usage {
 }
 
 pub fn usage(lab: &str, node: &str) -> Option<Usage> {
-    let dir = node_dir(lab, node);
+    usage_of(&node_dir(lab, node))
+}
+
+/// The cgroup v2 directory of a host process: a container's init, whose
+/// cgroup the runtime made (`/proc/PID/cgroup`, line `0::PATH`).
+pub fn process_dir(pid: u32) -> Option<PathBuf> {
+    let text = std::fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
+    let path = text.lines().find_map(|l| l.strip_prefix("0::"))?;
+    Some(Path::new("/sys/fs/cgroup").join(path.trim().trim_start_matches('/')))
+}
+
+/// Live usage of the cgroup at `dir`.
+pub fn usage_of(dir: &Path) -> Option<Usage> {
     let stat = std::fs::read_to_string(dir.join("cpu.stat")).ok()?;
     let cpu_usec = stat
         .lines()

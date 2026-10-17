@@ -85,6 +85,13 @@ fn lint_asymmetric_impairment(t: &Topology, out: &mut Vec<LintFinding>) {
     for link in &t.links {
         let a = &link.endpoints[0];
         let b = &link.endpoints[1];
+        // `->` / `<-` chose the direction, as the advice below says to
+        if [a, b]
+            .iter()
+            .any(|ep| t.directional_impairments.contains(*ep))
+        {
+            continue;
+        }
         match (t.impairments.contains_key(a), t.impairments.contains_key(b)) {
             (true, false) | (false, true) => {
                 let (with, without) = if t.impairments.contains_key(a) {
@@ -105,7 +112,9 @@ fn lint_asymmetric_impairment(t: &Topology, out: &mut Vec<LintFinding>) {
     }
 }
 
-/// Connected components of the node graph (links + bridge networks).
+/// Connected components of the node graph (links, bridge networks, and
+/// Wi-Fi: an SSID's APs and stations, a mesh-id's points). Wi-Fi labs
+/// were all "disconnected" (#223).
 pub fn components(t: &Topology) -> Vec<BTreeSet<String>> {
     let mut adj: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for n in t.nodes.keys() {
@@ -127,6 +136,27 @@ pub fn components(t: &Topology) -> Vec<BTreeSet<String>> {
             .iter()
             .filter_map(|m| EndpointRef::parse(m).map(|e| e.node))
             .collect();
+        for pair in members.windows(2) {
+            edges.push((pair[0].clone(), pair[1].clone()));
+        }
+    }
+    let mut cells: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (name, node) in &t.nodes {
+        for wifi in &node.wifi {
+            let cell = match wifi.mode {
+                crate::types::WifiMode::Mesh => wifi.mesh_id.clone().map(|id| format!("mesh {id}")),
+                // hostapd's and wpa_supplicant's default SSID
+                _ => Some(format!(
+                    "ssid {}",
+                    wifi.ssid.as_deref().unwrap_or("nlink-lab")
+                )),
+            };
+            if let Some(cell) = cell {
+                cells.entry(cell).or_default().push(name.clone());
+            }
+        }
+    }
+    for members in cells.values() {
         for pair in members.windows(2) {
             edges.push((pair[0].clone(), pair[1].clone()));
         }
@@ -262,6 +292,51 @@ validate { reach a b }
         let topo = t("lab \"x\"\nnode a\n");
         assert_eq!(lint(&topo, &[]).len(), 1);
         assert!(lint(&topo, &["no-description".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn a_deliberate_direction_is_not_asymmetric() {
+        // #223: `->` is what the finding's own advice asks for
+        let r = rules(
+            r#"lab "x" { description "d" }
+node a
+node b
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  -> delay 10ms
+}
+validate { reach a b }
+"#,
+        );
+        assert!(r.is_empty(), "{r:?}");
+        // a top-level `impair` over it is a plain one-sided impairment
+        let r = rules(
+            r#"lab "x" { description "d" }
+node a
+node b
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  -> delay 10ms
+}
+impair a:eth0 delay 20ms
+validate { reach a b }
+"#,
+        );
+        assert_eq!(r, ["asymmetric-impairment"]);
+    }
+
+    #[test]
+    fn wifi_cells_connect_their_nodes() {
+        let comps = components(&t(r#"lab "w"
+node ap { wifi wlan0 mode ap { ssid "lab" 10.0.0.1/24 } }
+node sta { wifi wlan0 mode station { ssid "lab" 10.0.0.2/24 } }
+node other { wifi wlan0 mode station { ssid "elsewhere" 10.0.0.3/24 } }
+node m1 { wifi wlan0 mode mesh { mesh-id "m" 10.0.1.1/24 } }
+node m2 { wifi wlan0 mode mesh { mesh-id "m" 10.0.1.2/24 } }
+"#));
+        let mut sizes: Vec<usize> = comps.iter().map(|c| c.len()).collect();
+        sizes.sort();
+        assert_eq!(sizes, [1, 2, 2], "{comps:?}");
     }
 
     #[test]

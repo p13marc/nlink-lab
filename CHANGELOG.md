@@ -370,6 +370,25 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`import` wrote archive entries outside the extract directory**
+  (#199). Each entry went to `<dir>/<entry name>`, with the name taken
+  raw from the archive, and entries the manifest did not list were
+  written too. Under `sudo import`, an entry named `../…` or `/etc/…` was
+  an arbitrary file write as root. The default directory, the manifest's
+  `lab_name`, could lead elsewhere the same way. `import` now refuses any
+  entry but `manifest.json` and the files its checksums cover, each a
+  plain file name, and a `lab_name` that is not a plain name without
+  `--dir`.
+- **`import` deployed a different topology than it validated** (#199):
+  it re-parsed `topology.nll` without the archive's params, so an
+  archive with a required `param` extracted, validated and then failed
+  to deploy, and `--no-reparse` was ignored for the deploy. It deploys
+  the validated topology now.
+- **`export --archive file.nll --set k=v` failed on a required param**
+  (#199): the rendered snapshot came from re-parsing the text without
+  the params. It is the topology already parsed with them. The
+  newer-format check now honours `--no-reparse`, as its own message
+  suggests, and the `--no-reparse` topology is validated.
 - **`proc-stat` on a container node** (#157). `--all` failed on every
   container node: it found the node's processes by their host PIDs, then
   read `/proc/<host PID>` inside the container, where that number names

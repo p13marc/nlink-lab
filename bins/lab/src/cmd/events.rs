@@ -25,8 +25,9 @@ pub struct Args {
     pub since: Option<String>,
 
     /// Only these event kinds (repeatable): lifecycle names such as
-    /// `deployed`, `impaired`, `spawned`, or the sources `lifecycle`,
-    /// `drift`, `runtime`.
+    /// `deployed`, `impaired`, `spawned`; drift names, `<action>_<object>`
+    /// as `watch` prints them (`new_address`, `del_route`, `new_nft_rule`)
+    /// or `ended`/`gone`; or the sources `lifecycle`, `drift`, `runtime`.
     #[arg(long, value_name = "KIND")]
     pub kind: Vec<String>,
 
@@ -69,16 +70,37 @@ pub struct DriftEvent {
     pub detail: serde_json::Value,
 }
 
+/// A watch event as a drift record: its JSON without `node`, which
+/// [`DriftEvent`] carries itself.
+fn drift_record(ts: String, w: &nlink_lab::WatchEvent) -> Option<Event> {
+    let mut detail = serde_json::to_value(w).ok()?;
+    let node = detail
+        .as_object_mut()
+        .and_then(|m| m.remove("node"))
+        .and_then(|n| n.as_str().map(str::to_string))
+        .unwrap_or_default();
+    Some(Event::Drift {
+        ts,
+        event: DriftEvent { node, detail },
+    })
+}
+
+impl DriftEvent {
+    /// The watch event the record carries: its `kind` and, for a kernel
+    /// object, nlink's view under `event` (#195).
+    fn kind(&self) -> Option<nlink_lab::watch::WatchEventKind> {
+        serde_json::from_value(self.detail.clone()).ok()
+    }
+}
+
 impl Event {
     fn name(&self) -> String {
         match self {
             Event::Lifecycle(e) => e.kind.name().to_string(),
-            Event::Drift { event, .. } => event
-                .detail
-                .get("kind")
-                .and_then(|k| k.as_str())
-                .unwrap_or("drift")
-                .to_string(),
+            Event::Drift { event, .. } => match event.kind() {
+                Some(kind) => kind.name(),
+                None => "drift".to_string(),
+            },
             Event::Runtime { event, .. } => event
                 .get("kind")
                 .and_then(|k| k.get("type"))
@@ -100,18 +122,9 @@ impl Event {
         match self {
             Event::Lifecycle(e) => e.render_line(),
             Event::Drift { ts, event } => {
-                let kind = self.name();
-                let rest: Vec<String> = event
-                    .detail
-                    .as_object()
-                    .map(|m| {
-                        m.iter()
-                            .filter(|(k, _)| *k != "kind" && *k != "family")
-                            .map(|(k, v)| format!("{k}={}", compact(v)))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                format!("{ts} drift {}:{kind} {}", event.node, rest.join(" "))
+                let detail = event.kind().map(|k| k.detail()).unwrap_or_default();
+                let line = format!("{ts} drift {}:{} {detail}", event.node, self.name());
+                line.trim_end().to_string()
             }
             Event::Runtime { ts, event } => {
                 let kind = self.name();
@@ -258,17 +271,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             let tx = tx.clone();
             tasks.push(tokio::spawn(async move {
                 while let Some(w) = drift_rx.recv().await {
-                    let Ok(mut v) = serde_json::to_value(&w) else {
+                    let Some(ev) = drift_record(now_iso8601(), &w) else {
                         continue;
-                    };
-                    let node = v
-                        .as_object_mut()
-                        .and_then(|m| m.remove("node"))
-                        .and_then(|n| n.as_str().map(str::to_string))
-                        .unwrap_or_default();
-                    let ev = Event::Drift {
-                        ts: now_iso8601(),
-                        event: DriftEvent { node, detail: v },
                     };
                     if tx.send(ev).await.is_err() {
                         return;
@@ -421,18 +425,36 @@ mod tests {
         let json = serde_json::to_string(&ev).unwrap();
         assert!(json.contains("\"source\":\"lifecycle\""), "{json}");
         assert!(json.contains("\"event\":\"destroyed\""), "{json}");
-        let drift = Event::Drift {
-            ts: "t".into(),
-            event: DriftEvent {
-                node: "a".into(),
-                detail: serde_json::json!({"kind": "new_address", "family": "route", "address": "10.0.0.9/32"}),
+        // The record `run` makes of a watch event (#195): named and
+        // rendered from nlink's view, which `--kind` filters on.
+        let watch = nlink_lab::WatchEvent {
+            node: "a".into(),
+            family: nlink_lab::WatchFamily::Route,
+            kind: nlink_lab::watch::WatchEventKind::Event {
+                event: nlink::netlink::events::view::EventView::Address {
+                    action: nlink::netlink::events::view::Action::New,
+                    ifindex: 2,
+                    cidr: Some("10.0.0.9/32".into()),
+                    scope: "global".into(),
+                    label: None,
+                },
             },
+            from_snapshot: false,
         };
+        let drift = drift_record("t".into(), &watch).unwrap();
         assert_eq!(drift.name(), "new_address");
-        assert!(
-            drift.render_line().contains("drift a:new_address"),
-            "{}",
-            drift.render_line()
+        assert_eq!(
+            drift.render_line(),
+            "t drift a:new_address cidr=10.0.0.9/32 ifindex=2 scope=global"
+        );
+        let gone = nlink_lab::WatchEvent {
+            kind: nlink_lab::watch::WatchEventKind::Gone,
+            ..watch
+        };
+        let gone = drift_record("t".into(), &gone).unwrap();
+        assert_eq!(
+            (gone.name(), gone.render_line()),
+            ("gone".into(), "t drift a:gone".into())
         );
         assert!(
             serde_json::to_string(&drift)

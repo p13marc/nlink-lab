@@ -23,7 +23,7 @@ Options:
           Only events newer than this (`10m`, `2h`, `30s`)
 
       --kind <KIND>
-          Only these event kinds (repeatable): lifecycle names such as `deployed`, `impaired`, `spawned`, or the sources `lifecycle`, `drift`, `runtime`
+          Only these event kinds (repeatable): lifecycle names such as `deployed`, `impaired`, `spawned`; drift names, `<action>_<object>` as `watch` prints them (`new_address`, `del_route`, `new_nft_rule`) or `ended`/`gone`; or the sources `lifecycle`, `drift`, `runtime`
 
       --interval <INTERVAL>
           Runtime-event sampling interval in seconds (with --follow)

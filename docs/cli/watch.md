@@ -41,6 +41,8 @@ Subscribes to every node in the lab and prints one line per kernel mutation — 
 
 nftables events cover tables, chains, rules, sets, set elements and named objects (counters, quotas, limits); the generation marker the kernel sends after every committed batch is not shown. Elements a rule adds from the packet path (`add @set`) are not notified by the kernel.
 
+Each event is nlink's view of the object: a line such as `[r1/route] new_link ifindex=7 mtu=1500 name=d0 …`, and with `--json` a record such as `{"node":"r1","family":"route","kind":"event","event":{"object":"link","action":"new",…}}`. The event's name, `<action>_<object>`, is what `events --kind` filters drift on.
+
 A node whose stream ends prints `watch ended: <error>` (an `ended` record in `--json`) and is subscribed again after a backoff; one whose namespace is gone prints `namespace gone` (`gone`) and stops. The command exits when every node's watch has stopped.
 
 Usage: nlink-lab watch [OPTIONS] <LAB>

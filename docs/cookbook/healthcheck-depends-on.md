@@ -103,7 +103,7 @@ sudo nlink-lab exec -L container-lifecycle app -- \
 ### Inspect health state
 
 ```bash
-nlink-lab containers -L container-lifecycle
+nlink-lab status container-lifecycle
 nlink-lab stats -L container-lifecycle
 ```
 

@@ -10,24 +10,34 @@ use crate::cmd;
 pub enum Commands {
     /// Deploy a lab from a topology file (.nll).
     ///
+    /// FILE is a topology (`.nll`) or a lab archive (`.nlz`).
+    ///
     /// JSON OUTPUT (with `--json`):
-    ///   { "name": str, "nodes": int, "links": int, "deploy_time_ms": int }
+    ///   { "schema_version": 1, "lab": str, "nodes": int, "links": int,
+    ///     "duration_ms": int, "assertions"?: [...], "assertions_failed"?: bool }
     /// Schema: docs/json-schemas/deploy.schema.json
     ///
-    /// Combined with `--unique`, the `name` field is the chosen unique
-    /// lab name (original name + PID suffix). Useful for scripted
-    /// teardown.
+    /// Combined with `--unique`, `lab` is the chosen unique lab name
+    /// (original name + PID suffix). Useful for scripted teardown.
     Deploy(cmd::deploy::Args),
 
     /// Apply topology changes to a running lab.
     ///
-    /// Reconciles the live lab state to match an updated NLL,
-    /// issuing only the deltas. Add `--check` to fail on any drift
-    /// (a CI gate). Add `--json --dry-run` for machine-parseable
-    /// diff output.
+    /// Reconciles the live lab with a changed topology, issuing only the
+    /// deltas. Without FILE, the file the lab was deployed from (or last
+    /// applied) is read again, with its params. `--dry-run` shows the
+    /// changes (`--json` for the machine-readable diff); `verify --file
+    /// FILE` is the CI drift gate.
+    ///
+    /// JSON OUTPUT: { "schema_version": 1, "lab", "ops", "removed",
+    ///   "applied", "duration_ms", "assertions"?, "assertions_failed"? }
     Apply(cmd::apply::Args),
 
-    /// Tear down a running lab.
+    /// Tear down labs (several at once, or `--all`).
+    ///
+    /// Without a name, `-L`, `$NLINK_LAB` or `nlink-lab use` says which
+    /// lab: never a guess at the only one. Destroying the current lab
+    /// forgets it. `--orphans` reaps what crashed deploys left.
     Destroy(cmd::destroy::Args),
 
     /// Select the current lab: the one lab-scoped commands act on.
@@ -41,25 +51,29 @@ pub enum Commands {
     ///   "from": "flag" | "env" | "context" | "only" | null, "note"?: str }
     Use(cmd::use_lab::Args),
 
-    /// Show running labs or details of a specific lab.
+    /// One lab, all of it: nodes and their addresses, containers, links,
+    /// impairments as they are now, partitions, processes and named
+    /// firewall counters (read live as root).
     ///
-    /// JSON OUTPUT (with `--json`, no lab name):
-    ///   [ { "name": str, "node_count": int, "created_at": str }, ... ]
-    /// Schema: docs/json-schemas/status-list.schema.json
-    ///
-    /// JSON OUTPUT (with `--json --scan`):
-    ///   { "labs": [ ... ],
-    ///     "orphans": { "bridges": [str], "veths": [str], "netns": [str],
-    ///                  "stale": [ { "name": str,
-    ///                               "missing_namespaces": [str] } ] } }
-    /// Schema: docs/json-schemas/status-scan.schema.json
-    ///
-    /// JSON OUTPUT (with `--json <lab>`):
-    ///   topology object for the lab + an `addresses` field per node
-    ///   + a `host_resources` block (mgmt bridge, declared subnets).
-    ///
-    /// Schema: docs/json-schemas/status-lab.schema.json
+    /// JSON OUTPUT: { "schema_version": 2, "lab", "created_at",
+    ///   "source"?, "current", "nodes": [ { "node", "kind", "image"?,
+    ///   "container"?: { "id", "pid" }, "addresses": { iface: CIDR list } } ],
+    ///   "links", "networks", "impairments": [ { "endpoint",
+    ///   "impairment", "runtime" } ], "partitions", "processes",
+    ///   "counters"?, "host_resources": { "mgmt_bridge", "subnets" } }
+    /// Schema: docs/json-schemas/status.schema.json
     Status(cmd::status::Args),
+
+    /// List the labs on this host (`*` marks the current one).
+    ///
+    /// `--scan` also reports lab resources without a state file (orphans)
+    /// and labs whose namespaces are gone (stale).
+    ///
+    /// JSON OUTPUT: { "schema_version": 1, "labs": [ { "lab", "nodes",
+    ///   "created_at", "source"?, "current" } ], "orphans"?: { "bridges",
+    ///   "veths", "netns", "stale" }, "legacy"?: [ str ] }
+    /// Schema: docs/json-schemas/ls.schema.json. With `--quiet`, the names.
+    Ls(cmd::ls::Args),
 
     /// Run a command in a lab node.
     Exec(cmd::exec::Args),
@@ -146,7 +160,7 @@ pub enum Commands {
     /// Check a running lab for drift against its topology (exit 2 on drift).
     ///
     /// Compares every node's live links/addresses/routes, nftables and
-    /// WireGuard peers with what the topology declares — the same view `apply --check` shows —
+    /// WireGuard peers with what the topology declares — the same view `apply --dry-run` shows —
     /// and prints the differences. Meant for CI and monitoring: exit 0
     /// means the lab is exactly what its file says.
     Verify(cmd::verify::Args),
@@ -181,21 +195,11 @@ pub enum Commands {
     /// `source: lifecycle | drift | runtime`. Schema: docs/json-schemas/events.schema.json
     Events(cmd::events::Args),
 
-    /// Save a checkpoint of a running lab (topology + runtime impairments
-    /// + partitions) under `<state>/<lab>/snapshots/<name>/`.
+    /// Checkpoints of a running lab: `save`, `ls`, `rm`, `restore`.
     ///
-    /// `--list` shows the lab's snapshots, `--delete NAME` removes one.
-    ///
-    /// JSON OUTPUT (with `--json`): the snapshot's metadata; with
-    /// `--list` an array of them. Schema: docs/json-schemas/snapshot-list.schema.json
+    /// A snapshot holds the topology, the runtime impairments and the
+    /// partitions; `restore` applies the topology and puts the rest back.
     Snapshot(cmd::snapshot::Args),
-
-    /// Bring a running lab back to a snapshot: `apply` the saved topology,
-    /// then re-install the saved runtime impairments and partitions.
-    ///
-    /// Restores what nlink-lab manages, not hand-made `ip`/`tc` edits
-    /// inside the namespaces. `--dry-run` prints the plan.
-    Restore(cmd::restore::Args),
 
     /// Run a `scenario` block from a deployed lab's topology.
     ///
@@ -338,32 +342,16 @@ pub enum Commands {
     /// Compare two topology files and show differences.
     Diff(cmd::diff::Args),
 
-    /// Export a running lab's topology as serialized data.
-    ///
-    /// By default, dumps the rendered topology as TOML/JSON to stdout
-    /// or `--output FILE`. With `--archive`, produces a portable
-    /// `.nlz` lab archive (tar.gz with manifest + topology + params
-    /// + rendered + checksums) suitable for sharing repros.
+    /// A running lab's topology as it is now (after `apply` and `edit`):
+    /// TOML, `--nll`, or JSON with `--format json`.
     Export(cmd::export::Args),
 
-    /// Import a `.nlz` lab archive.
+    /// Portable lab archives (`.nlz`): `create`, `extract`, `inspect`.
     ///
-    /// Verifies checksums, extracts to `./<lab-name>/` (or `-d DIR`),
-    /// and validates the topology. Pass `--no-deploy` to extract +
-    /// validate without deploying; `--no-reparse` to use the bundled
-    /// rendered.toml directly (useful when the archive was produced
-    /// by a newer nlink-lab whose NLL syntax we don't fully understand).
-    Import(cmd::import::Args),
-
-    /// Show comprehensive lab details, OR summarize a `.nlz` archive.
-    ///
-    /// If LAB is a path ending in `.nlz`, summarizes the archive
-    /// (manifest + node/link/network counts) without extracting.
-    /// Otherwise, behaves as before — runs against a deployed lab.
-    Inspect(cmd::inspect::Args),
-
-    /// List container nodes in a running lab.
-    Containers(cmd::containers::Args),
+    /// An archive holds a manifest, the topology, its params, the rendered
+    /// topology and checksums: a repro to share. `nlink-lab deploy
+    /// FILE.nlz` deploys one.
+    Archive(cmd::archive::Args),
 
     /// Show container logs or per-process logs from `nlink-lab spawn`.
     ///
@@ -420,18 +408,8 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     (
         "Lifecycle",
         &[
-            "deploy",
-            "apply",
-            "destroy",
-            "use",
-            "status",
-            "inspect",
-            "containers",
-            "verify",
-            "snapshot",
-            "restore",
+            "deploy", "apply", "destroy", "use", "ls", "status", "verify", "snapshot", "archive",
             "export",
-            "import",
         ],
     ),
     (

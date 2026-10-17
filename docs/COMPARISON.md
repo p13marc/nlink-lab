@@ -230,9 +230,9 @@ Where nlink-lab is **worse** than containerlab today:
 4. **Docs are younger.** containerlab has years of accumulated
    recipes, blog posts, conference talks. nlink-lab has the
    [cookbook](cookbook/) — comprehensive but newer.
-5. **Save/restore is namespace-state only.** `nlink-lab snapshot`
-   and `restore` checkpoint a lab, and `export --archive` produces
-   a portable `.nlz`, but neither captures the contents of a
+5. **Save/restore is namespace-state only.** `nlink-lab snapshot
+   save` and `snapshot restore` checkpoint a lab, and `archive
+   create` produces a portable `.nlz`, but neither captures the contents of a
    container's filesystem the way an image commit would.
 6. **No vendor NOS support, ever.** This is a design decision, not
    a bug — the project doesn't compete in that space.

@@ -44,7 +44,7 @@ impl TestResult {
 }
 
 /// Result of a single assertion.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
 pub struct AssertionResult {
     /// Human-readable assertion description.
     pub description: String,

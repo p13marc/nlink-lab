@@ -107,8 +107,12 @@ set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" --json ps -L no-such-lab 2>"$tmp
 [ "$rc" -eq 1 ] || { say "FAIL: ps on a missing lab exited $rc (expected 1)"; fail=1; }
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["code"] == "not_found", d' "$tmp/err.json" || { say "FAIL: ps --json error document"; fail=1; }
 
-say "== status (no labs) --json is valid JSON"
-NLINK_LAB_STATE_DIR="$tmp/state" "$bin" status --json | python3 -c 'import json,sys; json.load(sys.stdin)' || { say "FAIL status --json"; fail=1; }
+say "== ls (no labs) --json; status on none"
+NLINK_LAB_STATE_DIR="$tmp/state" "$bin" ls --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["labs"] == [], d' || { say "FAIL ls --json"; fail=1; }
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" status >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 1 ] || { say "FAIL: status with no lab exited $rc (expected 1)"; fail=1; }
+set +e; "$bin" inspect x >/dev/null 2>&1; rc=$?; set -e
+[ "$rc" -eq 64 ] || { say "FAIL: a removed command exited $rc (expected 64)"; fail=1; }
 
 say "== lsp (stdio JSON-RPC)"
 # EOF on stdin must end the server cleanly, never hang.

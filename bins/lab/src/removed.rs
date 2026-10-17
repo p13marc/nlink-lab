@@ -11,7 +11,74 @@ pub struct Removed {
 }
 
 /// Every removed command.
-pub const REMOVED: &[Removed] = &[];
+pub const REMOVED: &[Removed] = &[
+    Removed {
+        name: "inspect",
+        instead: "nlink-lab status LAB (an archive: nlink-lab archive inspect FILE)",
+    },
+    Removed {
+        name: "containers",
+        instead: "nlink-lab status LAB",
+    },
+    Removed {
+        name: "restore",
+        instead: "nlink-lab snapshot restore NAME",
+    },
+    Removed {
+        name: "import",
+        instead: "nlink-lab deploy FILE.nlz (or nlink-lab archive extract FILE)",
+    },
+];
+
+/// A removed flag of a command that stays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemovedFlag {
+    pub command: &'static str,
+    pub flag: &'static str,
+    pub instead: &'static str,
+}
+
+/// Every removed flag.
+pub const REMOVED_FLAGS: &[RemovedFlag] = &[
+    RemovedFlag {
+        command: "apply",
+        flag: "--check",
+        instead: "nlink-lab verify --file FILE",
+    },
+    RemovedFlag {
+        command: "export",
+        flag: "--archive",
+        instead: "nlink-lab archive create",
+    },
+    RemovedFlag {
+        command: "status",
+        flag: "--scan",
+        instead: "nlink-lab ls --scan",
+    },
+    RemovedFlag {
+        command: "snapshot",
+        flag: "--list",
+        instead: "nlink-lab snapshot ls",
+    },
+    RemovedFlag {
+        command: "snapshot",
+        flag: "--delete",
+        instead: "nlink-lab snapshot rm NAME",
+    },
+    RemovedFlag {
+        command: "verify",
+        flag: "--topology",
+        instead: "nlink-lab verify --file FILE",
+    },
+];
+
+/// The entry for `flag` given to `command`.
+pub fn find_flag(command: &str, flag: &str) -> Option<&'static RemovedFlag> {
+    let flag = flag.split('=').next().unwrap_or(flag);
+    REMOVED_FLAGS
+        .iter()
+        .find(|r| r.command == command && r.flag == flag)
+}
 
 /// Global options that take a value, so the word after them is not the
 /// subcommand.
@@ -78,6 +145,22 @@ mod tests {
                 words[1]
             );
         }
+        for r in REMOVED_FLAGS {
+            let words: Vec<&str> = r.instead.split_whitespace().collect();
+            assert!(cmd.find_subcommand(r.command).is_some(), "{r:?}");
+            assert!(cmd.find_subcommand(words[1]).is_some(), "{r:?}");
+            let has = cmd
+                .find_subcommand(r.command)
+                .unwrap()
+                .get_arguments()
+                .any(|a| a.get_long() == r.flag.strip_prefix("--"));
+            assert!(!has, "{} {} is still a flag", r.command, r.flag);
+        }
+        assert_eq!(
+            find_flag("apply", "--check").map(|r| r.instead),
+            Some("nlink-lab verify --file FILE")
+        );
+        assert!(find_flag("apply", "--dry-run").is_none());
         let table = [Removed {
             name: "graph",
             instead: "nlink-lab render --diagram dot FILE",

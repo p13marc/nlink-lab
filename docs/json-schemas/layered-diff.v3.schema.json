@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "nlink-lab apply --dry-run / --check / verify --json (v3)",
-  "description": "The `apply --dry-run --json` / `apply --check --json` / `verify --json`\nenvelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).",
+  "description": "The `apply --dry-run --json` / `verify --json`\nenvelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).",
   "type": "object",
   "properties": {
     "change_count": {

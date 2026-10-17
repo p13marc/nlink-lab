@@ -95,7 +95,7 @@ Every lab's state lives in one directory for the whole host,
 `/var/lib/nlink-lab/labs/` (`$NLINK_LAB_STATE_DIR` moves it), whoever
 deployed it. Writing it takes root (sudo, or the capability-installed
 binary from `just install-caps`). Reading it takes membership in the
-`nlink-lab` group, so `status`, `ip`, `logs` and `snapshot --list` work
+`nlink-lab` group, so `ls`, `status`, `ip`, `logs` and `snapshot ls` work
 without sudo for its members (see [INSTALL.md](INSTALL.md)).
 
 The ping succeeds because the deploy planned the veth pair, the
@@ -485,14 +485,14 @@ sudo nlink-lab destroy wan
 To send the lab to a coworker (bug repro, "look at this"):
 
 ```bash
-nlink-lab export --archive wan.nll -o wan-repro.nlz
+nlink-lab archive create wan.nll -o wan-repro.nlz
 ```
 
 The recipient runs:
 
 ```bash
-nlink-lab inspect wan-repro.nlz       # summary, no extract
-sudo nlink-lab import wan-repro.nlz   # extract → validate → deploy
+nlink-lab archive inspect wan-repro.nlz       # summary, no extract
+sudo nlink-lab deploy wan-repro.nlz   # extract → validate → deploy
 ```
 
 The `.nlz` archive is a gzipped tarball with the NLL, params,
@@ -661,7 +661,7 @@ their elements changes nothing else.
 Rules can also count, log and rate-limit: `drop tcp dport 22 counter name
 ssh-drops log "ssh: "`, `drop icmp 8 limit over 5/second`. A
 `validate { counter server ssh-drops > 0 }` assertion reads a named
-counter, and `nlink-lab inspect` lists them.
+counter, and `nlink-lab status` lists them.
 
 A router can mark connections and shape what it sends: `ct new tcp dport
 5201 mark set 0x10/0xff ct mark save` marks a connection, `ct mark
@@ -986,7 +986,7 @@ and `nlink-lab impair -L mylab --show` to see what tc installed.
 ### 20. Container Management
 
 ```bash
-nlink-lab containers -L mylab            # list container nodes
+nlink-lab status mylab            # list container nodes
 nlink-lab logs -L mylab web --follow     # stream logs
 nlink-lab stats -L mylab                 # live CPU/memory
 sudo nlink-lab restart -L mylab web      # restart one container
@@ -1097,8 +1097,6 @@ lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
 | `diff` | Compare two topology files |
 | `export` | Export a running lab's topology |
 | `shell` | Open an interactive shell in a lab node |
-| `inspect` | Combined status + links + impairments view (`--json`) |
-| `containers` | List container nodes with ID, image, PID |
 | `logs` | Show container logs (`--follow`, `--tail`) |
 | `pull` | Pre-pull all container images from a topology |
 | `stats` | Show live container CPU/memory usage |
@@ -1345,18 +1343,18 @@ Save a checkpoint of a running lab and come back to it later — after a
 chaos run, before a risky `apply`, or to hand a colleague a known state:
 
 ```bash
-sudo nlink-lab snapshot -L mylab before-chaos --description "clean baseline"
+sudo nlink-lab snapshot save -L mylab before-chaos --description "clean baseline"
 sudo nlink-lab impair -L mylab wan:eth0 --loss 30%
 sudo nlink-lab impair -L mylab core:eth1 --partition
-sudo nlink-lab snapshot -L mylab chaos
-sudo nlink-lab snapshot -L mylab --list
-sudo nlink-lab restore -L mylab before-chaos       # back to the baseline
-sudo nlink-lab restore -L mylab chaos --dry-run    # what would change
-sudo nlink-lab snapshot -L mylab --delete chaos
+sudo nlink-lab snapshot save -L mylab chaos
+sudo nlink-lab snapshot ls -L mylab
+sudo nlink-lab snapshot restore -L mylab before-chaos       # back to the baseline
+sudo nlink-lab snapshot restore -L mylab chaos --dry-run    # what would change
+sudo nlink-lab snapshot rm -L mylab chaos
 ```
 
 A snapshot holds the topology plus the runtime impairments and
-partitions nlink-lab installed; `restore` runs `apply` against the saved
+partitions nlink-lab installed; `snapshot restore` runs `apply` against the saved
 topology (nodes and links added since are removed, removed ones return)
 and then re-installs the saved impairments and partitions. Hand-made
 `ip`/`tc` changes inside the namespaces are not captured.

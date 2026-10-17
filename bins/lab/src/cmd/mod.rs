@@ -4,10 +4,10 @@
 //! single match that routes a parsed command to its handler.
 
 pub mod apply;
+pub mod archive;
 pub mod benchmark;
 pub mod capture;
 pub mod common;
-pub mod containers;
 pub mod daemon;
 pub mod deploy;
 pub mod destroy;
@@ -22,13 +22,12 @@ pub mod export;
 pub mod fmt;
 pub mod graph;
 pub mod impair;
-pub mod import;
 pub mod init;
-pub mod inspect;
 pub mod ip;
 pub mod kill;
 pub mod lint;
 pub mod logs;
+pub mod ls;
 pub mod lsp;
 pub mod metrics;
 pub mod proc_stat;
@@ -62,7 +61,8 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Use(args) => use_lab::run(ctx, args),
         Commands::Apply(args) => apply::run(ctx, args).await,
         Commands::Destroy(args) => destroy::run(ctx, args).await,
-        Commands::Status(args) => status::run(ctx, args).await,
+        Commands::Status(args) => status::run(ctx, args),
+        Commands::Ls(args) => ls::run(ctx, args).await,
         Commands::Exec(args) => exec::run(ctx, args),
         Commands::Spawn(args) => spawn::run(ctx, args).await,
         Commands::Validate(args) => validate::run(ctx, args),
@@ -93,15 +93,12 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Ip(args) => ip::run(ctx, args),
         Commands::Diff(args) => diff::run(ctx, args),
         Commands::Export(args) => export::run(ctx, args),
-        Commands::Import(args) => import::run(ctx, args).await,
-        Commands::Inspect(args) => inspect::run(ctx, args),
-        Commands::Containers(args) => containers::run(ctx, args),
+        Commands::Archive(args) => archive::run(ctx, args),
         Commands::Logs(args) => logs::run(ctx, args),
         Commands::Pull(args) => pull::run(ctx, args),
         Commands::Stats(args) => stats::run(ctx, args),
         Commands::Restart(args) => restart::run(ctx, args).await,
-        Commands::Snapshot(args) => snapshot::run(ctx, args),
-        Commands::Restore(args) => restore::run(ctx, args).await,
+        Commands::Snapshot(args) => snapshot::run(ctx, args).await,
         Commands::Completions { .. } => {
             // Already handled before async runtime
             Ok(())

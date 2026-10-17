@@ -198,3 +198,76 @@ fn an_error_under_json_is_the_api_error_document() {
     assert_eq!(doc["code"], "not_found", "{doc}");
     assert_eq!(doc["exit_code"], 1);
 }
+
+#[test]
+fn ls_and_status() {
+    let h = Host::new();
+    h.lab("alpha").lab("beta");
+    assert_eq!(code(&h.run(&["use", "beta"])), 0);
+    let ls = json(&h.run(&["--json", "ls"]));
+    assert_eq!(ls["schema_version"], 1);
+    let labs: Vec<(&str, bool)> = ls["labs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| (l["lab"].as_str().unwrap(), l["current"].as_bool().unwrap()))
+        .collect();
+    assert_eq!(labs, [("alpha", false), ("beta", true)]);
+    assert_eq!(stdout(&h.run(&["-q", "ls"])), "alpha\nbeta\n");
+
+    let st = h.run(&["--json", "status", "alpha"]);
+    assert_eq!(code(&st), 0, "{}", stderr(&st));
+    let st = json(&st);
+    assert_eq!(
+        (st["schema_version"].clone(), st["lab"].clone()),
+        (2.into(), "alpha".into())
+    );
+    assert_eq!(st["nodes"][0]["node"], "n");
+    assert_eq!(st["current"], false);
+    // without a name: the current lab
+    assert_eq!(json(&h.run(&["--json", "status"]))["lab"], "beta");
+    let snaps = json(&h.run(&["--json", "snapshot", "ls", "-L", "alpha"]));
+    assert_eq!(snaps["snapshots"], serde_json::json!([]));
+}
+
+#[test]
+fn removed_commands_and_flags_say_what_replaced_them() {
+    let h = Host::new();
+    let o = h.run(&["inspect", "wan"]);
+    assert_eq!(code(&o), 64);
+    assert!(
+        stderr(&o).contains("`nlink-lab inspect` was removed: use `nlink-lab status LAB"),
+        "{}",
+        stderr(&o)
+    );
+    let o = h.run(&["apply", "--check", "wan.nll"]);
+    assert_eq!(code(&o), 64);
+    assert!(
+        stderr(&o)
+            .contains("`nlink-lab apply --check` was removed: use `nlink-lab verify --file FILE`"),
+        "{}",
+        stderr(&o)
+    );
+    let o = h.run(&["--json", "restore", "x"]);
+    let doc: serde_json::Value = serde_json::from_slice(&o.stderr).unwrap();
+    assert!(
+        doc["message"]
+            .as_str()
+            .unwrap()
+            .contains("snapshot restore"),
+        "{doc}"
+    );
+}
+
+#[test]
+fn destroy_never_guesses_the_lab() {
+    let h = Host::new();
+    h.lab("alpha");
+    let o = h.run(&["destroy"]);
+    assert_eq!(code(&o), 1);
+    assert!(
+        stderr(&o).contains("name the lab to destroy: `nlink-lab destroy alpha`"),
+        "{}",
+        stderr(&o)
+    );
+}

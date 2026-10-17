@@ -208,7 +208,7 @@ initial-deploy path, so `apply` and `deploy` cannot drift apart.
 `compute_layered_diff(running, desired)` is the preview half: it
 walks every node, plans the same `Stack` apply would
 (`Stack::plan_in`), and emits one `LayeredDiff` bundle — network,
-nftables and WireGuard — for `apply --check` / `apply --dry-run`. The JSON form is **schema
+nftables and WireGuard — for `verify` / `apply --dry-run`. The JSON form is **schema
 v3**; the v1 `diff` / `layered_summary` /
 `layered_summary_deprecated` fields were removed in 0.7.0 after
 their deprecation window.
@@ -337,7 +337,7 @@ parallel deploys that both exercise one of these can race:
   bridge to the *host* network namespace; the bridge name is
   hash-derived per lab, so no name collision, but allocation of
   bridge IPs from a shared subnet is not coordinated.
-- **The `nlink-lab` process pool** — `nlink-lab status --scan`
+- **The `nlink-lab` process pool** — `nlink-lab ls --scan`
   walks `/run/netns` and `ip link show` from the host's POV; it
   doesn't take a global lock, so two `--scan` invocations can
   observe inconsistent intermediate states. Reads only — no
@@ -642,7 +642,7 @@ Some non-obvious choices worth knowing:
   with no context.
 - **New deploy work goes in a planner, not in `apply.rs`.**
   `deploy/plan/` must stay pure — no kernel calls, no host reads —
-  so `--dry-run` and `apply --check` keep telling the truth. If a
+  so `--dry-run` and `verify` keep telling the truth. If a
   stage is missing, add a `Stage` variant and update the table in
   this document and in `CLAUDE.md`.
 - **`#[allow(dead_code)]` is rare.** One exists for a test

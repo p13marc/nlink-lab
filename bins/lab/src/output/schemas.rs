@@ -1,6 +1,6 @@
 //! The JSON schemas `docs-gen --schemas` writes (`docs/json-schemas/`).
 
-use super::{DryRunReport, RuleInfo, StatusScanReport, ValidateReport};
+use super::{DryRunReport, RuleInfo, ValidateReport};
 
 /// The schema of what nlink-lab *prints* as `T`: generated for the
 /// serialize contract, so a field it leaves out when empty
@@ -24,12 +24,16 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
         ("validate", output_schema_for::<ValidateReport<'static>>()),
         ("validate-rules", output_schema_for::<Vec<RuleInfo>>()),
         (
-            "status-list",
-            output_schema_for::<Vec<nlink_lab::state::LabInfo>>(),
+            "deploy",
+            output_schema_for::<super::Document<'static, crate::cmd::deploy::DeployReport>>(),
         ),
         (
-            "status-scan",
-            output_schema_for::<StatusScanReport<'static>>(),
+            "ls",
+            output_schema_for::<super::Document<'static, crate::cmd::ls::LsReport>>(),
+        ),
+        (
+            "status",
+            output_schema_for::<super::Document<'static, crate::cmd::status::StatusReport>>(),
         ),
         (
             "use",
@@ -57,7 +61,7 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
         ),
         (
             "snapshot-list",
-            output_schema_for::<Vec<nlink_lab::state::SnapshotInfo>>(),
+            output_schema_for::<super::Document<'static, crate::cmd::snapshot::SnapshotList>>(),
         ),
         (
             "events",

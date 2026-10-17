@@ -42,7 +42,7 @@ If the state file is gone but namespaces remain, that is an
 *orphan*, and nlink-lab reaps those for you:
 
 ```bash
-nlink-lab status --scan          # what is orphaned or stale
+nlink-lab ls --scan          # what is orphaned or stale
 sudo nlink-lab destroy --orphans # reap it
 ```
 
@@ -157,7 +157,7 @@ sudo rm -rf /var/lib/nlink-lab/labs/<name>
 Then reap whatever the removed state file was tracking:
 
 ```bash
-nlink-lab status --scan
+nlink-lab ls --scan
 sudo nlink-lab destroy --orphans
 ```
 
@@ -210,16 +210,16 @@ sudo nlink-lab exec -L <lab> <node> -- ping -c 1 <target>
 
 ## Apply / Reconcile
 
-### `apply` says "drift detected" but I didn't change anything
+### `verify` says "drift detected" but I didn't change anything
 
-`nlink-lab apply --check` exits non-zero if the live lab differs
-from the NLL. False positives can happen when:
+`nlink-lab verify` (and `verify --file FILE`) exits 2 if the live lab
+differs from its topology. False positives can happen when:
 
 - **Routes auto-generated post-deploy** drift from the source NLL.
   The auto-routing pass writes inferred routes (default gateways,
   directly-connected subnets) at deploy time but doesn't update
-  the topology snapshot. After `apply --check` reports the diff
-  once, run `apply` to converge — it's safe.
+  the topology snapshot. After `verify` reports the diff once, run
+  `apply` to converge — it's safe.
 - **Sysctls touched outside the lab.** If something else on the
   host modified `net.*` sysctls in the namespace, the diff will
   show changes you didn't make. Run `apply` to revert to the NLL
@@ -230,7 +230,7 @@ from the NLL. False positives can happen when:
 
 ```bash
 # Inspect the structured diff before deciding
-nlink-lab apply --check --json topology.nll | jq '.diff'
+nlink-lab --json verify --file topology.nll | jq '.diff'
 ```
 
 ### `apply` won't reconcile my spawned process change
@@ -285,7 +285,7 @@ alone.
 
 ## `.nlz` Archive Errors
 
-### `import` reports "checksum mismatch"
+### `deploy FILE.nlz` (or `archive extract`) reports "checksum mismatch"
 
 The archive was modified after export. Either:
 
@@ -294,24 +294,24 @@ The archive was modified after export. Either:
   fresh one from the source NLL.
 - **Bit rot on storage:** check the source.
 
-### `import` reports "format version newer than supported"
+### `deploy FILE.nlz` reports "format version newer than supported"
 
 The archive was produced by a newer nlink-lab whose format you
 don't support. Two options:
 
 - **Upgrade nlink-lab.** The archive metadata says which version
-  produced it (`nlink-lab inspect <archive>.nlz`).
-- **Use `--no-reparse`** to read the bundled `rendered.toml`
+  produced it (`nlink-lab archive inspect <archive>.nlz`).
+- **Use `deploy --no-reparse`** to read the bundled `rendered.toml`
   directly. Works as long as the rendered Topology schema didn't
   change incompatibly between versions.
 
-### `import` deploy fails with "address already in use"
+### Deploying an archive fails with "address already in use"
 
-The recipient host has a stale lab from a previous import. Check:
+The recipient host has a stale lab from a previous deploy. Check:
 
 ```bash
 nlink-lab status
-nlink-lab status --scan      # also lists orphans
+nlink-lab ls --scan      # also lists orphans
 sudo nlink-lab destroy --orphans
 ```
 
@@ -447,7 +447,7 @@ Issues go to
 
 A good bug report includes:
 
-1. **Output of `nlink-lab inspect <lab>` or `--show-ips
+1. **Output of `nlink-lab status <lab>` or `validate --show-ips
    <topology.nll>`.**
 2. **The NLL** (or the `.nlz` archive — `nlink-lab export
    --archive --include-running-state <lab>`).

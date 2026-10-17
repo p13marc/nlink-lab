@@ -10,12 +10,13 @@ pub struct Args {
     #[command(flatten)]
     pub lab: crate::ctx::LabArg,
 
-    /// Compare the live lab against this topology file instead of the
-    /// one it was deployed from (what `apply` would converge to).
-    #[arg(long, value_name = "FILE")]
+    /// Compare the live lab against this topology file (`.nll` or
+    /// `.nlz`) instead of the topology it runs: a CI gate on what `apply
+    /// FILE` would change.
+    #[arg(long = "file", value_name = "FILE")]
     pub topology: Option<PathBuf>,
 
-    /// Set a `param` value for --topology (repeatable): --set key=value.
+    /// Set a `param` value for --file (repeatable): --set key=value.
     #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
     pub params: Vec<(String, String)>,
 }
@@ -33,10 +34,24 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
-    let desired = match topology {
+    let mut desired = match topology {
+        Some(path) if crate::cmd::common::is_archive(&path) => {
+            let scratch =
+                std::env::temp_dir().join(format!("nlink-lab-verify-{}", std::process::id()));
+            let topo = crate::cmd::common::archive_topology(&path, &scratch, false);
+            let _ = std::fs::remove_dir_all(&scratch);
+            topo?
+        }
         Some(path) => parse_topology(&path, &params)?,
         None => running.topology().clone(),
     };
+    // a lab deployed with `--suffix`/`--unique`: its file's name plus that
+    if desired.lab.name != lab
+        && let Some(sfx) = nlink_lab::state::source_of(&lab).and_then(|s| s.suffix)
+        && format!("{}-{sfx}", desired.lab.name) == lab
+    {
+        desired.lab.add_suffix(&sfx);
+    }
     if desired.lab.name != lab {
         return Err(nlink_lab::Error::invalid_argument(format!(
             "topology is for lab {:?}, not {lab:?}",
@@ -45,7 +60,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
     let plan = nlink_lab::apply_plan(&running, &desired)?;
-    // and the plan's other work, as `apply --check` counts it: a change
+    // and the plan's other work, as `apply` would do it: a change
     // that only re-creates a container verified clean (#209)
     let (removals, plan_ops) = crate::cmd::common::plan_lists(&plan);
     let report = DryRunReport::new(&lab, &layered, &removals).with_ops(&plan_ops);

@@ -8,7 +8,7 @@ get the parameters slightly wrong.
 
 The `.nlz` lab archive is one file that captures everything they
 need: NLL source, `--set` values, a rendered Topology snapshot,
-and SHA-256 checksums. They `import` it; they get the same lab.
+and SHA-256 checksums. They `deploy` it; they get the same lab.
 
 ## When to use this
 
@@ -19,7 +19,7 @@ and SHA-256 checksums. They `import` it; they get the same lab.
 - Versioned lab archives in CI artifacts: snapshot the deployed
   topology after each test run.
 - Time travel: when nlink-lab bumps a version, archives from the
-  old version still import (within `format_version`).
+  old version still deploy (within `format_version`).
 
 ## Why nlink-lab
 
@@ -29,12 +29,12 @@ flows. The `.nlz` archive is one tarball with manifest, source,
 params, rendered snapshot, and integrity checksums — closer to a
 hermetic Nix derivation than a `tar`-the-Docker-volumes script.
 
-## Export
+## Create
 
 From an NLL file (no deploy needed):
 
 ```bash
-nlink-lab export --archive examples/cookbook/satellite-mesh.nll
+nlink-lab archive create examples/cookbook/satellite-mesh.nll
 # → satellite-mesh.nlz in cwd
 ```
 
@@ -42,26 +42,26 @@ From a deployed lab:
 
 ```bash
 sudo nlink-lab deploy examples/cookbook/satellite-mesh.nll
-nlink-lab export --archive satellite-mesh -o /tmp/repro.nlz
+nlink-lab archive create -L satellite-mesh -o /tmp/repro.nlz
 ```
 
 With `--set` values recorded for reproducibility:
 
 ```bash
-nlink-lab export --archive wan.nll \
+nlink-lab archive create wan.nll \
   --set delay=200ms \
   --set loss=2% \
   -o wan-laggy.nlz
 ```
 
 The recipient gets `delay=200ms` applied automatically when they
-import.
+deploy it.
 
 With live state included (informational only — recipient can't
 resume the same PIDs):
 
 ```bash
-nlink-lab export --archive --include-running-state satellite-mesh
+nlink-lab archive create -L satellite-mesh --include-running-state
 ```
 
 ## Inspect
@@ -69,7 +69,7 @@ nlink-lab export --archive --include-running-state satellite-mesh
 Read-only summary, never extracts:
 
 ```bash
-nlink-lab inspect satellite-mesh.nlz
+nlink-lab archive inspect satellite-mesh.nlz
 ```
 
 ```text
@@ -90,33 +90,31 @@ Files:
 JSON output for tooling:
 
 ```bash
-nlink-lab inspect --json satellite-mesh.nlz | jq '.manifest.lab_name'
+nlink-lab --json archive inspect satellite-mesh.nlz | jq '.manifest.lab_name'
 ```
 
-CI gate — assert an archive matches expectations before importing:
+CI gate — assert an archive matches expectations before deploying:
 
 ```bash
-nlink-lab inspect --json bug-repro.nlz \
+nlink-lab --json archive inspect bug-repro.nlz \
   | jq -e '.manifest.format_version == 1 and .node_count == 12'
 ```
 
-## Import
+## Deploy or extract
 
-Default flow: extract + validate + deploy.
+Deploy it: checksums checked, the NLL re-parsed with the archive's
+params, validated, then deployed. The files are extracted into the
+lab's state directory, so what containers mount lives as long as the
+lab, and `destroy` removes it.
 
 ```bash
-sudo nlink-lab import satellite-mesh.nlz
-```
-
-```text
-Extracted lab 'satellite-mesh' to satellite-mesh (format v1, ...)
-Deployed lab 'satellite-mesh'
+sudo nlink-lab deploy satellite-mesh.nlz
 ```
 
 Extract + validate only (no kernel state changed):
 
 ```bash
-nlink-lab import --no-deploy satellite-mesh.nlz
+nlink-lab archive extract satellite-mesh.nlz
 ls satellite-mesh/
 # manifest.json  rendered.toml  topology.nll
 ```
@@ -124,7 +122,7 @@ ls satellite-mesh/
 Custom extract dir:
 
 ```bash
-sudo nlink-lab import bug-repro.nlz --dir /tmp/repro
+nlink-lab archive extract bug-repro.nlz --dir /tmp/repro
 ```
 
 Use the rendered snapshot directly (skip re-parsing the NLL —
@@ -132,7 +130,8 @@ useful if the archive was produced by a newer nlink-lab whose
 syntax we don't fully understand):
 
 ```bash
-sudo nlink-lab import --no-reparse newer-archive.nlz
+nlink-lab archive extract --no-reparse newer-archive.nlz   # check it
+sudo nlink-lab deploy --no-reparse newer-archive.nlz      # deploy it
 ```
 
 ## What's in the archive
@@ -214,7 +213,7 @@ Export the deployed topology after each test run:
 ```bash
 sudo nlink-lab deploy --json examples/wan.nll > deploy.json
 # ... run tests ...
-nlink-lab export --archive --include-running-state wan -o /tmp/wan-${CI_RUN}.nlz
+nlink-lab archive create -L wan --include-running-state -o /tmp/wan-${CI_RUN}.nlz
 ```
 
 Upload `wan-${CI_RUN}.nlz` to your CI artifact store. Failures
@@ -233,6 +232,6 @@ get a one-click reproducer.
 ## See also
 
 - [`export` CLI page](../cli/export.md)
-- [`import` CLI page](../cli/import.md)
-- [`inspect` CLI page](../cli/inspect.md)
+- [`archive` CLI page](../cli/archive.md)
+- [`deploy` CLI page](../cli/deploy.md)
 - **Plan 153** — design + roadmap

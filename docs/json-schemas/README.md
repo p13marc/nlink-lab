@@ -9,19 +9,20 @@ have no typed struct yet.
 
 | Command | Schema | Source |
 |---------|--------|--------|
-| `nlink-lab apply --check --json` / `--dry-run --json` / `verify --json` | `layered-diff.v3.schema.json` | generated (`DryRunReport`) |
+| `nlink-lab apply --dry-run --json` / `verify --json` | `layered-diff.v3.schema.json` | generated (`DryRunReport`) |
 | `nlink-lab validate --json` | `validate.schema.json` | generated (`ValidateReport`) |
 | `nlink-lab validate --list-rules --json` | `validate-rules.schema.json` | generated (`Vec<RuleInfo>`) |
-| `nlink-lab status --json` (no lab) | `status-list.schema.json` | generated (`Vec<LabInfo>`) |
-| `nlink-lab status --scan --json` | `status-scan.schema.json` | generated (`StatusScanReport`) |
-| `nlink-lab ps --json` | `ps.schema.json` | generated (`Vec<ProcessInfo>`) |
+| `nlink-lab deploy --json` | `deploy.schema.json` | generated (`DeployReport`) |
+| `nlink-lab ls --json` (with `--scan`: `orphans`) | `ls.schema.json` | generated (`LsReport`) |
+| `nlink-lab status --json` | `status.schema.json` | generated (`StatusReport`) |
+| `nlink-lab use --json` | `use.schema.json` | generated (`UseReport`) |
+| `nlink-lab snapshot ls --json` | `snapshot-list.schema.json` | generated (`SnapshotList`) |
+| `nlink-lab ps --json` | `ps.schema.json` | generated (`PsReport`) |
 | `nlink-lab proc-stat --json -L <PID>` | `proc-stat.schema.json` | generated (`ProcStat`) |
 | `nlink-lab proc-stat --json --all` / `--pid` | `proc-stat-list.schema.json` | generated (`Vec<ProcStat>`) |
 | `nlink-lab doctor --json` | `doctor.schema.json` | generated (`DoctorReport`) |
 | `nlink-lab lint --json` | `lint.schema.json` | generated (`LintReport`) |
 | `nlink-lab metrics --format json` (one line per snapshot) | `metrics-snapshot.schema.json` | generated (`MetricsSnapshot`) |
-| `nlink-lab deploy --json` | `deploy.schema.json` | hand-written |
-| `nlink-lab status --json <LAB>` | `status-lab.schema.json` | hand-written |
 | `nlink-lab spawn --json` | `spawn.schema.json` | hand-written |
 | `nlink-lab impair --show --json` | `impair-show.schema.json` | hand-written |
 | daemon API, client → daemon ([API.md](../API.md)) | `api-client.v1.schema.json` | generated (`api::ClientMsg`) |
@@ -31,8 +32,8 @@ The upstream `nlink::ConfigDiff` / `nlink::NftablesDiff` values inside
 the layered diff are free-form objects in the schema (their shape is
 nlink's). The shapes without a schema are described in prose: `exec`'s
 in [docs/cli/exec.md](../cli/exec.md), `diagnose`'s and `stats`'s in their
-`--help`; `inspect --json` prints the lab's topology (the archive summary
-for a `.nlz`), `render --json` the topology, and `diff --json` the
+`--help`; `archive inspect --json` prints the archive summary, `export
+--format json` and `render --json` a topology, and `diff --json` the
 topology diff with `total_changes`.
 
 ## Validating output

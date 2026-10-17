@@ -1,47 +1,77 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "nlink-lab status --scan --json",
-  "description": "`status --scan --json` envelope.",
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
   "type": "object",
   "properties": {
     "labs": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/LabInfo"
+        "$ref": "#/$defs/LabRow"
+      }
+    },
+    "legacy": {
+      "description": "Labs in the per-user state directories of older versions\n(`doctor --fix` moves them).",
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     },
     "orphans": {
-      "$ref": "#/$defs/Orphans"
+      "description": "With `--scan`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Orphans"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
     }
   },
   "required": [
-    "labs",
-    "orphans"
+    "schema_version",
+    "labs"
   ],
   "$defs": {
-    "LabInfo": {
-      "description": "Summary info about a running lab (for status listing).",
+    "LabRow": {
+      "description": "One running lab.",
       "type": "object",
       "properties": {
         "created_at": {
-          "description": "ISO 8601 creation timestamp.",
+          "description": "RFC 3339.",
           "type": "string"
         },
-        "name": {
-          "description": "Lab name.",
+        "current": {
+          "description": "The caller's current lab (`nlink-lab use`).",
+          "type": "boolean"
+        },
+        "lab": {
           "type": "string"
         },
-        "node_count": {
-          "description": "Number of nodes.",
+        "nodes": {
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "source": {
+          "description": "The topology file it was deployed from.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
-        "name",
-        "node_count",
-        "created_at"
+        "lab",
+        "nodes",
+        "created_at",
+        "current"
       ]
     },
     "Orphans": {

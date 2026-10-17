@@ -450,7 +450,7 @@ validate { counter server ssh-drops == 0 }
   established, so a limit after it never sees them. A size makes it a
   byte rate: `limit 1mb/second burst 64kb`.
 - `counter` counts packets and bytes; `counter name NAME` counts into a
-  named counter, declared by use, which `inspect` lists and a
+  named counter, declared by use, which `status` lists and a
   `validate { counter NODE NAME [packets|bytes] OP N }` assertion reads
   (`==`, `!=`, `>`, `>=`, `<`, `<=`).
 - `log ["prefix"] [group N] [level L]` logs the packet, at a syslog
@@ -758,7 +758,7 @@ matrix's default: it applies to traffic to the peers no pair rule names.
 
 Traffic control is declared with the node's links and addresses, so
 `apply` changes a changed block in place (its handle and counters stay),
-removes a removed one, and puts back one deleted by hand; `apply --check`
+removes a removed one, and puts back one deleted by hand; `verify`
 and `verify` report the difference. A `prio` gets handle `1:`.
 `edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` edits a running
 lab. See `examples/qdisc-kinds.nll`.

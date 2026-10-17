@@ -112,7 +112,7 @@ Deploy writes:
 - `~/.local/state/nlink-lab/labs/<lab>/topology.toml` — rendered (post-loop, post-import)
   topology
 
-These files are read by `destroy`, `apply`, `inspect`, `exec`, and
+These files are read by `destroy`, `apply`, `status`, `exec`, and
 all other lab-aware commands. Removing them by hand leaves orphan
 namespaces; use `nlink-lab destroy --orphans` to reap them.
 
@@ -130,15 +130,17 @@ namespaces; use `nlink-lab destroy --orphans` to reap them.
 ```text
 Deploy a lab from a topology file (.nll).
 
-JSON OUTPUT (with `--json`): { "name": str, "nodes": int, "links": int, "deploy_time_ms": int } Schema: docs/json-schemas/deploy.schema.json
+FILE is a topology (`.nll`) or a lab archive (`.nlz`).
 
-Combined with `--unique`, the `name` field is the chosen unique lab name (original name + PID suffix). Useful for scripted teardown.
+JSON OUTPUT (with `--json`): { "schema_version": 1, "lab": str, "nodes": int, "links": int, "duration_ms": int, "assertions"?: [...], "assertions_failed"?: bool } Schema: docs/json-schemas/deploy.schema.json
+
+Combined with `--unique`, `lab` is the chosen unique lab name (original name + PID suffix). Useful for scripted teardown.
 
 Usage: nlink-lab deploy [OPTIONS] <TOPOLOGY>
 
 Arguments:
   <TOPOLOGY>
-          Path to the topology file (.nll)
+          The topology file (`.nll`), or a lab archive (`.nlz`: `archive create` makes one), deployed with the params in it
 
 Options:
       --dry-run
@@ -164,6 +166,9 @@ Options:
 
       --unique
           Auto-generate unique lab name suffix (appends PID)
+
+      --no-reparse
+          With an archive: deploy its rendered topology instead of parsing its NLL (an archive made by a newer nlink-lab)
 
   -h, --help
           Print help (see a summary with '-h')

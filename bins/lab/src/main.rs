@@ -87,18 +87,31 @@ fn usage_error(e: clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
         || args
             .windows(2)
             .any(|w| w[0] == "--format" && (w[1] == "json" || w[1] == "ndjson"));
-    let message = match removed {
-        Some(r) => format!("`nlink-lab {}` was removed: use `{}`", r.name, r.instead),
-        None => e.render().to_string().trim_end().to_string(),
-    };
-    // `ps LAB`: the lab is `-L LAB` now
-    let lab_hint = (e.kind() == ErrorKind::UnknownArgument)
-        .then(|| e.get(clap::error::ContextKind::InvalidArg))
-        .flatten()
+    let invalid_arg = e
+        .get(clap::error::ContextKind::InvalidArg)
         .and_then(|v| match v {
             clap::error::ContextValue::String(s) => Some(s.clone()),
             _ => None,
+        });
+    // `apply --check`: a flag that moved to another command
+    let removed_flag = (e.kind() == ErrorKind::UnknownArgument)
+        .then(|| {
+            let cmd = removed::subcommand(args)?;
+            removed::find_flag(cmd, invalid_arg.as_deref()?)
         })
+        .flatten();
+    let message = match (removed, removed_flag) {
+        (Some(r), _) => format!("`nlink-lab {}` was removed: use `{}`", r.name, r.instead),
+        (None, Some(r)) => format!(
+            "`nlink-lab {} {}` was removed: use `{}`",
+            r.command, r.flag, r.instead
+        ),
+        (None, None) => e.render().to_string().trim_end().to_string(),
+    };
+    // `ps LAB`: the lab is `-L LAB` now
+    let lab_hint = (e.kind() == ErrorKind::UnknownArgument)
+        .then_some(invalid_arg.clone())
+        .flatten()
         .filter(|arg| !arg.starts_with('-') && nlink_lab::state::exists(arg));
     if wants_json {
         let mut api = nlink_lab::api::ApiError::new(
@@ -114,7 +127,7 @@ fn usage_error(e: clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
             "{}",
             serde_json::to_string_pretty(&api).unwrap_or_else(|_| message.clone())
         );
-    } else if removed.is_some() {
+    } else if removed.is_some() || removed_flag.is_some() {
         anstream::eprintln!("{} {message}", output::style::red("error:"));
     } else {
         let _ = e.print();

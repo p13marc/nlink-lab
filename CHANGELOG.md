@@ -55,6 +55,30 @@ under both (#233). Its waves land one by one below.
 - **`ps --json` is an object** (#241): `{"schema_version": 2, "lab": …,
   "processes": [ … ]}`, not a bare array. Every JSON document gets a
   `schema_version` as the CLI waves reach its command.
+- **Lifecycle commands, one per job** (#246):
+
+  | Was | Now |
+  |---|---|
+  | `status` (no name), `status --scan` | `ls`, `ls --scan` |
+  | `inspect LAB`, `containers LAB` | `status LAB` (default: the current lab) |
+  | `inspect FILE.nlz` | `archive inspect FILE.nlz` |
+  | `export --archive LAB\|FILE` | `archive create -L LAB` / `archive create FILE` |
+  | `import FILE.nlz` | `deploy FILE.nlz` |
+  | `import --no-deploy [-d DIR] FILE.nlz` | `archive extract FILE.nlz [--dir DIR]` |
+  | `snapshot LAB NAME`, `--list`, `--delete NAME` | `snapshot save NAME`, `snapshot ls`, `snapshot rm NAME` |
+  | `restore LAB NAME` | `snapshot restore NAME` |
+  | `apply --check FILE` | `verify --file FILE` |
+  | `verify --topology FILE` | `verify --file FILE` |
+
+  A removed command or flag says what replaced it (exit 64). `status
+  --json` is a v2 document (`status.schema.json`): nodes with their
+  addresses and containers, impairments, partitions, processes,
+  counters, `host_resources`; the topology itself is `export`'s.
+  `deploy --json` and `apply --json` say `lab` (was `name`) and
+  `duration_ms` (was `deploy_time_ms`/`apply_time_ms`), with a
+  `schema_version`. `snapshot ls --json` is `{schema_version, lab,
+  snapshots}`. `destroy` without a name no longer picks the only lab:
+  name it, or `-L`/`NLINK_LAB`/`use`.
 - **The lab is `-L LAB`, not the first argument** (#243), on every
   command that acts on a running lab (`exec`, `shell`, `spawn`,
   `wait-for`, `ps`, `kill`, `logs`, `stats`, `proc-stat`, `restart`,
@@ -579,6 +603,14 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`apply` without a file** (#246) re-reads the file the lab was
+  deployed from (or last applied), with its `--set` params; `-L` applies
+  a file to a lab deployed with `--suffix`/`--unique`. `deploy FILE.nlz`
+  deploys an archive (extracted into the lab's state directory, removed
+  with it; `--no-reparse` for one made by a newer nlink-lab), and `apply`
+  and `verify --file` read archives too. `destroy` takes several labs,
+  and destroying the current lab forgets it. `export --nll` prints a
+  running lab's topology as NLL.
 - **`nlink-lab use [LAB]`** (#243): the current lab, per user (`sudo`
   included, through `SUDO_UID`); without a name it says which lab
   commands act on and why, `--clear` forgets it. Completion offers the

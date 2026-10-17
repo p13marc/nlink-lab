@@ -1,10 +1,29 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Array_of_SnapshotInfo",
-  "type": "array",
-  "items": {
-    "$ref": "#/$defs/SnapshotInfo"
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "lab": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "snapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SnapshotInfo"
+      }
+    }
   },
+  "required": [
+    "schema_version",
+    "lab",
+    "snapshots"
+  ],
   "$defs": {
     "SnapshotInfo": {
       "description": "Listing entry for `nlink-lab snapshot --list`.",

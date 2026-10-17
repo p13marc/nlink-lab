@@ -1,30 +1,86 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://nlink-lab.example/schemas/deploy.schema.json",
-  "title": "nlink-lab deploy --json output",
-  "description": "Emitted on stdout (one object) by `nlink-lab deploy --json` after a successful deploy. With `--unique`, the `name` field is the chosen unique name (original + PID suffix).",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
   "type": "object",
-  "required": ["name", "nodes", "links", "deploy_time_ms"],
-  "additionalProperties": false,
   "properties": {
-    "name": {
-      "type": "string",
-      "description": "Final lab name (post --unique/--suffix)."
+    "assertions": {
+      "description": "The `validate { … }` results, when there are assertions.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AssertionResult"
+      }
     },
-    "nodes": {
+    "assertions_failed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "duration_ms": {
       "type": "integer",
-      "minimum": 0,
-      "description": "Node count from the lowered topology."
+      "format": "uint64",
+      "minimum": 0
+    },
+    "lab": {
+      "type": "string"
     },
     "links": {
       "type": "integer",
-      "minimum": 0,
-      "description": "Point-to-point link count."
+      "format": "uint",
+      "minimum": 0
     },
-    "deploy_time_ms": {
+    "nodes": {
       "type": "integer",
-      "minimum": 0,
-      "description": "Wall-clock duration of the deploy step, milliseconds."
+      "format": "uint",
+      "minimum": 0
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema_version",
+    "lab",
+    "nodes",
+    "links",
+    "duration_ms"
+  ],
+  "$defs": {
+    "AssertionResult": {
+      "description": "Result of a single assertion.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "Human-readable assertion description.",
+          "type": "string"
+        },
+        "detail": {
+          "description": "Detail message (e.g., actual latency, route output).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "Time to evaluate this assertion (milliseconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "passed": {
+          "description": "Whether the assertion passed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "description",
+        "passed",
+        "detail",
+        "duration_ms"
+      ]
     }
   }
 }

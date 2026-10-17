@@ -47,7 +47,7 @@ sudo nlink-lab destroy --orphans
 
 # List running labs; --scan also reports orphans detected on the host
 nlink-lab status
-nlink-lab status --scan
+nlink-lab ls --scan
 
 # Execute in a lab node (stdio streams live — good for services, tail -f, ping)
 sudo nlink-lab exec -L simple router -- ip addr
@@ -255,26 +255,27 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (48 total; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
-`deploy` (with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
-`destroy` (with `--all`, `--orphans`), `apply` (`--reset-impairments`),
-`snapshot` (`--list`, `--delete`), `restore` (`--dry-run`),
+CLI commands (lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+`deploy` (`.nll` or `.nlz`, with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
+`destroy` (`LAB…`, `--all`, `--orphans`), `apply` (`[FILE]`, default the recorded source; `--reset-impairments`),
+`ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,
+impairments, partitions, processes, counters),
+`snapshot save|ls|rm|restore` (`--dry-run`), `archive create|extract|inspect`,
 `events` (`--follow`, `--since`, `--kind`, `--socket`),
-`status` (with `--scan`, reports orphans + stale labs),
 `exec` (`--json`, `--env`, `--workdir`),
 `spawn` (`--log-dir`, `--env`, `--workdir`, `--wait-tcp`),
 `shell` (interactive TTY), `validate` (with `--set`, `--show-ips`), `test`
 (`--junit`, `--tap`, `--fail-fast`), `render`
-(`--json`, `--dot`, `--ascii`, `--set`), `inspect` (combined view),
+(`--json`, `--dot`, `--ascii`, `--set`),
 `impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
-`graph`, `diagnose` (`--json`), `capture`, `diff`, `export`, `import`,
+`graph`, `diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
 `watch` (`--family route|nftables|both`, `--json` for NDJSON),
 `wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
 `ip` (`--iface`, `--cidr`),
 `ps`, `kill`, `proc-stat` (`--all`, `--pid`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`, `metrics`,
-`containers`, `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
+`logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `stats`, `restart`, `fmt` (`--check`, `-w`, `-`), `lint`
-(`--strict`, `--allow`), `doctor`, `verify`, `edit` (`--set-impair`),
+(`--strict`, `--allow`), `doctor` (`--fix`), `verify` (`--file`, the CI drift gate), `edit` (`--set-impair`),
 `scenario`, `benchmark` (ping/iperf3 with metric asserts),
 `lsp` (LSP server over stdio, issue #56),
 `top` (`--interval`, `--once`, `--zenoh`, `--zenoh-connect`; ratatui TUI,
@@ -348,8 +349,8 @@ with the initial-deploy path. `compute_layered_diff(running,
 desired)` (Plan 158f Phase 2) is the dry-run preview that walks
 every node, plans the same `Stack` apply would (`Stack::plan_in`), and
 emits a single `LayeredDiff` bundle (network, nftables, WireGuard) for
-`apply --check` / `apply --dry-run`. Plan 159d ships
-`apply --check --json` with typed `network` + `nftables` (+ `wireguard`) fields;
+`verify` / `apply --dry-run`. Plan 159d ships
+`verify --json` with typed `network` + `nftables` (+ `wireguard`) fields;
 Plan 160 (0.7.0) bumped it to **schema v3**, removing the v1
 `diff` / `layered_summary` / `layered_summary_deprecated`
 fallback fields after their one-release deprecation window.

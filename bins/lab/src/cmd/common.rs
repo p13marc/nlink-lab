@@ -124,6 +124,28 @@ pub fn print_drift(
     layered.change_count() + removals.len() + work.len()
 }
 
+/// Whether `path` is a `.nlz` lab archive.
+pub fn is_archive(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e == "nlz")
+}
+
+/// The topology of a `.nlz` archive, extracted into `into`: its files
+/// (container configs, overlays) are read from there, so it has to live
+/// as long as the lab does.
+pub fn archive_topology(
+    archive: &Path,
+    into: &Path,
+    no_reparse: bool,
+) -> nlink_lab::Result<nlink_lab::Topology> {
+    let report = nlink_lab::portability::import_archive(archive, Some(into), no_reparse)?;
+    report.topology.ok_or_else(|| {
+        nlink_lab::Error::invalid_topology(format!(
+            "{}: the archive yields no topology",
+            archive.display()
+        ))
+    })
+}
+
 /// The `.nll` files `path` names: the file itself, or those in the
 /// directory (and below it with `recursive`), sorted.
 pub fn collect_nll(path: &Path, recursive: bool) -> std::io::Result<Vec<PathBuf>> {

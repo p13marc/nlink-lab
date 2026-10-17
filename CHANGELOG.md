@@ -373,6 +373,22 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`snat … to ADDR:PORT` deployed without its port** (#203): the plain
+  SNAT path passed none, unlike DNAT's. It installs `snat ip to
+  203.0.113.1:5000` now.
+- **`translate` rules that could not be expanded vanished** (#203): a
+  bare address instead of a CIDR, or two families, left `nat {}` empty
+  and `validate` clean. It is a parse error now, naming the rule.
+- **Firewall and NAT values deploy refuses passed `validate`** (#203):
+  an unresolved `${…}` in a match or a set element (set elements were
+  never cross-reference-resolved; `set web [${web1.eth0}]` now is), a
+  CIDR NAT target, a NAT range that runs backwards or mixes families.
+  They failed mid-deploy, after the namespaces existed.
+- **`render` of a firewall rule did not parse back** (#203): a one-word
+  log prefix was written bare (`log SSH` failed to parse; `log drop`
+  became a second, catch-all `drop` rule), and a byte size not a
+  multiple of 1 kb lost a byte (`0.104kb`). Prefixes are quoted, and
+  sizes exact (`107byte`).
 - **Concurrent commands on one lab lost each other's state** (#202).
   `save_state` wrote the whole in-memory copy back: two `spawn`s loaded
   before either saved kept only one process tracked, and a spawn waiting

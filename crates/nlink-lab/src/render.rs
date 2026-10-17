@@ -566,8 +566,11 @@ fn render_firewall_chain(
         }
         if let Some(l) = &rule.log {
             let mut s = String::from("log");
+            // Always quoted: the parser takes a prefix only as a string. A
+            // bare `log SSH` did not parse back, and `log drop` parsed as
+            // a rule with no prefix followed by a bare `drop` (#203).
             if let Some(p) = &l.prefix {
-                s.push_str(&format!(" {}", lit_value(p)?));
+                s.push_str(&format!(" {}", nll_string(p)?));
             }
             if let Some(g) = l.group {
                 s.push_str(&format!(" group {g}"));
@@ -603,15 +606,18 @@ fn render_firewall_chain(
     Ok(())
 }
 
-/// A byte count as an NLL size: `1mb`, `64kb`, `1.5kb` (1024-based, as
-/// `parse_size` reads them).
+/// A byte count as an NLL size that parses back to exactly it: `1mb`,
+/// `64kb` (1024-based, as `parse_size` reads them), else `107byte`. A
+/// fractional `0.104kb` came back as 106 bytes (#203).
 fn size_text(n: u64) -> String {
-    const MB: u64 = 1024 * 1024;
+    const KB: u64 = 1024;
+    const MB: u64 = KB * KB;
     if n >= MB && n.is_multiple_of(MB) {
         format!("{}mb", n / MB)
+    } else if n >= KB && n.is_multiple_of(KB) {
+        format!("{}kb", n / KB)
     } else {
-        let kb = format!("{:.3}", n as f64 / 1024.0);
-        format!("{}kb", kb.trim_end_matches('0').trim_end_matches('.'))
+        format!("{n}byte")
     }
 }
 
@@ -1986,6 +1992,34 @@ mod tests {
         let b = serde_json::to_value(&topo2).unwrap();
         assert_eq!(a, b, "round-trip mismatch\n--- rendered ---\n{rendered}");
         (topo, rendered, topo2)
+    }
+
+    /// Log prefixes are always quoted, and byte sizes come back exactly
+    /// (#203). `log SSH` did not parse back, `log drop` parsed as two rules
+    /// (the second a bare `drop`), and `burst 107byte` came back as 106.
+    #[test]
+    fn log_prefixes_and_byte_sizes_round_trip() {
+        let (_, rendered, topo) = roundtrip(
+            r#"lab "fw"
+node a {
+  firewall input policy accept {
+    drop tcp dport 22 log "SSH"
+    accept tcp dport 23 log "drop"
+    drop tcp dport 24 limit 1mb/second burst 107byte
+    drop tcp dport 25 limit 3kb/second burst 1536byte
+  }
+}
+"#,
+        );
+        for line in [
+            r#"log "SSH""#,
+            r#"log "drop""#,
+            "burst 107byte",
+            "limit 3kb/second burst 1536byte",
+        ] {
+            assert!(rendered.contains(line), "{line}\n{rendered}");
+        }
+        assert_eq!(topo.nodes["a"].firewall.as_ref().unwrap().rules.len(), 4);
     }
 
     #[test]

@@ -76,7 +76,7 @@ jobs:
       - run: cargo test -p nlink-lab ${{ matrix.features }} --lib
       - run: cargo test -p nlink-lab ${{ matrix.features }} --doc
       # doc-CI gate: every ```nll block and relative link under docs/ (Plan 150 D)
-      - run: cargo test -p nlink-lab ${{ matrix.features }} --test docs_examples
+      - run: cargo test -p nlink-lab ${{ matrix.features }} --test docs_examples --test editor_keywords --test render_roundtrip
 
   stress:
     runs-on: ubuntu-24.04

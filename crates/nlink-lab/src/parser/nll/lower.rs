@@ -336,7 +336,7 @@ fn lower_with_base_dir_and_params(
     warn_unresolved_refs(&topology);
 
     // Post-lowering pass: expand `translate` NAT rules using topology addresses
-    expand_translate_rules(&mut topology);
+    expand_translate_rules(&mut topology)?;
 
     Ok(topology)
 }
@@ -670,7 +670,7 @@ fn build_address_map(topology: &types::Topology) -> BTreeMap<String, String> {
 
 /// Expand `Translate` NAT rules into per-host DNAT rules by scanning
 /// the topology for addresses in the destination range.
-fn expand_translate_rules(topology: &mut types::Topology) {
+fn expand_translate_rules(topology: &mut types::Topology) -> Result<()> {
     // Collect all assigned addresses (both families) from links and
     // node interfaces.
     let mut assigned: Vec<std::net::IpAddr> = Vec::new();
@@ -697,8 +697,10 @@ fn expand_translate_rules(topology: &mut types::Topology) {
         }
     }
 
-    // For each node with NAT rules, expand Translate rules.
-    for node in topology.nodes.values_mut() {
+    // For each node with NAT rules, expand Translate rules. A rule that
+    // cannot be expanded is an error: it was dropped with no message, after
+    // which the validator never saw it (#203).
+    for (node_name, node) in topology.nodes.iter_mut() {
         let nat = match &mut node.nat {
             Some(n) => n,
             None => continue,
@@ -720,24 +722,30 @@ fn expand_translate_rules(topology: &mut types::Topology) {
                 expanded.push(rule.clone());
                 continue;
             }
-            let src_cidr = match &rule.src {
-                Some(s) => s.as_str(),
-                None => continue,
+            let refuse = |why: String| {
+                crate::Error::NllParse(format!(
+                    "node '{node_name}': translate {} to {}: {why}",
+                    rule.src.as_deref().unwrap_or("?"),
+                    rule.target.as_deref().unwrap_or("?"),
+                ))
             };
-            let dst_cidr = match &rule.target {
-                Some(s) => s.as_str(),
-                None => continue,
+            let (Some(src_cidr), Some(dst_cidr)) = (rule.src.as_deref(), rule.target.as_deref())
+            else {
+                return Err(refuse("needs both a source and a target range".into()));
             };
-            let Ok((src_net, src_prefix)) = crate::helpers::parse_cidr(src_cidr) else {
-                continue;
+            let cidr = |v: &str| {
+                crate::helpers::parse_cidr(v).map_err(|_| {
+                    refuse(format!(
+                        "'{v}' is not a CIDR (translate maps a range: `/32` for one host)"
+                    ))
+                })
             };
-            let Ok((dst_net, dst_prefix)) = crate::helpers::parse_cidr(dst_cidr) else {
-                continue;
-            };
-            // Family mismatch is reported by the validator
-            // (`nat-family-mismatch`); nothing sensible can be expanded.
+            let (src_net, src_prefix) = cidr(src_cidr)?;
+            let (dst_net, dst_prefix) = cidr(dst_cidr)?;
             if src_net.is_ipv6() != dst_net.is_ipv6() {
-                continue;
+                return Err(refuse(
+                    "the two ranges are of different address families".into(),
+                ));
             }
             let host_prefix = crate::helpers::addr_bits(dst_net);
             for &addr in &assigned {
@@ -762,6 +770,7 @@ fn expand_translate_rules(topology: &mut types::Topology) {
         }
         nat.rules = expanded;
     }
+    Ok(())
 }
 
 /// Map an address from the destination range to the source range,
@@ -848,6 +857,13 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
                 if let Some(match_expr) = &mut rule.match_expr {
                     *match_expr = resolve_ref(match_expr, &addr_map)?;
                     *match_expr = normalize_match_family(match_expr);
+                }
+            }
+            // Set elements may name an interface's address too
+            // (`set web ipv4 [${web1.eth0}]`); they were never resolved.
+            for set in fw.sets.values_mut() {
+                for element in &mut set.elements {
+                    *element = resolve_ref(element, &addr_map)?;
                 }
             }
         }
@@ -7503,20 +7519,25 @@ link r:eth0 -- h:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
         assert!(nat.rules.iter().all(|r| r.action == types::NatAction::Dnat));
     }
 
+    /// A translate rule that cannot be expanded is an error, not a rule
+    /// that silently vanishes before the validator could see it (#203).
     #[test]
-    fn test_lower_translate_family_mismatch_is_skipped() {
-        let src = r#"
-lab "t"
-node r {
-  nat { translate 172.100.0.0/16 to fd00:1::/64 }
-}
-node h
-link r:eth0 -- h:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
-"#;
-        let topo = crate::parser::parse(src).unwrap();
-        let nat = topo.nodes["r"].nat.as_ref().unwrap();
-        // Nothing sensible can be expanded; the validator reports the
-        // family mismatch (`nat-family-mismatch`).
-        assert!(nat.rules.is_empty(), "{:?}", nat.rules);
+    fn test_lower_translate_that_cannot_expand_is_an_error() {
+        for (rule, why) in [
+            (
+                "translate 172.100.0.0/16 to fd00:1::/64",
+                "different address families",
+            ),
+            ("translate 203.0.113.10 to 10.0.1.10", "is not a CIDR"),
+        ] {
+            let src = format!(
+                "lab \"t\"\nnode r {{\n  nat {{ {rule} }}\n}}\nnode h\nlink r:eth0 -- h:eth0 {{ 10.0.1.1/24 -- 10.0.1.10/24 }}\n"
+            );
+            let err = crate::parser::parse(&src).unwrap_err().to_string();
+            assert!(
+                err.contains(why) && err.contains("node 'r'"),
+                "{rule}: {err}"
+            );
+        }
     }
 }

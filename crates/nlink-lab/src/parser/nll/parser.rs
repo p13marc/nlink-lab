@@ -1407,14 +1407,18 @@ fn parse_nat_ports(tokens: &[Spanned], pos: &mut usize) -> Result<(u16, Option<u
 fn parse_nat_flags(tokens: &[Spanned], pos: &mut usize) -> Result<Vec<crate::types::NatFlag>> {
     use crate::types::NatFlag;
     let mut flags = Vec::new();
-    while let Some(Token::Ident(w)) = at(tokens, *pos) {
-        let flag = match w.as_str() {
-            "random" => NatFlag::Random,
-            "fully-random" => NatFlag::FullyRandom,
-            "persistent" => NatFlag::Persistent,
-            _ => break,
+    // Through `eat_kw`, which is where the editor-keyword gate collects
+    // the language's keywords from.
+    loop {
+        let flag = if eat_kw(tokens, pos, "random") {
+            NatFlag::Random
+        } else if eat_kw(tokens, pos, "fully-random") {
+            NatFlag::FullyRandom
+        } else if eat_kw(tokens, pos, "persistent") {
+            NatFlag::Persistent
+        } else {
+            break;
         };
-        *pos += 1;
         if !flags.contains(&flag) {
             flags.push(flag);
         }

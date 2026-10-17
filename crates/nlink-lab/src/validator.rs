@@ -415,6 +415,7 @@ impl Topology {
         validate_nat_addresses(self, &mut issues);
         validate_nat_families(self, &mut issues);
         validate_nat_matches(self, &mut issues);
+        validate_nat_literals(self, &mut issues);
         validate_firewall(self, &interfaces, &mut issues);
         validate_route_addresses(self, &mut issues);
         validate_mgmt_subnet(self, &mut issues);
@@ -1927,6 +1928,45 @@ fn validate_nat_matches(topology: &Topology, issues: &mut Vec<ValidationIssue>) 
     }
 }
 
+/// What the planner refuses about a NAT rule's literals, reported before
+/// deploy (#203): a CIDR target (`to 203.0.113.0/29`, deploy needs an
+/// address), a range that runs backwards (`10.0.0.9-10.0.0.1`) or mixes
+/// families. A rule the other NAT checks already reported is skipped, and
+/// so is one still holding `${…}`.
+fn validate_nat_literals(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        let Some(nat) = &node.nat else {
+            continue;
+        };
+        for (i, rule) in nat.rules.iter().enumerate() {
+            let location = format!("nodes.{node_name}.nat.rules[{i}]");
+            let reported = issues.iter().any(|x| {
+                x.location
+                    .as_deref()
+                    .is_some_and(|l| l.starts_with(&location))
+            });
+            let unresolved = [&rule.src, &rule.dst, &rule.target, &rule.target_end]
+                .into_iter()
+                .flatten()
+                .any(|v| v.contains("${"));
+            if reported || unresolved {
+                continue;
+            }
+            let one = crate::types::NatConfig {
+                rules: vec![rule.clone()],
+            };
+            if let Err(e) = crate::deploy::plan::nftables::validate_nat_rule_literals(&one) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "invalid-nat-cidr",
+                    message: format!("node '{node_name}': {e}"),
+                    location: Some(location),
+                });
+            }
+        }
+    }
+}
+
 fn validate_nat_families(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in sorted(&topology.nodes) {
         let Some(nat) = &node.nat else {
@@ -2004,7 +2044,17 @@ fn validate_firewall(
                     location: location.clone(),
                 });
             }
-            if set.elements.iter().any(|e| e.contains("${")) {
+            // An element still holding `${…}` would fail at deploy, after
+            // the namespaces exist (#203); report it here.
+            let mut unresolved = false;
+            for (i, e) in set.elements.iter().enumerate() {
+                unresolved |= check_unresolved(
+                    e,
+                    format!("nodes.{node_name}.firewall.sets.{name}.elements[{i}]"),
+                    issues,
+                );
+            }
+            if unresolved {
                 continue;
             }
             if let Err(msg) = crate::firewall::lower_set(name, set) {
@@ -2032,7 +2082,7 @@ fn validate_firewall(
             for (i, rule) in rules.iter().enumerate() {
                 let location = Some(format!("{base}.rules[{i}]"));
                 let expr = rule.match_expr.as_deref().unwrap_or("");
-                if expr.contains("${") {
+                if check_unresolved(expr, format!("{base}.rules[{i}]"), issues) {
                     continue;
                 }
                 let clauses = match crate::firewall::parse_match(expr) {
@@ -5048,6 +5098,55 @@ node b { sysctl "net/netfilter/nf_conntrack_max" "65536" }
         );
         assert!(hits.iter().all(|h| h.severity == Severity::Warning));
         assert!(hits[0].message.contains("tcp_rmem"), "{}", hits[0].message);
+    }
+
+    /// A `${…}` the lowerer could not resolve in a firewall match or set,
+    /// and a NAT target the planner would refuse, are errors before
+    /// deploy (#203); both used to validate and then fail mid-deploy.
+    #[test]
+    fn test_firewall_and_nat_literals_deploy_would_refuse() {
+        let result = parse_and_validate(
+            r#"lab "t"
+node server
+node a {
+  firewall {
+    set web ipv4 [${nope.eth0}]
+    input policy drop { accept src ${sever.eth0} }
+  }
+  nat {
+    snat src 10.0.1.0/24 to 203.0.113.0/29
+    snat src 10.0.2.0/24 to 10.0.0.9-10.0.0.1
+    snat src 10.0.3.0/24 to 10.0.0.1-fd00::9
+  }
+}
+link a:eth0 -- server:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        );
+        let at = |rule| -> Vec<String> {
+            rules_of(&result, rule)
+                .iter()
+                .filter_map(|i| i.location.clone())
+                .collect()
+        };
+        assert_eq!(
+            at("unresolved-interpolation"),
+            [
+                "nodes.a.firewall.sets.web.elements[0]",
+                "nodes.a.firewall.rules[0]"
+            ],
+            "{:?}",
+            result.issues()
+        );
+        assert_eq!(
+            at("invalid-nat-cidr"),
+            [
+                "nodes.a.nat.rules[0]",
+                "nodes.a.nat.rules[1]",
+                "nodes.a.nat.rules[2]"
+            ],
+            "{:?}",
+            result.issues()
+        );
     }
 
     #[test]

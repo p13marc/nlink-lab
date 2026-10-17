@@ -6,7 +6,7 @@ set at runtime and the partitions.
 
 ```bash
 nlink-lab snapshot save before-chaos --description "clean baseline"
-sudo nlink-lab impair wan:eth0 --loss 30%
+sudo nlink-lab impair wan:eth0 loss 30%
 nlink-lab snapshot ls
 sudo nlink-lab snapshot restore before-chaos --dry-run
 sudo nlink-lab snapshot restore before-chaos

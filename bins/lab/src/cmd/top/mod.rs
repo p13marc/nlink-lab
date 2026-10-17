@@ -102,7 +102,7 @@ impl Source {
     }
 
     async fn open_zenoh(args: &Args, lab: &str) -> nlink_lab::Result<Self> {
-        // Same configuration path as `nlink-lab metrics`.
+        // The daemon's metrics topic, as `nlink-lab daemon` publishes it.
         let mut config = zenoh::Config::default();
         if let Some(connect) = &args.zenoh_connect {
             config

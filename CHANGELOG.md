@@ -79,6 +79,19 @@ under both (#233). Its waves land one by one below.
   `schema_version`. `snapshot ls --json` is `{schema_version, lab,
   snapshots}`. `destroy` without a name no longer picks the only lab:
   name it, or `-L`/`NLINK_LAB`/`use`.
+- **Network and observe** (#251):
+
+  | Was | Now |
+  |---|---|
+  | `impair EP --delay 50ms --loss 1%` | `impair EP delay 50ms loss 1%` (or `delay=50ms,loss=1%`) |
+  | `impair EP --out-delay A --in-delay B` | `impair EP delay A`, `impair EP delay B --dir in` |
+  | `watch LAB --family route` | `events -f --source drift --family route` |
+  | `metrics LAB` | `top --once --json` |
+  | `ip LAB NODE --iface eth0` | `ip NODE:eth0` |
+
+  `impair --pair SRC DST SPEC` sets a network's impairment between two
+  nodes (`--network`, `--rate-cap`); `impair --clear --dir in|both`
+  clears what an endpoint receives. A removed flag says what replaced it.
 - **Nodes and processes** (#250):
 
   | Was | Now |

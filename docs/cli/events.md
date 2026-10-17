@@ -16,13 +16,30 @@ Options:
           The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
 
   -f, --follow
-          Keep running: tail new lifecycle events and merge live drift (`watch`) and runtime events (process exits, interface state). Drift and runtime sources need root; without it only the lifecycle log is followed
+          Keep running: tail new lifecycle events and merge live drift (RTNETLINK and nftables changes in the nodes) and runtime events (process exits, interface state). Drift and runtime need root; without it only the lifecycle log is followed
+
+      --source <SOURCE>
+          Only these sources (repeatable; default all): `lifecycle` (what nlink-lab did), `drift` (kernel changes, live: with -f), `runtime` (process exits and link state, live: with -f). `-f --source drift` is what `watch` was
+          
+          [possible values: lifecycle, drift, runtime]
+
+      --family <FAMILY>
+          Drift: the netlink family to watch
+          
+          [default: both]
+          [possible values: route, nftables, both]
+
+      --node <NODE>
+          Drift: one node only (nothing else is subscribed)
+
+      --include-snapshot
+          Drift: also show the resync replay after an ENOBUFS recovery (marked `[snapshot]`)
 
       --since <DURATION>
           Only events newer than this (`10m`, `2h`, `30s`)
 
       --kind <KIND>
-          Only these event kinds (repeatable): lifecycle names such as `deployed`, `impaired`, `spawned`; drift names, `<action>_<object>` as `watch` prints them (`new_address`, `del_route`, `new_nft_rule`) or `ended`/`gone`; or the sources `lifecycle`, `drift`, `runtime`
+          Only these event kinds (repeatable): lifecycle names such as `deployed`, `impaired`, `spawned`; drift names, `<action>_<object>` as drift records name them (`new_address`, `del_route`, `new_nft_rule`) or `ended`/`gone`; or the sources `lifecycle`, `drift`, `runtime`
 
   -i, --interval <DURATION>
           Runtime-event sampling interval (with --follow)

@@ -134,7 +134,7 @@ pub enum Commands {
 
     /// Live terminal UI for a running lab (nodes, interfaces, flows).
     ///
-    /// Collects a metrics snapshot every `--interval` seconds with the
+    /// Collects a metrics snapshot every `--interval` with the
     /// same collector `daemon` uses, which needs root like `diagnose`;
     /// `--zenoh` / `--zenoh-connect` instead reads a running daemon's
     /// stream, with no root and no write actions.
@@ -174,15 +174,17 @@ pub enum Commands {
     /// Add, remove or change a link of a running lab (MTU, qdisc).
     Link(cmd::link::Args),
 
-    /// Modify link impairment at runtime.
+    /// Change an endpoint's impairment at runtime: `impair r1:eth0 delay
+    /// 50ms loss 1%`, `--dir in|both` for what it receives, `--clear`,
+    /// `--partition`/`--heal`; or a network's between two nodes with
+    /// `--pair SRC DST`. `--show` lists what every endpoint has.
+    ///
+    /// The impairment replaces the endpoint's whole netem and is kept in
+    /// the lab's state, so `apply`, `verify` and `snapshot` see it.
     ///
     /// JSON OUTPUT (with `--show --json`):
-    ///   `{ "lab": str, "endpoints": { "<node>:<iface>": { ... } | null } }`
+    ///   { "schema_version": 1, "lab": str, "endpoints": { "NODE:IFACE": { ... } | null } }
     /// Schema: docs/json-schemas/impair-show.schema.json
-    ///
-    /// Without `--show`, applies impairment changes; output is plain
-    /// confirmation text.
-    #[command(group = clap::ArgGroup::new("impair_mode").args(["show", "clear", "partition", "heal"]).multiple(false))]
     Impair(cmd::impair::Args),
 
     /// Show a lab's lifecycle log (deploy, apply, spawn, kill, impair,
@@ -273,36 +275,6 @@ pub enum Commands {
     /// (and optionally `--listening`) look at a spawned `--pid`.
     Wait(cmd::wait::Args),
 
-    /// Tail nftables + RTNETLINK drift events for a running lab.
-    ///
-    /// Subscribes to every node in the lab and prints one line
-    /// per kernel mutation — useful for spotting hand-edits that
-    /// bypass `nlink-lab apply`. `--json` emits NDJSON for
-    /// piping to `jq`. Plan 159b.
-    ///
-    /// nftables events cover tables, chains, rules, sets, set
-    /// elements and named objects (counters, quotas, limits); the
-    /// generation marker the kernel sends after every committed
-    /// batch is not shown. Elements a rule adds from the packet path
-    /// (`add @set`) are not notified by the kernel.
-    ///
-    /// Each event is nlink's view of the object: a line such as
-    /// `[r1/route] new_link ifindex=7 mtu=1500 name=d0 …`, and with
-    /// `--json` a record such as
-    /// `{"node":"r1","family":"route","kind":"event","event":{"object":"link","action":"new",…}}`.
-    /// The event's name, `<action>_<object>`, is what `events --kind`
-    /// filters drift on.
-    ///
-    /// A node whose stream ends prints `watch ended: <error>` (an `ended`
-    /// record in `--json`) and is subscribed again after a backoff; one
-    /// whose namespace is gone, or was replaced by a redeploy of the lab,
-    /// prints `namespace gone` (`gone`) and stops. The command exits when
-    /// every node's watch has stopped, or when its output is closed.
-    ///
-    /// Every change is shown, whoever made it: what a concurrent `apply`,
-    /// `impair`, `node`, `link` or `node restart` does prints like a hand edit.
-    Watch(cmd::watch::Args),
-
     /// Show IP addresses assigned to a node.
     Ip(cmd::ip::Args),
 
@@ -371,9 +343,6 @@ pub enum Commands {
     /// Start the Zenoh backend daemon for a running lab.
     Daemon(cmd::daemon::Args),
 
-    /// Stream live metrics from a lab via Zenoh (no root required).
-    Metrics(cmd::metrics::Args),
-
     /// Create a topology file from a built-in template.
     Init(cmd::init::Args),
 }
@@ -395,10 +364,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("Network", &["impair", "node", "link", "ip", "capture"]),
-    (
-        "Observe",
-        &["events", "watch", "top", "metrics", "diagnose", "daemon"],
-    ),
+    ("Observe", &["events", "top", "diagnose", "daemon"]),
     ("Test", &["test", "scenario", "benchmark"]),
     (
         "Author",

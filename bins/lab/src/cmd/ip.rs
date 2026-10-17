@@ -7,11 +7,11 @@ pub struct Args {
     #[command(flatten)]
     pub lab: crate::ctx::LabArg,
 
-    /// Node name.
-    #[arg(add = crate::ctx::node_completer())]
+    /// The node, or one of its interfaces: `server`, `server:eth0`.
+    #[arg(value_name = "NODE[:IFACE]", add = crate::ctx::node_completer())]
     pub node: String,
 
-    /// Filter by interface name.
+    /// Only this interface (`NODE:IFACE` says the same).
     #[arg(long)]
     pub iface: Option<String>,
 
@@ -28,7 +28,17 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         cidr,
     } = args;
     let lab = lab.resolve()?;
+    let (node, iface) = match node.split_once(':') {
+        Some((n, i)) if iface.is_none() => (n.to_string(), Some(i.to_string())),
+        Some(_) => {
+            return Err(nlink_lab::Error::invalid_argument(
+                "give the interface once: NODE:IFACE or --iface",
+            ));
+        }
+        None => (node, iface),
+    };
     let running = nlink_lab::RunningLab::load(&lab)?;
+    crate::cmd::common::require_node(&running, &node)?;
     let addrs = running.node_addresses(&node)?;
 
     if let Some(ref iface_name) = iface {

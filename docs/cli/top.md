@@ -1,9 +1,9 @@
 # `nlink-lab top`
 
 A live terminal UI over a running lab: nodes, the selected node's
-interfaces, and its TCP flows, refreshed every `--interval` seconds. It is
-[`diagnose`](diagnose.md) + [`metrics`](metrics.md) + [`impair`](impair.md)
-in one screen.
+interfaces, and its TCP flows, refreshed every `--interval`. It is
+[`diagnose`](diagnose.md) + [`impair`](impair.md) in one screen, and
+`--once --json` prints one metrics snapshot (what `metrics` did).
 
 ```bash
 sudo nlink-lab top -L mylab            # collect locally (needs root)
@@ -47,7 +47,7 @@ delay 50ms loss 1%
 delay=50ms rate=10mbit
 ```
 
-Values are passed through verbatim, exactly as `impair --delay` does, but
+Values are passed through verbatim, exactly as `impair` does, but
 obvious mistakes (`delay 50` with no unit, `loss 150%`, a duplicate key)
 are rejected in the prompt so they can be corrected in place. Writes go
 through the same `RunningLab` calls as `impair`, so they are persisted in
@@ -84,7 +84,7 @@ without a terminal and tells you to use `--once`.
 ```text
 Live terminal UI for a running lab (nodes, interfaces, flows).
 
-Collects a metrics snapshot every `--interval` seconds with the same collector `daemon` uses, which needs root like `diagnose`; `--zenoh` / `--zenoh-connect` instead reads a running daemon's stream, with no root and no write actions.
+Collects a metrics snapshot every `--interval` with the same collector `daemon` uses, which needs root like `diagnose`; `--zenoh` / `--zenoh-connect` instead reads a running daemon's stream, with no root and no write actions.
 
 KEYS up/down or j/k  select        Tab  next pane      s  cycle sort i  impair prompt (`delay 50ms loss 1%`)           c  clear p  partition    h  heal       /  filter    ?  help    q  quit
 

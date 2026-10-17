@@ -500,6 +500,15 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`kill`, `kill -s` and an `apply` re-run stopped only the `exec` client
+  on a container node** (#215). A background process there is
+  `docker`/`podman exec … CMD`, and neither forwards a signal from the
+  client, so CMD kept running: after `kill` (which said "Killed"), and
+  after an `apply` that changed a `run`, next to its replacement. Each
+  exec into a container now carries `NLINK_LAB_TAG=<tag>` in its
+  environment (recorded in the state file as `process_tags`). Stopping
+  or signalling the tracked process also signals every process in the
+  container's PID namespace that carries the tag: TERM, then KILL.
 - **`events --follow` missed `destroyed`, then polled forever** (#210).
   It reads through an open descriptor now, so a deleted or rotated file
   is drained to its last line. A new file under the same name is read

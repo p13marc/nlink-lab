@@ -7699,3 +7699,57 @@ async fn an_auto_network_subnet_deploys_and_applies_as_nothing() {
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }
+
+/// #215: a process on a container node is `podman exec … CMD`, and the
+/// tracked PID is the exec client's, which forwards no signal. `kill`
+/// stopped the client and left CMD running in the container; an `apply`
+/// that changed a `run` started the new command next to the old one.
+#[tokio::test]
+async fn container_processes_are_stopped_inside_the_container() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("kct-{}", std::process::id());
+    let topo = |secs: &str| {
+        nlink_lab::parser::parse(&format!(
+            r#"lab "{lab_name}" {{ runtime "podman" }}
+node c image "alpine:latest" cmd ["sleep", "infinity"] {{ run background ["sleep", "{secs}"] }}
+node h
+link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+        ))
+        .unwrap()
+    };
+    let mut lab = topo("5555").deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let running = |lab: &RunningLab, what: &str| {
+        let ps = lab.exec("c", "ps", &[]).unwrap().stdout;
+        ps.lines().filter(|l| l.contains(what)).count()
+    };
+    let pid = lab.spawn_with_logs("c", &["sleep", "4242"], None).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_eq!(running(&lab, "sleep 4242"), 1);
+    assert!(lab.kill_process(pid).unwrap());
+    assert_eq!(
+        running(&lab, "sleep 4242"),
+        0,
+        "killed, still running in the container"
+    );
+
+    nlink_lab::apply(&mut lab, &topo("6666"))
+        .await
+        .expect("apply failed");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_eq!(
+        running(&lab, "sleep 5555"),
+        0,
+        "the old run is still running"
+    );
+    assert_eq!(running(&lab, "sleep 6666"), 1);
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}

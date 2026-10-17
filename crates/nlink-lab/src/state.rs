@@ -86,6 +86,12 @@ pub struct LabState {
     /// processes are never signalled by index (only by node removal).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub exec_pids: std::collections::BTreeMap<String, u32>,
+    /// The tag of each tracked process on a container node, set as
+    /// `NLINK_LAB_TAG` in its environment. The tracked PID is the
+    /// `docker`/`podman exec` client's, which forwards no signal: the tag
+    /// is what finds the process inside the container (#215).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub process_tags: std::collections::BTreeMap<u32, String>,
 }
 
 fn schema_v1() -> u32 {
@@ -113,6 +119,7 @@ impl LabState {
             live_impairments: Default::default(),
             process_logs: Default::default(),
             exec_pids: Default::default(),
+            process_tags: Default::default(),
         }
     }
 }

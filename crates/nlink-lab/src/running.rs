@@ -39,6 +39,9 @@ pub struct RunningLab {
     live_impairments: BTreeMap<String, crate::types::Impairment>,
     /// Log file paths for spawned processes: pid → (stdout_path, stderr_path).
     process_logs: BTreeMap<u32, (String, String)>,
+    /// Tag of each tracked process on a container node (see
+    /// `LabState::process_tags`).
+    process_tags: BTreeMap<u32, String>,
     /// `/proc/<pid>/stat` start time per tracked PID (see
     /// `LabState::starttimes`). A PID without an entry is never signalled.
     starttimes: BTreeMap<u32, u64>,
@@ -72,6 +75,7 @@ struct Baseline {
     saved_impairments: BTreeMap<String, crate::types::Impairment>,
     live_impairments: BTreeMap<String, crate::types::Impairment>,
     process_logs: BTreeMap<u32, (String, String)>,
+    process_tags: BTreeMap<u32, String>,
     /// The topology, serialized: `Topology` has no `PartialEq`.
     topology: String,
 }
@@ -290,6 +294,7 @@ impl RunningLab {
             saved_impairments: BTreeMap::new(),
             live_impairments: BTreeMap::new(),
             process_logs: BTreeMap::new(),
+            process_tags: BTreeMap::new(),
             assertion_results: Vec::new(),
             baseline: Default::default(),
         }
@@ -310,6 +315,7 @@ impl RunningLab {
             saved_impairments: self.saved_impairments.clone(),
             live_impairments: self.live_impairments.clone(),
             process_logs: self.process_logs.clone(),
+            process_tags: self.process_tags.clone(),
             topology: serde_json::to_string(&self.topology).unwrap_or_default(),
         }
     }
@@ -655,6 +661,7 @@ impl RunningLab {
         starttimes: BTreeMap<u32, u64>,
         exec_pids: BTreeMap<String, u32>,
         process_logs: BTreeMap<u32, (String, String)>,
+        process_tags: BTreeMap<u32, String>,
         mgmt_peers: BTreeMap<String, String>,
         dns_injected: bool,
         wifi_loaded: bool,
@@ -665,6 +672,7 @@ impl RunningLab {
         self.starttimes = starttimes;
         self.exec_pids = exec_pids;
         self.process_logs = process_logs;
+        self.process_tags = process_tags;
         self.mgmt_peers = mgmt_peers;
         self.dns_injected = dns_injected;
         self.wifi_loaded = wifi_loaded;
@@ -672,6 +680,14 @@ impl RunningLab {
 
     pub(crate) fn set_process_logs(&mut self, logs: BTreeMap<u32, (String, String)>) {
         self.process_logs = logs;
+    }
+
+    pub(crate) fn set_process_tags(&mut self, tags: BTreeMap<u32, String>) {
+        self.process_tags = tags;
+    }
+
+    pub(crate) fn process_tags_map(&self) -> &BTreeMap<u32, String> {
+        &self.process_tags
     }
 
     pub(crate) fn process_logs_map(&self) -> &BTreeMap<u32, (String, String)> {
@@ -1007,6 +1023,11 @@ impl RunningLab {
             &base.process_logs,
             &mine.process_logs,
         );
+        merge_map(
+            &mut fresh.process_tags,
+            &base.process_tags,
+            &mine.process_tags,
+        );
         let topology = match topology {
             Some(t) => t,
             None if mine.topology != base.topology => &self.topology,
@@ -1122,6 +1143,10 @@ impl RunningLab {
         };
         let (stdout_file, stdout_path) = temp_log("stdout")?;
         let (stderr_file, stderr_path) = temp_log("stderr")?;
+        // what finds the command inside the container (#215)
+        let tag = container
+            .as_ref()
+            .map(|_| new_process_tag(&self.topology.lab.name, node));
 
         let mut command = if let Some(id) = &container {
             let rt = self
@@ -1136,6 +1161,8 @@ impl RunningLab {
             for (k, v) in opts.env {
                 c.arg("-e").arg(format!("{k}={v}"));
             }
+            c.arg("-e")
+                .arg(format!("{TAG_VAR}={}", tag.as_deref().unwrap_or_default()));
             c.arg(id);
             c.args(cmd);
             c
@@ -1205,6 +1232,9 @@ impl RunningLab {
                 final_stderr.to_string_lossy().to_string(),
             ),
         );
+        if let Some(tag) = tag {
+            self.process_tags.insert(pid, tag);
+        }
         crate::events::record(
             &self.topology.lab.name,
             crate::events::LifecycleKind::Spawned {
@@ -1876,6 +1906,18 @@ impl RunningLab {
         Ok(results)
     }
 
+    /// `act(init_pid, tag)` for the processes a tracked PID started in a
+    /// container node, if it has a tag; what `act` returns, else 0.
+    fn tagged_in_container(&self, pid: u32, act: impl FnOnce(u32, &str) -> usize) -> usize {
+        let Some(tag) = self.process_tags.get(&pid) else {
+            return 0;
+        };
+        let Some((node, _)) = self.pids.iter().find(|(_, p)| *p == pid) else {
+            return 0;
+        };
+        self.containers.get(node).map_or(0, |c| act(c.pid, tag))
+    }
+
     /// Kill a tracked background process by PID. `Ok(false)` when it had
     /// already exited (`kill` said "Killed" for those, #209).
     pub fn kill_process(&self, pid: u32) -> Result<bool> {
@@ -1885,6 +1927,9 @@ impl RunningLab {
                 self.topology.lab.name
             )));
         }
+        // On a container node, what the `exec` client started too: the
+        // client forwards no signal, so it kept running (#215).
+        let inside = self.tagged_in_container(pid, stop_tagged);
         match kill_tracked(pid, self.starttimes.get(&pid).copied()) {
             outcome @ (KillOutcome::Signalled | KillOutcome::Gone) => {
                 crate::events::record(
@@ -1898,7 +1943,7 @@ impl RunningLab {
                         pid,
                     },
                 );
-                Ok(matches!(outcome, KillOutcome::Signalled))
+                Ok(matches!(outcome, KillOutcome::Signalled) || inside > 0)
             }
             KillOutcome::Unverified => Err(Error::deploy_failed(format!(
                 "refusing to signal pid {pid}: its start time was not recorded (state file \
@@ -1928,6 +1973,7 @@ impl RunningLab {
                 self.topology.lab.name
             )));
         }
+        self.tagged_in_container(pid, |init, tag| signal_tagged(init, tag, signal.number()));
         match signal_tracked(pid, self.starttimes.get(&pid).copied(), signal) {
             KillOutcome::Signalled | KillOutcome::Gone => {
                 crate::events::record(
@@ -2134,6 +2180,7 @@ impl RunningLab {
             saved_impairments: lab_state.saved_impairments,
             live_impairments: lab_state.live_impairments,
             process_logs: lab_state.process_logs,
+            process_tags: lab_state.process_tags,
             starttimes: lab_state.starttimes,
             exec_pids: lab_state.exec_pids,
             mgmt_peers: lab_state.mgmt_peers,
@@ -2738,6 +2785,72 @@ pub(crate) enum KillOutcome {
     Reused,
 }
 
+/// The environment variable that tags a process nlink-lab starts inside a
+/// container (#215): `NLINK_LAB_TAG=<tag>`.
+pub(crate) const TAG_VAR: &str = "NLINK_LAB_TAG";
+
+/// A tag no other process has: lab, node, this process and a counter.
+pub(crate) fn new_process_tag(lab: &str, node: &str) -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("{lab}.{node}.{}.{nanos}.{n}", std::process::id())
+}
+
+/// The host PIDs of the processes in `init_pid`'s PID namespace whose
+/// environment carries `tag`: a tagged command and everything it started.
+fn tagged_pids(init_pid: u32, tag: &str) -> Vec<i32> {
+    if init_pid == 0 {
+        return Vec::new();
+    }
+    let Ok(ns) = std::fs::read_link(format!("/proc/{init_pid}/ns/pid")) else {
+        return Vec::new();
+    };
+    let want = format!("{TAG_VAR}={tag}");
+    let Ok(dir) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    dir.flatten()
+        .filter_map(|e| e.file_name().to_str()?.parse::<i32>().ok())
+        .filter(|p| {
+            std::fs::read_link(format!("/proc/{p}/ns/pid")).is_ok_and(|l| l == ns)
+                && std::fs::read(format!("/proc/{p}/environ"))
+                    .is_ok_and(|env| env.split(|b| *b == 0).any(|v| v == want.as_bytes()))
+        })
+        .collect()
+}
+
+/// Send `signal` to the processes tagged `tag` in a container (see
+/// [`TAG_VAR`]); how many there were.
+pub(crate) fn signal_tagged(init_pid: u32, tag: &str, signal: i32) -> usize {
+    let pids = tagged_pids(init_pid, tag);
+    for p in &pids {
+        // SAFETY: plain kill(2) on PIDs just read from /proc.
+        unsafe { libc::kill(*p, signal) };
+    }
+    pids.len()
+}
+
+/// Stop the processes tagged `tag` in a container: SIGTERM, a grace
+/// period, SIGKILL for what is left. Stopping the `exec` client alone left
+/// them running: no runtime forwards its signals (#215). How many there
+/// were.
+pub(crate) fn stop_tagged(init_pid: u32, tag: &str) -> usize {
+    let found = signal_tagged(init_pid, tag, libc::SIGTERM);
+    if found > 0 {
+        for _ in 0..20 {
+            if tagged_pids(init_pid, tag).is_empty() {
+                return found;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        signal_tagged(init_pid, tag, libc::SIGKILL);
+    }
+    found
+}
+
 /// Best-effort, identity-checked kill of a tracked process: SIGTERM,
 /// a short grace period, then SIGKILL — but only when the PID's current
 /// start time matches the one recorded at spawn.
@@ -3192,6 +3305,37 @@ mod state_merge_tests {
 
     /// A tracked PID that is alive but started at another time is another
     /// process: `ps` reports ours as dead rather than the stranger as it.
+    /// The processes carrying a tag in a PID namespace are found and
+    /// stopped; an untagged one is left alone (#215). The test's own
+    /// namespace stands in for a container's.
+    #[test]
+    fn tagged_processes_are_found_and_stopped() {
+        let tag = new_process_tag("t", "n");
+        let spawn = |env: Option<&str>| {
+            let mut c = std::process::Command::new("sleep");
+            c.arg("30");
+            if let Some(tag) = env {
+                c.env(TAG_VAR, tag);
+            }
+            c.spawn().unwrap()
+        };
+        let mut tagged = spawn(Some(&tag));
+        let mut other = spawn(None);
+        let me = std::process::id();
+        assert_eq!(tagged_pids(me, &tag), vec![tagged.id() as i32]);
+        assert_eq!(stop_tagged(me, &tag), 1);
+        assert!(
+            tagged.wait().unwrap().code().is_none(),
+            "killed by a signal"
+        );
+        assert!(
+            other.try_wait().unwrap().is_none(),
+            "the untagged one runs on"
+        );
+        other.kill().unwrap();
+        other.wait().unwrap();
+    }
+
     /// A wait on a node the lab does not have is an error at once; it
     /// waited out its whole timeout and exited 124 (#209).
     #[tokio::test]

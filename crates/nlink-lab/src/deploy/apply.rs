@@ -35,6 +35,8 @@ pub(super) struct ApplyEnv {
     /// `"<node>:<index>"` → pid of a background `exec` block (#84).
     pub exec_pids: BTreeMap<String, u32>,
     pub process_logs: BTreeMap<u32, (String, String)>,
+    /// Tag of each background process on a container node (#215).
+    pub process_tags: BTreeMap<u32, String>,
     pub mgmt_peers: BTreeMap<String, String>,
     pub dns_injected: bool,
     pub wifi_loaded: bool,
@@ -71,6 +73,7 @@ impl ApplyEnv {
             starttimes: BTreeMap::new(),
             exec_pids: BTreeMap::new(),
             process_logs: BTreeMap::new(),
+            process_tags: BTreeMap::new(),
             mgmt_peers: BTreeMap::new(),
             dns_injected: false,
             wifi_loaded: false,
@@ -112,6 +115,7 @@ impl ApplyEnv {
         env.starttimes = running.starttimes().clone();
         env.exec_pids = running.exec_pids().clone();
         env.process_logs = running.process_logs_map().clone();
+        env.process_tags = running.process_tags_map().clone();
         env.mgmt_peers = running.mgmt_peers().clone();
         env.dns_injected = running.dns_injected();
         env.wifi_loaded = running.wifi_loaded();
@@ -960,6 +964,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     let outcome =
                         crate::running::kill_tracked(pid, env.starttimes.get(&pid).copied());
                     tracing::info!("stop exec[{index}] of '{node}' (pid {pid}): {outcome:?}");
+                    stop_in_container(env, node, pid);
                     env.starttimes.remove(&pid);
                     env.process_logs.remove(&pid);
                     env.pids.retain(|(_, p)| *p != pid);
@@ -979,6 +984,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .collect();
             for pid in mine {
                 let _ = crate::running::kill_tracked(pid, env.starttimes.get(&pid).copied());
+                stop_in_container(env, node, pid);
                 env.starttimes.remove(&pid);
                 env.process_logs.remove(&pid);
             }
@@ -1055,6 +1061,9 @@ fn exec_op(
     // discarded both streams, so nothing a service printed was recoverable --
     // `logs` only ever showed PID 1 (#112). Now both node kinds build a command
     // here and share the logging and tracking below; only the spawn differs.
+    let tag = container_id
+        .as_ref()
+        .map(|_| crate::running::new_process_tag(&env.lab, node));
     let mut cmd = if let Some(container_id) = &container_id {
         let rt = env
             .runtime
@@ -1063,7 +1072,15 @@ fn exec_op(
         // No `-d`: we keep the pipes so the output lands in the lab's log dir,
         // exactly like a namespace node's background process.
         let mut cmd = std::process::Command::new(rt.binary());
-        cmd.arg("exec").arg(container_id);
+        cmd.arg("exec");
+        // what finds the command inside the container: stopping the
+        // `exec` client alone left it running (#215)
+        cmd.arg("-e").arg(format!(
+            "{}={}",
+            crate::running::TAG_VAR,
+            tag.as_deref().unwrap_or_default()
+        ));
+        cmd.arg(container_id);
         cmd.args(&exec.cmd);
         cmd
     } else {
@@ -1165,7 +1182,21 @@ fn exec_op(
             final_stderr.to_string_lossy().to_string(),
         ),
     );
+    if let Some(tag) = tag {
+        env.process_tags.insert(pid, tag);
+    }
     Ok(())
+}
+
+/// After its `exec` client is stopped, stop what it started inside a
+/// container node: the client forwards no signal (#215).
+fn stop_in_container(env: &mut ApplyEnv, node: &str, pid: u32) {
+    if let Some(tag) = env.process_tags.remove(&pid)
+        && let Some(c) = env.containers.get(node)
+    {
+        let n = crate::running::stop_tagged(c.pid, &tag);
+        tracing::info!("stopped {n} process(es) tagged {tag} in container '{node}'");
+    }
 }
 
 /// Assign a management address. IPv6 addresses are added with `nodad`

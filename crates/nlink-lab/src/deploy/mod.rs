@@ -123,6 +123,7 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     lab_state.dns_injected = env.dns_injected;
     lab_state.wifi_loaded = env.wifi_loaded;
     lab_state.process_logs = env.process_logs.clone();
+    lab_state.process_tags = env.process_tags.clone();
     state::save(&lab_state, topology)?;
     crate::events::record(
         &topology.lab.name,
@@ -145,6 +146,7 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     running.set_exec_pids(env.exec_pids);
     running.set_mgmt_peers(env.mgmt_peers);
     running.set_process_logs(env.process_logs);
+    running.set_process_tags(env.process_tags);
     // What it holds is what was just written.
     running.mark_saved();
 
@@ -446,6 +448,7 @@ pub async fn apply_with(
         env.starttimes,
         env.exec_pids,
         env.process_logs,
+        env.process_tags,
         env.mgmt_peers,
         env.dns_injected,
         env.wifi_loaded,
@@ -613,6 +616,7 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
         env.starttimes,
         env.exec_pids,
         env.process_logs,
+        env.process_tags,
         env.mgmt_peers,
         env.dns_injected,
         env.wifi_loaded,

@@ -18,8 +18,8 @@ have no typed struct yet.
 | `nlink-lab use --json` | `use.schema.json` | generated (`UseReport`) |
 | `nlink-lab snapshot ls --json` | `snapshot-list.schema.json` | generated (`SnapshotList`) |
 | `nlink-lab ps --json` | `ps.schema.json` | generated (`PsReport`) |
-| `nlink-lab proc-stat --json -L <PID>` | `proc-stat.schema.json` | generated (`ProcStat`) |
-| `nlink-lab proc-stat --json --all` / `--pid` | `proc-stat-list.schema.json` | generated (`Vec<ProcStat>`) |
+| `nlink-lab stats --json` | `stats.schema.json` | generated (`StatsReport`) |
+| `nlink-lab stats NODE --pid PID --json` / `--procs` | `stats-procs.schema.json` | generated (`ProcsReport`) |
 | `nlink-lab doctor --json` | `doctor.schema.json` | generated (`DoctorReport`) |
 | `nlink-lab lint --json` | `lint.schema.json` | generated (`LintReport`) |
 | `nlink-lab metrics --format json` (one line per snapshot) | `metrics-snapshot.schema.json` | generated (`MetricsSnapshot`) |

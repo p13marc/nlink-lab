@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "lab": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NodeStats"
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema_version",
+    "lab",
+    "nodes"
+  ],
+  "$defs": {
+    "NodeStats": {
+      "description": "One node's cgroup usage.",
+      "type": "object",
+      "properties": {
+        "cpu_max": {
+          "description": "`cpu.max` quota as cores, `None` when unlimited.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cpu_usec": {
+          "description": "Cumulative CPU time in microseconds (`cpu.stat` usage_usec).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "`namespace` or `container`.",
+          "type": "string"
+        },
+        "memory_bytes": {
+          "description": "Current memory in bytes (`memory.current`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "memory_max": {
+          "description": "`memory.max` in bytes, `None` when unlimited.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "node": {
+          "type": "string"
+        },
+        "pids": {
+          "description": "Processes in the cgroup.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "node",
+        "kind",
+        "cpu_usec",
+        "memory_bytes",
+        "memory_max",
+        "cpu_max",
+        "pids"
+      ]
+    }
+  }
+}

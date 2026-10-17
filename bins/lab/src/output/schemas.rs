@@ -44,12 +44,12 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             output_schema_for::<super::Document<'static, crate::cmd::ps::PsReport>>(),
         ),
         (
-            "proc-stat",
-            output_schema_for::<nlink_lab::proc_stat::ProcStat>(),
+            "stats",
+            output_schema_for::<super::Document<'static, crate::cmd::stats::StatsReport>>(),
         ),
         (
-            "proc-stat-list",
-            output_schema_for::<Vec<nlink_lab::proc_stat::ProcStat>>(),
+            "stats-procs",
+            output_schema_for::<super::Document<'static, crate::cmd::stats::ProcsReport>>(),
         ),
         (
             "doctor",

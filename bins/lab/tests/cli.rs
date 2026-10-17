@@ -144,8 +144,17 @@ fn a_lab_that_does_not_run_is_refused() {
 fn the_old_lab_first_order_gets_a_hint() {
     let h = Host::new();
     h.lab("alpha");
-    let o = h.run(&["ps", "alpha"]);
+    // a command without positionals: a usage error
+    let o = h.run(&["events", "alpha"]);
     assert_eq!(code(&o), 64, "{}", stderr(&o));
+    assert!(
+        stderr(&o).contains("'alpha' is a lab: select it with -L alpha"),
+        "{}",
+        stderr(&o)
+    );
+    // where a node is expected: not a node of the lab
+    let o = h.run(&["ps", "alpha"]);
+    assert_eq!(code(&o), 1, "{}", stderr(&o));
     assert!(
         stderr(&o).contains("'alpha' is a lab: select it with -L alpha"),
         "{}",
@@ -158,7 +167,7 @@ fn usage_errors_exit_64_and_say_why() {
     let h = Host::new();
     for args in [
         &["no-such-command"][..],
-        &["wait-for", "n", "--tcp", "80", "--timeout", "30"],
+        &["wait", "n", "--tcp", "80", "--timeout", "30"],
         &["exec", "n", "-e", "NOEQUALS", "--", "true"],
         &["capture", "not-an-endpoint"],
         &["kill", "1", "-s", "NOPE"],
@@ -166,7 +175,7 @@ fn usage_errors_exit_64_and_say_why() {
         let o = h.run(args);
         assert_eq!(code(&o), 64, "{args:?}: {}", stderr(&o));
     }
-    let o = h.run(&["wait-for", "n", "--tcp", "80", "--timeout", "30"]);
+    let o = h.run(&["wait", "n", "--tcp", "80", "--timeout", "30"]);
     assert!(stderr(&o).contains("write `30s`"), "{}", stderr(&o));
     let o = h.run(&["--json", "no-such-command"]);
     let doc: serde_json::Value = serde_json::from_slice(&o.stderr).unwrap();

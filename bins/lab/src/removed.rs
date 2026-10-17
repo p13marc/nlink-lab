@@ -28,6 +28,22 @@ pub const REMOVED: &[Removed] = &[
         name: "import",
         instead: "nlink-lab deploy FILE.nlz (or nlink-lab archive extract FILE)",
     },
+    Removed {
+        name: "wait-for",
+        instead: "nlink-lab wait NODE --tcp PORT (or --exec CMD, --file PATH)",
+    },
+    Removed {
+        name: "proc-stat",
+        instead: "nlink-lab stats NODE --pid PID (or --procs, --pidfile-glob)",
+    },
+    Removed {
+        name: "restart",
+        instead: "nlink-lab node restart NODE",
+    },
+    Removed {
+        name: "edit",
+        instead: "nlink-lab node add|rm, nlink-lab link add|rm|set, nlink-lab impair",
+    },
 ];
 
 /// A removed flag of a command that stays.

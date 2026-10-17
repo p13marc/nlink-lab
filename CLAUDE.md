@@ -59,7 +59,7 @@ sudo nlink-lab exec --json -L simple router -- ip addr
 sudo nlink-lab spawn -L simple server -- /usr/bin/my-service --port 8080
 
 # Wait for a service to be ready
-sudo nlink-lab wait-for -L simple server --tcp 127.0.0.1:8080 --timeout 30s
+sudo nlink-lab wait -L simple server --tcp 127.0.0.1:8080 --timeout 30s
 
 # Show node IP addresses (including mgmt0 for host-reachable labs)
 nlink-lab ip -L simple server --iface eth0
@@ -270,12 +270,12 @@ impairments, partitions, processes, counters),
 `impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
 `graph`, `diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
 `watch` (`--family route|nftables|both`, `--json` for NDJSON),
-`wait`, `wait-for` (`--tcp`, `--exec`, `--file`),
+`wait [NODE]` (`--tcp`, `--exec`, `--file`, `--listening`, `--log`, `--fd-stable`),
 `ip` (`--iface`, `--cidr`),
-`ps`, `kill`, `proc-stat` (`--all`, `--pid`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`, `metrics`,
+`ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`, `metrics`,
 `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
-`pull`, `stats`, `restart`, `fmt` (`--check`, `-w`, `-`), `lint`
-(`--strict`, `--allow`), `doctor` (`--fix`), `verify` (`--file`, the CI drift gate), `edit` (`--set-impair`),
+`pull`, `node add|rm|restart`, `link add|rm|set` (`--mtu`, `--qdisc`), `fmt` (`--check`, `-w`, `-`), `lint`
+(`--strict`, `--allow`), `doctor` (`--fix`), `verify` (`--file`, the CI drift gate),
 `scenario`, `benchmark` (ping/iperf3 with metric asserts),
 `lsp` (LSP server over stdio, issue #56),
 `top` (`--interval`, `--once`, `--zenoh`, `--zenoh-connect`; ratatui TUI,

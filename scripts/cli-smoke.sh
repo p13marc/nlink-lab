@@ -22,7 +22,7 @@ while read -r -a cmd; do
 done < "$tmp/commands"
 
 say "== usage errors exit 64"
-for args in "no-such-command" "kill" "--format xml ps" "deploy --no-such-flag f.nll" "ps stray-positional"; do
+for args in "no-such-command" "kill" "--format xml ps" "deploy --no-such-flag f.nll" "events stray-positional"; do
   set +e; "$bin" $args >/dev/null 2>&1; rc=$?; set -e
   [ "$rc" -eq 64 ] || { say "FAIL: '$args' exited $rc (expected 64)"; fail=1; }
 done

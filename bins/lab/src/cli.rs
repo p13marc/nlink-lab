@@ -100,13 +100,6 @@ pub enum Commands {
     /// Validate a topology file without deploying.
     Validate(cmd::validate::Args),
 
-    /// Edit a running lab in place: add/remove nodes and links, set impairments.
-    ///
-    /// The edits are applied to the lab's stored topology and reconciled
-    /// with `apply`, so the state file stays the source of truth; use
-    /// `render`/`export` afterwards to get the updated NLL.
-    Edit(cmd::edit::Args),
-
     /// Format NLL files: canonical indentation and spacing, nothing else.
     ///
     /// A token-level formatter: comments, blank-line structure, quoting and
@@ -174,6 +167,12 @@ pub enum Commands {
 
     /// Run topology tests: deploy, validate, destroy.
     Test(cmd::test::Args),
+
+    /// Add, remove or restart a node of a running lab.
+    Node(cmd::node::Args),
+
+    /// Add, remove or change a link of a running lab (MTU, qdisc).
+    Link(cmd::link::Args),
 
     /// Modify link impairment at runtime.
     ///
@@ -250,43 +249,9 @@ pub enum Commands {
     /// one per line.
     Ps(cmd::ps::Args),
 
-    /// Kill a tracked background process.
+    /// Stop tracked background processes (TERM, then KILL), or send them
+    /// a signal (`-s STOP` freezes one in place).
     Kill(cmd::kill::Args),
-
-    /// Sample resource usage of processes inside a lab node.
-    ///
-    /// Reads `/proc/<pid>/{stat,status,smaps_rollup}` and counts
-    /// entries in `/proc/<pid>/fd/`. For a namespace node these come
-    /// from the host's `/proc`, which is the same `/proc` the node sees
-    /// (nlink-lab does not use `CLONE_NEWPID`); a container node has
-    /// its own PID namespace, so the reads are routed through
-    /// `nlink-lab exec` instead. Either way they run as root, so
-    /// `/proc/<pid>/fd/` — mode 0700 — is readable.
-    ///
-    /// Name one PID positionally, repeat `--pid`, or take the whole
-    /// node with `--all`. The per-node constants (boot time, clock-tick
-    /// rate) are read once per call, so sampling N processes costs one
-    /// call rather than N.
-    ///
-    /// JSON OUTPUT (with `--json`):
-    ///   { "node": str, "host_pid": int, "command": str, "uid": int,
-    ///     "rss_kb": int | null, "vsz_kb": int | null,
-    ///     "pss_kb": int | null, "fd_count": int,
-    ///     "cpu_user_ticks": int, "cpu_kernel_ticks": int,
-    ///     "started_at_unix_micros": int, "state": str }
-    /// one object for a single positional PID, or an ARRAY of them for
-    /// `--all` / `--pid`.
-    /// Schema: docs/json-schemas/proc-stat.schema.json,
-    ///   docs/json-schemas/proc-stat-list.schema.json
-    ///
-    /// CPU ticks are in `sysconf(_SC_CLK_TCK)` units (typically 100
-    /// per second); convert by dividing.
-    ///
-    /// Sum `pss_kb`, not `rss_kb`, to get a node's memory: RSS
-    /// double-counts every page shared between processes, which
-    /// systematically overstates whichever configuration runs more of
-    /// them.
-    ProcStat(cmd::proc_stat::Args),
 
     /// Run diagnostics on a lab.
     ///
@@ -300,7 +265,12 @@ pub enum Commands {
     /// Capture packets on an interface using netring.
     Capture(cmd::capture::Args),
 
-    /// Wait for a lab to be ready.
+    /// Wait for a lab to be deployed, or for conditions in a node.
+    ///
+    /// `wait -L LAB` waits until LAB is deployed. `wait NODE --tcp 8080
+    /// --exec 'curl -sf localhost/health'` waits until every condition
+    /// holds in NODE, all within one `--timeout`; `--log`, `--fd-stable`
+    /// (and optionally `--listening`) look at a spawned `--pid`.
     Wait(cmd::wait::Args),
 
     /// Tail nftables + RTNETLINK drift events for a running lab.
@@ -330,11 +300,8 @@ pub enum Commands {
     /// every node's watch has stopped, or when its output is closed.
     ///
     /// Every change is shown, whoever made it: what a concurrent `apply`,
-    /// `impair`, `edit` or `restart` does prints like a hand edit.
+    /// `impair`, `node`, `link` or `node restart` does prints like a hand edit.
     Watch(cmd::watch::Args),
-
-    /// Wait for a service or condition inside a lab node.
-    WaitFor(cmd::wait_for::Args),
 
     /// Show IP addresses assigned to a node.
     Ip(cmd::ip::Args),
@@ -342,7 +309,7 @@ pub enum Commands {
     /// Compare two topology files and show differences.
     Diff(cmd::diff::Args),
 
-    /// A running lab's topology as it is now (after `apply` and `edit`):
+    /// A running lab's topology as it is now (after `apply`, `node`, `link`):
     /// TOML, `--nll`, or JSON with `--format json`.
     Export(cmd::export::Args),
 
@@ -368,16 +335,25 @@ pub enum Commands {
     /// Pre-pull all container images from a topology.
     Pull(cmd::pull::Args),
 
-    /// Show resource usage of container nodes and cpu/memory-limited namespace nodes.
+    /// What nodes use (cgroup v2: CPU time, memory, PIDs) — or with
+    /// `--pid`, `--procs` or `--pidfile-glob`, what a node's processes use.
     ///
-    /// With `--json`, one object per node, from its cgroup v2:
-    /// `{node, kind: "namespace" | "container", cpu_usec, memory_bytes,
-    /// memory_max, cpu_max, pids}` (`memory_max` and `cpu_max` are null when
-    /// unlimited).
+    /// Process samples read `/proc/<pid>/{stat,status,smaps_rollup}` and
+    /// count `/proc/<pid>/fd/` (root: the fd directory is 0700); on a
+    /// container node they are routed through the runtime. Sum `pss_kb`,
+    /// not `rss_kb`, to get a node's memory: RSS counts every shared page
+    /// once per process. CPU ticks are `sysconf(_SC_CLK_TCK)` units
+    /// (usually 100 per second). `--watch` samples again until Ctrl-C.
+    ///
+    /// JSON OUTPUT: { "schema_version": 1, "lab", "nodes": [ { "node",
+    ///   "kind", "cpu_usec", "memory_bytes", "memory_max", "cpu_max",
+    ///   "pids" } ] }, or with process flags { "schema_version": 1, "lab",
+    ///   "node", "processes": [ { "node", "host_pid", "ns_pid", "name"?,
+    ///   "command", "uid", "rss_kb"?, "vsz_kb"?, "pss_kb"?, "fd_count",
+    ///   "cpu_user_ticks", "cpu_kernel_ticks", "started_at_unix_micros",
+    ///   "state" } ] }
+    /// Schemas: docs/json-schemas/stats.schema.json, stats-procs.schema.json
     Stats(cmd::stats::Args),
-
-    /// Restart a container node.
-    Restart(cmd::restart::Args),
 
     /// Generate shell completions.
     ///
@@ -415,20 +391,10 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     (
         "Run",
         &[
-            "exec",
-            "shell",
-            "spawn",
-            "wait",
-            "wait-for",
-            "ps",
-            "kill",
-            "logs",
-            "stats",
-            "proc-stat",
-            "restart",
+            "exec", "shell", "spawn", "wait", "ps", "kill", "logs", "stats",
         ],
     ),
-    ("Network", &["impair", "edit", "ip", "capture"]),
+    ("Network", &["impair", "node", "link", "ip", "capture"]),
     (
         "Observe",
         &["events", "watch", "top", "metrics", "diagnose", "daemon"],

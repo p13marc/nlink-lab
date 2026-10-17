@@ -759,9 +759,9 @@ matrix's default: it applies to traffic to the peers no pair rule names.
 Traffic control is declared with the node's links and addresses, so
 `apply` changes a changed block in place (its handle and counters stay),
 removes a removed one, and puts back one deleted by hand; `verify`
-and `verify` report the difference. A `prio` gets handle `1:`.
-`edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` edits a running
-lab. See `examples/qdisc-kinds.nll`.
+reports the difference. A `prio` gets handle `1:`.
+`link set a:eth0 --qdisc tbf,rate=10mbit,burst=32kb,limit=100kb` changes a
+running lab. See `examples/qdisc-kinds.nll`.
 
 ### 17. Dynamic Routing with FRR
 

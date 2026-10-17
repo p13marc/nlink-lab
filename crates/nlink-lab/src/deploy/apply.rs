@@ -661,7 +661,18 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 super::BuiltQdisc::Tbf(c) => conn.replace_qdisc(iface.as_str(), c).await,
                 super::BuiltQdisc::FqCodel(c) => conn.replace_qdisc(iface.as_str(), c).await,
                 super::BuiltQdisc::Sfq(c) => conn.replace_qdisc(iface.as_str(), c).await,
-                super::BuiltQdisc::Prio(c) => conn.replace_qdisc(iface.as_str(), c).await,
+                // `prio` gets root handle 1:, so a firewall's `classify 1:N`
+                // (`meta priority set`) names its bands: `prio_classify`
+                // ignores a priority whose major is not the qdisc's (#167).
+                super::BuiltQdisc::Prio(c) => {
+                    conn.replace_qdisc_full(
+                        iface.as_str(),
+                        nlink::TcHandle::ROOT,
+                        Some(nlink::TcHandle::major_only(1)),
+                        c,
+                    )
+                    .await
+                }
             };
             // A root qdisc is replaced in place (#108). nlink 0.31's
             // `replace_qdisc` looks at the slot first (nlink #486): sfq,

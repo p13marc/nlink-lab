@@ -4,9 +4,9 @@ use crate::error::{Error, Result};
 
 /// Name of the nftables table that nlink-lab owns on every
 /// node carrying firewall / NAT rules. Rules outside this
-/// table (or rules in this table without an `nlink-lab/`
-/// USERDATA-keyed comment) are treated as foreign and left
-/// alone by the reconcile path.
+/// table, and rules in it that carry no `nlink-lab/` key, are
+/// foreign and left alone by the reconcile path, together with
+/// the chains, sets and objects they use (nlink #459).
 pub(crate) const NLINK_LAB_TABLE: &str = "nlink-lab";
 
 /// Build the declarative [`NftablesConfig`] for a node's
@@ -18,8 +18,9 @@ pub(crate) const NLINK_LAB_TABLE: &str = "nlink-lab";
 /// `NftablesDiff::apply` then commits every chain/rule/table mutation in one
 /// atomic kernel batch.
 ///
-/// Each rule carries a stable `nlink-lab/{fw,nat}/<chain>/<idx>` USERDATA
-/// key (the `"nlink:"` prefix is auto-prepended by the library). Stable keys
+/// Each rule carries a stable `nlink-lab/{fw,nat}/<chain>/<idx>` key, which
+/// nlink keeps in a userdata TLV of its own (since 0.32, nlink #527; `nft
+/// list` no longer shows it as a `comment "nlink:…"`). Stable keys
 /// make idempotent re-apply produce zero kernel ops and in-place edits
 /// (e.g. `dport 80` → `dport 8080`) replace the rule body without losing its
 /// position.
@@ -135,7 +136,7 @@ pub(crate) fn topology_to_nftables_config(
                                     parse_addr_match(src).expect("validated NAT CIDR must parse");
                                 r = match_addr(r, Dir::Saddr, addr, prefix);
                             }
-                            r.masquerade()
+                            nat_matches(r, &rule_clone).masquerade()
                         });
                     }
                     NatAction::Snat => {
@@ -146,6 +147,7 @@ pub(crate) fn topology_to_nftables_config(
                                     parse_addr_match(src).expect("validated NAT CIDR must parse");
                                 r = match_addr(r, Dir::Saddr, addr, prefix);
                             }
+                            r = nat_matches(r, &rule_clone);
                             if let Some(target) = &rule_clone.target {
                                 let addr: std::net::IpAddr =
                                     target.parse().expect("validated NAT target must parse");
@@ -162,6 +164,7 @@ pub(crate) fn topology_to_nftables_config(
                                     parse_addr_match(dst).expect("validated NAT CIDR must parse");
                                 r = match_addr(r, Dir::Daddr, addr, prefix);
                             }
+                            r = nat_matches(r, &rule_clone);
                             if let Some(target) = &rule_clone.target {
                                 let addr: std::net::IpAddr =
                                     target.parse().expect("validated NAT target must parse");
@@ -188,6 +191,9 @@ pub(crate) fn topology_to_nftables_config(
 /// `.expect()`. Surfaces the offending value in the error.
 pub(crate) fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Result<()> {
     for nat_rule in &nat.rules {
+        if let Some(msg) = nat_match_problem(nat_rule) {
+            return Err(Error::deploy_failed(msg));
+        }
         let mut match_family: Option<(&str, &str, bool)> = None;
         if let Some(src) = &nat_rule.src {
             let (ip, _) = parse_addr_match(src).map_err(|e| {
@@ -219,6 +225,35 @@ pub(crate) fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Resul
     Ok(())
 }
 
+/// What is wrong with a NAT rule's interface or port match, if anything.
+pub(crate) fn nat_match_problem(nat: &crate::types::NatRule) -> Option<String> {
+    use crate::types::NatAction;
+    if nat.dport.is_some() && nat.proto.is_none() {
+        return Some("a NAT `dport` needs its protocol (`tcp dport 80`)".to_string());
+    }
+    if nat.dport.is_some() && nat.action != NatAction::Dnat {
+        return Some("only dnat matches a destination port".to_string());
+    }
+    if nat.iif.is_some() && nat.action != NatAction::Dnat {
+        return Some(
+            "`iif` applies to dnat (prerouting): masquerade and snat see `oif`".to_string(),
+        );
+    }
+    if nat.oif.is_some() && nat.action == NatAction::Dnat {
+        return Some(
+            "`oif` applies to masquerade and snat (postrouting): dnat sees `iif`".to_string(),
+        );
+    }
+    for name in [&nat.iif, &nat.oif].into_iter().flatten() {
+        if name.len() > 15 {
+            return Some(format!(
+                "interface name '{name}' is longer than 15 characters"
+            ));
+        }
+    }
+    None
+}
+
 fn family_name(v6: bool) -> &'static str {
     if v6 { "IPv6" } else { "IPv4" }
 }
@@ -242,6 +277,27 @@ fn match_addr(
         (Dir::Saddr, std::net::IpAddr::V6(a)) => rule.match_saddr_v6(a, prefix),
         (Dir::Daddr, std::net::IpAddr::V4(a)) => rule.match_daddr_v4(a, prefix),
         (Dir::Daddr, std::net::IpAddr::V6(a)) => rule.match_daddr_v6(a, prefix),
+    }
+}
+
+/// A NAT rule's interface and port matches (#167), after its address:
+/// nothing for a rule that has none, so existing rules keep their bytes.
+fn nat_matches(
+    mut rule: nlink::netlink::nftables::types::Rule,
+    nat: &crate::types::NatRule,
+) -> nlink::netlink::nftables::types::Rule {
+    if let Some(iif) = &nat.iif {
+        rule = rule.match_iif(iif);
+    }
+    if let Some(oif) = &nat.oif {
+        rule = rule.match_oif(oif);
+    }
+    match (nat.proto, nat.dport) {
+        (Some(crate::types::NatProto::Tcp), Some(p)) => rule.match_tcp_dport(p),
+        (Some(crate::types::NatProto::Udp), Some(p)) => rule.match_udp_dport(p),
+        (Some(crate::types::NatProto::Tcp), None) => rule.match_l4proto(6),
+        (Some(crate::types::NatProto::Udp), None) => rule.match_l4proto(17),
+        (None, _) => rule,
     }
 }
 

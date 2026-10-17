@@ -570,6 +570,26 @@ fn render_firewall_chain(
             }
             parts.push(s);
         }
+        if let Some(m) = rule.set_mark {
+            parts.push(match m.mask {
+                Some(mask) => format!("mark set {:#x}/{mask:#x}", m.value),
+                None => format!("mark set {:#x}", m.value),
+            });
+        }
+        match rule.ct_mark {
+            Some(crate::types::CtMarkAction::Set(v)) => parts.push(format!("ct mark set {v:#x}")),
+            Some(crate::types::CtMarkAction::Save) => parts.push("ct mark save".into()),
+            Some(crate::types::CtMarkAction::Restore) => parts.push("ct mark restore".into()),
+            None => {}
+        }
+        if let Some(h) = &rule.classify {
+            parts.push(format!("classify {h}"));
+        }
+        match rule.clamp_mss {
+            Some(crate::types::MssClamp::Pmtu) => parts.push("clamp mss pmtu".into()),
+            Some(crate::types::MssClamp::Mss(m)) => parts.push(format!("clamp mss {m}")),
+            None => {}
+        }
         writeln!(out, "{indent}  {}", parts.join(" ")).unwrap();
     }
     writeln!(out, "{indent}}}").unwrap();
@@ -597,11 +617,24 @@ fn render_nat(out: &mut String, indent: &str, nat: &crate::types::NatConfig) -> 
                 if let Some(src) = &rule.src {
                     write!(out, " src {}", nll_addr(src)?).unwrap();
                 }
+                if let Some(oif) = &rule.oif {
+                    write!(out, " oif {}", nll_name(oif)?).unwrap();
+                }
             }
             NatAction::Dnat => {
                 out.push_str("dnat");
                 if let Some(dst) = &rule.dst {
                     write!(out, " dst {}", nll_addr(dst)?).unwrap();
+                }
+                if let Some(iif) = &rule.iif {
+                    write!(out, " iif {}", nll_name(iif)?).unwrap();
+                }
+                if let (Some(proto), Some(port)) = (rule.proto, rule.dport) {
+                    let p = match proto {
+                        crate::types::NatProto::Tcp => "tcp",
+                        crate::types::NatProto::Udp => "udp",
+                    };
+                    write!(out, " {p} dport {port}").unwrap();
                 }
                 let target = need(rule.target.as_ref(), "target")?;
                 match rule.target_port {
@@ -618,6 +651,9 @@ fn render_nat(out: &mut String, indent: &str, nat: &crate::types::NatConfig) -> 
                 out.push_str("snat");
                 if let Some(src) = &rule.src {
                     write!(out, " src {}", nll_addr(src)?).unwrap();
+                }
+                if let Some(oif) = &rule.oif {
+                    write!(out, " oif {}", nll_name(oif)?).unwrap();
                 }
                 write!(out, " to {}", need(rule.target.as_ref(), "target")?).unwrap();
             }
@@ -2182,6 +2218,45 @@ validate {
         );
     }
 
+    /// #167: mangle statements and NAT qualifiers round-trip.
+    #[test]
+    fn test_render_firewall_mangle_roundtrip() {
+        let (_, rendered, _) = roundtrip(
+            r#"lab "t"
+
+node gw {
+  firewall forward {
+    oif wan0 clamp mss pmtu
+    ct mark restore
+    ct state new tcp dport 5201 mark set 0x10/0xff ct mark save
+    oif wan0 mark 0x10/0xff classify 1:3
+    ct mark 0x2 counter
+  }
+  nat {
+    masquerade src 10.0.1.0/24 oif wan0
+    dnat dst 10.0.2.1 iif wan0 tcp dport 80 to 10.0.1.10:5201
+  }
+}
+"#,
+        );
+        assert!(
+            rendered.contains("      oif wan0 clamp mss pmtu\n"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("mark set 0x10/0xff ct mark save\n"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("      oif wan0 mark 0x10/0xff classify 1:3\n"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("    dnat dst 10.0.2.1 iif wan0 tcp dport 80 to 10.0.1.10:5201\n"),
+            "{rendered}"
+        );
+    }
+
     #[test]
     fn test_render_firewall_unknown_match_is_error() {
         let mut topo = Topology::default();
@@ -2664,6 +2739,10 @@ node fw {
                 dst: None,
                 target: Some("172.100.0.0/16".into()),
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }],
         });
         topo.nodes.insert("fw".into(), fw);

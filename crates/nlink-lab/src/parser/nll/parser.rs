@@ -1276,24 +1276,15 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
         }
 
         if eat_kw(tokens, pos, "masquerade") {
-            let src = if eat_kw(tokens, pos, "src") {
-                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
-            } else {
-                None
-            };
+            let q = parse_nat_qualifiers(tokens, pos, "masquerade", &["src", "oif"])?;
             items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "masquerade".into(),
-                src,
-                dst: None,
                 target: None,
                 target_port: None,
+                ..q
             }));
         } else if eat_kw(tokens, pos, "dnat") {
-            let dst = if eat_kw(tokens, pos, "dst") {
-                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
-            } else {
-                None
-            };
+            let q = parse_nat_qualifiers(tokens, pos, "dnat", &["dst", "iif", "tcp", "udp"])?;
             expect_kw(tokens, pos, "to")?;
             // `to [fd00::2]:8080` — brackets disambiguate an IPv6 target
             // from its port (`fd00::2:8080` lexes as one address).
@@ -1310,25 +1301,19 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
             };
             items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "dnat".into(),
-                src: None,
-                dst,
                 target: Some(target),
                 target_port,
+                ..q
             }));
         } else if eat_kw(tokens, pos, "snat") {
-            let src = if eat_kw(tokens, pos, "src") {
-                Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?)
-            } else {
-                None
-            };
+            let q = parse_nat_qualifiers(tokens, pos, "snat", &["src", "oif"])?;
             expect_kw(tokens, pos, "to")?;
             let target = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
             items.push(ast::NatItem::Rule(ast::NatRuleDef {
                 action: "snat".into(),
-                src,
-                dst: None,
                 target: Some(target),
                 target_port: None,
+                ..q
             }));
         } else if eat_kw(tokens, pos, "translate") {
             let src_range = parse_addr_val::<ast::IpOrCidr>(tokens, pos)?;
@@ -1340,6 +1325,10 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
                 dst: None,
                 target: Some(dst_range),
                 target_port: None,
+                proto: None,
+                dport: None,
+                iif: None,
+                oif: None,
             }));
         } else {
             match at(tokens, *pos) {
@@ -1364,6 +1353,61 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
     }
 
     Ok(ast::NatDef { items })
+}
+
+/// The qualifiers of a NAT rule before its `to`, in any order:
+/// `src X`, `dst X`, `iif NAME`, `oif NAME`, `tcp|udp dport P` — each where
+/// `allowed` lists it (#167).
+fn parse_nat_qualifiers(
+    tokens: &[Spanned],
+    pos: &mut usize,
+    action: &str,
+    allowed: &[&str],
+) -> Result<ast::NatRuleDef> {
+    let mut q = ast::NatRuleDef {
+        action: action.into(),
+        src: None,
+        dst: None,
+        target: None,
+        target_port: None,
+        proto: None,
+        dport: None,
+        iif: None,
+        oif: None,
+    };
+    const QUALIFIERS: [&str; 6] = ["src", "dst", "iif", "oif", "tcp", "udp"];
+    while let Some(Token::Ident(w)) = at(tokens, *pos)
+        && QUALIFIERS.contains(&w.as_str())
+    {
+        let word = w.clone();
+        if !allowed.contains(&word.as_str()) {
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "`{word}` does not apply to {action} (it takes: {})",
+                    allowed.join(", ")
+                ),
+            ));
+        }
+        *pos += 1;
+        match word.as_str() {
+            "src" => q.src = Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?),
+            "dst" => q.dst = Some(parse_addr_val::<ast::IpOrCidr>(tokens, pos)?),
+            "iif" => q.iif = Some(parse_name(tokens, pos)?),
+            "oif" => q.oif = Some(parse_name(tokens, pos)?),
+            proto => {
+                expect_kw(tokens, pos, "dport")?;
+                q.proto = Some(if proto == "tcp" {
+                    crate::types::NatProto::Tcp
+                } else {
+                    crate::types::NatProto::Udp
+                });
+                q.dport = Some(expect_port(tokens, pos, "dport")?);
+            }
+        }
+    }
+    Ok(q)
 }
 
 /// `firewall policy P { … }` (the input chain), `firewall input|forward|output
@@ -1670,6 +1714,10 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
     let mut counter = false;
     let mut counter_name = None;
     let mut log = None;
+    let mut set_mark = None;
+    let mut ct_mark = None;
+    let mut classify = None;
+    let mut clamp_mss = None;
     loop {
         if eat_kw(tokens, pos, "limit") {
             let over = eat_kw(tokens, pos, "over");
@@ -1703,6 +1751,59 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
             } else {
                 counter = true;
             }
+        } else if check_kw(tokens, *pos, "mark") {
+            *pos += 1;
+            expect_kw(tokens, pos, "set")?;
+            let (_, value, mask) = parse_masked_mark(tokens, pos)?;
+            set_mark = Some(crate::types::MarkValue { value, mask });
+        } else if check_kw(tokens, *pos, "ct") {
+            *pos += 1;
+            expect_kw(tokens, pos, "mark")?;
+            ct_mark = Some(if eat_kw(tokens, pos, "save") {
+                crate::types::CtMarkAction::Save
+            } else if eat_kw(tokens, pos, "restore") {
+                crate::types::CtMarkAction::Restore
+            } else {
+                expect_kw(tokens, pos, "set")?;
+                crate::types::CtMarkAction::Set(parse_mark_value(tokens, pos)?.1)
+            });
+        } else if eat_kw(tokens, pos, "classify") {
+            // a tc handle: `1:10`, `1:a` (tc hex), joined from touching tokens
+            let start = *pos;
+            let mut handle = String::new();
+            while let Some(t) = at(tokens, *pos) {
+                if *pos > start && tokens[*pos].span.start != tokens[*pos - 1].span.end {
+                    break;
+                }
+                match t {
+                    Token::Int(s) | Token::Hex(s) | Token::Ident(s) => handle.push_str(s),
+                    Token::Colon => handle.push(':'),
+                    _ => break,
+                }
+                *pos += 1;
+            }
+            if handle.parse::<nlink::TcHandle>().is_err() {
+                return Err(err(
+                    tokens,
+                    start,
+                    format!(
+                        "expected a tc class handle like 1:10 after classify, found '{handle}'"
+                    ),
+                ));
+            }
+            classify = Some(handle);
+        } else if eat_kw(tokens, pos, "clamp") {
+            expect_kw(tokens, pos, "mss")?;
+            clamp_mss =
+                Some(if eat_kw(tokens, pos, "pmtu") {
+                    crate::types::MssClamp::Pmtu
+                } else {
+                    let at_pos = *pos;
+                    let v = expect_int(tokens, pos)?;
+                    crate::types::MssClamp::Mss(u16::try_from(v).map_err(|_| {
+                        err(tokens, at_pos, format!("MSS {v} out of range 0..=65535"))
+                    })?)
+                });
         } else if eat_kw(tokens, pos, "log") {
             let mut l = crate::types::FirewallLog::default();
             if let Some(Token::String(p)) = at(tokens, *pos) {
@@ -1720,7 +1821,14 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
         }
     }
 
-    let has_statement = limit.is_some() || counter || counter_name.is_some() || log.is_some();
+    let has_statement = limit.is_some()
+        || counter
+        || counter_name.is_some()
+        || log.is_some()
+        || set_mark.is_some()
+        || ct_mark.is_some()
+        || classify.is_some()
+        || clamp_mss.is_some();
     if action == "continue" && match_expr.is_empty() && !has_statement {
         return Err(err(
             tokens,
@@ -1741,7 +1849,7 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
                 *pos,
                 format!(
                     "expected a firewall match (ct/tcp/udp/icmp/icmpv6/mark/src/dst/iif/oif) or \
-                     a statement (limit/counter/log), found {other} (matches go before \
+                     a statement (limit/counter/log/mark set/ct mark/classify/clamp mss), found {other} (matches go before \
                      statements)"
                 ),
             ));
@@ -1763,7 +1871,45 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
         counter,
         counter_name,
         log,
+        set_mark,
+        ct_mark,
+        classify,
+        clamp_mss,
     })
+}
+
+/// A mark value, decimal or hex: its text and value.
+fn parse_mark_value(tokens: &[Spanned], pos: &mut usize) -> Result<(String, u32)> {
+    let text = match at(tokens, *pos) {
+        Some(Token::Int(s) | Token::Hex(s)) => s.clone(),
+        other => {
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected a mark (decimal or 0x hex), found {}",
+                    other.map_or("end of input".to_string(), |t| t.to_string())
+                ),
+            ));
+        }
+    };
+    let value = crate::firewall::parse_u32(&text)
+        .ok_or_else(|| err(tokens, *pos, format!("mark '{text}' does not fit 32 bits")))?;
+    *pos += 1;
+    Ok((text, value))
+}
+
+/// `V` or `V/M`: the text as written, the value and the mask.
+fn parse_masked_mark(tokens: &[Spanned], pos: &mut usize) -> Result<(String, u32, Option<u32>)> {
+    let (mut text, value) = parse_mark_value(tokens, pos)?;
+    let mask = if eat(tokens, pos, &Token::Slash) {
+        let (m_text, m) = parse_mark_value(tokens, pos)?;
+        text = format!("{text}/{m_text}");
+        Some(m)
+    } else {
+        None
+    };
+    Ok((text, value, mask))
 }
 
 /// An optional `!=` before a match operand.
@@ -1843,6 +1989,19 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 .unwrap_or(parts.len());
             parts.insert(insert_pos, format!("{family} daddr{neg} {addr}"));
         } else if check_kw(tokens, *pos, "ct") {
+            if check_kw(tokens, *pos + 1, "mark") {
+                // `ct mark set|save|restore` is a statement
+                if ["set", "save", "restore"]
+                    .iter()
+                    .any(|w| check_kw(tokens, *pos + 2, w))
+                {
+                    break;
+                }
+                *pos += 2;
+                let (text, _) = parse_mark_value(tokens, pos)?;
+                parts.push(format!("ct mark {text}"));
+                continue;
+            }
             *pos += 1;
             eat_kw(tokens, pos, "state");
             let mut states = Vec::new();
@@ -1922,6 +2081,9 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
             let icmp_type = expect_int(tokens, pos)?;
             parts.push(format!("icmpv6 type {icmp_type}"));
         } else if check_kw(tokens, *pos, "mark") {
+            if check_kw(tokens, *pos + 1, "set") {
+                break; // `mark set` is a statement
+            }
             *pos += 1;
             if matches!(at(tokens, *pos), Some(Token::Dot)) {
                 parts.push(parse_concat_tail(tokens, pos, "mark".into())?);
@@ -1940,8 +2102,8 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                     "`mark !=` takes a set: `mark != @name`".into(),
                 ));
             }
-            let mark = expect_int(tokens, pos)?;
-            parts.push(format!("mark {mark}"));
+            let (text, _, _) = parse_masked_mark(tokens, pos)?;
+            parts.push(format!("mark {text}"));
         } else if check_kw(tokens, *pos, "iif") || check_kw(tokens, *pos, "oif") {
             let kw = if check_kw(tokens, *pos, "iif") {
                 "iifname"

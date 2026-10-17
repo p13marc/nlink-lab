@@ -258,6 +258,9 @@ pub enum Token {
     // fraction is spelled out here now that logos matches it correctly.
     // Longer literals (`10.0.0.1`, `1.5ms`, `0.1%`) still win by longest
     // match, and `1..5` ranges still lex as `Int DotDot Int`.
+    /// `0x10`: a hex integer (marks, masks).
+    #[regex(r"0[xX][0-9a-fA-F]+", |lex| lex.slice().to_string(), priority = 5)]
+    Hex(String),
     #[regex(r"[0-9]+(\.[0-9]+)?", |lex| lex.slice().to_string(), priority = 2)]
     Int(String),
 
@@ -332,6 +335,7 @@ impl std::fmt::Display for Token {
             Token::Dot => write!(f, "."),
             Token::Asterisk => write!(f, "*"),
             Token::At => write!(f, "@"),
+            Token::Hex(v) => write!(f, "{v}"),
             Token::Dash => write!(f, "-"),
             Token::Slash => write!(f, "/"),
             Token::Newline => write!(f, "newline"),

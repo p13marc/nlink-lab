@@ -1,0 +1,70 @@
+# Firewall marks and QoS: connection marks, prio classification, MSS
+# clamping and NAT on a router.
+#
+# `gw` routes a LAN (`server`) out of a WAN link whose MTU is 1400. Its
+# forward chain clamps the MSS of TCP handshakes leaving through the WAN,
+# marks new connections to the published iperf3 and saves the mark on the
+# connection, restores it on every later packet, and sorts what leaves
+# through the WAN into the bands of a `prio` qdisc: pings first (1:1),
+# marked bulk last (1:3). NAT hides the LAN behind wan0 and publishes
+# server's iperf3 on gw's port 80, for TCP only.
+#
+#   sudo nlink-lab deploy --strict examples/firewall-qos.nll
+#   sudo nlink-lab scenario firewall-qos bulk
+#   sudo nlink-lab exec firewall-qos gw -- tc -s class show dev wan0
+#
+# Demonstrates: `clamp mss pmtu`, `ct mark restore`, `mark set V/M`,
+# `ct mark save`, `mark V/M` matches, `classify` into a `prio` qdisc,
+# NAT `oif`, `iif` and `tcp dport`.
+
+lab "firewall-qos" {
+  description "Connection marks, prio classification, MSS clamping and NAT"
+}
+
+profile router { forward ipv4 }
+
+node gw : router {
+  firewall forward {
+    oif wan0 clamp mss pmtu
+    ct mark restore
+    ct new tcp dport 5201 mark set 0x10/0xff ct mark save
+    oif wan0 icmp 8 classify 1:1
+    oif wan0 mark 0x10/0xff counter name bulk classify 1:3
+  }
+  nat {
+    masquerade src 10.0.1.0/24 oif wan0
+    dnat dst 10.0.2.1 iif wan0 tcp dport 80 to 10.0.1.10:5201
+  }
+}
+
+node server {
+  route default via 10.0.1.1
+  run background ["iperf3", "-s", "-p", "5201"]
+}
+
+# No route to the LAN: client only ever talks to gw's WAN address.
+node client
+
+link gw:lan0 -- server:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link gw:wan0 -- client:eth0 {
+  10.0.2.1/24 -- 10.0.2.10/24
+  mtu 1400
+}
+
+qdisc gw:wan0 prio { bands 3 }
+
+validate {
+  # Only works through the masquerade.
+  reach server client
+  counter gw bulk == 0
+}
+
+scenario "bulk" {
+  at 0s {
+    log "iperf3 from the WAN to gw:80, which DNATs to server:5201"
+    exec client "iperf3" "-c" "10.0.2.1" "-p" "80" "-t" "2" "-R"
+  }
+  at 4s {
+    validate { counter gw bulk > 0 }
+  }
+}

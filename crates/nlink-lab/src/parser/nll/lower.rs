@@ -749,6 +749,10 @@ fn expand_translate_rules(topology: &mut types::Topology) {
                         dst: Some(format!("{mapped}/{host_prefix}")),
                         target: Some(addr.to_string()),
                         target_port: None,
+                        proto: None,
+                        dport: None,
+                        iif: None,
+                        oif: None,
                     });
                 }
             }
@@ -2466,6 +2470,10 @@ fn interpolate_nat_rule(r: &ast::NatRuleDef, vars: &BTreeMap<String, String>) ->
         dst: iv(&r.dst, vars),
         target: iv(&r.target, vars),
         target_port: r.target_port,
+        proto: r.proto,
+        dport: r.dport,
+        iif: r.iif.as_ref().map(|v| i(v, vars)),
+        oif: r.oif.as_ref().map(|v| i(v, vars)),
     }
 }
 
@@ -2692,6 +2700,10 @@ fn lower_firewall(fw: &ast::FirewallDef, interp: impl Fn(&str) -> String) -> typ
                         prefix: l.prefix.as_deref().map(&interp),
                         group: l.group,
                     }),
+                    set_mark: r.set_mark,
+                    ct_mark: r.ct_mark,
+                    classify: r.classify.clone(),
+                    clamp_mss: r.clamp_mss,
                 }
             })
             .collect();
@@ -3051,6 +3063,10 @@ fn apply_node_props(
                             dst: r.dst.as_ref().map(ast::Val::to_text).transpose()?,
                             target: r.target.as_ref().map(ast::Val::to_text).transpose()?,
                             target_port: r.target_port,
+                            proto: r.proto,
+                            dport: r.dport,
+                            iif: r.iif.clone(),
+                            oif: r.oif.clone(),
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -4312,6 +4328,26 @@ validate {
 }
 "#;
 
+    const E_NLL: &str = r#"lab "t"
+node gw {
+  firewall forward {
+    oif wan0 clamp mss pmtu
+    tcp dport 443 clamp mss 1360
+    ct mark restore
+    ct new tcp dport 5201 mark set 0x10/0xff ct mark save
+    oif wan0 tcp dport 22 classify 1:1
+    oif wan0 mark 0x10/0xff classify 1:3
+    ct mark 0x2 counter name marked
+  }
+  nat {
+    masquerade src 10.0.1.0/24 oif wan0
+    snat oif wan1 to 10.0.3.1
+    dnat dst 10.0.2.1 iif wan0 tcp dport 80 to 10.0.1.10:5201
+  }
+}
+qdisc gw:wan0 prio { bands 3 }
+"#;
+
     #[test]
     fn test_lower_firewall_chains() {
         let topo = parse_and_lower(
@@ -4526,6 +4562,80 @@ node b : guarded {
         let src = "lab \"t\"\nnode a\nvalidate { counter a c = 3 }\n";
         let (msg, _) = parse_err_span(src);
         assert!(msg.contains("expected a comparison"), "{msg}");
+    }
+
+    /// #167: marks, connmark, classify, MSS clamping, NAT qualifiers.
+    #[test]
+    fn test_lower_firewall_mangle_and_nat_matches() {
+        use types::{CtMarkAction, MarkValue, MssClamp, NatProto};
+        let topo = parse_and_lower(E_NLL);
+        let gw = &topo.nodes["gw"];
+        let r = &gw
+            .firewall
+            .as_ref()
+            .unwrap()
+            .forward
+            .as_ref()
+            .unwrap()
+            .rules;
+        assert_eq!(r[0].clamp_mss, Some(MssClamp::Pmtu));
+        assert_eq!(r[0].action.as_deref(), Some("continue"));
+        assert_eq!(r[1].clamp_mss, Some(MssClamp::Mss(1360)));
+        assert_eq!(r[2].ct_mark, Some(CtMarkAction::Restore));
+        assert_eq!(
+            r[3].set_mark,
+            Some(MarkValue {
+                value: 0x10,
+                mask: Some(0xff)
+            })
+        );
+        assert_eq!(r[3].ct_mark, Some(CtMarkAction::Save));
+        assert_eq!(
+            r[3].match_expr.as_deref(),
+            Some("ct state new tcp dport 5201")
+        );
+        assert_eq!(r[4].classify.as_deref(), Some("1:1"));
+        assert_eq!(
+            r[5].match_expr.as_deref(),
+            Some("oifname wan0 mark 0x10/0xff")
+        );
+        assert_eq!(r[6].match_expr.as_deref(), Some("ct mark 0x2"));
+        let nat = &gw.nat.as_ref().unwrap().rules;
+        assert_eq!(nat[0].oif.as_deref(), Some("wan0"));
+        assert_eq!(nat[1].oif.as_deref(), Some("wan1"));
+        assert_eq!(
+            (nat[2].iif.as_deref(), nat[2].proto, nat[2].dport),
+            (Some("wan0"), Some(NatProto::Tcp), Some(80))
+        );
+        assert_eq!(nat[2].target_port, Some(5201));
+    }
+
+    #[test]
+    fn test_firewall_mangle_parse_errors() {
+        for (src, want) in [
+            (
+                "firewall forward { classify one }",
+                "expected a tc class handle",
+            ),
+            ("firewall forward { clamp mss 70000 }", "out of range"),
+            ("firewall forward { mark set }", "expected a mark"),
+            (
+                "firewall forward { ct mark frob }",
+                "expected a mark (decimal or 0x hex), found frob",
+            ),
+            (
+                "nat { masquerade iif eth0 }",
+                "does not apply to masquerade",
+            ),
+            (
+                "nat { dnat oif eth0 to 10.0.0.1 }",
+                "does not apply to dnat",
+            ),
+        ] {
+            let full = format!("lab \"t\"\nnode a {{\n  {src}\n}}\n");
+            let (msg, _) = parse_err_span(&full);
+            assert!(msg.contains(want), "{src}: {msg}");
+        }
     }
 
     #[test]

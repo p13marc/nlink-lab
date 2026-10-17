@@ -1454,14 +1454,69 @@ pub struct FirewallRule {
     /// Log the packets the rule acts on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log: Option<FirewallLog>,
+
+    /// `mark set V[/M]`: set the packet mark (only the bits under the mask).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub set_mark: Option<MarkValue>,
+
+    /// `ct mark set V`, `ct mark save`, `ct mark restore` (connmark).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ct_mark: Option<CtMarkAction>,
+
+    /// `classify X:Y`: the packet's priority, which a `prio` qdisc turns
+    /// into a band and an HTB into a class (tc hex: `1:10` is minor 0x10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classify: Option<String>,
+
+    /// `clamp mss N|pmtu`: lower a TCP SYN's MSS option.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clamp_mss: Option<MssClamp>,
 }
 
 impl FirewallRule {
-    /// True when the rule counts, logs or limits: what a rule without a
-    /// verdict (action "continue") is for.
+    /// True when the rule does something besides its verdict: what a rule
+    /// without a verdict (action "continue") is for.
     pub fn has_statement(&self) -> bool {
-        self.limit.is_some() || self.counter || self.counter_name.is_some() || self.log.is_some()
+        self.limit.is_some()
+            || self.counter
+            || self.counter_name.is_some()
+            || self.log.is_some()
+            || self.set_mark.is_some()
+            || self.ct_mark.is_some()
+            || self.classify.is_some()
+            || self.clamp_mss.is_some()
     }
+}
+
+/// A mark value, with the bits it applies to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct MarkValue {
+    pub value: u32,
+    /// Only these bits; left out, all 32.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask: Option<u32>,
+}
+
+/// What a rule does to the connection mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum CtMarkAction {
+    /// `ct mark set V`.
+    Set(u32),
+    /// `ct mark save`: the packet's mark into the connection.
+    Save,
+    /// `ct mark restore`: the connection's mark onto the packet.
+    Restore,
+}
+
+/// `clamp mss N` or `clamp mss pmtu`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MssClamp {
+    /// To what the path allows (`tcp option maxseg size set rt mtu`).
+    Pmtu,
+    /// To at most this value.
+    Mss(u16),
 }
 
 /// `limit [over] N/UNIT [burst N]`.
@@ -1584,6 +1639,26 @@ pub struct NatRule {
     pub target: Option<String>,
     /// Target port for DNAT.
     pub target_port: Option<u16>,
+    /// Only this L4 protocol (`dnat … tcp dport 80`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proto: Option<NatProto>,
+    /// Only this destination port (needs `proto`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dport: Option<u16>,
+    /// Only packets that came in on this interface (`dnat`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iif: Option<String>,
+    /// Only packets going out of this interface (`masquerade`, `snat`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oif: Option<String>,
+}
+
+/// The L4 protocol a NAT rule matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum NatProto {
+    Tcp,
+    Udp,
 }
 
 /// NAT action type.

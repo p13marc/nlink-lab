@@ -104,7 +104,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (56 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (68 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -137,7 +137,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (43 top-level; 52 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (44 top-level; 53 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -201,7 +201,9 @@ inline impairments (`->` / `<-`), profiles, firewall (input/forward/output
 chains; `src`/`dst`, `iif`/`oif`, `!=`, port ranges; accept/drop/reject
 with `reject with tcp-reset`; named sets with `@set` lookups, interval and
 concatenated keys; `limit`/`counter`/`counter name`/`log` statements and a
-`validate { counter … }` assertion), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
+`validate { counter … }` assertion; `mark set`/`ct mark set|save|restore`,
+`classify` into `prio` bands, `clamp mss`), NAT (`nat` block with
+`masquerade`/`snat`/`dnat`/`translate`, `iif`/`oif`/`tcp dport` qualifiers),
 link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
 route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,

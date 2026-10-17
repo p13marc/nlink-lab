@@ -113,6 +113,28 @@ when they apply `errno`, `ext_ack`, `netns`, `hint`, `issues` (a parse
 error is one issue with rule `parse` and `location` `file:line:column`)
 and `nlink` (what nlink says about a failed netlink call).
 
+## Progress
+
+Long operations — `deploy`, `apply`, `destroy`, `snapshot restore`,
+`test`, `scenario`, the waits of `spawn` and `wait-for`, `pull` — show
+what they are doing, on stderr:
+
+- on a terminal, one live line (the stage, the op being done, what is
+  being waited for, elapsed time) and a kept `✓` line per finished
+  stage;
+- on a pipe or in a CI log, one line per finished stage, wait and
+  warning, each after the time since the start, and a heartbeat every
+  10 s while nothing else happens;
+- with `--format ndjson`, every event as a JSON line on stdout
+  (`{"schema_version": 1, "item": "op", "event": {…}}`, the shape of
+  [the API's `OpEvent`](../API.md#progress)), then the result's line;
+- nothing with `--json` (one document) or `--quiet`.
+
+Ctrl-C cancels a deploy, apply or restore: it stops before its next
+step, or in the middle of a wait, and rolls back what it did (exit 130).
+A second Ctrl-C a moment later quits at once. `destroy` does not stop
+halfway; Ctrl-C only says so.
+
 ## Values
 
 - **Durations** carry a unit: `500ms`, `30s`, `1.5m`, `2h` (`ns`, `us`,

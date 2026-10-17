@@ -42,7 +42,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             ))
         })?;
     require_root()?;
-    let result = nlink_lab::scenario::run_scenario(&mut running, &scenario).await?;
+    let progress = crate::progress::Progress::new(ctx);
+    let op = progress.op("scenario", running.name());
+    let ran = nlink_lab::scenario::run_scenario_with(&mut running, &scenario, &op).await;
+    progress.finish();
+    let result = ran?;
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {

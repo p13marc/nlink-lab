@@ -267,7 +267,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     require_root()?;
     let start = Instant::now();
-    let report = nlink_lab::apply_with(&mut running, &desired, &apply_opts).await?;
+    let progress = crate::progress::Progress::new(ctx);
+    let op = progress.op("apply", lab_name);
+    let applied = nlink_lab::apply_with_ctx(&mut running, &desired, &apply_opts, &op).await;
+    progress.finish();
+    let report = applied?;
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     // what the next `apply` without a file converges on
     if let Err(e) = nlink_lab::state::set_source(lab_name, &source) {

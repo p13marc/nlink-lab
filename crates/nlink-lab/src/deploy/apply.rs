@@ -185,13 +185,13 @@ pub(super) async fn execute(plan: &Plan, env: &mut ApplyEnv, journal: &mut Journ
             tracing::info!("stage {stage:?}");
             last_stage = Some(stage);
             let ops = stages.get(stage_index).map_or(0, |(_, n)| *n);
+            stage_index += 1;
             env.ctx.emit(nlink_lab_shared::api::OpPhase::Stage {
                 stage: stage.name().to_string(),
                 index: stage_index,
                 of: stages.len(),
                 ops,
             });
-            stage_index += 1;
         }
         tracing::debug!("op: {}", op.describe());
         execute_one(op, env, journal).await.map_err(|e| {

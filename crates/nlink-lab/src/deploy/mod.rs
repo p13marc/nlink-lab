@@ -67,7 +67,7 @@ async fn deploy_ctx(
     rolled_back: &mut bool,
 ) -> Result<RunningLab> {
     topology.validate().bail()?;
-    let _lock = state::lock(&topology.lab.name)?;
+    let lock = state::lock(&topology.lab.name)?;
     if state::exists(&topology.lab.name) {
         return Err(Error::AlreadyExists {
             name: topology.lab.name.clone(),
@@ -112,13 +112,20 @@ async fn deploy_ctx(
             Ok(running)
         }
         Err(e) => {
-            tracing::warn!("deploy of '{lab_name}' failed: {e}; rolling back");
+            // the caller reports the error: the log is for -v
+            tracing::info!("deploy of '{lab_name}' failed: {e}; rolling back");
             ctx.emit(nlink_lab_shared::api::OpPhase::RollingBack {
                 reason: e.to_string(),
                 entries: journal.entries().len(),
             });
             journal.unwind().await;
             *rolled_back = true;
+            // The lab never existed: its directory (the events log, an
+            // archive's files) and its lock file go too (#103).
+            if !state::exists(&lab_name) {
+                let _ = state::remove(&lab_name);
+                lock.remove_file();
+            }
             Err(e)
         }
     }
@@ -521,7 +528,8 @@ async fn apply_ctx(
     let journal = Journal::new(running.name());
     let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
     if let Err(e) = res {
-        tracing::warn!(
+        // the caller reports the error: the log is for -v
+        tracing::info!(
             "apply to '{}' failed: {e}; rolling back this apply",
             running.name()
         );

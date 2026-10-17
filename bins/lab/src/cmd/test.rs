@@ -1,6 +1,6 @@
 //! `nlink-lab test`.
 
-use anstream::{eprint, eprintln, print};
+use anstream::{eprintln, print};
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, green, red, require_root};
@@ -28,7 +28,7 @@ pub struct Args {
     pub fail_fast: bool,
 }
 
-pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args {
         path,
         params,
@@ -51,22 +51,28 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut any_failed = false;
 
     for file in &files {
-        eprint!("Testing {} ... ", file.display());
         let started = std::time::Instant::now();
-        match nlink_lab::test_runner::run_test_with_params(file, &cli_params).await {
+        // the deploy's stages and waits, then the destroy's, live
+        let progress = crate::progress::Progress::new(ctx);
+        let op = progress.op("test", "");
+        let ran = nlink_lab::test_runner::run_test_with(file, &cli_params, &op).await;
+        progress.finish();
+        match ran {
             Ok(result) => {
                 let pass_count = result.assertions.iter().filter(|a| a.passed).count();
                 let total = result.assertions.len();
                 if result.passed {
                     eprintln!(
-                        "{} ({pass_count}/{total} assertions, {}ms)",
+                        "{} {} ({pass_count}/{total} assertions, {}ms)",
                         green("PASS"),
+                        file.display(),
                         result.total_ms
                     );
                 } else {
                     eprintln!(
-                        "{} ({pass_count}/{total} assertions, {}ms)",
+                        "{} {} ({pass_count}/{total} assertions, {}ms)",
                         red("FAIL"),
+                        file.display(),
                         result.total_ms
                     );
                     for a in &result.assertions {
@@ -90,7 +96,7 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 all_results.push(result);
             }
             Err(e) => {
-                eprintln!("{}: {e}", red("ERROR"));
+                eprintln!("{} {}: {e}", red("ERROR"), file.display());
                 any_failed = true;
                 // in the reports too: a file that did not deploy was
                 // missing from them, which then read as green (#208)

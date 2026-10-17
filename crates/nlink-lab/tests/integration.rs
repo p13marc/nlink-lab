@@ -8248,6 +8248,15 @@ async fn cancel_during_a_healthcheck_rolls_back() {
         );
     }
     assert!(!nlink_lab::state::exists(&name), "state left");
+    // nor its directory and lock file: the lab never existed (#103)
+    let dir = nlink_lab::state::state_dir(&name);
+    assert!(!dir.exists(), "{} left", dir.display());
+    let lock = dir
+        .parent()
+        .unwrap()
+        .join(".locks")
+        .join(format!("{name}.lock"));
+    assert!(!lock.exists(), "{} left", lock.display());
 }
 
 /// F4: `wait_all` waits for every condition within one deadline, reports

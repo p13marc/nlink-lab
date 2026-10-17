@@ -170,15 +170,18 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         conditions.push(WaitCondition::FdStable { pid, stable_for });
     }
     if !conditions.is_empty() {
-        running
+        let progress = crate::progress::Progress::new(ctx);
+        let waited = running
             .wait_all(
                 &node,
                 &conditions,
                 wait_timeout,
                 std::time::Duration::from_millis(500),
-                &nlink_lab::OpCtx::default(),
+                &progress.op("wait", &lab),
             )
-            .await?;
+            .await;
+        progress.finish();
+        waited?;
         if !ctx.quiet {
             eprintln!("ready");
         }

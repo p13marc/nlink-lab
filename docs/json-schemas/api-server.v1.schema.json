@@ -948,7 +948,7 @@
           ]
         },
         {
-          "description": "A stage begins (`index` of `of`), with its op count.",
+          "description": "A stage begins (`index` of `of`, from 1), with its op count.",
           "type": "object",
           "properties": {
             "index": {

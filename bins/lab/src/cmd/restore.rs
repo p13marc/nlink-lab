@@ -78,7 +78,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     require_root()?;
     crate::cmd::common::check_topology(&snapshot.topology)?;
-    let report = nlink_lab::restore(&mut running, &snapshot).await?;
+    let progress = crate::progress::Progress::new(ctx);
+    let op = progress.op("restore", &lab);
+    let restored = nlink_lab::restore_with(&mut running, &snapshot, &op).await;
+    progress.finish();
+    let report = restored?;
     if ctx.json {
         println!(
             "{}",

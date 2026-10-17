@@ -99,6 +99,32 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`NatRule` has four new fields** (`proto`, `dport`, `iif`, `oif`;
   library API). Code that builds one with a struct literal adds
   `proto: None, dport: None, iif: None, oif: None`.
+- **`apply` deletes a declared interface the topology no longer has**
+  (#159). Removing a `vlan`, `vxlan`, `bond`, `vrf` or `dummy` block used
+  to leave the interface and its address in the kernel, and nothing
+  reported it. The network layer now plans against the running
+  topology's config, so `apply --check` lists the link under
+  `links-to-remove` and `apply` deletes it, along with links stacked on
+  it.
+- **A declared interface's own sysctls are set on its declaration**
+  (#160). `net.ipv4.conf.<if>.*` / `net.ipv6.conf.<if>.*` keys of a
+  vlan, vxlan, bond, vrf or dummy are no longer in the node's `sysctls`
+  op (`deploy --dry-run`); nlink sets them when it creates the link and
+  again when it recreates one, and a hand edit is drift in the `network`
+  layer. A key nlink cannot set (an unknown name, a non-integer value)
+  stays a sysctl, as before.
+- **`apply --check --json` / `apply --dry-run --json` / `verify --json`
+  have a `wireguard` object** (#170): per node, nlink's
+  `WireguardConfigDiff` (public keys only; private and preshared keys as
+  presence flags). Additive, so `schema_version` stays `3`. The
+  published schema (`layered-diff.v3.schema.json`) now types the
+  `network` and `nftables` objects instead of leaving them free-form;
+  `wireguard` stays free-form until nlink's own schema of it matches its
+  JSON (marcpardo/nlink#876).
+- **`LayeredDiff` has a `wireguard` field** (library API). Code that
+  builds one with a struct literal adds `wireguard: Default::default()`.
+- **A `network { mtu }` lab deployed by an older nlink-lab keeps its
+  1500-byte member veths** until it is redeployed (#161).
 
 ### Added
 
@@ -233,6 +259,26 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   is how `examples/frr-bgp.nll` (`validate retries … interval … { … }`)
   stopped parsing without anyone noticing. The grammar now takes the
   settle policy, and the step requires a parse tree.
+- **A removed `vlan`/`vxlan`/`bond`/`vrf`/`dummy` stayed in the kernel**
+  (#159), invisible to `apply --check` and `verify`. See Migration.
+- **A per-interface sysctl on a declared vlan, vxlan or bond failed the
+  deploy** (#160): `sysctl key not found`, since sysctls were set before
+  the interface existed, and a recreated interface came back with the
+  kernel's defaults. Both are fixed by setting them on the declaration.
+- **`network { mtu }` was not applied** (#161). The member veths got no
+  MTU, so as each joined, the kernel moved the bridge back to 1500. Both
+  ends of every member veth now get the network's MTU, and the bridge
+  keeps it.
+- **The published JSON schemas rejected real output.** They were
+  generated for deserialization, so every field the output leaves out
+  when empty was required: no `apply --check --json` envelope validated,
+  since one of `topology`, `network` or `nftables` is always elided.
+  They are generated for serialization now (`docs/json-schemas`); every
+  `apply --check --json` from a deploy-every-example sweep validates.
+- **WireGuard drift was invisible** (#170): a peer removed by hand stayed
+  removed, and `apply --check`, `verify` and `apply` all said there was
+  nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`
+  converges it.
 - **Docs:**
   - `docs/cli/apply.md` showed an `apply --check --json` payload that
     never existed. It now shows output from a real run.
@@ -241,10 +287,17 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Changed
 
-- The network layer uses nlink's `apply_reconcile_with_options`, and
-  nftables `NftablesConfig::apply_reconcile`, which diffs again on each
-  attempt: since nlink 0.31 a diff applies only to the ruleset it was
-  taken from (ERESTART).
+- Each node's network, nftables and WireGuard layers are planned and
+  applied as one nlink `Stack` (`Stack::apply_reconcile_in`), in place of
+  three appliers of nlink-lab's own: WireGuard devices first, then
+  links, addresses and routes, the nftables table, then keys and peers.
+  A plan a concurrent change invalidates (EBUSY, an nftables ERESTART) is
+  planned again, twice at most. A node with no firewall or NAT declares
+  the `nlink-lab` table absent instead of deleting it out of band, so a
+  leftover table shows in `apply --check`. `apply --check` plans the same
+  stack with `Stack::plan_in`, saved WireGuard keys included.
+- `Plan::diff` compares ops by value (`PartialEq`) rather than by their
+  `Debug` text.
 - A deploy or apply runs its plan on a thread and runtime of its own,
   so `deploy()`/`apply()` stay `Send` (nlink 0.32's request futures, as
   the plan composes them, trip rustc's higher-ranked `Send` check,

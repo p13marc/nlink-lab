@@ -15,7 +15,7 @@ use nlink::{Connection, Route};
 
 use super::op::{Op, Plan, Stage};
 use super::rollback::{Journal, Undo};
-use super::{NsRef, apply_network_impairments, apply_stack_for_node, guard_namespace_absent};
+use super::{NsRef, apply_network_impairments, guard_namespace_absent};
 use crate::container::Runtime;
 use crate::error::{Error, Result};
 use crate::helpers::parse_rate_bps;
@@ -45,6 +45,9 @@ pub(super) struct ApplyEnv {
     /// The VRF tables each node declared routes into before this apply,
     /// purged even when the node no longer declares into them.
     pub previous_vrf_tables: BTreeMap<String, Vec<u32>>,
+    /// Each node's network config as the running lab has it: what it
+    /// declared and the desired one no longer does is removed (#159).
+    pub previous_network: BTreeMap<String, std::sync::Arc<nlink::netlink::config::NetworkConfig>>,
     /// Resolved FRR daemon binaries (filled by the preflight when the
     /// plan starts routing daemons, #65).
     pub frr_bins: BTreeMap<crate::frr::Daemon, std::path::PathBuf>,
@@ -75,6 +78,7 @@ impl ApplyEnv {
             wifi_loaded: false,
             purge: false,
             previous_vrf_tables: BTreeMap::new(),
+            previous_network: BTreeMap::new(),
             frr_bins: BTreeMap::new(),
         })
     }
@@ -117,6 +121,7 @@ impl ApplyEnv {
             .iter()
             .map(|(name, node)| (name.clone(), node.vrfs.values().map(|v| v.table).collect()))
             .collect();
+        env.previous_network = super::previous_network_configs(running.topology());
         Ok(env)
     }
 
@@ -458,13 +463,20 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             mgmt_ns,
             bridge,
             vlans,
+            mtu,
         } => {
             let mgmt_fd = namespace::open(mgmt_ns)
                 .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
             let mgmt_conn: Connection<Route> = Connection::new_in(mgmt_ns.as_str())
                 .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
             let node_conn = env.route(node)?;
-            let veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
+            let mut veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
+            // The kernel moves a bridge to its smallest port's MTU as each
+            // port joins: without the network's MTU on its ports, the
+            // bridge fell back to 1500 (#161).
+            if let Some(mtu) = mtu {
+                veth = veth.mtu(*mtu).peer_mtu(*mtu);
+            }
             node_conn.add_link(veth).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to create veth for bridge '{bridge}' member '{node}:{iface}' (mgmt peer '{peer}'): {e}"
@@ -619,23 +631,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
         Op::Stack { node, cfg } => {
             let handle = env.handle(node)?.clone();
-            #[cfg(feature = "wireguard")]
-            let wg = cfg.wireguard.clone();
-            #[cfg(not(feature = "wireguard"))]
-            let wg: Option<()> = None;
-            apply_stack_for_node(
-                &handle,
-                node,
-                cfg.network.clone(),
-                cfg.firewall.as_ref(),
-                cfg.nat.as_ref(),
-                wg,
-                super::network_plan_options(
-                    env.purge,
-                    env.previous_vrf_tables.get(node).map_or(&[], Vec::as_slice),
-                ),
-            )
-            .await?;
+            let plan = super::network_plan_options(
+                env.purge,
+                env.previous_vrf_tables.get(node).map_or(&[], Vec::as_slice),
+                env.previous_network.get(node),
+            );
+            super::apply_stack_for_node(&handle, node, cfg, plan).await?;
         }
         Op::Netem {
             node,

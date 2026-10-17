@@ -124,7 +124,7 @@ every op it runs.
 ```
 crates/nlink-lab/src/deploy/
   mod.rs        deploy(), apply(), compute_layered_diff(), plan_for();
-                the per-node stack appliers (network / nftables / WireGuard)
+                the per-node Stack (network + nftables + WireGuard, one nlink Stack)
   op.rs         NsRef (Root | Named | Container), Stage, Op, Plan::diff
   plan/         PURE planners — nothing here touches the kernel:
     topology.rs   namespaces, containers, hwsim, mgmt bridge, bridge
@@ -164,9 +164,11 @@ first, in *reverse* stage order.
 | 15 | `Wifi` | hostapd / wpa_supplicant / mesh join |
 
 Every netlink resource commits through nlink's declarative
-`NetworkConfig` / `NftablesConfig` / `WireguardConfig` reconcile
-paths — zero kernel calls when nothing changed. In apply mode the
-network layer runs with `ApplyOptions::with_purge(true)`.
+`NetworkConfig` / `NftablesConfig` / `WireguardConfig`, planned and
+applied per node as one `nlink::facade::Stack` — zero kernel calls
+when nothing changed. In apply mode the network layer purges and
+plans against the running topology's config (`PlanOptions::previous`),
+so a declared link the topology dropped is deleted.
 
 After the stages, `deploy()` writes the state file, records a
 `Deployed` lifecycle event, and *then* runs any `validate { … }`
@@ -198,9 +200,9 @@ hand is never someone else's to delete.
 `apply_diff` shares the declarative builders with the
 initial-deploy path, so `apply` and `deploy` cannot drift apart.
 `compute_layered_diff(running, desired)` is the preview half: it
-walks every node, builds the same per-namespace `NetworkConfig` /
-`NftablesConfig`, and emits one `LayeredDiff` bundle for
-`apply --check` / `apply --dry-run`. The JSON form is **schema
+walks every node, plans the same `Stack` apply would
+(`Stack::plan_in`), and emits one `LayeredDiff` bundle — network,
+nftables and WireGuard — for `apply --check` / `apply --dry-run`. The JSON form is **schema
 v3**; the v1 `diff` / `layered_summary` /
 `layered_summary_deprecated` fields were removed in 0.7.0 after
 their deprecation window.

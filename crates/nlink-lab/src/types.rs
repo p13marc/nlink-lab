@@ -1672,7 +1672,7 @@ pub enum NatAction {
 }
 
 /// Process to execute in a node.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ExecConfig {
     /// Command and arguments.
     pub cmd: Vec<String>,
@@ -1722,7 +1722,7 @@ pub struct WireguardConfig {
 }
 
 /// macvlan interface configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MacvlanConfig {
     /// Interface name inside the namespace.
     pub name: String,
@@ -1748,7 +1748,7 @@ pub enum MacvlanMode {
 }
 
 /// ipvlan interface configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct IpvlanConfig {
     /// Interface name inside the namespace.
     pub name: String,
@@ -1773,7 +1773,7 @@ pub enum IpvlanMode {
 }
 
 /// Wi-Fi interface configuration (mac80211_hwsim).
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WifiConfig {
     /// Interface name inside the namespace (e.g., "wlan0").
     pub name: String,

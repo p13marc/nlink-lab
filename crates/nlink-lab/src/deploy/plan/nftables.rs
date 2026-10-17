@@ -35,6 +35,11 @@ pub(crate) fn topology_to_nftables_config(
     use nlink::netlink::nftables::config::NftablesConfig;
     use nlink::netlink::nftables::types::{ChainType, Family, Hook, Priority};
 
+    // The rule closures below `.expect()` these literals.
+    if let Some(nat) = nat {
+        validate_nat_rule_literals(nat)?;
+    }
+
     let mut cfg = NftablesConfig::new();
 
     // Decide which chains we actually need to declare. NAT

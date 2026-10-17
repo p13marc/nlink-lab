@@ -11,6 +11,9 @@ use crate::types::{Impairment, Link, NetworkImpairment, RateLimit, RouteConfig, 
 /// `bins/lab`) don't need a direct `nlink` dep to construct the
 /// 159d typed JSON envelope.
 pub use nlink::netlink::config::ConfigDiff;
+/// Re-export upstream `WireguardConfigDiff` for the same reason as
+/// [`ConfigDiff`] above.
+pub use nlink::netlink::genl::wireguard::config::WireguardConfigDiff;
 /// Re-export upstream `NftablesDiff` for the same reason as
 /// [`ConfigDiff`] above.
 pub use nlink::netlink::nftables::config::NftablesDiff;
@@ -309,15 +312,20 @@ impl std::fmt::Display for TopologyDiff {
 #[derive(Debug, Default, Serialize, schemars::JsonSchema)]
 pub struct LayeredDiff {
     pub topology: TopologyDiff,
-    /// Upstream `nlink::ConfigDiff` per namespace (schema: free-form).
+    /// nlink's `ConfigDiff` per node.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub network: std::collections::BTreeMap<String, nlink::netlink::config::ConfigDiff>,
-    /// Upstream `nlink::NftablesDiff` per namespace (schema: free-form).
+    /// nlink's `NftablesDiff` per node.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub nftables:
         std::collections::BTreeMap<String, nlink::netlink::nftables::config::NftablesDiff>,
+    /// nlink's `WireguardConfigDiff` per node: a peer, key, endpoint or
+    /// allowed-ips that differs from the declared tunnel. Keys never
+    /// appear in it, only public keys and presence flags. Free-form in
+    /// the schema until nlink's matches its JSON (marcpardo/nlink#876).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
+    pub wireguard: std::collections::BTreeMap<String, WireguardConfigDiff>,
 }
 
 impl LayeredDiff {
@@ -328,6 +336,7 @@ impl LayeredDiff {
         self.topology.is_empty()
             && self.network.values().all(|d| d.is_empty())
             && self.nftables.values().all(|d| d.is_empty())
+            && self.wireguard.values().all(|d| d.is_empty())
     }
 
     /// Total change count, summed across every subdiff.
@@ -340,6 +349,11 @@ impl LayeredDiff {
                 .sum::<usize>()
             + self
                 .nftables
+                .values()
+                .map(|d| d.change_count())
+                .sum::<usize>()
+            + self
+                .wireguard
                 .values()
                 .map(|d| d.change_count())
                 .sum::<usize>()
@@ -393,6 +407,20 @@ impl std::fmt::Display for LayeredDiff {
             writeln!(
                 f,
                 "NftablesDiff ({node}, {} change{}):",
+                diff.change_count(),
+                if diff.change_count() == 1 { "" } else { "s" }
+            )?;
+            write!(f, "{diff}")?;
+            emitted = true;
+        }
+
+        for (node, diff) in &self.wireguard {
+            if diff.is_empty() {
+                continue;
+            }
+            writeln!(
+                f,
+                "WireguardConfigDiff ({node}, {} change{}):",
                 diff.change_count(),
                 if diff.change_count() == 1 { "" } else { "s" }
             )?;

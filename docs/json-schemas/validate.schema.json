@@ -96,7 +96,8 @@
       "required": [
         "severity",
         "rule",
-        "message"
+        "message",
+        "location"
       ]
     }
   }

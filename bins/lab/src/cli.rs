@@ -134,8 +134,8 @@ pub enum Commands {
 
     /// Check a running lab for drift against its topology (exit 2 on drift).
     ///
-    /// Compares every node's live links/addresses/routes/nftables with
-    /// what the topology declares — the same view `apply --check` shows —
+    /// Compares every node's live links/addresses/routes, nftables and
+    /// WireGuard peers with what the topology declares — the same view `apply --check` shows —
     /// and prints the differences. Meant for CI and monitoring: exit 0
     /// means the lab is exactly what its file says.
     Verify(cmd::verify::Args),

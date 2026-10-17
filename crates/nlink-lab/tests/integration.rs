@@ -5739,6 +5739,77 @@ network lan {{
     lab.destroy().await.expect("destroy failed");
 }
 
+/// #221: `restart` re-planned every node from the declared topology with
+/// fresh WireGuard keys, so an `impair` on another node went back to the
+/// declared value and every `key auto` interface was re-keyed.
+#[tokio::test]
+async fn a_restart_keeps_the_labs_runtime_impairments_and_keys() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("rk-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}" {{ runtime "podman" }}
+node r image "alpine:latest" cmd ["sleep", "infinity"]
+node a {{ wireguard wg0 {{ key auto listen 51820 address 192.168.77.1/32 peers [b] }} }}
+node b {{ wireguard wg0 {{ key auto listen 51820 address 192.168.77.2/32 peers [a] }} }}
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 10ms }}
+link r:eth0 -- a:eth1 {{ 10.1.0.1/24 -- 10.1.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    lab.set_impairment(
+        "a:eth0",
+        &nlink_lab::types::Impairment {
+            delay: Some("200ms".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let key = |lab: &RunningLab, node: &str| {
+        lab.exec(node, "wg", &["show", "wg0", "public-key"])
+            .unwrap()
+            .stdout
+    };
+    let keys_before = (key(&lab, "a"), key(&lab, "b"));
+
+    // What `nlink-lab restart` does.
+    let id = lab.container_for("r").unwrap().id.clone();
+    let ok = std::process::Command::new("podman")
+        .args(["restart", "-t", "0", &id])
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(ok, "podman restart");
+    let pid = nlink_lab::container::Runtime::with_binary("podman")
+        .inspect_pid(&id)
+        .unwrap();
+    lab.set_container_pid("r", pid).unwrap();
+    nlink_lab::reattach_node(&mut lab, "r").await.unwrap();
+
+    let qdisc = lab
+        .exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap()
+        .stdout;
+    assert!(
+        qdisc.contains("delay 200ms"),
+        "the runtime delay was undone: {qdisc}"
+    );
+    assert_eq!((key(&lab, "a"), key(&lab, "b")), keys_before, "re-keyed");
+    let ping = lab.exec("r", "ping", &["-c1", "-W2", "10.1.0.2"]).unwrap();
+    assert_eq!(ping.exit_code, 0, "r's link is back");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── firewall: reject, chains, matches on real traffic (#164) ───
 
 /// Start an iperf3 server on `port` in `node`, detached, and wait for it.

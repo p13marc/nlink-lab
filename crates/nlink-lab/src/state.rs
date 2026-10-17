@@ -176,6 +176,21 @@ pub struct SnapshotInfo {
     pub partitions: usize,
 }
 
+/// A lab name is a path component of the state directory. Every entry
+/// point that turns one into a path checks it: `""` named the `labs/`
+/// directory itself, `..` its parent and an absolute name any directory,
+/// so `destroy --force ""` deleted every lab's state (#221). The rule is
+/// the validator's for a topology's lab name.
+pub fn validate_lab_name(name: &str) -> Result<()> {
+    if crate::validator::is_valid_name(name) {
+        Ok(())
+    } else {
+        Err(Error::invalid_argument(format!(
+            "invalid lab name '{name}': use letters, digits, '_', '.' or '-', starting with a letter, digit or '_'"
+        )))
+    }
+}
+
 /// Snapshot names are path components: letters, digits, `-`, `_`, `.`
 /// (not leading), at most 64 bytes.
 pub fn validate_snapshot_name(name: &str) -> Result<()> {
@@ -201,6 +216,7 @@ pub fn snapshot_save(
     state: &LabState,
     topology: &Topology,
 ) -> Result<SnapshotInfo> {
+    validate_lab_name(lab)?;
     validate_snapshot_name(name)?;
     let dir = snapshots_dir(lab).join(name);
     std::fs::create_dir_all(&dir)?;
@@ -238,6 +254,7 @@ pub fn snapshot_save(
 
 /// Load one snapshot.
 pub fn snapshot_load(lab: &str, name: &str) -> Result<Snapshot> {
+    validate_lab_name(lab)?;
     validate_snapshot_name(name)?;
     let dir = snapshots_dir(lab).join(name);
     if !dir.join("meta.json").exists() {
@@ -277,6 +294,7 @@ pub fn snapshot_load(lab: &str, name: &str) -> Result<Snapshot> {
 
 /// All snapshots of a lab, newest first.
 pub fn snapshot_list(lab: &str) -> Result<Vec<SnapshotInfo>> {
+    validate_lab_name(lab)?;
     let dir = snapshots_dir(lab);
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -297,6 +315,7 @@ pub fn snapshot_list(lab: &str) -> Result<Vec<SnapshotInfo>> {
 
 /// Delete one snapshot.
 pub fn snapshot_remove(lab: &str, name: &str) -> Result<()> {
+    validate_lab_name(lab)?;
     validate_snapshot_name(name)?;
     let dir = snapshots_dir(lab).join(name);
     if !dir.exists() {
@@ -342,29 +361,43 @@ pub struct LabInfo {
     pub created_at: String,
 }
 
-/// Get the base state directory.
+/// nlink-lab's state root: `$XDG_STATE_HOME/nlink-lab`, else
+/// `$HOME/.local/state/nlink-lab`, else — no `HOME` at all, e.g. a systemd
+/// unit — `/var/lib/nlink-lab` for root and a per-uid directory under the
+/// system temp dir otherwise. It is never the world-writable, predictable
+/// `/tmp/nlink-lab` a root process used to fall back to (issue #38).
 ///
-/// `$XDG_STATE_HOME/nlink-lab/labs`, else `$HOME/.local/state/nlink-lab/labs`,
-/// else — no `HOME` at all, e.g. a systemd unit — `/var/lib/nlink-lab/labs`
-/// for root and a per-uid directory under the system temp dir otherwise.
-/// It is never the world-writable, predictable `/tmp/nlink-lab` a root
-/// process used to fall back to (issue #38).
-fn base_dir() -> PathBuf {
-    if let Ok(state_home) = std::env::var("XDG_STATE_HOME") {
-        PathBuf::from(state_home).join("nlink-lab").join("labs")
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home)
-            .join(".local")
-            .join("state")
-            .join("nlink-lab")
-            .join("labs")
-    } else if unsafe { libc::geteuid() } == 0 {
-        PathBuf::from("/var/lib/nlink-lab/labs")
+/// An empty or relative `XDG_STATE_HOME` or `HOME` is ignored, as the XDG
+/// spec says: it put the state under the current directory, so a lab
+/// deployed from one directory was not found from another (#221).
+pub(crate) fn root_dir() -> PathBuf {
+    root_dir_from(
+        std::env::var_os("XDG_STATE_HOME"),
+        std::env::var_os("HOME"),
+        unsafe { libc::geteuid() } == 0,
+    )
+}
+
+fn root_dir_from(
+    state_home: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+    root: bool,
+) -> PathBuf {
+    let absolute = |v: Option<std::ffi::OsString>| v.map(PathBuf::from).filter(|p| p.is_absolute());
+    if let Some(state_home) = absolute(state_home) {
+        state_home.join("nlink-lab")
+    } else if let Some(home) = absolute(home) {
+        home.join(".local").join("state").join("nlink-lab")
+    } else if root {
+        PathBuf::from("/var/lib/nlink-lab")
     } else {
-        std::env::temp_dir()
-            .join(format!("nlink-lab-{}", unsafe { libc::getuid() }))
-            .join("labs")
+        std::env::temp_dir().join(format!("nlink-lab-{}", unsafe { libc::getuid() }))
     }
+}
+
+/// Get the base state directory: `labs/` under [`root_dir`].
+fn base_dir() -> PathBuf {
+    root_dir().join("labs")
 }
 
 /// Directory holding per-lab lock files. Kept *outside* the lab's own
@@ -389,7 +422,7 @@ pub fn state_dir(name: &str) -> PathBuf {
 
 /// Check if state exists for a lab.
 pub fn exists(name: &str) -> bool {
-    state_dir(name).join("state.json").exists()
+    validate_lab_name(name).is_ok() && state_dir(name).join("state.json").exists()
 }
 
 /// Acquire an exclusive lock on a lab's state directory.
@@ -424,6 +457,7 @@ const ACQUIRE_ATTEMPTS: u32 = 8;
 /// closes that window: a stale inode is detected and the attempt is
 /// retried against whatever is at the path now.
 fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
+    validate_lab_name(name)?;
     let path = lock_path(name);
     let op = if blocking {
         libc::LOCK_EX
@@ -547,6 +581,7 @@ pub fn hosts_lock() -> Result<LabLock> {
 
 /// Save lab state and topology.
 pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
+    validate_lab_name(&state.name)?;
     let dir = state_dir(&state.name);
     std::fs::create_dir_all(&dir)?;
 
@@ -587,6 +622,7 @@ fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
 
 /// Load lab state and topology.
 pub fn load(name: &str) -> Result<(LabState, Topology)> {
+    validate_lab_name(name)?;
     let dir = state_dir(name);
 
     let state_path = dir.join("state.json");
@@ -664,6 +700,7 @@ pub fn labs_with_pending_journal() -> Vec<String> {
 
 /// Remove a lab's state directory.
 pub fn remove(name: &str) -> Result<()> {
+    validate_lab_name(name)?;
     let dir = state_dir(name);
     if dir.exists() {
         std::fs::remove_dir_all(&dir)?;
@@ -735,6 +772,7 @@ pub fn sweep_locks() -> usize {
 /// cross-check that resources the state claims exist are still present on
 /// the host.
 pub fn load_namespace_names(name: &str) -> Result<Vec<String>> {
+    validate_lab_name(name)?;
     let state_path = state_dir(name).join("state.json");
     if !state_path.exists() {
         return Err(Error::NotFound {
@@ -795,6 +833,52 @@ mod tests {
             _dir: dir,
             _guard: guard,
         }
+    }
+
+    #[test]
+    fn a_lab_name_that_is_not_a_path_component_is_refused() {
+        // #221: `destroy --force ""` removed every lab's state
+        let _dir = temp_state_env();
+        let state = LabState::new("keep", "2026-10-17T00:00:00Z");
+        save(&state, &Topology::default()).unwrap();
+        for bad in ["", ".", "..", "../keep", "/tmp/x", "a/b", "-a"] {
+            assert!(
+                matches!(remove(bad), Err(Error::InvalidArgument(_))),
+                "remove({bad:?})"
+            );
+            assert!(lock(bad).is_err(), "lock({bad:?})");
+            assert!(load(bad).is_err(), "load({bad:?})");
+            assert!(snapshot_list(bad).is_err(), "snapshot_list({bad:?})");
+            assert!(!exists(bad), "exists({bad:?})");
+        }
+        assert!(exists("keep"), "the other lab's state survived");
+        for good in ["keep", "a.b", "a-1", "_x"] {
+            validate_lab_name(good).unwrap();
+        }
+    }
+
+    #[test]
+    fn the_state_root_ignores_empty_and_relative_directories() {
+        let at = |xdg: &str, home: &str, root: bool| {
+            root_dir_from(Some(xdg.into()), Some(home.into()), root)
+        };
+        assert_eq!(
+            at("/s", "/h", false),
+            PathBuf::from("/s/nlink-lab"),
+            "XDG_STATE_HOME first"
+        );
+        // empty or relative XDG_STATE_HOME: HOME's
+        assert_eq!(
+            at("", "/h", false),
+            PathBuf::from("/h/.local/state/nlink-lab")
+        );
+        assert_eq!(
+            at("rel", "/h", false),
+            PathBuf::from("/h/.local/state/nlink-lab")
+        );
+        // neither usable: root's system directory
+        assert_eq!(at("", "", true), PathBuf::from("/var/lib/nlink-lab"));
+        assert!(at("x", "y", false).is_absolute());
     }
 
     #[test]

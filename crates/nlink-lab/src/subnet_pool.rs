@@ -31,18 +31,11 @@ struct Pool {
     next_offset: u32,
 }
 
+/// Next to the labs' state: it fell back to the world-writable
+/// `/tmp/nlink-lab` without `HOME`, which #38 fixed for the state only
+/// (#221).
 fn pool_path() -> PathBuf {
-    let base = if let Ok(state_home) = std::env::var("XDG_STATE_HOME") {
-        PathBuf::from(state_home).join("nlink-lab")
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home)
-            .join(".local")
-            .join("state")
-            .join("nlink-lab")
-    } else {
-        PathBuf::from("/tmp/nlink-lab")
-    };
-    base.join("subnet-pool.json")
+    crate::state::root_dir().join("subnet-pool.json")
 }
 
 fn lock_path() -> PathBuf {
@@ -57,7 +50,17 @@ fn lock() -> Result<std::fs::File> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let file = std::fs::File::create(&path)?;
+    // neither truncated nor followed: `File::create` emptied whatever a
+    // planted symlink pointed at (#221)
+    let file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(&path)?
+    };
     let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
     if ret != 0 {
         return Err(Error::deploy_failed(format!(

@@ -78,11 +78,20 @@ What this declares:
 Now validate, deploy, smoke-test, and tear down:
 
 ```bash
-nlink-lab validate wan.nll        # syntax + 53 validator rules
-sudo nlink-lab deploy wan.nll     # ~200ms; state in ~/.local/state/nlink-lab/labs/wan/
+nlink-lab validate wan.nll        # syntax + validator rules
+sudo nlink-lab deploy wan.nll     # ~200ms; state in root's ~/.local/state/nlink-lab/labs/wan/
 sudo nlink-lab exec wan site-a-client -- ping -c 3 10.0.1.1
 sudo nlink-lab destroy wan
 ```
+
+A lab's state lives in the state directory of the user who deployed
+it: `$XDG_STATE_HOME/nlink-lab/labs/`, else `~/.local/state/nlink-lab/labs/`
+(`/var/lib/nlink-lab/labs/` for root without a `HOME`). sudo runs as
+root with root's `HOME`, so a lab deployed with `sudo` is seen by
+`sudo nlink-lab status`, `ip`, `snapshot --list` and the other commands,
+and not by the same commands run without it. A binary with file
+capabilities (`just install-caps`) runs as you, with your state
+directory.
 
 The ping succeeds because the deploy planned the veth pair, the
 addresses and the route, then executed those stages in order —
@@ -1321,10 +1330,10 @@ sudo nlink-lab snapshot mylab before-chaos --description "clean baseline"
 sudo nlink-lab impair mylab wan:eth0 --loss 30%
 sudo nlink-lab impair mylab core:eth1 --partition
 sudo nlink-lab snapshot mylab chaos
-nlink-lab snapshot mylab --list
+sudo nlink-lab snapshot mylab --list
 sudo nlink-lab restore mylab before-chaos          # back to the baseline
 sudo nlink-lab restore mylab chaos --dry-run       # what would change
-nlink-lab snapshot mylab --delete chaos
+sudo nlink-lab snapshot mylab --delete chaos
 ```
 
 A snapshot holds the topology plus the runtime impairments and

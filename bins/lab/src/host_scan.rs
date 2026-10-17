@@ -5,13 +5,14 @@
 /// Best-effort cleanup when state is missing: delete this lab's namespaces
 /// and its root-namespace mgmt bridge/veth peers.
 ///
-/// Namespaces are matched by the `{name}-` prefix *and* must not carry a
-/// `netns_tag` for a different lab — `destroy simple --force` must not take
-/// "simple-2-router" down with it. Untagged prefix matches are still reaped
-/// here (unlike `--orphans`) because the caller named the lab explicitly and
-/// deploys that predate tagging left nothing else to go on.
-pub async fn force_cleanup(name: &str) {
-    let prefix = format!("{name}-");
+/// Namespaces are matched by the `{prefix}-` prefix (the topology's
+/// `prefix` when the caller has it, else the lab name) *and* must not
+/// carry a `netns_tag` for a different lab — `destroy simple --force` must
+/// not take "simple-2-router" down with it. Untagged prefix matches are
+/// still reaped here (unlike `--orphans`) because the caller named the lab
+/// explicitly and deploys that predate tagging left nothing else to go on.
+pub async fn force_cleanup(name: &str, prefix: &str) {
+    let prefix = format!("{prefix}-");
     match nlink::netlink::namespace::list() {
         Ok(all) => {
             for ns in all.iter().filter(|ns| ns.starts_with(&prefix)) {

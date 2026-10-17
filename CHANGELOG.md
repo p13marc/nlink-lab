@@ -301,6 +301,21 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   additive under `apply --check --json`'s `topology`). `diff --json`
   prints the whole diff plus `total_changes`, instead of a summary with
   link counts.
+- **State and names** (#221):
+  - a lab name a command is given must be a valid name (letters,
+    digits, `_`, `.`, `-`), or the command exits 1 with "invalid lab
+    name";
+  - `deploy --unique` / `--suffix` append the suffix to a topology's
+    `prefix` too, so a prefixed lab's namespaces and containers are
+    named `PREFIX-SUFFIX-NODE`;
+  - an empty or relative `XDG_STATE_HOME` or `HOME` is ignored. Without a
+    usable `HOME`, the subnet pool now lives next to the state
+    (`/var/lib/nlink-lab` for root) rather than in `/tmp/nlink-lab`;
+  - a lab whose state a newer nlink-lab wrote cannot be changed by an
+    older one;
+  - `restore --dry-run` prints the topology diff and the plan's removals
+    and other work, as `apply --dry-run` does. Its JSON `ops` lists those
+    only, and the new `topology_changes` counts the rest.
 - **Containers** (#217):
   - `cap-add` adds to the default `NET_ADMIN` and `NET_RAW` instead of
     replacing them, and `cap-drop` removes a default (`cap-drop [ALL]`
@@ -534,6 +549,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`destroy --force ""` deleted every lab's state** (#221): a lab name
+  was joined to the state directory as given, so `""` named the
+  directory itself, `..` its parent and an absolute name any directory.
+  `snapshot` wrote outside the state directory the same way.
+- **`restart` undid runtime impairments across the lab and re-keyed its
+  WireGuard interfaces** (#221). It re-applies every node's network
+  config, and planned it from the declared impairments, with fresh
+  `key auto` keys it did not save. `apply --check` then reported
+  WireGuard drift on every node.
+- **`deploy --force` without privileges destroyed the lab, then refused
+  to deploy** (#221).
+- **Docs:** a lab deployed with `sudo` lives in root's state directory, so
+  `status`, `ip` and `snapshot --list` without sudo do not see it (#221).
 - **A container's healthcheck ran on the host** (#217), in the
   container's network namespace only, with the host's binaries:
   `examples/container-lifecycle.nll` timed out on a host without

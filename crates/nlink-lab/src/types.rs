@@ -425,6 +425,17 @@ impl LabConfig {
         self.prefix.as_deref().unwrap_or(&self.name)
     }
 
+    /// Append `-SUFFIX` to the lab's name, and to its `prefix` when it
+    /// sets one: namespaces, containers and FRR pathspaces are named
+    /// after the prefix, so renaming the lab alone left two suffixed
+    /// copies of a prefixed topology on the same names (#221, #222).
+    pub fn add_suffix(&mut self, suffix: &str) {
+        self.name = format!("{}-{suffix}", self.name);
+        if let Some(prefix) = &mut self.prefix {
+            *prefix = format!("{prefix}-{suffix}");
+        }
+    }
+
     fn name_hash(&self) -> String {
         name_hash_str(&self.name)
     }
@@ -2031,6 +2042,25 @@ impl Topology {
 #[cfg(test)]
 mod name_hash_tests {
     use super::*;
+
+    #[test]
+    fn a_suffix_renames_the_prefix_too() {
+        // #221: `--suffix b` of a prefixed topology planned the same
+        // namespaces as `--suffix a`
+        let mut lab = LabConfig {
+            name: "dc".into(),
+            prefix: Some("p".into()),
+            ..Default::default()
+        };
+        lab.add_suffix("a");
+        assert_eq!((lab.name.as_str(), lab.prefix()), ("dc-a", "p-a"));
+        let mut plain = LabConfig {
+            name: "x".into(),
+            ..Default::default()
+        };
+        plain.add_suffix("1");
+        assert_eq!((plain.name.as_str(), plain.prefix()), ("x-1", "x-1"));
+    }
 
     #[test]
     fn network_peer_name_fits_ifname_budget() {

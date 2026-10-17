@@ -993,6 +993,17 @@ impl RunningLab {
     pub(crate) fn save_merged(&self, topology: Option<&Topology>) -> Result<()> {
         let (mut fresh, fresh_topology) = state::load(&self.topology.lab.name)?;
         let mine = self.snapshot();
+        // Written by a newer nlink-lab: rewriting it at this schema drops
+        // the fields this one does not know (#221).
+        if fresh.schema_version > state::SCHEMA_VERSION {
+            return Err(Error::invalid_argument(format!(
+                "lab '{}' was deployed by a newer nlink-lab (state schema {}, this one writes {}): \
+                 use that version to change it",
+                self.topology.lab.name,
+                fresh.schema_version,
+                state::SCHEMA_VERSION
+            )));
+        }
         let mut base = self.baseline.lock().unwrap_or_else(|p| p.into_inner());
         fresh.schema_version = state::SCHEMA_VERSION;
         take_changed(&mut fresh.namespaces, &base.namespaces, &mine.namespaces);

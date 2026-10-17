@@ -1560,7 +1560,7 @@ fn check_unresolved(value: &str, location: String, issues: &mut Vec<ValidationIs
 
 /// `^[A-Za-z0-9_][A-Za-z0-9_.-]*$` — names flow into filesystem paths
 /// (`state_dir`, `/etc/netns/<ns>`) and kernel object names.
-fn is_valid_name(name: &str) -> bool {
+pub(crate) fn is_valid_name(name: &str) -> bool {
     let mut chars = name.chars();
     match chars.next() {
         Some(c) if c.is_ascii_alphanumeric() || c == '_' => {}

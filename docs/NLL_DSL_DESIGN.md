@@ -450,7 +450,8 @@ node host {
 - Validation catches mixed families early: `nat-family-mismatch`
   (`snat src fd00::/64 to 10.0.0.1`), `firewall-match-expr`
   (`ip saddr fd00::/64` — use `ip6 saddr`), `vxlan-underlay-address`
-  (VXLAN needs an IPv4 underlay until nlink plumbs `IFLA_VXLAN_LOCAL6`).
+  (a VXLAN's `local` and `remote` must be the same family; an all-IPv6
+  underlay is fine).
 - `subnet auto/N` stays IPv4 (`10.0.0.0/8`).
 - Interface addresses other than `mgmt0` still perform Duplicate Address
   Detection: allow ~1 s before the first IPv6 packet, as
@@ -491,12 +492,14 @@ qdisc hub:eth2 sfq { perturb 10s limit 127 }
 qdisc hub:eth3 prio { bands 3 }
 ```
 
-`tbf` requires `rate` and `burst` (`limit` is a byte size there; for
-`fq_codel`/`sfq` it is a packet count). A parameter of another kind is
+`tbf` requires `rate`, `burst` and `limit` (`limit` is a byte size
+there; for `fq_codel`/`sfq` it is a packet count). A TBF with no limit
+has no queue and drops every packet, so it is a parse error, and a zero
+limit is a validation error (`invalid-qdisc-value`). A parameter of another kind is
 a parse error. An interface has exactly one root qdisc, so `qdisc`
 cannot share an endpoint with `impair` or `rate` (`qdisc-conflicts`).
 `apply` replaces a changed block and clears a removed one;
-`edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb` edits a running
+`edit --set-qdisc a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb` edits a running
 lab. See `examples/qdisc-kinds.nll`.
 
 ### 17. Dynamic Routing with FRR

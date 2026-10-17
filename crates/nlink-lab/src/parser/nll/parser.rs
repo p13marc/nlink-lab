@@ -2907,10 +2907,19 @@ fn parse_qdisc_stmt(tokens: &[Spanned], pos: &mut usize) -> Result<ast::QdiscDef
             let Some(burst) = burst else {
                 return Err(err(tokens, kind_pos, "qdisc tbf requires 'burst'".into()));
             };
+            // Without a queue limit the kernel gives a TBF no queue at all
+            // and it drops every packet; nlink 0.30 refuses one (#398).
+            let Some(limit) = limit_size else {
+                return Err(err(
+                    tokens,
+                    kind_pos,
+                    "qdisc tbf requires 'limit' (a byte size, e.g. limit 64kb): without one the kernel gives it no queue and it drops every packet".into(),
+                ));
+            };
             ast::QdiscKindDef::Tbf {
                 rate,
                 burst,
-                limit: limit_size,
+                limit: Some(limit),
                 peakrate,
                 mtu,
             }

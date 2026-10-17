@@ -20,10 +20,8 @@ node client { route default via 10.0.0.1 }
 
 link server:eth0 -- client:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
-# Egress only: `rate ... ingress` currently drops every packet (#149),
-# which would make the benchmark below unable to connect at all.
-rate server:eth0 egress 100mbit
-rate client:eth0 egress 100mbit
+rate server:eth0 egress 100mbit ingress 100mbit
+rate client:eth0 egress 100mbit ingress 100mbit
 
 # The link is shaped to 100mbit, so a 5-second run should land near it.
 # `bandwidth` is the metric iperf3 reports, in bits per second; the

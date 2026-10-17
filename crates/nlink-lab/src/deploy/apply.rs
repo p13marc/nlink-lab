@@ -13,7 +13,7 @@ use nlink::netlink::namespace;
 use nlink::netlink::ratelimit::RateLimiter;
 use nlink::{Connection, Route};
 
-use super::op::{Op, Plan, RouteSpec, Stage};
+use super::op::{Op, Plan, Stage};
 use super::rollback::{Journal, Undo};
 use super::{NsRef, apply_network_impairments, apply_stack_for_node, guard_namespace_absent};
 use crate::container::Runtime;
@@ -42,6 +42,9 @@ pub(super) struct ApplyEnv {
     pub wifi_loaded: bool,
     /// Reconcile the declarative layers with purge (apply mode).
     pub purge: bool,
+    /// The VRF tables each node declared routes into before this apply,
+    /// purged even when the node no longer declares into them.
+    pub previous_vrf_tables: BTreeMap<String, Vec<u32>>,
     /// Resolved FRR daemon binaries (filled by the preflight when the
     /// plan starts routing daemons, #65).
     pub frr_bins: BTreeMap<crate::frr::Daemon, std::path::PathBuf>,
@@ -71,6 +74,7 @@ impl ApplyEnv {
             dns_injected: false,
             wifi_loaded: false,
             purge: false,
+            previous_vrf_tables: BTreeMap::new(),
             frr_bins: BTreeMap::new(),
         })
     }
@@ -107,6 +111,12 @@ impl ApplyEnv {
         env.dns_injected = running.dns_injected();
         env.wifi_loaded = running.wifi_loaded();
         env.purge = true;
+        env.previous_vrf_tables = running
+            .topology()
+            .nodes
+            .iter()
+            .map(|(name, node)| (name.clone(), node.vrfs.values().map(|v| v.table).collect()))
+            .collect();
         Ok(env)
     }
 
@@ -318,13 +328,20 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             let nl = nlink::Connection::<Nl80211>::new_async()
                 .await
                 .map_err(|e| Error::deploy_failed(format!("nl80211 connection: {e}")))?;
-            let phys = nl
+            // Only hwsim radios: nlink 0.31 made `set_wiphy_netns` really
+            // move a wiphy (it was acked and ignored, nlink #604), so taking
+            // the first N would move a host's own Wi-Fi card into a lab.
+            let mut phys: Vec<_> = nl
                 .get_phys()
                 .await
-                .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?;
+                .map_err(|e| Error::deploy_failed(format!("failed to list PHYs: {e}")))?
+                .into_iter()
+                .filter(|p| is_hwsim_phy(&p.name))
+                .collect();
+            phys.sort_by_key(|p| p.index);
             if phys.len() < order.len() {
                 return Err(Error::deploy_failed(format!(
-                    "expected {} hwsim PHYs but found {}",
+                    "expected {} mac80211_hwsim radios but found {}",
                     order.len(),
                     phys.len()
                 )));
@@ -335,14 +352,12 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     .handle(node)?
                     .open_fd()
                     .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-                nl.set_wiphy_netns(phy.index, fd.as_raw_fd())
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to move phy{} to namespace '{node}': {e}",
-                            phy.index
-                        ))
-                    })?;
+                nl.set_wiphy_netns(phy.index, &fd).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to move phy{} to namespace '{node}': {e}",
+                        phy.index
+                    ))
+                })?;
             }
         }
         Op::CreateMgmtBridge { name, ip, prefix } => {
@@ -374,8 +389,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .handle(node)?
                 .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-            let veth =
-                nlink::netlink::link::VethLink::new(peer, "mgmt0").peer_netns_fd(fd.as_raw_fd());
+            let veth = nlink::netlink::link::VethLink::new(peer, "mgmt0").peer_netns_fd(&fd);
             root.add_link(veth).await.map_err(|e| {
                 Error::deploy_failed(format!("failed to create mgmt veth for node '{node}': {e}"))
             })?;
@@ -415,7 +429,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             vlan_filtering,
             mtu,
         } => {
-            let conn: Connection<Route> = namespace::connection_for(ns)
+            let conn: Connection<Route> = Connection::new_in(ns.as_str())
                 .map_err(|e| Error::deploy_failed(format!("connection for '{ns}': {e}")))?;
             let mut bridge = nlink::netlink::link::BridgeLink::new(name);
             if *vlan_filtering {
@@ -447,11 +461,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         } => {
             let mgmt_fd = namespace::open(mgmt_ns)
                 .map_err(|e| Error::deploy_failed(format!("failed to open mgmt namespace: {e}")))?;
-            let mgmt_conn: Connection<Route> = namespace::connection_for(mgmt_ns)
+            let mgmt_conn: Connection<Route> = Connection::new_in(mgmt_ns.as_str())
                 .map_err(|e| Error::deploy_failed(format!("connection for '{mgmt_ns}': {e}")))?;
             let node_conn = env.route(node)?;
-            let veth =
-                nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(mgmt_fd.as_raw_fd());
+            let veth = nlink::netlink::link::VethLink::new(iface, peer).peer_netns_fd(&mgmt_fd);
             node_conn.add_link(veth).await.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to create veth for bridge '{bridge}' member '{node}:{iface}' (mgmt peer '{peer}'): {e}"
@@ -504,8 +517,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 Error::deploy_failed(format!("failed to open namespace for '{}': {e}", b.node))
             })?;
             let conn_a = env.route(&a.node)?;
-            let mut veth = nlink::netlink::link::VethLink::new(&a.iface, &b.iface)
-                .peer_netns_fd(fd_b.as_raw_fd());
+            let mut veth =
+                nlink::netlink::link::VethLink::new(&a.iface, &b.iface).peer_netns_fd(&fd_b);
             if let Some(mtu) = mtu {
                 veth = veth.mtu(*mtu);
             }
@@ -544,7 +557,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .handle(node)?
                 .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-            host.set_link_netns_fd(cfg.name.as_str(), fd.as_raw_fd())
+            host.set_link_netns_fd(cfg.name.as_str(), &fd)
                 .await
                 .map_err(|e| {
                     Error::deploy_failed(format!(
@@ -576,7 +589,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 .handle(node)?
                 .open_fd()
                 .map_err(|e| Error::deploy_failed(format!("open ns fd for '{node}': {e}")))?;
-            host.set_link_netns_fd(cfg.name.as_str(), fd.as_raw_fd())
+            host.set_link_netns_fd(cfg.name.as_str(), &fd)
                 .await
                 .map_err(|e| {
                     Error::deploy_failed(format!(
@@ -617,7 +630,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 cfg.firewall.as_ref(),
                 cfg.nat.as_ref(),
                 wg,
-                env.purge,
+                super::network_plan_options(
+                    env.purge,
+                    env.previous_vrf_tables.get(node).map_or(&[], Vec::as_slice),
+                ),
             )
             .await?;
         }
@@ -647,33 +663,13 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 super::BuiltQdisc::Sfq(c) => conn.replace_qdisc(iface.as_str(), c).await,
                 super::BuiltQdisc::Prio(c) => conn.replace_qdisc(iface.as_str(), c).await,
             };
-            let mut res = replace(super::build_qdisc(qdisc)?).await;
-            // A root qdisc is replaced in place (#108), which the kernel
-            // turns into `qdisc_change()` when the kind is unchanged —
-            // and `sch_sfq` sets `.change = NULL`, so it answers EINVAL
-            // with "Change operation not supported by specified qdisc".
-            // sfq is the only kind here without a change op; netem, tbf,
-            // fq_codel and prio all have one. Delete and re-add for it,
-            // which is the only sequence the kernel offers. A *kind*
-            // change is unaffected — that takes create-and-graft, not
-            // change — so this costs a transient window only where there
-            // is no alternative.
-            //
-            // nlink 0.28 grew the same fallback (nlink#361), but in its
-            // *declarative* applier. This path is the imperative
-            // `Connection::replace_qdisc` — the side path #108 is about
-            // — so it does not inherit it. Removing this on the 0.28
-            // bump put the EINVAL straight back.
-            if res.is_err() && matches!(qdisc.kind, crate::types::QdiscKind::Sfq { .. }) {
-                conn.del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to clear {kind} qdisc on '{node}:{iface}': {e}"
-                        ))
-                    })?;
-                res = replace(super::build_qdisc(qdisc)?).await;
-            }
+            // A root qdisc is replaced in place (#108). nlink 0.31's
+            // `replace_qdisc` looks at the slot first (nlink #486): sfq,
+            // which has no change op, and an fq_codel whose `flows`
+            // changed are grafted anew, and the same `flows` is not sent
+            // again (the kernel refuses any `flows` on a live fq_codel).
+            // It used to be EINVAL for both; nlink-lab worked around sfq.
+            let res = replace(super::build_qdisc(qdisc)?).await;
             res.map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to apply {kind} qdisc on '{node}:{iface}': {e}"
@@ -716,7 +712,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 ))
             })?;
             tracing::debug!(endpoint = %format!("{node}:{iface}"), changes = report.changes_made, "rate limit reconcile complete");
-            journal.record(Undo::ClearQdisc {
+            journal.record(Undo::RemoveRateLimit {
                 ns: env.handle(node)?.clone(),
                 iface: iface.clone(),
             });
@@ -945,7 +941,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
 
         // ── removals (apply diffs) ──
-        Op::DeleteBridge { ns, name } => match namespace::connection_for(ns) {
+        Op::DeleteBridge { ns, name } => match Connection::new_in(ns.as_str()) {
             Ok(conn) => {
                 let conn: Connection<Route> = conn;
                 if let Err(e) = conn.del_link_if_exists(name.as_str()).await {
@@ -1012,23 +1008,6 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             env.containers.remove(node);
             env.ns.remove(node);
         }
-        Op::Route { node, route } => {
-            let conn = env.route(node)?;
-            replace_route_spec(&conn, route).await.map_err(|e| {
-                Error::deploy_failed(format!("failed to add route {route} on '{node}': {e}"))
-            })?;
-            journal.record(Undo::DelRoute {
-                ns: env.handle(node)?.clone(),
-                route: route.clone(),
-            });
-        }
-        Op::DelRoute { node, route } => {
-            if let Ok(conn) = env.route(node)
-                && let Err(e) = del_route_lenient(&conn, route).await
-            {
-                tracing::warn!("failed to delete route {route} on '{node}': {e}");
-            }
-        }
         Op::DeleteLink { node, iface } => {
             if let Ok(conn) = env.route(node)
                 && let Err(e) = conn.del_link_if_exists(iface.as_str()).await
@@ -1043,7 +1022,19 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             }
             env.mgmt_peers.retain(|_, p| p != name);
         }
-        Op::ClearQdisc { node, iface } | Op::RemoveRateLimit { node, iface } => {
+        // A rate limit is more than its root qdisc: ingress shaping adds an
+        // `ffff:` qdisc with a redirect filter and an `ifb_<iface>` device,
+        // which clearing the root alone left running.
+        Op::RemoveRateLimit { node, iface } => {
+            if let Ok(conn) = env.route(node) {
+                RateLimiter::new(iface).remove(&conn).await.map_err(|e| {
+                    Error::deploy_failed(format!(
+                        "failed to remove rate limit on '{node}:{iface}': {e}"
+                    ))
+                })?;
+            }
+        }
+        Op::ClearQdisc { node, iface } => {
             if let Ok(conn) = env.route(node) {
                 conn.del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
                     .await
@@ -1255,63 +1246,6 @@ fn exec_op(
     Ok(())
 }
 
-/// `ip route replace` for a [`RouteSpec`] (idempotent).
-async fn replace_route_spec(
-    conn: &Connection<Route>,
-    spec: &RouteSpec,
-) -> std::result::Result<(), nlink::netlink::Error> {
-    match spec.dest {
-        std::net::IpAddr::V4(dst) => conn.replace_route(route_v4(spec, dst)).await,
-        std::net::IpAddr::V6(dst) => conn.replace_route(route_v6(spec, dst)).await,
-    }
-}
-
-/// `ip route del` for a [`RouteSpec`]; an already-absent route is not an
-/// error.
-///
-/// The ESRCH/not-found swallowing used to live here. nlink 0.27 added
-/// `del_route_if_exists` — table-aware, full-key, same errno treatment —
-/// so this is now just the `RouteSpec` → `Ipv4Route`/`Ipv6Route` bridge
-/// (nlink #333/#335).
-pub(super) async fn del_route_lenient(
-    conn: &Connection<Route>,
-    spec: &RouteSpec,
-) -> std::result::Result<(), nlink::netlink::Error> {
-    match spec.dest {
-        std::net::IpAddr::V4(dst) => conn.del_route_if_exists(route_v4(spec, dst)).await?,
-        std::net::IpAddr::V6(dst) => conn.del_route_if_exists(route_v6(spec, dst)).await?,
-    };
-    Ok(())
-}
-
-fn route_v4(spec: &RouteSpec, dst: std::net::Ipv4Addr) -> nlink::netlink::route::Ipv4Route {
-    let mut r = nlink::netlink::route::Ipv4Route::from_addr(dst, spec.prefix).table(spec.table);
-    if let Some(std::net::IpAddr::V4(gw)) = spec.via {
-        r = r.gateway(gw);
-    }
-    if let Some(d) = &spec.dev {
-        r = r.dev(d.clone());
-    }
-    if let Some(m) = spec.metric {
-        r = r.metric(m);
-    }
-    r
-}
-
-fn route_v6(spec: &RouteSpec, dst: std::net::Ipv6Addr) -> nlink::netlink::route::Ipv6Route {
-    let mut r = nlink::netlink::route::Ipv6Route::from_addr(dst, spec.prefix).table(spec.table);
-    if let Some(std::net::IpAddr::V6(gw)) = spec.via {
-        r = r.gateway(gw);
-    }
-    if let Some(d) = &spec.dev {
-        r = r.dev(d.clone());
-    }
-    if let Some(m) = spec.metric {
-        r = r.metric(m);
-    }
-    r
-}
-
 /// Assign a management address. IPv6 addresses are added with `nodad`
 /// so the host-reachable bridge and `mgmt0` are usable immediately
 /// instead of sitting in `tentative` for a second; the segment is
@@ -1434,5 +1368,43 @@ fn track_pidfile(what: &str, node: &str, pidfile: &str, env: &mut ApplyEnv, jour
             }
         }
         None => tracing::warn!("{what} on '{node}' wrote no pidfile at {pidfile}; not tracked"),
+    }
+}
+
+/// Whether wiphy `name` (`phy3`) is a `mac80211_hwsim` radio: its device
+/// lives under `/sys/devices/virtual/mac80211_hwsim/`.
+fn is_hwsim_phy(name: &str) -> bool {
+    std::fs::canonicalize(format!("/sys/class/ieee80211/{name}/device"))
+        .is_ok_and(|p| p.to_string_lossy().contains("mac80211_hwsim"))
+}
+
+/// [`execute`] on a thread and a current-thread runtime of its own.
+///
+/// nlink 0.32's request futures, composed the way `execute_one` composes
+/// them (borrowed names and local connections held across awaits), trip
+/// rustc's higher-ranked `Send` check (rust-lang/rust#102211). The plan's
+/// future is therefore not `Send`, and neither would `deploy()`/`apply()`
+/// be: a caller could no longer `tokio::spawn` them. Running the plan here
+/// keeps theirs `Send`. The plan, env and journal travel by value and come
+/// back; a panic in the plan resumes in the caller.
+pub(super) async fn execute_isolated(
+    plan: Plan,
+    env: ApplyEnv,
+    journal: Journal,
+) -> (Result<()>, ApplyEnv, Journal) {
+    let task = tokio::task::spawn_blocking(move || {
+        let (mut env, mut journal) = (env, journal);
+        let res = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt.block_on(execute(&plan, &mut env, &mut journal)),
+            Err(e) => Err(Error::deploy_failed(format!("plan runtime: {e}"))),
+        };
+        (res, env, journal)
+    });
+    match task.await {
+        Ok(out) => out,
+        Err(e) => std::panic::resume_unwind(e.into_panic()),
     }
 }

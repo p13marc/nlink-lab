@@ -4,6 +4,144 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Built on **nlink 0.32** (#158). nlink 0.31 fixed every bug nlink-lab
+reported while adopting 0.30 (nlink #456, #458–#533), and 0.32 carries
+the redesigns it asked for (nlink #534). What reaches nlink-lab here:
+
+- a declared link whose kind parameters change is recreated (nlink
+  #417), keeping the Tc nlink-lab put on it (nlink #645);
+- `rate … ingress` passes traffic (nlink #458, #149 here);
+- an `fq_codel` with `flows` can be edited and `prio { bands 2 }`
+  installs (nlink #486, #487);
+- IPv6 VXLAN endpoints (nlink #418), a TBF without a queue limit refused
+  (nlink #398), a WireGuard re-apply that is a true no-op (nlink
+  #410–#414).
+
+### Migration
+
+- **A `qdisc … tbf` block needs a `limit`.** Without one the kernel gives
+  the TBF no queue, and it drops every packet. On 0.29 such a qdisc
+  deployed, diffed clean and passed nothing; nlink now refuses it.
+  The NLL parser requires `limit`, like `rate` and `burst`, and so does
+  `edit --set-qdisc` (`limit=`). The validator reports a missing or zero
+  limit as `invalid-qdisc-value` for builder and JSON topologies.
+  `burst + rate × latency` is a reasonable size.
+- **`apply --check --json`: the nested `network` and `nftables` objects
+  change shape.** They are nlink's own diffs, serialized as they are:
+  - `rules-to-add[]` items are `{ "rule": {…}, "placement": … }`;
+  - new keys, among them `links-to-recreate` (with `blocked-by` as a list
+    of objects tagged by `kind`), `links-missing`, `routes-refused` and
+    `set-kind-params` (network), `rules-to-move`, `sets-to-update`,
+    `objects-to-add/update/delete`, `kept-in-use` and `generation`
+    (nftables);
+  - qdiscs are written in human units (`"delay": "100ms"`).
+
+  The envelope, and `schema_version: 3` with it, is unchanged. Consumers
+  that read inside those two objects need updating.
+- **Editing a declared interface's kind parameters takes effect.** This
+  covers a VLAN's id, protocol or parent, a VXLAN's VNI, port or address
+  family, a bond's mode or LACP rate, a VRF's table, or the kind itself.
+  On 0.29 `apply` recorded the change in the state file and left the
+  kernel as it was. Now nlink deletes and recreates the link; its
+  impairment, `qdisc`, rate limit and per-pair tree are kept, and its VRF
+  routes put back. If the link carries state a topology cannot declare
+  (FRR routes, a permanent neighbour, a hand-added FDB entry), the apply
+  is refused before anything changes, naming that state.
+- **VRF routes are part of a node's `Stack` op.** The separate `Routes`
+  stage (`Op::Route` / `Op::DelRoute`) is gone from `deploy --dry-run`
+  and `apply --check` plans, since nlink's purge covers every table a
+  node declares into. A journal left by an interrupted deploy of an
+  older nlink-lab that contains VRF route entries is not loaded; the
+  namespaces it names still are, and deleting them clears their routes.
+- **A route over a connected prefix is refused.** A `route` whose place
+  (destination, table and metric) holds a kernel-made route, such as the
+  prefix route of an address, used to replace it and break every route
+  through that segment. nlink 0.31 refuses it (nlink #469). Give it a
+  metric, or drop it.
+- **The address purge covers every declared interface** (nlink #470).
+  In `apply`, a declared vlan/bond/vrf/dummy loses an undeclared global
+  address even when the topology gives it none. Addresses with a
+  lifetime (SLAAC, DHCP) are no longer purged.
+- **One-time replaces on the first `apply` after upgrading:** a per-pair
+  netem whose loss nlink now rounds as tc does (nlink #633), and a
+  per-pair tree's default leaf, which moves from `ffff:` to `8000:`
+  (nlink #485). Counters of those qdiscs restart.
+- **Error text** from netlink reads `(errno N)` instead of `(os error N)`,
+  and errors from a node's namespace end in `[netns <name>]`.
+- **`watch` / `events --follow` no longer show nftables generation
+  events.** nlink delivers one after every committed batch, nlink-lab's
+  own applies included.
+
+### Added
+
+- **Changing a declared interface on a running lab** (see Migration).
+  The network layer is planned with nlink's `preserve_undeclared_tc`, so
+  a recreated link keeps nlink-lab's Tc, and with VRF routes declared,
+  so they come back. A read-only preflight (nlink's offline
+  `diff_against` picks the nodes) refuses a recreate nlink would refuse
+  before any stage runs. `apply --check` previews the recreate the way
+  `apply` meets it.
+- **VXLAN over an IPv6 underlay.** `local`/`remote` may be IPv6. The
+  `vxlan-underlay-address` rule now only requires both to be valid and
+  of the same family.
+- **IPv4 VRF routes via an IPv6 gateway** (RFC 5549), as nlink 0.32
+  declares them.
+- **`watch` types nftables set-element and object events.**
+  `new_set_elements`/`del_set_elements` carry the set and element count,
+  `new_object`/`del_object` the name and type, and `new_set`/`del_set`
+  now carry the set's name.
+
+### Fixed
+
+- **`rate … ingress` dropped every packet the endpoint received (#149).**
+  nlink redirected ingress traffic to the IFB with a mirred *ingress*
+  redirect, so packets never reached the shaper or the stack; it is a
+  matchall egress redirect now. `examples/iperf-benchmark.nll` shapes
+  both directions again. A lab deployed with an older nlink-lab keeps
+  the old redirect until its rate limit is applied again.
+- **An `fq_codel` with `flows` could not be edited (#171)**: every apply
+  after the first was EINVAL. nlink-lab's own sfq delete-and-re-add
+  workaround goes, as nlink now replaces both itself.
+- **`prio { bands 2 }` was EINVAL (#172).**
+- **The VRF table's last route survived its removal.** With routes
+  declared, a table the node no longer declares into is still purged.
+- **Removing a `rate … ingress` left the ingress shaper running.**
+  Removal and rollback deleted only the root qdisc, so the `ffff:`
+  ingress qdisc, its redirect filter and the `ifb_<iface>` device stayed,
+  and received traffic was still shaped. They now remove all three.
+- **A VRF or bond member that is itself a declared interface was
+  declared twice.** It was declared once as its kind, and again as a
+  bare enslave entry that nlink reads as a separate physical device.
+  Each link is now declared once, with its master, and a kind with no
+  master is declared without one (`nomaster`), so taking it out of a
+  bond or VRF releases it.
+- **Wi-Fi labs could move a host's own Wi-Fi card into a node.** nlink
+  now really moves a wiphy (it used to ack and ignore the request), and
+  nlink-lab took the first N wiphys; it takes only `mac80211_hwsim`
+  radios.
+- **The tree-sitter CI step that parses every example parsed nothing.**
+  It only grepped for `ERROR`, so a run that printed no tree passed. That
+  is how `examples/frr-bgp.nll` (`validate retries … interval … { … }`)
+  stopped parsing without anyone noticing. The grammar now takes the
+  settle policy, and the step requires a parse tree.
+- **Docs:**
+  - `docs/cli/apply.md` showed an `apply --check --json` payload that
+    never existed. It now shows output from a real run.
+  - Four places described the nftables apply as a full flush and
+    rebuild. It is a per-rule reconcile in one atomic batch.
+
+### Changed
+
+- The network layer uses nlink's `apply_reconcile_with_options`, and
+  nftables `NftablesConfig::apply_reconcile`, which diffs again on each
+  attempt: since nlink 0.31 a diff applies only to the ruleset it was
+  taken from (ERESTART).
+- A deploy or apply runs its plan on a thread and runtime of its own,
+  so `deploy()`/`apply()` stay `Send` (nlink 0.32's request futures, as
+  the plan composes them, trip rustc's higher-ranked `Send` check,
+  rust-lang/rust#102211).
+
+
 ## [0.13.0] - 2026-10-02
 
 The loss release. A network-fault lab ran every experiment it ever made

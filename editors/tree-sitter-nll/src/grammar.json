@@ -3007,6 +3007,40 @@
           "value": "validate"
         },
         {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "retries"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "integer"
+                  }
+                ]
+              },
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "interval"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "duration"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "type": "STRING",
           "value": "{"
         },

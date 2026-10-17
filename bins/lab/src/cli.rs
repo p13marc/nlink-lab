@@ -284,6 +284,12 @@ pub enum Commands {
     /// per kernel mutation — useful for spotting hand-edits that
     /// bypass `nlink-lab apply`. `--json` emits NDJSON for
     /// piping to `jq`. Plan 159b.
+    ///
+    /// nftables events cover tables, chains, rules, sets, set
+    /// elements and named objects (counters, quotas, limits); the
+    /// generation marker the kernel sends after every committed
+    /// batch is not shown. Elements a rule adds from the packet path
+    /// (`add @set`) are not notified by the kernel.
     Watch(cmd::watch::Args),
 
     /// Wait for a service or condition inside a lab node.

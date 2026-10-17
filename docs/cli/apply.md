@@ -90,22 +90,56 @@ layers elided.
 ```json
 {
   "schema_version": 3,
-  "lab": "satellite-mesh",
+  "lab": "check-demo",
   "no_op": false,
-  "change_count": 3,
+  "change_count": 6,
   "topology": {
     "impairments_changed": [
       { "endpoint": "alpha:radio", "old": { "delay": "10ms" }, "new": { "delay": "40ms" } }
+    ],
+    "nftables_changed": [
+      {
+        "node": "hq",
+        "desired_firewall": {
+          "policy": "drop",
+          "rules": [
+            { "match": "ct state established,related", "action": "accept" },
+            { "match": "tcp dport 8080", "action": "accept" }
+          ]
+        },
+        "was_present": true
+      }
     ]
   },
   "network": {
-    "alpha": { "addresses_to_add": [ { "ifname": "radio", "address": "172.100.0.3/24" } ] }
+    "alpha": {
+      "addresses-to-add": [ { "dev": "radio", "address": "172.100.0.3/24" } ],
+      "addresses-to-remove": [ { "dev": "radio", "address": "172.100.0.2/24" } ]
+    }
   },
   "nftables": {
-    "hq": { "rules_to_add": [ { "chain": "input", "expr": "tcp dport 8080 accept" } ] }
+    "hq": {
+      "rules-to-add": [
+        {
+          "rule": { "table": "nlink-lab", "chain": "input", "family": "inet", "handle-key": "nlink-lab/fw/input/1" },
+          "placement": { "After": 3 }
+        }
+      ],
+      "generation": 2
+    }
   }
 }
 ```
+
+Trimmed from a real run: `network` and `nftables` are nlink's own diffs,
+serialized with kebab-case keys, and every key they define is present
+(empty ones are left out above) — among them `links-to-recreate`
+(a declared link whose kind parameters changed, see below),
+`rules-to-move` (rules found out of declared order) and the set and
+object collections. `rules-to-add` items carry the rule and where it goes
+in the chain (`"Append"`, `{"Before": handle}`, `{"After": handle}`), and
+`generation` is the ruleset generation the diff was taken from (an apply
+of it is refused if the ruleset moved since).
 
 **Traffic-control changes appear only under `topology`.** Impairments,
 per-pair `impair` matrices, `qdisc` blocks and rate limits are applied
@@ -132,10 +166,11 @@ done
 | Links removed | ✅ |
 | Per-endpoint netem | ✅ change in place |
 | Network-level per-pair impair | ✅ via `PerPeerImpairer::reconcile()` — zero kernel calls when unchanged |
-| Rate limits | ✅ add / replace / remove via reconcile (coarse — full HTB tree rebuild on any change; brief packet-drop window) |
+| Rate limits | ✅ add / replace / remove (a changed limit is removed and re-added — brief unshaped window; removal takes the ingress qdisc and IFB too) |
 | Routes | ✅ add / replace / remove via reconcile |
 | Sysctls | ✅ add / change in place; removed entries warned (kernel default not auto-restored) |
-| nftables / NAT | ✅ atomic flush + rebuild on any change (coarse — full ruleset swap, conntrack state preserved) |
+| nftables / NAT | ✅ per rule, in one atomic batch: an edited rule is replaced in place, a new one inserted where it is declared, rules out of declared order moved; foreign rules left alone |
+| Declared interfaces (vlan, vxlan, bond, vrf, dummy) | ✅ in place where the kernel allows it; a changed VLAN id/protocol/parent, VNI, VXLAN port or address family, bond mode, VRF table or kind recreates the link, with its impairment, `qdisc`, rate limit and VRF routes put back. Refused before any change if the link carries state the topology cannot declare (FRR routes, permanent neighbours, hand-added FDB entries) |
 | Spawned processes | ❌ — apply leaves them alone; redeploy or use `kill` + `spawn` |
 | Container nodes | ❌ — image / cmd changes require redeploy |
 

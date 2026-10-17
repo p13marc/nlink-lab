@@ -387,7 +387,7 @@ module.exports = grammar({
     directional_impairment: ($) =>
       seq(choice("->", "<-"), $.impairment_properties),
 
-    // `qdisc a:eth0 tbf { rate 10mbit burst 32kb }` — the kind is an
+    // `qdisc a:eth0 tbf { rate 10mbit burst 32kb limit 100kb }` — the kind is an
     // identifier (tbf, fq_codel, sfq, prio), not a keyword.
     qdisc_statement: ($) =>
       seq(
@@ -448,8 +448,18 @@ module.exports = grammar({
       ),
 
     // ── Validate / Scenario / Benchmark ─────────────
+    // `validate retries 30 interval 2s { … }`: the settle policy sits
+    // before the block, in any order.
     validate_block: ($) =>
-      seq("validate", "{", repeat($.assertion), "}"),
+      seq(
+        "validate",
+        repeat(
+          choice(seq("retries", $.integer), seq("interval", $.duration)),
+        ),
+        "{",
+        repeat($.assertion),
+        "}",
+      ),
 
     assertion: ($) =>
       choice(

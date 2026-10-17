@@ -315,9 +315,10 @@ sudo nlink-lab exec wan site-a-client -- timeout 2 nc -v site-b-server 9999
 echo "exit code: $?"   # nonzero — firewall dropped (no RST, just timeout)
 ```
 
-`apply` of a firewall edit triggers an atomic flush+rebuild of the
-node's nftables table. The kernel never sees a half-built ruleset;
-conntrack state is preserved across the swap.
+`apply` of a firewall edit changes only the rules that differ — an
+edited rule is replaced in place, a new one is inserted where it is
+declared — in one atomic batch, so the kernel never sees a half-built
+ruleset and conntrack state is untouched.
 
 ---
 
@@ -887,7 +888,8 @@ qdisc hub:eth1 fq_codel {
 }
 ```
 
-Kinds: `tbf` (needs `rate` + `burst`; `limit`, `peakrate`, `mtu`),
+Kinds: `tbf` (needs `rate`, `burst` and `limit` — without a limit a TBF
+has no queue and drops everything; optional `peakrate`, `mtu`),
 `fq_codel` (`target`, `interval`, `limit`, `flows`, `quantum`, `ecn`),
 `sfq` (`perturb`, `limit`, `quantum`), `prio` (`bands`). One root qdisc
 per interface — a `qdisc` endpoint cannot also carry `impair` or

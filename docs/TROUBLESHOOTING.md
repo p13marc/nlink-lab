@@ -246,15 +246,14 @@ nlink-lab spawn <lab> <node> -- /usr/bin/new-cmd
 
 Or redeploy.
 
-### `apply` rebuilt my whole nftables ruleset for a one-line change
+### `apply` replaced every rule after the one I inserted
 
-Expected. nftables reconcile is coarse: any change to a node's
-firewall or NAT block triggers an atomic `del_table` +
-`apply_firewall` + `apply_nat` cycle. The kernel transaction is
-atomic — packets in flight are never matched against a half-built
-ruleset — but conntrack state is preserved across the swap.
-
-A fully-incremental rule-by-rule reconcile is on the roadmap.
+Expected. A firewall rule's identity is its position in the block
+(`nlink-lab/fw/input/<index>`), so inserting a rule shifts the index of
+every rule after it, and each of those is replaced in place with its new
+body. The change is one atomic batch — packets in flight never meet a
+half-built ruleset, and conntrack state is untouched. Rules nlink-lab did
+not write are left alone.
 
 ---
 

@@ -46,10 +46,11 @@ pub enum Undo {
         ns: NsRef,
         iface: String,
     },
-    /// A non-main-table route (`Op::Route`).
-    DelRoute {
+    /// A `rate` limit: the root shaper, the `ffff:` ingress qdisc with its
+    /// redirect filter, and the `ifb_<iface>` device ingress shaping uses.
+    RemoveRateLimit {
         ns: NsRef,
-        route: super::op::RouteSpec,
+        iface: String,
     },
     RemoveHosts {
         lab: String,
@@ -209,17 +210,17 @@ impl Journal {
                         tracing::warn!("rollback: delete link '{iface}' in {ns:?}: {e}");
                     }
                 }
-                Undo::DelRoute { ns, route } => {
-                    if let Ok(conn) = ns.connection::<Route>()
-                        && let Err(e) = super::apply::del_route_lenient(&conn, route).await
-                    {
-                        tracing::warn!("rollback: delete route {route} in {ns:?}: {e}");
-                    }
-                }
                 Undo::ClearQdisc { ns, iface } => {
                     if let Ok(conn) = ns.connection::<Route>() {
                         let _ = conn
                             .del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
+                            .await;
+                    }
+                }
+                Undo::RemoveRateLimit { ns, iface } => {
+                    if let Ok(conn) = ns.connection::<Route>() {
+                        let _ = nlink::netlink::ratelimit::RateLimiter::new(iface)
+                            .remove(&conn)
                             .await;
                     }
                 }
@@ -290,8 +291,8 @@ impl Drop for Journal {
                 Undo::CleanupWifiConfigs { lab } => crate::wifi::cleanup_configs(lab),
                 Undo::DeleteHostLink { .. }
                 | Undo::DeleteLink { .. }
-                | Undo::DelRoute { .. }
-                | Undo::ClearQdisc { .. } => {}
+                | Undo::ClearQdisc { .. }
+                | Undo::RemoveRateLimit { .. } => {}
             }
         }
         // The file stays so `destroy --orphans` can finish the netlink half.
@@ -316,19 +317,6 @@ mod tests {
             Undo::KillProcess {
                 pid: 7,
                 starttime: Some(99),
-            },
-            Undo::DelRoute {
-                ns: NsRef::Named {
-                    name: "l-pe".into(),
-                },
-                route: super::super::op::RouteSpec {
-                    dest: "10.0.0.0".parse().unwrap(),
-                    prefix: 8,
-                    table: 10,
-                    via: Some("10.10.0.10".parse().unwrap()),
-                    dev: None,
-                    metric: Some(50),
-                },
             },
         ];
         let json = serde_json::to_string(&entries).unwrap();

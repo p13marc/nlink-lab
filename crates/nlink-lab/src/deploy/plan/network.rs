@@ -1,6 +1,5 @@
 //! Pure planner: a node's links/interfaces/addresses/routes → `NetworkConfig` (Plan 158e/159a).
 
-use crate::deploy::op::{Op, RouteSpec};
 use crate::error::{Error, Result};
 use crate::types::{EndpointRef, Topology};
 use std::collections::BTreeMap;
@@ -59,6 +58,29 @@ pub(crate) fn topology_to_network_config(
     // matters when the parent is also declarative.
     use crate::types::InterfaceKind;
 
+    // Who enslaves whom: bond members, then VRF interfaces (a VRF wins a
+    // collision, as it did when its enslave was declared last). Each
+    // link is declared **once**, so a member that is itself a declared
+    // kind (a VLAN in a VRF, a dummy in a bond) carries its master on
+    // that declaration. `NetworkConfig::link` appends rather than
+    // merges, and a second, kind-less entry for the same name is a
+    // `Physical` declaration: nlink 0.30 skips those when it recreates a
+    // link (#417), so the link came back without its master.
+    let mut masters: BTreeMap<&str, &str> = BTreeMap::new();
+    for (iface_name, iface_config) in &node.interfaces {
+        if iface_config.kind == Some(InterfaceKind::Bond) {
+            for member in &iface_config.members {
+                masters.insert(member, iface_name);
+            }
+        }
+    }
+    for (vrf_name, vrf_config) in &node.vrfs {
+        for iface in &vrf_config.interfaces {
+            masters.insert(iface, vrf_name);
+        }
+    }
+    let master_of = |iface: &str| masters.get(iface).map(|m| m.to_string());
+
     // Pass 1 — parentless single-namespace kinds (Dummy, Bond,
     // VRF, Vxlan). The 0.19 upstream topo-sort handles dependency
     // ordering across `links_to_add`, but declaring parents
@@ -68,22 +90,36 @@ pub(crate) fn topology_to_network_config(
         match iface_config.kind {
             Some(InterfaceKind::Dummy) => {
                 let mtu = iface_config.mtu;
+                let master = master_of(iface_name);
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.dummy().up();
                     if let Some(m) = mtu {
                         b = b.mtu(m);
                     }
+                    // Without a master the kind is released (`nomaster`): since nlink
+                    // 0.31 a declaration with none leaves the master alone (#462).
+                    b = match &master {
+                        Some(m) => b.master(m),
+                        None => b.nomaster(),
+                    };
                     b
                 });
             }
             Some(InterfaceKind::Bond) => {
                 let mtu = iface_config.mtu;
                 let bond = iface_config.bond.clone();
+                let master = master_of(iface_name);
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.bond().up();
                     if let Some(m) = mtu {
                         b = b.mtu(m);
                     }
+                    // Without a master the kind is released (`nomaster`): since nlink
+                    // 0.31 a declaration with none leaves the master alone (#462).
+                    b = match &master {
+                        Some(m) => b.master(m),
+                        None => b.nomaster(),
+                    };
                     // Bonding options (#75): nlink 0.26 `LinkBuilder::bond_*`.
                     if let Some(o) = &bond {
                         use crate::types::{BondMode as M, LacpRate as L};
@@ -109,7 +145,7 @@ pub(crate) fn topology_to_network_config(
                             });
                         }
                         if let Some(policy) = o.xmit_hash {
-                            b = b.xmit_hash_policy(policy.kernel_value());
+                            b = b.xmit_hash_policy(policy.to_nlink());
                         }
                         if let Some(n) = o.min_links {
                             b = b.min_links(n);
@@ -123,18 +159,9 @@ pub(crate) fn topology_to_network_config(
                     }
                     b
                 });
-                // Enslave each member (Plan 158e Slice 2 folds in
-                // what was step 10b). The member link itself must
-                // exist already (veth — created in step 5) and is left
-                // *down* by the LinksUp stage: the kernel refuses to
-                // enslave an up device, and nlink would `set_link_up`
-                // before `set_link_master`. The bonding driver opens the
-                // slave itself once enslaved, so the state stays
-                // `Unchanged` here.
-                for member in &iface_config.members {
-                    let bond_name = iface_name.clone();
-                    cfg = cfg.link(member, move |b| b.master(&bond_name));
-                }
+                // Members are enslaved through `masters` (their own
+                // declaration, or a bare `.master()` entry for a veth;
+                // see the end of this function).
             }
             Some(InterfaceKind::Vxlan) => {
                 // Plan 159a Slice 4 — declarative VXLAN via 0.19's
@@ -149,25 +176,17 @@ pub(crate) fn topology_to_network_config(
                          '{node_name}' missing vni"
                     ))
                 })?;
-                // nlink 0.26 only plumbs IPv4 underlay addresses
-                // (`IFLA_VXLAN_LOCAL6`/`GROUP6` are dropped silently), so
-                // an IPv6 underlay is refused here rather than deployed
-                // as a tunnel without endpoints. The validator reports
-                // it first (`vxlan-underlay-address`).
+                // Either family: nlink 0.30 writes IPv6 endpoints as
+                // `IFLA_VXLAN_LOCAL6`/`GROUP6` (nlink #418). Mixing the
+                // two is refused by the kernel; the validator reports it
+                // first (`vxlan-underlay-address`).
                 let parse_underlay = |what: &str, v: &str| -> Result<std::net::IpAddr> {
-                    let ip: std::net::IpAddr = v.parse().map_err(|e| {
+                    v.parse().map_err(|e| {
                         Error::invalid_topology(format!(
                             "bad vxlan {what} address '{v}' on \
                              '{node_name}:{iface_name}': {e}"
                         ))
-                    })?;
-                    if ip.is_ipv6() {
-                        return Err(Error::invalid_topology(format!(
-                            "vxlan {what} address '{v}' on '{node_name}:{iface_name}' is IPv6: \
-                             an IPv6 underlay is not applied by nlink 0.26"
-                        )));
-                    }
-                    Ok(ip)
+                    })
                 };
                 let local = iface_config
                     .local
@@ -182,8 +201,15 @@ pub(crate) fn topology_to_network_config(
                 let port = iface_config.port;
                 let underlay = iface_config.underlay.clone();
                 let mtu = iface_config.mtu;
+                let master = master_of(iface_name);
                 cfg = cfg.link(iface_name, move |mut b| {
                     b = b.vxlan(vni).up();
+                    // Without a master the kind is released (`nomaster`): since nlink
+                    // 0.31 a declaration with none leaves the master alone (#462).
+                    b = match &master {
+                        Some(m) => b.master(m),
+                        None => b.nomaster(),
+                    };
                     if let Some(l) = local {
                         b = b.vxlan_local(l);
                     }
@@ -244,8 +270,15 @@ pub(crate) fn topology_to_network_config(
         };
         let mtu = iface_config.mtu;
         let protocol = iface_config.vlan_protocol;
+        let master = master_of(iface_name);
         cfg = cfg.link(iface_name, move |mut b| {
             b = b.vlan(&parent, vid).up();
+            // Without a master the kind is released (`nomaster`): since nlink
+            // 0.31 a declaration with none leaves the master alone (#462).
+            b = match &master {
+                Some(m) => b.master(m),
+                None => b.nomaster(),
+            };
             // 802.1ad outer tag for Q-in-Q (#75).
             if let Some(p) = protocol {
                 b = b.vlan_protocol(match p {
@@ -262,21 +295,37 @@ pub(crate) fn topology_to_network_config(
         });
     }
 
-    // Pass 3 — VRF enslave. Declared AFTER VRF link + VLAN children
-    // so an iface enslaved to a VRF — including a declarative VLAN
-    // — has both endpoints declared before the master ref. Plan
-    // 159a Slice 4 (folds in what was step 10c).
-    for (vrf_name, vrf_config) in &node.vrfs {
-        for iface in &vrf_config.interfaces {
-            let master = vrf_name.clone();
-            cfg = cfg.link(iface, move |b| b.master(&master));
+    // Pass 3 — enslave members that are not declared kinds above (veths
+    // from the Links stage, macvlans, WireGuard devices): a bare
+    // `.master()` entry, declared after every master. A bond member is
+    // left *down* by the LinksUp stage; since nlink 0.30 (#406) the
+    // apply enslaves before raising and takes an up port down to join,
+    // so that exclusion only saves an up→down→up flap. The driver opens
+    // the port itself once enslaved, so the state stays `Unchanged`.
+    let declared_kinds: std::collections::BTreeSet<&str> = node
+        .interfaces
+        .iter()
+        .filter(|(_, c)| {
+            matches!(
+                c.kind,
+                Some(
+                    InterfaceKind::Dummy
+                        | InterfaceKind::Bond
+                        | InterfaceKind::Vxlan
+                        | InterfaceKind::Vlan
+                )
+            )
+        })
+        .map(|(n, _)| n.as_str())
+        .chain(node.vrfs.keys().map(String::as_str))
+        .collect();
+    for (iface, master) in &masters {
+        if declared_kinds.contains(iface) {
+            continue;
         }
+        let master = master.to_string();
+        cfg = cfg.link(iface, move |b| b.master(&master));
     }
-
-    // VRF-table routes are NOT declared here: nlink's purge converges
-    // the main table only, so they are explicit `Op::Route` ops
-    // (`vrf_route_ops`). `with_vrf_routes` adds them back for the
-    // diff-only view.
 
     // ── Addresses, in the same order step 9 used to apply them ──
     // 1. From per-link endpoint addresses.
@@ -403,6 +452,17 @@ pub(crate) fn topology_to_network_config(
         }
     }
 
+    // ── VRF-table routes ──
+    // Declared like the main table's. A purge covers every table the
+    // config declares into (nlink 0.27, #335; a table the node no longer
+    // declares into is passed as `purge_tables`), and a declared route is
+    // what nlink puts back after it recreates the link the route uses.
+    for vrf_config in node.vrfs.values() {
+        for (dest, route_config) in &vrf_config.routes {
+            cfg = push_route(cfg, node_name, dest, route_config, Some(vrf_config.table))?;
+        }
+    }
+
     Ok(cfg)
 }
 
@@ -469,89 +529,6 @@ fn normalize_dest(dest: &str, route_config: &crate::types::RouteConfig) -> Strin
     } else {
         dest.to_string()
     }
-}
-
-/// Every `vrf { route … }` of `node` as an explicit, fully resolved
-/// [`RouteSpec`] op (`Stage::Routes`).
-pub(crate) fn vrf_route_ops(node_name: &str, node: &crate::types::Node) -> Result<Vec<Op>> {
-    let mut ops = Vec::new();
-    for (vrf_name, vrf_config) in &node.vrfs {
-        for (dest, route_config) in &vrf_config.routes {
-            let route = route_spec(node_name, vrf_name, dest, route_config, vrf_config.table)?;
-            ops.push(Op::Route {
-                node: node_name.to_string(),
-                route,
-            });
-        }
-    }
-    Ok(ops)
-}
-
-fn route_spec(
-    node_name: &str,
-    vrf_name: &str,
-    dest: &str,
-    route_config: &crate::types::RouteConfig,
-    table: u32,
-) -> Result<RouteSpec> {
-    let cidr = normalize_dest(dest, route_config);
-    let bad = |why: String| {
-        Error::invalid_topology(format!(
-            "vrf '{vrf_name}' on node '{node_name}': route '{dest}': {why}"
-        ))
-    };
-    let (addr, prefix) = cidr
-        .split_once('/')
-        .ok_or_else(|| bad("expected CIDR".into()))?;
-    let dest_ip: std::net::IpAddr = addr
-        .parse()
-        .map_err(|e| bad(format!("invalid destination: {e}")))?;
-    let prefix: u8 = prefix
-        .parse()
-        .map_err(|e| bad(format!("invalid prefix: {e}")))?;
-    let max = if dest_ip.is_ipv6() { 128 } else { 32 };
-    if prefix > max {
-        return Err(bad(format!("prefix /{prefix} exceeds /{max}")));
-    }
-    let via = match &route_config.via {
-        Some(gw) => {
-            let gw: std::net::IpAddr = gw
-                .parse()
-                .map_err(|e| bad(format!("invalid gateway '{gw}': {e}")))?;
-            if gw.is_ipv6() != dest_ip.is_ipv6() {
-                return Err(bad(format!(
-                    "gateway {gw} and destination {dest_ip} are different address families"
-                )));
-            }
-            Some(gw)
-        }
-        None => None,
-    };
-    Ok(RouteSpec {
-        dest: dest_ip,
-        prefix,
-        table,
-        via,
-        dev: route_config.dev.clone(),
-        metric: route_config.metric,
-    })
-}
-
-/// Diff-only view: the node's `NetworkConfig` *with* its VRF-table
-/// routes declared, so `apply --check` / `compute_layered_diff` still
-/// report VRF route additions and changes (removals are reported by
-/// the plan diff's `DelRoute` ops instead).
-pub(crate) fn with_vrf_routes(
-    mut cfg: nlink::netlink::config::NetworkConfig,
-    node_name: &str,
-    node: &crate::types::Node,
-) -> Result<nlink::netlink::config::NetworkConfig> {
-    for vrf_config in node.vrfs.values() {
-        for (dest, route_config) in &vrf_config.routes {
-            cfg = push_route(cfg, node_name, dest, route_config, Some(vrf_config.table))?;
-        }
-    }
-    Ok(cfg)
 }
 
 /// Static routes the planner adds per node for the lab's routing mode:

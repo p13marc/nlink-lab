@@ -7,7 +7,7 @@
 
 use nlink_lab::lab_test;
 #[allow(unused_imports)]
-use nlink_lab::{Lab, RunningLab};
+use nlink_lab::{Lab, Op, RunningLab};
 
 /// Check whether a kernel module is available (loaded or loadable).
 fn has_kernel_module(name: &str) -> bool {
@@ -924,7 +924,7 @@ async fn ext_ack_surfaces_from_real_kernel_error() {
     // collision.
     let ns_name = lab.namespace_for("router").unwrap().to_string();
     let conn: nlink::Connection<nlink::Route> =
-        nlink::netlink::namespace::connection_for(&ns_name).expect("connection_for failed");
+        nlink::Connection::new_in(ns_name).expect("connection_for failed");
 
     let dummy_a = nlink::netlink::link::DummyLink::new("ext-ack-dup");
     conn.add_link(dummy_a)
@@ -1055,7 +1055,7 @@ async fn nat_masquerade_reapply_is_zero_ops() {
 
     // #141: the *diff* must agree with the applier. Handles surviving
     // only proves `apply` converged; it did that before too. What was
-    // broken is what `apply --check` reads — `Expr::Masquerade` rendered
+    // broken is what `apply --check` reads — the masquerade expression rendered
     // without the empty NFTA_EXPR_DATA nest the kernel echoes, so the
     // rule came out four bytes short of the kernel's copy and diffed as
     // changed on every reconcile, forever. Nothing here asserted on the
@@ -1346,6 +1346,293 @@ async fn slice4_vxlan_reapply_is_zero_ops() {
     lab.destroy().await.expect("destroy failed");
 }
 
+/// A VXLAN over an IPv6 underlay deploys with its endpoints and carries
+/// traffic. nlink 0.26–0.29 dropped IPv6 endpoints (the tunnel came up
+/// with none), so the validator refused them; 0.30 writes
+/// `IFLA_VXLAN_LOCAL6`/`GROUP6` (nlink #418).
+#[tokio::test]
+async fn vxlan_ipv6_underlay_deploys_and_forwards() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping vxlan_ipv6_underlay_deploys_and_forwards: requires root");
+        return;
+    }
+    let lab_name = format!("vx6-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node vtep1 {{
+  vxlan vx6 {{
+    vni 600
+    local fd00:1::1
+    remote fd00:1::2
+    port 4789
+    address 192.168.160.1/24
+  }}
+}}
+node vtep2 {{
+  vxlan vx6 {{
+    vni 600
+    local fd00:1::2
+    remote fd00:1::1
+    port 4789
+    address 192.168.160.2/24
+  }}
+}}
+link vtep1:eth0 -- vtep2:eth0 {{ fd00:1::1/64 -- fd00:1::2/64 }}
+"#
+    ))
+    .unwrap();
+    let result = topo.validate();
+    assert!(!result.has_errors(), "{:?}", result.issues());
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let out = lab
+        .exec("vtep1", "ip", &["-d", "link", "show", "vx6"])
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    assert!(
+        out.stdout.contains("local fd00:1::1") && out.stdout.contains("remote fd00:1::2"),
+        "vx6 must carry its IPv6 endpoints: {}",
+        out.stdout
+    );
+    wait_for_dad(&lab, "vtep1", "eth0").await;
+    wait_for_dad(&lab, "vtep2", "eth0").await;
+    let mut last = String::new();
+    let mut ok = false;
+    for _ in 0..10 {
+        let ping = lab
+            .exec("vtep1", "ping", &["-c", "1", "-W", "1", "192.168.160.2"])
+            .unwrap();
+        if ping.exit_code == 0 {
+            ok = true;
+            break;
+        }
+        last = format!("{}{}", ping.stdout, ping.stderr);
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+    assert!(ok, "overlay ping over the IPv6 underlay failed: {last}");
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(
+        layered.is_empty(),
+        "expected empty layered diff after an IPv6-underlay VXLAN deploy; got {} change(s):\n{layered}",
+        layered.change_count()
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
+// ─── a recreated link keeps nlink-lab's Tc and VRF routes (#158) ───
+
+/// `r` has a VLAN in VRF `red`, a VRF route through it and netem on it;
+/// `h` has the other end of the VLAN.
+fn recreate_lab_src(lab_name: &str, id: u16) -> String {
+    format!(
+        r#"
+lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node r : router {{
+  vlan vl0 {{ parent eth0 id {id} address 10.10.0.1/24 }}
+  vrf red table 10 {{ interfaces [vl0] route 192.168.5.0/24 via 10.10.0.2 }}
+}}
+node h {{
+  vlan vl0 {{ parent eth0 id {id} address 10.10.0.2/24 }}
+}}
+link r:eth0 -- h:eth0
+impair r:vl0 delay 20ms
+"#
+    )
+}
+
+fn recreate_modules_present(test: &str) -> bool {
+    for m in ["vrf", "8021q"] {
+        let _ = std::process::Command::new("modprobe").arg(m).status();
+        if !std::path::Path::new(&format!("/sys/module/{m}")).exists() {
+            eprintln!("skipping {test}: kernel `{m}` module unavailable");
+            return false;
+        }
+    }
+    true
+}
+
+/// Changing a VLAN id makes nlink delete and recreate the VLAN (nlink
+/// #417). The VLAN carries nlink-lab's netem, which nlink keeps across the
+/// recreate (`preserve_undeclared_tc`, nlink #645), and a VRF route, which
+/// is declared and so put back; the VLAN keeps its VRF master.
+#[tokio::test]
+async fn apply_recreates_vlan_and_reinstalls_netem_and_vrf_route() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping apply_recreates_vlan_and_reinstalls_netem_and_vrf_route: requires root"
+        );
+        return;
+    }
+    if !recreate_modules_present("apply_recreates_vlan_and_reinstalls_netem_and_vrf_route") {
+        return;
+    }
+    let lab_name = format!("rcv-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&recreate_lab_src(&lab_name, 10)).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let desired = nlink_lab::parser::parse(&recreate_lab_src(&lab_name, 20)).unwrap();
+
+    // --check shows the recreate, and not as refused: nlink keeps the
+    // netem, and the VRF route is declared.
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    let r = &layered.network["r"];
+    let rec: Vec<_> = r
+        .links_to_recreate
+        .iter()
+        .filter(|l| l.name == "vl0")
+        .collect();
+    assert_eq!(rec.len(), 1, "vl0 should be recreated:\n{layered}");
+    assert!(
+        !rec[0].is_refused(),
+        "the recreate must not be refused:\n{layered}"
+    );
+
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply failed");
+
+    let link = lab.exec("r", "ip", &["-d", "link", "show", "vl0"]).unwrap();
+    assert!(link.stdout.contains("id 20"), "{}", link.stdout);
+    assert!(
+        link.stdout.contains("master red"),
+        "vl0 lost its VRF: {}",
+        link.stdout
+    );
+    let tc = lab
+        .exec("r", "tc", &["qdisc", "show", "dev", "vl0"])
+        .unwrap();
+    assert!(
+        tc.stdout.contains("netem") && tc.stdout.contains("delay 20ms"),
+        "netem not re-installed: {}",
+        tc.stdout
+    );
+    let routes = lab
+        .exec("r", "ip", &["route", "show", "table", "10"])
+        .unwrap();
+    assert!(
+        routes.stdout.contains("192.168.5.0/24"),
+        "VRF route not re-installed: {}",
+        routes.stdout
+    );
+    let mut ok = false;
+    for _ in 0..10 {
+        if lab
+            .exec("h", "ping", &["-c", "1", "-W", "1", "10.10.0.1"])
+            .unwrap()
+            .exit_code
+            == 0
+        {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+    assert!(ok, "h cannot reach r over the recreated VLAN");
+
+    // Converged: nothing left to do.
+    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    assert!(
+        !plan
+            .ops
+            .iter()
+            .any(|o| matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. })),
+        "{:?}",
+        plan.ops
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// A recreate nlink would refuse — the VLAN carries a permanent neighbour
+/// the topology cannot declare — fails before anything changes.
+#[tokio::test]
+async fn apply_refused_recreate_changes_nothing() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping apply_refused_recreate_changes_nothing: requires root");
+        return;
+    }
+    if !recreate_modules_present("apply_refused_recreate_changes_nothing") {
+        return;
+    }
+    let lab_name = format!("rcr-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&recreate_lab_src(&lab_name, 10)).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let neigh = lab
+        .exec(
+            "r",
+            "ip",
+            &[
+                "neigh",
+                "replace",
+                "10.10.0.99",
+                "lladdr",
+                "02:00:00:00:00:99",
+                "dev",
+                "vl0",
+                "nud",
+                "permanent",
+            ],
+        )
+        .unwrap();
+    assert_eq!(neigh.exit_code, 0, "{}", neigh.stderr);
+    let desired = nlink_lab::parser::parse(&recreate_lab_src(&lab_name, 20)).unwrap();
+
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .expect("compute_layered_diff failed");
+    let refused = layered.network["r"]
+        .links_to_recreate
+        .iter()
+        .any(|l| l.name == "vl0" && l.is_refused());
+    assert!(refused, "--check should show the refusal:\n{layered}");
+
+    let err = nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect_err("apply must refuse")
+        .to_string();
+    assert!(err.contains("10.10.0.99"), "{err}");
+    assert!(err.contains("nothing has been changed"), "{err}");
+
+    let link = lab.exec("r", "ip", &["-d", "link", "show", "vl0"]).unwrap();
+    assert!(link.stdout.contains("id 10"), "{}", link.stdout);
+    let tc = lab
+        .exec("r", "tc", &["qdisc", "show", "dev", "vl0"])
+        .unwrap();
+    assert!(
+        tc.stdout.contains("netem"),
+        "netem was removed: {}",
+        tc.stdout
+    );
+    let routes = lab
+        .exec("r", "ip", &["route", "show", "table", "10"])
+        .unwrap();
+    assert!(
+        routes.stdout.contains("192.168.5.0/24"),
+        "{}",
+        routes.stdout
+    );
+    let iface = &lab.topology().nodes["r"].interfaces["vl0"];
+    assert_eq!(iface.vni, Some(10), "state must keep the old topology");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // Plan 159a Phase 2 — WireGuard configuration via
 // `WireguardConfig::apply_reconcile`. Re-applying the same
 // topology must produce zero set_device calls — verified end-
@@ -1430,6 +1717,34 @@ async fn wireguard_config_reapply_is_zero_ops() {
         "wg0 must still have a peer after reapply; got {}",
         after.stdout
     );
+
+    // …and the WG layer itself has nothing left to do. nlink 0.29 diffed
+    // a peer as changed forever when its allowed IPs carried host bits
+    // (ours do: `10.0.0.2/24` style, `plan/wireguard.rs`) or the private
+    // key was not pre-clamped (nlink #410, #412).
+    let plan = nlink_lab::apply_plan(&lab, &topo).unwrap();
+    let mut checked = 0;
+    for op in &plan.ops {
+        let Op::Stack { node, cfg } = op else {
+            continue;
+        };
+        let Some(wg) = &cfg.wireguard else {
+            continue;
+        };
+        let conn = lab
+            .ns_resolver_of(node)
+            .expect("node handle")
+            .connection_async::<nlink::Wireguard>()
+            .await
+            .expect("wireguard connection");
+        let diff = wg.diff(&conn).await.expect("WireguardConfig::diff");
+        assert!(
+            diff.is_empty(),
+            "{node}: WireGuard diff after reapply: {diff:?}"
+        );
+        checked += 1;
+    }
+    assert!(checked >= 2, "expected both gateways to carry WireGuard");
 
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
@@ -1876,7 +2191,7 @@ network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
     // netlink (an `ip -n` child is not reliable in every CI container).
     async fn mgmt_bridges() -> Vec<String> {
         let conn: nlink::Connection<nlink::Route> =
-            nlink::netlink::namespace::connection_for("apply-net-rm-mgmt").unwrap();
+            nlink::Connection::new_in("apply-net-rm-mgmt").unwrap();
         conn.get_links()
             .await
             .unwrap()
@@ -2064,13 +2379,16 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
     let desired =
         nlink_lab::parser::parse(&src.replace("    route 192.168.5.0/24 via 10.10.0.10\n", ""))
             .unwrap();
-    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
+    // VRF routes are declared in pe's stack: --check shows the removal.
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .unwrap();
     assert!(
-        plan.ops
+        layered.network["pe"]
+            .routes_to_remove
             .iter()
-            .any(|o| o.describe() == "pe: delete route 192.168.5.0/24 table 10 via 10.10.0.10"),
-        "{:?}",
-        plan.ops
+            .any(|r| r.table() == Some(10) && r.prefix_len() == 24),
+        "{layered}"
     );
     nlink_lab::apply(&mut lab, &desired)
         .await
@@ -2086,18 +2404,27 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
     );
 
     // Re-apply is a no-op on the route layer, and the diff is clean.
-    let plan = nlink_lab::apply_plan(&lab, &desired).unwrap();
-    assert!(
-        !plan.ops.iter().any(|o| matches!(
-            o,
-            nlink_lab::Op::Route { .. } | nlink_lab::Op::DelRoute { .. }
-        )),
-        "{:?}",
-        plan.ops
-    );
     let layered = nlink_lab::compute_layered_diff(&lab, &desired)
         .await
         .unwrap();
+    assert!(layered.is_empty(), "{layered}");
+
+    // The table's last route goes too, although the config then declares
+    // nothing into table 10 (it is purged as a table the node used).
+    let empty = nlink_lab::parser::parse(
+        &src.replace("    route 192.168.5.0/24 via 10.10.0.10\n", "")
+            .replace("    route default via 10.10.0.10\n", ""),
+    )
+    .unwrap();
+    nlink_lab::apply(&mut lab, &empty)
+        .await
+        .expect("apply failed");
+    let last = table(&lab);
+    assert!(
+        !last.contains("via 10.10.0.10"),
+        "the last VRF route survived apply: {last}"
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &empty).await.unwrap();
     assert!(layered.is_empty(), "{layered}");
 
     std::mem::forget(_guard);
@@ -3481,6 +3808,83 @@ rate a:eth0 egress 10mbit burst 64kbyte
     lab.destroy().await.expect("destroy failed");
 }
 
+/// `rate … ingress` passes traffic (#149), and removing it removes all of
+/// it: the root shaper, the `ffff:` ingress qdisc with its redirect
+/// filter, and the `ifb_<iface>` device. Clearing only the root qdisc left
+/// the other two running (#158).
+#[tokio::test]
+async fn rate_limit_removal_takes_ingress_and_ifb() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping rate_limit_removal_takes_ingress_and_ifb: requires root");
+        return;
+    }
+    let lab_name = format!("rmrate-{}", std::process::id());
+    let src = |rate: &str| {
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+{rate}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("rate a:eth0 egress 10mbit ingress 10mbit")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let qdiscs = |lab: &RunningLab| {
+        lab.exec("a", "tc", &["qdisc", "show", "dev", "eth0"])
+            .unwrap()
+            .stdout
+    };
+    let has_ifb = |lab: &RunningLab| {
+        lab.exec("a", "ip", &["link", "show", "ifb_eth0"])
+            .unwrap()
+            .exit_code
+            == 0
+    };
+    let out = qdiscs(&lab);
+    assert!(out.contains("qdisc htb"), "{out}");
+    assert!(out.contains("qdisc ingress"), "{out}");
+    assert!(has_ifb(&lab), "ingress shaping should create ifb_eth0");
+    // Ingress shaping passes traffic (#149): nlink before 0.31 redirected
+    // to the IFB with mirred *ingress*, and every packet a:eth0 received
+    // was lost. The redirect is a mirred egress redirect now.
+    let filters = lab
+        .exec("a", "tc", &["filter", "show", "dev", "eth0", "ingress"])
+        .unwrap()
+        .stdout;
+    assert!(filters.contains("Egress Redirect"), "{filters}");
+    let ping = lab
+        .exec(
+            "b",
+            "ping",
+            &["-c", "3", "-i", "0.2", "-W", "1", "10.0.0.1"],
+        )
+        .unwrap();
+    assert_eq!(
+        ping.exit_code, 0,
+        "no traffic through rate … ingress: {}",
+        ping.stdout
+    );
+
+    let desired = nlink_lab::parser::parse(&src("")).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (no rate) failed");
+    let out = qdiscs(&lab);
+    assert!(!out.contains("qdisc htb"), "root shaper left behind: {out}");
+    assert!(
+        !out.contains("qdisc ingress"),
+        "ingress qdisc left behind: {out}"
+    );
+    assert!(!has_ifb(&lab), "ifb_eth0 left behind");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── `qdisc` blocks reach tc and follow apply (#67) ─────
 
 #[tokio::test]
@@ -3517,6 +3921,20 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     let out = show(&lab);
     assert!(out.contains("qdisc tbf"), "tbf expected: {out}");
     assert!(out.to_ascii_lowercase().contains("rate 10mbit"), "{out}");
+    // The TBF must pass traffic, not just exist: one without a queue limit
+    // installed fine on nlink 0.29 and dropped every packet (nlink #398).
+    let ping = lab
+        .exec(
+            "a",
+            "ping",
+            &["-c", "3", "-i", "0.2", "-W", "2", "10.0.0.2"],
+        )
+        .unwrap();
+    assert_eq!(
+        ping.exit_code, 0,
+        "ping through the tbf failed: {}{}",
+        ping.stdout, ping.stderr
+    );
 
     // Change the kind: apply must replace the root qdisc.
     let desired = nlink_lab::parser::parse(&src(
@@ -3581,6 +3999,39 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     assert!(
         out.contains("qdisc sfq") && out.contains("perturb 20sec"),
         "sfq must still be installed, with the new period: {out}"
+    );
+
+    // An fq_codel that sets `flows`, edited on a live lab (#171): the
+    // kernel refuses any `flows` on a live fq_codel, and nlink before 0.31
+    // always sent it, so every apply after the first was EINVAL.
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 fq_codel { flows 512 limit 1000 }\nqdisc b:eth0 prio { bands 2 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (fq_codel flows, prio bands 2) failed");
+    let desired = nlink_lab::parser::parse(&src(
+        "qdisc a:eth0 fq_codel { flows 512 limit 2000 }\nqdisc b:eth0 prio { bands 2 }",
+    ))
+    .unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("apply (fq_codel limit edit) failed");
+    let out = show(&lab);
+    assert!(
+        out.contains("qdisc fq_codel") && out.contains("limit 2000p") && out.contains("flows 512"),
+        "{out}"
+    );
+    // `prio { bands 2 }` installs (#172): nlink fits the default 3-band
+    // priomap to it; it used to be EINVAL.
+    let out_b = lab
+        .exec("b", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap()
+        .stdout;
+    assert!(
+        out_b.contains("qdisc prio") && out_b.contains("bands 2"),
+        "{out_b}"
     );
 
     lab.destroy().await.expect("destroy failed");
@@ -3988,6 +4439,87 @@ validate {{ reach a b }}
     }
     assert!(seen, "expected a drift event for the new address on a:eth0");
 
+    lab.destroy().await.expect("destroy failed");
+}
+
+// ─── watch: nftables events nlink 0.30 delivers (#158) ───
+
+/// Set elements and named objects arrive typed; the generation event nlink
+/// 0.30 sends after every committed batch does not show up at all.
+#[tokio::test]
+async fn watch_types_set_elements_and_objects_and_drops_generations() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!(
+            "skipping watch_types_set_elements_and_objects_and_drops_generations: requires root"
+        );
+        return;
+    }
+    if !has_nftables() {
+        eprintln!(
+            "skipping watch_types_set_elements_and_objects_and_drops_generations: no nftables"
+        );
+        return;
+    }
+    let lab_name = format!("wnft-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"
+lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let opts = nlink_lab::WatchOpts {
+        family: nlink_lab::WatchFamily::Nftables,
+        ..Default::default()
+    };
+    let (mut rx, tasks) = nlink_lab::watch_stream(&lab, &opts)
+        .unwrap()
+        .expect("nodes to watch");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    for cmd in [
+        "add table inet probe",
+        "add set inet probe s { type ipv4_addr ; }",
+        "add element inet probe s { 10.0.0.9 }",
+        "add counter inet probe c",
+    ] {
+        let args: Vec<&str> = cmd.split(' ').collect();
+        let out = lab.exec("a", "nft", &args).unwrap();
+        assert_eq!(out.exit_code, 0, "nft {cmd}: {}", out.stderr);
+    }
+    let mut kinds = Vec::new();
+    let mut raw = Vec::new();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
+        match tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await {
+            Ok(Some(ev)) if ev.node == "a" => {
+                let json = serde_json::to_value(&ev).unwrap();
+                kinds.push(json["kind"]["kind"].as_str().unwrap_or("?").to_string());
+                raw.push(json);
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => break,
+            Err(_) => continue,
+        }
+    }
+    for t in tasks {
+        t.abort();
+    }
+    for want in ["new_table", "new_set", "new_set_elements", "new_object"] {
+        assert!(kinds.iter().any(|k| k == want), "no {want} event: {raw:?}");
+    }
+    assert!(
+        !kinds.iter().any(|k| k == "other"),
+        "untyped event: {raw:?}"
+    );
+    let all = serde_json::to_string(&raw).unwrap();
+    assert!(!all.contains("NewGen"), "generation event leaked: {all}");
+    assert!(all.contains(r#""set":"s""#), "set name missing: {all}");
     lab.destroy().await.expect("destroy failed");
 }
 

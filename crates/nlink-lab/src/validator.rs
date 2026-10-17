@@ -905,8 +905,31 @@ fn validate_qdiscs(
             } => {
                 check_qdisc_value(ValueKind::Rate, rate, &location, "rate", issues);
                 check_qdisc_value(ValueKind::Size, burst, &location, "burst", issues);
-                if let Some(l) = limit {
-                    check_qdisc_value(ValueKind::Size, l, &location, "limit", issues);
+                // Without a queue limit the kernel gives a TBF no queue and
+                // it drops every packet; nlink 0.30 refuses one at apply
+                // (#398), so catch it here for builder/JSON/edit topologies.
+                match limit {
+                    None => issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "invalid-qdisc-value",
+                        message: format!(
+                            "'{key}': qdisc tbf needs a 'limit' (a byte size, e.g. 64kb): without one the kernel gives it no queue and it drops every packet"
+                        ),
+                        location: Some(format!("{location}.limit")),
+                    }),
+                    Some(l) => {
+                        check_qdisc_value(ValueKind::Size, l, &location, "limit", issues);
+                        if crate::helpers::parse_size(l).is_ok_and(|b| b == 0) {
+                            issues.push(ValidationIssue {
+                                severity: Severity::Error,
+                                rule: "invalid-qdisc-value",
+                                message: format!(
+                                    "'{key}': qdisc tbf limit '{l}' is zero bytes: the TBF would have no queue and drop every packet"
+                                ),
+                                location: Some(format!("{location}.limit")),
+                            });
+                        }
+                    }
                 }
                 if let Some(p) = peakrate {
                     check_qdisc_value(ValueKind::Rate, p, &location, "peakrate", issues);
@@ -1845,8 +1868,8 @@ fn validate_firewall_match_exprs(topology: &Topology, issues: &mut Vec<Validatio
     }
 }
 
-/// VXLAN `local`/`remote` must be IP addresses of the same family, and
-/// (until nlink plumbs `IFLA_VXLAN_LOCAL6`/`GROUP6`) IPv4.
+/// VXLAN `local`/`remote` must be IP addresses of the same family (the
+/// kernel refuses a mix). Either family works since nlink 0.30 (#418).
 fn validate_vxlan_underlay(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in sorted(&topology.nodes) {
         for (iface_name, iface) in sorted(&node.interfaces) {
@@ -1880,17 +1903,6 @@ fn validate_vxlan_underlay(topology: &Topology, issues: &mut Vec<ValidationIssue
                     rule: "vxlan-underlay-address",
                     message: format!(
                         "VXLAN local '{a}' and remote '{b}' are different address families"
-                    ),
-                    location: location.clone(),
-                });
-                continue;
-            }
-            if let Some((field, ip)) = parsed.iter().find(|(_, ip)| ip.is_ipv6()) {
-                issues.push(ValidationIssue {
-                    severity: Severity::Error,
-                    rule: "vxlan-underlay-address",
-                    message: format!(
-                        "VXLAN {field} '{ip}' is IPv6: an IPv6 underlay is not applied by nlink 0.26 (IFLA_VXLAN_LOCAL6/GROUP6 are not plumbed); use an IPv4 underlay"
                     ),
                     location: location.clone(),
                 });
@@ -3991,7 +4003,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                 kind: QdiscKind::Tbf {
                     rate: "10mbit".into(),
                     burst: "nope".into(),
-                    limit: None,
+                    limit: Some("64kb".into()),
                     peakrate: None,
                     mtu: None,
                 },
@@ -4021,6 +4033,48 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             bad.iter()
                 .any(|i| i.message.contains("bands 1 out of range"))
         );
+    }
+
+    /// A TBF with no queue limit, or a zero one, drops every packet
+    /// (nlink 0.30 refuses it at apply, #398): the validator catches it for
+    /// topologies that did not come through the NLL parser.
+    #[test]
+    fn test_tbf_requires_nonzero_limit() {
+        use crate::types::{QdiscConfig, QdiscKind};
+        let tbf = |limit: Option<&str>| QdiscConfig {
+            kind: QdiscKind::Tbf {
+                rate: "10mbit".into(),
+                burst: "32kb".into(),
+                limit: limit.map(Into::into),
+                peakrate: None,
+                mtu: None,
+            },
+        };
+        for (limit, want) in [
+            (None, Some("needs a 'limit'")),
+            (Some("0"), Some("zero bytes")),
+            (Some("0.4"), Some("zero bytes")),
+            (Some("100kb"), None),
+        ] {
+            let mut topo = crate::Lab::new("t")
+                .node("a", |n| n)
+                .node("b", |n| n)
+                .link("a:eth0", "b:eth0", |l| {
+                    l.addresses("10.0.0.1/24", "10.0.0.2/24")
+                })
+                .build();
+            topo.qdiscs.insert("a:eth0".into(), tbf(limit));
+            let result = validate_topo(topo);
+            let bad = rules_of(&result, "invalid-qdisc-value");
+            match want {
+                Some(msg) => {
+                    assert_eq!(bad.len(), 1, "limit {limit:?}: {bad:?}");
+                    assert!(bad[0].message.contains(msg), "limit {limit:?}: {bad:?}");
+                    assert_eq!(bad[0].location.as_deref(), Some("qdiscs.\"a:eth0\".limit"));
+                }
+                None => assert!(bad.is_empty(), "limit {limit:?}: {bad:?}"),
+            }
+        }
     }
 
     #[test]
@@ -4107,7 +4161,18 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
         assert_eq!(hits.len(), 1, "{:?}", result.issues());
         assert!(hits[0].message.contains("different address families"));
 
+        // An all-IPv6 underlay is fine since nlink 0.30 (#418).
         vx.local = Some("fd00::1".into());
+        topo.nodes
+            .get_mut("r")
+            .unwrap()
+            .interfaces
+            .insert("vx0".into(), vx.clone());
+        let result = validate_topo(topo.clone());
+        let hits = rules_of(&result, "vxlan-underlay-address");
+        assert!(hits.is_empty(), "{:?}", result.issues());
+
+        vx.local = Some("fd00::1::bad".into());
         topo.nodes
             .get_mut("r")
             .unwrap()
@@ -4116,7 +4181,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
         let result = validate_topo(topo);
         let hits = rules_of(&result, "vxlan-underlay-address");
         assert_eq!(hits.len(), 1, "{:?}", result.issues());
-        assert!(hits[0].message.contains("IPv6 underlay is not applied"));
+        assert!(hits[0].message.contains("is invalid"));
     }
 
     #[test]

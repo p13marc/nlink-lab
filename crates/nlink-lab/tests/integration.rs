@@ -8247,3 +8247,65 @@ async fn cancel_during_a_healthcheck_rolls_back() {
     }
     assert!(!nlink_lab::state::exists(&name), "state left");
 }
+
+/// F4: `wait_all` waits for every condition within one deadline, reports
+/// each one, and a cancel ends a wait that would never succeed.
+#[lab_test("examples/simple.nll")]
+async fn wait_all_reports_progress_and_stops_on_cancel(lab: RunningLab) {
+    use nlink_lab::api::{OpEvent, OpPhase};
+    use nlink_lab::wait::WaitCondition;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+    let seen = Arc::new(Mutex::new(Vec::<OpEvent>::new()));
+    let sink = {
+        let seen = seen.clone();
+        move |e: OpEvent| seen.lock().unwrap().push(e)
+    };
+    let ctx = nlink_lab::OpCtx::new("wait", lab.name()).with_sink(Arc::new(sink));
+    lab.exec("host", "touch", &["/tmp/nlink-lab-wait-all"])
+        .unwrap();
+    let conditions = [
+        WaitCondition::File("/tmp/nlink-lab-wait-all".into()),
+        WaitCondition::Exec("true".into()),
+    ];
+    lab.wait_all(
+        "host",
+        &conditions,
+        Duration::from_secs(10),
+        Duration::from_millis(100),
+        &ctx,
+    )
+    .await
+    .expect("wait failed");
+    let progress: Vec<(usize, usize)> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match &e.phase {
+            OpPhase::WaitProgress { done, total, .. } => Some((*done, *total)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(progress, [(1, 2), (2, 2)]);
+    let _ = std::fs::remove_file("/tmp/nlink-lab-wait-all");
+
+    let cancel = nlink_lab::CancelToken::new();
+    let ctx = nlink_lab::OpCtx::new("wait", lab.name()).with_cancel(cancel.clone());
+    let started = std::time::Instant::now();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        cancel.cancel();
+    });
+    let never = [WaitCondition::File("/nonexistent/nlink-lab".into())];
+    let r = lab
+        .wait_all(
+            "host",
+            &never,
+            Duration::from_secs(60),
+            Duration::from_millis(100),
+            &ctx,
+        )
+        .await;
+    assert!(matches!(r, Err(nlink_lab::Error::Cancelled(_))), "{r:?}");
+    assert!(started.elapsed() < Duration::from_secs(5));
+}

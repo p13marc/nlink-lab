@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::ctx::{Ctx, require_root};
 use crate::util::parse_env_pairs;
+use nlink_lab::wait::WaitCondition;
 
 /// Stream selector for `nlink-lab spawn --wait-log-stream`.
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -87,7 +88,7 @@ pub struct Args {
     pub wait_fd_stable: Option<f64>,
 
     /// Timeout for --wait-tcp / --wait-log / --wait-port /
-    /// --wait-fd-stable in seconds (default: 30).
+    /// --wait-fd-stable together, in seconds (default: 30).
     #[arg(long, default_value = "30")]
     pub wait_timeout: u64,
 
@@ -117,17 +118,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let env_pairs = parse_env_pairs(&env_vars)?;
     let wait_tcp = wait_tcp
         .as_deref()
-        .map(crate::util::parse_tcp_target)
+        .map(nlink_lab::wait::parse_tcp_target)
         .transpose()?;
     let wait_log = wait_log
         .as_deref()
-        .map(|re_src| {
-            regex::Regex::new(re_src).map_err(|e| {
-                nlink_lab::Error::invalid_argument(format!(
-                    "invalid --wait-log regex {re_src:?}: {e}"
-                ))
-            })
-        })
+        .map(nlink_lab::wait::log_pattern)
         .transpose()?;
     require_root()?;
     let env_refs: Vec<(&str, &str)> = env_pairs
@@ -167,36 +162,44 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         println!("PID: {pid}");
     }
 
-    // Wait for readiness signal(s). --wait-tcp and --wait-log are
-    // independent and AND-composed: both must succeed before
-    // spawn returns. Either one can fail the spawn via timeout.
-    let timeout = std::time::Duration::from_secs(wait_timeout);
-    let interval = std::time::Duration::from_millis(500);
-    if let Some((ip, port)) = &wait_tcp {
-        running
-            .wait_for_tcp(&node, ip, *port, timeout, interval)
-            .await?;
+    // Readiness signals AND-compose: all must hold, within one
+    // --wait-timeout.
+    let mut conditions = Vec::new();
+    if let Some((ip, port)) = wait_tcp {
+        conditions.push(WaitCondition::Tcp { ip, port });
     }
-    if let Some(pattern) = &wait_log {
-        running
-            .wait_for_log_line(pid, pattern, wait_log_stream.into(), timeout, interval)
-            .await?;
+    if let Some(pattern) = wait_log {
+        conditions.push(WaitCondition::Log {
+            pid,
+            pattern,
+            stream: wait_log_stream.into(),
+        });
     }
     if let Some(port) = wait_port {
-        running
-            .wait_for_port(&node, pid, port, timeout, interval)
-            .await?;
+        conditions.push(WaitCondition::Listening {
+            port,
+            pid: Some(pid),
+        });
     }
     if let Some(secs) = wait_fd_stable {
-        let stable_for = std::time::Duration::from_secs_f64(secs);
-        running
-            .wait_for_fd_stable(&node, pid, stable_for, timeout, interval)
-            .await?;
+        conditions.push(WaitCondition::FdStable {
+            pid,
+            stable_for: std::time::Duration::from_secs_f64(secs),
+        });
     }
-    if (wait_tcp.is_some() || wait_log.is_some() || wait_port.is_some() || wait_fd_stable.is_some())
-        && !ctx.quiet
-    {
-        eprintln!("ready");
+    if !conditions.is_empty() {
+        running
+            .wait_all(
+                &node,
+                &conditions,
+                std::time::Duration::from_secs(wait_timeout),
+                std::time::Duration::from_millis(500),
+                &nlink_lab::OpCtx::default(),
+            )
+            .await?;
+        if !ctx.quiet {
+            eprintln!("ready");
+        }
     }
 
     Ok(())

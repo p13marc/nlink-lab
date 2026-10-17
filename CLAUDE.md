@@ -120,6 +120,11 @@ crates/nlink-lab/src/
   netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
   ops/              # OpCtx: progress (OpEvent) + cancellation of deploy/apply/destroy/…
+  host.rs           # orphan/stale detection + reaper (tag-gated), reported as Cleanups
+  metrics.rs        # MetricsCollector: interface rates/states, top TCP flows, process exits
+  logs.rs           # process log tail / cat / follow
+  edit.rs           # Edit model: live topology edits (nodes, links, impairments, qdiscs, pairs, MTU)
+  wait.rs           # WaitCondition + RunningLab::wait_all (one deadline, progress, cancel)
 crates/nlink-lab-shared/src/
   api/              # daemon API (docs/API.md): Request (+ meta roles), Response,
                     #   StreamItem/Notification, OpEvent progress, ApiError, DTOs,
@@ -139,8 +144,8 @@ bins/lab/src/
   cmd/top/          # `top`: app (pure state + keys), ui (widgets +
                     #   `--once` text frame), mod (source, event loop)
   render/           # dot / ascii / mermaid topology renderers
-  host_scan.rs      # orphan/stale detection + reaper (tag-gated, nlink-based)
-  util.rs           # tail, env pairs, byte sizes, BPF glue
+  host_scan.rs      # prints nlink_lab::host cleanups
+  util.rs           # env pairs, byte sizes, BPF glue, impair --show lines
 
 examples/
   *.nll             # NLL topology examples (46 top-level; 55 incl. cookbook/ and imports/)

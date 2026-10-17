@@ -1,15 +1,25 @@
-//! Metrics collector — gathers live stats from all lab nodes.
+//! Metrics collector — gathers live stats from all lab nodes: interface
+//! rates and states, the top TCP flows by goodput, and the exits of
+//! tracked processes. `top`, `events` and the daemon share it.
 
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
+use crate::deploy::NsRef;
+use crate::{NodeDiagnostic, RunningLab};
 use nlink::netlink::{Connection, SockDiag};
 use nlink::sockdiag::{SocketFilter, SocketOwnerMap, SocketRateTracker};
-use nlink_lab::deploy::NsRef;
-use nlink_lab::{NodeDiagnostic, RunningLab};
 use nlink_lab_shared::WIRE_VERSION;
 use nlink_lab_shared::messages::{LabEvent, LabEventKind};
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics, SocketRateMetric};
+
+/// Seconds since the Unix epoch, as snapshots and events are stamped.
+pub fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
 
 /// Top TCP flows (by goodput) reported per node.
 const TOP_FLOWS: usize = 5;
@@ -153,11 +163,11 @@ impl MetricsCollector {
     pub async fn snapshot(
         &mut self,
         lab: &RunningLab,
-    ) -> Result<(MetricsSnapshot, Vec<LabEvent>), nlink_lab::Error> {
+    ) -> Result<(MetricsSnapshot, Vec<LabEvent>), crate::Error> {
         let diagnostics = lab.diagnose_since(None, &self.prev_diagnostics).await?;
         let mut nodes = HashMap::new();
         let lab_name = lab.name().to_string();
-        let timestamp = crate::now_unix();
+        let timestamp = now_unix();
         let mut events = self.process_events(lab, timestamp);
 
         // One amortized `/proc` walk joins socket inodes to owning

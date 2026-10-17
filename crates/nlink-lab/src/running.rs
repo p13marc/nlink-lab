@@ -196,6 +196,96 @@ pub struct ExecOpts<'a> {
     pub timeout: Option<std::time::Duration>,
 }
 
+/// How [`RunningLab::prepare_exec`] wires a command.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExecMode {
+    /// It reads stdin (`exec -i` on a container node).
+    pub stdin: bool,
+    /// The caller gives it a terminal (`exec -t` on a container node).
+    pub tty: bool,
+    /// It may have to be stopped before it ends (a timeout, a cancel, a
+    /// client that went away): on a container node it is tagged, so the
+    /// command can be found and stopped in the container, where killing
+    /// the runtime's client does not reach it (#226).
+    pub stoppable: bool,
+}
+
+/// A command [`RunningLab::prepare_exec`] made, not started yet.
+#[derive(Debug)]
+pub struct PreparedExec {
+    command: std::process::Command,
+    /// The network namespace a namespace node's command enters.
+    netns: Option<String>,
+    /// A container's init pid and the command's tag.
+    stop: Option<(u32, String)>,
+    /// `exec in 'node'`, for errors.
+    label: String,
+}
+
+impl PreparedExec {
+    /// The command, to set its stdio (and, before spawning, anything
+    /// else `Command` allows, like a `pre_exec` hook for a terminal).
+    pub fn command(&mut self) -> &mut std::process::Command {
+        &mut self.command
+    }
+
+    pub fn spawn(self) -> Result<ExecChild> {
+        let label = self.label;
+        let child = match &self.netns {
+            Some(ns) => crate::ns_exec::spawn(ns, self.command)
+                .map_err(|e| Error::nlink(format!("{label} failed"), e))?,
+            None => {
+                let mut command = self.command;
+                command
+                    .spawn()
+                    .map_err(|e| Error::deploy_failed(format!("{label} failed: {e}")))?
+            }
+        };
+        Ok(ExecChild {
+            child,
+            stop: self.stop,
+        })
+    }
+}
+
+/// A started exec: the process, and how to stop the command it runs.
+#[derive(Debug)]
+pub struct ExecChild {
+    /// The process: the command on a namespace node, the runtime's client
+    /// on a container node.
+    pub child: std::process::Child,
+    stop: Option<(u32, String)>,
+}
+
+impl ExecChild {
+    /// What stops the command in a container, kept apart from the child
+    /// that is waited for.
+    pub fn stopper(&self) -> ExecStopper {
+        ExecStopper(self.stop.clone())
+    }
+
+    /// Stop the command and its process.
+    pub fn kill(&mut self) {
+        self.stopper().stop();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Stops a container command an exec started, by its tag (see
+/// [`ExecMode::stoppable`]); nothing on a namespace node, where killing
+/// the process is enough.
+#[derive(Debug, Clone)]
+pub struct ExecStopper(Option<(u32, String)>);
+
+impl ExecStopper {
+    pub fn stop(&self) {
+        if let Some((pid, tag)) = &self.0 {
+            stop_tagged(*pid, tag);
+        }
+    }
+}
+
 /// Optional knobs for [`RunningLab::spawn_with_logs_with_opts`]. Same env
 /// and workdir semantics as [`ExecOpts`], plus a custom log directory.
 #[derive(Debug, Clone, Copy, Default)]
@@ -834,60 +924,89 @@ impl RunningLab {
         args: &[&str],
         opts: ExecOpts<'_>,
     ) -> Result<ExecOutput> {
-        if let Some(container) = self.containers.get(node) {
-            // Use docker/podman exec for container nodes
-            let rt_binary = self
-                .runtime_binary
-                .as_deref()
-                .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
-            let wd_str = opts.workdir.map(|p| p.to_string_lossy().into_owned());
-            let env_pairs: Vec<String> = opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
-            let mut all_args: Vec<&str> = vec!["exec"];
-            if let Some(ref wd) = wd_str {
-                all_args.push("-w");
-                all_args.push(wd.as_str());
-            }
-            for pair in &env_pairs {
-                all_args.push("-e");
-                all_args.push(pair.as_str());
-            }
+        let mode = ExecMode {
             // tagged when it may have to be stopped: killing the runtime's
             // client at the timeout left the command running (#226)
-            let tag = opts.timeout.map(|_| new_process_tag(self.name(), node));
-            let tag_env = tag.as_ref().map(|t| format!("{TAG_VAR}={t}"));
-            if let Some(env) = &tag_env {
-                all_args.push("-e");
-                all_args.push(env);
-            }
-            all_args.push(&container.id);
-            all_args.push(cmd);
-            all_args.extend(args);
-            let mut command = std::process::Command::new(rt_binary);
-            command.args(&all_args);
-            if let (Some(timeout), Some(tag)) = (opts.timeout, &tag) {
-                let child = command
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .map_err(|e| {
-                        Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
-                    })?;
-                output_with_timeout(child, timeout).inspect_err(|e| {
+            stoppable: opts.timeout.is_some(),
+            ..Default::default()
+        };
+        let mut prepared = self.prepare_exec(node, cmd, args, &opts, mode)?;
+        // stdin closed, with a timeout or without: it read the caller's
+        // stdin (#226)
+        prepared
+            .command()
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let running = prepared.spawn()?;
+        match opts.timeout {
+            Some(timeout) => {
+                let stop = running.stopper();
+                output_with_timeout(running.child, timeout).inspect_err(|e| {
                     if matches!(e, Error::Timeout(_)) {
-                        stop_tagged(container.pid, tag);
+                        stop.stop();
                     }
                 })
-            } else {
-                let output = command.output().map_err(|e| {
-                    Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
-                })?;
+            }
+            None => {
+                let output = running.child.wait_with_output().map_err(Error::Io)?;
                 Ok(ExecOutput {
                     stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                     stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
                     exit_code: exit_code_of(output.status),
                 })
             }
+        }
+    }
+
+    /// The command that runs `cmd args` in `node` with `opts`, not started
+    /// yet: through the runtime's `exec` on a container node, entering the
+    /// node's network namespace (with its `/etc/netns` overlay where the
+    /// host allows one, as `ip netns exec` does) on a namespace node. Set
+    /// its stdio with [`PreparedExec::command`], then spawn it.
+    ///
+    /// `exec`, the attached exec and the daemon's streaming exec and shell
+    /// all start their commands through it.
+    pub fn prepare_exec(
+        &self,
+        node: &str,
+        cmd: &str,
+        args: &[&str],
+        opts: &ExecOpts<'_>,
+        mode: ExecMode,
+    ) -> Result<PreparedExec> {
+        let what = if mode.stdin { "attached exec" } else { "exec" };
+        if let Some(container) = self.containers.get(node) {
+            let rt_binary = self
+                .runtime_binary
+                .as_deref()
+                .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
+            let mut command = std::process::Command::new(rt_binary);
+            command.arg("exec");
+            if mode.stdin {
+                command.arg("-i");
+            }
+            if mode.tty {
+                command.arg("-t");
+            }
+            if let Some(wd) = opts.workdir {
+                command.arg("-w").arg(wd);
+            }
+            for (k, v) in opts.env {
+                command.arg("-e").arg(format!("{k}={v}"));
+            }
+            let stop = mode.stoppable.then(|| {
+                let tag = new_process_tag(self.name(), node);
+                command.arg("-e").arg(format!("{TAG_VAR}={tag}"));
+                (container.pid, tag)
+            });
+            command.arg(&container.id).arg(cmd).args(args);
+            Ok(PreparedExec {
+                command,
+                netns: None,
+                stop,
+                label: format!("{what} in container '{node}'"),
+            })
         } else {
             let ns_name = self.namespace_for(node)?;
             let mut command = std::process::Command::new(cmd);
@@ -898,23 +1017,12 @@ impl RunningLab {
             for (k, v) in opts.env {
                 command.env(k, v);
             }
-            if let Some(timeout) = opts.timeout {
-                // as without a timeout: it read the caller's stdin (#226)
-                command.stdin(std::process::Stdio::null());
-                command.stdout(std::process::Stdio::piped());
-                command.stderr(std::process::Stdio::piped());
-                let child = crate::ns_exec::spawn(ns_name, command)
-                    .map_err(|e| Error::nlink(format!("exec in '{node}' failed"), e))?;
-                output_with_timeout(child, timeout)
-            } else {
-                let output = crate::ns_exec::spawn_output(ns_name, command)
-                    .map_err(|e| Error::nlink(format!("exec in '{node}' failed"), e))?;
-                Ok(ExecOutput {
-                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                    exit_code: exit_code_of(output.status),
-                })
-            }
+            Ok(PreparedExec {
+                command,
+                netns: Some(ns_name.to_string()),
+                stop: None,
+                label: format!("{what} in '{node}'"),
+            })
         }
     }
 
@@ -959,77 +1067,27 @@ impl RunningLab {
         args: &[&str],
         opts: ExecOpts<'_>,
     ) -> Result<i32> {
-        if let Some(container) = self.containers.get(node) {
-            let rt_binary = self
-                .runtime_binary
-                .as_deref()
-                .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
-            let wd_str = opts.workdir.map(|p| p.to_string_lossy().into_owned());
-            let env_pairs: Vec<String> = opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
-            let mut all_args: Vec<&str> = vec!["exec", "-i"];
-            if let Some(ref wd) = wd_str {
-                all_args.push("-w");
-                all_args.push(wd.as_str());
+        let mode = ExecMode {
+            stdin: true,
+            stoppable: opts.timeout.is_some(),
+            ..Default::default()
+        };
+        let mut prepared = self.prepare_exec(node, cmd, args, &opts, mode)?;
+        prepared
+            .command()
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit());
+        let label = prepared.label.clone();
+        let running = prepared.spawn()?;
+        let stop = running.stopper();
+        wait_with_optional_timeout(running.child, opts.timeout).map_err(|e| match e {
+            Error::Timeout(_) => {
+                stop.stop();
+                e
             }
-            for pair in &env_pairs {
-                all_args.push("-e");
-                all_args.push(pair.as_str());
-            }
-            let tag = opts.timeout.map(|_| new_process_tag(self.name(), node));
-            let tag_env = tag.as_ref().map(|t| format!("{TAG_VAR}={t}"));
-            if let Some(env) = &tag_env {
-                all_args.push("-e");
-                all_args.push(env);
-            }
-            all_args.push(&container.id);
-            all_args.push(cmd);
-            all_args.extend(args);
-            let mut command = std::process::Command::new(rt_binary);
-            command
-                .args(&all_args)
-                .stdin(std::process::Stdio::inherit())
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit());
-            run_with_optional_timeout(&mut command, opts.timeout).map_err(|e| match e {
-                Error::Timeout(_) => {
-                    if let Some(tag) = &tag {
-                        stop_tagged(container.pid, tag);
-                    }
-                    e
-                }
-                other => Error::deploy_failed(format!(
-                    "attached exec in container '{node}' failed: {other}"
-                )),
-            })
-        } else {
-            let ns_name = self.namespace_for(node)?;
-            // Spawned straight into the namespace by nlink, stdio inherited,
-            // with the node's /etc/netns overlay where the host allows one,
-            // as `ip netns exec` does. No `nsenter`, and no hard-coded
-            // namespace directory (#179).
-            let mut command = std::process::Command::new(cmd);
-            command
-                .args(args)
-                .stdin(std::process::Stdio::inherit())
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit());
-            if let Some(wd) = opts.workdir {
-                command.current_dir(wd);
-            }
-            for (k, v) in opts.env {
-                command.env(k, v);
-            }
-            let child = nlink::netlink::namespace::NetnsCommand::new(ns_name, command)
-                .and_then(|c| {
-                    c.etc_overlay(nlink::netlink::namespace::Overlay::BestEffort)
-                        .spawn()
-                })
-                .map_err(|e| Error::nlink(format!("attached exec in '{node}' failed"), e))?;
-            wait_with_optional_timeout(child, opts.timeout).map_err(|e| match e {
-                Error::Timeout(_) => e,
-                other => Error::deploy_failed(format!("attached exec in '{node}' failed: {other}")),
-            })
-        }
+            other => Error::deploy_failed(format!("{label} failed: {other}")),
+        })
     }
 
     /// Spawn a background process in a lab node.
@@ -1609,12 +1667,11 @@ impl RunningLab {
         }
     }
 
-    /// Wait until process `pid` has a TCP listener bound to `port`
-    /// inside its namespace. Reads `/proc/<pid>/net/tcp` and
-    /// `/proc/<pid>/net/tcp6` (which reflect the namespace's socket
-    /// table when the reading process is in the same netns) and looks
-    /// for a row with `st = 0A` (TCP_LISTEN) and the matching local
-    /// port.
+    /// Wait until a process of `node` (`pid`, when it is given) has a TCP
+    /// listener bound to `port` inside its namespace. Asks sock_diag, or
+    /// reads `/proc/<pid>/net/tcp{,6}` (`/proc/net/tcp{,6}` without a
+    /// `pid`), which reflect the namespace's socket table, for a row with
+    /// `st = 0A` (TCP_LISTEN) and the matching local port.
     ///
     /// Cheaper than [`wait_for_tcp`](Self::wait_for_tcp) — no actual
     /// `connect(2)` is attempted, so there's no logged
@@ -1626,7 +1683,7 @@ impl RunningLab {
     pub async fn wait_for_port(
         &self,
         node: &str,
-        pid: u32,
+        pid: Option<u32>,
         port: u16,
         timeout: std::time::Duration,
         interval: std::time::Duration,
@@ -1642,7 +1699,10 @@ impl RunningLab {
                 Some(false) => {}
                 None => {
                     for proto in &["tcp", "tcp6"] {
-                        let path = format!("/proc/{pid}/net/{proto}");
+                        let path = match pid {
+                            Some(pid) => format!("/proc/{pid}/net/{proto}"),
+                            None => format!("/proc/net/{proto}"),
+                        };
                         if let Ok(out) = self.exec(node, "cat", &[&path])
                             && out.exit_code == 0
                             && proc_net_tcp_has_listener(&out.stdout, &port_hex)
@@ -1653,9 +1713,14 @@ impl RunningLab {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(Error::TimedOut(format!(
-                    "timeout waiting for TCP listener on port {port} for PID {pid}"
-                )));
+                return Err(Error::TimedOut(match pid {
+                    Some(pid) => {
+                        format!("timeout waiting for TCP listener on port {port} for PID {pid}")
+                    }
+                    None => {
+                        format!("timeout waiting for TCP listener on port {port} on node '{node}'")
+                    }
+                }));
             }
             tokio::time::sleep(interval).await;
         }
@@ -1744,7 +1809,7 @@ impl RunningLab {
                 return Ok(link.endpoints[0].clone());
             }
         }
-        Err(Error::deploy_failed(format!(
+        Err(Error::invalid_argument(format!(
             "no link found for endpoint '{endpoint}'"
         )))
     }
@@ -1779,6 +1844,49 @@ impl RunningLab {
             }
         }
         self.save_state()
+    }
+
+    /// Impair what `endpoint` sends (`egress`) and what it receives
+    /// (`ingress`, installed on the egress of its link's other end), and
+    /// return that other end when `ingress` is given. The peer is looked
+    /// up first: an endpoint without one (a network member) changes
+    /// nothing (#209).
+    pub async fn set_directed_impairment(
+        &mut self,
+        endpoint: &str,
+        egress: Option<&crate::types::Impairment>,
+        ingress: Option<&crate::types::Impairment>,
+    ) -> Result<Option<String>> {
+        let peer = match ingress {
+            Some(_) => Some(self.peer_endpoint(endpoint)?),
+            None => None,
+        };
+        if let Some(egress) = egress {
+            self.set_impairment(endpoint, egress).await?;
+        }
+        if let (Some(peer), Some(ingress)) = (&peer, ingress) {
+            self.set_impairment(peer, ingress).await?;
+        }
+        Ok(peer)
+    }
+
+    /// [`set_impairment`](Self::set_impairment) in `dir`: on what
+    /// `endpoint` sends, on what it receives, or both. Returns the peer
+    /// endpoint an `in` or `both` impairment went on.
+    pub async fn impair(
+        &mut self,
+        endpoint: &str,
+        impairment: &crate::types::Impairment,
+        dir: crate::api::Direction,
+    ) -> Result<Option<String>> {
+        use crate::api::Direction;
+        let (egress, ingress) = match dir {
+            Direction::Out => (Some(impairment), None),
+            Direction::In => (None, Some(impairment)),
+            Direction::Both => (Some(impairment), Some(impairment)),
+        };
+        self.set_directed_impairment(endpoint, egress, ingress)
+            .await
     }
 
     /// Modify the netem impairment on an interface at runtime.
@@ -2920,13 +3028,6 @@ pub(crate) fn output_with_timeout(
         stderr: text(&stderr),
         exit_code: exit_code_of(status),
     })
-}
-
-fn run_with_optional_timeout(
-    command: &mut std::process::Command,
-    timeout: Option<std::time::Duration>,
-) -> Result<i32> {
-    wait_with_optional_timeout(command.spawn().map_err(Error::Io)?, timeout)
 }
 
 /// Wait for `child`, killing it after `timeout`; its exit code

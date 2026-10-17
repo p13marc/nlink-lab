@@ -68,16 +68,20 @@ pub mod container;
 pub mod deploy;
 pub mod diff;
 pub mod dns;
+pub mod edit;
 pub mod error;
 pub mod events;
 pub(crate) mod firewall;
 pub mod fmt;
 pub mod frr;
 pub mod helpers;
+pub mod host;
 pub mod impair_parse;
 pub mod ipfunc;
 pub mod ipmap;
 pub mod lint;
+pub mod logs;
+pub mod metrics;
 pub mod netns_tag;
 pub mod ns_exec;
 pub mod ops;
@@ -95,6 +99,7 @@ pub mod test_helpers;
 pub mod test_runner;
 pub mod types;
 pub mod validator;
+pub mod wait;
 pub mod watch;
 pub mod wifi;
 
@@ -116,8 +121,8 @@ pub use nlink_lab_shared::api;
 pub use ops::{CancelToken, OpCtx, ProgressSink};
 pub use proc_stat::ProcStat;
 pub use running::{
-    ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, Signal, SpawnOpts,
-    parse_signal,
+    ExecChild, ExecMode, ExecOpts, ExecOutput, LogStream, NodeDiagnostic, PreparedExec,
+    ProcessInfo, RunningLab, Signal, SpawnOpts, parse_signal,
 };
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,

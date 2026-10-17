@@ -48,7 +48,7 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             let result = match nlink_lab::RunningLab::load(&info.name) {
                 Ok(lab) => lab.destroy().await.map(|()| "Destroyed"),
                 Err(_) if force => {
-                    force_cleanup(&info.name).await;
+                    force_cleanup(&info.name, &info.name).await;
                     Ok("Force-cleaned")
                 }
                 Err(e) => Err(e),
@@ -88,6 +88,9 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let name = name.ok_or_else(|| {
         nlink_lab::Error::deploy_failed("lab name required (or use --all/--orphans)")
     })?;
+    // before `--force` can sweep with it: `""` or `..` named the state
+    // directory itself (#221)
+    nlink_lab::state::validate_lab_name(&name)?;
     match nlink_lab::RunningLab::load(&name) {
         Ok(lab) => {
             let node_count = lab.namespace_count();
@@ -108,7 +111,7 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         Err(e) if force => {
             eprintln!("warning: state not found, attempting force cleanup: {e}");
-            force_cleanup(&name).await;
+            force_cleanup(&name, &name).await;
             println!("Lab {name:?} force-cleaned");
         }
         Err(nlink_lab::Error::NotFound { .. }) => {

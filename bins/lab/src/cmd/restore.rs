@@ -27,7 +27,18 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             reset_impairments: true,
         };
         let plan = nlink_lab::apply_plan_with(&running, &snapshot.topology, &opts)?;
-        let ops: Vec<String> = plan.ops.iter().map(|o| o.describe()).collect();
+        // What changes, as `apply --dry-run` shows it: the topology diff
+        // (which the per-node reconciles carry out), then the plan's
+        // removals and other work. Every op was listed, so the reconciles
+        // that always run hid "no changes" (#221).
+        let diff = nlink_lab::diff_topologies(running.topology(), &snapshot.topology);
+        let ops: Vec<String> = plan
+            .ops
+            .iter()
+            .filter(|o| o.is_removal())
+            .chain(plan.work())
+            .map(|o| o.describe())
+            .collect();
         let live: Vec<&String> = snapshot.state.live_impairments.keys().collect();
         let parts: Vec<&String> = snapshot.state.saved_impairments.keys().collect();
         if ctx.json {
@@ -37,6 +48,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                     "lab": lab,
                     "snapshot": snapshot.meta,
                     "ops": ops,
+                    "topology_changes": diff.change_count(),
                     "restore_impairments": live,
                     "restore_partitions": parts,
                     "dry_run": true,
@@ -44,8 +56,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             );
         } else {
             println!("Restore {lab:?} to snapshot {name:?} (dry run):");
-            if ops.is_empty() {
+            if diff.is_empty() && ops.is_empty() {
                 println!("  topology: no changes");
+            } else {
+                // its lines are indented already
+                print!("{diff}");
             }
             for op in &ops {
                 println!("  {op}");

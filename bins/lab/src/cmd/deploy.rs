@@ -60,9 +60,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     } = args;
     let mut topo = parse_topology(&topology, &params)?;
     if unique {
-        topo.lab.name = format!("{}-{}", topo.lab.name, std::process::id());
+        topo.lab.add_suffix(&std::process::id().to_string());
     } else if let Some(ref sfx) = suffix {
-        topo.lab.name = format!("{}-{sfx}", topo.lab.name);
+        topo.lab.add_suffix(sfx);
     }
     if skip_validate {
         topo.assertions.clear();
@@ -106,6 +106,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         return Ok(());
     }
 
+    // before `--force`: it destroyed the lab, then refused to deploy (#221)
+    require_root()?;
+
     // Handle --force: destroy existing lab first
     if force {
         if nlink_lab::state::exists(&topo.lab.name) {
@@ -113,11 +116,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             lab.destroy().await?;
         } else {
             // Best-effort cleanup of orphaned resources (no state file)
-            force_cleanup(&topo.lab.name).await;
+            force_cleanup(&topo.lab.name, topo.lab.prefix()).await;
         }
     }
-
-    require_root()?;
 
     let start = Instant::now();
     let lab = topo.deploy().await?;

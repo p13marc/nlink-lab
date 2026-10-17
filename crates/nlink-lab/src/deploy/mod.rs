@@ -323,6 +323,43 @@ fn plan_apply(
 /// overlaid ([`overlay_live_impairments`]) and planned with the keys of
 /// the WireGuard interfaces that already exist, so `apply` does not rotate
 /// every peer's key and `apply --check` compares the keys in use.
+/// [`PlanInputs::for_deploy`], with the saved keys of the `key auto`
+/// WireGuard interfaces that already exist, so planning a running lab does
+/// not rotate every peer's key; a key the topology writes is the one it
+/// gets (#204).
+fn inputs_with_saved_keys(running: &RunningLab, topology: &Topology) -> Result<PlanInputs> {
+    #[cfg(feature = "wireguard")]
+    {
+        let mut inputs = PlanInputs::for_deploy(topology)?;
+        if let Some(fresh) = inputs.wg_keys.as_mut()
+            && let Some(saved) = wireguard_secrets::load(running.name())
+        {
+            for (node, ifaces) in saved {
+                if let Some(target) = fresh.get_mut(&node) {
+                    for (iface, keys) in ifaces {
+                        let auto = topology
+                            .nodes
+                            .get(&node)
+                            .and_then(|n| n.wireguard.get(&iface))
+                            .is_some_and(|wg| {
+                                matches!(wg.private_key.as_deref(), None | Some("auto"))
+                            });
+                        if auto && target.contains_key(&iface) {
+                            target.insert(iface, keys);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(inputs)
+    }
+    #[cfg(not(feature = "wireguard"))]
+    {
+        let _ = running;
+        PlanInputs::for_deploy(topology)
+    }
+}
+
 fn apply_plans(
     running: &RunningLab,
     desired: &Topology,
@@ -335,40 +372,8 @@ fn apply_plans(
     // they exist: the current side's too, so an interface the desired
     // topology drops is in the current plan's Stack and `Plan::diff`
     // removes it (#204).
-    let with_saved_keys = |topology: &Topology| -> Result<PlanInputs> {
-        #[cfg(feature = "wireguard")]
-        {
-            let mut inputs = PlanInputs::for_deploy(topology)?;
-            // keep the keys of `key auto` interfaces that already exist so
-            // `apply` does not rotate every peer's key; a key the topology
-            // writes is the one it gets (#204)
-            if let Some(fresh) = inputs.wg_keys.as_mut()
-                && let Some(saved) = wireguard_secrets::load(running.name())
-            {
-                for (node, ifaces) in saved {
-                    if let Some(target) = fresh.get_mut(&node) {
-                        for (iface, keys) in ifaces {
-                            let auto = topology
-                                .nodes
-                                .get(&node)
-                                .and_then(|n| n.wireguard.get(&iface))
-                                .is_some_and(|wg| {
-                                    matches!(wg.private_key.as_deref(), None | Some("auto"))
-                                });
-                            if auto && target.contains_key(&iface) {
-                                target.insert(iface, keys);
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(inputs)
-        }
-        #[cfg(not(feature = "wireguard"))]
-        PlanInputs::for_deploy(topology)
-    };
-    let inputs = with_saved_keys(desired)?;
-    let current_inputs = with_saved_keys(&overlay.current)?;
+    let inputs = inputs_with_saved_keys(running, desired)?;
+    let current_inputs = inputs_with_saved_keys(running, &overlay.current)?;
 
     let cur_inputs = PlanInputs {
         partitions: overlay.current_partitions.clone(),
@@ -547,7 +552,10 @@ fn restore_dns(running: &RunningLab, current: &Plan) {
 /// The node's bridge-network ports, sysctls, mgmt veth and `run` commands
 /// lived in the old namespace as well, and are re-created the same way.
 pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<ApplyReport> {
-    let mut desired = running.topology().clone();
+    // The lab as it is, runtime impairments included: every node's Stack
+    // is re-applied, so planning from the declared values undid an
+    // `impair` anywhere in the lab, not only on the restarted node (#221).
+    let (desired, all_partitions) = live_view(running);
     desired.validate().bail()?;
     let _lock = state::lock(running.name())?;
     let touches = |ep: &String| ep.split(':').next() == Some(node);
@@ -557,25 +565,23 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
         .filter(|l| l.endpoints.iter().any(touches))
         .flat_map(|l| l.endpoints.iter().cloned())
         .collect();
+    // The lost link ends lost their netem with the veth; what `impair`
+    // installed at runtime is what comes back (it is in `desired`).
     let mut current = desired.clone();
     current.links.retain(|l| !l.endpoints.iter().any(touches));
     for ep in &lost {
         current.impairments.remove(ep);
-        // What `impair` installed at runtime is what comes back.
-        if let Some(live) = running.live_impairments().get(ep) {
-            desired.impairments.insert(ep.clone(), live.clone());
-        }
     }
     // A partition of a lost link end died with the veth.
-    let partitions: BTreeSet<String> = running
-        .partitions()
-        .keys()
-        .filter(|ep| !lost.contains(*ep))
-        .cloned()
+    let partitions: BTreeSet<String> = all_partitions
+        .into_iter()
+        .filter(|ep| !lost.contains(ep))
         .collect();
+    // The keys in use: fresh ones re-keyed every `key auto` interface of
+    // the lab, and were not saved (#221).
     let inputs = PlanInputs {
         partitions,
-        ..PlanInputs::for_deploy(&desired)?
+        ..inputs_with_saved_keys(running, &desired)?
     };
     let cur_plan = plan::plan(&current, &inputs)?;
     let des_plan = plan::plan(&desired, &inputs)?;
@@ -608,6 +614,10 @@ pub async fn reattach_node(running: &mut RunningLab, node: &str) -> Result<Apply
         return Err(e);
     }
     journal.discard();
+    #[cfg(feature = "wireguard")]
+    if let Some(keys) = &inputs.wg_keys {
+        wireguard_secrets::save(running.name(), keys)?;
+    }
     running.retain_partitions(|ep| !lost.contains(ep));
     running.absorb_apply(
         env.namespace_names,

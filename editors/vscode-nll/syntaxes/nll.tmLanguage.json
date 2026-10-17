@@ -65,7 +65,16 @@
       "patterns": [
         {
           "name": "variable.other.interpolated.nll",
-          "match": "\\$\\{[^}]+\\}"
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "patterns": [
+            {
+              "include": "#interpolation"
+            },
+            {
+              "include": "#strings"
+            }
+          ]
         }
       ]
     },

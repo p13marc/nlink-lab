@@ -105,14 +105,19 @@ link dc-spine1:wan0 -- wan-pe1:eth0 {
 
 **Semantics:**
 - Imports must appear before the `lab` declaration
-- All node, network, profile, and endpoint names are prefixed with `<alias>-`: `dc-spine1`, `dc-r1:eth0` (a dash, so the names stay valid hostnames; cross-references use `${dc-r1.eth0}`)
+- All node, network, profile, and endpoint names are prefixed with `<alias>-`: `dc-spine1`, `dc-r1:eth0` (a dash, so the names stay valid hostnames; cross-references use `${dc-r1.eth0}`). Names inside the module's blocks are prefixed too: `qdisc` endpoints, network `impair` pairs, WireGuard `peers`, BGP `neighbor`s, assertions
+- An argument is interpolated in the importing file: `import "ring.nll" as r(count=${n})` passes the value of its `param n`
 - The `lab` name comes from the root file only
 - Imports can be recursive (imported files can import others)
 - Circular imports are detected and rejected
 
 ### 3. Profiles
 
-Reusable node templates. Nodes inherit with `:`.
+Reusable node templates. Nodes inherit with `:`. A profile body is
+interpolated like a node's (`sysctl "…" "${ttl}"`), and a profile, a
+`defaults` block or a `pool` may be declared inside `if`, `for` and `site`
+blocks; it applies to the whole file, wherever its users are. The profile
+a node names may be interpolated too: `node r : ${kind}`.
 
 ```nll-ignore
 profile router {
@@ -207,6 +212,13 @@ network fabric {
   port host2:eth0 { vlans [100, 200]  tagged }
 }
 ```
+
+With a `subnet`, every member whose `port` gives no address gets one: the
+next free host address of the subnet, in member order. An address that a
+`port` gives is skipped, so `members [a:eth0, b:eth0, c:eth0]`,
+`subnet 10.0.0.0/24` and `port b { 10.0.0.1/24 }` number a `.2` and c `.3`.
+Glob members (`*-h:eth0`) match every node of the lab, wherever it is
+declared.
 
 #### Per-Pair Impairment
 
@@ -1575,7 +1587,11 @@ nat_block      = "nat" "{" (nat_rule | "for" IDENT "in" (range | list) nat_block
                  (* rules keep source order; loops expand in place *)
 # ── Site grouping ────────────────────────────────
 site           = "site" IDENT STRING? "{" statement* "}"
-               # All node/link/network names inside are prefixed with "site-"
+               # All node/link/network names inside are prefixed with "site-",
+               # and so are the names its blocks refer to (qdiscs, impair
+               # pairs, WireGuard peers, BGP neighbours, assertions). Inside
+               # the site, a cross-reference names a node as written there:
+               # ${r.eth0} is site-r's eth0
 
 nat_rule       = "masquerade" ("src" CIDR | "oif" IDENT)* ("to" ":" ports)? nat_flag*
                | "redirect" pre_qual* ("to" ":" INT)? nat_flag*
@@ -1793,7 +1809,9 @@ at 100 000 iterations. `if <cond> { … }` (with `==`, `!=`, `<`, `>`, `&&`,
 statements, it does not compute values — use `${a ? b : c}` for that.
 Both `for` and `if` bodies accept every statement kind, including nested
 loops, `site` blocks, `validate`, `scenario` and `benchmark`; `let`
-bindings and loop variables are scoped to the enclosing block.
+bindings and loop variables are scoped to the enclosing block. A `for`
+inside a `node`, `network` or `nat` block sees that scope too: an
+enclosing loop's variable, a `site`'s `let`.
 
 ### Why not YAML?
 Implicit typing (`NO` → false, `3.10` → 3.1), indentation sensitivity.

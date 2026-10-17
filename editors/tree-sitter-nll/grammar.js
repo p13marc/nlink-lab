@@ -913,7 +913,9 @@ module.exports = grammar({
     // interpolated text as one unit until lowering.
     interpolation: ($) =>
       token(
-        /([A-Za-z0-9_\/%-]+(\.[A-Za-z0-9_\/%-]+)*\.?)?(\$\{[^}]+\}(\.?[A-Za-z0-9_\/%-]+)*\.?)+/,
+        // `${…}` with quoted strings and one nested `${…}` inside:
+        // `${leaf${i}.eth0}`, `${x == "}" ? a : b}` (nlink-lab #205)
+        /([A-Za-z0-9_\/%-]+(\.[A-Za-z0-9_\/%-]+)*\.?)?(\$\{([^{}"]|"[^"]*"|\$\{[^{}]*\})+\}(\.?[A-Za-z0-9_\/%-]+)*\.?)+/,
       ),
 
     line_comment: ($) => /(#|\/\/)[^\n]*/,

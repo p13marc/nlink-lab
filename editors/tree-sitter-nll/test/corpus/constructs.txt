@@ -218,3 +218,18 @@ node a {
             (list
               (ipv6_cidr)
               (identifier))))))))
+
+================
+Nested interpolation
+================
+node host${i} { route default via ${router${i}.eth0} }
+---
+
+(source_file
+  (node_definition
+    (interpolation)
+    (node_body
+      (route_property
+        (route_destination)
+        (route_params
+          (interpolation))))))

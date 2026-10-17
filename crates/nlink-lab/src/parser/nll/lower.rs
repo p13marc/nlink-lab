@@ -3,7 +3,7 @@
 //! Expands `for` loops, substitutes `let` variables, resolves profiles,
 //! and maps AST nodes to the [`crate::types::Topology`] struct.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 
 use super::ast;
@@ -112,59 +112,12 @@ fn lower_with_base_dir_and_params(
         }
     }
 
-    // First pass: collect profiles, variables, and defaults
+    // First pass: the top-level variables, visible to every statement.
+    // Profiles, defaults and pools are collected after expansion, so the
+    // ones inside `if` / `for` / `site` count too (#205).
     for stmt in &file.statements {
-        match stmt {
-            ast::Statement::Profile(p) => ctx.add_profile(p),
-            ast::Statement::Let(l) => ctx.add_variable(l),
-            ast::Statement::Defaults(d) => match &d.kind {
-                ast::DefaultsKind::Link => ctx.default_link_mtu = d.mtu,
-                ast::DefaultsKind::Impair => ctx.default_impair = d.impair.clone(),
-                ast::DefaultsKind::Rate => ctx.default_rate = d.rate.clone(),
-                ast::DefaultsKind::Named(name) => {
-                    ctx.link_profiles.insert(name.clone(), d.clone());
-                }
-            },
-            ast::Statement::Pool(p) => {
-                let (ip, prefix) = crate::helpers::parse_cidr(&p.base).map_err(|e| {
-                    crate::Error::NllParse(format!(
-                        "pool '{}': invalid base '{}': {e}",
-                        p.name, p.base
-                    ))
-                })?;
-                let bits = crate::helpers::addr_bits(ip);
-                if p.prefix > bits || p.prefix < prefix {
-                    return Err(crate::Error::NllParse(format!(
-                        "pool '{}': allocation prefix /{} must be between the pool prefix /{prefix} and /{bits}",
-                        p.name, p.prefix
-                    )));
-                }
-                // Mask to the network address so `pool p 10.0.0.5/8 /30`
-                // allocates from 10.0.0.0.
-                let base = crate::helpers::ip_to_bits(crate::helpers::network_address(ip, prefix));
-                // An IPv6 /0 pool has 2^128 addresses, which does not fit
-                // u128; saturate — no lab will exhaust it.
-                let pool_size = 1u128
-                    .checked_shl(u32::from(bits - prefix))
-                    .unwrap_or(u128::MAX);
-                if ctx.pools.contains_key(&p.name) {
-                    return Err(crate::Error::NllParse(format!(
-                        "duplicate pool name '{}'",
-                        p.name
-                    )));
-                }
-                ctx.pools.insert(
-                    p.name.clone(),
-                    PoolState {
-                        base,
-                        pool_size,
-                        alloc_prefix: p.prefix,
-                        next_offset: 0,
-                        bits,
-                    },
-                );
-            }
-            _ => {}
+        if let ast::Statement::Let(l) = stmt {
+            ctx.add_variable(l);
         }
     }
 
@@ -180,10 +133,14 @@ fn lower_with_base_dir_and_params(
     );
 
     // Pre-lowering validation
-    validate_ast(file, &ctx)?;
+    validate_ast(file)?;
 
     // Second pass: expand loops and collect all concrete statements
     let expanded = ctx.expand_statements(&file.statements)?;
+    for stmt in &expanded {
+        ctx.add_declaration(stmt)?;
+    }
+    check_profile_refs(&expanded, &ctx)?;
 
     // Third pass: lower to Topology
     let mut topology = types::Topology::default();
@@ -194,7 +151,7 @@ fn lower_with_base_dir_and_params(
         let base = base_dir.ok_or_else(|| {
             crate::Error::NllParse("import requires file-based parsing (use parse_file)".into())
         })?;
-        resolve_imports(&file.imports, base, &mut topology, visited)?;
+        resolve_imports(&file.imports, base, &mut topology, visited, &ctx.variables)?;
     }
 
     // Add profiles to topology (for validator cross-referencing)
@@ -204,11 +161,38 @@ fn lower_with_base_dir_and_params(
             .insert(name.clone(), lower_profile(profile_def));
     }
 
+    // Every node the lab will have, for glob network members: matched
+    // against the nodes lowered so far, a glob missed the ones declared
+    // after the network (#205).
+    let mut node_names: BTreeSet<String> = topology.nodes.keys().cloned().collect();
+    for stmt in &expanded {
+        match stmt {
+            ast::Statement::Node(n) => {
+                node_names.insert(n.name.clone());
+            }
+            ast::Statement::Pattern(p) => {
+                let mut names = p.nodes.clone();
+                match &p.kind {
+                    ast::PatternKind::Star { hub } => names.push(hub.clone()),
+                    // `ring r { count 4 }` names its nodes r1..r4
+                    ast::PatternKind::Ring if names.is_empty() => {
+                        let n = p.count.unwrap_or(0).clamp(0, MAX_LOOP_ITERATIONS);
+                        names.extend((1..=n).map(|i| format!("r{i}")));
+                    }
+                    _ => {}
+                }
+                node_names.extend(names.iter().map(|n| format!("{}.{n}", p.name)));
+            }
+            _ => {}
+        }
+    }
     for stmt in &expanded {
         match stmt {
             ast::Statement::Node(n) => lower_node(&mut topology, n, &mut ctx)?,
             ast::Statement::Link(l) => lower_link(&mut topology, l, &mut ctx)?,
-            ast::Statement::Network(n) => lower_network(&mut topology, n, &ctx.variables)?,
+            ast::Statement::Network(n) => {
+                lower_network(&mut topology, n, &ctx.variables, &node_names)?
+            }
             ast::Statement::Impair(i) => lower_impair(&mut topology, i)?,
             ast::Statement::Rate(r) => lower_rate(&mut topology, r)?,
             ast::Statement::Qdisc(q) => lower_qdisc(&mut topology, q)?,
@@ -348,8 +332,16 @@ fn resolve_imports(
     base_dir: &Path,
     topology: &mut types::Topology,
     visited: &mut HashSet<std::path::PathBuf>,
+    vars: &BTreeMap<String, String>,
 ) -> Result<()> {
     for imp in imports {
+        // `as r(count=${n})`: the argument is the importer's value, not
+        // the text `${n}` (#205)
+        let params: Vec<(String, String)> = imp
+            .params
+            .iter()
+            .map(|(k, v)| (k.clone(), interpolate(v, vars)))
+            .collect();
         let import_path = base_dir.join(&imp.path);
         let canonical = std::fs::canonicalize(&import_path).map_err(|e| {
             crate::Error::NllParse(format!("cannot resolve import '{}': {e}", imp.path))
@@ -377,13 +369,13 @@ fn resolve_imports(
             .map_err(|e| super::attach_source(e, &content, &import_name))?;
 
         // Resolve parametric import: inject caller params, apply defaults from `param` stmts
-        if !imp.params.is_empty()
+        if !params.is_empty()
             || ast
                 .statements
                 .iter()
                 .any(|s| matches!(s, ast::Statement::Param(_)))
         {
-            resolve_import_params(&imp.params, &mut ast)?;
+            resolve_import_params(&params, &mut ast)?;
         }
 
         let import_base = import_path.parent().unwrap_or(base_dir);
@@ -456,6 +448,7 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
     // Merge nodes with prefixed names (use - separator for parser compatibility).
     // Profile references are prefixed alongside the profiles themselves so
     // the validator's dangling-profile check keeps matching.
+    let pn = |n: &str| format!("{alias}-{n}");
     for (name, mut node) in imported.nodes {
         node.profiles = node
             .profiles
@@ -467,6 +460,13 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
             .into_iter()
             .map(|d| format!("{alias}-{d}"))
             .collect();
+        // WireGuard peers and BGP neighbours name nodes too (#205)
+        for wg in node.wireguard.values_mut() {
+            prefix_wireguard_peers(wg, &pn);
+        }
+        if let Some(frr) = &mut node.frr {
+            prefix_bgp_neighbors(frr, &pn);
+        }
         main.nodes.insert(format!("{alias}-{name}"), node);
     }
 
@@ -488,6 +488,10 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
         for (key, port) in old_ports {
             network.ports.insert(prefix_endpoint(alias, &key), port);
         }
+        for imp in &mut network.impairments {
+            imp.src = prefix_endpoint(alias, &imp.src);
+            imp.dst = prefix_endpoint(alias, &imp.dst);
+        }
         main.networks.insert(format!("{alias}-{name}"), network);
     }
 
@@ -501,15 +505,29 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
         main.rate_limits.insert(prefix_endpoint(alias, &key), rl);
     }
 
+    // …and qdisc blocks, which were dropped (#205)
+    for (key, q) in imported.qdiscs {
+        main.qdiscs.insert(prefix_endpoint(alias, &key), q);
+    }
+
     // Merge profiles with prefixed names
-    for (name, profile) in imported.profiles {
+    for (name, mut profile) in imported.profiles {
+        if let Some(frr) = &mut profile.frr {
+            prefix_bgp_neighbors(frr, &pn);
+        }
         main.profiles.insert(format!("{alias}-{name}"), profile);
     }
 
     // Assertions, scenarios and benchmarks travel with the module too
     // (they used to be dropped silently), with their node references
-    // prefixed like everything else.
-    let pn = |n: &str| format!("{alias}-{n}");
+    // prefixed like everything else. So does its `validate` block's
+    // settle policy; the importer's own, lowered after, wins.
+    if imported.assertion_retries.is_some() {
+        main.assertion_retries = imported.assertion_retries;
+    }
+    if imported.assertion_interval.is_some() {
+        main.assertion_interval = imported.assertion_interval;
+    }
     for a in imported.assertions {
         main.assertions.push(prefix_lowered_assertion(a, &pn));
     }
@@ -544,6 +562,22 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
             }
         }
         main.benchmarks.push(b);
+    }
+}
+
+fn prefix_wireguard_peers(wg: &mut types::WireguardConfig, pn: &dyn Fn(&str) -> String) {
+    wg.peers = wg.peers.iter().map(|p| pn(p)).collect();
+    wg.peer_settings = std::mem::take(&mut wg.peer_settings)
+        .into_iter()
+        .map(|(name, peer)| (pn(&name), peer))
+        .collect();
+}
+
+fn prefix_bgp_neighbors(frr: &mut types::FrrConfig, pn: &dyn Fn(&str) -> String) {
+    if let Some(bgp) = &mut frr.bgp {
+        for n in &mut bgp.neighbors {
+            n.node = pn(&n.node);
+        }
     }
 }
 
@@ -1035,6 +1069,62 @@ impl LowerCtx {
         self.variables.insert(l.name.clone(), l.value.clone());
     }
 
+    /// A `profile`, `defaults` or `pool` statement of the expanded list.
+    fn add_declaration(&mut self, stmt: &ast::Statement) -> Result<()> {
+        match stmt {
+            ast::Statement::Profile(p) => self.add_profile(p),
+            ast::Statement::Defaults(d) => match &d.kind {
+                ast::DefaultsKind::Link => self.default_link_mtu = d.mtu,
+                ast::DefaultsKind::Impair => self.default_impair = d.impair.clone(),
+                ast::DefaultsKind::Rate => self.default_rate = d.rate.clone(),
+                ast::DefaultsKind::Named(name) => {
+                    self.link_profiles.insert(name.clone(), d.clone());
+                }
+            },
+            ast::Statement::Pool(p) => self.add_pool(p)?,
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn add_pool(&mut self, p: &ast::PoolDef) -> Result<()> {
+        let (ip, prefix) = crate::helpers::parse_cidr(&p.base).map_err(|e| {
+            crate::Error::NllParse(format!("pool '{}': invalid base '{}': {e}", p.name, p.base))
+        })?;
+        let bits = crate::helpers::addr_bits(ip);
+        if p.prefix > bits || p.prefix < prefix {
+            return Err(crate::Error::NllParse(format!(
+                "pool '{}': allocation prefix /{} must be between the pool prefix /{prefix} and /{bits}",
+                p.name, p.prefix
+            )));
+        }
+        // Mask to the network address so `pool p 10.0.0.5/8 /30`
+        // allocates from 10.0.0.0.
+        let base = crate::helpers::ip_to_bits(crate::helpers::network_address(ip, prefix));
+        // An IPv6 /0 pool has 2^128 addresses, which does not fit
+        // u128; saturate — no lab will exhaust it.
+        let pool_size = 1u128
+            .checked_shl(u32::from(bits - prefix))
+            .unwrap_or(u128::MAX);
+        if self.pools.contains_key(&p.name) {
+            return Err(crate::Error::NllParse(format!(
+                "duplicate pool name '{}'",
+                p.name
+            )));
+        }
+        self.pools.insert(
+            p.name.clone(),
+            PoolState {
+                base,
+                pool_size,
+                alloc_prefix: p.prefix,
+                next_offset: 0,
+                bits,
+            },
+        );
+        Ok(())
+    }
+
     fn expand_statements(&self, stmts: &[ast::Statement]) -> Result<Vec<ast::Statement>> {
         let mut vars = self.variables.clone();
         self.expand_into(stmts, &mut vars)
@@ -1080,12 +1170,29 @@ impl LowerCtx {
                 ast::Statement::Site(site) => {
                     let prefix = format!("{}-", interpolate(&site.name, vars));
                     let saved = vars.clone();
-                    let inner = self.expand_into(&site.body, vars)?;
-                    *vars = saved;
+                    let mut inner = self.expand_into(&site.body, vars)?;
+                    *vars = saved.clone();
+                    // A cross-reference names a node of the site as the
+                    // site writes it, `${r.eth0}`: bind each of them to
+                    // its prefixed name and expand again (#205).
+                    let local: Vec<String> = inner
+                        .iter()
+                        .filter_map(|st| match st {
+                            ast::Statement::Node(n) => Some(n.name.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    if !local.is_empty() {
+                        for n in &local {
+                            vars.insert(format!("{SITE_NODE}{n}"), format!("{prefix}{n}"));
+                        }
+                        inner = self.expand_into(&site.body, vars)?;
+                        *vars = saved;
+                    }
                     result.extend(inner.into_iter().map(|st| prefix_statement(st, &prefix)));
                 }
                 other => {
-                    result.push(interpolate_statement(other, vars));
+                    result.push(expand_statement(other, vars)?);
                 }
             }
         }
@@ -1116,6 +1223,71 @@ impl LowerCtx {
 
         *vars = saved;
         Ok(result)
+    }
+}
+
+/// One statement interpolated with the scope it sits in, the `for` loops
+/// inside its block expanded there too: node and profile property loops,
+/// `nat` loops and network `impair` loops. They were expanded at lowering
+/// time with the file's top-level variables only, so an enclosing loop's
+/// variable or a `site`'s `let` was unknown in them (#205).
+fn expand_statement(
+    stmt: &ast::Statement,
+    vars: &BTreeMap<String, String>,
+) -> Result<ast::Statement> {
+    let expand_props = |props: &[ast::NodeProp]| -> Result<Vec<ast::NodeProp>> {
+        expand_node_props(props, vars)?
+            .into_iter()
+            .map(|prop| match prop {
+                ast::NodeProp::Nat(nat) => Ok(ast::NodeProp::Nat(ast::NatDef {
+                    items: expand_nat_rules(&nat, vars)?
+                        .into_iter()
+                        .map(|r| ast::NatItem::Rule(Box::new(r)))
+                        .collect(),
+                })),
+                other => Ok(other),
+            })
+            .collect()
+    };
+    Ok(match interpolate_statement(stmt, vars) {
+        ast::Statement::Node(mut n) => {
+            n.props = expand_props(&n.props)?;
+            ast::Statement::Node(n)
+        }
+        ast::Statement::Profile(mut p) => {
+            p.props = expand_props(&p.props)?;
+            ast::Statement::Profile(p)
+        }
+        ast::Statement::Network(mut n) => {
+            n.impairments = expand_network_impairs(&n.impairments, &n.loops, vars)?;
+            n.loops.clear();
+            ast::Statement::Network(n)
+        }
+        other => other,
+    })
+}
+
+/// Every node's profiles exist. Checked on the expanded statements, so a
+/// profile declared in an `if` block counts and `node r : ${kind}` is
+/// checked as the name it interpolates to (#205).
+fn check_profile_refs(expanded: &[ast::Statement], ctx: &LowerCtx) -> Result<()> {
+    let errors: Vec<String> = expanded
+        .iter()
+        .filter_map(|stmt| match stmt {
+            ast::Statement::Node(n) => Some(n),
+            _ => None,
+        })
+        .flat_map(|n| {
+            n.profiles
+                .iter()
+                .filter(|p| !ctx.profiles.contains_key(*p))
+                .map(|p| format!("node '{}' references undefined profile '{p}'", n.name))
+        })
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(crate::Error::NllParse(errors.join("; ")))
     }
 }
 
@@ -1268,6 +1440,27 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
                 .into_iter()
                 .map(|d| format!("{prefix}{d}"))
                 .collect();
+            // WireGuard peers and BGP neighbours name nodes too (#205)
+            for prop in &mut n.props {
+                match prop {
+                    ast::NodeProp::Wireguard(wg) => {
+                        for peer in &mut wg.peers {
+                            *peer = format!("{prefix}{peer}");
+                        }
+                        for peer in &mut wg.peer_settings {
+                            peer.name = format!("{prefix}{}", peer.name);
+                        }
+                    }
+                    ast::NodeProp::Frr(frr) => {
+                        if let Some(bgp) = &mut frr.bgp {
+                            for neighbor in &mut bgp.neighbors {
+                                neighbor.node = format!("{prefix}{}", neighbor.node);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
             S::Node(n)
         }
         S::Link(mut l) => {
@@ -1297,6 +1490,10 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
         S::Rate(mut r) => {
             r.node = format!("{prefix}{}", r.node);
             S::Rate(r)
+        }
+        S::Qdisc(mut q) => {
+            q.node = format!("{prefix}{}", q.node);
+            S::Qdisc(q)
         }
         S::Pattern(mut p) => {
             p.name = format!("{prefix}{}", p.name);
@@ -1560,17 +1757,43 @@ fn eval_expr(expr: &str, vars: &BTreeMap<String, String>) -> String {
     }
 
     // Simple variable lookup
-    vars.get(expr)
-        .cloned()
-        .unwrap_or_else(|| format!("${{{expr}}}"))
+    if let Some(value) = vars.get(expr) {
+        return value.clone();
+    }
+    // `${r.eth0}` inside a `site`: its node `r` is `<site>-r`, resolved
+    // as a cross-reference after lowering
+    if let Some((node, rest)) = expr.split_once('.')
+        && let Some(full) = vars.get(&format!("{SITE_NODE}{node}"))
+    {
+        return format!("${{{full}.{rest}}}");
+    }
+    format!("${{{expr}}}")
+}
+
+/// Variable-name prefix binding a `site`'s node names to their prefixed
+/// ones; no NLL variable can start with `@`.
+const SITE_NODE: &str = "@site:";
+
+/// Byte index of the first `ch` outside `"…"`.
+fn find_unquoted(s: &str, ch: char) -> Option<usize> {
+    let mut quoted = false;
+    for (i, c) in s.char_indices() {
+        if c == '"' {
+            quoted = !quoted;
+        } else if c == ch && !quoted {
+            return Some(i);
+        }
+    }
+    None
 }
 
 /// Evaluate a ternary expression: `var == "lit" ? true_val : false_val`
 fn eval_ternary(expr: &str, vars: &BTreeMap<String, String>) -> Option<String> {
-    let q = expr.find('?')?;
+    let q = find_unquoted(expr, '?')?;
     let condition = expr[..q].trim();
     let rest = expr[q + 1..].trim();
-    let colon = rest.find(':')?;
+    // not the `:` of a quoted `"fd00::1"`
+    let colon = find_unquoted(rest, ':')?;
     let true_val = rest[..colon].trim();
     let false_val = rest[colon + 1..].trim();
 
@@ -1727,9 +1950,9 @@ fn tokenize_arith(expr: &str, vars: &BTreeMap<String, String>) -> Vec<ArithTok> 
                     );
                 if is_unary {
                     // Parse the number/variable and negate
-                    let val = read_operand(&mut chars, vars);
+                    let val = read_operand(&mut chars, vars).and_then(i64::checked_neg);
                     if let Some(n) = val {
-                        tokens.push(ArithTok::Num(-n));
+                        tokens.push(ArithTok::Num(n));
                     } else {
                         return vec![];
                     } // can't parse → bail
@@ -1843,13 +2066,15 @@ fn parse_arith_expr(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result
     let mut left = parse_arith_term(tokens, pos)?;
     while *pos < tokens.len() {
         match tokens[*pos] {
+            // overflow is not a number: the expression stays unevaluated
+            // (it panicked)
             ArithTok::Plus => {
                 *pos += 1;
-                left += parse_arith_term(tokens, pos)?;
+                left = left.checked_add(parse_arith_term(tokens, pos)?).ok_or(())?;
             }
             ArithTok::Minus => {
                 *pos += 1;
-                left -= parse_arith_term(tokens, pos)?;
+                left = left.checked_sub(parse_arith_term(tokens, pos)?).ok_or(())?;
             }
             _ => break,
         }
@@ -1864,23 +2089,23 @@ fn parse_arith_term(tokens: &[ArithTok], pos: &mut usize) -> std::result::Result
         match tokens[*pos] {
             ArithTok::Mul => {
                 *pos += 1;
-                left *= parse_arith_factor(tokens, pos)?;
+                left = left
+                    .checked_mul(parse_arith_factor(tokens, pos)?)
+                    .ok_or(())?;
             }
+            // `checked_div` / `checked_rem` are `None` for a zero divisor
+            // and for `i64::MIN / -1`
             ArithTok::Div => {
                 *pos += 1;
-                let right = parse_arith_factor(tokens, pos)?;
-                if right == 0 {
-                    return Err(());
-                }
-                left /= right;
+                left = left
+                    .checked_div(parse_arith_factor(tokens, pos)?)
+                    .ok_or(())?;
             }
             ArithTok::Mod => {
                 *pos += 1;
-                let right = parse_arith_factor(tokens, pos)?;
-                if right == 0 {
-                    return Err(());
-                }
-                left %= right;
+                left = left
+                    .checked_rem(parse_arith_factor(tokens, pos)?)
+                    .ok_or(())?;
             }
             _ => break,
         }
@@ -1919,7 +2144,11 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
         ast::Statement::Impair(i) => ast::Statement::Impair(interpolate_impair_def(i, vars)),
         ast::Statement::Rate(r) => ast::Statement::Rate(interpolate_rate_def(r, vars)),
         ast::Statement::Qdisc(q) => ast::Statement::Qdisc(interpolate_qdisc_def(q, vars)),
-        ast::Statement::Profile(p) => ast::Statement::Profile(p.clone()),
+        // A profile body is interpolated like a node's (#205).
+        ast::Statement::Profile(p) => ast::Statement::Profile(ast::ProfileDef {
+            name: i(&p.name, vars),
+            props: p.props.iter().map(|q| interpolate_prop(q, vars)).collect(),
+        }),
         ast::Statement::Defaults(d) => ast::Statement::Defaults(d.clone()),
         ast::Statement::Pool(p) => ast::Statement::Pool(p.clone()),
         ast::Statement::Pattern(p) => ast::Statement::Pattern(ast::PatternDef {
@@ -2383,7 +2612,15 @@ fn interpolate_network(n: &ast::NetworkDef, vars: &BTreeMap<String, String>) -> 
         mtu: n.mtu,
         subnet: n.subnet.as_ref().map(|s| i(s, vars)),
         vlans: n.vlans.clone(),
-        ports: n.ports.clone(),
+        ports: n
+            .ports
+            .iter()
+            .map(|port| ast::PortDef {
+                endpoint: i(&port.endpoint, vars),
+                addresses: port.addresses.iter().map(|a| i(a, vars)).collect(),
+                ..port.clone()
+            })
+            .collect(),
         impairments: n
             .impairments
             .iter()
@@ -2626,11 +2863,13 @@ fn interpolate_qdisc_def(q: &ast::QdiscDef, vars: &BTreeMap<String, String>) -> 
 
 // ─── Pre-lowering validation ──────────────────────────────
 
-fn validate_ast(file: &ast::File, ctx: &LowerCtx) -> Result<()> {
+/// Checks on the statements as written. A node's profiles are checked
+/// after expansion ([`check_profile_refs`]).
+fn validate_ast(file: &ast::File) -> Result<()> {
     let mut errors = Vec::new();
 
     for stmt in &file.statements {
-        validate_stmt(stmt, ctx, &mut errors);
+        validate_stmt(stmt, &mut errors);
     }
 
     if errors.is_empty() {
@@ -2640,38 +2879,24 @@ fn validate_ast(file: &ast::File, ctx: &LowerCtx) -> Result<()> {
     }
 }
 
-fn validate_stmt(stmt: &ast::Statement, ctx: &LowerCtx, errors: &mut Vec<String>) {
-    match stmt {
-        ast::Statement::Node(n) => {
-            // Check all profiles exist
-            for profile in &n.profiles {
-                if !ctx.profiles.contains_key(profile) {
-                    errors.push(format!(
-                        "node '{}' references undefined profile '{profile}'",
-                        n.name
-                    ));
-                }
-            }
+fn validate_stmt(stmt: &ast::Statement, errors: &mut Vec<String>) {
+    if let ast::Statement::For(f) = stmt {
+        if let ast::ForRange::IntRange { start, end } = &f.range
+            && start > end
+        {
+            errors.push(format!(
+                "for loop '{}' has empty range {}..{}",
+                f.var, start, end
+            ));
         }
-        ast::Statement::For(f) => {
-            if let ast::ForRange::IntRange { start, end } = &f.range
-                && start > end
-            {
-                errors.push(format!(
-                    "for loop '{}' has empty range {}..{}",
-                    f.var, start, end
-                ));
-            }
-            if let ast::ForRange::List(items) = &f.range
-                && items.is_empty()
-            {
-                errors.push(format!("for loop '{}' has empty list", f.var));
-            }
-            for stmt in &f.body {
-                validate_stmt(stmt, ctx, errors);
-            }
+        if let ast::ForRange::List(items) = &f.range
+            && items.is_empty()
+        {
+            errors.push(format!("for loop '{}' has empty list", f.var));
         }
-        _ => {}
+        for stmt in &f.body {
+            validate_stmt(stmt, errors);
+        }
     }
 }
 
@@ -3069,13 +3294,14 @@ fn apply_node_props(
                 let lo = node.interfaces.entry("lo".to_string()).or_default();
                 if let Some(pool_name) = addr.strip_prefix("pool:") {
                     // Allocate from pool
-                    if let Some(pool) = ctx.pools.get_mut(pool_name) {
-                        let allocated = pool.allocate(pool_name)?;
-                        lo.addresses.push(allocated);
-                    } else {
-                        tracing::warn!("unknown pool '{pool_name}' for loopback");
-                        lo.addresses.push(addr.clone());
-                    }
+                    // An unknown pool was kept as the address `pool:NAME`,
+                    // which validation then called an invalid CIDR (#205).
+                    let pool = ctx.pools.get_mut(pool_name).ok_or_else(|| {
+                        crate::Error::NllParse(format!(
+                            "`lo pool {pool_name}` references undefined pool '{pool_name}'"
+                        ))
+                    })?;
+                    lo.addresses.push(pool.allocate(pool_name)?);
                 } else {
                     lo.addresses.push(addr.clone());
                 }
@@ -3524,6 +3750,7 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
 
     let profile_mtu = profile_defaults.and_then(|d| d.mtu);
     let profile_impair = profile_defaults.and_then(|d| d.impair.as_ref());
+    let profile_rate = profile_defaults.and_then(|d| d.rate.as_ref());
 
     // Apply link defaults: per-link > profile > global
     let mtu = link.mtu.or(profile_mtu).or(ctx.default_link_mtu);
@@ -3557,8 +3784,14 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
         topo.impairments.insert(ep, lower_impair_props(imp)?);
     }
 
-    // Lower rate (both endpoints)
-    if let Some(rate) = &link.rate {
+    // Lower rate (both endpoints; per-link > profile > global). The
+    // defaults were parsed and never applied (#205).
+    let effective_rate = link
+        .rate
+        .as_ref()
+        .or(profile_rate)
+        .or(ctx.default_rate.as_ref());
+    if let Some(rate) = effective_rate {
         let left_ep = format!("{}:{}", link.left_node, link.left_iface);
         let right_ep = format!("{}:{}", link.right_node, link.right_iface);
         let rl = lower_rate_props(rate)?;
@@ -3566,6 +3799,62 @@ fn lower_link(topo: &mut types::Topology, link: &ast::LinkDef, ctx: &mut LowerCt
         topo.rate_limits.insert(right_ep, rl);
     }
     Ok(())
+}
+
+/// A network's `subnet` auto-assignment: the next free host address, in
+/// member order, for each member without an address in `explicit`. An
+/// address an explicit port holds is skipped: it was handed out again
+/// (#205). `None` for `auto[/N]` and unresolved subnets, left for deploy.
+/// Shared with `render`, which writes the ports this would not re-create.
+pub(crate) fn subnet_auto_assign(
+    subnet: &str,
+    members: &[String],
+    explicit: &BTreeMap<String, Vec<String>>,
+) -> std::result::Result<Option<BTreeMap<String, String>>, String> {
+    if subnet.starts_with("auto") || subnet.contains("${") {
+        return Ok(None);
+    }
+    let (base_ip, prefix) = crate::helpers::parse_cidr(subnet)
+        .map_err(|e| format!("invalid subnet '{subnet}': {e}"))?;
+    let base_ip = crate::helpers::network_address(base_ip, prefix);
+    let host_bits = match base_ip {
+        std::net::IpAddr::V4(_) => 32u32.saturating_sub(prefix as u32),
+        std::net::IpAddr::V6(_) => 128u32.saturating_sub(prefix as u32),
+    };
+    // usable hosts: 2^bits - 2 (network + broadcast), capped so the
+    // comparison below cannot overflow
+    let max_host: u64 = if host_bits >= 63 {
+        u64::MAX
+    } else {
+        (1u64 << host_bits).saturating_sub(2)
+    };
+    let used: std::collections::BTreeSet<std::net::IpAddr> = explicit
+        .values()
+        .flatten()
+        .filter_map(|a| a.split('/').next()?.parse().ok())
+        .collect();
+    let mut assigned = BTreeMap::new();
+    let mut host_num: u64 = 1;
+    for member in members {
+        if explicit.contains_key(member) {
+            continue;
+        }
+        let ip = loop {
+            if host_num > max_host || host_num > u64::from(u32::MAX) {
+                return Err(format!(
+                    "subnet {subnet} has only {max_host} usable host address(es) but {} members need one",
+                    members.len()
+                ));
+            }
+            let ip = increment_ip(base_ip, host_num as u32);
+            host_num += 1;
+            if !used.contains(&ip) {
+                break ip;
+            }
+        };
+        assigned.insert(member.clone(), format!("{ip}/{prefix}"));
+    }
+    Ok(Some(assigned))
 }
 
 /// Increment an IP address by a host number offset (saturating at the
@@ -3616,16 +3905,13 @@ fn lower_rate_props(props: &ast::RateProps) -> Result<types::RateLimit> {
 
 /// Resolve glob patterns in network member lists.
 /// E.g., `*-black:fo` expands to `alpha-black:fo`, `bravo-black:fo`, etc.
-fn resolve_glob_members(
-    members: &[String],
-    all_nodes: &BTreeMap<String, types::Node>,
-) -> Vec<String> {
+fn resolve_glob_members(members: &[String], all_nodes: &BTreeSet<String>) -> Vec<String> {
     let mut resolved = Vec::new();
     for member in members {
         if let Some((node_pattern, iface)) = member.split_once(':') {
             if node_pattern.contains('*') {
                 // Glob: expand against all known node names
-                for node_name in all_nodes.keys() {
+                for node_name in all_nodes {
                     if glob_matches(node_pattern, node_name) {
                         resolved.push(format!("{node_name}:{iface}"));
                     }
@@ -3635,7 +3921,7 @@ fn resolve_glob_members(
             }
         } else if member.contains('*') {
             // Glob without interface — match bare node names
-            for node_name in all_nodes.keys() {
+            for node_name in all_nodes {
                 if glob_matches(member, node_name) {
                     resolved.push(node_name.clone());
                 }
@@ -3658,16 +3944,20 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
     if parts.len() != 2 {
         return false; // only single * supported
     }
-    name.starts_with(parts[0]) && name.ends_with(parts[1])
+    // `h*h` is not `h`: the two ends must not overlap
+    name.len() >= parts[0].len() + parts[1].len()
+        && name.starts_with(parts[0])
+        && name.ends_with(parts[1])
 }
 
 fn lower_network(
     topo: &mut types::Topology,
     net: &ast::NetworkDef,
     vars: &BTreeMap<String, String>,
+    node_names: &BTreeSet<String>,
 ) -> Result<()> {
     // Resolve glob patterns in member lists (e.g., "*-black:fo" → "alpha-black:fo")
-    let resolved_members = resolve_glob_members(&net.members, &topo.nodes);
+    let resolved_members = resolve_glob_members(&net.members, node_names);
 
     let mut network = types::Network {
         kind: Some("bridge".to_string()),
@@ -3754,51 +4044,21 @@ fn lower_network(
     // unresolved placeholders are left for deploy time.
     if let Some(subnet) = &net.subnet {
         network.subnet = Some(subnet.clone());
-        if !subnet.starts_with("auto") && !subnet.contains("${") {
-            let (base_ip, prefix) = crate::helpers::parse_cidr(subnet).map_err(|e| {
-                crate::Error::NllParse(format!(
-                    "network '{}': invalid subnet '{subnet}': {e}",
-                    net.name
-                ))
-            })?;
-            let base_ip = crate::helpers::network_address(base_ip, prefix);
-            let host_bits = match base_ip {
-                std::net::IpAddr::V4(_) => 32u32.saturating_sub(prefix as u32),
-                std::net::IpAddr::V6(_) => 128u32.saturating_sub(prefix as u32),
-            };
-            // usable hosts: 2^bits - 2 (network + broadcast), capped so the
-            // comparison below cannot overflow
-            let max_host: u64 = if host_bits >= 63 {
-                u64::MAX
-            } else {
-                (1u64 << host_bits).saturating_sub(2)
-            };
-            let mut host_num: u64 = 1;
-            for member in &network.members {
-                if network
-                    .ports
-                    .get(member)
-                    .is_some_and(|p| !p.addresses.is_empty())
-                {
-                    continue;
-                }
-                if host_num > max_host {
-                    return Err(crate::Error::NllParse(format!(
-                        "network '{}': subnet {subnet} has only {max_host} usable host address(es) but {} members need one",
-                        net.name,
-                        network.members.len()
-                    )));
-                }
-                let ip = increment_ip(base_ip, host_num as u32);
-                let addr = format!("{ip}/{prefix}");
-                network
-                    .ports
-                    .entry(member.clone())
-                    .or_default()
-                    .addresses
-                    .push(addr);
-                host_num += 1;
-            }
+        let explicit: BTreeMap<String, Vec<String>> = network
+            .ports
+            .iter()
+            .filter(|(_, p)| !p.addresses.is_empty())
+            .map(|(k, p)| (k.clone(), p.addresses.clone()))
+            .collect();
+        let assigned = subnet_auto_assign(subnet, &network.members, &explicit)
+            .map_err(|e| crate::Error::NllParse(format!("network '{}': {e}", net.name)))?;
+        for (member, addr) in assigned.into_iter().flatten() {
+            network
+                .ports
+                .entry(member)
+                .or_default()
+                .addresses
+                .push(addr);
         }
     }
 
@@ -7539,5 +7799,261 @@ link r:eth0 -- h:eth0 { fd00:1::1/64 -- fd00:1::2/64 }
                 "{rule}: {err}"
             );
         }
+    }
+
+    // ── #205 ──
+
+    #[test]
+    fn nested_interpolation_resolves_the_inner_one_first() {
+        let topo = parse_and_lower(
+            r#"lab "n"
+let host1 = "alpha"
+for i in 1..2 {
+  node router${i}
+  node host${i} { route default via ${router${i}.eth0} }
+  link router${i}:eth0 -- host${i}:eth0 { 10.${i}.0.1/24 -- 10.${i}.0.2/24 }
+}
+node n-${host${1}}
+"#,
+        );
+        assert_eq!(
+            topo.nodes["host2"].routes["default"].via.as_deref(),
+            Some("10.2.0.1")
+        );
+        assert!(
+            topo.nodes.contains_key("n-alpha"),
+            "{:?}",
+            topo.nodes.keys()
+        );
+    }
+
+    #[test]
+    fn the_evaluator_does_not_panic_and_reads_quoted_colons() {
+        let topo = parse_and_lower(
+            r#"lab "e"
+let big = 9223372036854775807
+let v6 = "yes"
+node a { route default via ${v6 == "yes" ? "fd00::1" : "10.0.0.1"} }
+node b { sysctl "x.y" "${big * 2}" }
+node c { sysctl "x.y" "${(0 - big - 1) / -1}" }
+"#,
+        );
+        assert_eq!(
+            topo.nodes["a"].routes["default"].via.as_deref(),
+            Some("fd00::1")
+        );
+        // an overflow is not a number: the expression stays as written
+        assert_eq!(topo.nodes["b"].sysctls["x.y"], "${big * 2}");
+        assert_eq!(topo.nodes["c"].sysctls["x.y"], "${(0 - big - 1) / -1}");
+    }
+
+    #[test]
+    fn defaults_rate_applies_to_links() {
+        let topo = parse_and_lower(
+            r#"lab "d"
+defaults rate { egress 100mbit }
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  rate egress 5mbit }
+"#,
+        );
+        assert_eq!(
+            topo.rate_limits["b:eth0"].egress.as_deref(),
+            Some("100mbit")
+        );
+        assert_eq!(topo.rate_limits["c:eth0"].egress.as_deref(), Some("5mbit"));
+    }
+
+    #[test]
+    fn auto_assignment_skips_an_explicit_ports_address() {
+        let topo = parse_and_lower(
+            r#"lab "s"
+node a
+node b
+node c
+network lan {
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.0.0.0/24
+  port b { 10.0.0.1/24 }
+}
+"#,
+        );
+        let addr = |m: &str| topo.networks["lan"].ports[m].addresses.clone();
+        assert_eq!(addr("a:eth0"), vec!["10.0.0.2/24"]);
+        assert_eq!(addr("b:eth0"), vec!["10.0.0.1/24"]);
+        assert_eq!(addr("c:eth0"), vec!["10.0.0.3/24"]);
+    }
+
+    #[test]
+    fn declarations_inside_if_blocks_and_profile_bodies_interpolate() {
+        let topo = parse_and_lower(
+            r#"lab "p"
+let env = "prod"
+let ttl = "33"
+let kind = "router"
+if ${env} == "prod" {
+  profile router { forward ipv4  sysctl "net.ipv4.ip_default_ttl" "${ttl}" }
+  defaults link { mtu 9000 }
+  pool p 10.9.0.0/24 /30
+}
+node r : ${kind}
+node h
+link r:eth0 -- h:eth0 { pool p }
+"#,
+        );
+        assert_eq!(topo.nodes["r"].profiles, vec!["router"]);
+        assert_eq!(
+            topo.profiles["router"].sysctls["net.ipv4.ip_default_ttl"],
+            "33"
+        );
+        assert_eq!(topo.links[0].mtu, Some(9000));
+        assert_eq!(topo.links[0].addresses.as_ref().unwrap()[0], "10.9.0.1/30");
+    }
+
+    #[test]
+    fn block_loops_see_the_enclosing_scope() {
+        let topo = parse_and_lower(
+            r#"lab "l"
+let n = 7
+site east {
+  let last = 2
+  for i in 0..${last} { node n${i} }
+  network ring {
+    members [n0:rf, n1:rf, n2:rf]
+    subnet 10.0.0.0/24
+    for i in 0..${last - 1} {
+      impair n${i} -- n${i + 1} { delay 5ms }
+    }
+  }
+}
+for k in 1..2 {
+  node a${k} {
+    for i in 1..2 { lo 10.${k}.0.${i + k * 10}/32 }
+  }
+}
+node r${n}
+node h
+network lan {
+  members [r${n}:eth0, h:eth0]
+  port r${n}:eth0 { 10.7.0.1/24 }
+  port h { 10.7.0.2/24 }
+}
+"#,
+        );
+        let ring = &topo.networks["east-ring"];
+        assert_eq!(ring.impairments.len(), 2, "{:?}", ring.impairments);
+        assert_eq!(ring.impairments[1].src, "east-n1");
+        assert_eq!(ring.impairments[1].dst, "east-n2");
+        assert_eq!(
+            topo.nodes["a2"].interfaces["lo"].addresses,
+            vec!["10.2.0.21/32", "10.2.0.22/32"]
+        );
+        assert_eq!(
+            topo.networks["lan"].ports["r7:eth0"].addresses,
+            vec!["10.7.0.1/24"]
+        );
+    }
+
+    #[test]
+    fn glob_members_match_nodes_declared_after_the_network() {
+        let topo = parse_and_lower(
+            r#"lab "g"
+node sw
+network lan {
+  members [sw:eth0, *-h:eth0]
+  subnet 10.0.0.0/24
+}
+node a-h
+node b-h
+node h
+"#,
+        );
+        assert_eq!(
+            topo.networks["lan"].members,
+            vec!["sw:eth0", "a-h:eth0", "b-h:eth0"]
+        );
+        assert!(!super::glob_matches("h*h", "h"));
+    }
+
+    #[test]
+    fn an_unknown_loopback_pool_is_named() {
+        let err = nll::parse("lab \"u\"\npool loops 10.255.0.0/30 /32\nnode a { lo pool loopz }\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("undefined pool 'loopz'"), "{err}");
+    }
+
+    #[test]
+    fn a_site_prefixes_qdiscs_peers_and_its_cross_references() {
+        let topo = parse_and_lower(
+            r#"lab "s"
+site east {
+  node r { forward ipv4 }
+  node h { route default via ${r.eth0} }
+  node a { wireguard wg0 { key auto listen 51820 address 192.168.255.1/32 peers [b] } }
+  node b { wireguard wg0 { key auto listen 51820 address 192.168.255.2/32 peers [a] } }
+  link r:eth0 -- h:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+  link a:eth0 -- b:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
+  qdisc r:eth0 tbf { rate 10mbit burst 32k limit 64k }
+}
+"#,
+        );
+        assert_eq!(
+            topo.nodes["east-h"].routes["default"].via.as_deref(),
+            Some("10.0.0.1")
+        );
+        assert!(topo.qdiscs.contains_key("east-r:eth0"), "{:?}", topo.qdiscs);
+        assert_eq!(topo.nodes["east-a"].wireguard["wg0"].peers, vec!["east-b"]);
+        assert!(topo.validate().bail().is_ok(), "{:?}", topo.validate());
+    }
+
+    #[test]
+    fn an_import_keeps_qdiscs_and_prefixes_peers_neighbors_and_impairs() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("mod.nll"),
+            r#"param count default 1
+lab "mod"
+node a {
+  wireguard wg0 { key auto listen 51820 address 192.168.255.1/32 peers [b] }
+  frr { bgp { as 65001 neighbor b } }
+}
+node b { wireguard wg0 { key auto listen 51820 address 192.168.255.2/32 peers [a] } }
+node c { sysctl "x.y" "${count}" }
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+qdisc a:eth0 tbf { rate 10mbit burst 32k limit 64k }
+network lan {
+  members [a:eth1, b:eth1, c:eth1]
+  subnet 10.1.0.0/24
+  impair a -- b { delay 10ms }
+}
+validate retries 5 interval 1s { reach a b }
+"#,
+        )
+        .unwrap();
+        let main = dir.path().join("main.nll");
+        std::fs::write(
+            &main,
+            "param n default 3\nimport \"mod.nll\" as m(count=${n})\nlab \"main\"\n",
+        )
+        .unwrap();
+        let topo = crate::parser::parse_file(&main).unwrap();
+        assert!(topo.qdiscs.contains_key("m-a:eth0"), "{:?}", topo.qdiscs);
+        assert_eq!(topo.assertion_retries, Some(5));
+        assert_eq!(topo.assertion_interval.as_deref(), Some("1s"));
+        let imp = &topo.networks["m-lan"].impairments[0];
+        assert_eq!((imp.src.as_str(), imp.dst.as_str()), ("m-a", "m-b"));
+        assert_eq!(topo.nodes["m-a"].wireguard["wg0"].peers, vec!["m-b"]);
+        let bgp = topo.nodes["m-a"]
+            .frr
+            .as_ref()
+            .unwrap()
+            .bgp
+            .as_ref()
+            .unwrap();
+        assert_eq!(bgp.neighbors[0].node, "m-b");
+        assert_eq!(topo.nodes["m-c"].sysctls["x.y"], "3");
     }
 }

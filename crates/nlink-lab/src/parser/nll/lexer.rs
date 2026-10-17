@@ -73,6 +73,32 @@ fn lex_block_comment(lex: &mut logos::Lexer<Token>) -> FilterResult<(), LexError
     FilterResult::Error(LexError::UnterminatedBlockComment)
 }
 
+/// The rest of a `${…}` after its `${`: up to the `}` that closes it,
+/// counting nested `${…}` and skipping braces inside `"…"`. `None` (a lex
+/// error) for an empty or unterminated one.
+fn lex_interp(lex: &mut logos::Lexer<Token>) -> Option<String> {
+    let mut depth = 1usize;
+    let mut quoted = false;
+    for (i, c) in lex.remainder().char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            '{' if !quoted => depth += 1,
+            '}' if !quoted => {
+                depth -= 1;
+                if depth == 0 {
+                    if i == 0 {
+                        return None;
+                    }
+                    lex.bump(i + 1);
+                    return Some(lex.slice().to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// NLL tokens.
 ///
 /// Most keywords are context-sensitive and lex as `Ident`.  Only the
@@ -271,7 +297,9 @@ pub enum Token {
     })]
     String(String),
 
-    #[regex(r"\$\{[^}]+\}", |lex| lex.slice().to_string())]
+    /// `${…}`, braces balanced: `${leaf${i}.eth0}` is one token, its
+    /// inner `${i}` resolved first. A regex stopped at the first `}`.
+    #[token("${", lex_interp)]
     Interp(String),
 
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_-]*", |lex| lex.slice().to_string(), priority = 1)]
@@ -541,6 +569,21 @@ mod tests {
                 Token::Int("9000".into()),
             ]
         );
+    }
+
+    /// One token per `${…}`, braces balanced and quoted ones skipped:
+    /// the regex stopped at the first `}` (#205).
+    #[test]
+    fn interpolations_nest() {
+        assert_eq!(
+            lex_tokens(r#"${leaf${i}.eth0} ${x == "}" ? "a" : "b"}"#),
+            vec![
+                Token::Interp("${leaf${i}.eth0}".into()),
+                Token::Interp(r#"${x == "}" ? "a" : "b"}"#.into()),
+            ]
+        );
+        assert!(lex("${}").is_err());
+        assert!(lex("${a").is_err());
     }
 
     #[test]

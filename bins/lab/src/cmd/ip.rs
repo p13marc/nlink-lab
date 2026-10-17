@@ -33,7 +33,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     if let Some(ref iface_name) = iface {
         let iface_addrs = addrs.get(iface_name).ok_or_else(|| {
-            nlink_lab::Error::invalid_topology(format!(
+            nlink_lab::Error::invalid_argument(format!(
                 "interface '{iface_name}' not found on node '{node}'"
             ))
         })?;

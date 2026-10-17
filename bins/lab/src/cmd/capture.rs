@@ -125,7 +125,7 @@ pub struct Args {
     pub filter_not: bool,
 
     /// Stop after N seconds.
-    #[arg(long)]
+    #[arg(long, value_parser = crate::util::parse_secs)]
     pub duration: Option<f64>,
 
     /// Snap length -- truncate packets to N bytes.
@@ -151,7 +151,7 @@ pub struct Args {
     /// Rotate the pcap file every SECS seconds since the last
     /// rotation. Composes with `--max-size` (whichever threshold
     /// fires first triggers the rotation). Requires `--write`.
-    #[arg(long, value_name = "SECS")]
+    #[arg(long, value_name = "SECS", value_parser = crate::util::parse_secs)]
     pub rotate: Option<f64>,
 
     /// Number of *rotated* segments to keep (`<base>.pcap.1`
@@ -162,40 +162,19 @@ pub struct Args {
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+    let bpf = build_filter(&args)?;
     let Args {
         lab,
         endpoint,
         write,
         count,
-        filter,
-        filter_tcp,
-        filter_udp,
-        filter_icmp,
-        filter_ip_proto,
-        filter_ipv4,
-        filter_ipv6,
-        filter_arp,
-        filter_vlan,
-        filter_vlan_id,
-        filter_host,
-        filter_src_host,
-        filter_dst_host,
-        filter_net,
-        filter_src_net,
-        filter_dst_net,
-        filter_port,
-        filter_src_port,
-        filter_dst_port,
-        filter_ports,
-        filter_src_ports,
-        filter_dst_ports,
-        filter_not,
         duration,
         snap_len,
         dedupe_loopback,
         max_size,
         rotate,
         keep,
+        ..
     } = args;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
@@ -206,121 +185,6 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     })?;
 
     let ns_name = running.namespace_for(&ep.node)?.to_string();
-
-    // Reject combining the legacy `--filter` expression with
-    // any typed `--filter-*` flag — the two paths describe
-    // the same logical thing and mixing them produces
-    // surprising AND-of-AND semantics.
-    let any_typed_filter = filter_tcp
-        || filter_udp
-        || filter_icmp
-        || filter_ip_proto.is_some()
-        || filter_ipv4
-        || filter_ipv6
-        || filter_arp
-        || filter_vlan
-        || filter_vlan_id.is_some()
-        || filter_host.is_some()
-        || filter_src_host.is_some()
-        || filter_dst_host.is_some()
-        || filter_net.is_some()
-        || filter_src_net.is_some()
-        || filter_dst_net.is_some()
-        || filter_port.is_some()
-        || filter_src_port.is_some()
-        || filter_dst_port.is_some()
-        || !filter_ports.is_empty()
-        || !filter_src_ports.is_empty()
-        || !filter_dst_ports.is_empty()
-        || filter_not;
-    if filter.is_some() && any_typed_filter {
-        return Err(nlink_lab::Error::invalid_topology(
-            "cannot combine --filter \"<expr>\" with typed --filter-* flags",
-        ));
-    }
-
-    let bpf = if let Some(expr) = &filter {
-        Some(compile_legacy_bpf_filter(expr)?)
-    } else if any_typed_filter {
-        let mut b = netring::BpfFilter::builder();
-        if filter_ipv4 {
-            b = b.ipv4();
-        }
-        if filter_ipv6 {
-            b = b.ipv6();
-        }
-        if filter_arp {
-            b = b.arp();
-        }
-        // `--filter-vlan-id` implies `--filter-vlan` so the
-        // ethertype check + offset shift get emitted before
-        // the ID match.
-        if filter_vlan || filter_vlan_id.is_some() {
-            b = b.vlan();
-        }
-        if let Some(vid) = filter_vlan_id {
-            b = b.vlan_id(vid);
-        }
-        if filter_tcp {
-            b = b.tcp();
-        }
-        if filter_udp {
-            b = b.udp();
-        }
-        if filter_icmp {
-            b = b.icmp();
-        }
-        if let Some(proto) = filter_ip_proto {
-            b = b.ip_proto(proto);
-        }
-        if let Some(addr) = filter_host {
-            b = b.host(addr);
-        }
-        if let Some(addr) = filter_src_host {
-            b = b.src_host(addr);
-        }
-        if let Some(addr) = filter_dst_host {
-            b = b.dst_host(addr);
-        }
-        if let Some(s) = &filter_net {
-            b = b.net(parse_filter_cidr("--filter-net", s)?);
-        }
-        if let Some(s) = &filter_src_net {
-            b = b.src_net(parse_filter_cidr("--filter-src-net", s)?);
-        }
-        if let Some(s) = &filter_dst_net {
-            b = b.dst_net(parse_filter_cidr("--filter-dst-net", s)?);
-        }
-        if let Some(p) = filter_port {
-            b = b.port(p);
-        }
-        if let Some(p) = filter_src_port {
-            b = b.src_port(p);
-        }
-        if let Some(p) = filter_dst_port {
-            b = b.dst_port(p);
-        }
-        // netring 0.16 multi-port shortcuts. Passing an
-        // empty Vec is harmless (the builder treats it as
-        // a no-op), so we just forward unconditionally.
-        if !filter_ports.is_empty() {
-            b = b.ports(filter_ports.iter().copied());
-        }
-        if !filter_src_ports.is_empty() {
-            b = b.src_ports(filter_src_ports.iter().copied());
-        }
-        if !filter_dst_ports.is_empty() {
-            b = b.dst_ports(filter_dst_ports.iter().copied());
-        }
-        if filter_not {
-            b = b.negate();
-        }
-        Some(b.build().map_err(|e| {
-            nlink_lab::Error::invalid_topology(format!("BPF filter build failed: {e}"))
-        })?)
-    } else {
-        None
-    };
 
     let config = nlink_lab::capture::CaptureConfig {
         interface: ep.iface.clone(),
@@ -351,7 +215,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // Build the output sink. --max-size or --rotate need
     // --write (rotation only makes sense for file output).
     if (max_size.is_some() || rotate.is_some()) && write.is_none() {
-        return Err(nlink_lab::Error::invalid_topology(
+        return Err(nlink_lab::Error::invalid_argument(
             "--max-size and --rotate require --write",
         ));
     }
@@ -376,4 +240,270 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         );
     }
     Ok(())
+}
+
+/// The capture's BPF filter: the legacy `--filter` expression, or the
+/// typed `--filter-*` flags built with netring's builder. `None` without
+/// either.
+fn build_filter(args: &Args) -> nlink_lab::Result<Option<netring::BpfFilter>> {
+    let &Args {
+        ref filter,
+        filter_tcp,
+        filter_udp,
+        filter_icmp,
+        filter_ip_proto,
+        filter_ipv4,
+        filter_ipv6,
+        filter_arp,
+        filter_vlan,
+        filter_vlan_id,
+        filter_host,
+        filter_src_host,
+        filter_dst_host,
+        ref filter_net,
+        ref filter_src_net,
+        ref filter_dst_net,
+        filter_port,
+        filter_src_port,
+        filter_dst_port,
+        ref filter_ports,
+        ref filter_src_ports,
+        ref filter_dst_ports,
+        filter_not,
+        ..
+    } = args;
+    // Reject combining the legacy `--filter` expression with
+    // any typed `--filter-*` flag — the two paths describe
+    // the same logical thing and mixing them produces
+    // surprising AND-of-AND semantics.
+    let any_typed_filter = filter_tcp
+        || filter_udp
+        || filter_icmp
+        || filter_ip_proto.is_some()
+        || filter_ipv4
+        || filter_ipv6
+        || filter_arp
+        || filter_vlan
+        || filter_vlan_id.is_some()
+        || filter_host.is_some()
+        || filter_src_host.is_some()
+        || filter_dst_host.is_some()
+        || filter_net.is_some()
+        || filter_src_net.is_some()
+        || filter_dst_net.is_some()
+        || filter_port.is_some()
+        || filter_src_port.is_some()
+        || filter_dst_port.is_some()
+        || !filter_ports.is_empty()
+        || !filter_src_ports.is_empty()
+        || !filter_dst_ports.is_empty()
+        || filter_not;
+    if filter.is_some() && any_typed_filter {
+        return Err(nlink_lab::Error::invalid_argument(
+            "cannot combine --filter \"<expr>\" with typed --filter-* flags",
+        ));
+    }
+
+    Ok(if let Some(expr) = filter {
+        Some(compile_legacy_bpf_filter(expr)?)
+    } else if any_typed_filter {
+        let net = filter_net
+            .as_deref()
+            .map(|s| parse_filter_cidr("--filter-net", s))
+            .transpose()?;
+        let src_net = filter_src_net
+            .as_deref()
+            .map(|s| parse_filter_cidr("--filter-src-net", s))
+            .transpose()?;
+        let dst_net = filter_dst_net
+            .as_deref()
+            .map(|s| parse_filter_cidr("--filter-dst-net", s))
+            .transpose()?;
+        // An IPv6 address needs the IPv6 ethertype check: without a family
+        // flag the builder checks for IPv4, then reads IPv6 address
+        // offsets, and the filter matched nothing (#209).
+        let v6 = [filter_host, filter_src_host, filter_dst_host]
+            .iter()
+            .flatten()
+            .any(|a| a.is_ipv6())
+            || [net, src_net, dst_net]
+                .iter()
+                .flatten()
+                .any(|n| n.is_ipv6());
+        // Everything but the port lists, for each branch below.
+        let base = |mut b: netring::BpfFilterBuilder| {
+            if filter_ipv4 {
+                b = b.ipv4();
+            }
+            if filter_ipv6 || (v6 && !filter_ipv4 && !filter_arp) {
+                b = b.ipv6();
+            }
+            if filter_arp {
+                b = b.arp();
+            }
+            // `--filter-vlan-id` implies `--filter-vlan` so the
+            // ethertype check + offset shift get emitted before
+            // the ID match.
+            if filter_vlan || filter_vlan_id.is_some() {
+                b = b.vlan();
+            }
+            if let Some(vid) = filter_vlan_id {
+                b = b.vlan_id(vid);
+            }
+            if filter_tcp {
+                b = b.tcp();
+            }
+            if filter_udp {
+                b = b.udp();
+            }
+            if filter_icmp {
+                b = b.icmp();
+            }
+            if let Some(proto) = filter_ip_proto {
+                b = b.ip_proto(proto);
+            }
+            if let Some(addr) = filter_host {
+                b = b.host(addr);
+            }
+            if let Some(addr) = filter_src_host {
+                b = b.src_host(addr);
+            }
+            if let Some(addr) = filter_dst_host {
+                b = b.dst_host(addr);
+            }
+            if let Some(n) = net {
+                b = b.net(n);
+            }
+            if let Some(n) = src_net {
+                b = b.src_net(n);
+            }
+            if let Some(n) = dst_net {
+                b = b.dst_net(n);
+            }
+            if let Some(p) = filter_port {
+                b = b.port(p);
+            }
+            if let Some(p) = filter_src_port {
+                b = b.src_port(p);
+            }
+            if let Some(p) = filter_dst_port {
+                b = b.dst_port(p);
+            }
+            b
+        };
+        // One OR branch per combination of the port lists, each with the
+        // whole chain. netring 0.30's `ports()` copies only the fragments
+        // before it into its extra branches, so `--filter-src-ports 1,2
+        // --filter-dst-ports 3,4` also matched source port 2 to any port
+        // (#209; fixed in netring after 0.31.1).
+        let each = |ports: &[u16]| -> Vec<Option<u16>> {
+            if ports.is_empty() {
+                vec![None]
+            } else {
+                ports.iter().copied().map(Some).collect()
+            }
+        };
+        let mut combos = Vec::new();
+        for p in each(filter_ports) {
+            for sp in each(filter_src_ports) {
+                for dp in each(filter_dst_ports) {
+                    combos.push((p, sp, dp));
+                }
+            }
+        }
+        let with_ports =
+            |mut b: netring::BpfFilterBuilder,
+             (p, sp, dp): (Option<u16>, Option<u16>, Option<u16>)| {
+                if let Some(p) = p {
+                    b = b.port(p);
+                }
+                if let Some(p) = sp {
+                    b = b.src_port(p);
+                }
+                if let Some(p) = dp {
+                    b = b.dst_port(p);
+                }
+                b
+            };
+        let mut b = with_ports(base(netring::BpfFilter::builder()), combos[0]);
+        for &combo in &combos[1..] {
+            b = b.or(|branch| with_ports(base(branch), combo));
+        }
+        if filter_not {
+            b = b.negate();
+        }
+        Some(b.build().map_err(|e| {
+            nlink_lab::Error::invalid_argument(format!("BPF filter build failed: {e}"))
+        })?)
+    } else {
+        None
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser as _;
+
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(flatten)]
+        args: Args,
+    }
+
+    fn filter(flags: &[&str]) -> netring::BpfFilter {
+        let argv = ["capture", "lab", "a:eth0"].iter().chain(flags);
+        build_filter(&Cli::parse_from(argv).args).unwrap().unwrap()
+    }
+
+    /// Ethernet + IPv4 (or IPv6) + the TCP ports.
+    fn tcp_frame(src: std::net::IpAddr, sport: u16, dport: u16) -> Vec<u8> {
+        let mut f = vec![0u8; 12];
+        match src {
+            std::net::IpAddr::V4(a) => {
+                f.extend_from_slice(&[0x08, 0x00, 0x45, 0, 0, 40, 0, 0, 0, 0, 64, 6, 0, 0]);
+                f.extend_from_slice(&a.octets());
+                f.extend_from_slice(&[10, 0, 0, 2]);
+            }
+            std::net::IpAddr::V6(a) => {
+                f.extend_from_slice(&[0x86, 0xdd, 0x60, 0, 0, 0, 0, 20, 6, 64]);
+                f.extend_from_slice(&a.octets());
+                f.extend_from_slice(&"fd00::2".parse::<std::net::Ipv6Addr>().unwrap().octets());
+            }
+        }
+        f.extend_from_slice(&sport.to_be_bytes());
+        f.extend_from_slice(&dport.to_be_bytes());
+        f.extend_from_slice(&[0u8; 16]);
+        f
+    }
+
+    /// Two port lists are both required, for every pair. netring 0.30
+    /// left the second list off the first list's extra branches: source
+    /// port 2 matched with any destination (#209).
+    #[test]
+    fn port_lists_combine_as_a_product() {
+        let f = filter(&[
+            "--filter-tcp",
+            "--filter-src-ports",
+            "1,2",
+            "--filter-dst-ports",
+            "3,4",
+        ]);
+        let v4: std::net::IpAddr = "10.0.0.1".parse().unwrap();
+        for (s, d) in [(1, 3), (1, 4), (2, 3), (2, 4)] {
+            assert!(f.matches(&tcp_frame(v4, s, d)), "{s} -> {d}");
+        }
+        for (s, d) in [(2, 99), (1, 99), (99, 3)] {
+            assert!(!f.matches(&tcp_frame(v4, s, d)), "{s} -> {d}");
+        }
+    }
+
+    /// An IPv6 host matches IPv6 traffic without `--filter-ipv6` (#209).
+    #[test]
+    fn an_ipv6_host_filter_matches_ipv6() {
+        let f = filter(&["--filter-host", "2001:db8::1"]);
+        assert!(f.matches(&tcp_frame("2001:db8::1".parse().unwrap(), 5, 6)));
+        assert!(!f.matches(&tcp_frame("2001:db8::9".parse().unwrap(), 5, 6)));
+        assert!(!f.matches(&tcp_frame("10.0.0.1".parse().unwrap(), 5, 6)));
+    }
 }

@@ -92,7 +92,7 @@ These are accepted by every subcommand:
 
 | Flag | What |
 |------|------|
-| `--json` | Emit machine-parseable JSON instead of human text (errors become a JSON envelope on stderr) |
+| `--json` | Emit machine-parseable JSON instead of human text (errors become a JSON envelope on stderr; an NLL parse error's has `kind: "parse"`, `file`, `line` and `column`) |
 | `--verbose`, `-v` | Show deployment steps / tracing (`info` level) |
 | `--quiet`, `-q` | Suppress non-error output |
 

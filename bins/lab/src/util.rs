@@ -56,13 +56,17 @@ fn tail_follow_to<W: std::io::Write>(
 
 /// Last `n` lines of a file, read backwards in 64 KiB chunks so a
 /// multi-gigabyte log is never loaded into memory (#46).
-pub fn tail_lines(path: &std::path::Path, n: usize) -> std::io::Result<String> {
+///
+/// Also returns the file length they were read from: where a `--follow`
+/// picks up. A length taken before the read made lines written in between
+/// print twice (#209).
+pub fn tail_lines_at(path: &std::path::Path, n: usize) -> std::io::Result<(String, u64)> {
     use std::io::{Read, Seek, SeekFrom};
-    if n == 0 {
-        return Ok(String::new());
-    }
     let mut f = std::fs::File::open(path)?;
     let len = f.metadata()?.len();
+    if n == 0 {
+        return Ok((String::new(), len));
+    }
     let mut end = len;
     let mut buf: Vec<u8> = Vec::new();
     const CHUNK: u64 = 64 * 1024;
@@ -87,7 +91,31 @@ pub fn tail_lines(path: &std::path::Path, n: usize) -> std::io::Result<String> {
     let text = String::from_utf8_lossy(&buf);
     let lines: Vec<&str> = text.lines().collect();
     let start = lines.len().saturating_sub(n);
-    Ok(lines[start..].join("\n"))
+    Ok((lines[start..].join("\n"), len))
+}
+
+/// Copy a whole file to `out` as bytes, in chunks: neither loaded into
+/// memory nor required to be UTF-8, which failed the read (#209). Adds a
+/// newline when the file does not end in one. Returns the bytes copied.
+pub fn cat_to(path: &std::path::Path, out: &mut impl std::io::Write) -> std::io::Result<u64> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut buf = vec![0u8; 64 * 1024];
+    let (mut total, mut last) = (0u64, None);
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        out.write_all(&buf[..n])?;
+        total += n as u64;
+        last = Some(buf[n - 1]);
+    }
+    if last.is_some_and(|b| b != b'\n') {
+        out.write_all(b"\n")?;
+    }
+    out.flush()?;
+    Ok(total)
 }
 
 /// Wrapper used by the CLI: runs forever (until Ctrl-C) and writes to
@@ -103,7 +131,7 @@ pub fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Resu
 /// tell which `--filter-*-net` was malformed.
 pub fn parse_filter_cidr(flag: &str, s: &str) -> nlink_lab::Result<netring::IpNet> {
     s.parse::<netring::IpNet>()
-        .map_err(|e| nlink_lab::Error::invalid_topology(format!("invalid {flag} value {s:?}: {e}")))
+        .map_err(|e| nlink_lab::Error::invalid_argument(format!("invalid {flag} value {s:?}: {e}")))
 }
 
 /// Legacy `--filter "<tcpdump expr>"` path. Default builds reject
@@ -117,7 +145,7 @@ pub fn compile_legacy_bpf_filter(expr: &str) -> nlink_lab::Result<netring::BpfFi
 
 #[cfg(not(feature = "legacy-tcpdump-filter"))]
 pub fn compile_legacy_bpf_filter(_expr: &str) -> nlink_lab::Result<netring::BpfFilter> {
-    Err(nlink_lab::Error::invalid_topology(
+    Err(nlink_lab::Error::invalid_argument(
         "--filter \"<tcpdump expr>\" requires nlink-lab built with the \
          `legacy-tcpdump-filter` feature (which shells out to `tcpdump -dd`). \
          Default builds use the typed --filter-tcp / --filter-dst-port / \
@@ -142,7 +170,45 @@ pub fn parse_byte_size(s: &str) -> std::result::Result<u64, String> {
     let n: u64 = num_str
         .parse()
         .map_err(|e| format!("invalid byte size {s:?}: {e}"))?;
-    Ok(n * mul)
+    // overflowed (a panic in a debug build, a wrapped size otherwise)
+    n.checked_mul(mul)
+        .ok_or_else(|| format!("byte size {s:?} is too large"))
+}
+
+/// A `--tcp` / `--wait-tcp` target: `PORT` (on 127.0.0.1), `IP:PORT`, or
+/// `[IPv6]:PORT`. The brackets were kept, so the address did not parse and
+/// any listener on the port matched (#209).
+pub fn parse_tcp_target(s: &str) -> nlink_lab::Result<(String, u16)> {
+    let bad = || {
+        nlink_lab::Error::invalid_argument(format!(
+            "invalid TCP target {s:?} (expected PORT, IP:PORT or [IPv6]:PORT)"
+        ))
+    };
+    let (host, port) = match s.rsplit_once(':') {
+        None => ("127.0.0.1", s),
+        Some((host, port)) => (
+            host.strip_prefix('[')
+                .and_then(|h| h.strip_suffix(']'))
+                .unwrap_or(host),
+            port,
+        ),
+    };
+    let port: u16 = port.parse().map_err(|_| bad())?;
+    let ip: std::net::IpAddr = host.parse().map_err(|_| bad())?;
+    Ok((ip.to_string(), port))
+}
+
+/// Parse a `SECS` CLI argument: a finite, non-negative number of seconds
+/// that fits a `Duration`. `Duration::from_secs_f64` panics on anything
+/// else (`--duration -1`, `nan`, `1e30`, #209).
+pub fn parse_secs(s: &str) -> std::result::Result<f64, String> {
+    let secs: f64 = s
+        .trim()
+        .parse()
+        .map_err(|e| format!("invalid number of seconds {s:?}: {e}"))?;
+    std::time::Duration::try_from_secs_f64(secs)
+        .map(|_| secs)
+        .map_err(|_| format!("{s:?} is not a duration in seconds (finite, not negative)"))
 }
 
 /// Parse repeated `--env KEY=VALUE` strings into `(key, value)` pairs.
@@ -160,7 +226,7 @@ pub fn parse_env_pairs(env_vars: &[String]) -> nlink_lab::Result<Vec<(String, St
         .map(|s| {
             s.split_once('=')
                 .ok_or_else(|| {
-                    nlink_lab::Error::invalid_topology(format!(
+                    nlink_lab::Error::invalid_argument(format!(
                         "invalid --env {s:?} (expected KEY=VALUE)"
                     ))
                 })
@@ -311,21 +377,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cat_copies_bytes_that_are_not_utf8() {
+        // `logs --pid` read the file as UTF-8 and failed on this (#209)
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("log");
+        std::fs::write(&p, b"caf\xe9\nno newline").unwrap();
+        let mut out = Vec::new();
+        assert_eq!(cat_to(&p, &mut out).unwrap(), 15);
+        assert_eq!(out, b"caf\xe9\nno newline\n");
+        let (tail, len) = tail_lines_at(&p, 1).unwrap();
+        assert_eq!((tail.as_str(), len), ("no newline", 15));
+    }
+
+    #[test]
     fn tail_lines_reads_only_the_tail() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("log");
         let body: String = (0..10_000).map(|i| format!("line {i}\n")).collect();
         std::fs::write(&p, &body).unwrap();
         assert_eq!(
-            tail_lines(&p, 3).unwrap(),
+            tail_lines_at(&p, 3).unwrap().0,
             "line 9997\nline 9998\nline 9999"
         );
-        assert_eq!(tail_lines(&p, 0).unwrap(), "");
-        assert_eq!(tail_lines(&p, 20_000).unwrap().lines().count(), 10_000);
+        assert_eq!(tail_lines_at(&p, 0).unwrap().0, "");
+        assert_eq!(tail_lines_at(&p, 20_000).unwrap().0.lines().count(), 10_000);
         // file without trailing newline, spanning several 64 KiB chunks
         let big: String = (0..200_000).map(|i| format!("{i:08}\n")).collect();
         std::fs::write(&p, big.trim_end()).unwrap();
-        assert_eq!(tail_lines(&p, 2).unwrap(), "00199998\n00199999");
+        assert_eq!(tail_lines_at(&p, 2).unwrap().0, "00199998\n00199999");
     }
 
     #[test]

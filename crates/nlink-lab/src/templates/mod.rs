@@ -147,13 +147,31 @@ pub fn get(name: &str) -> Option<&'static Template> {
 ///
 /// Returns the NLL content with the lab name replaced.
 pub fn render(template: &Template, name: Option<&str>) -> String {
-    match name {
-        Some(new_name) => {
-            let old_name = extract_lab_name(template.nll);
-            template.nll.replacen(&old_name, new_name, 1)
-        }
-        None => template.nll.to_string(),
+    let Some(new_name) = name else {
+        return template.nll.to_string();
+    };
+    // In the `lab` declaration only: the first occurrence of the old name
+    // was in a leading comment for five templates, and a node may share
+    // the lab's name (#209).
+    let old_name = extract_lab_name(template.nll);
+    let mut done = false;
+    let mut out: String = template
+        .nll
+        .lines()
+        .map(|line| {
+            if !done && line.trim_start().starts_with("lab ") {
+                done = true;
+                line.replacen(&format!("\"{old_name}\""), &format!("\"{new_name}\""), 1)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if template.nll.ends_with('\n') {
+        out.push('\n');
     }
+    out
 }
 
 /// Extract the lab name from NLL content (looks for `lab "name"`).
@@ -228,6 +246,22 @@ mod tests {
         let nll = render(t, Some("my-custom-lab"));
         assert!(nll.contains("my-custom-lab"));
         assert!(!nll.contains("\"simple\""));
+    }
+
+    #[test]
+    fn every_template_takes_a_new_name() {
+        // the first occurrence was a comment in five of them (#209)
+        for t in list() {
+            let topo = crate::parser::parse(&render(t, Some("renamed"))).unwrap();
+            assert_eq!(topo.lab.name, "renamed", "{}", t.name);
+            let original = crate::parser::parse(t.nll).unwrap();
+            assert_eq!(
+                topo.nodes.keys().collect::<Vec<_>>(),
+                original.nodes.keys().collect::<Vec<_>>(),
+                "{}",
+                t.name
+            );
+        }
     }
 
     #[test]

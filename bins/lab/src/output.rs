@@ -27,6 +27,26 @@ pub fn exit_code_for(err: &nlink_lab::Error) -> u8 {
     }
 }
 
+/// The `--json` error envelope of an NLL parse error: the message, the
+/// file, and the 1-based line and column the span starts at.
+pub fn render_diagnostic_json(diag: &nlink_lab::error::NllDiagnostic) -> serde_json::Value {
+    let text = diag.src.inner();
+    let offset = diag.span.offset().min(text.len());
+    let before = &text[..offset];
+    let line = before.matches('\n').count() + 1;
+    let column = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
+    serde_json::json!({
+        "error": diag.message,
+        "kind": "parse",
+        "file": diag.src.name(),
+        "line": line,
+        "column": column,
+        "label": diag.label,
+        "help": diag.help,
+        "exit_code": EXIT_VALIDATION,
+    })
+}
+
 /// Plan 158b Phase 3 — render an `nlink_lab::Error` as a
 /// structured JSON envelope for the `--json` paths. Walks the
 /// `std::error::Error::source` chain to build `error_chain`,
@@ -133,6 +153,11 @@ mod tests {
         );
         assert_eq!(
             exit_code_for(&nlink_lab::Error::NotFound { name: "l".into() }),
+            EXIT_FAILURE
+        );
+        // a bad argument is an error, not a validation failure (#209)
+        assert_eq!(
+            exit_code_for(&nlink_lab::Error::invalid_argument("--set x")),
             EXIT_FAILURE
         );
     }

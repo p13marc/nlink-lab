@@ -79,6 +79,12 @@ pub enum Error {
     #[error("invalid topology: {0}")]
     InvalidTopology(String),
 
+    /// A command-line argument the caller got wrong (`--set noequals`, an
+    /// unknown template, a bad regex). The CLI exits 1 for it, as for any
+    /// other error; it used to be an `InvalidTopology`, exit 2 (#209).
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
+
     /// Namespace operation failed. Plan 158b — the underlying
     /// `nlink::Error` is preserved on `#[source]` so
     /// `err.ext_ack()` walks through to the kernel's
@@ -178,6 +184,11 @@ impl Error {
     /// Create an invalid topology error.
     pub fn invalid_topology(message: impl Into<String>) -> Self {
         Self::InvalidTopology(message.into())
+    }
+
+    /// Create an invalid argument error.
+    pub fn invalid_argument(message: impl Into<String>) -> Self {
+        Self::InvalidArgument(message.into())
     }
 
     /// Create a deploy failed error (generic catch-all).

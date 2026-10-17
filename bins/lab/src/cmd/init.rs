@@ -51,7 +51,7 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     let template_name = template.unwrap();
     let t = nlink_lab::templates::get(&template_name).ok_or_else(|| {
-        nlink_lab::Error::invalid_topology(format!(
+        nlink_lab::Error::invalid_argument(format!(
             "unknown template '{template_name}'. Use --list to see available templates"
         ))
     })?;

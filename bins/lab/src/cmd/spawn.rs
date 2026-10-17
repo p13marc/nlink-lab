@@ -83,7 +83,7 @@ pub struct Args {
     /// --wait-port when a deterministic signal is available. A
     /// process can open more files later in its lifecycle.
     /// Round-5 §2.4.
-    #[arg(long, value_name = "SECS")]
+    #[arg(long, value_name = "SECS", value_parser = crate::util::parse_secs)]
     pub wait_fd_stable: Option<f64>,
 
     /// Timeout for --wait-tcp / --wait-log / --wait-port /
@@ -111,8 +111,25 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         wait_timeout,
         cmd,
     } = args;
-    require_root()?;
+    // Every argument is checked before the process starts: a bad
+    // `--wait-log` regex used to start it, print its PID and fail, and a
+    // retry started a second one (#209).
     let env_pairs = parse_env_pairs(&env_vars)?;
+    let wait_tcp = wait_tcp
+        .as_deref()
+        .map(crate::util::parse_tcp_target)
+        .transpose()?;
+    let wait_log = wait_log
+        .as_deref()
+        .map(|re_src| {
+            regex::Regex::new(re_src).map_err(|e| {
+                nlink_lab::Error::invalid_argument(format!(
+                    "invalid --wait-log regex {re_src:?}: {e}"
+                ))
+            })
+        })
+        .transpose()?;
+    require_root()?;
     let env_refs: Vec<(&str, &str)> = env_pairs
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -155,32 +172,14 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // spawn returns. Either one can fail the spawn via timeout.
     let timeout = std::time::Duration::from_secs(wait_timeout);
     let interval = std::time::Duration::from_millis(500);
-    if let Some(ref tcp_addr) = wait_tcp {
-        let (ip, port) = if let Some((ip, port_str)) = tcp_addr.rsplit_once(':') {
-            (
-                ip.to_string(),
-                port_str.parse::<u16>().map_err(|e| {
-                    nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
-                })?,
-            )
-        } else {
-            (
-                "127.0.0.1".to_string(),
-                tcp_addr.parse::<u16>().map_err(|e| {
-                    nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
-                })?,
-            )
-        };
+    if let Some((ip, port)) = &wait_tcp {
         running
-            .wait_for_tcp(&node, &ip, port, timeout, interval)
+            .wait_for_tcp(&node, ip, *port, timeout, interval)
             .await?;
     }
-    if let Some(ref re_src) = wait_log {
-        let pattern = regex::Regex::new(re_src).map_err(|e| {
-            nlink_lab::Error::invalid_topology(format!("invalid --wait-log regex {re_src:?}: {e}"))
-        })?;
+    if let Some(pattern) = &wait_log {
         running
-            .wait_for_log_line(pid, &pattern, wait_log_stream.into(), timeout, interval)
+            .wait_for_log_line(pid, pattern, wait_log_stream.into(), timeout, interval)
             .await?;
     }
     if let Some(port) = wait_port {

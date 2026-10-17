@@ -71,14 +71,14 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
             None => (spec.clone(), None),
         };
         if topo.nodes.contains_key(&name) {
-            return Err(nlink_lab::Error::invalid_topology(format!(
+            return Err(nlink_lab::Error::invalid_argument(format!(
                 "node '{name}' already exists"
             )));
         }
         let mut node = nlink_lab::types::Node::default();
         if let Some(p) = profile {
             if !topo.profiles.contains_key(&p) {
-                return Err(nlink_lab::Error::invalid_topology(format!(
+                return Err(nlink_lab::Error::invalid_argument(format!(
                     "profile '{p}' does not exist"
                 )));
             }
@@ -134,7 +134,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
             None => (spec.as_str(), None),
         };
         let (a, b) = ends.split_once("--").ok_or_else(|| {
-            nlink_lab::Error::invalid_topology(format!("--add-link {spec:?}: expected A:IF--B:IF"))
+            nlink_lab::Error::invalid_argument(format!("--add-link {spec:?}: expected A:IF--B:IF"))
         })?;
         let (ea, eb) = (endpoint(a.trim())?, endpoint(b.trim())?);
         for e in [&ea, &eb] {
@@ -147,7 +147,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         let addresses = match addrs {
             Some(a) => {
                 let (x, y) = a.split_once("--").ok_or_else(|| {
-                    nlink_lab::Error::invalid_topology(format!(
+                    nlink_lab::Error::invalid_argument(format!(
                         "--add-link {spec:?}: addresses must be ADDR--ADDR"
                     ))
                 })?;
@@ -172,7 +172,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
             .flat_map(|l| l.endpoints.iter().cloned())
             .collect();
         if ends.is_empty() {
-            return Err(nlink_lab::Error::invalid_topology(format!(
+            return Err(nlink_lab::Error::invalid_argument(format!(
                 "no link has endpoint '{key}'"
             )));
         }
@@ -182,7 +182,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
     }
     for spec in &args.set_impair {
         let (ep, props) = spec.split_once('=').ok_or_else(|| {
-            nlink_lab::Error::invalid_topology(format!(
+            nlink_lab::Error::invalid_argument(format!(
                 "--set-impair {spec:?}: expected NODE:IFACE=K=V[,K=V…]"
             ))
         })?;
@@ -191,13 +191,13 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         let mut imp = nlink_lab::types::Impairment::default();
         for kv in props.split(',') {
             let (k, v) = kv.split_once('=').ok_or_else(|| {
-                nlink_lab::Error::invalid_topology(format!(
+                nlink_lab::Error::invalid_argument(format!(
                     "--set-impair {spec:?}: bad item {kv:?}"
                 ))
             })?;
             // One list of property names for `edit`, `top` and NLL.
             imp.set_property(k, v).map_err(|e| {
-                nlink_lab::Error::invalid_topology(format!("--set-impair {spec:?}: {e}"))
+                nlink_lab::Error::invalid_argument(format!("--set-impair {spec:?}: {e}"))
             })?;
         }
         topo.impairments.insert(key.clone(), imp);
@@ -207,7 +207,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         let ep = endpoint(ep)?;
         let key = format!("{}:{}", ep.node, ep.iface);
         if topo.impairments.remove(&key).is_none() {
-            return Err(nlink_lab::Error::invalid_topology(format!(
+            return Err(nlink_lab::Error::invalid_argument(format!(
                 "no impairment on '{key}'"
             )));
         }
@@ -215,7 +215,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
     }
     for spec in &args.set_qdisc {
         let (ep, rest) = spec.split_once('=').ok_or_else(|| {
-            nlink_lab::Error::invalid_topology(format!(
+            nlink_lab::Error::invalid_argument(format!(
                 "--set-qdisc {spec:?}: expected NODE:IFACE=KIND[,K=V…]"
             ))
         })?;
@@ -230,14 +230,14 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
         let ep = endpoint(ep)?;
         let key = format!("{}:{}", ep.node, ep.iface);
         if topo.qdiscs.remove(&key).is_none() {
-            return Err(nlink_lab::Error::invalid_topology(format!(
+            return Err(nlink_lab::Error::invalid_argument(format!(
                 "no qdisc on '{key}'"
             )));
         }
         log.push(format!("clear qdisc on {key}"));
     }
     if log.is_empty() {
-        return Err(nlink_lab::Error::invalid_topology(
+        return Err(nlink_lab::Error::invalid_argument(
             "nothing to do: pass --add-node/--remove-node/--add-link/--remove-link/--set-impair/--clear-impair/--set-qdisc/--clear-qdisc",
         ));
     }
@@ -250,7 +250,7 @@ pub fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Re
 fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::types::QdiscKind> {
     use nlink_lab::types::QdiscKind;
     let bad =
-        |what: String| nlink_lab::Error::invalid_topology(format!("--set-qdisc {spec:?}: {what}"));
+        |what: String| nlink_lab::Error::invalid_argument(format!("--set-qdisc {spec:?}: {what}"));
     let mut items = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
     let kind = items
         .next()
@@ -354,15 +354,15 @@ fn parse_qdisc_spec(spec: &str, rest: &str) -> nlink_lab::Result<nlink_lab::type
 /// `NODE:IFACE=MTU` -> (endpoint, mtu).
 pub fn parse_mtu_spec(spec: &str) -> nlink_lab::Result<(String, u32)> {
     let (ep, mtu) = spec.split_once('=').ok_or_else(|| {
-        nlink_lab::Error::invalid_topology(format!(
+        nlink_lab::Error::invalid_argument(format!(
             "--set-mtu expects NODE:IFACE=MTU, got {spec:?}"
         ))
     })?;
     let mtu: u32 = mtu.trim().parse().map_err(|_| {
-        nlink_lab::Error::invalid_topology(format!("--set-mtu: {mtu:?} is not an MTU"))
+        nlink_lab::Error::invalid_argument(format!("--set-mtu: {mtu:?} is not an MTU"))
     })?;
     if !(68..=65535).contains(&mtu) {
-        return Err(nlink_lab::Error::invalid_topology(format!(
+        return Err(nlink_lab::Error::invalid_argument(format!(
             "--set-mtu: {mtu} is outside 68..=65535"
         )));
     }
@@ -373,28 +373,44 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     require_root()?;
     let mut running = nlink_lab::RunningLab::load(&args.lab)?;
     // MTU changes are applied directly (both ends, live) rather than through
-    // the plan: the plan only knows an MTU at veth creation.
-    let mut mtu_log = Vec::new();
+    // the plan: the plan only knows an MTU at veth creation. They are
+    // checked first, with the other edits, and applied only once those
+    // validate: a bad edit next to one used to fail after the MTU changed
+    // (#209).
+    let mut mtus = Vec::new();
     for spec in &args.set_mtu {
         let (ep, mtu) = parse_mtu_spec(spec)?;
         let peer = running.peer_endpoint(&ep)?;
+        mtus.push((ep, peer, mtu));
+    }
+    let mut desired = running.topology().clone();
+    for (ep, _, mtu) in &mtus {
+        for link in desired
+            .links
+            .iter_mut()
+            .filter(|l| l.endpoints.contains(ep))
+        {
+            link.mtu = Some(*mtu);
+        }
+    }
+    let edit_log = apply_edits_unless_only_mtu(&mut desired, &args)?;
+    if edit_log.is_some() {
+        let result = desired.validate();
+        for w in result.warnings() {
+            eprintln!("  {} {w}", yellow("WARN"));
+        }
+        result.bail()?;
+    }
+    let mut mtu_log = Vec::new();
+    for (ep, peer, mtu) in &mtus {
         if args.dry_run {
             mtu_log.push(format!("set mtu {mtu} on {ep} and {peer} (live)"));
         } else {
-            running.set_link_mtu(&ep, mtu).await?;
+            running.set_link_mtu(ep, *mtu).await?;
             mtu_log.push(format!("set mtu {mtu} on {ep} and {peer}"));
         }
     }
-    let only_mtu = !args.set_mtu.is_empty()
-        && args.add_node.is_empty()
-        && args.remove_node.is_empty()
-        && args.add_link.is_empty()
-        && args.remove_link.is_empty()
-        && args.set_impair.is_empty()
-        && args.clear_impair.is_empty()
-        && args.set_qdisc.is_empty()
-        && args.clear_qdisc.is_empty();
-    if only_mtu {
+    if edit_log.is_none() {
         if ctx.json {
             println!(
                 "{}",
@@ -407,14 +423,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         return Ok(());
     }
-    let mut desired = running.topology().clone();
-    let mut log = apply_edits(&mut desired, &args)?;
+    let mut log = edit_log.unwrap_or_default();
     log.splice(0..0, mtu_log);
-    let result = desired.validate();
-    for w in result.warnings() {
-        eprintln!("  {} {w}", yellow("WARN"));
-    }
-    result.bail()?;
     let plan = nlink_lab::apply_plan(&running, &desired)?;
     if args.dry_run {
         if ctx.json {
@@ -425,9 +435,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 .filter(|o| o.is_removal())
                 .map(|o| o.describe())
                 .collect();
+            let plan_ops: Vec<String> = plan.work().map(|o| o.describe()).collect();
             println!(
                 "{}",
-                serde_json::to_string_pretty(&DryRunReport::new(&args.lab, &layered, &removals))?
+                serde_json::to_string_pretty(
+                    &DryRunReport::new(&args.lab, &layered, &removals).with_ops(&plan_ops)
+                )?
             );
             return Ok(());
         }
@@ -464,6 +477,28 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         );
     }
     Ok(())
+}
+
+/// [`apply_edits`], or `None` when `--set-mtu` is the only edit (which
+/// `apply_edits` refuses as "nothing to do").
+fn apply_edits_unless_only_mtu(
+    topo: &mut nlink_lab::Topology,
+    args: &Args,
+) -> nlink_lab::Result<Option<Vec<String>>> {
+    let only_mtu = !args.set_mtu.is_empty()
+        && args.add_node.is_empty()
+        && args.remove_node.is_empty()
+        && args.add_link.is_empty()
+        && args.remove_link.is_empty()
+        && args.set_impair.is_empty()
+        && args.clear_impair.is_empty()
+        && args.set_qdisc.is_empty()
+        && args.clear_qdisc.is_empty();
+    if only_mtu {
+        Ok(None)
+    } else {
+        apply_edits(topo, args).map(Some)
+    }
 }
 
 /// Drop what a removed link's ends carried: a link's `delay` is stored on

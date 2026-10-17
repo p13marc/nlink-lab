@@ -69,7 +69,7 @@ pub fn parse_set_params(params: &[String]) -> nlink_lab::Result<Vec<(String, Str
         .iter()
         .map(|p| {
             let (key, value) = p.split_once('=').ok_or_else(|| {
-                nlink_lab::Error::invalid_topology(format!(
+                nlink_lab::Error::invalid_argument(format!(
                     "invalid --set format: '{p}' (expected KEY=VALUE)"
                 ))
             })?;
@@ -144,7 +144,14 @@ pub fn node_completer() -> clap_complete::ArgValueCompleter {
         let labs = nlink_lab::state::list().unwrap_or_default();
         let nodes = labs.into_iter().flat_map(|l| {
             nlink_lab::state::load(&l.name)
-                .map(|(st, _)| st.namespaces.keys().cloned().collect::<Vec<_>>())
+                // container nodes too: `logs <lab> <node>` takes only those
+                .map(|(st, _)| {
+                    st.namespaces
+                        .keys()
+                        .chain(st.containers.keys())
+                        .cloned()
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         });
         candidates(current, nodes)

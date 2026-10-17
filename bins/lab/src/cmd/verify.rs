@@ -38,25 +38,30 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         None => running.topology().clone(),
     };
     if desired.lab.name != lab {
-        return Err(nlink_lab::Error::invalid_topology(format!(
+        return Err(nlink_lab::Error::invalid_argument(format!(
             "topology is for lab {:?}, not {lab:?}",
             desired.lab.name
         )));
     }
     let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
-    let removals: Vec<String> = nlink_lab::apply_plan(&running, &desired)?
+    let plan = nlink_lab::apply_plan(&running, &desired)?;
+    let removals: Vec<String> = plan
         .ops
         .iter()
         .filter(|o| o.is_removal())
         .map(|o| o.describe())
         .collect();
-    let report = DryRunReport::new(&lab, &layered, &removals);
+    // and the plan's other work, as `apply --check` counts it: a change
+    // that only re-creates a container verified clean (#209)
+    let plan_ops: Vec<String> = plan.work().map(|o| o.describe()).collect();
+    let report = DryRunReport::new(&lab, &layered, &removals).with_ops(&plan_ops);
     let drift = !report.no_op;
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if drift {
         println!("Drift detected for lab {lab:?}:");
         print_layered(&layered, &removals);
+        crate::output::print_plan_ops(&plan_ops);
         println!("{} change(s) needed to converge", report.change_count);
     } else if !ctx.quiet {
         println!("Lab {lab:?} matches its topology (no drift).");

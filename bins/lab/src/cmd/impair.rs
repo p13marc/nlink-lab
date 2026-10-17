@@ -161,7 +161,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     let endpoint = endpoint.ok_or_else(|| {
-        nlink_lab::Error::invalid_topology("endpoint required (use --show to inspect)")
+        nlink_lab::Error::invalid_argument("endpoint required (use --show to inspect)")
     })?;
 
     let report = |action: &str, endpoint: &str, peer: Option<&str>| {
@@ -177,6 +177,37 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             }
         }
     };
+    let has_directional = out_delay.is_some()
+        || out_jitter.is_some()
+        || out_loss.is_some()
+        || out_rate.is_some()
+        || in_delay.is_some()
+        || in_jitter.is_some()
+        || in_loss.is_some()
+        || in_rate.is_some();
+    let has_symmetric = delay.is_some()
+        || jitter.is_some()
+        || loss.is_some()
+        || rate.is_some()
+        || corrupt.is_some()
+        || reorder.is_some()
+        || duplicate.is_some()
+        || delay_correlation.is_some()
+        || loss_correlation.is_some()
+        || limit.is_some();
+    // `--partition --delay 50ms` dropped the delay, and no flag at all
+    // cleared the netem while saying "updated" (#209).
+    if (partition || heal || clear) && (has_directional || has_symmetric) {
+        return Err(nlink_lab::Error::invalid_argument(
+            "--partition, --heal and --clear take no impairment flags",
+        ));
+    }
+    if !(partition || heal || clear || has_directional || has_symmetric) {
+        return Err(nlink_lab::Error::invalid_argument(
+            "nothing to change: give impairment flags (--delay, --loss, --out-*, …), \
+             --clear, --partition or --heal",
+        ));
+    }
     if partition {
         running.partition(&endpoint).await?;
         report("partitioned", &endpoint, None);
@@ -187,27 +218,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         running.clear_impairment(&endpoint).await?;
         report("cleared", &endpoint, None);
     } else {
-        let has_directional = out_delay.is_some()
-            || out_jitter.is_some()
-            || out_loss.is_some()
-            || out_rate.is_some()
-            || in_delay.is_some()
-            || in_jitter.is_some()
-            || in_loss.is_some()
-            || in_rate.is_some();
-        let has_symmetric = delay.is_some()
-            || jitter.is_some()
-            || loss.is_some()
-            || rate.is_some()
-            || corrupt.is_some()
-            || reorder.is_some()
-            || duplicate.is_some()
-            || delay_correlation.is_some()
-            || loss_correlation.is_some()
-            || limit.is_some();
-
         if has_directional && has_symmetric {
-            return Err(nlink_lab::Error::invalid_topology(
+            return Err(nlink_lab::Error::invalid_argument(
                 "cannot mix the symmetric flags (--delay, --loss, --corrupt, ...) with --out-*/--in-*",
             ));
         }
@@ -228,15 +240,28 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 ..Default::default()
             };
 
-            if egress != nlink_lab::Impairment::default() {
+            let out = egress != nlink_lab::Impairment::default();
+            let inn = ingress != nlink_lab::Impairment::default();
+            // The peer first: when there is none (a network member), the
+            // egress half was applied before the error (#209).
+            let peer = if inn {
+                Some(running.peer_endpoint(&endpoint)?)
+            } else {
+                None
+            };
+            if out {
                 running.set_impairment(&endpoint, &egress).await?;
-                report("updated egress impairment on", &endpoint, None);
             }
-            if ingress != nlink_lab::Impairment::default() {
-                let peer = running.peer_endpoint(&endpoint)?;
-                running.set_impairment(&peer, &ingress).await?;
-                report("updated ingress impairment on", &endpoint, Some(&peer));
+            if let Some(peer) = &peer {
+                running.set_impairment(peer, &ingress).await?;
             }
+            // one report, so `--json` prints one document
+            let action = match (out, inn) {
+                (true, true) => "updated egress and ingress impairment on",
+                (false, true) => "updated ingress impairment on",
+                _ => "updated egress impairment on",
+            };
+            report(action, &endpoint, peer.as_deref());
         } else {
             let impairment = nlink_lab::Impairment {
                 delay,

@@ -104,15 +104,21 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
     ));
 
     for (bin, required, why) in [
-        ("ip", true, "namespace exec/diagnostics"),
+        // nlink-lab itself talks netlink; these are for looking by hand
+        // (`impair --show` reads qdiscs over netlink, not through `tc`)
+        ("ip", false, "manual inspection (`ip -n <ns> addr`)"),
         ("ping", true, "reach assertions"),
-        ("nft", false, "firewall/nat inspection (`nft list ruleset`)"),
-        ("tc", false, "impairment inspection (`impair --show`)"),
+        (
+            "nft",
+            false,
+            "manual firewall/nat inspection (`nft list ruleset`)",
+        ),
+        ("tc", false, "manual qdisc inspection"),
         ("wg", false, "wireguard inspection"),
         ("iperf3", false, "benchmarks"),
         ("hostapd", false, "wifi access points"),
         ("wpa_supplicant", false, "wifi stations"),
-        ("iw", false, "wifi mesh"),
+        ("iw", false, "manual wifi inspection"),
         ("getent", false, "dns-resolves assertions"),
     ] {
         let found = on_path(bin);

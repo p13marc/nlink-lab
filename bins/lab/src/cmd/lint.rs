@@ -61,7 +61,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .iter()
         .find(|a| !nlink_lab::LINT_RULE_IDS.contains(&a.as_str()))
     {
-        return Err(nlink_lab::Error::invalid_topology(format!(
+        return Err(nlink_lab::Error::invalid_argument(format!(
             "unknown lint rule '{bad}' (see `lint --list-rules`)"
         )));
     }

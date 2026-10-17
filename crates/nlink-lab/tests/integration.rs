@@ -5361,7 +5361,7 @@ validate {{ reach a b }}
         "a STOPped process is still tracked as alive"
     );
     lab.signal_process(pid, nlink_lab::Signal::Cont).unwrap();
-    lab.kill_process(pid).unwrap();
+    assert!(lab.kill_process(pid).unwrap(), "it was running");
     let (st, tp) = nlink_lab::state::load(&lab_name).unwrap();
     nlink_lab::state::snapshot_save(&lab_name, "s1", None, &st, &tp).unwrap();
 

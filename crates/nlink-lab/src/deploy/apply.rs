@@ -1343,9 +1343,10 @@ async fn create_radio(
 
 /// [`execute`] on a thread and a current-thread runtime of its own.
 ///
-/// nlink 0.32's request futures, composed the way `execute_one` composes
-/// them (borrowed names and local connections held across awaits), trip
-/// rustc's higher-ranked `Send` check (rust-lang/rust#102211). The plan's
+/// nlink 0.32's reconciling applies (`Stack::apply_reconcile_in`, which
+/// `Op::Stack` awaits) are not `Send`, even with `'static` inputs: their
+/// retry loop takes an `AsyncFnMut`, whose call future rustc cannot prove
+/// `Send` for every borrow (nlink #877, rust-lang/rust#102211). The plan's
 /// future is therefore not `Send`, and neither would `deploy()`/`apply()`
 /// be: a caller could no longer `tokio::spawn` them. Running the plan here
 /// keeps theirs `Send`. The plan, env and journal travel by value and come

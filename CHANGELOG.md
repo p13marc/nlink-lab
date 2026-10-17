@@ -226,6 +226,14 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Added
 
+- **Validator warning `sysctl-host-global`** (#162): a profile or node
+  that sets a sysctl the kernel keeps for the host only, such as
+  `net.core.rmem_max`, `net.core.netdev_max_backlog`, `net.ipv4.tcp_mem`
+  or `net.netfilter.nf_conntrack_max`. In a node's namespace it is
+  read-only or absent, and the deploy fails with "Permission denied".
+  The list was read off Linux 6.12: the files writable on the host and
+  not in a fresh namespace.
+
 - **`examples/wifi-mesh.nll`**: three 802.11s mesh points that reach each
   other (#176).
 - **`RunningLab::diagnose_since(node, previous)`** (#191): each
@@ -334,6 +342,11 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   now carry the set's name.
 
 ### Fixed
+
+- **`examples/multi-profile.nll` could not deploy** (#162): its
+  `monitored` profile set `net.core.rmem_max` / `wmem_max`, which are
+  read-only in a node's namespace. It sets `net.ipv4.tcp_rmem` /
+  `tcp_wmem` now, which are per namespace.
 
 - **`rate … ingress` dropped every packet the endpoint received (#149).**
   nlink redirected ingress traffic to the IFB with a mirred *ingress*

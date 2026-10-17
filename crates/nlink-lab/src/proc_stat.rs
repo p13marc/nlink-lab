@@ -20,12 +20,20 @@ pub struct ProcStat {
     /// sample stays self-describing once the records are written to a
     /// file and read back somewhere else.
     pub node: String,
-    /// Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`) for a
-    /// namespace node; see `docs/ARCHITECTURE.md` "Process & namespace
-    /// model". A container node has its own PID namespace, so for one
-    /// of those this is the host PID when the process was discovered
-    /// with `--all` and the in-container PID when you named it.
+    /// The process's PID on the host, whichever way it was named (#157).
     pub host_pid: u32,
+    /// Its PID as the node sees it: the last `NSpid:` field of its
+    /// status, so the container's own PID on a container node. Equal to
+    /// [`Self::host_pid`] on a namespace node, which has no PID
+    /// namespace of its own (see `docs/ARCHITECTURE.md` "Process &
+    /// namespace model").
+    pub ns_pid: u32,
+    /// The stem of the pidfile it was found through
+    /// (`proc-stat --pidfile-glob`): `zenohd` for `/run/zenohd.pid`. It
+    /// tells apart processes that share a [`Self::command`], such as
+    /// several `python3` services.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// Short process name (`/proc/<pid>/comm`-equivalent — first 16 bytes
     /// of the binary's basename or whatever `prctl(PR_SET_NAME)` set).
     pub command: String,
@@ -127,6 +135,9 @@ pub(crate) struct StatusFields {
     pub vm_size_kb: Option<u64>,
     pub vm_rss_kb: Option<u64>,
     pub uid: Option<u32>,
+    /// The PID in the innermost PID namespace: the last `NSpid:` field
+    /// (Linux 4.1+).
+    pub ns_pid: Option<u32>,
 }
 
 /// Parse `/proc/<pid>/status` line-by-line. Lines we don't recognise
@@ -148,6 +159,8 @@ pub(crate) fn parse_status(text: &str) -> StatusFields {
                 let parts: Vec<&str> = value.split_whitespace().collect();
                 out.uid = parts.get(1).and_then(|s| s.parse().ok());
             }
+            // `NSpid: <host> [<child ns> …]`, outermost first.
+            "NSpid" => out.ns_pid = value.split_whitespace().last().and_then(|s| s.parse().ok()),
             _ => {}
         }
     }
@@ -192,10 +205,44 @@ pub(crate) fn parse_btime(proc_stat_text: &str) -> Option<u64> {
 /// Everything read from `/proc` for one process, before it is combined
 /// with the per-node constants into a [`ProcStat`].
 pub(crate) struct Sampled<'a> {
+    pub host_pid: u32,
     pub stat: &'a StatFields,
     pub status: &'a StatusFields,
     pub fd_count: u32,
     pub pss_kb: Option<u64>,
+    pub name: Option<&'a str>,
+}
+
+/// Whether `name` matches `pattern`, a file name with `*` (any run of
+/// characters) and `?` (one character) — the last component of a
+/// `--pidfile-glob`.
+pub(crate) fn wildcard_match(pattern: &str, name: &str) -> bool {
+    let (p, n): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
+    // Iterative match with one backtrack point, the last `*` seen.
+    let (mut i, mut j) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while j < n.len() {
+        if i < p.len() && (p[i] == '?' || p[i] == n[j]) {
+            i += 1;
+            j += 1;
+        } else if i < p.len() && p[i] == '*' {
+            star = Some((i, j));
+            i += 1;
+        } else if let Some((si, sj)) = star {
+            i = si + 1;
+            j = sj + 1;
+            star = Some((si, sj + 1));
+        } else {
+            return false;
+        }
+    }
+    p[i..].iter().all(|&c| c == '*')
+}
+
+/// A pidfile's name for its process: the file name without its last
+/// extension (`zenohd.pid` → `zenohd`, `a.b.pid` → `a.b`).
+pub(crate) fn pidfile_name(path: &std::path::Path) -> Option<String> {
+    path.file_stem().map(|s| s.to_string_lossy().into_owned())
 }
 
 /// Combine the per-process sources with the per-node constants into a
@@ -205,23 +252,26 @@ pub(crate) struct Sampled<'a> {
 /// separate arguments: a multi-process sample reads them once.
 pub(crate) fn assemble(
     node: &str,
-    pid: u32,
     sampled: Sampled<'_>,
     btime_secs: u64,
     tick_hz: u64,
 ) -> ProcStat {
     let Sampled {
+        host_pid,
         stat,
         status,
         fd_count,
         pss_kb,
+        name,
     } = sampled;
     let starttime_secs_since_boot = stat.starttime_ticks as f64 / tick_hz as f64;
     let started_unix_secs = btime_secs as f64 + starttime_secs_since_boot;
     let started_unix_micros = (started_unix_secs * 1_000_000.0) as u64;
     ProcStat {
         node: node.to_string(),
-        host_pid: pid,
+        host_pid,
+        ns_pid: status.ns_pid.unwrap_or(host_pid),
+        name: name.map(str::to_string),
         command: stat.comm.clone(),
         uid: status.uid.unwrap_or(0),
         rss_kb: status.vm_rss_kb,
@@ -365,21 +415,25 @@ Private_Dirty:       900 kB
             vm_size_kb: Some(1024),
             vm_rss_kb: Some(512),
             uid: Some(0),
+            ns_pid: Some(23),
         };
         let ps = assemble(
             "host",
-            123,
             Sampled {
+                host_pid: 123,
                 stat: &stat,
                 status: &status,
                 fd_count: 4,
                 pss_kb: Some(300),
+                name: Some("zenohd"),
             },
             1_700_000_000,
             100,
         );
         assert_eq!(ps.node, "host");
         assert_eq!(ps.host_pid, 123);
+        assert_eq!(ps.ns_pid, 23);
+        assert_eq!(ps.name.as_deref(), Some("zenohd"));
         assert_eq!(ps.command, "sleep");
         assert_eq!(ps.uid, 0);
         assert_eq!(ps.rss_kb, Some(512));
@@ -407,17 +461,54 @@ Private_Dirty:       900 kB
         let status = StatusFields::default();
         let ps = assemble(
             "host",
-            99,
             Sampled {
+                host_pid: 99,
                 stat: &stat,
                 status: &status,
                 fd_count: 0,
                 pss_kb: None,
+                name: None,
             },
             0,
             100,
         );
         assert_eq!(ps.state, "Z");
         assert_eq!(ps.rss_kb, None);
+        // Without an `NSpid:` line, the process is the host's.
+        assert_eq!((ps.host_pid, ps.ns_pid), (99, 99));
+        assert!(ps.name.is_none());
+    }
+
+    /// `NSpid:` lists the PID outermost first: the last field is the
+    /// one the process's own PID namespace uses (#157).
+    #[test]
+    fn parse_status_takes_the_innermost_ns_pid() {
+        let host_only = parse_status("Name:\tsleep\nNSpid:\t4242\n");
+        assert_eq!(host_only.ns_pid, Some(4242));
+        let in_container = parse_status("NSpid:\t3143197\t23\nVmRSS:\t   512 kB\n");
+        assert_eq!(in_container.ns_pid, Some(23));
+        assert_eq!(in_container.vm_rss_kb, Some(512));
+        assert_eq!(parse_status("Name:\tx\n").ns_pid, None);
+    }
+
+    #[test]
+    fn pidfile_globs_match_file_names() {
+        for (pattern, name, want) in [
+            ("*.pid", "zenohd.pid", true),
+            ("*.pid", "zenohd.pid.old", false),
+            ("zenoh?.pid", "zenohd.pid", true),
+            ("robot-*-*.pid", "robot-a-b.pid", true),
+            ("robot-*-*.pid", "robot-a.pid", false),
+            ("*", "anything", true),
+            ("exact.pid", "exact.pid", true),
+            ("exact.pid", "exact.pidx", false),
+            ("*a*b", "xaybzb", true),
+        ] {
+            assert_eq!(wildcard_match(pattern, name), want, "{pattern} ~ {name}");
+        }
+        let name = |p: &str| pidfile_name(std::path::Path::new(p));
+        assert_eq!(name("/run/zenohd.pid").as_deref(), Some("zenohd"));
+        assert_eq!(name("/run/a.b.pid").as_deref(), Some("a.b"));
+        assert_eq!(name("/run/plain").as_deref(), Some("plain"));
     }
 }

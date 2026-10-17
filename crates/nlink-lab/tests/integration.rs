@@ -2967,6 +2967,31 @@ impl Drop for LabCleanup {
                 }
             }
         }
+        // A container node's container is named `<lab>-<node>`; a failed
+        // test must not leave it running.
+        // podman waits 10 s for a stop signal by default; `-t 0` does not.
+        for (runtime, rm) in [
+            ("podman", &["rm", "-f", "-t", "0"][..]),
+            ("docker", &["rm", "-f"][..]),
+        ] {
+            let Ok(out) = std::process::Command::new(runtime)
+                .args(["ps", "-a", "--format", "{{.Names}}"])
+                .stderr(std::process::Stdio::null())
+                .output()
+            else {
+                continue;
+            };
+            for name in String::from_utf8_lossy(&out.stdout).lines() {
+                if name.starts_with(&prefix) {
+                    let _ = std::process::Command::new(runtime)
+                        .args(rm)
+                        .arg(name)
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                }
+            }
+        }
         let _ = nlink_lab::state::remove(&self.name);
         // Every test lab has a unique name, so without this `.locks/`
         // grows by one file per test, for ever (issue #103).
@@ -5391,6 +5416,125 @@ validate {{ reach a b }}
     }
     assert!(seen, "expected a drift event for the new address on a:eth0");
 
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// An image in the local podman store; nothing is pulled.
+fn has_local_image(image: &str) -> bool {
+    std::process::Command::new("podman")
+        .args(["image", "exists", image])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// #157: `proc-stat` on a container node reads the host's `/proc`. Every
+/// process has its host PID and the container's own; `--pid` names the
+/// container's; pidfiles under the container's root give their names; and
+/// no call enters the container (each exec costs about 0.25 s here, so a
+/// call that execs takes far longer than the bound below). On a namespace
+/// node, a PID outside the node is refused rather than sampled.
+#[tokio::test]
+async fn proc_stat_on_a_container_node_reads_the_host_proc() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!(
+            "skipping proc_stat_on_a_container_node_reads_the_host_proc: needs root and \
+             alpine:latest in the podman store"
+        );
+        return;
+    }
+    let lab_name = format!("psc-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}" {{ runtime "podman" }}
+node c image "alpine:latest" cmd ["sleep", "infinity"]
+node h
+link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let out = lab
+        .exec(
+            "c",
+            "sh",
+            &[
+                "-c",
+                "setsid sleep 300 >/dev/null 2>&1 & echo $! > /run/alpha.pid; \
+                 setsid sleep 301 >/dev/null 2>&1 & echo $! > /run/beta.pid; \
+                 echo 99999 > /run/stale.pid; echo junk > /run/junk.pid; \
+                 cat /run/alpha.pid /run/beta.pid",
+            ],
+        )
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    let in_container: Vec<u32> = out.stdout.lines().map(|l| l.parse().unwrap()).collect();
+    let init_host = match lab.ns_resolver_of("c") {
+        Some(nlink_lab::deploy::NsRef::Container { pid, .. }) => pid,
+        other => panic!("not a container node: {other:?}"),
+    };
+
+    // `--all`: every process, by both PIDs. It used to read host PIDs
+    // inside the container, and fail.
+    let t = std::time::Instant::now();
+    let all = lab.proc_stat_all("c").unwrap();
+    let took_all = t.elapsed();
+    let init = all
+        .iter()
+        .find(|s| s.ns_pid == 1)
+        .expect("the container's init");
+    assert_eq!(init.host_pid, init_host, "{all:?}");
+    for pid in &in_container {
+        assert!(all.iter().any(|s| s.ns_pid == *pid), "no {pid}: {all:?}");
+    }
+    assert!(all.iter().all(|s| s.host_pid != s.ns_pid), "{all:?}");
+
+    // `--pid` names the container's PID, and the record has the host's.
+    let t = std::time::Instant::now();
+    let one = lab.proc_stat_many("c", &[1]).unwrap();
+    let took_one = t.elapsed();
+    assert_eq!((one[0].ns_pid, one[0].host_pid), (1, init_host));
+    let err = lab.proc_stat_many("c", &[99999]).unwrap_err().to_string();
+    assert!(err.contains("has no process 99999"), "{err}");
+
+    // Pidfiles under the container's root: named by their stem; a stale
+    // PID and a file that holds none are skipped.
+    let named = lab.proc_stat_pidfiles("c", "/run/*.pid").unwrap();
+    let got: Vec<(&str, u32)> = named
+        .iter()
+        .map(|s| (s.name.as_deref().unwrap(), s.ns_pid))
+        .collect();
+    assert_eq!(got, [("alpha", in_container[0]), ("beta", in_container[1])]);
+
+    for (what, took) in [("--all", took_all), ("--pid", took_one)] {
+        assert!(
+            took < std::time::Duration::from_millis(200),
+            "{what} took {took:?}: it entered the container"
+        );
+    }
+
+    // A namespace node: the host's init is not the node's, and a pidfile
+    // read from the host's filesystem names the node's process.
+    let err = lab.proc_stat_many("h", &[1]).unwrap_err().to_string();
+    assert!(err.contains("has no process 1"), "{err}");
+    let pid = lab.spawn("h", &["sleep", "30"]).unwrap();
+    let dir = std::env::temp_dir().join(format!("nlink-lab-psc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("napper.pid"), format!("{pid}\n")).unwrap();
+    let named = lab
+        .proc_stat_pidfiles("h", &format!("{}/*.pid", dir.display()))
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(named.len(), 1, "{named:?}");
+    assert_eq!(
+        (named[0].name.as_deref(), named[0].host_pid, named[0].ns_pid),
+        (Some("napper"), pid, pid)
+    );
+
+    std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }
 

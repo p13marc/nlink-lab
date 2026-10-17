@@ -238,8 +238,21 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - `events --kind` drift names are `<action>_<object>`: `new_address`,
   `del_route`, `new_nft_rule` (was `new_rule`), `new_neighbour`, plus
   `ended` and `gone`. An ip rule is `new_rule` now.
+- **`proc-stat` records' `host_pid` is always the host's PID** (#157).
+  On a container node, `--pid N` used to put the container's `N` there.
+  The container's own PID is the new `ns_pid` field. On a namespace node,
+  a PID that is not in the node's network namespace is now refused
+  ("node 'x' has no process N"); it used to be sampled anyway, the
+  host's init for `--pid 1`.
+
 ### Added
 
+- **`proc-stat --pidfile-glob '/run/*.pid'`** (#157): samples the
+  processes a node's pidfiles name, read through the container's root on
+  a container node. Each record's new `name` field is the pidfile's stem,
+  which tells apart processes that share a `command`. Records also carry
+  `ns_pid`, and the library has `RunningLab::proc_stat_all`,
+  `proc_stat_pidfiles` and `host_pids`.
 - **Validator warning `sysctl-host-global`** (#162): a profile or node
   that sets a sysctl the kernel keeps for the host only, such as
   `net.core.rmem_max`, `net.core.netdev_max_backlog`, `net.ipv4.tcp_mem`
@@ -357,6 +370,18 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`proc-stat` on a container node** (#157). `--all` failed on every
+  container node: it found the node's processes by their host PIDs, then
+  read `/proc/<host PID>` inside the container, where that number names
+  nothing (or another process). `--pid` cost 2 + 4 execs per process,
+  about 0.25 s each. Every read now comes from the host's `/proc`, which
+  root sees whole, for container nodes too: no exec at all. A container
+  PID is translated through the `NSpid:` of the node's processes in the
+  container's PID namespace. Measured on an alpine node: `--pid 1` went
+  from 1.64 s to 15 ms, and `--all` from failing to 16 ms. `--all` also
+  leaves out a process that exits mid-sample instead of failing, which
+  matters under `--watch` on a churning lab. `spawn --wait-fd-stable`
+  counts the fds from the host as well, instead of one exec per poll.
 - **`events --follow` drift was blank and `--kind` never matched it**
   (#195). The drift record read the event's name from a top-level
   `kind` string, but watch nested the event as an object, so every

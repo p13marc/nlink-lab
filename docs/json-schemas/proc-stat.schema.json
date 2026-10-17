@@ -27,14 +27,27 @@
       "minimum": 0
     },
     "host_pid": {
-      "description": "Host-side PID. Equal to ns_pid today (no `CLONE_NEWPID`) for a\nnamespace node; see `docs/ARCHITECTURE.md` \"Process & namespace\nmodel\". A container node has its own PID namespace, so for one\nof those this is the host PID when the process was discovered\nwith `--all` and the in-container PID when you named it.",
+      "description": "The process's PID on the host, whichever way it was named (#157).",
       "type": "integer",
       "format": "uint32",
       "minimum": 0
     },
+    "name": {
+      "description": "The stem of the pidfile it was found through\n(`proc-stat --pidfile-glob`): `zenohd` for `/run/zenohd.pid`. It\ntells apart processes that share a [`Self::command`], such as\nseveral `python3` services.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "node": {
       "description": "Lab node the process was sampled in. Present so a multi-process\nsample stays self-describing once the records are written to a\nfile and read back somewhere else.",
       "type": "string"
+    },
+    "ns_pid": {
+      "description": "Its PID as the node sees it: the last `NSpid:` field of its\nstatus, so the container's own PID on a container node. Equal to\n[`Self::host_pid`] on a namespace node, which has no PID\nnamespace of its own (see `docs/ARCHITECTURE.md` \"Process &\nnamespace model\").",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
     },
     "pss_kb": {
       "description": "Proportional set size in kilobytes (`Pss` from\n`/proc/<pid>/smaps_rollup`): resident memory with every shared\npage divided among the processes mapping it.\n\nThis is the number to sum across a node. Summing [`Self::rss_kb`]\ndouble-counts every shared page, which is harmless for one\nprocess and wrong for a node — and *systematically* wrong when\ncomparing two configurations with different process counts,\nbecause the one with more processes is penalised for sharing the\nsame libraries.\n\n`None` where `smaps_rollup` is unreadable: kernel threads, and\nkernels before 4.14, which did not have the file. Reading it is\na single kernel-side aggregate, unlike walking `smaps`.",
@@ -83,6 +96,7 @@
   "required": [
     "node",
     "host_pid",
+    "ns_pid",
     "command",
     "uid",
     "fd_count",

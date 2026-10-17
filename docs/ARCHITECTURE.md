@@ -299,14 +299,18 @@ parsing.
 
 ### Host PID vs namespace PID
 
-Equal. **Always.** No exceptions today.
+Equal on a **namespace node**: nlink-lab never uses `CLONE_NEWPID`.
 
 `nlink-lab spawn --json` returns `{ "pid": N, "host_pid": N, ... }`
-where `pid` and `host_pid` are aliases for the same value. The
-`host_pid` field exists for forward compatibility — if a future
-version of nlink-lab adds `CLONE_NEWPID`, an `ns_pid` field will
-appear alongside it. Until then, code that reads either is
-correct.
+where `pid` and `host_pid` are aliases for the same value.
+
+A **container node** has its own PID namespace. `proc-stat` takes a PID
+as the node sees it, the container's, and reports both in every record:
+`host_pid`, and `ns_pid`, the last `NSpid:` field of the process's
+status (#157). It translates by walking the node's processes on the
+host, keeping those in the container init's PID namespace. A process
+`spawn` starts in a container node is tracked by the host PID of the
+runtime's `exec` client, which is what `ps` and `kill` see.
 
 ### Globally-shared state (the parallel-deploy caveats)
 

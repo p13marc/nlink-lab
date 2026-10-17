@@ -1214,26 +1214,138 @@ impl QdiscKind {
     }
 }
 
-/// Firewall configuration (nftables).
+/// Firewall configuration (nftables): one `nlink-lab` table per node.
+///
+/// `policy` and `rules` are the **input** chain (traffic to the node
+/// itself) — the shape every earlier version wrote, so it keeps loading.
+/// `forward` (traffic routed through the node) and `output` (traffic the
+/// node sends) are separate chains with their own policy.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FirewallConfig {
-    /// Default chain policy ("accept" or "drop").
+    /// Input chain policy: "accept" (the default) or "drop".
     pub policy: Option<String>,
 
-    /// Firewall rules.
+    /// Input chain rules, in order (first match wins).
     #[serde(default)]
     pub rules: Vec<FirewallRule>,
+
+    /// Forward chain. Left out, it is installed with policy accept and no
+    /// rules (before 0.14 it took the input chain's policy and could hold
+    /// no rule, so `policy drop` on a router dropped everything routed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward: Option<FirewallChain>,
+
+    /// Output chain. Left out, none is installed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<FirewallChain>,
+}
+
+/// One firewall chain besides input: its policy and rules.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FirewallChain {
+    /// "accept" (the default) or "drop".
+    pub policy: Option<String>,
+
+    /// Rules, in order (first match wins).
+    #[serde(default)]
+    pub rules: Vec<FirewallRule>,
+}
+
+impl FirewallConfig {
+    /// True when the input chain is declared (a policy or a rule): a
+    /// profile's input chain is replaced only by a node that declares one.
+    pub fn input_declared(&self) -> bool {
+        self.policy.is_some() || !self.rules.is_empty()
+    }
+
+    /// Lay `other`'s declared chains over these, chain by chain: a node's
+    /// `firewall forward { … }` keeps the input chain its profile gave it.
+    pub fn merge_from(&mut self, other: &FirewallConfig) {
+        if other.input_declared() {
+            self.policy.clone_from(&other.policy);
+            self.rules.clone_from(&other.rules);
+        }
+        if other.forward.is_some() {
+            self.forward.clone_from(&other.forward);
+        }
+        if other.output.is_some() {
+            self.output.clone_from(&other.output);
+        }
+    }
+
+    /// Every rule of every chain.
+    pub fn all_rules(&self) -> impl Iterator<Item = &FirewallRule> {
+        self.rules
+            .iter()
+            .chain(self.forward.iter().flat_map(|c| c.rules.iter()))
+            .chain(self.output.iter().flat_map(|c| c.rules.iter()))
+    }
+
+    /// Every rule of every chain, mutably.
+    pub fn all_rules_mut(&mut self) -> impl Iterator<Item = &mut FirewallRule> {
+        self.rules
+            .iter_mut()
+            .chain(self.forward.iter_mut().flat_map(|c| c.rules.iter_mut()))
+            .chain(self.output.iter_mut().flat_map(|c| c.rules.iter_mut()))
+    }
 }
 
 /// A single firewall rule.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FirewallRule {
     /// Match expression (e.g., "tcp dport 80", "ct state established,related").
+    /// Empty or absent: the rule matches every packet.
     #[serde(rename = "match")]
     pub match_expr: Option<String>,
 
-    /// Action ("accept", "drop", "reject").
+    /// Verdict: "accept" (the default), "drop" or "reject".
     pub action: Option<String>,
+
+    /// How a `reject` answers. Left out: ICMP port unreachable (ICMPv6
+    /// for IPv6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reject_with: Option<RejectWith>,
+}
+
+/// The answer a `reject` rule sends (`reject with …`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RejectWith {
+    /// A TCP reset. Only meaningful for TCP: the rule must match `tcp`.
+    TcpReset,
+    /// ICMP(v6) port unreachable — what a bare `reject` sends.
+    PortUnreachable,
+    /// ICMP(v6) host unreachable.
+    HostUnreachable,
+    /// ICMP(v6) no route to destination.
+    NoRoute,
+    /// ICMP(v6) administratively prohibited.
+    AdminProhibited,
+}
+
+impl RejectWith {
+    /// The NLL / nft spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TcpReset => "tcp-reset",
+            Self::PortUnreachable => "port-unreachable",
+            Self::HostUnreachable => "host-unreachable",
+            Self::NoRoute => "no-route",
+            Self::AdminProhibited => "admin-prohibited",
+        }
+    }
+
+    /// Parse the NLL spelling.
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "tcp-reset" => Self::TcpReset,
+            "port-unreachable" => Self::PortUnreachable,
+            "host-unreachable" => Self::HostUnreachable,
+            "no-route" => Self::NoRoute,
+            "admin-prohibited" => Self::AdminProhibited,
+            _ => return None,
+        })
+    }
 }
 
 /// NAT configuration.
@@ -1515,17 +1627,33 @@ impl Topology {
         sysctls
     }
 
-    /// Get the effective firewall config for a node (node overrides profile).
-    pub fn effective_firewall<'a>(&'a self, node: &'a Node) -> Option<&'a FirewallConfig> {
-        if node.firewall.is_some() {
-            return node.firewall.as_ref();
-        }
-        // Last profile carrying a firewall wins (later profiles override
+    /// The firewall a node runs: its profiles' and its own, merged chain by
+    /// chain (a declared chain replaces the one before it).
+    pub fn effective_firewall<'a>(
+        &'a self,
+        node: &'a Node,
+    ) -> Option<std::borrow::Cow<'a, FirewallConfig>> {
+        use std::borrow::Cow;
+        // Chain by chain: each profile, in order, then the node, lays the
+        // chains it declares over the ones before (later profiles override
         // earlier ones, mirroring sysctl merge order).
-        node.profiles
+        let layers: Vec<&FirewallConfig> = node
+            .profiles
             .iter()
-            .rev()
-            .find_map(|name| self.profiles.get(name).and_then(|p| p.firewall.as_ref()))
+            .filter_map(|name| self.profiles.get(name).and_then(|p| p.firewall.as_ref()))
+            .chain(node.firewall.as_ref())
+            .collect();
+        match layers.as_slice() {
+            [] => None,
+            [only] => Some(Cow::Borrowed(*only)),
+            [first, rest @ ..] => {
+                let mut fw = (*first).clone();
+                for layer in rest {
+                    fw.merge_from(layer);
+                }
+                Some(Cow::Owned(fw))
+            }
+        }
     }
 }
 

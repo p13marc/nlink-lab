@@ -436,58 +436,71 @@ fn render_sysctls(
     Ok(())
 }
 
-/// Translate an nftables match expression (as produced by the parser's
-/// `parse_match_expr`) back into NLL `match_expr` syntax.
+/// Translate a stored match expression (as produced by the parser's
+/// `parse_match_expr`) back into NLL syntax.
 fn firewall_match_to_nll(expr: &str) -> Result<String> {
-    let bad = |why: &str| unrepresentable("firewall match", expr, why);
-    let toks: Vec<&str> = expr.split_whitespace().collect();
-    let mut parts: Vec<String> = Vec::new();
-    let mut i = 0;
-    while i < toks.len() {
-        let rest = &toks[i..];
-        match rest {
-            ["ip" | "ip6", dir @ ("saddr" | "daddr"), addr, ..] => {
-                let kw = if *dir == "saddr" { "src" } else { "dst" };
-                parts.push(format!("{kw} {}", nll_addr(addr)?));
-                i += 3;
+    use crate::firewall::Clause;
+    let clauses = crate::firewall::parse_match(expr)
+        .map_err(|e| unrepresentable("firewall match", expr, &e))?;
+    for c in &clauses {
+        match c {
+            Clause::Addr { text, .. } => {
+                nll_addr(text)?;
             }
-            ["ct", "state", states, ..] => {
-                for st in states.split(',') {
+            Clause::CtState(states) => {
+                for st in states {
                     nll_name(st)?;
                 }
-                parts.push(format!("ct {states}"));
-                i += 3;
             }
-            [proto @ ("tcp" | "udp"), dir @ ("dport" | "sport"), port, ..] if is_digits(port) => {
-                parts.push(format!("{proto} {dir} {port}"));
-                i += 3;
+            Clause::Iface { name, .. } => {
+                nll_name(name)?;
             }
-            [proto @ ("icmp" | "icmpv6"), "type", ty, ..] if is_digits(ty) => {
-                parts.push(format!("{proto} {ty}"));
-                i += 3;
-            }
-            ["mark", mark, ..] if is_digits(mark) => {
-                parts.push(format!("mark {mark}"));
-                i += 2;
-            }
-            _ => {
-                return Err(bad(
-                    "only `ip[6] saddr/daddr`, `ct state`, `tcp/udp dport/sport`, \
-                     `icmp[v6] type` and `mark` have NLL syntax",
-                ));
-            }
+            _ => {}
         }
     }
-    if parts.is_empty() {
-        return Err(bad("a firewall rule needs at least one match"));
-    }
-    Ok(parts.join(" "))
+    Ok(clauses
+        .iter()
+        .map(Clause::to_nll)
+        .collect::<Vec<_>>()
+        .join(" "))
 }
 
+/// A node's or profile's firewall. Only an input chain: the original
+/// `firewall policy P { … }`, so existing output is unchanged; otherwise
+/// the grouped `firewall { input … forward … output … }`.
 fn render_firewall(out: &mut String, indent: &str, fw: &FirewallConfig) -> Result<()> {
-    let policy = fw.policy.as_deref().unwrap_or("accept");
-    writeln!(out, "{indent}firewall policy {} {{", nll_ident(policy)?).unwrap();
-    for rule in &fw.rules {
+    if fw.forward.is_none() && fw.output.is_none() {
+        let policy = fw.policy.as_deref().unwrap_or("accept");
+        return render_firewall_chain(out, indent, "firewall", Some(policy), &fw.rules);
+    }
+    writeln!(out, "{indent}firewall {{").unwrap();
+    let inner = format!("{indent}  ");
+    if fw.input_declared() {
+        render_firewall_chain(out, &inner, "input", fw.policy.as_deref(), &fw.rules)?;
+    }
+    for (name, chain) in [("forward", &fw.forward), ("output", &fw.output)] {
+        if let Some(c) = chain {
+            render_firewall_chain(out, &inner, name, c.policy.as_deref(), &c.rules)?;
+        }
+    }
+    writeln!(out, "{indent}}}").unwrap();
+    Ok(())
+}
+
+fn render_firewall_chain(
+    out: &mut String,
+    indent: &str,
+    head: &str,
+    policy: Option<&str>,
+    rules: &[crate::types::FirewallRule],
+) -> Result<()> {
+    crate::firewall::policy(policy)
+        .map_err(|e| unrepresentable("firewall policy", policy.unwrap_or(""), &e))?;
+    match policy {
+        Some(p) => writeln!(out, "{indent}{head} policy {p} {{").unwrap(),
+        None => writeln!(out, "{indent}{head} {{").unwrap(),
+    }
+    for rule in rules {
         let action = rule.action.as_deref().unwrap_or("accept");
         if !matches!(action, "accept" | "drop" | "reject") {
             return Err(unrepresentable(
@@ -496,8 +509,17 @@ fn render_firewall(out: &mut String, indent: &str, fw: &FirewallConfig) -> Resul
                 "expected accept, drop or reject",
             ));
         }
-        let expr = rule.match_expr.as_deref().unwrap_or("");
-        writeln!(out, "{indent}  {action} {}", firewall_match_to_nll(expr)?).unwrap();
+        let mut line = action.to_string();
+        if let Some(with) = rule.reject_with {
+            line.push_str(" with ");
+            line.push_str(with.as_str());
+        }
+        let m = firewall_match_to_nll(rule.match_expr.as_deref().unwrap_or(""))?;
+        if !m.is_empty() {
+            line.push(' ');
+            line.push_str(&m);
+        }
+        writeln!(out, "{indent}  {line}").unwrap();
     }
     writeln!(out, "{indent}}}").unwrap();
     Ok(())
@@ -1938,6 +1960,7 @@ node a : web
         n.firewall = Some(FirewallConfig {
             policy: Some("drop".into()),
             rules: vec![],
+            ..Default::default()
         });
         topo.nodes.insert("a".into(), n);
         let rendered = try_render(&topo).unwrap();
@@ -1954,6 +1977,52 @@ node a : web
         );
     }
 
+    /// #164: chains, bare verdicts, `reject with`, iif/oif, `!=` and port
+    /// ranges render back to NLL that parses to the same topology; a firewall
+    /// with only an input chain keeps the original form.
+    #[test]
+    fn test_render_firewall_chains_roundtrip() {
+        let (_, rendered, _) = roundtrip(
+            r#"lab "t"
+
+node gw {
+  firewall policy drop {
+    accept ct established,related
+    reject
+  }
+  firewall forward policy drop {
+    accept iif lan0 oif wan0
+    accept dst 10.0.1.10 tcp dport 8000-8999
+    drop src != 10.0.0.0/8 udp sport != 53
+    reject with tcp-reset iif wan0 tcp dport 22
+  }
+  firewall output { accept }
+}
+
+node h {
+  firewall policy accept { drop icmp 8 }
+}
+"#,
+        );
+        assert!(
+            rendered.contains("  firewall {\n    input policy drop {"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("    forward policy drop {"), "{rendered}");
+        assert!(
+            rendered.contains("      reject with tcp-reset iif wan0 tcp dport 22"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("    output {\n      accept\n    }"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("  firewall policy accept {\n    drop icmp 8"),
+            "{rendered}"
+        );
+    }
+
     #[test]
     fn test_render_firewall_unknown_match_is_error() {
         let mut topo = Topology::default();
@@ -1964,7 +2033,9 @@ node a : web
             rules: vec![crate::types::FirewallRule {
                 match_expr: Some("meta l4proto sctp".into()),
                 action: Some("accept".into()),
+                ..Default::default()
             }],
+            ..Default::default()
         });
         topo.nodes.insert("a".into(), n);
         let err = try_render(&topo).unwrap_err();

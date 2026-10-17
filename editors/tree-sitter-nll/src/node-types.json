@@ -547,6 +547,21 @@
       "required": false,
       "types": [
         {
+          "type": "firewall_chain",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "firewall_chain",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
           "type": "firewall_rule",
           "named": true
         }
@@ -558,9 +573,13 @@
     "named": true,
     "fields": {},
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
         {
           "type": "match_expression",
           "named": true
@@ -3706,6 +3725,10 @@
     "named": false
   },
   {
+    "type": "-",
+    "named": false
+  },
+  {
     "type": "--",
     "named": false
   },
@@ -4071,6 +4094,10 @@
     "named": true
   },
   {
+    "type": "iif",
+    "named": false
+  },
+  {
     "type": "image",
     "named": false
   },
@@ -4088,6 +4115,10 @@
   },
   {
     "type": "ingress",
+    "named": false
+  },
+  {
+    "type": "input",
     "named": false
   },
   {
@@ -4280,11 +4311,19 @@
     "named": false
   },
   {
+    "type": "oif",
+    "named": false
+  },
+  {
     "type": "option_word",
     "named": true
   },
   {
     "type": "ospf",
+    "named": false
+  },
+  {
+    "type": "output",
     "named": false
   },
   {
@@ -4476,6 +4515,10 @@
     "named": false
   },
   {
+    "type": "state",
+    "named": false
+  },
+  {
     "type": "streams",
     "named": false
   },
@@ -4593,6 +4636,10 @@
   },
   {
     "type": "wireguard",
+    "named": false
+  },
+  {
+    "type": "with",
     "named": false
   },
   {

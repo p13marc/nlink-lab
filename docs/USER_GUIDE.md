@@ -606,9 +606,29 @@ node server {
 }
 ```
 
-Rules are applied via nftables. The `policy` sets the default chain action.
+Rules are applied via nftables, first match wins. `firewall policy P`
+is the **input** chain (traffic to the node); `policy` is `accept` or
+`drop`. A router filters routed traffic in its own **forward** chain —
+left out, forward accepts:
 
-See `examples/firewall.nll`.
+```nll-ignore
+node gw : router {
+  firewall forward policy drop {
+    accept ct established,related
+    accept iif lan0 oif wan0
+    reject with tcp-reset iif wan0 tcp dport 22
+  }
+}
+```
+
+Matches: `src`/`dst` (with `!=`), `tcp`/`udp` `dport`/`sport` (a port or
+a range `8000-8999`, `!=` for a single port), `ct` states, `iif`/`oif`,
+`icmp`/`icmpv6` types, `mark`. A rule with no match (`reject`) catches
+everything left. `reject` answers ICMP port unreachable; `reject with
+tcp-reset` sends a reset. There is also an `output` chain, and
+`firewall { input … forward … output … }` groups them.
+
+See `examples/firewall.nll` and `examples/firewall-router.nll`.
 
 ### 7. Bridge Networks with VLANs
 

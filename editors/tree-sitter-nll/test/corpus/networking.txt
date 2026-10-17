@@ -65,12 +65,13 @@ node fw {
     (identifier)
     (node_body
       (firewall_block
-        (firewall_rule
-          (match_expression
-            (integer)))
-        (firewall_rule
-          (match_expression
-            (cidr)))))))
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (integer)))
+          (firewall_rule
+            (match_expression
+              (cidr))))))))
 
 ================
 Validate block
@@ -154,3 +155,54 @@ qdisc hub:eth1 fq_codel { target 5ms ecn }
       (identifier))
     (identifier)
     (duration)))
+
+================
+Firewall chains
+================
+node gw {
+  firewall {
+    input policy drop {
+      accept ct state established,related
+      reject
+    }
+    forward {
+      accept iif lan0 oif != wan0
+      drop src != 10.0.0.0/8 tcp dport 8000-8999
+      reject with tcp-reset tcp dport 22
+    }
+  }
+  firewall output policy accept { drop icmp 8 }
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (ct_states
+                (identifier)
+                (identifier))))
+          (firewall_rule))
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (identifier)
+              (identifier)))
+          (firewall_rule
+            (match_expression
+              (cidr)
+              (integer)
+              (integer)))
+          (firewall_rule
+            (identifier)
+            (match_expression
+              (integer)))))
+      (firewall_block
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (integer))))))))

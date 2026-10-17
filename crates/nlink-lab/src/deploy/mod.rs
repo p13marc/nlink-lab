@@ -1128,7 +1128,7 @@ pub async fn compute_layered_diff(
         let fw = desired.effective_firewall(node);
         let nat = node.nat.as_ref();
         if fw.is_some() || nat.is_some() {
-            let cfg = topology_to_nftables_config(fw, nat)?;
+            let cfg = topology_to_nftables_config(fw.as_deref(), nat)?;
             let nft_conn: Connection<Nftables> = handle.connection().map_err(|e| {
                 Error::deploy_failed(format!("Nftables connection on '{node_name}': {e}"))
             })?;
@@ -2007,12 +2007,15 @@ validate {
                 crate::types::FirewallRule {
                     match_expr: Some("tcp dport 80".into()),
                     action: Some("accept".into()),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("tcp dport 22".into()),
                     action: Some("accept".into()),
+                    ..Default::default()
                 },
             ],
+            ..Default::default()
         };
         let cfg = topology_to_nftables_config(Some(&fw), None).unwrap();
         assert_eq!(cfg.tables().len(), 1, "exactly one table");
@@ -2066,7 +2069,9 @@ validate {
             rules: vec![crate::types::FirewallRule {
                 match_expr: Some("tcp dport 22".into()),
                 action: Some("accept".into()),
+                ..Default::default()
             }],
+            ..Default::default()
         };
         let nat = crate::types::NatConfig {
             rules: vec![crate::types::NatRule {
@@ -2100,7 +2105,9 @@ validate {
             rules: vec![crate::types::FirewallRule {
                 match_expr: Some("ip saddr 999.999.999.999/24".into()),
                 action: Some("accept".into()),
+                ..Default::default()
             }],
+            ..Default::default()
         };
         let err = topology_to_nftables_config(Some(&fw), None).unwrap_err();
         assert!(
@@ -2117,16 +2124,20 @@ validate {
                 crate::types::FirewallRule {
                     match_expr: Some("ip6 saddr fd00::/64 tcp dport 22".into()),
                     action: Some("accept".into()),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("ip6 daddr fd00::1".into()),
                     action: Some("accept".into()),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("ip saddr 10.0.0.1".into()),
                     action: Some("accept".into()),
+                    ..Default::default()
                 },
             ],
+            ..Default::default()
         };
         let cfg = topology_to_nftables_config(Some(&fw), None).unwrap();
         let input_rules = cfg.tables()[0]
@@ -2137,6 +2148,65 @@ validate {
         assert_eq!(input_rules, 3);
     }
 
+    /// #164: input and forward chains are always declared (forward accepts
+    /// unless declared), output only when declared; each chain's rules get
+    /// their own keys; a reject is a reject; a policy is accept or drop.
+    #[test]
+    fn nftables_config_chains_keys_and_strict_verdicts() {
+        use nlink::netlink::nftables::types::Policy;
+        let fw = crate::types::FirewallConfig {
+            policy: Some("drop".into()),
+            rules: vec![crate::types::FirewallRule {
+                match_expr: Some("tcp dport 22".into()),
+                action: Some("reject".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let cfg = topology_to_nftables_config(Some(&fw), None).unwrap();
+        let t = &cfg.tables()[0];
+        let chains: Vec<(&str, Option<Policy>)> =
+            t.chains().iter().map(|c| (c.name(), c.policy())).collect();
+        assert_eq!(
+            chains,
+            [
+                ("input", Some(Policy::Drop)),
+                ("forward", Some(Policy::Accept))
+            ],
+            "an undeclared forward chain accepts"
+        );
+        assert!(matches!(
+            t.rules()[0].exprs().last(),
+            Some(nlink::netlink::nftables::Expr::Reject { .. })
+        ));
+
+        let mut fw2 = fw.clone();
+        fw2.forward = Some(crate::types::FirewallChain {
+            policy: Some("drop".into()),
+            rules: vec![crate::types::FirewallRule {
+                match_expr: Some("iifname lan0".into()),
+                action: Some("accept".into()),
+                ..Default::default()
+            }],
+        });
+        fw2.output = Some(Default::default());
+        let cfg = topology_to_nftables_config(Some(&fw2), None).unwrap();
+        let t = &cfg.tables()[0];
+        let names: Vec<&str> = t.chains().iter().map(|c| c.name()).collect();
+        assert_eq!(names, ["input", "forward", "output"]);
+        let keys: Vec<&str> = t.rules().iter().filter_map(|r| r.handle_key()).collect();
+        assert_eq!(keys, ["nlink-lab/fw/input/0", "nlink-lab/fw/forward/0"]);
+
+        let mut bad = fw.clone();
+        bad.policy = Some("reject".into());
+        let err = topology_to_nftables_config(Some(&bad), None).unwrap_err();
+        assert!(err.to_string().contains("accept or drop"), "{err}");
+        let mut bad = fw;
+        bad.rules[0].action = Some("dorp".into());
+        let err = topology_to_nftables_config(Some(&bad), None).unwrap_err();
+        assert!(err.to_string().contains("unknown firewall action"), "{err}");
+    }
+
     #[test]
     fn nftables_config_ip_keyword_with_v6_address_errors() {
         let fw = crate::types::FirewallConfig {
@@ -2144,7 +2214,9 @@ validate {
             rules: vec![crate::types::FirewallRule {
                 match_expr: Some("ip saddr fd00::/64".into()),
                 action: Some("accept".into()),
+                ..Default::default()
             }],
+            ..Default::default()
         };
         let err = topology_to_nftables_config(Some(&fw), None).unwrap_err();
         assert!(err.to_string().contains("use 'ip6 saddr'"), "{err}");
@@ -2153,7 +2225,9 @@ validate {
             rules: vec![crate::types::FirewallRule {
                 match_expr: Some("ip6 daddr 10.0.0.0/8".into()),
                 action: Some("accept".into()),
+                ..Default::default()
             }],
+            ..Default::default()
         };
         let err = topology_to_nftables_config(Some(&fw), None).unwrap_err();
         assert!(err.to_string().contains("use 'ip daddr'"), "{err}");

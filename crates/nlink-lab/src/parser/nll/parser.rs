@@ -1366,37 +1366,66 @@ fn parse_nat_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NatDef> {
     Ok(ast::NatDef { items })
 }
 
+/// `firewall policy P { … }` (the input chain), `firewall input|forward|output
+/// [policy P] { … }`, or `firewall { … }` holding several of those (#164).
 fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallDef> {
-    expect_kw(tokens, pos, "policy")?;
-    let policy = if eat_kw(tokens, pos, "accept") {
-        "accept".to_string()
-    } else if eat_kw(tokens, pos, "drop") {
-        "drop".to_string()
-    } else if eat_kw(tokens, pos, "reject") {
-        "reject".to_string()
-    } else {
-        match at(tokens, *pos) {
-            Some(Token::Ident(s)) => {
-                let s = s.clone();
-                *pos += 1;
-                s
+    let mut def = ast::FirewallDef::default();
+    if eat(tokens, pos, &Token::LBrace) {
+        loop {
+            skip_newlines(tokens, pos);
+            if eat(tokens, pos, &Token::RBrace) {
+                break;
             }
-            other => {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    format!(
-                        "expected firewall policy, found {}",
-                        other.map_or("end of input".to_string(), |t| t.to_string())
-                    ),
-                ));
-            }
+            def.chains.push(parse_firewall_chain(tokens, pos)?);
         }
+    } else {
+        def.chains.push(parse_firewall_chain(tokens, pos)?);
+    }
+    Ok(def)
+}
+
+fn parse_firewall_chain(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallChainDef> {
+    let chain = if eat_kw(tokens, pos, "input") {
+        "input"
+    } else if eat_kw(tokens, pos, "forward") {
+        "forward"
+    } else if eat_kw(tokens, pos, "output") {
+        "output"
+    } else if check_kw(tokens, *pos, "policy") {
+        // the original form: `firewall policy drop { … }` is the input chain
+        "input"
+    } else {
+        return Err(err(
+            tokens,
+            *pos,
+            format!(
+                "expected `policy`, `input`, `forward` or `output` in firewall, found {}",
+                at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+            ),
+        ));
+    };
+    let policy = if eat_kw(tokens, pos, "policy") {
+        Some(if eat_kw(tokens, pos, "accept") {
+            "accept".to_string()
+        } else if eat_kw(tokens, pos, "drop") {
+            "drop".to_string()
+        } else {
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "firewall policy must be `accept` or `drop`, found {} (a chain cannot have \
+                     a reject policy: end it with a bare `reject` rule)",
+                    at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+                ),
+            ));
+        })
+    } else {
+        None
     };
 
     let mut rules = Vec::new();
     expect(tokens, pos, &Token::LBrace)?;
-
     loop {
         skip_newlines(tokens, pos);
         if eat(tokens, pos, &Token::RBrace) {
@@ -1405,7 +1434,11 @@ fn parse_firewall_def(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firewa
         rules.push(parse_firewall_rule(tokens, pos)?);
     }
 
-    Ok(ast::FirewallDef { policy, rules })
+    Ok(ast::FirewallChainDef {
+        chain: chain.to_string(),
+        policy,
+        rules,
+    })
 }
 
 fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::FirewallRuleDef> {
@@ -1426,26 +1459,99 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
         ));
     };
 
-    // Parse match expression
-    let match_expr = parse_match_expr(tokens, pos)?;
+    // `reject with tcp-reset|port-unreachable|host-unreachable|no-route|admin-prohibited`
+    let reject_with = if action == "reject" && eat_kw(tokens, pos, "with") {
+        let at_pos = *pos;
+        let name = parse_name(tokens, pos)?;
+        Some(crate::types::RejectWith::parse(&name).ok_or_else(|| {
+            err(
+                tokens,
+                at_pos,
+                format!(
+                    "unknown reject type '{name}' (expected tcp-reset, port-unreachable, \
+                     host-unreachable, no-route or admin-prohibited)"
+                ),
+            )
+        })?)
+    } else {
+        None
+    };
 
-    Ok(ast::FirewallRuleDef { action, match_expr })
+    // Matches are optional: a bare verdict (`reject`) matches every packet.
+    let match_expr = parse_match_expr(tokens, pos)?;
+    match at(tokens, *pos) {
+        None | Some(Token::Newline | Token::RBrace) => {}
+        Some(Token::Ident(s)) if matches!(s.as_str(), "accept" | "drop" | "reject") => {}
+        Some(other) => {
+            return Err(err(
+                tokens,
+                *pos,
+                format!(
+                    "expected a firewall match (ct/tcp/udp/icmp/icmpv6/mark/src/dst/iif/oif), \
+                     found {other}"
+                ),
+            ));
+        }
+    }
+
+    Ok(ast::FirewallRuleDef {
+        action,
+        reject_with,
+        match_expr,
+    })
+}
+
+/// An optional `!=` before a match operand.
+fn eat_neq(tokens: &[Spanned], pos: &mut usize) -> &'static str {
+    if eat(tokens, pos, &Token::NotEq) {
+        " !="
+    } else {
+        ""
+    }
+}
+
+/// A port, or a range `LO-HI`, as the match string writes it.
+fn parse_port_or_range(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
+    let port = |tokens: &[Spanned], pos: &mut usize| -> Result<u16> {
+        let at_pos = *pos;
+        let v = expect_int(tokens, pos)?;
+        u16::try_from(v)
+            .map_err(|_| err(tokens, at_pos, format!("port {v} out of range 0..=65535")))
+    };
+    let start = *pos;
+    let lo = port(tokens, pos)?;
+    // `8000-8999`: the dash must touch both numbers
+    if matches!(at(tokens, *pos), Some(Token::Dash))
+        && tokens[*pos].span.start == tokens[*pos - 1].span.end
+    {
+        *pos += 1;
+        let hi = port(tokens, pos)?;
+        if lo > hi {
+            return Err(err(
+                tokens,
+                start,
+                format!("port range {lo}-{hi} starts after it ends"),
+            ));
+        }
+        return Ok(format!("{lo}-{hi}"));
+    }
+    Ok(lo.to_string())
 }
 
 fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
     let mut parts: Vec<String> = Vec::new();
-    let mut matched = false;
 
     // Parse match components — src/dst can appear before or after protocol matches
     loop {
         if check_kw(tokens, *pos, "src") {
             *pos += 1;
+            let neg = eat_neq(tokens, pos);
             let addr = parse_cidr_or_name(tokens, pos)?;
             let family = if addr.contains(':') { "ip6" } else { "ip" };
-            parts.insert(0, format!("{family} saddr {addr}")); // saddr first in nftables order
-            matched = true;
+            parts.insert(0, format!("{family} saddr{neg} {addr}")); // saddr first in nftables order
         } else if check_kw(tokens, *pos, "dst") {
             *pos += 1;
+            let neg = eat_neq(tokens, pos);
             let addr = parse_cidr_or_name(tokens, pos)?;
             let family = if addr.contains(':') { "ip6" } else { "ip" };
             // Insert after saddr if present, otherwise at start
@@ -1453,21 +1559,40 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 .iter()
                 .position(|p| !p.contains("saddr"))
                 .unwrap_or(parts.len());
-            parts.insert(insert_pos, format!("{family} daddr {addr}"));
-            matched = true;
+            parts.insert(insert_pos, format!("{family} daddr{neg} {addr}"));
         } else if check_kw(tokens, *pos, "ct") {
             *pos += 1;
-            let mut ct = "ct state ".to_string();
-            let state = parse_name(tokens, pos)?;
-            ct.push_str(&state);
-            while eat(tokens, pos, &Token::Comma) {
+            eat_kw(tokens, pos, "state");
+            let mut states = Vec::new();
+            loop {
+                let at_pos = *pos;
                 let state = parse_name(tokens, pos)?;
-                ct.push(',');
-                ct.push_str(&state);
+                if !matches!(
+                    state.as_str(),
+                    "established" | "related" | "new" | "invalid" | "untracked"
+                ) && !state.contains("${")
+                {
+                    return Err(err(
+                        tokens,
+                        at_pos,
+                        format!(
+                            "unknown ct state '{state}' (expected established, related, new, \
+                             invalid or untracked)"
+                        ),
+                    ));
+                }
+                states.push(state);
+                if !eat(tokens, pos, &Token::Comma) {
+                    break;
+                }
             }
-            parts.push(ct);
-            matched = true;
-        } else if check_kw(tokens, *pos, "tcp") {
+            parts.push(format!("ct state {}", states.join(",")));
+        } else if check_kw(tokens, *pos, "tcp") || check_kw(tokens, *pos, "udp") {
+            let proto = if check_kw(tokens, *pos, "tcp") {
+                "tcp"
+            } else {
+                "udp"
+            };
             *pos += 1;
             let dir = if eat_kw(tokens, pos, "dport") {
                 "dport"
@@ -1478,63 +1603,58 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                     tokens,
                     *pos,
                     format!(
-                        "expected 'dport' or 'sport' after 'tcp', found {}",
+                        "expected 'dport' or 'sport' after '{proto}', found {}",
                         at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
                     ),
                 ));
             };
-            let port = expect_int(tokens, pos)?;
-            parts.push(format!("tcp {dir} {port}"));
-            matched = true;
-        } else if check_kw(tokens, *pos, "udp") {
-            *pos += 1;
-            let dir = if eat_kw(tokens, pos, "dport") {
-                "dport"
-            } else if eat_kw(tokens, pos, "sport") {
-                "sport"
-            } else {
+            let neg = eat_neq(tokens, pos);
+            let neg_at = *pos;
+            let port = parse_port_or_range(tokens, pos)?;
+            if !neg.is_empty() && port.contains('-') {
                 return Err(err(
                     tokens,
-                    *pos,
+                    neg_at,
                     format!(
-                        "expected 'dport' or 'sport' after 'udp', found {}",
-                        at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
+                        "a negated port range ('!= {port}') is not supported; match the range \
+                         in an accept/drop rule placed first"
                     ),
                 ));
-            };
-            let port = expect_int(tokens, pos)?;
-            parts.push(format!("udp {dir} {port}"));
-            matched = true;
+            }
+            parts.push(format!("{proto} {dir}{neg} {port}"));
         } else if check_kw(tokens, *pos, "icmp") {
             *pos += 1;
             let icmp_type = expect_int(tokens, pos)?;
             parts.push(format!("icmp type {icmp_type}"));
-            matched = true;
         } else if check_kw(tokens, *pos, "icmpv6") {
             *pos += 1;
             let icmp_type = expect_int(tokens, pos)?;
             parts.push(format!("icmpv6 type {icmp_type}"));
-            matched = true;
         } else if check_kw(tokens, *pos, "mark") {
             *pos += 1;
             let mark = expect_int(tokens, pos)?;
             parts.push(format!("mark {mark}"));
-            matched = true;
+        } else if check_kw(tokens, *pos, "iif") || check_kw(tokens, *pos, "oif") {
+            let kw = if check_kw(tokens, *pos, "iif") {
+                "iifname"
+            } else {
+                "oifname"
+            };
+            *pos += 1;
+            let neg = eat_neq(tokens, pos);
+            let at_pos = *pos;
+            let name = parse_name(tokens, pos)?;
+            if name.len() > 15 && !name.contains("${") {
+                return Err(err(
+                    tokens,
+                    at_pos,
+                    format!("interface name '{name}' is longer than 15 characters"),
+                ));
+            }
+            parts.push(format!("{kw}{neg} {name}"));
         } else {
             break;
         }
-    }
-
-    if !matched {
-        let tok = at(tokens, *pos);
-        return Err(err(
-            tokens,
-            *pos,
-            format!(
-                "expected match expression (ct/tcp/udp/icmp/icmpv6/mark/src/dst), found {}",
-                tok.map_or("end of input".to_string(), |t| t.to_string())
-            ),
-        ));
     }
 
     Ok(parts.join(" "))
@@ -4187,7 +4307,9 @@ node server {
         match &ast.statements[0] {
             ast::Statement::Node(n) => match &n.props[0] {
                 ast::NodeProp::Firewall(fw) => {
-                    assert_eq!(fw.policy, "drop");
+                    let fw = &fw.chains[0];
+                    assert_eq!(fw.chain, "input");
+                    assert_eq!(fw.policy.as_deref(), Some("drop"));
                     assert_eq!(fw.rules.len(), 2);
                     assert_eq!(fw.rules[0].action, "accept");
                     assert_eq!(fw.rules[0].match_expr, "ct state established,related");
@@ -4216,6 +4338,7 @@ node server {
         match &ast.statements[0] {
             ast::Statement::Node(n) => match &n.props[0] {
                 ast::NodeProp::Firewall(fw) => {
+                    let fw = &fw.chains[0];
                     assert_eq!(fw.rules.len(), 5);
                     assert_eq!(fw.rules[0].match_expr, "tcp dport 443");
                     assert_eq!(fw.rules[1].match_expr, "ip saddr 10.0.0.0/8 tcp dport 80");

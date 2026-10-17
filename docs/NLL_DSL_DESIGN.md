@@ -321,6 +321,63 @@ node server {
 }
 ```
 
+A node's firewall is one nftables table (`nlink-lab`) with three base
+chains. `firewall policy P { … }` is the **input** chain: traffic
+addressed to the node. A router filters what it routes in the
+**forward** chain, and a node can filter what it sends in **output**:
+
+```nll-ignore
+node gw : router {
+  firewall policy drop {                      # input: traffic to gw itself
+    accept ct established,related
+    accept iif lan0 tcp dport 22
+    reject                                    # a bare verdict matches everything
+  }
+  firewall forward policy drop {              # traffic routed through gw
+    accept ct established,related
+    accept iif lan0 oif wan0
+    accept iif wan0 dst 10.0.1.10 tcp dport 8000-8999
+    reject with tcp-reset iif wan0 tcp dport 22
+  }
+  firewall output { drop dst 192.0.2.0/24 }
+}
+```
+
+The chains may also be grouped: `firewall { input policy drop { … }
+forward { … } output { … } }`.
+
+- **Policy:** `accept` (the default) or `drop`. A chain has no reject
+  policy; end it with a bare `reject` rule instead.
+- **Forward left out:** the forward chain is installed with policy
+  `accept`. (Before 0.14 it took the input chain's policy and could hold
+  no rule, so `policy drop` on a router dropped everything it routed.)
+- **Profiles:** a node's chains are laid over its profiles' chain by
+  chain. A node that declares only `firewall forward { … }` keeps the
+  input chain its profile gives it.
+- **Verdicts:** `accept`, `drop`, `reject`. `reject` answers with ICMP(v6)
+  port unreachable; `reject with tcp-reset | port-unreachable |
+  host-unreachable | no-route | admin-prohibited` picks the answer
+  (`tcp-reset` needs a `tcp` match).
+- **Matches** (any number, all must hold; first matching rule wins):
+
+  | match | example |
+  |---|---|
+  | `src` / `dst` [`!=`] address or CIDR (either family) | `src 10.0.1.0/24`, `dst != fd00::/64` |
+  | `tcp` / `udp` `dport` / `sport` [`!=`] port or range | `tcp dport 22`, `udp dport 8000-8999`, `tcp sport != 53` |
+  | `ct` [`state`] states | `ct established,related` (also `new`, `invalid`, `untracked`) |
+  | `iif` / `oif` [`!=`] interface | `iif lan0`, `oif != wan0` |
+  | `icmp` / `icmpv6` type | `icmp 8` |
+  | `mark` value | `mark 42` |
+
+  `iif` cannot match in output and `oif` cannot match in input
+  (`firewall-chain-context`). A negated port range is not supported.
+
+Each rule's identity is its position (`nlink-lab/fw/<chain>/<index>`):
+an edited rule is replaced in place, and `apply` keeps the chain in
+declared order. Validation rules: `firewall-policy`, `firewall-action`,
+`firewall-match-expr`, `firewall-chain-context`, and
+`firewall-iface-exists` (a warning).
+
 ### 8. VRF
 
 ```nll-ignore
@@ -1279,7 +1336,7 @@ property       = "forward" ("ipv4" | "ipv6")
                | "sysctl" STRING STRING
                | "lo" CIDR
                | "route" route_target route_params
-               | "firewall" "policy" IDENT firewall_block
+               | "firewall" (fw_chain | "{" fw_chain* "}")
                | "vrf" IDENT "table" INT block
                | "wireguard" IDENT block
                | "vxlan" IDENT block
@@ -1410,12 +1467,17 @@ run_config     = "run" ("background")? (STRING | "[" STRING ("," STRING)* "]") (
 route_target   = "default" | CIDR
 route_params   = ("via" IP)? ("dev" IDENT)? ("metric" INT)?
 
-firewall_block = "{" firewall_rule* "}"
-firewall_rule  = ("accept" | "drop" | "reject") match_expr+
-match_expr     = "ct" IDENT ("," IDENT)*
-               | ("tcp" | "udp") ("dport" | "sport") INT
+fw_chain       = ("policy" fw_policy | ("input" | "forward" | "output") ("policy" fw_policy)?)
+                 "{" firewall_rule* "}"
+fw_policy      = "accept" | "drop"
+firewall_rule  = ("accept" | "drop" | "reject" ("with" reject_type)?) match_expr*
+reject_type    = "tcp-reset" | "port-unreachable" | "host-unreachable"
+               | "no-route" | "admin-prohibited"
+match_expr     = "ct" "state"? IDENT ("," IDENT)*
+               | ("tcp" | "udp") ("dport" | "sport") "!="? (INT | INT "-" INT)
                | "icmp" INT | "icmpv6" INT | "mark" INT
-               | "src" CIDR | "dst" CIDR
+               | ("src" | "dst") "!="? CIDR
+               | ("iif" | "oif") "!="? IDENT
 
 # ── Impairment & rate ────────────────────────────
 addr_pair      = CIDR "--" CIDR

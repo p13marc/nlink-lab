@@ -154,14 +154,15 @@ node fw {
     (identifier)
     (node_body
       (firewall_block
-        (firewall_rule
-          (match_expression
-            (ct_states
-              (identifier)
-              (identifier))))
-        (firewall_rule
-          (match_expression
-            (integer))))
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (ct_states
+                (identifier)
+                (identifier))))
+          (firewall_rule
+            (match_expression
+              (integer)))))
       (run_property
         (string))
       (wireguard_block

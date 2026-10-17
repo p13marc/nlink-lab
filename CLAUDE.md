@@ -137,7 +137,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (40 top-level; 49 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (41 top-level; 50 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -197,8 +197,9 @@ NLL supports `for` loops (integer ranges and list iteration), `let` variables,
 `/* block comments */`, subnet auto-assignment, named subnet pools
 (`pool fabric 10.0.0.0/16 /30`), topology patterns (`mesh`, `ring`, `star`),
 cross-references (`${node.iface}`), multi-profile inheritance,
-inline impairments (`->` / `<-`), profiles, firewall (with `src`/`dst`
-matching), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
+inline impairments (`->` / `<-`), profiles, firewall (input/forward/output
+chains; `src`/`dst`, `iif`/`oif`, `!=`, port ranges; accept/drop/reject
+with `reject with tcp-reset`), NAT (`nat` block with `masquerade`/`snat`/`dnat`/`translate`),
 link type profiles (`defaults radio { delay 15ms }` + `: radio` on links),
 route groups (`route [a, b, c] via gw`),
 VRF, WireGuard, VXLAN, containers (with cpu/memory limits,

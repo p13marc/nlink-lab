@@ -140,11 +140,20 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         return Ok(());
     }
+    // An unchanged topology can still leave the kernel to fix: a hand edit
+    // `verify` reports, or what a newer nlink-lab plans differently for the
+    // same file (a forward chain that now accepts). Look before saying so.
+    let mut drift_view = None;
     if !(check || dry_run) && diff.is_empty() {
-        if !ctx.quiet {
-            println!("No changes to apply.");
+        require_root()?;
+        let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
+        if layered.is_empty() {
+            if !ctx.quiet {
+                println!("No changes to apply.");
+            }
+            return Ok(());
         }
-        return Ok(());
+        drift_view = Some(layered);
     }
 
     // --check: exit non-zero if any layered drift.
@@ -165,7 +174,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     if !ctx.quiet {
         println!("Changes for lab '{lab_name}':");
-        if let Some(layered) = &layered_view {
+        if let Some(layered) = &drift_view {
+            println!("  (topology unchanged; the kernel has drifted from it)");
+            crate::output::print_layered(layered, &removals);
+            println!("{} change(s)", layered.change_count());
+        } else if let Some(layered) = &layered_view {
             crate::output::print_layered(layered, &removals);
             println!("{} change(s)", layered.change_count() + removals.len());
         } else {
@@ -202,11 +215,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         println!("{out}");
     } else if !ctx.quiet {
-        println!(
-            "\nApplied {} change(s) in {:.0?}",
-            diff.change_count(),
-            elapsed
-        );
+        let changes = drift_view
+            .as_ref()
+            .map_or(diff.change_count(), |d| d.change_count());
+        println!("\nApplied {changes} change(s) in {elapsed:.0?}");
         for a in running.assertion_results() {
             if a.passed {
                 println!("  PASS {}", a.description);

@@ -95,7 +95,9 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
             node: node_name.clone(),
             cfg: Box::new(StackConfig {
                 network: net,
-                firewall: topology.effective_firewall(node).cloned(),
+                firewall: topology
+                    .effective_firewall(node)
+                    .map(std::borrow::Cow::into_owned),
                 nat: node.nat.clone(),
                 #[cfg(feature = "wireguard")]
                 wireguard: wg,

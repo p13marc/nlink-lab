@@ -72,6 +72,9 @@ pub const RULE_IDS: &[&str] = &[
     "invalid-route-dest",
     "nat-family-mismatch",
     "firewall-match-expr",
+    "firewall-policy",
+    "firewall-action",
+    "firewall-chain-context",
     "mgmt-subnet-capacity",
     "vxlan-vni-range",
     "vxlan-underlay-address",
@@ -95,6 +98,7 @@ pub const RULE_IDS: &[&str] = &[
     "empty-exec-cmd",
     "command-not-split",
     "loss-correlation-suppresses-loss",
+    "firewall-iface-exists",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -115,6 +119,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "empty-exec-cmd",
     "command-not-split",
     "loss-correlation-suppresses-loss",
+    "firewall-iface-exists",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -391,7 +396,7 @@ impl Topology {
         validate_impairment_values(self, &mut issues);
         validate_nat_addresses(self, &mut issues);
         validate_nat_families(self, &mut issues);
-        validate_firewall_match_exprs(self, &mut issues);
+        validate_firewall(self, &interfaces, &mut issues);
         validate_route_addresses(self, &mut issues);
         validate_mgmt_subnet(self, &mut issues);
         validate_vxlan_vni(self, &mut issues);
@@ -1837,32 +1842,101 @@ fn validate_nat_families(topology: &Topology, issues: &mut Vec<ValidationIssue>)
 /// planner's parser is pure (it only builds rule bytes), so running it
 /// here turns deploy-time failures — unsupported tokens, `ip saddr` with
 /// an IPv6 address — into validation errors.
-fn validate_firewall_match_exprs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
-    use nlink::netlink::nftables::types::{Family, Rule};
+/// Every node's firewall, as it will run (profiles merged in), chain by
+/// chain: policies, verdicts, match expressions, and matches that cannot
+/// fire where they are (#164).
+fn validate_firewall(
+    topology: &Topology,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    use crate::firewall::{Chain, Clause};
     for (node_name, node) in sorted(&topology.nodes) {
-        let Some(fw) = &node.firewall else {
+        let Some(fw) = topology.effective_firewall(node) else {
             continue;
         };
-        for (i, rule) in fw.rules.iter().enumerate() {
-            let Some(expr) = rule.match_expr.as_deref() else {
-                continue;
+        for (chain, policy, rules) in crate::firewall::chains(&fw) {
+            let base = match chain {
+                Chain::Input => format!("nodes.{node_name}.firewall"),
+                other => format!("nodes.{node_name}.firewall.{}", other.name()),
             };
-            if expr.trim().is_empty() || expr.contains("${") {
-                continue;
-            }
-            let probe = Rule::new("probe", "input").family(Family::Inet);
-            if let Err(e) = crate::deploy::plan::nftables::apply_match_expr(probe, expr) {
-                let msg = e.to_string();
-                let msg = msg
-                    .strip_prefix("deploy failed: ")
-                    .unwrap_or(&msg)
-                    .to_string();
+            if let Err(e) = crate::firewall::policy(policy) {
                 issues.push(ValidationIssue {
                     severity: Severity::Error,
-                    rule: "firewall-match-expr",
-                    message: msg,
-                    location: Some(format!("nodes.{node_name}.firewall.rules[{i}]")),
+                    rule: "firewall-policy",
+                    message: format!("node '{node_name}': {e}"),
+                    location: Some(format!("{base}.policy")),
                 });
+            }
+            for (i, rule) in rules.iter().enumerate() {
+                let location = Some(format!("{base}.rules[{i}]"));
+                let expr = rule.match_expr.as_deref().unwrap_or("");
+                if expr.contains("${") {
+                    continue;
+                }
+                let clauses = match crate::firewall::parse_match(expr) {
+                    Ok(c) => c,
+                    Err(msg) => {
+                        issues.push(ValidationIssue {
+                            severity: Severity::Error,
+                            rule: "firewall-match-expr",
+                            message: msg,
+                            location,
+                        });
+                        continue;
+                    }
+                };
+                if let Err(msg) = crate::firewall::check_verdict(rule, &clauses) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "firewall-action",
+                        message: format!("node '{node_name}': {msg}"),
+                        location: location.clone(),
+                    });
+                }
+                for clause in &clauses {
+                    let Clause::Iface { out, name, .. } = clause else {
+                        continue;
+                    };
+                    // No output interface is known on input, no input
+                    // interface on output: the match never fires.
+                    let dead = match (chain, out) {
+                        (Chain::Input, true) => Some("oif"),
+                        (Chain::Output, false) => Some("iif"),
+                        _ => None,
+                    };
+                    if let Some(kw) = dead {
+                        issues.push(ValidationIssue {
+                            severity: Severity::Error,
+                            rule: "firewall-chain-context",
+                            message: format!(
+                                "node '{node_name}': `{kw}` in the {} chain never matches (use it \
+                                 in {})",
+                                chain.name(),
+                                if kw == "oif" {
+                                    "forward or output"
+                                } else {
+                                    "input or forward"
+                                }
+                            ),
+                            location: location.clone(),
+                        });
+                    }
+                    if interfaces
+                        .get(node_name.as_str())
+                        .is_some_and(|known| !known.contains_key(name.as_str()))
+                    {
+                        issues.push(ValidationIssue {
+                            severity: Severity::Warning,
+                            rule: "firewall-iface-exists",
+                            message: format!(
+                                "node '{node_name}' has no interface '{name}' for its firewall to \
+                                 match"
+                            ),
+                            location: location.clone(),
+                        });
+                    }
+                }
             }
         }
     }
@@ -4115,16 +4189,20 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
                 crate::types::FirewallRule {
                     match_expr: Some("ip6 saddr fd00::/64 tcp dport 22".into()),
                     action: Some("accept".into()),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("ip saddr fd00::/64".into()),
                     action: Some("drop".into()),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("bogus 1".into()),
                     action: Some("drop".into()),
+                    ..Default::default()
                 },
             ],
+            ..Default::default()
         });
         let result = validate_topo(topo);
         let hits = rules_of(&result, "firewall-match-expr");
@@ -4139,6 +4217,71 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             Some("nodes.r.firewall.rules[1]")
         );
         assert!(hits[1].message.contains("unsupported firewall match token"));
+    }
+
+    /// #164: policies, verdicts, matches that cannot fire where they are,
+    /// interfaces the node does not have — on every chain, profiles merged.
+    #[test]
+    fn test_firewall_chain_rules() {
+        let result = parse_and_validate(
+            r#"lab "t"
+profile guarded {
+  firewall policy drop { accept oif eth0 }
+}
+node a : guarded {
+  firewall forward { accept iif eth9 }
+  firewall output { accept iif eth0 }
+}
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        );
+        let ctx = rules_of(&result, "firewall-chain-context");
+        assert_eq!(ctx.len(), 2, "{:?}", result.issues());
+        assert_eq!(
+            ctx[0].location.as_deref(),
+            Some("nodes.a.firewall.rules[0]")
+        );
+        assert!(ctx[0].message.contains("`oif` in the input chain"));
+        assert_eq!(
+            ctx[1].location.as_deref(),
+            Some("nodes.a.firewall.output.rules[0]")
+        );
+        let missing = rules_of(&result, "firewall-iface-exists");
+        assert_eq!(missing.len(), 1, "{:?}", result.issues());
+        assert!(missing[0].message.contains("'eth9'"));
+        assert_eq!(missing[0].severity, Severity::Warning);
+
+        // JSON / builder topologies bypass the parser's checks
+        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        topo.nodes.get_mut("r").unwrap().firewall = Some(crate::types::FirewallConfig {
+            policy: Some("reject".into()),
+            rules: vec![
+                crate::types::FirewallRule {
+                    match_expr: Some("tcp dport 22".into()),
+                    action: Some("accept".into()),
+                    reject_with: Some(crate::types::RejectWith::NoRoute),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("udp dport 53".into()),
+                    action: Some("reject".into()),
+                    reject_with: Some(crate::types::RejectWith::TcpReset),
+                },
+                crate::types::FirewallRule {
+                    match_expr: Some("ct state bogus".into()),
+                    action: Some("drop".into()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        let result = validate_topo(topo);
+        assert_eq!(rules_of(&result, "firewall-policy").len(), 1);
+        let act = rules_of(&result, "firewall-action");
+        assert_eq!(act.len(), 2, "{:?}", result.issues());
+        assert!(act[1].message.contains("tcp-reset"));
+        let m = rules_of(&result, "firewall-match-expr");
+        assert!(m[0].message.contains("unknown ct state 'bogus'"), "{m:?}");
     }
 
     #[test]

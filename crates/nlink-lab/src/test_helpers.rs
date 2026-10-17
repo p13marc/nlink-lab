@@ -54,6 +54,13 @@ pub fn is_root() -> bool {
     unsafe { libc::geteuid() == 0 }
 }
 
+/// Root, or CAP_NET_ADMIN + CAP_SYS_ADMIN: what a lab deploy needs, and
+/// what the CLI accepts. The gate checked [`is_root`] only, so a test
+/// binary granted the capabilities always failed (#222).
+pub fn has_privileges() -> bool {
+    crate::privileges::has_privileges()
+}
+
 /// Outcome of the `#[lab_test]` privilege check. See [`root_gate`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootGate {
@@ -75,7 +82,7 @@ pub enum RootGate {
 /// behaviour (the skip is printed to stderr so it is visible in
 /// `cargo test -- --nocapture` / CI logs).
 pub fn root_gate(test_name: &str) -> RootGate {
-    if is_root() {
+    if has_privileges() {
         return RootGate::Proceed;
     }
     if skip_root_tests_requested() {
@@ -99,8 +106,8 @@ pub fn skip_root_tests_requested() -> bool {
 /// root and [`SKIP_ROOT_TESTS_ENV`] is unset.
 pub fn root_required_message(test_name: &str) -> String {
     format!(
-        "#[lab_test] '{test_name}' needs root/CAP_NET_ADMIN; run under sudo, \
-         or set {SKIP_ROOT_TESTS_ENV}=1 to skip"
+        "#[lab_test] '{test_name}' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under \
+         sudo, or set {SKIP_ROOT_TESTS_ENV}=1 to skip"
     )
 }
 
@@ -307,7 +314,7 @@ pub fn cleanup_lab_blocking(topology: &Topology) -> CleanupReport {
 /// Designed for use inside the `#[lab_test]` macro's `capture =
 /// true` form.
 pub struct LabCapture {
-    /// node-name → temp pcap path
+    /// `{namespace}-{iface}` → temp pcap path
     pcaps: HashMap<String, PathBuf>,
     /// Signal threads to stop.
     shutdown: Arc<AtomicBool>,
@@ -322,8 +329,9 @@ pub struct LabCapture {
 impl LabCapture {
     /// Start one capture per `(node-namespace-name, iface)` entry.
     ///
-    /// Each capture writes to `<temp>/<node>.pcap`. Captures run
-    /// until the helper is dropped.
+    /// Each capture writes to `<temp>/<namespace>-<iface>.pcap`: a node's
+    /// interfaces all wrote `<namespace>.pcap`, truncating each other's
+    /// (#222). Captures run until the helper is dropped.
     pub fn start(targets: &[(String, String)]) -> Result<Self> {
         let temp = tempfile::tempdir()
             .map_err(|e| Error::invalid_topology(format!("create temp dir for captures: {e}")))?;
@@ -332,8 +340,9 @@ impl LabCapture {
         let mut handles: Vec<(String, CaptureHandle)> = Vec::new();
 
         for (ns_name, iface) in targets {
-            let pcap_path = temp.path().join(format!("{ns_name}.pcap"));
-            pcaps.insert(ns_name.clone(), pcap_path.clone());
+            let stem = format!("{ns_name}-{iface}");
+            let pcap_path = temp.path().join(format!("{stem}.pcap"));
+            pcaps.insert(stem, pcap_path.clone());
 
             let cfg = CaptureConfig {
                 interface: iface.clone(),
@@ -395,8 +404,8 @@ impl LabCapture {
             Error::invalid_topology(format!("create capture dir {}: {e}", dest_dir.display(),))
         })?;
         let mut out = Vec::with_capacity(self.pcaps.len());
-        for (ns, src) in &self.pcaps {
-            let dst = dest_dir.join(format!("{ns}.pcap"));
+        for (stem, src) in &self.pcaps {
+            let dst = dest_dir.join(format!("{stem}.pcap"));
             if src.exists() {
                 if let Err(e) = std::fs::copy(src, &dst) {
                     tracing::warn!(
@@ -437,5 +446,82 @@ impl LabCapture {
 impl Drop for LabCapture {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+/// Where `#[lab_test(capture = true)]` keeps a failed test's pcaps:
+/// `$CARGO_TARGET_DIR/lab_test_captures/<test>-<pid>/`, else the
+/// workspace's `target/`. It was a `target` relative to the test's working
+/// directory, which cargo sets to the package's, so in a workspace the
+/// pcaps went to `crates/<pkg>/target/` (#222).
+pub fn capture_dir(workspace_root: &str, test: &str) -> PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(workspace_root).join("target"))
+        .join("lab_test_captures")
+        .join(format!("{test}-{}", std::process::id()))
+}
+
+/// The `capture = true` state of a `#[lab_test]`, shared by the thread that
+/// runs the test and the one that enforces its `timeout`: whichever
+/// finishes the capture first decides whether the pcaps are kept.
+#[derive(Clone)]
+pub struct CaptureSlot {
+    cap: Arc<std::sync::Mutex<Option<LabCapture>>>,
+    dest: PathBuf,
+}
+
+impl CaptureSlot {
+    /// An empty slot whose pcaps would be kept in `dest`.
+    pub fn new(dest: PathBuf) -> Self {
+        Self {
+            cap: Arc::default(),
+            dest,
+        }
+    }
+
+    /// Capture every interface of `lab` ([`RunningLab::capture_targets`]).
+    pub fn start(&self, lab: &crate::RunningLab) {
+        match LabCapture::start(&lab.capture_targets()) {
+            Ok(cap) => *self.cap.lock().unwrap_or_else(|p| p.into_inner()) = Some(cap),
+            Err(e) => eprintln!("lab_capture: failed to start: {e}"),
+        }
+    }
+
+    /// Stop capturing; keep the pcaps when `failed`, else discard them.
+    /// Only the first call does anything.
+    pub fn finish(&self, failed: bool) {
+        let Some(cap) = self.cap.lock().unwrap_or_else(|p| p.into_inner()).take() else {
+            return;
+        };
+        match cap.persist_on_failure_in(failed, &self.dest) {
+            Ok(Some(paths)) => {
+                eprintln!(
+                    "lab_capture: persisted {} pcap(s) to {}",
+                    paths.len(),
+                    self.dest.display(),
+                );
+                for p in paths {
+                    eprintln!("  - {}", p.display());
+                }
+            }
+            Ok(None) => {}
+            Err(e) => eprintln!("lab_capture: persist failed: {e}"),
+        }
+    }
+
+    /// A guard that finishes the capture when dropped, keeping the pcaps
+    /// when the thread is panicking.
+    pub fn guard(&self) -> CaptureGuard {
+        CaptureGuard(self.clone())
+    }
+}
+
+/// See [`CaptureSlot::guard`].
+pub struct CaptureGuard(CaptureSlot);
+
+impl Drop for CaptureGuard {
+    fn drop(&mut self) {
+        self.0.finish(std::thread::panicking());
     }
 }

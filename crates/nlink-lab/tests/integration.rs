@@ -81,6 +81,71 @@ async fn deploy_simple(lab: RunningLab) {
     assert_eq!(lab.topology().links.len(), 1);
 }
 
+/// #222: `timeout` wrapped the body in `tokio::time::timeout`, which never
+/// fired while the body blocked its thread in `exec`: this test waited out
+/// the `sleep` and passed. It now ends at the deadline.
+#[lab_test("examples/simple.nll", timeout = 3)]
+#[should_panic(expected = "exceeded 3s timeout")]
+async fn a_lab_test_timeout_ends_a_blocking_body(lab: RunningLab) {
+    let _ = lab.exec("router", "sleep", &["20"]);
+}
+
+/// #222: the macro renamed the lab only, so the namespaces of a topology
+/// with `prefix` were `dc-spine1`, shared by every test of that file.
+#[lab_test("examples/spine-leaf.nll")]
+async fn a_lab_test_of_a_prefixed_topology_gets_its_own_namespaces(lab: RunningLab) {
+    let ns = lab.namespace_for("spine1").unwrap();
+    assert!(
+        ns.starts_with("dc-test-a_lab_test_of_a_prefixed_topology_gets_its_own_namespaces-"),
+        "{ns}"
+    );
+}
+
+/// #222: every interface of a node wrote `<namespace>.pcap`, truncating
+/// the other's, and one file per node was kept.
+#[tokio::test]
+async fn lab_capture_keeps_one_pcap_per_interface() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping lab_capture_keeps_one_pcap_per_interface: requires root");
+        return;
+    }
+    let lab_name = format!("cap2-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node r : router
+node a {{ route default via 10.0.1.1 }}
+node b {{ route default via 10.0.2.1 }}
+link a:eth0 -- r:eth0 {{ 10.0.1.2/24 -- 10.0.1.1/24 }}
+link r:eth1 -- b:eth0 {{ 10.0.2.1/24 -- 10.0.2.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let cap = nlink_lab::test_helpers::LabCapture::start(&lab.capture_targets()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let ping = lab
+        .exec("a", "ping", &["-c3", "-i0.2", "10.0.2.2"])
+        .unwrap();
+    assert_eq!(ping.exit_code, 0, "{}", ping.stderr);
+    let dir = tempfile::tempdir().unwrap();
+    let kept = cap.persist_to(dir.path()).unwrap();
+    let ns = lab.namespace_for("r").unwrap().to_string();
+    for iface in ["eth0", "eth1"] {
+        let path = dir.path().join(format!("{ns}-{iface}.pcap"));
+        assert!(kept.contains(&path), "{path:?} not in {kept:?}");
+        // the 24-byte pcap header and some of the six ICMP packets (the
+        // first can go by before the ring is up)
+        let len = std::fs::metadata(&path).unwrap().len();
+        assert!(len > 24 + 3 * 100, "{path:?}: {len} bytes");
+    }
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 #[lab_test("examples/simple.nll")]
 async fn exec_ip_addr(lab: RunningLab) {
     let output = lab.exec("router", "ip", &["addr", "show", "eth0"]).unwrap();

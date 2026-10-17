@@ -444,15 +444,25 @@ use nlink_lab::RunningLab;
 
 #[lab_test("wan.nll", capture = true, timeout = 30)]
 async fn wan_recovers_from_partition(lab: RunningLab) {
-    let scenario = lab.topology().scenarios.iter().find(|s| s.name == "wan-flap").unwrap();
-    let result = nlink_lab::scenario::run_scenario(&lab, scenario).await.unwrap();
+    // cloned: `run_scenario` takes the lab `&mut`
+    let scenario = lab
+        .topology()
+        .scenarios
+        .iter()
+        .find(|s| s.name == "wan-flap")
+        .cloned()
+        .unwrap();
+    let result = nlink_lab::scenario::run_scenario(&mut lab, &scenario)
+        .await
+        .unwrap();
     assert!(result.passed);
 }
 ```
 
 `capture = true` quietly captures pcaps on every interface for
-the test duration. On panic, the pcaps land at
-`target/lab_test_captures/<test>-<pid>/`; on success, they're
+the test duration. On a panic or a timeout, the pcaps land at
+`target/lab_test_captures/<test>-<pid>/<namespace>-<iface>.pcap` (in
+the workspace's `target/`, or `$CARGO_TARGET_DIR`); on success, they're
 discarded. CI flake → pcap auto-attached to the failure record.
 
 See the [Rust integration test cookbook](cookbook/rust-integration-test.md).

@@ -82,6 +82,7 @@ pub mod netns_tag;
 pub mod ns_exec;
 pub mod parser;
 pub mod portability;
+pub mod privileges;
 pub mod proc_stat;
 pub mod render;
 pub mod running;

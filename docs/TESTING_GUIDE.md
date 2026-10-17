@@ -31,7 +31,8 @@ The `#[lab_test]` attribute macro handles the full lifecycle of a test topology:
 1. Checks for root privileges (fails the test if not root, or skips when
    `NLINK_LAB_SKIP_ROOT_TESTS=1` is set).
 2. Parses and validates the topology.
-3. Assigns a unique lab name (appends test function name + PID) to avoid collisions.
+3. Assigns a unique lab name (appends test function name + PID), and the same
+   suffix to the topology's `prefix` when it sets one, to avoid collisions.
 4. Deploys the topology (creates namespaces, veths, addresses, routes, etc.).
 5. Passes a `RunningLab` handle to your test body.
 6. Destroys the lab after the test, even if the test panics or the deploy
@@ -47,7 +48,7 @@ Deploying namespaces needs root (or `CAP_NET_ADMIN`). When the test process
 is not root the macro panics with:
 
 ```text
-#[lab_test] 'test_connectivity' needs root/CAP_NET_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
+#[lab_test] 'test_connectivity' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
 ```
 
 This is deliberate: a privileged test that quietly returns green on a
@@ -263,8 +264,9 @@ coverage visible.
 ## Best Practices
 
 **Use unique lab names.** The `#[lab_test]` macro automatically appends the
-test function name and `std::process::id()` to the lab name, so parallel test
-execution is safe by default. If you deploy labs manually (without the macro),
+test function name and `std::process::id()` to the lab name (and to its
+`prefix`, which names the namespaces), so parallel test execution is safe by
+default. If you deploy labs manually (without the macro),
 include something unique like the PID in the name.
 
 **Keep topologies minimal.** Each node is a Linux network namespace with its

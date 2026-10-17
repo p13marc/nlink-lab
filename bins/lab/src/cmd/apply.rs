@@ -92,22 +92,27 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // on a quiet host. The cost only applies on
     // --check/--dry-run paths; normal apply doesn't pay it.
     let layered_view = if check || dry_run {
-        Some(nlink_lab::compute_layered_diff(&running, &desired).await?)
+        Some(nlink_lab::compute_layered_diff_with(&running, &desired, &apply_opts).await?)
     } else {
         None
     };
     // Removal ops (deleted nodes/links/routes/…) come from the plan
     // diff: the layered diff only sees what the declarative layers
     // still declare, never what disappeared (#83).
-    let removals: Vec<String> = if check || dry_run {
-        nlink_lab::apply_plan(&running, &desired)?
-            .ops
-            .iter()
-            .filter(|o| o.is_removal())
-            .map(|o| o.describe())
-            .collect()
+    // …and so does the plan's other work: a container re-created because
+    // its options changed is in neither the lab graph nor the layers.
+    let (removals, plan_ops): (Vec<String>, Vec<String>) = if check || dry_run {
+        let plan = nlink_lab::apply_plan_with(&running, &desired, &apply_opts)?;
+        (
+            plan.ops
+                .iter()
+                .filter(|o| o.is_removal())
+                .map(|o| o.describe())
+                .collect(),
+            plan.work().map(|o| o.describe()).collect(),
+        )
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
 
     // JSON dry-run output for CI consumption.
@@ -115,7 +120,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let layered = layered_view
             .as_ref()
             .expect("layered_view is Some when dry_run");
-        let report = crate::output::DryRunReport::new(lab_name, layered, &removals);
+        let report =
+            crate::output::DryRunReport::new(lab_name, layered, &removals).with_ops(&plan_ops);
         let no_op = report.no_op;
         let change_count = report.change_count;
         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -131,8 +137,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // layered diff (richer than the lab-graph-only
     // TopologyDiff). For ordinary apply, the existing
     // TopologyDiff render is what gets printed.
-    let layered_is_empty =
-        layered_view.as_ref().map(|l| l.is_empty()).unwrap_or(true) && removals.is_empty();
+    let layered_is_empty = layered_view.as_ref().map(|l| l.is_empty()).unwrap_or(true)
+        && removals.is_empty()
+        && plan_ops.is_empty();
 
     if (check || dry_run) && layered_is_empty {
         if !ctx.quiet {
@@ -146,8 +153,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut drift_view = None;
     if !(check || dry_run) && diff.is_empty() {
         require_root()?;
-        let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
-        if layered.is_empty() {
+        let layered = nlink_lab::compute_layered_diff_with(&running, &desired, &apply_opts).await?;
+        // A change only the plan sees (container options) is work too: it
+        // used to be reported as "No changes to apply" and never applied.
+        let plan = nlink_lab::apply_plan_with(&running, &desired, &apply_opts)?;
+        let plan_has_work = plan.work().next().is_some() || plan.ops.iter().any(|o| o.is_removal());
+        if layered.is_empty() && !plan_has_work {
             if ctx.json {
                 // One JSON document on stdout, as after an apply (#177).
                 println!(
@@ -173,10 +184,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let layered = layered_view
             .as_ref()
             .expect("layered_view is Some when check");
-        let change_count = layered.change_count() + removals.len();
+        let change_count = layered.change_count() + removals.len() + plan_ops.len();
         if !ctx.quiet {
             println!("Drift detected for lab '{lab_name}':");
             crate::output::print_layered(layered, &removals);
+            crate::output::print_plan_ops(&plan_ops);
             println!("{change_count} change(s) needed to converge");
         }
         return Err(nlink_lab::Error::Validation(format!(
@@ -191,10 +203,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         if let Some(layered) = &drift_view {
             println!("  (topology unchanged; the kernel has drifted from it)");
             crate::output::print_layered(layered, &removals);
+            crate::output::print_plan_ops(&plan_ops);
             println!("{} change(s)", layered.change_count());
         } else if let Some(layered) = &layered_view {
             crate::output::print_layered(layered, &removals);
-            println!("{} change(s)", layered.change_count() + removals.len());
+            crate::output::print_plan_ops(&plan_ops);
+            println!(
+                "{} change(s)",
+                layered.change_count() + removals.len() + plan_ops.len()
+            );
         } else {
             print!("{diff}");
             println!("{} change(s)", diff.change_count());
@@ -229,9 +246,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         println!("{out}");
     } else if !ctx.quiet {
-        let changes = drift_view
+        // A change only the plan saw (a container re-created) counts as
+        // its ops, not as the empty diff's zero.
+        let changes = match drift_view
             .as_ref()
-            .map_or(diff.change_count(), |d| d.change_count());
+            .map_or(diff.change_count(), |d| d.change_count())
+        {
+            0 => report.applied.len() - report.removed,
+            n => n,
+        };
         println!("\nApplied {changes} change(s) in {elapsed:.0?}");
         for a in running.assertion_results() {
             if a.passed {

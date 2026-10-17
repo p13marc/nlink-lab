@@ -2992,6 +2992,18 @@ impl Drop for LabCleanup {
                 }
             }
         }
+        // A `dns hosts` lab's /etc/hosts section and /etc/netns overlays,
+        // and a limited node's cgroup, outlive its namespaces.
+        let _ = nlink_lab::dns::remove_hosts(&self.name);
+        if let Ok(entries) = std::fs::read_dir("/etc/netns") {
+            for e in entries.flatten() {
+                let ns = e.file_name().to_string_lossy().into_owned();
+                if ns.starts_with(&prefix) {
+                    nlink_lab::dns::remove_netns_etc(&ns);
+                }
+            }
+        }
+        nlink_lab::cgroup::remove_lab(&self.name);
         let _ = nlink_lab::state::remove(&self.name);
         // Every test lab has a unique name, so without this `.locks/`
         // grows by one file per test, for ever (issue #103).
@@ -5656,6 +5668,77 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
         .unwrap();
 }
 
+/// A restarted container gets back everything its old namespace had: its
+/// links, its bridge-network port, its mgmt veth, its sysctls and its
+/// background `run`. Only the point-to-point links came back, and a
+/// network member could not be restarted at all (its bridge port was
+/// missing when the links were brought up).
+#[tokio::test]
+async fn a_restarted_container_gets_its_ports_sysctls_and_runs_back() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("rs-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}" {{
+  runtime "podman"
+  mgmt 172.30.77.0/24 host-reachable
+}}
+node r image "alpine:latest" cmd ["sleep", "infinity"] {{
+  run background ["sleep", "1000"]
+  sysctl "net.ipv4.ip_default_ttl" "33"
+}}
+node h1 {{ route default via 10.0.0.1 }}
+node h2
+link r:eth0 -- h1:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+network lan {{
+  members [r:eth1, h2:eth0]
+  subnet 10.9.0.0/24
+}}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // What `nlink-lab restart` does.
+    let id = lab.container_for("r").unwrap().id.clone();
+    let rt = nlink_lab::container::Runtime::with_binary("podman");
+    let ok = std::process::Command::new("podman")
+        .args(["restart", "-t", "0", &id])
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(ok, "podman restart");
+    let pid = rt.inspect_pid(&id).unwrap();
+    lab.set_container_pid("r", pid).unwrap();
+    nlink_lab::reattach_node(&mut lab, "r").await.unwrap();
+
+    let out = |node: &str, cmd: &[&str]| lab.exec(node, cmd[0], &cmd[1..]).unwrap();
+    assert_eq!(
+        out("r", &["cat", "/proc/sys/net/ipv4/ip_default_ttl"])
+            .stdout
+            .trim(),
+        "33"
+    );
+    assert_eq!(out("r", &["ip", "link", "show", "mgmt0"]).exit_code, 0);
+    assert!(
+        out("r", &["ps"]).stdout.contains("sleep 1000"),
+        "the background run is back"
+    );
+    for (node, addr) in [("h1", "10.0.0.1"), ("h2", "10.9.0.1")] {
+        let reached = (0..5).any(|_| out(node, &["ping", "-c1", "-W1", addr]).exit_code == 0);
+        assert!(reached, "{node} cannot reach r at {addr}");
+    }
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── firewall: reject, chains, matches on real traffic (#164) ───
 
 /// Start an iperf3 server on `port` in `node`, detached, and wait for it.
@@ -7203,4 +7286,235 @@ async fn wifi_ap_and_stations_associate() {
 
     std::mem::forget(_guard);
     lab.destroy().await.unwrap();
+}
+
+/// #204: radios are made in the first Wi-Fi node's namespace, so adding
+/// a Wi-Fi node that sorts first re-creates every radio. The AP's hostapd
+/// and the station's wpa_supplicant were left bound to the netdevs that
+/// went with the old radios: the station never associated again.
+#[tokio::test]
+async fn an_apply_that_recreates_the_radios_restarts_their_daemons() {
+    if !hwsim_available() {
+        eprintln!("skipping: needs root and mac80211_hwsim");
+        return;
+    }
+    let found = |bin: &str| {
+        std::env::var("PATH")
+            .unwrap_or_default()
+            .split(':')
+            .any(|d| std::path::Path::new(d).join(bin).exists())
+    };
+    if !found("hostapd") || !found("wpa_supplicant") {
+        eprintln!("skipping: needs hostapd and wpa_supplicant");
+        return;
+    }
+    let lab_name = format!("wrc-{}", std::process::id());
+    let station = |name: &str, addr: &str| {
+        format!(
+            r#"node {name} {{ wifi wlan0 mode station {{ ssid "labnet" wpa2 "testpassword" {addr}/24 }} }}"#
+        )
+    };
+    let topo = |extra: &str| {
+        nlink_lab::parser::parse(&format!(
+            r#"lab "{lab_name}"
+{extra}
+node m {{ wifi wlan0 mode ap {{ ssid "labnet" channel 6 wpa2 "testpassword" 10.0.0.1/24 }} }}
+{}
+"#,
+            station("s", "10.0.0.2")
+        ))
+        .unwrap()
+    };
+    let mut lab = topo("").deploy().await.expect("deploy wifi");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let reaches_the_ap = |lab: &RunningLab, sta: &str| {
+        (0..30).any(|_| {
+            lab.exec(sta, "ping", &["-c1", "-W1", "10.0.0.1"])
+                .is_ok_and(|o| o.exit_code == 0)
+        })
+    };
+    assert!(reaches_the_ap(&lab, "s"), "s never reached the AP");
+
+    // `a` sorts before `m`: every radio is made in its namespace now
+    let plan = nlink_lab::apply_plan(&lab, &topo(&station("a", "10.0.0.3"))).unwrap();
+    assert!(
+        plan.ops
+            .iter()
+            .any(|o| matches!(o, nlink_lab::Op::DeleteRadio { node, .. } if node == "m")),
+        "the radios are not re-created: {:?}",
+        plan.ops
+    );
+    nlink_lab::apply(&mut lab, &topo(&station("a", "10.0.0.3")))
+        .await
+        .expect("apply adding a first Wi-Fi node");
+    for sta in ["s", "a"] {
+        assert!(
+            reaches_the_ap(&lab, sta),
+            "{sta} does not reach the AP after the apply"
+        );
+    }
+
+    std::mem::forget(_guard);
+    lab.destroy().await.unwrap();
+}
+
+/// #204: WireGuard on `apply`. A key the topology writes is the one the
+/// interface gets (the key saved by the first deploy won, and `apply`
+/// reported no change), and a tunnel the topology drops is deleted (it
+/// stayed up with its key and peers).
+#[cfg(feature = "wireguard")]
+#[tokio::test]
+async fn apply_takes_a_written_wireguard_key_and_deletes_a_dropped_tunnel() {
+    let wg_tools = std::process::Command::new("wg")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if unsafe { libc::geteuid() } != 0 || !has_wireguard() || !wg_tools {
+        eprintln!("skipping: needs root, the wireguard module and wireguard-tools");
+        return;
+    }
+    let genkey = || {
+        let out = std::process::Command::new("wg")
+            .arg("genkey")
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    let (k1, k2) = (genkey(), genkey());
+    let lab_name = format!("wgk-{}", std::process::id());
+    let topo = |key: Option<&str>| {
+        let (a, b) = match key {
+            Some(k) => (
+                format!(
+                    r#"{{ wireguard wg0 {{ key "{k}" listen 51820 address 192.168.255.1/32 peers [b] }} }}"#
+                ),
+                r#"{ wireguard wg0 { key auto listen 51820 address 192.168.255.2/32 peers [a] } }"#
+                    .to_string(),
+            ),
+            None => Default::default(),
+        };
+        nlink_lab::parser::parse(&format!(
+            "lab \"{lab_name}\"\nnode a {a}\nnode b {b}\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/30 -- 10.0.0.2/30 }}\n"
+        ))
+        .unwrap()
+    };
+    let mut lab = topo(Some(&k1)).deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let wg = |lab: &RunningLab, node: &str, what: &str| {
+        let out = lab.exec(node, "wg", &["show", "wg0", what]).unwrap();
+        assert_eq!(
+            out.exit_code, 0,
+            "{node}: wg show wg0 {what}: {}",
+            out.stderr
+        );
+        out.stdout.trim().to_string()
+    };
+    assert_eq!(wg(&lab, "a", "private-key"), k1);
+
+    nlink_lab::apply(&mut lab, &topo(Some(&k2)))
+        .await
+        .expect("apply of a new key failed");
+    assert_eq!(
+        wg(&lab, "a", "private-key"),
+        k2,
+        "the written key is not applied"
+    );
+    assert_eq!(
+        wg(&lab, "b", "peers"),
+        wg(&lab, "a", "public-key"),
+        "b's peer kept a's old key"
+    );
+
+    nlink_lab::apply(&mut lab, &topo(None))
+        .await
+        .expect("apply without the tunnels failed");
+    for node in ["a", "b"] {
+        let out = lab.exec(node, "ip", &["link", "show", "wg0"]).unwrap();
+        assert_ne!(out.exit_code, 0, "{node}: wg0 is still there");
+    }
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo(None))
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #204: a failed `apply` rolls back what it did, and only that. Its
+/// journal removed the lab's whole cgroup subtree, killing the processes
+/// of every node with a cpu/memory limit, its `/etc/hosts` section and
+/// the `/etc/netns` overlay of every node it touched.
+#[tokio::test]
+async fn a_failed_apply_leaves_the_running_labs_processes_and_hosts_alone() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: requires root");
+        return;
+    }
+    let lab_name = format!("rbk-{}", std::process::id());
+    let topo = |extra: &str, b_addr: &str| {
+        nlink_lab::parser::parse(&format!(
+            r#"lab "{lab_name}" {{ dns hosts }}
+node a {{ cpu 0.5  run background ["sleep", "1001"] }}
+node b
+{extra}
+link a:eth0 -- b:eth0 {{ 10.0.0.1/29 -- {b_addr}/29 }}
+"#
+        ))
+        .unwrap()
+    };
+    let mut lab = topo("", "10.0.0.2").deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let pid = lab
+        .pids()
+        .iter()
+        .find(|(n, _)| n == "a")
+        .map(|(_, p)| *p)
+        .expect("a's background process");
+    let overlay = format!("/etc/netns/{}/hosts", lab.namespace_for("a").unwrap());
+    let section = || {
+        let hosts = std::fs::read_to_string("/etc/hosts").unwrap();
+        let start = format!("NLINK-LAB-{lab_name}-START");
+        let end = format!("NLINK-LAB-{lab_name}-END");
+        hosts
+            .lines()
+            .skip_while(|l| !l.contains(&start))
+            .take_while(|l| !l.contains(&end))
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let before = section();
+    assert!(before.contains("10.0.0.2"), "{before}");
+
+    // a new limited node whose second `run` cannot start, and a moved
+    // address: the apply gets as far as the processes and fails there
+    let failing = topo(
+        r#"node c { cpu 0.5  run background ["sleep", "1002"]  run background ["/nonexistent/binary"] }
+link a:eth1 -- c:eth0 { 10.0.1.1/30 -- 10.0.1.2/30 }"#,
+        "10.0.0.5",
+    );
+    nlink_lab::apply(&mut lab, &failing)
+        .await
+        .expect_err("the missing binary must fail the apply");
+
+    assert!(
+        std::path::Path::new(&format!("/proc/{pid}")).exists(),
+        "the rollback killed a's process"
+    );
+    assert_eq!(section(), before, "the lab's /etc/hosts section changed");
+    let a_hosts = std::fs::read_to_string(&overlay).unwrap_or_default();
+    assert!(
+        a_hosts.contains("10.0.0.2") && !a_hosts.contains("10.0.0.5"),
+        "a's overlay is not the running lab's: {a_hosts:?}"
+    );
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
 }

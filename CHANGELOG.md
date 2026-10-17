@@ -247,8 +247,36 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **Waits that give up return `Error::TimedOut`** (#202), a new variant
   (library API), and the CLI exits 124 for them: `wait`, `wait-for`
   and `spawn --wait-*` used to exit 1 or 2 on a timeout.
+- **`apply` acts on a change only its plan sees** (#204). Editing a
+  container's `cmd`, `env` or another container option re-creates the
+  container; `apply` used to print "No changes to apply" and leave it.
+  `apply --check` / `--dry-run` list that work under `Plan:`. Their JSON
+  gets an `ops` array (one description per op), counted in
+  `change_count` and `no_op`. It is additive, so `schema_version` stays
+  `3`.
+- **A container is no longer re-created because another node's address
+  changed** (#204). In a `dns hosts` lab, every container's
+  `extra_hosts` lists every address, so each `apply` that moved one
+  re-created every container. The container's `/etc/hosts` now picks up
+  the new names when it is next re-created, for its own reasons.
+- **`apply --check`, `apply --dry-run` and `restore --dry-run` preview
+  what runs** (#204). They planned without `--reset-impairments` (and
+  without the reset `restore` does), so a lab with runtime impairments
+  showed a plan other than the one applied.
+- **`apply` deletes a WireGuard interface the topology drops, and sets
+  a `key` the topology writes** (#204). Both used to report no change.
+  A `key auto` interface keeps its saved key, as before.
+- **`restart` works on a network member and on a node without links**
+  (#204). It re-creates the node's bridge-network ports, its mgmt veth
+  and its sysctls, and starts its `run` commands again. It used to
+  refuse a network member and put back only point-to-point links.
 
 ### Added
+
+- **`apply_plan_with` and `compute_layered_diff_with`** (library API,
+  #204): `apply_plan` / `compute_layered_diff` with `ApplyOptions`, for
+  the plan an `apply_with` runs. Also `Plan::work` (the ops that create
+  or start something) and `Op::lives_in_node`.
 
 - **`proc-stat --pidfile-glob '/run/*.pid'`** (#157): samples the
   processes a node's pidfiles name, read through the container's root on
@@ -373,6 +401,40 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **A failed `apply` rolled back state the lab already had** (#204). Its
+  journal held lab-wide inverses for what it only touched:
+  - the lab's cgroup subtree, so the processes of every node with a
+    cpu/memory limit were killed;
+  - the lab's `/etc/hosts` section and every node's `/etc/netns`
+    overlay;
+  - the Wi-Fi configs and FRR directories that running daemons use.
+
+  An inverse is now journaled only by the run that created what it
+  removes, and the running topology's DNS entries are written back.
+- **A re-created container lost its links, ports, sysctls and processes**
+  (#204). Its namespace is new, but the diff re-ran only the
+  `CreateContainer`, and the first `LinksUp` failed on a missing veth.
+  Every op that lives in the node's namespace runs again.
+- **A removed node's processes kept running** (#204): its `run`
+  commands, Wi-Fi daemons and `spawn`ed processes survived the namespace
+  deletion, and kept the namespace alive. They are stopped first.
+- **A live impairment on a removed link failed every later `apply`**
+  (#204). An endpoint set with `impair` was overlaid onto the desired
+  plan after its link was gone, declaring a netem on a missing
+  interface.
+- **A radio re-created by `apply` was left without its daemon** (#204).
+  A Wi-Fi node added or removed first in name order re-creates every
+  radio (they are made in that node's namespace). The hostapd or
+  wpa_supplicant of each radio is now stopped before the radio is
+  deleted, and started on the new one.
+- **A container node's `run` processes became zombies of the deploying
+  process** (#204). The `podman exec` / `docker exec` client was a plain
+  child, never waited for. In a long-lived caller (the backend, `top`, a
+  test harness) one zombie was left behind per container `run`. It is
+  detached like every other background process now.
+- **`edit --remove-node` / `--remove-link` kept the peer end's
+  impairment** (#204). A link's `delay` is stored on both ends, so the
+  edited topology named a missing interface and failed validation.
 - **`snat … to ADDR:PORT` deployed without its port** (#203): the plain
   SNAT path passed none, unlike DNAT's. It installs `snat ip to
   203.0.113.1:5000` now.

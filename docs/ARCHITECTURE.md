@@ -188,6 +188,14 @@ journal is unwound:
 - by `destroy --orphans`, which reaps host resources with no state
   file behind them.
 
+An `apply` journals only what it creates. A lab-wide inverse (the
+lab's cgroup subtree, its `/etc/hosts` section, a node's `/etc/netns`
+overlay, the Wi-Fi config directory) is recorded only by the run that
+made the resource, so a failed apply never removes what the running lab
+already had. Afterwards it writes the running topology's DNS entries
+back. The declarative `Stack` layers are not journaled: a failed apply
+leaves them as far as it got, and the next `apply` converges them (#204).
+
 Namespaces nlink-lab created carry an ownership tag under
 `/run/nlink-lab/netns/<ns>` (`netns_tag.rs`), and the orphan
 reaper only ever touches tagged ones — a namespace you made by

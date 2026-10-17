@@ -177,6 +177,12 @@ pub struct DryRunReport<'a> {
     /// routes, …), one description per op. Elided when empty.
     #[serde(skip_serializing_if = "<[String]>::is_empty")]
     pub removals: &'a [String],
+    /// The plan's other work, one description per op: what neither the
+    /// lab graph nor the declarative layers show, such as a container
+    /// re-created because its options changed, or a process restarted
+    /// (#204). Elided when empty; additive, so the marker stays `3`.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    pub ops: &'a [String],
 }
 
 impl<'a> DryRunReport<'a> {
@@ -195,6 +201,25 @@ impl<'a> DryRunReport<'a> {
             nftables: &layered.nftables,
             wireguard: &layered.wireguard,
             removals,
+            ops: &[],
+        }
+    }
+
+    /// With the plan's other work ([`DryRunReport::ops`]).
+    pub fn with_ops(mut self, ops: &'a [String]) -> Self {
+        self.no_op &= ops.is_empty();
+        self.change_count += ops.len();
+        self.ops = ops;
+        self
+    }
+}
+
+/// Human rendering of the plan's other work ([`DryRunReport::ops`]).
+pub fn print_plan_ops(ops: &[String]) {
+    if !ops.is_empty() {
+        println!("Plan:");
+        for op in ops {
+            println!("  + {op}");
         }
     }
 }

@@ -112,6 +112,7 @@ pub const RULE_IDS: &[&str] = &[
     "firewall-set-unused",
     "firewall-classify-no-effect",
     "wireguard-route-peer",
+    "sysctl-host-global",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -136,6 +137,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "firewall-set-unused",
     "firewall-classify-no-effect",
     "wireguard-route-peer",
+    "sysctl-host-global",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -420,6 +422,7 @@ impl Topology {
         validate_vxlan_underlay(self, &mut issues);
         validate_wifi_channels(self, &mut issues);
         validate_wifi_mesh_ids(self, &mut issues);
+        validate_host_global_sysctls(self, &mut issues);
         validate_macvlan_parents(self, &mut issues);
         validate_vrf_interfaces(self, &interfaces, &mut issues);
         validate_test_refs(self, &interfaces, &mut issues);
@@ -2430,6 +2433,117 @@ fn validate_wifi_mesh_ids(topology: &Topology, issues: &mut Vec<ValidationIssue>
                 rule: "wifi-mesh-id",
                 message: format!("Wi-Fi mesh point '{node_name}:{}' {problem}", wifi.name),
                 location: Some(format!("nodes.{node_name}.wifi[{i}].mesh_id")),
+            });
+        }
+    }
+}
+
+/// Writable sysctls under `/proc/sys/net` that the kernel registers for
+/// the initial network namespace only: in a node's namespace they are
+/// read-only or absent, so setting one fails the deploy (#162). Read off
+/// Linux 6.12: the files writable on the host and not in a fresh
+/// namespace.
+const HOST_GLOBAL_SYSCTLS: &[&str] = &[
+    "net.core.bpf_jit_enable",
+    "net.core.bpf_jit_harden",
+    "net.core.bpf_jit_kallsyms",
+    "net.core.bpf_jit_limit",
+    "net.core.busy_poll",
+    "net.core.busy_read",
+    "net.core.default_qdisc",
+    "net.core.dev_weight",
+    "net.core.dev_weight_rx_bias",
+    "net.core.dev_weight_tx_bias",
+    "net.core.devconf_inherit_init_net",
+    "net.core.fb_tunnels_only_for_init_net",
+    "net.core.flow_limit_cpu_bitmap",
+    "net.core.flow_limit_table_len",
+    "net.core.gro_normal_batch",
+    "net.core.high_order_alloc_disable",
+    "net.core.max_skb_frags",
+    "net.core.mem_pcpu_rsv",
+    "net.core.message_burst",
+    "net.core.message_cost",
+    "net.core.netdev_budget",
+    "net.core.netdev_budget_usecs",
+    "net.core.netdev_max_backlog",
+    "net.core.netdev_tstamp_prequeue",
+    "net.core.netdev_unregister_timeout_secs",
+    "net.core.rmem_default",
+    "net.core.rmem_max",
+    "net.core.rps_sock_flow_entries",
+    "net.core.skb_defer_max",
+    "net.core.tstamp_allow_data",
+    "net.core.warnings",
+    "net.core.wmem_default",
+    "net.core.wmem_max",
+    "net.ipv4.cipso_cache_bucket_size",
+    "net.ipv4.cipso_cache_enable",
+    "net.ipv4.cipso_rbm_optfmt",
+    "net.ipv4.cipso_rbm_strictvalid",
+    "net.ipv4.fib_sync_mem",
+    "net.ipv4.inet_peer_maxttl",
+    "net.ipv4.inet_peer_minttl",
+    "net.ipv4.inet_peer_threshold",
+    "net.ipv4.ipfrag_secret_interval",
+    "net.ipv4.tcp_allowed_congestion_control",
+    "net.ipv4.tcp_low_latency",
+    "net.ipv4.tcp_max_orphans",
+    "net.ipv4.tcp_mem",
+    "net.ipv4.udp_mem",
+    "net.netfilter.nf_conntrack_buckets",
+    "net.netfilter.nf_conntrack_expect_max",
+    "net.netfilter.nf_conntrack_max",
+    "net.netfilter.nf_log_all_netns",
+    "net.nf_conntrack_max",
+];
+
+/// A `sysctl` on a key [`HOST_GLOBAL_SYSCTLS`] lists, in a profile or a
+/// node. A warning, not an error: a newer kernel may make one per
+/// namespace.
+fn validate_host_global_sysctls(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    // A node's sysctls include its profiles' (lowering merges them):
+    // those are reported once, at the profile.
+    let from_profile = |node: &crate::types::Node, key: &str| {
+        node.profiles
+            .iter()
+            .filter_map(|p| topology.profiles.get(p))
+            .any(|p| p.sysctls.contains_key(key))
+    };
+    let owners = sorted(&topology.profiles)
+        .into_iter()
+        .map(|(name, p)| {
+            let keys: Vec<&String> = p.sysctls.keys().collect();
+            (
+                format!("profiles.{name}"),
+                format!("profile '{name}'"),
+                keys,
+            )
+        })
+        .chain(sorted(&topology.nodes).into_iter().map(|(name, n)| {
+            let keys = n.sysctls.keys().filter(|k| !from_profile(n, k)).collect();
+            (format!("nodes.{name}"), format!("node '{name}'"), keys)
+        }));
+    for (at, owner, keys) in owners {
+        for key in keys {
+            let dotted = key.replace('/', ".");
+            if !HOST_GLOBAL_SYSCTLS.contains(&dotted.as_str()) {
+                continue;
+            }
+            let hint = if dotted.starts_with("net.core.") && dotted.contains("mem_") {
+                " (socket buffers: net.ipv4.tcp_rmem / tcp_wmem are per namespace)"
+            } else {
+                ""
+            };
+            issues.push(ValidationIssue {
+                severity: Severity::Warning,
+                rule: "sysctl-host-global",
+                message: format!(
+                    "{owner} sets '{key}', which is the host's, not a network namespace's: \
+                     in a node it is read-only or absent, and the deploy fails. Set it on \
+                     the host, or use a per-namespace key{hint}"
+                ),
+                location: Some(format!("{at}.sysctls.{key}")),
             });
         }
     }
@@ -4910,6 +5024,30 @@ node d { wifi wlan0 mode station { ssid "x" 10.0.0.4/24 } }
             result.issues()
         );
         assert!(hits[1].message.contains("36 bytes"), "{}", hits[1].message);
+    }
+
+    #[test]
+    fn test_sysctl_host_global() {
+        let result = parse_and_validate(
+            r#"lab "t"
+profile monitored { sysctl "net.core.rmem_max" "16777216" }
+node a : monitored { sysctl "net.ipv4.tcp_rmem" "4096 131072 16777216" }
+node b { sysctl "net/netfilter/nf_conntrack_max" "65536" }
+"#,
+        );
+        let hits = rules_of(&result, "sysctl-host-global");
+        let at: Vec<_> = hits.iter().map(|h| h.location.as_deref()).collect();
+        assert_eq!(
+            at,
+            [
+                Some("profiles.monitored.sysctls.net.core.rmem_max"),
+                Some("nodes.b.sysctls.net/netfilter/nf_conntrack_max"),
+            ],
+            "{:?}",
+            result.issues()
+        );
+        assert!(hits.iter().all(|h| h.severity == Severity::Warning));
+        assert!(hits[0].message.contains("tcp_rmem"), "{}", hits[0].message);
     }
 
     #[test]

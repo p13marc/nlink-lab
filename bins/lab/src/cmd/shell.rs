@@ -1,7 +1,6 @@
 //! `nlink-lab shell`.
 
 use crate::ctx::{Ctx, require_root};
-use crate::util::nsenter_shell_args;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -40,15 +39,19 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         pass_through_status(status);
         Ok(())
     } else {
+        // Spawned into the namespace by nlink with the node's /etc/netns
+        // overlay where the host allows one, as `ip netns exec` does (#179).
+        use nlink::netlink::namespace::{NetnsCommand, Overlay};
         let ns = running.namespace_for(&node)?;
-        let args = nsenter_shell_args(ns, &shell);
-        let status = std::process::Command::new("nsenter")
-            .args(&args)
-            .stdin(std::process::Stdio::inherit())
+        let mut cmd = std::process::Command::new(&shell);
+        cmd.stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .map_err(|e| nlink_lab::Error::deploy_failed(format!("nsenter failed: {e}")))?;
+            .stderr(std::process::Stdio::inherit());
+        let status = NetnsCommand::new(ns, cmd)
+            .and_then(|c| c.etc_overlay(Overlay::BestEffort).spawn())
+            .map_err(|e| nlink_lab::Error::deploy_failed(format!("shell in '{node}': {e}")))?
+            .wait()
+            .map_err(|e| nlink_lab::Error::deploy_failed(format!("shell in '{node}': {e}")))?;
         pass_through_status(status);
         Ok(())
     }

@@ -195,12 +195,16 @@ fn eval_assertion(
             interval,
         } => {
             let desc = format!("tcp-connect {from} {to}:{port}");
-            if let Some(ip) = ip_map.get(to) {
+            let addr = ip_map
+                .get(to)
+                .and_then(|ip| ip.parse::<std::net::IpAddr>().ok())
+                .map(|ip| std::net::SocketAddr::new(ip, *port));
+            if let Some(addr) = addr {
                 let t = timeout.as_deref().unwrap_or("3s");
-                let secs = crate::helpers::parse_duration(t)
-                    .map(|d| d.as_secs().max(1))
-                    .unwrap_or(3);
-                let cmd = format!("timeout {secs} bash -c 'echo > /dev/tcp/{ip}/{port}'");
+                let timeout = crate::helpers::parse_duration(t)
+                    .ok()
+                    .filter(|d| !d.is_zero())
+                    .unwrap_or(std::time::Duration::from_secs(3));
                 let max_attempts = retries.unwrap_or(1);
                 let retry_interval = interval
                     .as_deref()
@@ -209,17 +213,11 @@ fn eval_assertion(
 
                 let mut result = (desc.clone(), false, None);
                 for attempt in 0..max_attempts {
-                    match lab.exec(from, "bash", &["-c", &cmd]) {
-                        Ok(out) if out.exit_code == 0 => {
+                    // A socket in `from`'s namespace: no shell needed there (#179).
+                    match lab.tcp_connect(from, addr, timeout) {
+                        Ok(()) => {
                             result = (desc.clone(), true, None);
                             break;
-                        }
-                        Ok(out) => {
-                            result = (
-                                desc.clone(),
-                                false,
-                                Some(format!("exit code {}", out.exit_code)),
-                            );
                         }
                         Err(e) => {
                             result = (desc.clone(), false, Some(e.to_string()));
@@ -271,22 +269,34 @@ fn eval_assertion(
             dev,
         } => {
             let desc = format!("route-has {node} {destination}");
-            match lab.exec(node, "ip", &["route", "show", destination]) {
-                Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
-                    let line = out.stdout.trim().to_string();
-                    let via_ok = via
-                        .as_ref()
-                        .is_none_or(|v| line.contains(&format!("via {v}")));
-                    let dev_ok = dev
-                        .as_ref()
-                        .is_none_or(|d| line.contains(&format!("dev {d}")));
-                    if via_ok && dev_ok {
-                        (desc, true, Some(line))
-                    } else {
-                        (desc, false, Some(line))
-                    }
+            // What `ip route show DESTINATION` lists: main-table routes with
+            // exactly that prefix, read over netlink (#179). A route passes
+            // when one of its hops has the gateway and the device asked for.
+            let Some((dst, len)) = parse_route_destination(destination) else {
+                return (
+                    desc,
+                    false,
+                    Some(format!("'{destination}' is not a prefix or `default`")),
+                );
+            };
+            match lab.main_routes_to_blocking(node, dst, len) {
+                Ok(routes) if !routes.is_empty() => {
+                    let via: Option<std::net::IpAddr> = via.as_ref().and_then(|v| v.parse().ok());
+                    let shown: Vec<String> = routes
+                        .iter()
+                        .map(|hops| {
+                            let hops: Vec<String> = hops.iter().map(ToString::to_string).collect();
+                            format!("{destination} {}", hops.join(" nexthop "))
+                        })
+                        .collect();
+                    let ok = routes.iter().flatten().any(|hop| {
+                        via.is_none_or(|v| hop.via == Some(v))
+                            && dev.as_ref().is_none_or(|d| hop.dev.as_deref() == Some(d))
+                    });
+                    (desc, ok, Some(shown.join("; ")))
                 }
-                _ => (desc, false, Some("no route found".into())),
+                Ok(_) => (desc, false, Some("no route found".into())),
+                Err(e) => (desc, false, Some(e.to_string())),
             }
         }
         Assertion::DnsResolves {
@@ -339,6 +349,19 @@ fn eval_assertion(
             }
         }
     }
+}
+
+/// A `route-has` destination: `default` (IPv4, as `ip route show default`),
+/// a prefix, or an address (a host route).
+fn parse_route_destination(s: &str) -> Option<(std::net::IpAddr, u8)> {
+    if s == "default" {
+        return Some((std::net::Ipv4Addr::UNSPECIFIED.into(), 0));
+    }
+    if let Ok(cidr) = crate::helpers::parse_cidr(s) {
+        return Some(cidr);
+    }
+    let ip: std::net::IpAddr = s.parse().ok()?;
+    Some((ip, if ip.is_ipv4() { 32 } else { 128 }))
 }
 
 /// Parse average latency from ping -q output.

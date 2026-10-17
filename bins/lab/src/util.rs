@@ -241,9 +241,48 @@ pub struct ImpairShowEntry {
     partition: bool,
 }
 
-/// Walk every endpoint in the topology, exec `tc qdisc show dev <iface>`
-/// inside the right namespace, and parse the result. Endpoints with no
-/// impairment installed serialize as `null`. Used by `--show --json`.
+/// `impair --show`'s human line for an endpoint: its root qdisc, netem's
+/// values, and whether it is partitioned.
+pub fn impair_show_line(entry: Option<&ImpairShowEntry>) -> String {
+    let Some(entry) = entry else {
+        return "-".to_string();
+    };
+    let f = &entry.fields;
+    let mut words = vec![f.qdisc.clone()];
+    let ms = |v: f64| format!("{}ms", (v * 1000.0).round() / 1000.0);
+    if let Some(d) = f.delay_ms {
+        words.push(format!("delay {}", ms(d)));
+    }
+    if let Some(j) = f.jitter_ms {
+        words.push(format!("jitter {}", ms(j)));
+    }
+    if let Some(l) = f.loss_pct {
+        words.push(format!("loss {l}%"));
+    }
+    if let Some(m) = &f.loss_model {
+        words.push(format!("loss {m}"));
+    }
+    if let Some(r) = f.rate_bps {
+        words.push(format!("rate {}", rate_text(r)));
+    }
+    if entry.partition {
+        words.push("(partitioned)".to_string());
+    }
+    words.join(" ")
+}
+
+/// A rate in bits per second as tc writes one (`10Mbit`, `1500Kbit`).
+fn rate_text(bits: u64) -> String {
+    match bits {
+        b if b >= 1_000_000_000 && b % 1_000_000_000 == 0 => format!("{}Gbit", b / 1_000_000_000),
+        b if b >= 1_000_000 && b % 1_000_000 == 0 => format!("{}Mbit", b / 1_000_000),
+        b if b >= 1_000 && b % 1_000 == 0 => format!("{}Kbit", b / 1_000),
+        b => format!("{b}bit"),
+    }
+}
+
+/// Every endpoint in the topology with its root qdisc, read over netlink
+/// (#179), and its partition flag. A node that is not running is skipped.
 pub fn collect_impair_show(
     running: &nlink_lab::RunningLab,
 ) -> nlink_lab::Result<std::collections::BTreeMap<String, Option<ImpairShowEntry>>> {
@@ -253,43 +292,18 @@ pub fn collect_impair_show(
         let ep = EndpointRef::parse(&ep_str).ok_or_else(|| {
             nlink_lab::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in topology"))
         })?;
-        // The host's `tc`, run inside the node's network namespace -- a
-        // bare namespace by name, a container by its init pid (its image
-        // need not ship iproute2).  A node with neither is not running.
-        let stdout = match running.ns_resolver_of(&ep.node) {
-            Some(ns) => {
-                let mut cmd = std::process::Command::new("tc");
-                cmd.args(["qdisc", "show", "dev", &ep.iface]);
-                let out = ns.spawn_output(cmd).map_err(|e| {
-                    nlink_lab::Error::deploy_failed(format!("tc in '{}': {e}", ep.node))
-                })?;
-                String::from_utf8_lossy(&out.stdout).into_owned()
-            }
-            None => continue,
-        };
-        let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&stdout);
-        let entry = parsed.map(|fields| ImpairShowEntry {
-            fields,
-            partition: running.is_partitioned(&ep_str),
-        });
+        if running.ns_resolver_of(&ep.node).is_none() {
+            continue;
+        }
+        let entry = running
+            .impair_show_blocking(&ep_str)?
+            .map(|fields| ImpairShowEntry {
+                fields,
+                partition: running.is_partitioned(&ep_str),
+            });
         out.insert(ep_str, entry);
     }
     Ok(out)
-}
-
-/// Build the argv to pass to `nsenter` for entering a lab node's network
-/// namespace and exec'ing a shell.
-///
-/// Must emit `--net=<path>` as a single argument; splitting it into two
-/// (`--net`, `<path>`) makes nsenter treat `--net` as "enter target's netns"
-/// and then look for a target it never got, failing with
-/// "neither filename nor target pid supplied for ns/net".
-pub fn nsenter_shell_args(ns: &str, shell: &str) -> Vec<String> {
-    vec![
-        format!("--net=/var/run/netns/{ns}"),
-        "--".into(),
-        shell.into(),
-    ]
 }
 
 #[cfg(test)]
@@ -421,25 +435,6 @@ network lan_b {
         assert!(
             endpoints.contains(&"site_b:eth0".to_string()),
             "missing site_b:eth0 (was the regression trigger): {endpoints:?}"
-        );
-    }
-
-    #[test]
-    fn nsenter_shell_args_uses_equals_form() {
-        let args = nsenter_shell_args("mylab-router", "/bin/bash");
-        assert_eq!(
-            args,
-            vec![
-                "--net=/var/run/netns/mylab-router".to_string(),
-                "--".to_string(),
-                "/bin/bash".to_string(),
-            ]
-        );
-        // Guard against the split `--net` regression: no argument may be
-        // exactly `--net`, which nsenter interprets as the flag alone.
-        assert!(
-            !args.iter().any(|a| a == "--net"),
-            "bare --net would be misparsed by nsenter"
         );
     }
 

@@ -2570,8 +2570,8 @@ node a { cpu 0.5  memory 64m  run ["sleep", "1000"] background }
 }
 
 // Issue #83: a VRF-table route removed from the topology must be
-// deleted on apply. nlink's purge only converges the main table, so the
-// engine owns non-main-table routes as explicit ops.
+// deleted on apply. VRF routes are declared in the node's config, and
+// purge covers every table it declares into, and the ones it did before.
 #[tokio::test]
 async fn apply_removes_vrf_route() {
     if unsafe { libc::geteuid() } != 0 {
@@ -3716,6 +3716,9 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
             .is_some_and(|m| m.starts_with("gemodel")),
         "{parsed:?}"
     );
+    // `impair --show` reads the same over netlink, without `tc` (#179).
+    let read = lab.impair_show_blocking("router:eth0").unwrap();
+    assert_eq!(read.as_ref(), Some(&parsed), "tc said: {}", qd.stdout);
     let ping = lab
         .exec(
             "router",
@@ -3754,6 +3757,131 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
         "a model that never loses must not drop: {}",
         ping.stdout
     );
+
+    // The plain values too: netlink's view equals tc's.
+    let plain = nlink_lab::Impairment {
+        delay: Some("10ms".into()),
+        jitter: Some("2ms".into()),
+        loss: Some("1.5%".into()),
+        rate: Some("10mbit".into()),
+        ..Default::default()
+    };
+    lab.set_impairment("router:eth0", &plain).await.unwrap();
+    let qd = lab
+        .exec("router", "tc", &["qdisc", "show", "dev", "eth0"])
+        .unwrap();
+    let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout);
+    let read = lab.impair_show_blocking("router:eth0").unwrap();
+    assert_eq!(read, parsed, "tc said: {}", qd.stdout);
+    assert_eq!(read.and_then(|r| r.rate_bps), Some(10_000_000));
+    lab.clear_impairment("router:eth0").await.unwrap();
+    assert_eq!(lab.impair_show_blocking("router:eth0").unwrap(), None);
+}
+
+/// `tcp-connect` and `route-has` read the kernel through nlink (#179):
+/// a socket made in the node's namespace, and a main-table route dump,
+/// instead of `bash -c 'echo > /dev/tcp/…'` and `ip route show` text.
+#[tokio::test]
+async fn tcp_connect_and_route_has_read_the_kernel() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping tcp_connect_and_route_has_read_the_kernel: requires root");
+        return;
+    }
+    let lab_name = format!("tcrh-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a {{ route 10.9.0.0/24 via 10.0.0.2 }}
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+validate {{
+  tcp-connect a b 5555
+  route-has a 10.9.0.0/24 via 10.0.0.2 dev eth0
+  route-has a 10.9.0.0/24 via 10.0.0.99
+  route-has a 10.0.0.0/24 dev eth0
+  route-has a 10.8.0.0/24
+  tcp-connect a b 5556
+}}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    // A listener in b's namespace, held by this process.
+    let netns = lab.ns_resolver_of("b").unwrap().netns().unwrap();
+    let _listener = netns
+        .run(|| std::net::TcpListener::bind("0.0.0.0:5555"))
+        .unwrap()
+        .unwrap();
+    let ip_map = nlink_lab::scenario::build_ip_map(lab.topology());
+    let got: Vec<(bool, String)> = topo
+        .assertions
+        .iter()
+        .map(|a| {
+            let (desc, ok, detail) = nlink_lab::test_runner::eval_assertion_pub(&lab, a, &ip_map);
+            (ok, format!("{desc}: {detail:?}"))
+        })
+        .collect();
+    let ok: Vec<bool> = got.iter().map(|(ok, _)| *ok).collect();
+    assert_eq!(ok, [true, true, false, true, false, false], "{got:#?}");
+    assert!(got[1].1.contains("via 10.0.0.2 dev eth0"), "{got:#?}");
+    assert!(got[5].1.contains("refused"), "{got:#?}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// A watch ends cleanly when its lab goes away (#175): each node's route
+/// and nftables subscriptions end with a `gone` event and their tasks
+/// return, so their sockets stop pinning the namespaces. They used to
+/// stream nothing, with the namespaces kept alive behind `destroy`.
+#[tokio::test]
+async fn watch_reports_gone_when_the_lab_is_destroyed() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping watch_reports_gone_when_the_lab_is_destroyed: requires root");
+        return;
+    }
+    let lab_name = format!("wgone-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let (mut rx, tasks) = nlink_lab::watch_stream(&lab, &nlink_lab::WatchOpts::default())
+        .unwrap()
+        .expect("nodes to watch");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    lab.destroy().await.expect("destroy failed");
+
+    let mut gone = std::collections::BTreeSet::new();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        match tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv()).await {
+            Ok(Some(ev)) => {
+                if matches!(ev.kind, nlink_lab::watch::WatchEventKind::Gone) {
+                    gone.insert(format!("{}/{:?}", ev.node, ev.family));
+                }
+            }
+            Ok(None) => break,
+            Err(_) => {}
+        }
+    }
+    assert_eq!(
+        gone.into_iter().collect::<Vec<_>>(),
+        ["a/Nftables", "a/Route", "b/Nftables", "b/Route"]
+    );
+    for t in tasks {
+        tokio::time::timeout(std::time::Duration::from_secs(2), t)
+            .await
+            .expect("a subscription task outlived its namespace")
+            .unwrap();
+    }
 }
 
 // ─── Plan 156 PR C — impair --show JSON view ────────────

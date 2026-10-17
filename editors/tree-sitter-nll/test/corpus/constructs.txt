@@ -178,3 +178,43 @@ node fw {
                   (integer)
                   (integer))
                 (interpolation)))))))))
+
+================
+WireGuard longhand peers
+================
+node a {
+  wireguard wg-red {
+    key auto
+    peer hub-b { endpoint ${hub-b.wan0}:51820 allowed-ips [10.20.0.0/16] }
+    peer c {
+      endpoint [fd00::2]:51820
+      allowed-ips [fd00:99::2/128, default]
+    }
+  }
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (wireguard_block
+        (identifier)
+        (generic_block
+          (known_property
+            (identifier))
+          (wireguard_peer
+            (identifier)
+            (socket_address
+              (interpolation)
+              (integer))
+            (list
+              (cidr)))
+          (wireguard_peer
+            (identifier)
+            (socket_address
+              (ipv6_address)
+              (integer))
+            (list
+              (ipv6_cidr)
+              (identifier))))))))

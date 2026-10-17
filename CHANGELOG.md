@@ -123,6 +123,14 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   JSON (marcpardo/nlink#876).
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
+- **WireGuard peers are resolved differently** (#147), so a deployed lab's
+  peers change on its first `apply`: a node with several tunnels to one
+  peer pairs them by interface name; the endpoint is the peer's address
+  on a segment the two share; allowed-ips are the peer's tunnel
+  addresses as hosts (`/32`, `/128`, not the interface prefix) plus the
+  node's routes into the tunnel towards it. `WireguardConfig` has a new
+  field, `peer_settings` (library API: struct literals add
+  `peer_settings: Default::default()`).
 - **Error messages no longer start with `deploy failed:`** (#177): that
   prefix was on every command's errors (`apply`, `impair`, `exec`,
   `watch`…). The message names what failed (`failed to create veth …`).
@@ -353,6 +361,18 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   is gone. Each subscription also checks every 2 s that its namespace
   still exists, so a running `watch` stops pinning a destroyed lab's
   namespaces with its sockets.
+- **WireGuard tunnels did not carry their traffic** (#147). Every
+  interface got every peer interface of a peer node (each tunnel had the
+  other tunnel's key too); the endpoint was the peer's first address,
+  which in `cookbook/multi-tenant-wan` was inside the network the tunnel
+  carried; and allowed-ips were only the peer's tunnel address, so
+  cryptokey routing dropped everything else — `wireguard-vpn`'s
+  host-to-host traffic as well. With the new resolution both examples
+  pass their assertions (`wireguard-vpn` has a `validate` block now).
+  Where the inference does not fit, a `peer NAME { endpoint …
+  allowed-ips […] }` block inside `wireguard` sets them (parser, render,
+  tree-sitter, editors); validation rules `wireguard-peer-settings` and
+  `wireguard-route-peer` (warning).
 - **Every error said "deploy failed", JSON errors had no errno or
   extended ack, and `apply --json` mixed text into its stdout** (#177).
   See Migration. Multi-node network diffs also ran together on one line
@@ -399,6 +419,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   stack with `Stack::plan_in`, saved WireGuard keys included.
 - `Plan::diff` compares ops by value (`PartialEq`) rather than by their
   `Debug` text.
+- WireGuard keys are generated, derived and encoded by nlink's
+  `PrivateKey`/`PublicKey` (its `wireguard-keys` feature): nlink-lab no
+  longer depends on `x25519-dalek`, `getrandom` or `base64`. Saved keys
+  (`secrets.json`, `wg_public_keys` in the state) keep their format; an
+  upgraded lab keeps its peers' keys, and its first `apply` only adds the
+  routes the peers carry to their allowed-ips (#147).
 - Traffic control is planned in `deploy/plan/tc.rs` (`QdiscSpec`,
   `RateLimiter::declare`, `PerPeerImpairer::declare`) and applied with
   each node's `Stack`; a runtime `impair`, `--clear`, `--partition` or

@@ -44,3 +44,10 @@ link gw-b:eth1 -- host-b:eth0 { 192.168.2.1/24 -- 192.168.2.10/24 }
 
 # WAN impairment
 impair gw-a:eth0 delay 50ms jitter 5ms loss 0.1%
+
+# The tunnel carries each site's LAN: the far /24 is in the peer's
+# allowed-ips because the gateway routes it `dev wg0`.
+validate {
+  reach host-a host-b
+  reach host-b host-a
+}

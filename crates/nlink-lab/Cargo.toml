@@ -15,7 +15,9 @@ readme = "../../README.md"
 
 [features]
 default = ["wireguard"]
-wireguard = ["dep:x25519-dalek", "dep:base64", "dep:getrandom"]
+# Key generation and derivation are nlink's (`PrivateKey`, the
+# `wireguard-keys` feature its `full` includes).
+wireguard = []
 # Opt-in: keep `nlink_lab::capture::compile_bpf_filter` (and the
 # CLI's `--filter "<tcpdump expr>"` flag) wired to a `tcpdump -dd`
 # shell-out. Requires `tcpdump` + `libpcap` on PATH at runtime.
@@ -55,9 +57,6 @@ regex = "1"
 netring = { workspace = true }
 
 # Feature-gated dependencies
-x25519-dalek = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
-getrandom = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }

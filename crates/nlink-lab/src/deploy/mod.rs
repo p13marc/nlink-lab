@@ -93,17 +93,14 @@ async fn deploy_inner(topology: &Topology, journal: &mut Journal) -> Result<Runn
     // ── state file ──
     #[cfg(feature = "wireguard")]
     let wg_public_keys_b64 = {
-        use base64::Engine;
+        use nlink::netlink::genl::wireguard::PublicKey;
         let mut map = BTreeMap::new();
         if let Some(keys) = &inputs.wg_keys {
             wireguard_secrets::save(&topology.lab.name, keys)?;
             for (node, ifaces) in keys {
                 let mut node_map = BTreeMap::new();
                 for (iface, (_priv, pubkey)) in ifaces {
-                    node_map.insert(
-                        iface.clone(),
-                        base64::engine::general_purpose::STANDARD.encode(pubkey),
-                    );
+                    node_map.insert(iface.clone(), PublicKey(*pubkey).to_string());
                 }
                 map.insert(node.clone(), node_map);
             }
@@ -606,15 +603,18 @@ mod wireguard_secrets {
     }
 
     pub fn save(lab: &str, keys: &WgKeys) -> Result<()> {
-        use base64::Engine;
+        use nlink::netlink::genl::wireguard::{PrivateKey, PublicKey};
         use std::os::unix::fs::OpenOptionsExt;
-        let enc = base64::engine::general_purpose::STANDARD;
         let mut out: BTreeMap<String, BTreeMap<String, (String, String)>> = BTreeMap::new();
         for (node, ifaces) in keys {
             for (iface, (priv_k, pub_k)) in ifaces {
-                out.entry(node.clone())
-                    .or_default()
-                    .insert(iface.clone(), (enc.encode(priv_k), enc.encode(pub_k)));
+                out.entry(node.clone()).or_default().insert(
+                    iface.clone(),
+                    (
+                        PrivateKey::from_bytes(*priv_k).to_string(),
+                        PublicKey(*pub_k).to_string(),
+                    ),
+                );
             }
         }
         let p = path(lab);
@@ -633,21 +633,19 @@ mod wireguard_secrets {
     }
 
     pub fn load(lab: &str) -> Option<WgKeys> {
-        use base64::Engine;
-        let dec = base64::engine::general_purpose::STANDARD;
+        use nlink::netlink::genl::wireguard::{PrivateKey, PublicKey};
         let text = std::fs::read_to_string(path(lab)).ok()?;
         let raw: BTreeMap<String, BTreeMap<String, (String, String)>> =
             serde_json::from_str(&text).ok()?;
         let mut out: WgKeys = BTreeMap::new();
         for (node, ifaces) in raw {
             for (iface, (p, q)) in ifaces {
-                let (Ok(p), Ok(q)) = (dec.decode(p), dec.decode(q)) else {
+                let (Ok(p), Ok(q)) = (p.parse::<PrivateKey>(), q.parse::<PublicKey>()) else {
                     continue;
                 };
-                let (Ok(p), Ok(q)) = (<[u8; 32]>::try_from(p), <[u8; 32]>::try_from(q)) else {
-                    continue;
-                };
-                out.entry(node.clone()).or_default().insert(iface, (p, q));
+                out.entry(node.clone())
+                    .or_default()
+                    .insert(iface, (*p.as_bytes(), q.0));
             }
         }
         Some(out)
@@ -2822,10 +2820,7 @@ node host
         // Generate a known key once.
         let priv_key = generate_wg_private_key().unwrap();
         let pub_key = derive_wg_public_key(&priv_key);
-        let b64 = {
-            use base64::Engine;
-            base64::engine::general_purpose::STANDARD.encode(priv_key)
-        };
+        let b64 = nlink::netlink::genl::wireguard::PrivateKey::from_bytes(priv_key).to_string();
 
         let topo = crate::parser::parse(
             r#"lab "t"
@@ -2842,6 +2837,7 @@ node host
                 fwmark: None,
                 addresses: vec!["10.0.0.1/24".into()],
                 peers: vec![],
+                peer_settings: Default::default(),
             },
         );
         let mut topo = topo;
@@ -2873,6 +2869,7 @@ node host
                 fwmark: None,
                 addresses: vec![],
                 peers: vec![],
+                peer_settings: Default::default(),
             },
         );
         let mut topo = topo;
@@ -2906,6 +2903,7 @@ node b
                 fwmark: None,
                 addresses: vec!["10.99.0.1/24".into()],
                 peers: vec!["b".into()],
+                peer_settings: Default::default(),
             },
         );
         topo.nodes.insert("a".into(), a);
@@ -2919,6 +2917,7 @@ node b
                 fwmark: None,
                 addresses: vec!["10.99.0.2/24".into()],
                 peers: vec!["a".into()],
+                peer_settings: Default::default(),
             },
         );
         topo.nodes.insert("b".into(), b);
@@ -2963,6 +2962,7 @@ node b
                 fwmark: None,
                 addresses: vec!["10.99.0.1/24".into()],
                 peers: vec!["b".into()],
+                peer_settings: Default::default(),
             },
         );
         topo.nodes.insert("a".into(), a);

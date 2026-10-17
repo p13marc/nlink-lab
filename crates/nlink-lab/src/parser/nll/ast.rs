@@ -494,6 +494,17 @@ pub struct WireguardDef {
     pub fwmark: Option<u32>,
     pub addresses: Vec<String>,
     pub peers: Vec<String>,
+    /// Longhand `peer NAME { endpoint … allowed-ips […] }` blocks (#147).
+    pub peer_settings: Vec<WireguardPeerDef>,
+}
+
+/// One longhand `peer` block of a `wireguard` interface.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WireguardPeerDef {
+    pub name: String,
+    /// `IP`, `IP:PORT` or `[IPv6]:PORT`, interpolations unresolved.
+    pub endpoint: Option<String>,
+    pub allowed_ips: Vec<String>,
 }
 
 /// VXLAN interface definition.

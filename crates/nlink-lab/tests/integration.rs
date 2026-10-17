@@ -1889,6 +1889,19 @@ async fn wireguard_config_reapply_is_zero_ops() {
         name: lab.name().to_string(),
     };
 
+    // The example's own assertions (#147): host-a and host-b reach each
+    // other through the tunnel, the far /24 being in the peer's
+    // allowed-ips.
+    let failed: Vec<_> = lab
+        .assertion_results()
+        .iter()
+        .filter(|a| !a.passed)
+        .collect();
+    assert!(
+        !lab.assertion_results().is_empty() && failed.is_empty(),
+        "{failed:?}"
+    );
+
     // WG interface must exist after deploy.
     let out = lab.exec("gw-a", "wg", &["show", "wg0"]).unwrap();
     assert_eq!(
@@ -1983,6 +1996,44 @@ async fn wireguard_config_reapply_is_zero_ops() {
     assert!(layered.is_empty(), "not converged:\n{layered}");
 
     std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #147: two tunnels between two hubs, each in its own VRF. Every tunnel
+/// gets only its own peer (by name), the WAN as its endpoint and the far
+/// site in its allowed-ips, so the example's four assertions pass: each
+/// customer reaches its other site, and not the other customer. Two of them
+/// failed before.
+#[cfg(feature = "wireguard")]
+#[tokio::test]
+async fn multi_tenant_wan_tunnels_carry_their_customers() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping multi_tenant_wan_tunnels_carry_their_customers: requires root");
+        return;
+    }
+    for m in ["wireguard", "vrf"] {
+        let _ = std::process::Command::new("modprobe").arg(m).status();
+        if !std::path::Path::new(&format!("/sys/module/{m}")).exists() {
+            eprintln!("skipping multi_tenant_wan_tunnels_carry_their_customers: no `{m}` module");
+            return;
+        }
+    }
+    let topo = nlink_lab::parser::parse_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/cookbook/multi-tenant-wan.nll"
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let results: Vec<(String, bool)> = lab
+        .assertion_results()
+        .iter()
+        .map(|a| (a.description.clone(), a.passed))
+        .collect();
+    assert_eq!(results.len(), 4, "{results:?}");
+    assert!(results.iter().all(|(_, ok)| *ok), "{results:?}");
     lab.destroy().await.expect("destroy failed");
 }
 
@@ -3033,6 +3084,7 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
                         fwmark: None,
                         addresses: vec!["10.255.0.3/32".to_string()],
                         peers: vec!["a".to_string()],
+                        peer_settings: Default::default(),
                     },
                 );
                 m
@@ -3049,6 +3101,7 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
                 fwmark: None,
                 addresses: vec!["10.255.0.1/32".to_string()],
                 peers: vec!["c".to_string()],
+                peer_settings: Default::default(),
             },
         );
     }

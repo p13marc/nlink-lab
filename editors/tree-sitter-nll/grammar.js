@@ -707,6 +707,7 @@ module.exports = grammar({
     _generic_item: ($) =>
       choice(
         $.known_property,
+        $.wireguard_peer,
         seq($.identifier, $._value),
         seq($.identifier, $.list),
         seq($.identifier, $.generic_block),
@@ -714,6 +715,25 @@ module.exports = grammar({
         // bare address lines: `10.0.0.1/24`, `fd00::1/64`, `${addr}/24`
         choice($.cidr, $.ipv6_cidr, $.interpolation, $.function_cidr),
         $.for_loop,
+      ),
+
+    // `peer hub-b { endpoint 10.0.0.2:51820 allowed-ips [10.20.0.0/16] }`:
+    // a WireGuard peer written out longhand (#147).
+    wireguard_peer: ($) =>
+      seq(
+        "peer",
+        $._name,
+        "{",
+        repeat(choice(seq("endpoint", $.socket_address), seq("allowed-ips", $.list))),
+        "}",
+      ),
+
+    // `10.0.0.2`, `10.0.0.2:51820`, `${hub-b.wan0}:51820`, `[fd00::2]:51820`.
+    socket_address: ($) =>
+      choice(
+        seq(choice($.ipv4_address, $.interpolation), optional(seq(":", $.integer))),
+        seq("[", $.ipv6_address, "]", optional(seq(":", $.integer))),
+        $.ipv6_address,
       ),
 
     // Properties the language defines for wireguard / vxlan / wifi / vrf

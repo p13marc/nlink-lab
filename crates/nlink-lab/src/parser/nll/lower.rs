@@ -825,11 +825,19 @@ fn resolve_cross_refs(topology: &mut types::Topology) -> Result<()> {
         return Ok(());
     }
 
-    // Resolve references in node routes and firewall rules
+    // Resolve references in node routes, WireGuard peer endpoints
+    // (`endpoint ${hub-b.wan0}:51820`) and firewall rules
     for node in topology.nodes.values_mut() {
         for route in node.routes.values_mut() {
             if let Some(via) = &mut route.via {
                 *via = resolve_ref(via, &addr_map)?;
+            }
+        }
+        for wg in node.wireguard.values_mut() {
+            for peer in wg.peer_settings.values_mut() {
+                if let Some(ep) = &mut peer.endpoint {
+                    *ep = resolve_ref(ep, &addr_map)?;
+                }
             }
         }
         if let Some(fw) = &mut node.firewall {
@@ -2265,6 +2273,15 @@ fn interpolate_wg(wg: &ast::WireguardDef, vars: &BTreeMap<String, String>) -> as
         fwmark: wg.fwmark,
         addresses: wg.addresses.iter().map(|s| i(s, vars)).collect(),
         peers: wg.peers.iter().map(|s| i(s, vars)).collect(),
+        peer_settings: wg
+            .peer_settings
+            .iter()
+            .map(|p| ast::WireguardPeerDef {
+                name: i(&p.name, vars),
+                endpoint: p.endpoint.as_ref().map(|e| i(e, vars)),
+                allowed_ips: p.allowed_ips.iter().map(|a| i(a, vars)).collect(),
+            })
+            .collect(),
     }
 }
 
@@ -3101,16 +3118,35 @@ fn apply_node_props(
                 );
             }
             ast::NodeProp::Wireguard(wg) => {
-                node.wireguard.insert(
-                    wg.name.clone(),
+                node.wireguard.insert(wg.name.clone(), {
+                    // A longhand `peer` block names a peer too (#147).
+                    let mut peers = wg.peers.clone();
+                    for p in &wg.peer_settings {
+                        if !peers.contains(&p.name) {
+                            peers.push(p.name.clone());
+                        }
+                    }
                     types::WireguardConfig {
                         private_key: wg.key.clone(),
                         listen_port: wg.listen_port,
                         fwmark: wg.fwmark,
                         addresses: wg.addresses.clone(),
-                        peers: wg.peers.clone(),
-                    },
-                );
+                        peers,
+                        peer_settings: wg
+                            .peer_settings
+                            .iter()
+                            .map(|p| {
+                                (
+                                    p.name.clone(),
+                                    types::WireguardPeer {
+                                        endpoint: p.endpoint.clone(),
+                                        allowed_ips: p.allowed_ips.clone(),
+                                    },
+                                )
+                            })
+                            .collect(),
+                    }
+                });
             }
             ast::NodeProp::Vxlan(vx) => {
                 node.interfaces.insert(

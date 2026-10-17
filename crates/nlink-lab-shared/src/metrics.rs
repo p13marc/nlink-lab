@@ -90,16 +90,17 @@ pub struct InterfaceMetrics {
     #[serde(default)]
     pub state: String,
     /// Receive rate in **bits** per second — the unit [`format_rate`]
-    /// expects. Differenced by the collector from [`Self::rx_bytes`]
-    /// across two ticks; `0` on the first sample for an interface and
-    /// on any tick whose counters stepped backwards.
+    /// expects. nlink's rate over the time between the previous tick's
+    /// read of the link counters and this one's
+    /// (`RunningLab::diagnose_since`); `0` on the first sample for an
+    /// interface and on any tick whose counters stepped backwards.
     #[serde(default)]
     pub rx_bps: u64,
     /// Transmit rate in **bits** per second. See [`Self::rx_bps`].
     #[serde(default)]
     pub tx_bps: u64,
-    /// Receive packets per second, differenced from [`Self::rx_pkts`].
-    /// Same first-sample and reset rules as [`Self::rx_bps`].
+    /// Receive packets per second, over the same interval and with the
+    /// same first-sample and reset rules as [`Self::rx_bps`].
     #[serde(default)]
     pub rx_pps: u64,
     /// Transmit packets per second. See [`Self::rx_pps`].

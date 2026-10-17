@@ -203,9 +203,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   at a root or a per-pair leaf (nlink #633); and a rate limit's ingress
   redirect and IFB alias, which is how #149's fix reaches a lab deployed
   before it. Labs deployed by a build of this release see no change.
+- **`NodeDiagnostic` has a `taken_at`** (library API, #191): when its
+  counters were read, for `RunningLab::diagnose_since`. Code that builds
+  one by hand sets it. `nlink_lab_backend::collector`'s
+  `rates_between`, `IfaceCounters` and `IfaceRates` are removed; the
+  collector's rates come from nlink.
 
 ### Added
 
+- **`RunningLab::diagnose_since(node, previous)`** (#191): each
+  interface's `rates` since an earlier `diagnose`, over the time between
+  the two reads of its counters (nlink's `Diagnostics::scan_since`). A
+  link recreated since, or another link at its ifindex, has none.
+  `diagnose` keeps reporting zero rates: it has no previous sample.
 - **Firewall and NAT on nlink 0.32's nftables (#189).**
   - NAT address and port ranges with `random`/`fully-random`/
     `persistent`: `snat … to 203.0.113.1-203.0.113.9:40000-40010
@@ -427,6 +437,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Changed
 
+- The backend's interface rates (`top`, `metrics`, `daemon --http`, the
+  topoviewer) come from `diagnose_since` over the previous tick (#191),
+  replacing the collector's own counter differencing from #133. The
+  interval is the one between the two link dumps rather than between two
+  clock reads in the collector loop. As before, a first tick and a
+  recreated interface report no rate.
 - Each node's network, nftables and WireGuard layers are planned and
   applied as one nlink `Stack` (`Stack::apply_reconcile_in`), in place of
   three appliers of nlink-lab's own: WireGuard devices first, then

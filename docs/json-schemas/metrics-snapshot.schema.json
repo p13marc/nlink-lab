@@ -45,7 +45,7 @@
           "default": ""
         },
         "rx_bps": {
-          "description": "Receive rate in **bits** per second — the unit [`format_rate`]\nexpects. Differenced by the collector from [`Self::rx_bytes`]\nacross two ticks; `0` on the first sample for an interface and\non any tick whose counters stepped backwards.",
+          "description": "Receive rate in **bits** per second — the unit [`format_rate`]\nexpects. nlink's rate over the time between the previous tick's\nread of the link counters and this one's\n(`RunningLab::diagnose_since`); `0` on the first sample for an\ninterface and on any tick whose counters stepped backwards.",
           "type": "integer",
           "format": "uint64",
           "default": 0,
@@ -78,7 +78,7 @@
           "minimum": 0
         },
         "rx_pps": {
-          "description": "Receive packets per second, differenced from [`Self::rx_pkts`].\nSame first-sample and reset rules as [`Self::rx_bps`].",
+          "description": "Receive packets per second, over the same interval and with the\nsame first-sample and reset rules as [`Self::rx_bps`].",
           "type": "integer",
           "format": "uint64",
           "default": 0,

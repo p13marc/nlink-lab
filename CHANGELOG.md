@@ -266,6 +266,41 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`apply` deletes a WireGuard interface the topology drops, and sets
   a `key` the topology writes** (#204). Both used to report no change.
   A `key auto` interface keeps its saved key, as before.
+- **`mgmt SUBNET` without `host-reachable` builds the management network**
+  (#210). Every node gets a `mgmt0` on a bridge in the lab's `-mgmt`
+  namespace, numbered as the host-reachable one is; the docs and
+  `examples/management-network.nll` always said so, but nothing was
+  built. A deployed lab gets it on its next `apply`. It is out of band:
+  `routing auto` and FRR do not route over it.
+- **`subnet auto/24` in a `network` block deploys** (#210). `validate`
+  rejected it as an invalid CIDR; past that, the members got no
+  addresses. `apply` gives an `auto` network the subnet the deploy
+  allocated, and refuses one it would add.
+- **Validation is stricter where deploy failed later** (#210):
+  - a macvlan, ipvlan, Wi-Fi interface, VRF or (with `mgmt`) `mgmt0`
+    named like another interface of the node is `interface-uniqueness`;
+  - a VRF name over 15 characters is `interface-name-length`;
+  - an interface in two VRFs, or in a bond and a VRF, is the new
+    `interface-one-master`;
+  - an invalid WireGuard `key` is the new `wireguard-key`;
+  - a VXLAN `underlay` the node does not have is
+    `vxlan-underlay-address`;
+  - a macvlan/ipvlan/Wi-Fi address that is not a CIDR is `valid-cidr`;
+  - two network ports with one address are a `unique-ips` warning.
+
+  And less strict where it was wrong: the same subnet in two VRFs of a
+  node is no longer `overlapping-subnets`; `iif lo`, `iif mgmt0` and VRF
+  devices no longer warn `firewall-iface-exists`; a gateway on a network
+  port, WireGuard or Wi-Fi address no longer warns `route-reachability`.
+- **`diff` and `apply`'s change list show every kind of change** (#210):
+  networks added, removed or changed, link addresses and MTU, node
+  fields (interfaces, VRFs, WireGuard, `run`, container options, FRR),
+  lab settings, and the other sections. `TopologyDiff` has new fields
+  (`networks_added`, `networks_removed`, `networks_changed`,
+  `links_changed`, `nodes_changed`, `lab_changed`, `sections_changed`;
+  additive under `apply --check --json`'s `topology`). `diff --json`
+  prints the whole diff plus `total_changes`, instead of a summary with
+  link counts.
 - **A bad argument exits 1, not 2, and says "invalid argument"** (#209):
   `--set noequals`, an unknown template, signal, lint rule, scenario or
   benchmark name, a bad regex or `--env`, a missing `--tcp`/`--exec`/
@@ -465,6 +500,15 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`events --follow` missed `destroyed`, then polled forever** (#210).
+  It reads through an open descriptor now, so a deleted or rotated file
+  is drained to its last line. A new file under the same name is read
+  from its start, where it used to skip past the old offset. The follow
+  ends after `destroyed`. The writer rotates under a lock, so two
+  writers no longer both rotate.
+- **`destroy` left the `-mgmt` namespace of a lab with a `mgmt` subnet
+  and no networks**, and `nlink-lab ip … --iface mgmt0` knew only the
+  host-reachable kind (#210).
 - **`capture` filters** (#209):
   - `--filter-src-ports 1,2 --filter-dst-ports 3,4` also matched source
     port 2 to any destination (netring 0.30 left the later list off the

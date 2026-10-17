@@ -227,35 +227,59 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(1024);
     let mut tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
-    // 1. the lifecycle log (poll; a new file after rotation is picked up)
+    // 1. the lifecycle log, read through an open descriptor: a file that is
+    //    rotated or deleted under us (destroy writes `destroyed` and
+    //    removes the state directory at once) is still drained to its
+    //    last line, and a file that is not the one we hold any more (a
+    //    rotation, a redeploy under the same name) is read from its
+    //    start. Polling by path missed `destroyed` and then polled a
+    //    missing file forever, and a new file past the old offset lost its
+    //    first lines (#210).
     {
         let tx = tx.clone();
         let path = nlink_lab::events::events_path(&lab);
-        let mut offset = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let start = std::fs::File::open(&path).ok().map(|f| {
+            let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+            (f, len)
+        });
         tasks.push(tokio::spawn(async move {
+            use std::io::{Read as _, Seek as _};
+            use std::os::unix::fs::MetadataExt as _;
+            let mut held: Option<(std::fs::File, u64)> = start;
             loop {
                 tokio::time::sleep(Duration::from_millis(250)).await;
-                let Ok(meta) = std::fs::metadata(&path) else {
+                if held.is_none() {
+                    held = std::fs::File::open(&path).ok().map(|f| (f, 0));
+                }
+                let Some((file, offset)) = held.as_mut() else {
                     continue;
                 };
-                if meta.len() < offset {
-                    offset = 0; // rotated
+                let mut new = Vec::new();
+                if file.seek(std::io::SeekFrom::Start(*offset)).is_ok() {
+                    let _ = file.read_to_end(&mut new);
                 }
-                if meta.len() == offset {
-                    continue;
-                }
-                let Ok(bytes) = std::fs::read(&path) else {
-                    continue;
-                };
-                let new = &bytes[offset as usize..];
                 // Only complete lines; keep a torn tail for the next poll.
                 let end = new.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+                *offset += end as u64;
                 let text = String::from_utf8_lossy(&new[..end]).into_owned();
-                offset += end as u64;
+                let mut destroyed = false;
                 for e in nlink_lab::events::parse_lines(&text) {
+                    destroyed |= matches!(e.kind, nlink_lab::events::LifecycleKind::Destroyed);
                     if tx.send(Event::Lifecycle(e)).await.is_err() {
                         return;
                     }
+                }
+                if destroyed {
+                    return; // the printer ends the follow
+                }
+                // Still the file at that path? If not, it was drained above:
+                // open the new one, from its start, on the next poll.
+                let same = match (file.metadata(), std::fs::metadata(&path)) {
+                    (Ok(a), Ok(b)) => a.ino() == b.ino() && a.dev() == b.dev(),
+                    _ => false,
+                };
+                if !same {
+                    held = None;
                 }
             }
         }));
@@ -349,7 +373,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let quiet = ctx.quiet;
     let printer = async {
         while let Some(ev) = rx.recv().await {
+            // the lab is gone: nothing more will come for it
+            let last = matches!(
+                &ev,
+                Event::Lifecycle(e) if matches!(e.kind, nlink_lab::events::LifecycleKind::Destroyed)
+            );
             if !filter.keep(&ev) {
+                if last {
+                    break;
+                }
                 continue;
             }
             let line = if json || socket.is_some() {
@@ -366,6 +398,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 } else {
                     println!("{}", ev.render_line());
                 }
+            }
+            if last {
+                break;
             }
         }
     };

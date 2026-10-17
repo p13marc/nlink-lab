@@ -177,6 +177,26 @@ pub struct ApplyReport {
     pub applied: Vec<String>,
 }
 
+/// `desired` with its `subnet auto/N` networks given the running lab's
+/// subnets ([`crate::subnet_pool::resolve_auto_subnets`]); borrowed when
+/// it has none.
+fn with_running_subnets<'a>(
+    running: &RunningLab,
+    desired: &'a Topology,
+) -> Result<std::borrow::Cow<'a, Topology>> {
+    let has_auto = desired.networks.values().any(|n| {
+        n.subnet
+            .as_deref()
+            .is_some_and(|s| crate::subnet_pool::parse_auto_placeholder(s).is_some())
+    });
+    if !has_auto {
+        return Ok(std::borrow::Cow::Borrowed(desired));
+    }
+    let mut owned = desired.clone();
+    crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut owned)?;
+    Ok(std::borrow::Cow::Owned(owned))
+}
+
 /// Reconcile a running lab to `desired`: `execute(plan(desired) −
 /// plan(current))`, with the declarative layers purging undeclared
 /// addresses/routes. Journaled and rolled back on failure like a deploy;
@@ -196,6 +216,7 @@ pub fn apply_plan_with(
     desired: &Topology,
     opts: &ApplyOptions,
 ) -> Result<Plan> {
+    let desired = &with_running_subnets(running, desired)?;
     desired.validate().bail()?;
     Ok(plan_apply(running, desired, opts)?.1)
 }
@@ -370,6 +391,7 @@ pub async fn apply_with(
     desired: &Topology,
     opts: &ApplyOptions,
 ) -> Result<ApplyReport> {
+    let desired = &with_running_subnets(running, desired)?;
     desired.validate().bail()?;
     let _lock = state::lock(running.name())?;
     let (inputs, overlay, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
@@ -414,7 +436,7 @@ pub async fn apply_with(
         wireguard_secrets::save(running.name(), keys)?;
     }
 
-    running.set_topology(desired.clone());
+    running.set_topology(desired.clone().into_owned());
     running.set_live_impairments(overlay.kept);
     running.retain_partitions(|ep| overlay.desired_partitions.contains(ep));
     running.absorb_apply(
@@ -848,6 +870,7 @@ pub async fn compute_layered_diff_with(
     desired: &Topology,
     opts: &ApplyOptions,
 ) -> Result<crate::diff::LayeredDiff> {
+    let desired = &with_running_subnets(running, desired)?;
     let topology = crate::diff::diff_topologies(running.topology(), desired);
     let (_, _, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
     let previous = stack_networks(&cur_plan);

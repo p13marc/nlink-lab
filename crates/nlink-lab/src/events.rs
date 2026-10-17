@@ -231,21 +231,38 @@ pub fn append(lab: &str, event: &LifecycleEvent) -> Result<()> {
         // record into.
         return Ok(());
     }
-    if let Ok(meta) = std::fs::metadata(&path)
-        && meta.len() > MAX_BYTES
-    {
-        let _ = std::fs::rename(&path, dir.join("events.1.ndjson"));
-    }
     let mut line = serde_json::to_string(event)?;
     line.push('\n');
-    // O_APPEND: one write per line, so concurrent CLI invocations never
-    // interleave inside a record (lines are far below PIPE_BUF).
-    let mut f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)?;
-    f.write_all(line.as_bytes())?;
-    Ok(())
+    loop {
+        // O_APPEND: one write per line, so concurrent CLI invocations
+        // never interleave inside a record (lines are far below
+        // PIPE_BUF).
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        // Rotation under an exclusive lock on the file, and only while
+        // the path still names it: two writers both rotated, the second
+        // renaming the first one's fresh file over `events.1` (#210).
+        use std::os::fd::AsRawFd as _;
+        use std::os::unix::fs::MetadataExt as _;
+        // SAFETY: flock on a descriptor this function owns.
+        if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) } != 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        let here = f.metadata()?;
+        match std::fs::metadata(&path) {
+            Ok(now) if now.ino() == here.ino() => {}
+            // another writer rotated it under us: write to the new file
+            _ => continue,
+        }
+        if here.len() > MAX_BYTES {
+            std::fs::rename(&path, dir.join("events.1.ndjson"))?;
+            continue;
+        }
+        f.write_all(line.as_bytes())?;
+        return Ok(());
+    }
 }
 
 /// Every recorded event, oldest first (the rotated generation first).

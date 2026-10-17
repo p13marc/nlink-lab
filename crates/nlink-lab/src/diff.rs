@@ -53,6 +53,82 @@ pub struct TopologyDiff {
     /// apply reconciles rule by rule in one atomic batch. Plan 152
     /// Phase B.
     pub nftables_changed: Vec<NftablesChange>,
+
+    /// Bridge networks added and removed (#210).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub networks_added: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub networks_removed: Vec<String>,
+    /// Networks on both sides whose members, ports, subnet, MTU or VLANs
+    /// differ (per-pair impairments are in `network_impairs_changed`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub networks_changed: Vec<FieldsChange>,
+    /// Links on both sides (same endpoints, same order) whose addresses or
+    /// MTU differ. The name is `a -- b`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links_changed: Vec<FieldsChange>,
+    /// Nodes on both sides with other fields changed: interfaces, VRFs,
+    /// WireGuard, `run`, container options, FRR, … (routes, sysctls and
+    /// nftables have their own lists).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes_changed: Vec<FieldsChange>,
+    /// Lab settings that differ (`dns`, `mgmt_subnet`, `routing`, …).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lab_changed: Vec<String>,
+    /// Other sections that differ: `profiles`, `assertions`, `scenarios`,
+    /// `benchmarks`, `assertion_retries`, `assertion_interval`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections_changed: Vec<String>,
+}
+
+/// Something present on both sides with some of its fields changed.
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct FieldsChange {
+    pub name: String,
+    /// The changed fields, by their serialized names.
+    pub fields: Vec<String>,
+}
+
+/// The top-level keys whose values differ between two serialized values
+/// (missing on one side counts as a difference), minus `skip`.
+fn changed_fields<T: Serialize>(a: &T, b: &T, skip: &[&str]) -> Vec<String> {
+    let (Ok(serde_json::Value::Object(a)), Ok(serde_json::Value::Object(b))) =
+        (serde_json::to_value(a), serde_json::to_value(b))
+    else {
+        return Vec::new();
+    };
+    let keys: std::collections::BTreeSet<&String> = a.keys().chain(b.keys()).collect();
+    keys.into_iter()
+        .filter(|k| !skip.contains(&k.as_str()) && a.get(*k) != b.get(*k))
+        .cloned()
+        .collect()
+}
+
+/// `delay 10ms jitter 2ms loss 1%`: the fields an impairment sets, for
+/// `~ update impairment` (which showed only the delay, `10ms → 10ms` for a
+/// loss change).
+fn impairment_summary(imp: &Impairment) -> String {
+    let fields = [
+        ("delay", &imp.delay),
+        ("jitter", &imp.jitter),
+        ("loss", &imp.loss),
+        ("rate", &imp.rate),
+        ("corrupt", &imp.corrupt),
+        ("reorder", &imp.reorder),
+        ("duplicate", &imp.duplicate),
+        ("delay-correlation", &imp.delay_correlation),
+        ("loss-correlation", &imp.loss_correlation),
+        ("limit", &imp.limit),
+    ];
+    let parts: Vec<String> = fields
+        .iter()
+        .filter_map(|(k, v)| v.as_ref().map(|v| format!("{k} {v}")))
+        .collect();
+    if parts.is_empty() {
+        "-".to_string()
+    } else {
+        parts.join(" ")
+    }
 }
 
 /// A change to the per-node nftables ruleset (firewall + NAT).
@@ -158,6 +234,13 @@ impl TopologyDiff {
             && self.rate_limits_changed.is_empty()
             && self.qdiscs_changed.is_empty()
             && self.nftables_changed.is_empty()
+            && self.networks_added.is_empty()
+            && self.networks_removed.is_empty()
+            && self.networks_changed.is_empty()
+            && self.links_changed.is_empty()
+            && self.nodes_changed.is_empty()
+            && self.lab_changed.is_empty()
+            && self.sections_changed.is_empty()
     }
 
     /// Total number of changes.
@@ -175,6 +258,13 @@ impl TopologyDiff {
             + self.rate_limits_changed.len()
             + self.qdiscs_changed.len()
             + self.nftables_changed.len()
+            + self.networks_added.len()
+            + self.networks_removed.len()
+            + self.networks_changed.len()
+            + self.links_changed.len()
+            + self.nodes_changed.len()
+            + self.lab_changed.len()
+            + self.sections_changed.len()
     }
 }
 
@@ -209,10 +299,10 @@ impl std::fmt::Display for TopologyDiff {
         for change in &self.impairments_changed {
             writeln!(
                 f,
-                "  ~ update impairment: {} (delay {:?} → {:?})",
+                "  ~ update impairment: {} ({} → {})",
                 change.endpoint,
-                change.old.delay.as_deref().unwrap_or("-"),
-                change.new.delay.as_deref().unwrap_or("-"),
+                impairment_summary(&change.old),
+                impairment_summary(&change.new),
             )?;
         }
         for change in &self.network_impairs_changed {
@@ -279,6 +369,32 @@ impl std::fmt::Display for TopologyDiff {
                 (true, true) => writeln!(f, "  ~ change nftables: {}", n.node)?,
                 (false, _) => writeln!(f, "  - remove nftables: {}", n.node)?,
             }
+        }
+        for name in &self.networks_added {
+            writeln!(f, "  + add network: {name}")?;
+        }
+        for name in &self.networks_removed {
+            writeln!(f, "  - remove network: {name}")?;
+        }
+        for c in &self.networks_changed {
+            writeln!(
+                f,
+                "  ~ update network: {} ({})",
+                c.name,
+                c.fields.join(", ")
+            )?;
+        }
+        for c in &self.links_changed {
+            writeln!(f, "  ~ update link: {} ({})", c.name, c.fields.join(", "))?;
+        }
+        for c in &self.nodes_changed {
+            writeln!(f, "  ~ update node: {} ({})", c.name, c.fields.join(", "))?;
+        }
+        if !self.lab_changed.is_empty() {
+            writeln!(f, "  ~ update lab: {}", self.lab_changed.join(", "))?;
+        }
+        for name in &self.sections_changed {
+            writeln!(f, "  ~ update {name}")?;
         }
         if self.is_empty() {
             writeln!(f, "  (no changes)")?;
@@ -710,6 +826,63 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
         });
     }
 
+    // ── What the lists above do not cover (#210) ──
+    for (name, net) in &desired.networks {
+        match current.networks.get(name) {
+            None => diff.networks_added.push(name.clone()),
+            Some(old) => {
+                let fields = changed_fields(old, net, &["impairments"]);
+                if !fields.is_empty() {
+                    diff.networks_changed.push(FieldsChange {
+                        name: name.clone(),
+                        fields,
+                    });
+                }
+            }
+        }
+    }
+    for name in current.networks.keys() {
+        if !desired.networks.contains_key(name) {
+            diff.networks_removed.push(name.clone());
+        }
+    }
+    for link in &desired.links {
+        if let Some(old) = current.links.iter().find(|l| l.endpoints == link.endpoints) {
+            let fields = changed_fields(old, link, &["endpoints"]);
+            if !fields.is_empty() {
+                diff.links_changed.push(FieldsChange {
+                    name: format!("{} -- {}", link.endpoints[0], link.endpoints[1]),
+                    fields,
+                });
+            }
+        }
+    }
+    for (name, node) in &desired.nodes {
+        if let Some(old) = current.nodes.get(name) {
+            let fields = changed_fields(old, node, &["routes", "sysctls", "firewall", "nat"]);
+            if !fields.is_empty() {
+                diff.nodes_changed.push(FieldsChange {
+                    name: name.clone(),
+                    fields,
+                });
+            }
+        }
+    }
+    diff.lab_changed = changed_fields(&current.lab, &desired.lab, &[]);
+    diff.sections_changed = changed_fields(
+        current,
+        desired,
+        &[
+            "lab",
+            "nodes",
+            "links",
+            "networks",
+            "impairments",
+            "rate_limits",
+            "qdiscs",
+        ],
+    );
+
     // Sort for deterministic output
     diff.nodes_added.sort();
     diff.nodes_removed.sort();
@@ -732,6 +905,37 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
 mod tests {
     use super::*;
     use crate::Lab;
+
+    /// Networks, link addresses, node fields, lab settings and sections
+    /// were not compared at all (#210).
+    #[test]
+    fn diff_sees_networks_links_nodes_and_lab() {
+        let a = crate::parser::parse(
+            r#"lab "d"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+"#,
+        )
+        .unwrap();
+        let b = crate::parser::parse(
+            r#"lab "d" { dns hosts }
+node a { lo 10.255.0.1/32 }
+node b
+link a:eth0 -- b:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  mtu 9000 }
+network lan { members [a:eth1, b:eth1] subnet 10.9.0.0/24 }
+validate { reach a b }
+"#,
+        )
+        .unwrap();
+        let d = diff_topologies(&a, &b);
+        assert_eq!(d.networks_added, vec!["lan"]);
+        assert_eq!(d.links_changed[0].fields, vec!["addresses", "mtu"]);
+        assert_eq!(d.nodes_changed[0].name, "a");
+        assert_eq!(d.lab_changed, vec!["dns"]);
+        assert_eq!(d.sections_changed, vec!["assertions"]);
+        assert!(diff_topologies(&b, &b).is_empty());
+    }
 
     #[test]
     fn qdisc_added_changed_removed() {

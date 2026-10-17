@@ -1289,10 +1289,8 @@ impl RunningLab {
             }
         }
 
-        // From host-reachable management network (mgmt0)
-        if self.topology.lab.mgmt_host_reachable
-            && let Some(ref mgmt_subnet) = self.topology.lab.mgmt_subnet
-        {
+        // From the management network (mgmt0), host-reachable or not
+        if let Some(ref mgmt_subnet) = self.topology.lab.mgmt_subnet {
             // Nodes get the 2nd, 3rd, ... host address in name order, over
             // every node as deploy numbers them, containers included: over
             // the namespace nodes alone, a lab with a container reported
@@ -2055,8 +2053,9 @@ impl RunningLab {
             crate::netns_tag::untag(ns_name);
         }
 
-        // 4b. Delete management namespace (bridges) if it exists
-        if !self.topology.networks.is_empty() {
+        // 4b. Delete management namespace (bridges) if it exists: a lab
+        // with networks or a `mgmt` subnet has one
+        if !self.topology.networks.is_empty() || self.topology.lab.mgmt_subnet.is_some() {
             let mgmt_ns = format!("{}-mgmt", self.topology.lab.prefix());
             if namespace::exists(&mgmt_ns)
                 && let Err(e) = namespace::delete(&mgmt_ns)

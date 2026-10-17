@@ -177,16 +177,65 @@ where
         {
             let cidr = alloc(prefix)?;
             allocated.push(cidr.clone());
-            net.subnet = Some(cidr);
+            set_subnet(net, cidr)?;
         }
     }
 
     Ok(allocated)
 }
 
+/// The running lab's subnet for each of `desired`'s `auto/N` networks:
+/// what an `apply` of the file the lab was deployed from needs. It left
+/// the placeholder in, so the members had no addresses and the apply
+/// would have removed theirs (#210). A network the running lab does not
+/// have is an error: subnets are allocated at deploy.
+pub fn resolve_auto_subnets(
+    running: &crate::types::Topology,
+    desired: &mut crate::types::Topology,
+) -> Result<()> {
+    for (name, net) in desired.networks.iter_mut() {
+        let Some(s) = &net.subnet else { continue };
+        if parse_auto_placeholder(s).is_none() {
+            continue;
+        }
+        let have = running
+            .networks
+            .get(name)
+            .and_then(|n| n.subnet.as_ref())
+            .filter(|s| parse_auto_placeholder(s).is_none());
+        let Some(have) = have else {
+            return Err(Error::invalid_topology(format!(
+                "network '{name}': `subnet {s}` is allocated when the lab is deployed; \
+                 give a network an apply adds a subnet of its own"
+            )));
+        };
+        set_subnet(net, have.clone())?;
+    }
+    Ok(())
+}
+
+/// Give `net` its concrete subnet, and its members the addresses the
+/// parser's auto-assignment gives (it skipped a placeholder): the
+/// substituted subnet used to leave every member unaddressed (#210).
+fn set_subnet(net: &mut crate::types::Network, cidr: String) -> Result<()> {
+    let explicit: std::collections::BTreeMap<String, Vec<String>> = net
+        .ports
+        .iter()
+        .filter(|(_, p)| !p.addresses.is_empty())
+        .map(|(k, p)| (k.clone(), p.addresses.clone()))
+        .collect();
+    let assigned = crate::parser::nll::lower::subnet_auto_assign(&cidr, &net.members, &explicit)
+        .map_err(Error::invalid_topology)?;
+    for (member, addr) in assigned.into_iter().flatten() {
+        net.ports.entry(member).or_default().addresses.push(addr);
+    }
+    net.subnet = Some(cidr);
+    Ok(())
+}
+
 /// `"auto/24"` → `Some(24)`. `"auto"` → `Some(24)` (default prefix).
 /// Anything else → `None`.
-fn parse_auto_placeholder(s: &str) -> Option<u8> {
+pub(crate) fn parse_auto_placeholder(s: &str) -> Option<u8> {
     if s == "auto" {
         return Some(24);
     }
@@ -197,6 +246,30 @@ fn parse_auto_placeholder(s: &str) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An `auto` network's members get addresses from the subnet it is
+    /// given, and an apply reuses the running lab's (#210).
+    #[test]
+    fn auto_networks_get_member_addresses_and_keep_their_subnet() {
+        let nll =
+            "lab \"a\"\nnode a\nnode b\nnetwork lan { members [a:eth0, b:eth0] subnet auto/24 }\n";
+        let mut deployed = crate::parser::parse(nll).unwrap();
+        substitute_auto_subnets(&mut deployed, |_| Ok("10.7.3.0/24".into())).unwrap();
+        let lan = &deployed.networks["lan"];
+        assert_eq!(lan.ports["a:eth0"].addresses, vec!["10.7.3.1/24"]);
+        assert_eq!(lan.ports["b:eth0"].addresses, vec!["10.7.3.2/24"]);
+        let mut desired = crate::parser::parse(nll).unwrap();
+        resolve_auto_subnets(&deployed, &mut desired).unwrap();
+        assert_eq!(
+            serde_json::to_value(&desired.networks).unwrap(),
+            serde_json::to_value(&deployed.networks).unwrap()
+        );
+        let mut added = crate::parser::parse(
+            "lab \"a\"\nnode a\nnode b\nnetwork wan { members [a:eth0, b:eth0] subnet auto }\n",
+        )
+        .unwrap();
+        assert!(resolve_auto_subnets(&deployed, &mut added).is_err());
+    }
 
     #[test]
     fn parse_auto_placeholder_recognises_forms() {

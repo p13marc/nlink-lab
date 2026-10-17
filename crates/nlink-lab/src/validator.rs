@@ -18,7 +18,7 @@
 //! result.bail()?;
 //! ```
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::net::IpAddr;
 
@@ -99,6 +99,8 @@ pub const RULE_IDS: &[&str] = &[
     "depends-on-cycle",
     "loss-model-excludes-correlation",
     "benchmark-metric",
+    "interface-one-master",
+    "wireguard-key",
     // Warning-level
     "frr-requires-forwarding",
     "mgmt-subnet-not-network-address",
@@ -283,6 +285,8 @@ enum InterfaceSource {
     Macvlan,
     Ipvlan,
     Wifi,
+    Vrf,
+    Mgmt,
 }
 
 impl fmt::Display for InterfaceSource {
@@ -295,6 +299,8 @@ impl fmt::Display for InterfaceSource {
             Self::Macvlan => write!(f, "macvlans"),
             Self::Ipvlan => write!(f, "ipvlans"),
             Self::Wifi => write!(f, "wifi"),
+            Self::Vrf => write!(f, "vrfs"),
+            Self::Mgmt => write!(f, "mgmt"),
         }
     }
 }
@@ -344,6 +350,11 @@ fn collect_interfaces(topology: &Topology) -> BTreeMap<String, BTreeMap<String, 
             ifaces
                 .entry(wifi.name.clone())
                 .or_insert(InterfaceSource::Wifi);
+        }
+        // A VRF is a device too: its name is checked like any other
+        // (a 16-character one passed, #210)
+        for vrf in node.vrfs.keys() {
+            ifaces.entry(vrf.clone()).or_insert(InterfaceSource::Vrf);
         }
     }
 
@@ -404,6 +415,7 @@ impl Topology {
         validate_rate_limit_refs(self, &interfaces, &mut issues);
         validate_qdiscs(self, &interfaces, &mut issues);
         validate_bond_and_vlan_refs(self, &interfaces, &mut issues);
+        validate_interface_masters(self, &mut issues);
         validate_frr(self, &mut issues);
         validate_route_config(self, &mut issues);
         validate_interface_name_length(self, &interfaces, &mut issues);
@@ -421,7 +433,8 @@ impl Topology {
         validate_route_addresses(self, &mut issues);
         validate_mgmt_subnet(self, &mut issues);
         validate_vxlan_vni(self, &mut issues);
-        validate_vxlan_underlay(self, &mut issues);
+        validate_vxlan_underlay(self, &interfaces, &mut issues);
+        validate_wireguard_keys(self, &mut issues);
         validate_wifi_channels(self, &mut issues);
         validate_wifi_mesh_ids(self, &mut issues);
         validate_host_global_sysctls(self, &mut issues);
@@ -496,6 +509,38 @@ fn validate_cidrs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
                 }
             }
         }
+
+        // Host-attached and radio addresses: `10.0.0.1/33` passed and
+        // failed at deploy (#210)
+        let host_attached = node
+            .macvlans
+            .iter()
+            .enumerate()
+            .map(|(i, mv)| ("macvlans", i, &mv.addresses))
+            .chain(
+                node.ipvlans
+                    .iter()
+                    .enumerate()
+                    .map(|(i, iv)| ("ipvlans", i, &iv.addresses)),
+            )
+            .chain(
+                node.wifi
+                    .iter()
+                    .enumerate()
+                    .map(|(i, w)| ("wifi", i, &w.addresses)),
+            );
+        for (field, i, addresses) in host_attached {
+            for (k, addr) in addresses.iter().enumerate() {
+                if let Err(e) = parse_cidr(addr) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "valid-cidr",
+                        message: format!("invalid CIDR '{addr}': {e}"),
+                        location: Some(format!("nodes.{node_name}.{field}[{i}].addresses[{k}]")),
+                    });
+                }
+            }
+        }
     }
 
     // Network port addresses
@@ -515,8 +560,21 @@ fn validate_cidrs(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
             }
         }
 
-        // Network subnet
+        // Network subnet. `auto[/N]` is allocated at deploy (only /24
+        // today); it used to fail here, so the documented form never
+        // deployed (#210).
         if let Some(subnet) = &network.subnet
+            && let Some(prefix) = crate::subnet_pool::parse_auto_placeholder(subnet)
+        {
+            if prefix != 24 {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "valid-cidr",
+                    message: format!("subnet '{subnet}': only auto/24 is allocated today"),
+                    location: Some(format!("networks.{net_name}.subnet")),
+                });
+            }
+        } else if let Some(subnet) = &network.subnet
             && let Err(e) = parse_cidr(subnet)
         {
             issues.push(ValidationIssue {
@@ -696,6 +754,39 @@ fn validate_interface_uniqueness(topology: &Topology, issues: &mut Vec<Validatio
                 .entry(wg_name.clone())
                 .or_default()
                 .push(InterfaceSource::Wireguard);
+        }
+        // Every device a node gets, not only links and declared ones: a
+        // macvlan named like a link end, a VRF named like a link, a link
+        // end named `mgmt0` validated and then failed at deploy (#210).
+        for mv in &node.macvlans {
+            ifaces
+                .entry(mv.name.clone())
+                .or_default()
+                .push(InterfaceSource::Macvlan);
+        }
+        for iv in &node.ipvlans {
+            ifaces
+                .entry(iv.name.clone())
+                .or_default()
+                .push(InterfaceSource::Ipvlan);
+        }
+        for wifi in &node.wifi {
+            ifaces
+                .entry(wifi.name.clone())
+                .or_default()
+                .push(InterfaceSource::Wifi);
+        }
+        for vrf in node.vrfs.keys() {
+            ifaces
+                .entry(vrf.clone())
+                .or_default()
+                .push(InterfaceSource::Vrf);
+        }
+        if topology.lab.mgmt_subnet.is_some() {
+            ifaces
+                .entry("mgmt0".to_string())
+                .or_default()
+                .push(InterfaceSource::Mgmt);
         }
     }
 
@@ -1568,6 +1659,20 @@ struct SubnetEntry<'a> {
     prefix: u8,
     owner: SubnetOwner<'a>,
     location: String,
+    /// The (node, VRF) pairs the segment ends in: two segments that meet
+    /// a node in different routing tables do not conflict (#210).
+    ends: Vec<(&'a str, Option<&'a str>)>,
+}
+
+/// The VRF `iface` of `node` is enslaved to, if any.
+fn vrf_of<'a>(topology: &'a Topology, node: &str, iface: &str) -> Option<&'a str> {
+    topology
+        .nodes
+        .get(node)?
+        .vrfs
+        .iter()
+        .find(|(_, v)| v.interfaces.iter().any(|i| i == iface))
+        .map(|(name, _)| name.as_str())
 }
 
 impl SubnetEntry<'_> {
@@ -1581,6 +1686,7 @@ fn push_subnet<'a>(
     cidr: &str,
     owner: SubnetOwner<'a>,
     location: String,
+    ends: Vec<(&'a str, Option<&'a str>)>,
 ) {
     let Ok((ip, prefix)) = parse_cidr(cidr) else {
         return; // valid-cidr reports it
@@ -1599,6 +1705,7 @@ fn push_subnet<'a>(
         prefix,
         owner,
         location,
+        ends,
     });
 }
 
@@ -1607,9 +1714,25 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
     let mut out = Vec::new();
 
     if let Some(mgmt) = &topology.lab.mgmt_subnet {
-        push_subnet(&mut out, mgmt, SubnetOwner::Mgmt, "lab.mgmt".into());
+        push_subnet(
+            &mut out,
+            mgmt,
+            SubnetOwner::Mgmt,
+            "lab.mgmt".into(),
+            Vec::new(),
+        );
     }
 
+    let ends_of = |endpoints: &'_ [String]| -> Vec<(&str, Option<&str>)> {
+        endpoints
+            .iter()
+            .filter_map(|e| e.split_once(':'))
+            .filter_map(|(node, iface)| {
+                let (name, _) = topology.nodes.get_key_value(node)?;
+                Some((name.as_str(), vrf_of(topology, node, iface)))
+            })
+            .collect()
+    };
     for (i, link) in topology.links.iter().enumerate() {
         if let Some(addrs) = &link.addresses {
             for (j, addr) in addrs.iter().enumerate() {
@@ -1618,6 +1741,7 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
                     addr,
                     SubnetOwner::Link(i),
                     format!("links[{i}].addresses[{j}]"),
+                    ends_of(&link.endpoints),
                 );
             }
         }
@@ -1630,6 +1754,7 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
                 subnet,
                 SubnetOwner::Network(net_name),
                 format!("networks.{net_name}.subnet"),
+                ends_of(&network.members),
             );
         }
         for (port_name, port) in sorted(&network.ports) {
@@ -1639,12 +1764,14 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
                     addr,
                     SubnetOwner::Network(net_name),
                     format!("networks.{net_name}.ports.{port_name}.addresses[{k}]"),
+                    ends_of(&network.members),
                 );
             }
         }
     }
 
     for (node_name, node) in sorted(&topology.nodes) {
+        let here = |iface: &str| vec![(node_name.as_str(), vrf_of(topology, node_name, iface))];
         for (iface_name, iface) in sorted(&node.interfaces) {
             for (k, addr) in iface.addresses.iter().enumerate() {
                 push_subnet(
@@ -1652,6 +1779,7 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
                     addr,
                     SubnetOwner::Interface,
                     format!("nodes.{node_name}.interfaces.{iface_name}.addresses[{k}]"),
+                    here(iface_name),
                 );
             }
         }
@@ -1662,6 +1790,7 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
                     addr,
                     SubnetOwner::Interface,
                     format!("nodes.{node_name}.wireguard.{wg_name}.addresses[{k}]"),
+                    here(wg_name),
                 );
             }
         }
@@ -1669,26 +1798,27 @@ fn collect_subnets(topology: &Topology) -> Vec<SubnetEntry<'_>> {
             .macvlans
             .iter()
             .enumerate()
-            .map(|(i, mv)| ("macvlans", i, &mv.addresses))
+            .map(|(i, mv)| ("macvlans", i, &mv.name, &mv.addresses))
             .chain(
                 node.ipvlans
                     .iter()
                     .enumerate()
-                    .map(|(i, iv)| ("ipvlans", i, &iv.addresses)),
+                    .map(|(i, iv)| ("ipvlans", i, &iv.name, &iv.addresses)),
             )
             .chain(
                 node.wifi
                     .iter()
                     .enumerate()
-                    .map(|(i, w)| ("wifi", i, &w.addresses)),
+                    .map(|(i, w)| ("wifi", i, &w.name, &w.addresses)),
             );
-        for (field, i, addresses) in host_attached {
+        for (field, i, name, addresses) in host_attached {
             for (k, addr) in addresses.iter().enumerate() {
                 push_subnet(
                     &mut out,
                     addr,
                     SubnetOwner::Interface,
                     format!("nodes.{node_name}.{field}[{i}].addresses[{k}]"),
+                    here(name),
                 );
             }
         }
@@ -1717,6 +1847,29 @@ fn validate_overlapping_subnets(topology: &Topology, issues: &mut Vec<Validation
             }
             let identical = a.prefix == b.prefix;
             if identical && (a.owner == SubnetOwner::Interface || b.owner == SubnetOwner::Interface)
+            {
+                continue;
+            }
+            // Two segments that meet a node in different routing tables
+            // (VRFs, or a VRF and the main table) are separate: the same
+            // subnet in two VRFs of a PE is what VRFs are for (#210).
+            fn tables_at<'a>(e: &SubnetEntry<'a>, node: &str) -> BTreeSet<Option<&'a str>> {
+                e.ends
+                    .iter()
+                    .filter(|(n, _)| *n == node)
+                    .map(|(_, v)| *v)
+                    .collect()
+            }
+            let shared: BTreeSet<&str> = a
+                .ends
+                .iter()
+                .map(|(n, _)| *n)
+                .filter(|n| b.ends.iter().any(|(m, _)| m == n))
+                .collect();
+            if !shared.is_empty()
+                && shared
+                    .iter()
+                    .all(|n| tables_at(a, n).is_disjoint(&tables_at(b, n)))
             {
                 continue;
             }
@@ -2187,9 +2340,14 @@ fn validate_firewall(
                             location: location.clone(),
                         });
                     }
-                    if interfaces
-                        .get(node_name.as_str())
-                        .is_some_and(|known| !known.contains_key(name.as_str()))
+                    // `lo` always exists, and `mgmt0` with a mgmt network:
+                    // warned, an error under --strict (#210)
+                    let implicit =
+                        name == "lo" || (name == "mgmt0" && topology.lab.mgmt_subnet.is_some());
+                    if !implicit
+                        && interfaces
+                            .get(node_name.as_str())
+                            .is_some_and(|known| !known.contains_key(name.as_str()))
                     {
                         issues.push(ValidationIssue {
                             severity: Severity::Warning,
@@ -2238,13 +2396,33 @@ fn is_valid_set_name(name: &str) -> bool {
 
 /// VXLAN `local`/`remote` must be IP addresses of the same family (the
 /// kernel refuses a mix). Either family works since nlink 0.30 (#418).
-fn validate_vxlan_underlay(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+fn validate_vxlan_underlay(
+    topology: &Topology,
+    interfaces: &BTreeMap<String, BTreeMap<String, InterfaceSource>>,
+    issues: &mut Vec<ValidationIssue>,
+) {
     for (node_name, node) in sorted(&topology.nodes) {
         for (iface_name, iface) in sorted(&node.interfaces) {
             if iface.kind != Some(InterfaceKind::Vxlan) {
                 continue;
             }
             let location = Some(format!("nodes.{node_name}.interfaces.{iface_name}"));
+            // an underlay the node does not have failed mid-deploy (#210)
+            if let Some(dev) = &iface.underlay
+                && !dev.contains("${")
+                && interfaces
+                    .get(node_name.as_str())
+                    .is_some_and(|known| !known.contains_key(dev.as_str()))
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "vxlan-underlay-address",
+                    message: format!(
+                        "VXLAN underlay '{dev}' is not an interface of node '{node_name}'"
+                    ),
+                    location: location.clone(),
+                });
+            }
             let mut parsed: Vec<(&str, IpAddr)> = Vec::new();
             for (field, value) in [("local", &iface.local), ("remote", &iface.remote)] {
                 let Some(v) = value else {
@@ -2801,6 +2979,72 @@ fn validate_test_refs(
     }
 }
 
+/// A WireGuard `key` is `auto` or a key: `key "not-a-key"` validated and
+/// failed at deploy (#210).
+fn validate_wireguard_keys(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        for (wg_name, wg) in sorted(&node.wireguard) {
+            let Some(key) = wg.private_key.as_deref().filter(|k| *k != "auto") else {
+                continue;
+            };
+            if key.contains("${") {
+                continue;
+            }
+            #[cfg(feature = "wireguard")]
+            let bad = crate::deploy::plan::wireguard::decode_wg_key(key).err();
+            #[cfg(not(feature = "wireguard"))]
+            let bad: Option<String> = None;
+            if let Some(e) = bad {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "wireguard-key",
+                    message: format!(
+                        "WireGuard key of '{wg_name}' on '{node_name}' is invalid: {e}"
+                    ),
+                    location: Some(format!("nodes.{node_name}.wireguard.{wg_name}.private_key")),
+                });
+            }
+        }
+    }
+}
+
+/// An interface has one master: a VRF or a bond. Listed in two VRFs the
+/// last one in name order silently won, and in a bond and a VRF the VRF
+/// took the port, which then stayed down (#210).
+fn validate_interface_masters(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        let mut masters: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+        for (vrf, cfg) in sorted(&node.vrfs) {
+            for iface in &cfg.interfaces {
+                masters.entry(iface).or_default().push(format!("vrf {vrf}"));
+            }
+        }
+        for (name, iface) in sorted(&node.interfaces) {
+            if iface.kind == Some(crate::types::InterfaceKind::Bond) {
+                for member in &iface.members {
+                    masters
+                        .entry(member)
+                        .or_default()
+                        .push(format!("bond {name}"));
+                }
+            }
+        }
+        for (iface, claimed) in masters {
+            if claimed.len() > 1 {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "interface-one-master",
+                    message: format!(
+                        "interface '{iface}' of node '{node_name}' has more than one master: {}",
+                        claimed.join(", ")
+                    ),
+                    location: Some(format!("nodes.{node_name}")),
+                });
+            }
+        }
+    }
+}
+
 /// A benchmark assertion names a metric its test reports, with a
 /// threshold in that metric's unit, and an iperf3 `rate` is a rate. A
 /// metric the test never measures (`jitter` on a ping) or a threshold the
@@ -2923,6 +3167,29 @@ fn validate_unique_ips(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
             }
         }
     }
+
+    // Network ports too: two ports of one bridge with the same address
+    // were not reported at all (#210)
+    for (net_name, network) in sorted(&topology.networks) {
+        for (port_name, port) in sorted(&network.ports) {
+            for (k, addr) in port.addresses.iter().enumerate() {
+                if let Ok((ip, _)) = parse_cidr(addr) {
+                    let ip_str = ip.to_string();
+                    let location = format!("networks.{net_name}.ports.{port_name}.addresses[{k}]");
+                    if let Some(prev) = seen.get(&ip_str) {
+                        issues.push(ValidationIssue {
+                            severity: Severity::Warning,
+                            rule: "unique-ips",
+                            message: format!("duplicate address '{ip_str}' (also at {prev})"),
+                            location: Some(location),
+                        });
+                    } else {
+                        seen.insert(ip_str, location);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Connected interfaces should have matching MTUs.
@@ -3003,6 +3270,32 @@ fn validate_route_reachability(
                 if let Ok((ip, prefix)) = parse_cidr(addr) {
                     subnets.push((ip, prefix));
                 }
+            }
+        }
+
+        // From the node's bridge-network ports, WireGuard and Wi-Fi
+        // addresses: a gateway on one of those was warned about (#210)
+        for network in topology.networks.values() {
+            for (key, port) in &network.ports {
+                let owner = key.split_once(':').map_or(key.as_str(), |(n, _)| n);
+                if owner != node_name {
+                    continue;
+                }
+                for addr in &port.addresses {
+                    if let Ok((ip, prefix)) = parse_cidr(addr) {
+                        subnets.push((ip, prefix));
+                    }
+                }
+            }
+        }
+        for addr in node
+            .wireguard
+            .values()
+            .flat_map(|wg| &wg.addresses)
+            .chain(node.wifi.iter().flat_map(|w| &w.addresses))
+        {
+            if let Ok((ip, prefix)) = parse_cidr(addr) {
+                subnets.push((ip, prefix));
             }
         }
 
@@ -4054,6 +4347,99 @@ link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             );
         }
         assert_eq!(rule_ids(), RULE_IDS);
+    }
+
+    fn rules(nll: &str) -> Vec<(String, String)> {
+        let topo = parser::parse(nll).unwrap();
+        topo.validate()
+            .issues()
+            .iter()
+            .map(|i| (i.rule.to_string(), i.location.clone().unwrap_or_default()))
+            .collect()
+    }
+
+    /// What validated and then failed at deploy, and what was refused
+    /// though it deploys (#210).
+    #[test]
+    fn names_masters_keys_and_underlays_are_checked() {
+        let found = rules(
+            r#"lab "v"
+node a {
+  macvlan eth0 parent "enp1s0" { 10.1.0.1/33 }
+  vrf customer-red-vrf table 10 { interfaces [eth1] }
+  vrf blue table 20 { interfaces [eth1] }
+  wireguard wg0 { key "not-a-key" address 192.168.255.1/32 peers [b] }
+  vxlan vx0 { vni 10 local 10.0.0.1 remote 10.0.0.2 underlay eth9 }
+}
+node b { wireguard wg0 { key auto address 192.168.255.2/32 peers [a] } }
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+link a:eth1 -- b:eth1 { 10.0.1.1/24 -- 10.0.1.2/24 }
+"#,
+        );
+        let has = |rule: &str| found.iter().any(|(r, _)| r == rule);
+        for rule in [
+            "interface-uniqueness",
+            "interface-name-length",
+            "interface-one-master",
+            "vxlan-underlay-address",
+            "valid-cidr",
+        ] {
+            assert!(has(rule), "{rule} missing from {found:?}");
+        }
+        // keys are decoded with the `wireguard` feature only
+        assert_eq!(
+            has("wireguard-key"),
+            cfg!(feature = "wireguard"),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn vrfs_separate_subnets_and_lo_is_an_interface() {
+        let found = rules(
+            r#"lab "v"
+profile router { forward ipv4 }
+node pe : router {
+  vrf red table 10 { interfaces [eth0] }
+  vrf blue table 20 { interfaces [eth1] }
+  firewall { input policy accept { accept iif lo } }
+}
+node ce1 { route default via 10.0.0.1 }
+node ce2
+node h { route default via 10.9.0.1 }
+link pe:eth0 -- ce1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+link pe:eth1 -- ce2:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+network lan {
+  members [pe:eth2, h:eth0]
+  port pe { 10.9.0.1/24 }
+  port h { 10.9.0.1/24 }
+}
+"#,
+        );
+        let has = |rule: &str| found.iter().any(|(r, _)| r == rule);
+        assert!(!has("overlapping-subnets"), "{found:?}");
+        assert!(!has("firewall-iface-exists"), "{found:?}");
+        assert!(!has("route-reachability"), "{found:?}");
+        // the two ports with one address are reported
+        assert!(
+            found
+                .iter()
+                .any(|(r, l)| r == "unique-ips" && l.starts_with("networks.lan.ports")),
+            "{found:?}"
+        );
+    }
+
+    /// `subnet auto/24` validated as an invalid CIDR (#210).
+    #[test]
+    fn an_auto_network_subnet_validates() {
+        let ok = rules(
+            "lab \"a\"\nnode a\nnode b\nnetwork lan { members [a:eth0, b:eth0] subnet auto/24 }\n",
+        );
+        assert!(!ok.iter().any(|(r, _)| r == "valid-cidr"), "{ok:?}");
+        let bad = rules(
+            "lab \"a\"\nnode a\nnode b\nnetwork lan { members [a:eth0, b:eth0] subnet auto/30 }\n",
+        );
+        assert!(bad.iter().any(|(r, _)| r == "valid-cidr"), "{bad:?}");
     }
 
     /// A metric the test does not report, or a threshold not in the

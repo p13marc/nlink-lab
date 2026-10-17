@@ -7624,3 +7624,78 @@ benchmark "b" {{
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }
+
+/// #210: `mgmt SUBNET` without `host-reachable` gave no node a `mgmt0`;
+/// now the nodes reach each other over it, at the addresses `ip` reports,
+/// and destroy removes its namespace.
+#[tokio::test]
+async fn a_mgmt_subnet_connects_every_node() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: requires root");
+        return;
+    }
+    let lab_name = format!("mgm-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        "lab \"{lab_name}\" {{ mgmt 172.31.77.0/24 }}\nnode a\nnode b\n"
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let b = lab.node_addresses("b").unwrap()["mgmt0"][0].clone();
+    assert_eq!(b, "172.31.77.3/24");
+    let ping = lab
+        .exec("a", "ping", &["-c1", "-W2", b.split('/').next().unwrap()])
+        .unwrap();
+    assert_eq!(
+        ping.exit_code, 0,
+        "a cannot reach b over mgmt0: {}",
+        ping.stderr
+    );
+    let mgmt_ns = format!("{}-mgmt", lab.topology().lab.prefix());
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+    assert!(
+        !nlink::netlink::namespace::exists(&mgmt_ns),
+        "{mgmt_ns} is left behind"
+    );
+}
+
+/// #210: `subnet auto/24` failed validation; past that its members had
+/// no addresses, and an apply of the same file had no subnet for them.
+#[tokio::test]
+async fn an_auto_network_subnet_deploys_and_applies_as_nothing() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: requires root");
+        return;
+    }
+    let lab_name = format!("aut-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        "lab \"{lab_name}\"\nnode a\nnode b\nnetwork lan {{ members [a:eth0, b:eth0] subnet auto/24 }}\n"
+    ))
+    .unwrap();
+    assert!(topo.validate().bail().is_ok(), "{:?}", topo.validate());
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let ports = &lab.topology().networks["lan"].ports;
+    let b = ports["b:eth0"].addresses[0].clone();
+    let ping = lab
+        .exec("a", "ping", &["-c1", "-W2", b.split('/').next().unwrap()])
+        .unwrap();
+    assert_eq!(ping.exit_code, 0, "{}", ping.stderr);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "the same file is drift:\n{layered}");
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("apply failed");
+    let after = lab
+        .exec("a", "ping", &["-c1", "-W2", b.split('/').next().unwrap()])
+        .unwrap();
+    assert_eq!(after.exit_code, 0, "the apply removed the addresses");
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}

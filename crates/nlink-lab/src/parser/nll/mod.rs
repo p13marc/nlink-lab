@@ -61,6 +61,20 @@ pub fn parse_file_with_params(
     lower::lower_with_params(&ast, Some(base_dir), params)
 }
 
+/// The names of the `param`s an NLL source declares, in order.
+pub fn declared_params(input: &str) -> Result<Vec<String>> {
+    let tokens = lexer::lex(input)?;
+    let ast = parser::parse_tokens(&tokens, input)?;
+    Ok(ast
+        .statements
+        .iter()
+        .filter_map(|s| match s {
+            ast::Statement::Param(p) => Some(p.name.clone()),
+            _ => None,
+        })
+        .collect())
+}
+
 /// Parse an NLL string, producing rich diagnostics with source context on error.
 pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
     parse(input).map_err(|e| attach_source(e, input, filename))

@@ -240,13 +240,17 @@ use nlink_lab::RunningLab;
 
 #[lab_test("examples/cookbook/p2p-partition.nll", timeout = 30)]
 async fn partition_recovery_works(lab: RunningLab) {
+    // cloned: `run_scenario` takes the lab `&mut`
     let scenario = lab
         .topology()
         .scenarios
         .iter()
         .find(|s| s.name == "partition-and-heal")
+        .cloned()
         .unwrap();
-    let result = nlink_lab::scenario::run_scenario(&lab, scenario).await.unwrap();
+    let result = nlink_lab::scenario::run_scenario(&mut lab, &scenario)
+        .await
+        .unwrap();
     assert!(result.passed);
     assert!(result.duration_ms < 20_000);
 }

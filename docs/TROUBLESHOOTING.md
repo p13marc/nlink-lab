@@ -348,17 +348,20 @@ resolution. Either:
 
 ## Library Use (`#[lab_test]`)
 
-### Test silently passes without running
+### Test fails with "needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN"
 
-You're not running as root. The macro skips with a loud banner —
-look for `*** SKIPPING #[lab_test] '...' ***` in the test
-output. Run with `sudo cargo test` or grant `CAP_NET_ADMIN`+
-`CAP_SYS_ADMIN` to the cargo binary.
+A `#[lab_test]` fails without privileges, so an unprivileged run
+cannot report coverage it does not have. Run with `sudo cargo test`,
+or grant `CAP_NET_ADMIN`+`CAP_SYS_ADMIN` to the test binary. To skip
+instead (a job that is meant to run unprivileged), set
+`NLINK_LAB_SKIP_ROOT_TESTS=1`: each test then prints
+`*** SKIPPING #[lab_test] '...' ***` and passes.
 
 ### Tests interfere with each other
 
-Each `#[lab_test]` gets a unique lab name suffix, but namespaces
-share the host kernel. If multiple tests use overlapping address
+Each `#[lab_test]` gets a unique suffix on its lab name and, when the
+topology sets one, on its `prefix`, so tests of the same file deploy
+side by side. They still share the host kernel. If multiple tests use overlapping address
 ranges:
 
 - **Use distinct subnets** per test (10.0.1.0/24, 10.0.2.0/24,

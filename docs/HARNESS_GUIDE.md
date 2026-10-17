@@ -216,22 +216,24 @@ When a scenario fails:
 
 The `#[lab_test]` macro's `capture = true` mode (Plan 154) preserves
 pcaps to `target/lab_test_captures/<test>-<pid>/` on test failure
-and discards on success. For non-`lab_test` harnesses, the pattern
-is:
+and discards on success. For non-`lab_test` harnesses, the same
+helper is public (`run_my_scenario` stands for your own test step):
 
 ```rust
-let captures = vec![
-    Capture::on(&lab, "router:eth0", &artefacts.join("router-eth0.pcap"))?,
-    Capture::on(&lab, "site_a:lo", &artefacts.join("site-a-lo.pcap"))?,
-];
-let result = run_scenario(&mut lab).await;
+use nlink_lab::test_helpers::LabCapture;
+
+// one pcap per (namespace, iface) of the lab, in a temp dir
+let captures = LabCapture::start(&lab.capture_targets())?;
+let result = run_my_scenario(&mut lab).await;
 if result.is_err() {
-    eprintln!("HARNESS_ARTEFACT_DIR={}", artefacts.display());
+    // keep them: <artefacts>/<namespace>-<iface>.pcap
+    let kept = captures.persist_to(&artefacts)?;
+    eprintln!("HARNESS_ARTEFACT_DIR={} ({} pcaps)", artefacts.display(), kept.len());
     // Don't destroy on failure — let the user inspect.
-    std::mem::forget(captures);
-    return Err(result.unwrap_err());
+    return result;
 }
-// Success — drop captures (their pcap files remain) and destroy.
+// Success — dropping `captures` stops them and deletes the pcaps.
+drop(captures);
 ```
 
 ---

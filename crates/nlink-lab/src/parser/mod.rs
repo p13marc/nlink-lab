@@ -42,6 +42,15 @@ pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<Topology> {
         .map_err(|e| nll::attach_source(e, &contents, &filename))
 }
 
+/// The names of the `param`s a topology file declares. `--set` and
+/// `#[lab_test(set { … })]` values are matched against these.
+pub fn declared_params<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
+    let path = path.as_ref();
+    let contents = std::fs::read_to_string(path)?;
+    nll::declared_params(&contents)
+        .map_err(|e| nll::attach_source(e, &contents, &path.display().to_string()))
+}
+
 /// Parse a topology file with import resolution and CLI parameters.
 ///
 /// Parameters are matched against `param` declarations in the file.

@@ -301,6 +301,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   additive under `apply --check --json`'s `topology`). `diff --json`
   prints the whole diff plus `total_changes`, instead of a summary with
   link counts.
+- **`#[lab_test]`** (#222):
+  - the test's suffix goes on the topology's `prefix` too, so a prefixed
+    topology's namespaces are `PREFIX-test-FN-PID-NODE`;
+  - `timeout = N` runs the test on its own thread and counts deploy, body
+    and destroy;
+  - `capture = true` keeps `<namespace>-<iface>.pcap` files (one per
+    interface, was one per node) in the workspace's
+    `target/lab_test_captures/` or `$CARGO_TARGET_DIR`'s;
+  - a `set { … }` key that names no `param` of the file fails the test;
+  - root or CAP_NET_ADMIN+CAP_SYS_ADMIN passes the privilege gate, as for
+    the CLI (`nlink_lab::privileges::has_privileges`);
+  - new library helpers: `test_helpers::{CaptureSlot, CaptureGuard,
+    capture_dir, has_privileges}` and `parser::declared_params`.
 - **State and names** (#221):
   - a lab name a command is given must be a valid name (letters,
     digits, `_`, `.`, `-`), or the command exits 1 with "invalid lab
@@ -549,6 +562,21 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`#[lab_test]`** (#222):
+  - two tests of a topology with `prefix` deployed on the same namespaces;
+    the second failed, and its cleanup swept the first's;
+  - `timeout` never fired while the body blocked in `lab.exec`: the test
+    ran as long as the command did;
+  - with `capture = true`, a node's interfaces wrote one pcap file,
+    truncating each other's;
+  - the pcaps went to a `target/` relative to the test's package, not the
+    workspace's;
+  - `set { "wan-delay" = … }` and `set { type = … }` did not parse;
+  - a binary with the capabilities failed the root gate.
+- **Docs:** the `run_scenario` examples (USER_GUIDE, p2p-partition
+  cookbook) did not compile, the harness guide used a `Capture::on` that
+  does not exist, and TROUBLESHOOTING said an unprivileged `#[lab_test]`
+  skips; it fails (#222).
 - **`destroy --force ""` deleted every lab's state** (#221): a lab name
   was joined to the state directory as given, so `""` named the
   directory itself, `..` its parent and an absolute name any directory.

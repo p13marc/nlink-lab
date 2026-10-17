@@ -58,7 +58,7 @@ Deploying needs root (or `CAP_NET_ADMIN`). If you're not root, the
 test **fails** with
 
 ```text
-#[lab_test] 'ping_works' needs root/CAP_NET_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
+#[lab_test] 'ping_works' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
 ```
 
 rather than quietly passing — a green run with zero coverage is
@@ -118,19 +118,25 @@ strategy generates the topology shape.
 The `set { … }` form maps to the same NLL `param` overrides the
 CLI `--set k=v` flag uses. Common use case: the same NLL file
 serves multiple tests with different parameter values, instead of
-maintaining one NLL per scenario.
+maintaining one NLL per scenario. A key that is not an identifier
+is quoted (`set { "wan-delay" = "50ms" }`), and a key the file
+declares no `param` for fails the test.
 
-The `timeout = N` form wraps the test body in `tokio::time::timeout`
-and panics with a clear message after N seconds. Default: no
+The `timeout = N` form runs the test on its own thread and fails it
+after N seconds, counting deploy, body and destroy. It fires even
+while the body is blocked in a synchronous call such as `lab.exec`:
+the lab is swept from the test's thread (and its pcaps kept, with
+`capture = true`), and the stuck thread is left behind. Default: no
 timeout (the test runs as long as `cargo test`'s own timeout
-allows). The body borrows `lab` inside the timeout future, so it
-must not move `lab` out — the macro still needs it for `destroy()`.
+allows). The body must not move `lab` out — the macro still needs
+it for `destroy()`.
 
 The `capture = true` form is the killer feature for flake
 investigation. When the test panics — assert failure, deadline
 hit, or any other panic — the pcaps land in
-`target/lab_test_captures/<test-name>-<pid>/`, one per
-(namespace, iface). When the test passes, the pcaps are
+`target/lab_test_captures/<test-name>-<pid>/`, one
+`<namespace>-<iface>.pcap` per interface. `target/` is the
+workspace's (or `$CARGO_TARGET_DIR`), whichever crate the test is in. When the test passes, the pcaps are
 discarded along with the temp dir. CI runs that fail
 auto-attach the pcaps to the failure record:
 
@@ -265,7 +271,7 @@ is multi-second per cycle.
 
 ## Troubleshooting
 
-- **`needs root/CAP_NET_ADMIN` panic.** You're not root. Run with
+- **`needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN` panic.** You're not root. Run with
   `sudo` or add capabilities; set `NLINK_LAB_SKIP_ROOT_TESTS=1` if
   the job is meant to run unprivileged and should skip instead.
 - **The test passed in 0.00s.** `NLINK_LAB_SKIP_ROOT_TESTS` is set

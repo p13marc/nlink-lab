@@ -240,6 +240,38 @@ impl RunningLab {
     /// (`/var/run/netns/<name>`); container namespaces use the
     /// init PID's `/proc/<pid>/ns/net`. Returns `None` if the
     /// node isn't running.
+    /// The named firewall counters of `node` (`counter name …` in its
+    /// firewall), read from its `nlink-lab` nftables table. Empty when the
+    /// node has none (#166).
+    pub async fn firewall_counters(&self, node: &str) -> Result<Vec<FirewallCounter>> {
+        let ns = self
+            .ns_resolver_of(node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node.to_string(),
+            })?;
+        read_firewall_counters(&ns).await
+    }
+
+    /// [`firewall_counters`](Self::firewall_counters) for synchronous code
+    /// (the assertion engine): on a thread of its own with its own runtime,
+    /// so it works inside or outside one.
+    pub fn firewall_counters_blocking(&self, node: &str) -> Result<Vec<FirewallCounter>> {
+        let ns = self
+            .ns_resolver_of(node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node.to_string(),
+            })?;
+        std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| Error::deploy_failed(format!("counter runtime: {e}")))?
+                .block_on(read_firewall_counters(&ns))
+        })
+        .join()
+        .map_err(|_| Error::deploy_failed("the counter reader panicked".to_string()))?
+    }
+
     pub fn ns_resolver_of(&self, node: &str) -> Option<crate::deploy::NsRef> {
         if let Some(name) = self.namespace_names.get(node) {
             return Some(crate::deploy::NsRef::Named { name: name.clone() });
@@ -2552,4 +2584,38 @@ mod pid_identity_tests {
         // Gone PID → nothing to do, regardless of the recorded value.
         assert_eq!(kill_tracked(4_194_305, Some(1)), KillOutcome::Gone);
     }
+}
+
+/// One named firewall counter (`counter name …`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FirewallCounter {
+    pub name: String,
+    pub packets: u64,
+    pub bytes: u64,
+}
+
+async fn read_firewall_counters(ns: &crate::deploy::NsRef) -> Result<Vec<FirewallCounter>> {
+    use nlink::netlink::Nftables;
+    use nlink::netlink::nftables::{Family, ObjectState};
+    let conn: Connection<Nftables> = ns.connection()?;
+    let objects = match conn
+        .list_objects_in(crate::deploy::plan::nftables::NLINK_LAB_TABLE, Family::Inet)
+        .await
+    {
+        Ok(o) => o,
+        // no firewall on the node: no table, no counters
+        Err(e) if e.is_not_found() => return Ok(Vec::new()),
+        Err(e) => return Err(Error::deploy_failed(format!("read firewall counters: {e}"))),
+    };
+    Ok(objects
+        .into_iter()
+        .filter_map(|o| match o.state {
+            ObjectState::Counter { packets, bytes, .. } => Some(FirewallCounter {
+                name: o.name,
+                packets,
+                bytes,
+            }),
+            _ => None,
+        })
+        .collect())
 }

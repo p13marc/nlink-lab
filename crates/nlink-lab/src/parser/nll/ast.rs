@@ -216,6 +216,14 @@ pub enum AssertionDef {
         name: String,
         expected_ip: String,
     },
+    /// `counter NODE NAME [packets|bytes] OP N`.
+    Counter {
+        node: String,
+        name: String,
+        metric: crate::types::CounterMetric,
+        op: crate::types::CompareOp,
+        value: u64,
+    },
 }
 
 /// Topology pattern: `mesh`, `ring`, `star`.
@@ -410,11 +418,16 @@ pub struct FirewallChainDef {
 /// A single firewall rule.
 #[derive(Debug, Clone)]
 pub struct FirewallRuleDef {
+    /// `accept`, `drop`, `reject`, or `continue` for a rule with no verdict.
     pub action: String,
     /// `reject with …` (only on `reject`).
     pub reject_with: Option<crate::types::RejectWith>,
     /// The nft-like match string; empty matches every packet.
     pub match_expr: String,
+    pub limit: Option<crate::types::FirewallLimit>,
+    pub counter: bool,
+    pub counter_name: Option<String>,
+    pub log: Option<crate::types::FirewallLog>,
 }
 
 /// NAT definition: rules and `for` loops in source order (rule order is

@@ -292,6 +292,21 @@ fn lower_with_base_dir_and_params(
                                 expected_ip: expected_ip.clone(),
                             });
                         }
+                        ast::AssertionDef::Counter {
+                            node,
+                            name,
+                            metric,
+                            op,
+                            value,
+                        } => {
+                            topology.assertions.push(types::Assertion::Counter {
+                                node: node.clone(),
+                                name: name.clone(),
+                                metric: *metric,
+                                op: *op,
+                                value: *value,
+                            });
+                        }
                     }
                 }
             }
@@ -588,6 +603,19 @@ fn prefix_lowered_assertion(a: types::Assertion, pn: &dyn Fn(&str) -> String) ->
             from: pn(&from),
             name,
             expected_ip,
+        },
+        A::Counter {
+            node,
+            name,
+            metric,
+            op,
+            value,
+        } => A::Counter {
+            node: pn(&node),
+            name,
+            metric,
+            op,
+            value,
         },
     }
 }
@@ -1179,6 +1207,19 @@ fn prefix_assertion(a: ast::AssertionDef, prefix: &str) -> ast::AssertionDef {
             from: format!("{prefix}{from}"),
             name,
             expected_ip,
+        },
+        A::Counter {
+            node,
+            name,
+            metric,
+            op,
+            value,
+        } => A::Counter {
+            node: format!("{prefix}{node}"),
+            name,
+            metric,
+            op,
+            value,
         },
     }
 }
@@ -2020,6 +2061,19 @@ fn interpolate_assertion(
             name: i(name, vars),
             expected_ip: i(expected_ip, vars),
         },
+        A::Counter {
+            node,
+            name,
+            metric,
+            op,
+            value,
+        } => A::Counter {
+            node: i(node, vars),
+            name: i(name, vars),
+            metric: *metric,
+            op: *op,
+            value: *value,
+        },
     }
 }
 
@@ -2099,8 +2153,12 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
                         .iter()
                         .map(|r| ast::FirewallRuleDef {
                             match_expr: i(&r.match_expr, vars),
-                            action: r.action.clone(),
-                            reject_with: r.reject_with,
+                            counter_name: r.counter_name.as_ref().map(|c| i(c, vars)),
+                            log: r.log.as_ref().map(|l| types::FirewallLog {
+                                prefix: l.prefix.as_ref().map(|p| i(p, vars)),
+                                group: l.group,
+                            }),
+                            ..r.clone()
                         })
                         .collect(),
                 })
@@ -2627,6 +2685,13 @@ fn lower_firewall(fw: &ast::FirewallDef, interp: impl Fn(&str) -> String) -> typ
                     match_expr: (!m.is_empty()).then_some(m),
                     action: Some(r.action.clone()),
                     reject_with: r.reject_with,
+                    limit: r.limit.clone(),
+                    counter: r.counter,
+                    counter_name: r.counter_name.as_deref().map(&interp),
+                    log: r.log.as_ref().map(|l| types::FirewallLog {
+                        prefix: l.prefix.as_deref().map(&interp),
+                        group: l.group,
+                    }),
                 }
             })
             .collect();
@@ -3885,6 +3950,19 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                                 name: name.clone(),
                                 expected_ip: expected_ip.clone(),
                             },
+                            ast::AssertionDef::Counter {
+                                node,
+                                name,
+                                metric,
+                                op,
+                                value,
+                            } => types::Assertion::Counter {
+                                node: node.clone(),
+                                name: name.clone(),
+                                metric: *metric,
+                                op: *op,
+                                value: *value,
+                            },
                         });
                     }
                     types::ScenarioAction::Validate(typed)
@@ -4218,6 +4296,22 @@ node gw {
 }
 "#;
 
+    const D_NLL: &str = r#"lab "t"
+node server {
+  firewall policy drop {
+    accept ct established,related
+    accept icmp 8 limit 5/second burst 10 counter
+    drop tcp dport 22 counter name ssh-drops log "ssh-drop: "
+    tcp dport 5201 counter name iperf
+    drop limit over 100/minute log group 2
+  }
+}
+validate {
+  counter server ssh-drops == 0
+  counter server iperf bytes > 1000
+}
+"#;
+
     #[test]
     fn test_lower_firewall_chains() {
         let topo = parse_and_lower(
@@ -4365,6 +4459,73 @@ node b : guarded {
             let (msg, _) = parse_err_span(&full);
             assert!(msg.contains(want), "{src}: {msg}");
         }
+    }
+
+    /// #166: statements after the matches, verdict-less rules, counter
+    /// assertions.
+    #[test]
+    fn test_lower_firewall_statements_and_counter_assertion() {
+        use types::{CompareOp, CounterMetric, LimitPer};
+        let topo = parse_and_lower(D_NLL);
+        let fw = topo.nodes["server"].firewall.as_ref().unwrap();
+        let icmp = &fw.rules[1];
+        let l = icmp.limit.as_ref().unwrap();
+        assert_eq!(
+            (l.rate, l.per, l.burst, l.over),
+            (5, LimitPer::Second, Some(10), false)
+        );
+        assert!(icmp.counter);
+        let ssh = &fw.rules[2];
+        assert_eq!(ssh.counter_name.as_deref(), Some("ssh-drops"));
+        assert_eq!(
+            ssh.log.as_ref().unwrap().prefix.as_deref(),
+            Some("ssh-drop: ")
+        );
+        let iperf = &fw.rules[3];
+        assert_eq!(iperf.action.as_deref(), Some("continue"));
+        assert_eq!(iperf.match_expr.as_deref(), Some("tcp dport 5201"));
+        let over = &fw.rules[4];
+        assert!(over.limit.as_ref().unwrap().over);
+        assert_eq!(over.log.as_ref().unwrap().group, Some(2));
+        assert!(matches!(
+            &topo.assertions[0],
+            types::Assertion::Counter { node, name, metric: CounterMetric::Packets, op: CompareOp::Eq, value: 0 }
+                if node == "server" && name == "ssh-drops"
+        ));
+        assert!(matches!(
+            &topo.assertions[1],
+            types::Assertion::Counter {
+                metric: CounterMetric::Bytes,
+                op: CompareOp::Gt,
+                value: 1000,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_firewall_statement_parse_errors() {
+        for (src, want) in [
+            ("firewall policy drop { frob }", "expected a firewall rule"),
+            (
+                "firewall policy drop { accept limit 5/fortnight }",
+                "unknown limit unit",
+            ),
+            (
+                "firewall policy drop { accept counter tcp dport 22 }",
+                "matches go before statements",
+            ),
+        ] {
+            let full = format!("lab \"t\"\nnode a {{\n  {src}\n}}\n");
+            let (msg, _) = parse_err_span(&full);
+            assert!(msg.contains(want), "{src}: {msg}");
+        }
+        let src = "lab \"t\"\nnode a\nvalidate { counter a c ~ 3 }\n";
+        let err = crate::parser::parse(src).unwrap_err().to_string();
+        assert!(!err.is_empty());
+        let src = "lab \"t\"\nnode a\nvalidate { counter a c = 3 }\n";
+        let (msg, _) = parse_err_span(src);
+        assert!(msg.contains("expected a comparison"), "{msg}");
     }
 
     #[test]

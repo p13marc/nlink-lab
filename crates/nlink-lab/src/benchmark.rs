@@ -306,19 +306,13 @@ fn evaluate_assertions(
             let actual = metrics.get(&a.metric).copied();
             let threshold = parse_metric_value(&a.value);
             let passed = match (actual, threshold) {
-                (Some(actual), Some(threshold)) => match a.op {
-                    CompareOp::Gt => actual > threshold,
-                    CompareOp::Lt => actual < threshold,
-                    CompareOp::Gte => actual >= threshold,
-                    CompareOp::Lte => actual <= threshold,
-                },
+                (Some(actual), Some(threshold)) => a.op.holds(actual, threshold),
                 _ => false,
             };
             let op_str = match a.op {
                 CompareOp::Gt => "above",
                 CompareOp::Lt => "below",
-                CompareOp::Gte => ">=",
-                CompareOp::Lte => "<=",
+                other => other.as_str(),
             };
             AssertionEval {
                 metric: a.metric.clone(),

@@ -416,6 +416,39 @@ node gw : router {
   lookup whose fields do not match the key), `firewall-set-element`,
   `firewall-set-unused` (a warning).
 
+**Statements: counting, logging, limiting.** After its matches, a rule
+may carry statements:
+
+```nll-ignore
+node server {
+  firewall policy drop {
+    drop icmp 8 limit over 5/second burst 10 counter    # pings over the rate
+    accept ct established,related
+    accept icmp 8
+    drop tcp dport 22 counter name ssh-drops log "ssh-drop: "
+    tcp dport 5201 counter name iperf                   # no verdict: count and go on
+  }
+}
+validate { counter server ssh-drops == 0 }
+```
+
+- `limit [over] N/second|minute|hour|day [burst N]` — the rule acts only
+  on packets under the rate (with `over`, above it). Put a limit before
+  `accept ct established,related`: every echo after the first is
+  established, so a limit after it never sees them.
+- `counter` counts packets and bytes; `counter name NAME` counts into a
+  named counter, declared by use, which `inspect` lists and a
+  `validate { counter NODE NAME [packets|bytes] OP N }` assertion reads
+  (`==`, `!=`, `>`, `>=`, `<`, `<=`).
+- `log ["prefix"] [group N]` logs the packet (see TROUBLESHOOTING: in a
+  lab node the kernel prints nothing by default).
+- Statements run in a fixed order — limit, counter, named counter, log,
+  then the verdict — so the counters and the log see only the packets
+  the rule acts on. A rule with no verdict must have a statement; the
+  packet carries on to the next rule.
+- Counters keep counting across `apply`. Validation:
+  `firewall-statement`, `assertion-counter-exists`.
+
 Each rule's identity is its position (`nlink-lab/fw/<chain>/<index>`):
 an edited rule is replaced in place, and `apply` keeps the chain in
 declared order. Validation rules: `firewall-policy`, `firewall-action`,
@@ -1450,6 +1483,7 @@ assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
                | "latency-under" IDENT IDENT DURATION ("samples" INT)?
                | "route-has" IDENT value ("via" value)? ("dev" IDENT)?
                | "dns-resolves" IDENT value value
+               | "counter" IDENT IDENT ("packets" | "bytes")? ("==" | "!=" | ">" | ">=" | "<" | "<=") INT
 
 # ── Scenario ────────────────────────────────────
 scenario       = "scenario" STRING "{" step* "}"
@@ -1519,7 +1553,12 @@ set_opt        = "size" INT | "timeout" DURATION | "dynamic"
 set_elem       = set_part ("." set_part)*
 set_part       = (IP | CIDR | INT) ("-" (IP | INT))?
 fw_policy      = "accept" | "drop"
-firewall_rule  = ("accept" | "drop" | "reject" ("with" reject_type)?) match_expr*
+firewall_rule  = (verdict match_expr* | match_expr+) fw_statement*
+               (* no verdict ("continue"): at least one fw_statement *)
+verdict        = "accept" | "drop" | "reject" ("with" reject_type)?
+fw_statement   = "limit" "over"? INT "/" ("second" | "minute" | "hour" | "day") ("burst" INT)?
+               | "counter" ("name" IDENT)?
+               | "log" STRING? ("group" INT)?
 reject_type    = "tcp-reset" | "port-unreachable" | "host-unreachable"
                | "no-route" | "admin-prohibited"
 match_expr     = "ct" "state"? IDENT ("," IDENT)*

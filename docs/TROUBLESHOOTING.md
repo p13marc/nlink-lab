@@ -246,14 +246,40 @@ nlink-lab spawn <lab> <node> -- /usr/bin/new-cmd
 
 Or redeploy.
 
+### A firewall `log` rule prints nothing
+
+The rule is there (`nft list chain inet nlink-lab input` shows `log
+prefix …`), but a lab node is a network namespace, and the kernel logs
+netfilter packets from namespaces other than the host's only when the
+host sets:
+
+```bash
+sudo sysctl -w net.netfilter.nf_log_all_netns=1
+```
+
+Then the lines appear in the host's kernel log (`dmesg`, `journalctl
+-k`). `log group N` sends to nflog group N instead (read it with
+`ulogd` or `tcpdump -i nflog:N`). If deploy fails with `No such file or
+directory` on a `log` rule, the host lacks the nftables logger: `sudo
+modprobe nf_log_syslog`.
+
+### A `limit` rule lets everything through
+
+Check where it sits. `accept ct established,related` accepts every
+packet of a flow after the first, ping echoes included, so a limit
+placed after it only ever sees the first packet. Drop what is over the
+rate before the conntrack rule: `drop icmp 8 limit over 5/second`.
+
 ### `apply` replaced every rule after the one I inserted
 
 Expected. A firewall rule's identity is its position in the block
 (`nlink-lab/fw/input/<index>`), so inserting a rule shifts the index of
 every rule after it, and each of those is replaced in place with its new
 body. The change is one atomic batch — packets in flight never meet a
-half-built ruleset, and conntrack state is untouched. Rules nlink-lab did
-not write are left alone.
+half-built ruleset, and conntrack state is untouched — but an anonymous
+`counter` on a shifted rule starts again from zero (a named counter,
+`counter name …`, does not). Rules nlink-lab did not write are left
+alone.
 
 ---
 

@@ -142,6 +142,22 @@ pub fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
                 } => {
                     out.push_str(&format!("  dns-resolves {from} {name} -> {expected_ip}\n"));
                 }
+                nlink_lab::types::Assertion::Counter {
+                    node,
+                    name,
+                    metric,
+                    op,
+                    value,
+                } => {
+                    let m = match metric {
+                        nlink_lab::types::CounterMetric::Packets => "packets",
+                        nlink_lab::types::CounterMetric::Bytes => "bytes",
+                    };
+                    out.push_str(&format!(
+                        "  counter {node} {name} {m} {} {value}\n",
+                        op.as_str()
+                    ));
+                }
             }
         }
     }

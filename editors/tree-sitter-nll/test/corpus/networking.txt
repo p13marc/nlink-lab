@@ -276,3 +276,62 @@ node gw {
           (set_elements
             (set_element
               (integer))))))))
+
+================
+Firewall statements and counter assertion
+================
+node server {
+  firewall policy drop {
+    accept icmp 8 limit 5/second burst 10 counter
+    drop tcp dport 22 counter name ssh-drops log "ssh-drop: "
+    tcp dport 5201 counter name iperf
+    drop limit over 100/minute log group 2
+  }
+}
+validate {
+  counter server ssh-drops == 0
+  counter server iperf bytes > 1000
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (integer))
+            (fw_statement
+              (integer)
+              (identifier)
+              (integer))
+            (fw_statement))
+          (firewall_rule
+            (match_expression
+              (integer))
+            (fw_statement
+              (identifier))
+            (fw_statement
+              (string)))
+          (firewall_rule
+            (match_expression
+              (integer))
+            (fw_statement
+              (identifier)))
+          (firewall_rule
+            (fw_statement
+              (integer)
+              (identifier))
+            (fw_statement
+              (integer)))))))
+  (validate_block
+    (assertion
+      (identifier)
+      (identifier)
+      (integer))
+    (assertion
+      (identifier)
+      (identifier)
+      (integer))))

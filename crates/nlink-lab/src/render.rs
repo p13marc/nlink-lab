@@ -524,24 +524,53 @@ fn render_firewall_chain(
     }
     for rule in rules {
         let action = rule.action.as_deref().unwrap_or("accept");
-        if !matches!(action, "accept" | "drop" | "reject") {
+        if !matches!(action, "accept" | "drop" | "reject" | "continue") {
             return Err(unrepresentable(
                 "firewall action",
                 action,
-                "expected accept, drop or reject",
+                "expected accept, drop, reject or continue",
             ));
         }
-        let mut line = action.to_string();
+        // a rule with no verdict starts with its matches
+        let mut parts: Vec<String> = Vec::new();
+        if action != "continue" {
+            parts.push(action.to_string());
+        }
         if let Some(with) = rule.reject_with {
-            line.push_str(" with ");
-            line.push_str(with.as_str());
+            parts.push(format!("with {}", with.as_str()));
         }
         let m = firewall_match_to_nll(rule.match_expr.as_deref().unwrap_or(""))?;
         if !m.is_empty() {
-            line.push(' ');
-            line.push_str(&m);
+            parts.push(m);
         }
-        writeln!(out, "{indent}  {line}").unwrap();
+        if let Some(l) = &rule.limit {
+            let mut s = String::from("limit ");
+            if l.over {
+                s.push_str("over ");
+            }
+            s.push_str(&format!("{}/{}", l.rate, l.per.as_str()));
+            if let Some(b) = l.burst {
+                s.push_str(&format!(" burst {b}"));
+            }
+            parts.push(s);
+        }
+        if rule.counter {
+            parts.push("counter".into());
+        }
+        if let Some(n) = &rule.counter_name {
+            parts.push(format!("counter name {}", nll_name(n)?));
+        }
+        if let Some(l) = &rule.log {
+            let mut s = String::from("log");
+            if let Some(p) = &l.prefix {
+                s.push_str(&format!(" {}", lit_value(p)?));
+            }
+            if let Some(g) = l.group {
+                s.push_str(&format!(" group {g}"));
+            }
+            parts.push(s);
+        }
+        writeln!(out, "{indent}  {}", parts.join(" ")).unwrap();
     }
     writeln!(out, "{indent}}}").unwrap();
     Ok(())
@@ -1648,6 +1677,26 @@ fn render_assertion(out: &mut String, indent: &str, a: &Assertion) -> Result<()>
             )
             .unwrap();
         }
+        Assertion::Counter {
+            node,
+            name,
+            metric,
+            op,
+            value,
+        } => {
+            let metric = match metric {
+                crate::types::CounterMetric::Packets => "",
+                crate::types::CounterMetric::Bytes => " bytes",
+            };
+            writeln!(
+                out,
+                "counter {} {}{metric} {} {value}",
+                nll_ident(node)?,
+                nll_name(name)?,
+                op.as_str()
+            )
+            .unwrap();
+        }
     }
     Ok(())
 }
@@ -1754,6 +1803,13 @@ fn render_benchmark_assertions(
             CompareOp::Lt => "below",
             CompareOp::Gte => ">=",
             CompareOp::Lte => "<=",
+            other => {
+                return Err(unrepresentable(
+                    "benchmark assertion",
+                    other.as_str(),
+                    "a benchmark compares with above, below, >= or <=",
+                ));
+            }
         };
         writeln!(
             out,
@@ -2082,6 +2138,46 @@ node gw {
         );
         assert!(
             rendered.contains("      drop src != @b6 tcp dport 22"),
+            "{rendered}"
+        );
+    }
+
+    /// #166: statements, verdict-less rules and counter assertions
+    /// round-trip.
+    #[test]
+    fn test_render_firewall_statements_roundtrip() {
+        let (_, rendered, _) = roundtrip(
+            r#"lab "t"
+
+node server {
+  firewall policy drop {
+    accept icmp 8 limit 5/second burst 10 counter
+    drop tcp dport 22 counter name ssh-drops log "ssh-drop: "
+    tcp dport 5201 counter name iperf
+    drop limit over 100/minute log group 2
+  }
+}
+
+validate {
+  counter server ssh-drops == 0
+  counter server iperf bytes > 1000
+}
+"#,
+        );
+        assert!(
+            rendered.contains("    accept icmp 8 limit 5/second burst 10 counter\n"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("    tcp dport 5201 counter name iperf\n"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("    drop limit over 100/minute log group 2\n"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("  counter server iperf bytes > 1000\n"),
             "{rendered}"
         );
     }

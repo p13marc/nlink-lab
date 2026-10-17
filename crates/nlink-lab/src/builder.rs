@@ -782,6 +782,7 @@ fn chain_rule(match_expr: &str, action: &str, reject_with: Option<RejectWith>) -
         match_expr: (!match_expr.is_empty()).then(|| match_expr.to_string()),
         action: Some(action.to_string()),
         reject_with,
+        ..Default::default()
     }
 }
 

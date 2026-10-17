@@ -78,6 +78,8 @@ pub const RULE_IDS: &[&str] = &[
     "firewall-set-undeclared",
     "firewall-set-type",
     "firewall-set-element",
+    "firewall-statement",
+    "assertion-counter-exists",
     "mgmt-subnet-capacity",
     "vxlan-vni-range",
     "vxlan-underlay-address",
@@ -1942,6 +1944,14 @@ fn validate_firewall(
                         },
                     });
                 }
+                if let Err(msg) = crate::firewall::check_statements(rule) {
+                    issues.push(ValidationIssue {
+                        severity: Severity::Error,
+                        rule: "firewall-statement",
+                        message: format!("node '{node_name}': {msg}"),
+                        location: location.clone(),
+                    });
+                }
                 if let Err(msg) = crate::firewall::check_verdict(rule, &clauses) {
                     issues.push(ValidationIssue {
                         severity: Severity::Error,
@@ -2381,6 +2391,7 @@ fn assertion_node_refs(assertion: &Assertion) -> Vec<(&'static str, &str)> {
         | Assertion::LatencyUnder { from, to, .. } => vec![("from", from), ("to", to)],
         Assertion::RouteHas { node, .. } => vec![("node", node)],
         Assertion::DnsResolves { from, .. } => vec![("from", from)],
+        Assertion::Counter { node, .. } => vec![("node", node)],
     }
 }
 
@@ -2393,6 +2404,24 @@ fn validate_test_refs(
     for_each_assertion(topology, |assertion, location| {
         for (field, name) in assertion_node_refs(assertion) {
             check_node_ref(topology, name, format!("{location}.{field}"), issues);
+        }
+        // a counter assertion reads a counter some rule of the node counts into
+        if let Assertion::Counter { node, name, .. } = assertion
+            && let Some(n) = topology.nodes.get(node)
+        {
+            let counted = topology
+                .effective_firewall(n)
+                .is_some_and(|fw| crate::firewall::counter_names(&fw).contains(name));
+            if !counted {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "assertion-counter-exists",
+                    message: format!(
+                        "node '{node}' has no firewall rule with `counter name {name}`"
+                    ),
+                    location: Some(format!("{location}.name")),
+                });
+            }
         }
     });
 
@@ -4335,11 +4364,13 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
                     match_expr: Some("tcp dport 22".into()),
                     action: Some("accept".into()),
                     reject_with: Some(crate::types::RejectWith::NoRoute),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("udp dport 53".into()),
                     action: Some("reject".into()),
                     reject_with: Some(crate::types::RejectWith::TcpReset),
+                    ..Default::default()
                 },
                 crate::types::FirewallRule {
                     match_expr: Some("ct state bogus".into()),
@@ -4401,6 +4432,33 @@ node a {
         let unused = rules_of(&result, "firewall-set-unused");
         assert_eq!(unused.len(), 1);
         assert!(unused[0].message.contains("'idle'"));
+    }
+
+    /// #166: statements the kernel would refuse; a counter assertion must
+    /// name a counter some rule counts into.
+    #[test]
+    fn test_firewall_statement_and_counter_assertion_rules() {
+        let result = parse_and_validate(
+            r#"lab "t"
+node a {
+  firewall policy drop {
+    accept icmp 8 limit 0/second
+    drop tcp dport 22 counter name ssh
+  }
+}
+validate {
+  counter a ssh > 0
+  counter a nope == 0
+}
+"#,
+        );
+        let st = rules_of(&result, "firewall-statement");
+        assert_eq!(st.len(), 1, "{:?}", result.issues());
+        assert!(st[0].message.contains("limit of 0"));
+        let c = rules_of(&result, "assertion-counter-exists");
+        assert_eq!(c.len(), 1, "{:?}", result.issues());
+        assert!(c[0].message.contains("`counter name nope`"));
+        assert_eq!(c[0].location.as_deref(), Some("assertions[1].name"));
     }
 
     #[test]

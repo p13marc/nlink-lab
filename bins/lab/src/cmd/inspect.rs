@@ -142,5 +142,33 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
     }
 
+    // Named firewall counters (`counter name …`, #166), read live.
+    let mut lines = Vec::new();
+    for (name, node) in &topo.nodes {
+        let counts = topo
+            .effective_firewall(node)
+            .is_some_and(|fw| fw.all_rules().any(|r| r.counter_name.is_some()));
+        if !counts {
+            continue;
+        }
+        match running.firewall_counters_blocking(name) {
+            Ok(counters) => {
+                for c in counters {
+                    lines.push(format!(
+                        "  {:<16} {:<24} {:>12} packets {:>14} bytes",
+                        name, c.name, c.packets, c.bytes
+                    ));
+                }
+            }
+            Err(e) => lines.push(format!("  {name:<16} (cannot read: {e})")),
+        }
+    }
+    if !lines.is_empty() {
+        println!("\n  {}", bold("FIREWALL COUNTERS"));
+        for l in lines {
+            println!("{l}");
+        }
+    }
+
     Ok(())
 }

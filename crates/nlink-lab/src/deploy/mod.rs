@@ -2256,6 +2256,49 @@ node gw {
         assert_eq!(lookups, 3);
     }
 
+    /// #166: statements lower in a fixed order (limit, counter, named
+    /// counter, log, verdict); each named counter is declared once.
+    #[test]
+    fn nftables_config_statements_and_counter_objects() {
+        use nlink::netlink::nftables::Expr;
+        let topo = crate::parser::parse(
+            r#"lab "t"
+node s {
+  firewall policy drop {
+    drop tcp dport 22 limit 5/second counter counter name ssh log "x: "
+    tcp dport 23 counter name ssh
+    counter name all
+  }
+}
+"#,
+        )
+        .unwrap();
+        let fw = topo.effective_firewall(&topo.nodes["s"]);
+        let cfg = topology_to_nftables_config(fw.as_deref(), None).unwrap();
+        let t = &cfg.tables()[0];
+        let objects: Vec<&str> = t.objects().iter().map(|o| o.name()).collect();
+        assert_eq!(objects, ["all", "ssh"], "declared once each, sorted");
+        let kinds: Vec<&'static str> = t.rules()[0]
+            .exprs()
+            .iter()
+            .filter_map(|e| match e {
+                Expr::Limit(_) => Some("limit"),
+                Expr::Counter => Some("counter"),
+                Expr::Objref(_) => Some("objref"),
+                Expr::Log(_) => Some("log"),
+                Expr::Verdict(_) | Expr::Immediate { .. } => Some("verdict"),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            kinds[..4],
+            ["limit", "counter", "objref", "log"],
+            "{kinds:?}"
+        );
+        // a verdict-less rule ends with its statement
+        assert!(matches!(t.rules()[2].exprs().last(), Some(Expr::Objref(_))));
+    }
+
     #[test]
     fn nftables_config_ip_keyword_with_v6_address_errors() {
         let fw = crate::types::FirewallConfig {

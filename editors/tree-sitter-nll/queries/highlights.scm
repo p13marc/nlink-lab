@@ -19,6 +19,8 @@
 (set_ref "@" @operator)
 (set_ref (identifier) @variable)
 (set_concat ["src" "dst" "tcp" "udp" "dport" "sport" "mark"] @keyword)
+(fw_statement ["limit" "over" "burst" "counter" "name" "log" "group"] @keyword)
+(assertion ["counter" "packets" "bytes"] @keyword)
 (nat_block "nat" @keyword)
 (nat_rule ["masquerade" "dnat" "snat" "translate"] @keyword)
 (nat_rule ["src" "dst" "to"] @keyword)

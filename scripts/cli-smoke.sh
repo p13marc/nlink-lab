@@ -4,6 +4,9 @@
 # known-bad inputs that must fail fast (never hang). Used by the `cli-smoke`
 # CI job and by `just ci`.
 set -euo pipefail
+# `| grep PATTERN >/dev/null`, not `grep -q`: -q exits at the first match,
+# the binary's next write fails with EPIPE, and pipefail fails the check
+# (it did for `validate --list-rules` once the list grew).
 bin=${1:-target/debug/nlink-lab}
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 fail=0
@@ -33,7 +36,7 @@ printf 'lab "t"\nnode a\ndefaults impair { bogus }\n' > "$tmp/bad4.nll"
 printf 'lab "t"\nnode a\nmesh m {\n' > "$tmp/bad5.nll"
 # 2001:db8::1 must lex as IPv6 (#14) and multi-line props must merge (#16)
 printf 'lab "t"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {\n  2001:db8::1/64 -- 2001:db8::2/64\n  delay 10ms\n  loss 1%%\n}\n' > "$tmp/good1.nll"
-timeout 10 "$bin" render "$tmp/good1.nll" | grep -q 'delay 10ms loss 1%' || { say "FAIL: multi-line impairment not merged / IPv6 not lexed"; fail=1; }
+timeout 10 "$bin" render "$tmp/good1.nll" | grep 'delay 10ms loss 1%' >/dev/null || { say "FAIL: multi-line impairment not merged / IPv6 not lexed"; fail=1; }
 for f in "$tmp"/bad*.nll; do
   set +e; timeout 10 "$bin" validate "$f" >/dev/null 2>&1; rc=$?; set -e
   case $rc in
@@ -47,21 +50,21 @@ say "== validate --json / graph --mermaid / exit codes"
 "$bin" --json validate examples/simple.nll | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["valid"] is True, d' || { say "FAIL validate --json"; fail=1; }
 set +e; "$bin" --json validate "$tmp/bad1.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: validate --json on a bad file exited $rc (expected 2)"; fail=1; }
-"$bin" graph --mermaid examples/simple.nll | grep -q '^graph LR' || { say "FAIL graph --mermaid"; fail=1; }
-"$bin" render --mermaid examples/cookbook/satellite-mesh.nll | grep -q 'net_' || { say "FAIL render --mermaid"; fail=1; }
-"$bin" validate --list-rules | grep -q 'unreferenced-node *warning' || { say "FAIL validate --list-rules"; fail=1; }
+"$bin" graph --mermaid examples/simple.nll | grep '^graph LR' >/dev/null || { say "FAIL graph --mermaid"; fail=1; }
+"$bin" render --mermaid examples/cookbook/satellite-mesh.nll | grep 'net_' >/dev/null || { say "FAIL render --mermaid"; fail=1; }
+"$bin" validate --list-rules | grep 'unreferenced-node *warning' >/dev/null || { say "FAIL validate --list-rules"; fail=1; }
 printf 'lab "w"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\nnode lonely\n' > "$tmp/warn.nll"
 set +e; "$bin" validate --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: validate --strict exited $rc (expected 2)"; fail=1; }
-"$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep -q WARN && { say "FAIL: --allow did not silence the warning"; fail=1; }
-"$bin" graph examples/cookbook/satellite-mesh.nll | grep -q 'net:' || { say "FAIL: graph ignores network blocks"; fail=1; }
+"$bin" validate --allow unreferenced-node "$tmp/warn.nll" 2>&1 | grep WARN >/dev/null && { say "FAIL: --allow did not silence the warning"; fail=1; }
+"$bin" graph examples/cookbook/satellite-mesh.nll | grep 'net:' >/dev/null || { say "FAIL: graph ignores network blocks"; fail=1; }
 
 say "== fmt"
-printf 'lab "f"\nnode   a{forward ipv4}\n' | "$bin" fmt - | grep -q '^node a { forward ipv4 }$' || { say "FAIL fmt -"; fail=1; }
+printf 'lab "f"\nnode   a{forward ipv4}\n' | "$bin" fmt - | grep '^node a { forward ipv4 }$' >/dev/null || { say "FAIL fmt -"; fail=1; }
 "$bin" fmt --check examples >/dev/null || { say "FAIL: examples are not fmt-clean"; fail=1; }
 
 say "== lint"
-"$bin" lint --list-rules | grep -q 'no-assertions' || { say "FAIL lint --list-rules"; fail=1; }
+"$bin" lint --list-rules | grep 'no-assertions' >/dev/null || { say "FAIL lint --list-rules"; fail=1; }
 "$bin" lint examples/simple.nll >/dev/null || { say "FAIL lint"; fail=1; }
 set +e; "$bin" lint --strict "$tmp/warn.nll" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || { say "FAIL: lint --strict exited $rc (expected 2)"; fail=1; }
@@ -87,7 +90,7 @@ printf '' | timeout 10 "$bin" lsp >/dev/null 2>&1 || { say "FAIL: lsp on empty s
 # log line leaks into the protocol (`-v` raises the tracing level).
 req='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
 printf 'Content-Length: %d\r\n\r\n%s' "${#req}" "$req" \
-  | timeout 10 "$bin" -v lsp 2>/dev/null | grep -q '"capabilities"' \
+  | timeout 10 "$bin" -v lsp 2>/dev/null | grep '"capabilities"' >/dev/null \
   || { say "FAIL: lsp initialize did not answer with capabilities on stdout"; fail=1; }
 
 say "== top (headless)"
@@ -98,7 +101,7 @@ set +e; XDG_STATE_HOME="$tmp/state" timeout 10 "$bin" top no-such-lab --once >/d
 # garble the terminal.
 set +e; XDG_STATE_HOME="$tmp/state" timeout 10 "$bin" top no-such-lab </dev/null >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -ne 124 ] || { say "FAIL: top hung without a tty"; fail=1; }
-"$bin" top --help | grep -q -- '--once' || { say "FAIL: top --help lacks --once"; fail=1; }
+"$bin" top --help | grep -- '--once' >/dev/null || { say "FAIL: top --help lacks --once"; fail=1; }
 
 if [ "$fail" -ne 0 ]; then say "cli-smoke: FAILED"; exit 1; fi
 say "cli-smoke: OK"

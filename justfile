@@ -36,7 +36,7 @@ ci: fmt-check lint
     # Separate invocations: cargo rejects `--doc` alongside another target
     # selector, and ci.yml runs them as two steps too.
     cargo test -p nlink-lab --doc
-    cargo test -p nlink-lab --test stress --test docs_examples
+    cargo test -p nlink-lab --test stress --test docs_examples --test editor_keywords --test render_roundtrip
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
     cargo deny check
     cargo build -p nlink-lab-cli && ./scripts/cli-smoke.sh target/debug/nlink-lab

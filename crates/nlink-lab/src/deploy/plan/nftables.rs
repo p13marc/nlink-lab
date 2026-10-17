@@ -175,7 +175,8 @@ pub(crate) fn topology_to_nftables_config(
                             if let Some(target) = &rule_clone.target {
                                 let addr: std::net::IpAddr =
                                     target.parse().expect("validated NAT target must parse");
-                                r = nat_target(r, NatAction::Snat, addr, None);
+                                // `snat … to ADDR:PORT`: the port was dropped (#203).
+                                r = nat_target(r, NatAction::Snat, addr, rule_clone.target_port);
                             }
                             r
                         });
@@ -570,6 +571,26 @@ mod nat_ranges {
         let topo = crate::parser::parse(src).unwrap();
         assert!(!topo.validate().has_errors(), "{:?}", topo.validate());
         topo.nodes["gw"].nat.clone().unwrap()
+    }
+
+    /// `snat … to ADDR:PORT` with no range or flag takes the plain path,
+    /// and keeps its port there (#203): it used to be dropped, as `dnat`'s
+    /// never was.
+    #[test]
+    fn a_plain_snat_keeps_its_port() {
+        let nat =
+            nat_of("lab \"n\"\nnode gw {\n  nat { snat src 10.0.1.0/24 to 203.0.113.1:5000 }\n}\n");
+        assert_eq!(nat.rules[0].target_port, Some(5000));
+        let cfg = super::topology_to_nftables_config(None, Some(&nat)).unwrap();
+        let rule = cfg.tables()[0]
+            .rules()
+            .iter()
+            .find(|r| r.handle_key().is_some_and(|k| k.ends_with("/snat")))
+            .map(|r| format!("{:?}", r.exprs()))
+            .expect("the snat rule");
+        // The port is loaded into a register for the NAT expression, in
+        // network byte order: 5000 = 0x1388.
+        assert!(rule.contains("Nat") && rule.contains("[19, 136]"), "{rule}");
     }
 
     /// Ranges, flags and redirect (#189) parse, render back as themselves,

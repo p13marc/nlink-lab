@@ -18,6 +18,11 @@ ignore = [
     "RUSTSEC-2024-0449", # unsafe-libyaml unmaintained — zenoh-config's serde_yaml 0.9 (deprecated)
     # via iced 0.14 (topoviewer GUI)
     "RUSTSEC-2026-0192", # ttf-parser unmaintained
+    # zbus 5's crates, merged into zbus 6; iced 0.14 → mundy 0.2.3 → zbus 5,
+    # all latest (#230, 2026-10-17)
+    "RUSTSEC-2026-0370", # zvariant unmaintained
+    "RUSTSEC-2026-0371", # zbus_names unmaintained
+    "RUSTSEC-2026-0372", # zvariant_derive unmaintained
     # via wayland-scanner (build-time proc-macro only), which pins quick-xml <0.41
 ]
 

@@ -6,7 +6,7 @@
 # into the LAN, and only the LAN may ping the router.
 #
 #   sudo nlink-lab deploy --strict examples/firewall-router.nll
-#   sudo nlink-lab exec firewall-router gw -- nft list table inet nlink-lab
+#   sudo nlink-lab exec -L firewall-router gw -- nft list table inet nlink-lab
 #
 # Demonstrates: the forward chain, iif/oif, port ranges, a bare verdict,
 # reject vs drop, reject with tcp-reset.

@@ -5,8 +5,8 @@
 # (Q-in-Q) outer VLAN 100 carries the addressed traffic. `mon` hangs off
 # a plain 802.1Q sub-interface of a third link.
 #
-#   sudo nlink-lab exec bond-qinq left -- cat /proc/net/bonding/bond0
-#   sudo nlink-lab exec bond-qinq left -- ip -d link show bond0.100
+#   sudo nlink-lab exec -L bond-qinq left -- cat /proc/net/bonding/bond0
+#   sudo nlink-lab exec -L bond-qinq left -- ip -d link show bond0.100
 
 lab "bond-qinq" {
   description "LACP bond with an 802.1ad (Q-in-Q) VLAN on top"

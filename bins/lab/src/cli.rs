@@ -326,17 +326,23 @@ pub enum Commands {
     /// Schemas: docs/json-schemas/stats.schema.json, stats-procs.schema.json
     Stats(cmd::stats::Args),
 
-    /// Generate shell completions.
+    /// Print the shell completion script.
     ///
-    /// Static completions for the given shell. For completions that know
-    /// deployed lab, node and rule names, source the dynamic form instead:
-    /// bash `source <(COMPLETE=bash nlink-lab)`, zsh
-    /// `source <(COMPLETE=zsh nlink-lab)`, fish
-    /// `COMPLETE=fish nlink-lab | source`.
+    /// The script calls back into nlink-lab, so it completes what is on
+    /// the host: labs, the nodes and endpoints of the lab on the line (or
+    /// the current one), snapshots, tracked PIDs, a topology's `--set`
+    /// params, templates, rule ids. Install it with: bash
+    /// `source <(nlink-lab completions bash)` (in ~/.bashrc), zsh
+    /// `source <(nlink-lab completions zsh)`, fish
+    /// `nlink-lab completions fish | source`. `--static` prints a script
+    /// that knows only the commands and flags.
     Completions {
         /// Shell to generate completions for.
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+        /// A script that does not call back: commands and flags only.
+        #[arg(long = "static")]
+        static_script: bool,
     },
 
     /// Start the Zenoh backend daemon for a running lab.

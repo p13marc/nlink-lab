@@ -12,7 +12,7 @@ pub struct Args {
     #[arg(add = crate::ctx::node_completer())]
     pub node: Option<String>,
     /// Process ID (for background process logs).
-    #[arg(long)]
+    #[arg(long, add = crate::ctx::pid_completer())]
     pub pid: Option<u32>,
     /// Show stderr instead of stdout (with --pid).
     #[arg(long)]

@@ -17,7 +17,7 @@ pub struct Args {
     pub topology: Option<PathBuf>,
 
     /// Set a `param` value for --file (repeatable): --set key=value.
-    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value, add = crate::ctx::param_completer())]
     pub params: Vec<(String, String)>,
 }
 

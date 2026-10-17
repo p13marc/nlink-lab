@@ -5,7 +5,7 @@
 # `neighbor r2` resolves the peer address from the shared link and the
 # remote AS from r2's own `bgp { as … }`.
 #
-#   sudo nlink-lab exec frr-bgp r1 -- vtysh -N nl-frr-bgp-r1 -c "show bgp summary"
+#   sudo nlink-lab exec -L frr-bgp r1 -- vtysh -N nl-frr-bgp-r1 -c "show bgp summary"
 
 lab "frr-bgp" {
   description "Two-AS eBGP peering with redistributed connected networks"

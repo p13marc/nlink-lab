@@ -9,6 +9,7 @@ pub struct Args {
     pub lab: crate::ctx::LabArg,
 
     /// Snapshot name (see `nlink-lab snapshot ls`).
+    #[arg(add = crate::ctx::snapshot_completer())]
     pub name: String,
 
     /// Show the plan without changing anything.

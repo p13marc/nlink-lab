@@ -142,6 +142,34 @@ fn usage_error(e: clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
     ExitCode::from(EXIT_USAGE)
 }
 
+/// `completions SHELL`: the registration of the dynamic completer (the
+/// script runs `COMPLETE=SHELL nlink-lab …` to complete a line), or with
+/// `--static` clap's generated script.
+fn completions(shell: clap_complete::Shell, static_script: bool) -> std::io::Result<()> {
+    use clap_complete::env::{Bash, Elvish, EnvCompleter, Fish, Powershell, Zsh};
+    let mut out = std::io::stdout();
+    let dynamic: Option<&dyn EnvCompleter> = match shell {
+        _ if static_script => None,
+        clap_complete::Shell::Bash => Some(&Bash),
+        clap_complete::Shell::Zsh => Some(&Zsh),
+        clap_complete::Shell::Fish => Some(&Fish),
+        clap_complete::Shell::Elvish => Some(&Elvish),
+        clap_complete::Shell::PowerShell => Some(&Powershell),
+        _ => None,
+    };
+    match dynamic {
+        // the user's shell calls `nlink-lab` from its PATH: a script
+        // generated for a release tarball holds no build-machine path
+        Some(shell) => {
+            shell.write_registration("COMPLETE", "nlink-lab", "nlink-lab", "nlink-lab", &mut out)
+        }
+        None => {
+            clap_complete::generate(shell, &mut command(), "nlink-lab", &mut out);
+            Ok(())
+        }
+    }
+}
+
 fn main() -> ExitCode {
     // Dynamic completion callback (`COMPLETE=bash nlink-lab`): answers the
     // shell and exits before normal argument parsing.
@@ -193,9 +221,18 @@ fn main() -> ExitCode {
         .init();
 
     // Handle completions synchronously (no runtime needed)
-    if let Commands::Completions { shell } = &cli.command {
-        clap_complete::generate(*shell, &mut command(), "nlink-lab", &mut std::io::stdout());
-        return ExitCode::SUCCESS;
+    if let Commands::Completions {
+        shell,
+        static_script,
+    } = &cli.command
+    {
+        return match completions(*shell, *static_script) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("error: {e}");
+                ExitCode::from(EXIT_FAILURE)
+            }
+        };
     }
 
     let format = match (cli.json, cli.format) {

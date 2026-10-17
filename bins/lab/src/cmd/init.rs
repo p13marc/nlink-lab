@@ -7,6 +7,7 @@ use crate::ctx::Ctx;
 #[derive(clap::Args)]
 pub struct Args {
     /// Template name (e.g., "router", "spine-leaf"). Use --list to see all.
+    #[arg(add = crate::ctx::template_completer())]
     pub template: Option<String>,
 
     /// List available templates.

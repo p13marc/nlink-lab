@@ -4,8 +4,8 @@
 # other by name via auto-generated /etc/hosts entries.
 #
 # After deploying:
-#   sudo nlink-lab exec dns server -- getent hosts client
-#   sudo nlink-lab exec dns client -- ping -c1 server
+#   sudo nlink-lab exec -L dns server -- getent hosts client
+#   sudo nlink-lab exec -L dns client -- ping -c1 server
 #
 # Each node gets:
 #   - Bare hostname pointing to its first IP (e.g., "server" -> 10.0.1.1)

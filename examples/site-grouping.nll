@@ -4,7 +4,7 @@
 # the site name. Cross-site links use the prefixed names.
 #
 # After deploy:
-#   sudo nlink-lab exec site-demo dc1-server -- ping 172.16.0.2
+#   sudo nlink-lab exec -L site-demo dc1-server -- ping 172.16.0.2
 
 lab "site-demo" { dns hosts }
 

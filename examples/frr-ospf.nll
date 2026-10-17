@@ -5,9 +5,9 @@
 # passive towards hosts); hosts keep `auto`-style static defaults.
 # Requires the `frr` package (daemons live in /usr/lib/frr on Debian).
 #
-#   sudo nlink-lab exec frr-ospf r1 -- vtysh -N nl-frr-ospf-r1 -c "show ip ospf neighbor"
-#   sudo nlink-lab exec frr-ospf h1 -- ip route     # far subnets appear as `proto ospf`
-#   sudo nlink-lab watch frr-ospf --family route    # watch convergence live
+#   sudo nlink-lab exec -L frr-ospf r1 -- vtysh -N nl-frr-ospf-r1 -c "show ip ospf neighbor"
+#   sudo nlink-lab exec -L frr-ospf h1 -- ip route  # far subnets appear as `proto ospf`
+#   sudo nlink-lab events -f -L frr-ospf --source drift --family route # watch convergence live
 
 lab "frr-ospf" {
   description "OSPF area 0 over a router triangle, hosts get static defaults"

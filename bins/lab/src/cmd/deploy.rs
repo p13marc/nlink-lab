@@ -47,7 +47,7 @@ pub struct Args {
     pub skip_validate: bool,
 
     /// Set NLL parameters (can be repeated: --set key=value).
-    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value, add = crate::ctx::param_completer())]
     pub params: Vec<(String, String)>,
 
     /// Append suffix to lab name (for parallel test safety).

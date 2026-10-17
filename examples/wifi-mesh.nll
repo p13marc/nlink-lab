@@ -8,7 +8,7 @@
 # Requires: the mac80211_hwsim kernel module.
 #
 # After deploying:
-#   sudo nlink-lab exec wifi-mesh m1 -- ping -c1 10.0.0.3
+#   sudo nlink-lab exec -L wifi-mesh m1 -- ping -c1 10.0.0.3
 
 lab "wifi-mesh" {
   description "Three 802.11s mesh points on mac80211_hwsim"

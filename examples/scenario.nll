@@ -1,7 +1,7 @@
 # Scenario: failover test.
 #
 # Demonstrates timed fault injection and validation. After deploy,
-# run the scenario with: sudo nlink-lab scenario run failover failover-test
+# run the scenario with: sudo nlink-lab scenario -L run failover failover-test
 #
 # Timeline:
 #   0s  — verify client can reach server

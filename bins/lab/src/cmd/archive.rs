@@ -31,7 +31,7 @@ pub enum Action {
         #[arg(long)]
         no_rendered: bool,
         /// NLL `param` values recorded in the archive (repeatable).
-        #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+        #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value, add = crate::ctx::param_completer())]
         params: Vec<(String, String)>,
     },
     /// Check an archive's checksums and validate it, extracting it into a

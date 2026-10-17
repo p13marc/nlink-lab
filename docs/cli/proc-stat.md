@@ -58,14 +58,17 @@ Arguments:
           Node name
 
   [PID]
-          Process ID (host PID — same as ns PID; see ARCHITECTURE.md). Omit it and pass `--all` or `--pid` instead to sample more than one process per call
+          Process ID as the node sees it: the host PID on a namespace node, the container's own PID on a container node. Omit it and pass `--all`, `--pid` or `--pidfile-glob` instead to sample more than one process per call. Every record carries both `host_pid` and `ns_pid`
 
 Options:
       --pid <PID>
-          Sample this PID (repeatable). Output is a JSON array even for a single `--pid`, unlike the positional form
+          Sample this PID, as the node sees it (repeatable). Output is a JSON array even for a single `--pid`, unlike the positional form
 
       --all
-          Sample every process in the node's network namespace, found by walking `/proc`. Reports host PIDs, which for a container node are not the PIDs seen inside it
+          Sample every process in the node's network namespace, found by walking the host's `/proc`. A process that exits mid-sample is left out
+
+      --pidfile-glob <PATTERN>
+          Sample the processes the node's pidfiles name: every file matching this absolute path, whose file name may hold `*` and `?` (`'/run/*.pid'`). Read from the host, through the container's root on a container node. Each record's `name` is the pidfile's stem; a stale pidfile is skipped
 
       --watch <SECS>
           Sample every SECS seconds, emitting one record per sample. NDJSON (one JSON object per line, or one array per line in the multi-process modes) when combined with `--json`. Stops on Ctrl-C

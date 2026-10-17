@@ -37,20 +37,28 @@ nlink-lab proc-stat des-3m site_a 292086 --json --watch 5  # NDJSON, every 5s
 ```
 
 To sample more than one process, take them in a single call rather than
-looping the command — the per-node constants are read once, and for a
-namespace node the whole sample costs no namespace-entering execs at
-all:
+looping the command. Every read comes from the host's `/proc`, for
+container nodes too, so a sample costs no exec into the node at all
+(#157):
 
 ```bash
 nlink-lab proc-stat des-3m site_a --all --json          # whole namespace
 nlink-lab proc-stat des-3m site_a --pid 292086 --pid 292090 --json
+nlink-lab proc-stat des-3m site_a --pidfile-glob '/run/*.pid' --json
 ```
+
+A PID you name is the node's: the host PID on a namespace node, the
+container's own PID on a container node. Every record carries both,
+`host_pid` and `ns_pid`. `--pidfile-glob` reads the node's pidfiles
+(through the container's root on a container node) and names each
+record after its file's stem (`"name": "zenohd"`), which is how to tell
+apart several processes that share a `command` such as `python3`.
 
 `--all` is namespace membership (it walks `/proc` comparing
 `/proc/<pid>/ns/net`), not nlink-lab's own spawn bookkeeping, so it
-finds processes your own supervisor started inside the node. Both
-multi-process forms emit a JSON **array**; the positional single-PID
-form still emits one object.
+finds processes your own supervisor started inside the node; one that
+exits mid-sample is left out. The multi-process forms emit a JSON
+**array**; the positional single-PID form still emits one object.
 
 **Sum `pss_kb`, not `rss_kb`, for a node's memory.** RSS counts every
 shared page once per process mapping it, so summing it over a node

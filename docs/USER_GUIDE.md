@@ -847,7 +847,12 @@ lab "mylab" {
 }
 ```
 
-All nodes get a `mgmt0` interface with a sequential IP from the subnet.
+All nodes get a `mgmt0` interface on one bridge, with a sequential IP
+from the subnet: the first host address is the bridge's, then the nodes in
+name order (`nlink-lab ip LAB NODE --iface mgmt0` prints a node's). With
+`mgmt SUBNET host-reachable` the bridge sits in the root namespace with
+that first address, so the host reaches every node; without it the bridge
+is in the lab's own `<lab>-mgmt` namespace.
 
 ### 18. IPv6 and Dual-Stack
 

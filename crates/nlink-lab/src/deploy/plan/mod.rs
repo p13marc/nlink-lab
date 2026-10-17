@@ -52,9 +52,55 @@ impl PlanInputs {
     }
 }
 
+/// The name the implicit management network has in the plan: not an NLL
+/// identifier, so no `network` block can take it.
+pub const MGMT_NETWORK: &str = "@mgmt";
+
+/// `topology`, with a `mgmt SUBNET` that is not `host-reachable` as a
+/// bridge network of every node's `mgmt0`, numbered as the host-reachable
+/// one is (the bridge's address `.1` reserved, nodes from `.2` in name
+/// order, which `nlink-lab ip` reports). It was parsed and did nothing:
+/// no node got a `mgmt0` (#210).
+fn with_mgmt_network(topology: &Topology) -> Result<std::borrow::Cow<'_, Topology>> {
+    let Some(subnet) = topology
+        .lab
+        .mgmt_subnet
+        .as_ref()
+        .filter(|_| !topology.lab.mgmt_host_reachable)
+    else {
+        return Ok(std::borrow::Cow::Borrowed(topology));
+    };
+    let mgmt = crate::helpers::mgmt_addresses(subnet, topology.nodes.len())?;
+    let mut net = crate::types::Network {
+        kind: Some("bridge".to_string()),
+        subnet: Some(subnet.clone()),
+        ..Default::default()
+    };
+    for (idx, node) in topology.nodes.keys().enumerate() {
+        let ep = format!("{node}:mgmt0");
+        net.members.push(ep.clone());
+        net.ports.insert(
+            ep,
+            crate::types::PortConfig {
+                addresses: vec![format!("{}/{}", mgmt.nodes[idx], mgmt.prefix)],
+                ..Default::default()
+            },
+        );
+    }
+    let mut owned = topology.clone();
+    owned.networks.insert(MGMT_NETWORK.to_string(), net);
+    Ok(std::borrow::Cow::Owned(owned))
+}
+
 /// The complete plan for `topology`: every op a deploy performs, in
 /// stage order. Pure — nothing here touches the kernel.
 pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
+    // Routing and DNS see the topology as declared: the management network
+    // is out of band. Given to `routing auto` and FRR it was one more
+    // segment between every pair of nodes: OSPF ran over it, a BGP
+    // neighbour had two segments and failed (#210).
+    let declared = topology;
+    let topology = &*with_mgmt_network(topology)?;
     #[cfg(not(feature = "wireguard"))]
     if topology.nodes.values().any(|n| !n.wireguard.is_empty()) {
         return Err(crate::Error::deploy_failed(
@@ -64,7 +110,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
     }
 
     let dns_extra_hosts: Vec<String> = if topology.lab.dns == DnsMode::Hosts {
-        crate::dns::generate_hosts_entries(topology)
+        crate::dns::generate_hosts_entries(declared)
             .iter()
             .flat_map(|entry| {
                 entry
@@ -80,7 +126,7 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
     let mut ops = topology::plan_topology(topology, &dns_extra_hosts)?;
 
     // ── per-node declarative stack ──
-    let auto_routes = network::auto_routes_for(topology);
+    let auto_routes = network::auto_routes_for(declared);
     for (node_name, node) in &topology.nodes {
         let net = network::topology_to_network_config(
             node_name,
@@ -111,11 +157,11 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
     }
 
     // ── FRR routing daemons (#65) ──
-    for (node_name, node) in &topology.nodes {
-        if let Some(cfg) = topology.effective_frr(node) {
+    for (node_name, node) in &declared.nodes {
+        if let Some(cfg) = declared.effective_frr(node) {
             ops.push(Op::FrrDaemons {
                 node: node_name.clone(),
-                spec: Box::new(crate::frr::build_spec(topology, node_name, node, &cfg)?),
+                spec: Box::new(crate::frr::build_spec(declared, node_name, node, &cfg)?),
             });
         }
     }
@@ -185,6 +231,46 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
 mod tests {
     use super::*;
     use crate::deploy::op::Stage;
+
+    /// A `mgmt` subnet without `host-reachable` gave no node a `mgmt0`
+    /// (#210): it is a bridge network now, numbered as `nlink-lab ip`
+    /// reports.
+    #[test]
+    fn a_mgmt_subnet_is_a_bridge_of_every_nodes_mgmt0() {
+        let t = crate::parser::parse("lab \"m\" { mgmt 172.20.0.0/24 }\nnode b\nnode a\n").unwrap();
+        let p = plan(&t, &PlanInputs::for_deploy(&t).unwrap()).unwrap();
+        let veths: Vec<(&str, &str)> = p
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::CreateNetworkVeth { node, iface, .. } => Some((node.as_str(), iface.as_str())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(veths, vec![("a", "mgmt0"), ("b", "mgmt0")]);
+        let net = &with_mgmt_network(&t).unwrap().networks[MGMT_NETWORK];
+        assert_eq!(net.ports["a:mgmt0"].addresses, vec!["172.20.0.2/24"]);
+        assert_eq!(net.ports["b:mgmt0"].addresses, vec!["172.20.0.3/24"]);
+        // routing does not see it: `routing auto` adds no route over mgmt0
+        let t = crate::parser::parse(
+            "lab \"m\" { mgmt 172.20.0.0/24  routing auto }\nnode a\nnode b\nnode c\n\
+             link a:eth0 -- b:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }\n\
+             link b:eth1 -- c:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }\n",
+        )
+        .unwrap();
+        let routes = network::auto_routes_for(&t);
+        assert!(
+            routes
+                .values()
+                .flat_map(|r| r.values())
+                .all(|r| r.via.as_deref().is_none_or(|v| !v.starts_with("172.20."))),
+            "{routes:?}"
+        );
+        // host-reachable keeps its own bridge
+        let t = crate::parser::parse("lab \"m\" { mgmt 172.20.0.0/24 host-reachable }\nnode a\n")
+            .unwrap();
+        assert!(with_mgmt_network(&t).unwrap().networks.is_empty());
+    }
 
     fn topo(src: &str) -> Topology {
         crate::parser::parse(src).unwrap()

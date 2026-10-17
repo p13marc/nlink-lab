@@ -3005,6 +3005,26 @@
         }
       ]
     },
+    "FieldsChange": {
+      "description": "Something present on both sides with some of its fields changed.",
+      "type": "object",
+      "properties": {
+        "fields": {
+          "description": "The changed fields, by their serialized names.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "fields"
+      ]
+    },
     "FilterKeyRepr": {
       "description": "A filter's own key, for a removal.",
       "type": "object",
@@ -7980,10 +8000,24 @@
             "type": "string"
           }
         },
+        "lab_changed": {
+          "description": "Lab settings that differ (`dns`, `mgmt_subnet`, `routing`, …).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "links_added": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/Link"
+          }
+        },
+        "links_changed": {
+          "description": "Links on both sides (same endpoints, same order) whose addresses or\nMTU differ. The name is `a -- b`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldsChange"
           }
         },
         "links_removed": {
@@ -7999,6 +8033,26 @@
             "$ref": "#/$defs/NetworkImpairerChange"
           }
         },
+        "networks_added": {
+          "description": "Bridge networks added and removed (#210).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "networks_changed": {
+          "description": "Networks on both sides whose members, ports, subnet, MTU or VLANs\ndiffer (per-pair impairments are in `network_impairs_changed`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldsChange"
+          }
+        },
+        "networks_removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "nftables_changed": {
           "description": "Per-node nftables ruleset changes (firewall + NAT, both\nrooted in the same `nlink-lab` table). One entry per node whose\nrules differ; the `nftables` layer has the per-rule detail. The\napply reconciles rule by rule in one atomic batch. Plan 152\nPhase B.",
           "type": "array",
@@ -8010,6 +8064,13 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "nodes_changed": {
+          "description": "Nodes on both sides with other fields changed: interfaces, VRFs,\nWireGuard, `run`, container options, FRR, … (routes, sysctls and\nnftables have their own lists).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldsChange"
           }
         },
         "nodes_removed": {
@@ -8037,6 +8098,13 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/RouteChange"
+          }
+        },
+        "sections_changed": {
+          "description": "Other sections that differ: `profiles`, `assertions`, `scenarios`,\n`benchmarks`, `assertion_retries`, `assertion_interval`.",
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         },
         "sysctls_changed": {

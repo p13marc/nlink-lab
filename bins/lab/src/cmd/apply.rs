@@ -69,13 +69,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     // Load current topology from running lab state
-    let lab_name = &desired.lab.name;
+    let lab_name = &desired.lab.name.clone();
     if !nlink_lab::state::exists(lab_name) {
         return Err(nlink_lab::Error::NotFound {
             name: format!("{lab_name} (deploy first, then apply changes)"),
         });
     }
     let mut running = nlink_lab::RunningLab::load(lab_name)?;
+    // `subnet auto` networks get the subnets the deploy allocated
+    nlink_lab::subnet_pool::resolve_auto_subnets(running.topology(), &mut desired)?;
     let current = running.topology();
 
     let diff = nlink_lab::diff_topologies(current, &desired);

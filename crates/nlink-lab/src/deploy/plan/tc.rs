@@ -85,9 +85,9 @@ pub(crate) fn declare_node_tc(
             if let Some(imp) = impairment {
                 impairer = impairer.default_impairment(PeerImpairment::new(build_netem(imp)?));
             }
-            cfg = impairer.declare(cfg).map_err(|e| {
-                Error::deploy_failed(format!("per-pair impairments on '{ep}': {e}"))
-            })?;
+            cfg = impairer
+                .declare(cfg)
+                .map_err(|e| Error::nlink(format!("per-pair impairments on '{ep}'"), e))?;
         } else if let Some(imp) = impairment {
             let netem = build_netem(imp)?;
             cfg = cfg.qdisc(&iface, |q| q.spec(netem));

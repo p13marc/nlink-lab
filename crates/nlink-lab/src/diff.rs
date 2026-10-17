@@ -360,6 +360,20 @@ impl LayeredDiff {
     }
 }
 
+/// Write `block` and end it with a newline, which nlink's diffs do not
+/// always do: the next node's header ran onto its last line (#177).
+fn write_block(
+    f: &mut std::fmt::Formatter<'_>,
+    block: &impl std::fmt::Display,
+) -> std::fmt::Result {
+    let text = block.to_string();
+    f.write_str(&text)?;
+    if !text.is_empty() && !text.ends_with('\n') {
+        writeln!(f)?;
+    }
+    Ok(())
+}
+
 impl std::fmt::Display for LayeredDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut emitted = false;
@@ -393,7 +407,7 @@ impl std::fmt::Display for LayeredDiff {
                 diff.change_count(),
                 if diff.change_count() == 1 { "" } else { "s" }
             )?;
-            write!(f, "{diff}")?;
+            write_block(f, diff)?;
             emitted = true;
         }
 
@@ -410,7 +424,7 @@ impl std::fmt::Display for LayeredDiff {
                 diff.change_count(),
                 if diff.change_count() == 1 { "" } else { "s" }
             )?;
-            write!(f, "{diff}")?;
+            write_block(f, diff)?;
             emitted = true;
         }
 
@@ -424,7 +438,7 @@ impl std::fmt::Display for LayeredDiff {
                 diff.change_count(),
                 if diff.change_count() == 1 { "" } else { "s" }
             )?;
-            write!(f, "{diff}")?;
+            write_block(f, diff)?;
             emitted = true;
         }
 
@@ -1357,6 +1371,24 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         let diff = diff_topologies(&current, &desired);
         let output = diff.to_string();
         assert!(output.contains("+ add node: c"));
+    }
+
+    #[test]
+    fn a_block_without_a_final_newline_gets_one() {
+        struct Block(&'static str);
+        impl std::fmt::Display for Block {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.0)
+            }
+        }
+        struct Two;
+        impl std::fmt::Display for Two {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write_block(f, &Block("- address fd00:1::1/64 on eth0"))?;
+                write_block(f, &Block("next\n"))
+            }
+        }
+        assert_eq!(Two.to_string(), "- address fd00:1::1/64 on eth0\nnext\n");
     }
 
     // ── Plan 158f: LayeredDiff tests ──

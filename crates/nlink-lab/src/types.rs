@@ -1524,15 +1524,20 @@ pub enum MssClamp {
 /// `limit [over] N/UNIT [burst N]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FirewallLimit {
-    /// Packets per `per`.
+    /// Packets (or, with `bytes`, bytes) per `per`.
     pub rate: u64,
     pub per: LimitPer,
-    /// Packets allowed above the rate in a burst (the kernel's default is 5).
+    /// Packets (bytes) allowed above the rate in a burst (the kernel's
+    /// default is 5 packets).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub burst: Option<u32>,
     /// Act on the packets *above* the rate instead.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub over: bool,
+    /// The rate and burst are bytes (`limit 1mb/second`), not packets
+    /// (#189).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bytes: bool,
 }
 
 /// The unit of a [`FirewallLimit`] rate.
@@ -1577,7 +1582,16 @@ pub struct FirewallLog {
     /// Send to nflog group N instead of the kernel log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<u16>,
+    /// The syslog level (`emerg` … `debug`); the kernel's default is
+    /// `warn` (#189).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<String>,
 }
+
+/// The log levels `log … level L` takes, as nft names them.
+pub const LOG_LEVELS: [&str; 8] = [
+    "emerg", "alert", "crit", "err", "warn", "notice", "info", "debug",
+];
 
 /// The answer a `reject` rule sends (`reject with …`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -1653,6 +1667,40 @@ pub struct NatRule {
     /// Only packets going out of this interface (`masquerade`, `snat`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oif: Option<String>,
+    /// The last address of a range (`snat to 203.0.113.1-203.0.113.9`),
+    /// `target` the first (#189).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_end: Option<String>,
+    /// The last port of a range (`to :40000-40010`), `target_port` the
+    /// first (#189).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_port_end: Option<u16>,
+    /// `random`, `fully-random`, `persistent` (#189).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<NatFlag>,
+}
+
+/// How a NAT rule picks its port or address (#189).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum NatFlag {
+    /// `random`: the port is picked at random.
+    Random,
+    /// `fully-random`: the port is picked fully at random.
+    FullyRandom,
+    /// `persistent`: a client gets the same address every time.
+    Persistent,
+}
+
+impl NatFlag {
+    /// The NLL / nft word.
+    pub fn name(self) -> &'static str {
+        match self {
+            NatFlag::Random => "random",
+            NatFlag::FullyRandom => "fully-random",
+            NatFlag::Persistent => "persistent",
+        }
+    }
 }
 
 /// The L4 protocol a NAT rule matches.
@@ -1671,6 +1719,8 @@ pub enum NatAction {
     Snat,
     Dnat,
     Translate,
+    /// `redirect … to :PORT`: to this node itself (#189).
+    Redirect,
 }
 
 /// Process to execute in a node.

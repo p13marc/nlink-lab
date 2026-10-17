@@ -123,6 +123,10 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   JSON (marcpardo/nlink#876).
 - **`LayeredDiff` has a `wireguard` field** (library API). Code that
   builds one with a struct literal adds `wireguard: Default::default()`.
+- **`NatRule` has three more fields and `NatAction` a `Redirect` variant;
+  `FirewallLimit` has `bytes`, `FirewallLog` has `level`** (library API,
+  #189). Struct literals add `target_end: None, target_port_end: None,
+  flags: Vec::new()`, `bytes: false` and `level: None`.
 - **WireGuard peers are resolved differently** (#147), so a deployed lab's
   peers change on its first `apply`: a node with several tunnels to one
   peer pairs them by interface name; the endpoint is the peer's address
@@ -202,6 +206,21 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Added
 
+- **Firewall and NAT on nlink 0.32's nftables (#189).**
+  - NAT address and port ranges with `random`/`fully-random`/
+    `persistent`: `snat … to 203.0.113.1-203.0.113.9:40000-40010
+    fully-random`, `masquerade … to :1024-2048 random`, `dnat … to
+    10.0.1.10:8443 persistent`.
+  - `redirect … tcp dport 80 to :3128`: to the node itself (a transparent
+    proxy).
+  - `drop rpf` (`fib saddr . iif oif missing`): reverse-path filtering
+    per chain, refused in `output`.
+  - `tcp|udp dport|sport != LO-HI`, which was a parse error.
+  - `mark LO-HI`.
+  - Byte-rate limits: `limit 1mb/second burst 64kb`.
+  - `log … level info`.
+  - New example `examples/firewall-edge.nll`; the golden fixture of every
+    example's planned rules shows no existing rule moving.
 - **Firewall chains and matches (#164).**
   - `firewall forward [policy P] { … }` filters routed traffic.
   - `firewall output [policy P] { … }` filters what the node sends.

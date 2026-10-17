@@ -1506,8 +1506,17 @@
                 ]
               },
               {
-                "type": "SYMBOL",
-                "name": "integer"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "integer"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "size"
+                  }
+                ]
               },
               {
                 "type": "STRING",
@@ -1528,8 +1537,17 @@
                         "value": "burst"
                       },
                       {
-                        "type": "SYMBOL",
-                        "name": "integer"
+                        "type": "CHOICE",
+                        "members": [
+                          {
+                            "type": "SYMBOL",
+                            "name": "integer"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "size"
+                          }
+                        ]
                       }
                     ]
                   },
@@ -1602,6 +1620,27 @@
                       {
                         "type": "SYMBOL",
                         "name": "integer"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
+              },
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SEQ",
+                    "members": [
+                      {
+                        "type": "STRING",
+                        "value": "level"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "identifier"
                       }
                     ]
                   },
@@ -2039,15 +2078,33 @@
                           "type": "CHOICE",
                           "members": [
                             {
-                              "type": "SEQ",
+                              "type": "CHOICE",
                               "members": [
                                 {
-                                  "type": "STRING",
-                                  "value": "/"
+                                  "type": "SEQ",
+                                  "members": [
+                                    {
+                                      "type": "STRING",
+                                      "value": "/"
+                                    },
+                                    {
+                                      "type": "SYMBOL",
+                                      "name": "_mark_value"
+                                    }
+                                  ]
                                 },
                                 {
-                                  "type": "SYMBOL",
-                                  "name": "_mark_value"
+                                  "type": "SEQ",
+                                  "members": [
+                                    {
+                                      "type": "STRING",
+                                      "value": "-"
+                                    },
+                                    {
+                                      "type": "SYMBOL",
+                                      "name": "_mark_value"
+                                    }
+                                  ]
                                 }
                               ]
                             },
@@ -2099,6 +2156,10 @@
                   "name": "_value"
                 }
               ]
+            },
+            {
+              "type": "STRING",
+              "value": "rpf"
             }
           ]
         }
@@ -2173,14 +2234,55 @@
           "type": "SEQ",
           "members": [
             {
-              "type": "STRING",
-              "value": "masquerade"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "masquerade"
+                },
+                {
+                  "type": "STRING",
+                  "value": "redirect"
+                }
+              ]
             },
             {
               "type": "REPEAT",
               "content": {
                 "type": "SYMBOL",
                 "name": "_nat_qualifier"
+              }
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "to"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": ":"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_nat_ports"
+                    }
+                  ]
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_nat_flag"
               }
             }
           ]
@@ -2189,8 +2291,17 @@
           "type": "SEQ",
           "members": [
             {
-              "type": "STRING",
-              "value": "dnat"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "dnat"
+                },
+                {
+                  "type": "STRING",
+                  "value": "snat"
+                }
+              ]
             },
             {
               "type": "REPEAT",
@@ -2215,11 +2326,11 @@
                   "members": [
                     {
                       "type": "STRING",
-                      "value": ":"
+                      "value": "-"
                     },
                     {
                       "type": "SYMBOL",
-                      "name": "integer"
+                      "name": "_value"
                     }
                   ]
                 },
@@ -2227,30 +2338,34 @@
                   "type": "BLANK"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "SEQ",
-          "members": [
+            },
             {
-              "type": "STRING",
-              "value": "snat"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": ":"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_nat_ports"
+                    }
+                  ]
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
             },
             {
               "type": "REPEAT",
               "content": {
                 "type": "SYMBOL",
-                "name": "_nat_qualifier"
+                "name": "_nat_flag"
               }
-            },
-            {
-              "type": "STRING",
-              "value": "to"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_value"
             }
           ]
         },
@@ -2274,6 +2389,53 @@
               "name": "_value"
             }
           ]
+        }
+      ]
+    },
+    "_nat_ports": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "integer"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "-"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "integer"
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        }
+      ]
+    },
+    "_nat_flag": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "random"
+        },
+        {
+          "type": "STRING",
+          "value": "fully-random"
+        },
+        {
+          "type": "STRING",
+          "value": "persistent"
         }
       ]
     },

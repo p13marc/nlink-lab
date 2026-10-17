@@ -753,6 +753,9 @@ fn expand_translate_rules(topology: &mut types::Topology) {
                         dport: None,
                         iif: None,
                         oif: None,
+                        target_end: None,
+                        target_port_end: None,
+                        flags: Vec::new(),
                     });
                 }
             }
@@ -2169,6 +2172,7 @@ fn interpolate_prop(p: &ast::NodeProp, vars: &BTreeMap<String, String>) -> ast::
                             log: r.log.as_ref().map(|l| types::FirewallLog {
                                 prefix: l.prefix.as_ref().map(|p| i(p, vars)),
                                 group: l.group,
+                                level: l.level.clone(),
                             }),
                             ..r.clone()
                         })
@@ -2469,7 +2473,9 @@ fn interpolate_nat(nat: &ast::NatDef, vars: &BTreeMap<String, String>) -> ast::N
             .items
             .iter()
             .map(|item| match item {
-                ast::NatItem::Rule(r) => ast::NatItem::Rule(interpolate_nat_rule(r, vars)),
+                ast::NatItem::Rule(r) => {
+                    ast::NatItem::Rule(Box::new(interpolate_nat_rule(r, vars)))
+                }
                 ast::NatItem::For(f) => ast::NatItem::For(ast::NatForLoop {
                     var: f.var.clone(),
                     range: f.range.clone(),
@@ -2491,6 +2497,9 @@ fn interpolate_nat_rule(r: &ast::NatRuleDef, vars: &BTreeMap<String, String>) ->
         dport: r.dport,
         iif: r.iif.as_ref().map(|v| i(v, vars)),
         oif: r.oif.as_ref().map(|v| i(v, vars)),
+        target_end: iv(&r.target_end, vars),
+        target_port_end: r.target_port_end,
+        flags: r.flags.clone(),
     }
 }
 
@@ -2716,6 +2725,7 @@ fn lower_firewall(fw: &ast::FirewallDef, interp: impl Fn(&str) -> String) -> typ
                     log: r.log.as_ref().map(|l| types::FirewallLog {
                         prefix: l.prefix.as_deref().map(&interp),
                         group: l.group,
+                        level: l.level.clone(),
                     }),
                     set_mark: r.set_mark,
                     ct_mark: r.ct_mark,
@@ -3014,6 +3024,7 @@ fn lower_nat_action(action: &str) -> Result<types::NatAction> {
         "snat" => Ok(types::NatAction::Snat),
         "dnat" => Ok(types::NatAction::Dnat),
         "translate" => Ok(types::NatAction::Translate),
+        "redirect" => Ok(types::NatAction::Redirect),
         other => Err(crate::Error::NllParse(format!(
             "unknown NAT action '{other}' (expected masquerade, snat, dnat or translate)"
         ))),
@@ -3084,6 +3095,9 @@ fn apply_node_props(
                             dport: r.dport,
                             iif: r.iif.clone(),
                             oif: r.oif.clone(),
+                            target_end: r.target_end.as_ref().map(ast::Val::to_text).transpose()?,
+                            target_port_end: r.target_port_end,
+                            flags: r.flags.clone(),
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -4701,11 +4715,6 @@ node b : guarded {
                 "firewall policy drop { drop tcp dport 9-1 }",
                 "starts after it ends",
                 "9",
-            ),
-            (
-                "firewall policy drop { drop tcp dport != 1-2 }",
-                "negated port range",
-                "1",
             ),
             (
                 "firewall policy drop { drop tcp dport 70000 }",

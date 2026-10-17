@@ -1,0 +1,48 @@
+# An edge router: anti-spoofing, port-range NAT, a redirect, a byte budget.
+#
+# Demonstrates: `drop rpf` (reverse-path filtering), a negated port
+# range, `limit 1mb/second`, `log … level`, `masquerade … to :P-Q random`,
+# `redirect … to :PORT`, `snat … to A-B:P-Q fully-random` (#189).
+#
+#   client (10.0.1.10) --lan0-- gw --wan0-- server (10.0.2.10)
+
+lab "firewall-edge" {
+  description "Edge router: rpf, NAT port ranges and redirect, a byte budget"
+  tags [firewall, nat]
+}
+
+profile router { forward ipv4 }
+
+node client { route default via 10.0.1.1 }
+
+node gw : router {
+  firewall forward policy accept {
+    # a source with no route back out of the interface it came in on is
+    # spoofed: count it and drop it
+    drop rpf counter name spoofed log "spoofed: " level info
+    # the LAN's web traffic gets a byte budget; the rest flows freely
+    drop iif lan0 tcp dport 80 limit over 1mb/second burst 64kb
+  }
+  firewall input policy drop {
+    accept ct established,related
+    accept icmp 8
+    # only the proxy's ports from the LAN; everything else is closed
+    drop iif lan0 tcp dport != 3128-3129
+    accept iif lan0 tcp dport 3128
+  }
+  nat {
+    # the LAN leaves through wan0 from a fixed port range
+    masquerade src 10.0.1.0/24 oif wan0 to :40000-40999 random
+    # a transparent proxy: LAN web traffic lands on the router's 3128
+    redirect iif lan0 tcp dport 8080 to :3128
+  }
+}
+
+node server { route default via 10.0.2.1 }
+
+link client:eth0 -- gw:lan0 { 10.0.1.10/24 -- 10.0.1.1/24 }
+link gw:wan0 -- server:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }
+
+validate {
+  reach client server
+}

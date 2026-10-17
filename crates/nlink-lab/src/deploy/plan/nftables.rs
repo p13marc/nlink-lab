@@ -132,6 +132,25 @@ pub(crate) fn topology_to_nftables_config(
 
             for (idx, nat_rule) in nat_rules.iter().enumerate() {
                 let rule_clone = nat_rule.clone();
+                // A range, a flag or a redirect (#189) is nlink's
+                // `NatStatement`. The other rules keep the expressions
+                // they always had, so they keep their bytes.
+                if let Some((chain, kind)) = nat_statement_rule(nat_rule) {
+                    let key = format!("nlink-lab/nat/{chain}/{idx}/{kind}");
+                    t = t.rule_keyed(chain, &key, move |mut r| {
+                        let (field, dir) = match rule_clone.action {
+                            NatAction::Dnat | NatAction::Redirect => (&rule_clone.dst, Dir::Daddr),
+                            _ => (&rule_clone.src, Dir::Saddr),
+                        };
+                        if let Some(cidr) = field {
+                            let (addr, prefix) =
+                                parse_addr_match(cidr).expect("validated NAT CIDR must parse");
+                            r = match_addr(r, dir, addr, prefix);
+                        }
+                        nat_matches(r, &rule_clone).nat(nat_statement(&rule_clone))
+                    });
+                    continue;
+                }
                 match nat_rule.action {
                     NatAction::Masquerade => {
                         let key = format!("nlink-lab/nat/postrouting/{idx}/masq");
@@ -181,6 +200,7 @@ pub(crate) fn topology_to_nftables_config(
                     NatAction::Translate => {
                         unreachable!("translate rules should be expanded during lowering");
                     }
+                    NatAction::Redirect => unreachable!("a redirect is a NatStatement rule"),
                 }
             }
         }
@@ -212,6 +232,30 @@ pub(crate) fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Resul
             })?;
             match_family = Some(("dst", dst, ip.is_ipv6()));
         }
+        if let (Some(target), Some(end)) = (&nat_rule.target, &nat_rule.target_end) {
+            let (first, last) = (
+                target.parse::<std::net::IpAddr>(),
+                end.parse::<std::net::IpAddr>(),
+            );
+            match (first, last) {
+                (Ok(a), Ok(b)) if a.is_ipv6() != b.is_ipv6() => {
+                    return Err(Error::deploy_failed(format!(
+                        "NAT range '{target}-{end}' mixes address families"
+                    )));
+                }
+                (Ok(a), Ok(b)) if b < a => {
+                    return Err(Error::deploy_failed(format!(
+                        "NAT range '{target}-{end}' runs backwards"
+                    )));
+                }
+                (_, Err(e)) => {
+                    return Err(Error::deploy_failed(format!(
+                        "invalid NAT range end '{end}': {e}"
+                    )));
+                }
+                _ => {}
+            }
+        }
         if let Some(target) = &nat_rule.target {
             let ip = target
                 .parse::<std::net::IpAddr>()
@@ -236,18 +280,39 @@ pub(crate) fn nat_match_problem(nat: &crate::types::NatRule) -> Option<String> {
     if nat.dport.is_some() && nat.proto.is_none() {
         return Some("a NAT `dport` needs its protocol (`tcp dport 80`)".to_string());
     }
-    if nat.dport.is_some() && nat.action != NatAction::Dnat {
-        return Some("only dnat matches a destination port".to_string());
+    let prerouting = matches!(nat.action, NatAction::Dnat | NatAction::Redirect);
+    if nat.dport.is_some() && !prerouting {
+        return Some("only dnat and redirect match a destination port".to_string());
     }
-    if nat.iif.is_some() && nat.action != NatAction::Dnat {
+    if nat.iif.is_some() && !prerouting {
         return Some(
-            "`iif` applies to dnat (prerouting): masquerade and snat see `oif`".to_string(),
+            "`iif` applies to dnat and redirect (prerouting): masquerade and snat see `oif`"
+                .to_string(),
         );
     }
-    if nat.oif.is_some() && nat.action == NatAction::Dnat {
+    if nat.oif.is_some() && prerouting {
         return Some(
-            "`oif` applies to masquerade and snat (postrouting): dnat sees `iif`".to_string(),
+            "`oif` applies to masquerade and snat (postrouting): dnat and redirect see `iif`"
+                .to_string(),
         );
+    }
+    // Ranges and redirect (#189).
+    if matches!(nat.action, NatAction::Masquerade | NatAction::Redirect) && nat.target.is_some() {
+        return Some("masquerade and redirect take a port (`to :3128`), not an address".into());
+    }
+    if nat.target_end.is_some() && !matches!(nat.action, NatAction::Snat | NatAction::Dnat) {
+        return Some("only snat and dnat take an address range".to_string());
+    }
+    if nat.target_port_end.is_some() && nat.target_port.is_none() {
+        return Some("a port range needs its first port".to_string());
+    }
+    if let (Some(first), Some(last)) = (nat.target_port, nat.target_port_end)
+        && last < first
+    {
+        return Some(format!("port range {first}-{last} runs backwards"));
+    }
+    if nat.target_port_end.is_some() && nat.action == NatAction::Redirect {
+        return Some("redirect takes one port".to_string());
     }
     for name in [&nat.iif, &nat.oif].into_iter().flatten() {
         if name.len() > 15 {
@@ -306,6 +371,65 @@ fn nat_matches(
     }
 }
 
+/// The chain and key word of a NAT rule built as an nlink `NatStatement`:
+/// one with an address or port range, a `random`/`fully-random`/
+/// `persistent` flag, a masquerade port range, or a redirect (#189).
+/// `None` for the rest, whose expressions predate it.
+fn nat_statement_rule(nat: &crate::types::NatRule) -> Option<(&'static str, &'static str)> {
+    use crate::types::NatAction;
+    let extended = nat.target_end.is_some()
+        || nat.target_port_end.is_some()
+        || !nat.flags.is_empty()
+        || (nat.action == NatAction::Masquerade && nat.target_port.is_some());
+    match nat.action {
+        NatAction::Redirect => Some(("prerouting", "redirect")),
+        NatAction::Dnat if extended => Some(("prerouting", "dnat")),
+        NatAction::Snat if extended => Some(("postrouting", "snat")),
+        NatAction::Masquerade if extended => Some(("postrouting", "masq")),
+        _ => None,
+    }
+}
+
+/// The `NatStatement` of a rule [`nat_statement_rule`] picked.
+fn nat_statement(nat: &crate::types::NatRule) -> nlink::netlink::nftables::NatStatement {
+    use crate::types::{NatAction, NatFlag};
+    use nlink::netlink::nftables::NatStatement;
+    let addr =
+        |s: &String| -> std::net::IpAddr { s.parse().expect("validated NAT target must parse") };
+    let mut st = match nat.action {
+        NatAction::Masquerade => NatStatement::masquerade(),
+        NatAction::Redirect => NatStatement::redirect(),
+        NatAction::Snat | NatAction::Dnat => {
+            let first = addr(
+                nat.target
+                    .as_ref()
+                    .expect("validated: snat/dnat have a target"),
+            );
+            let st = if nat.action == NatAction::Snat {
+                NatStatement::snat(first)
+            } else {
+                NatStatement::dnat(first)
+            };
+            match &nat.target_end {
+                Some(last) => st.to(addr(last)),
+                None => st,
+            }
+        }
+        NatAction::Translate => unreachable!("translate rules are expanded during lowering"),
+    };
+    if let Some(first) = nat.target_port {
+        st = st.ports(first, nat.target_port_end.unwrap_or(first));
+    }
+    for flag in &nat.flags {
+        st = match flag {
+            NatFlag::Random => st.random(),
+            NatFlag::FullyRandom => st.fully_random(),
+            NatFlag::Persistent => st.persistent(),
+        };
+    }
+    st
+}
+
 /// Add the snat/dnat target expression of the right family.
 fn nat_target(
     rule: nlink::netlink::nftables::types::Rule,
@@ -319,7 +443,7 @@ fn nat_target(
         (NatAction::Snat, std::net::IpAddr::V6(a)) => rule.snat_v6(a, port),
         (NatAction::Dnat, std::net::IpAddr::V4(a)) => rule.dnat(a, port),
         (NatAction::Dnat, std::net::IpAddr::V6(a)) => rule.dnat_v6(a, port),
-        (NatAction::Masquerade | NatAction::Translate, _) => rule,
+        (NatAction::Masquerade | NatAction::Translate | NatAction::Redirect, _) => rule,
     }
 }
 
@@ -435,5 +559,156 @@ mod golden {
                 diff.join("\n")
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod nat_ranges {
+    use crate::types::{NatAction, NatFlag};
+
+    fn nat_of(src: &str) -> crate::types::NatConfig {
+        let topo = crate::parser::parse(src).unwrap();
+        assert!(!topo.validate().has_errors(), "{:?}", topo.validate());
+        topo.nodes["gw"].nat.clone().unwrap()
+    }
+
+    /// Ranges, flags and redirect (#189) parse, render back as themselves,
+    /// and plan as `NatStatement`s; a plain rule keeps its expressions.
+    #[test]
+    fn nat_ranges_flags_and_redirect() {
+        let src = r#"lab "n"
+node gw {
+  nat {
+    snat src 10.0.1.0/24 oif wan0 to 203.0.113.1-203.0.113.9:40000-40010 fully-random
+    masquerade src 10.0.2.0/24 to :1024-2048 random
+    redirect iif lan0 tcp dport 80 to :3128
+    dnat dst 203.0.113.10 tcp dport 443 to 10.0.1.10:8443 persistent
+    masquerade src 10.0.3.0/24
+  }
+}
+"#;
+        let nat = nat_of(src);
+        let r = &nat.rules;
+        assert_eq!(r[0].target_end.as_deref(), Some("203.0.113.9"));
+        assert_eq!(
+            (r[0].target_port, r[0].target_port_end),
+            (Some(40000), Some(40010))
+        );
+        assert_eq!(r[0].flags, [NatFlag::FullyRandom]);
+        assert_eq!(
+            (r[1].target_port, r[1].flags.as_slice()),
+            (Some(1024), &[NatFlag::Random][..])
+        );
+        assert_eq!(
+            (r[2].action.clone(), r[2].target_port),
+            (NatAction::Redirect, Some(3128))
+        );
+        assert_eq!(r[3].flags, [NatFlag::Persistent]);
+
+        let rendered = crate::render::try_render(&crate::parser::parse(src).unwrap()).unwrap();
+        for line in [
+            "snat src 10.0.1.0/24 oif wan0 to 203.0.113.1-203.0.113.9:40000-40010 fully-random",
+            "masquerade src 10.0.2.0/24 to :1024-2048 random",
+            "redirect iif lan0 tcp dport 80 to :3128",
+            "dnat dst 203.0.113.10 tcp dport 443 to 10.0.1.10:8443 persistent",
+        ] {
+            assert!(rendered.contains(line), "{line}\n{rendered}");
+        }
+        assert_eq!(
+            crate::parser::parse(&rendered).unwrap().nodes["gw"].nat,
+            Some(nat.clone())
+        );
+
+        let cfg = super::topology_to_nftables_config(None, Some(&nat)).unwrap();
+        let rules: Vec<String> = cfg.tables()[0]
+            .rules()
+            .iter()
+            .map(|r| format!("{} {:?}", r.handle_key().unwrap_or("-"), r.exprs()))
+            .collect();
+        assert_eq!(rules.len(), 5, "{rules:#?}");
+        assert!(
+            rules
+                .iter()
+                .any(|r| r.starts_with("nlink-lab/nat/prerouting/2/redirect"))
+        );
+        // The plain masquerade is the expressions it always was.
+        let plain = rules
+            .iter()
+            .find(|r| r.starts_with("nlink-lab/nat/postrouting/4/masq"))
+            .unwrap();
+        assert!(plain.contains("Masq"), "{plain}");
+    }
+
+    #[test]
+    fn nat_range_mistakes_are_refused() {
+        for (bad, why) in [
+            ("masquerade to :2048-1024", "runs backwards"),
+            ("snat to 10.0.0.9-10.0.0.1", "runs backwards"),
+            ("redirect to :80-90", "one port"),
+            ("redirect oif wan0 to :80", "does not apply to redirect"),
+        ] {
+            let src = format!("lab \"n\"\nnode gw {{ nat {{ {bad} }} }}\n");
+            let msg = match crate::parser::parse(&src) {
+                Err(e) => e.to_string(),
+                Ok(t) => {
+                    let v = t.validate();
+                    let errs: Vec<String> = v.errors().map(|e| e.message.clone()).collect();
+                    match super::validate_nat_rule_literals(t.nodes["gw"].nat.as_ref().unwrap()) {
+                        Err(e) => format!("{errs:?} {e}"),
+                        Ok(()) => format!("{errs:?}"),
+                    }
+                }
+            };
+            assert!(msg.contains(why), "{bad}: {msg}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod filter_032 {
+    /// #189's filter additions parse, validate, render back as themselves
+    /// and plan.
+    #[test]
+    fn rpf_ranges_byte_limits_and_log_levels_round_trip() {
+        let src = r#"lab "f"
+node gw {
+  firewall forward policy accept {
+    drop rpf
+    drop iif lan0 tcp dport != 8000-8999
+    mark 0x10-0x1f counter
+    accept limit 1mb/second burst 64kb
+    log "spoof: " level info
+  }
+}
+"#;
+        let topo = crate::parser::parse(src).unwrap();
+        let v = topo.validate();
+        assert!(!v.has_errors(), "{:?}", v.errors().collect::<Vec<_>>());
+        let rendered = crate::render::try_render(&topo).unwrap();
+        for line in [
+            "drop rpf",
+            "drop iif lan0 tcp dport != 8000-8999",
+            "mark 0x10-0x1f counter",
+            "accept limit 1mb/second burst 64kb",
+            "log \"spoof: \" level info",
+        ] {
+            assert!(rendered.contains(line), "{line}\n{rendered}");
+        }
+        let again = crate::parser::parse(&rendered).unwrap();
+        assert_eq!(again.nodes["gw"].firewall, topo.nodes["gw"].firewall);
+        let fw = topo.effective_firewall(&topo.nodes["gw"]);
+        let cfg = super::topology_to_nftables_config(fw.as_deref(), None).unwrap();
+        assert_eq!(cfg.tables()[0].rules().len(), 5);
+    }
+
+    #[test]
+    fn rpf_in_the_output_chain_is_refused() {
+        let topo =
+            crate::parser::parse("lab \"f\"\nnode a { firewall output { drop rpf } }\n").unwrap();
+        assert!(
+            topo.validate().errors().any(|e| e.message.contains("rpf")),
+            "{:?}",
+            topo.validate().errors().collect::<Vec<_>>()
+        );
     }
 }

@@ -252,16 +252,22 @@ module.exports = grammar({
     fw_statement: ($) =>
       prec.right(
         choice(
+          // packets (`5/second`) or bytes (`1mb/second burst 64kb`, #189)
           seq(
             "limit",
             optional("over"),
-            $.integer,
+            choice($.integer, $.size),
             "/",
             $.identifier,
-            optional(seq("burst", $.integer)),
+            optional(seq("burst", choice($.integer, $.size))),
           ),
           seq("counter", optional(seq("name", $._name))),
-          seq("log", optional($.string), optional(seq("group", $.integer))),
+          seq(
+            "log",
+            optional($.string),
+            optional(seq("group", $.integer)),
+            optional(seq("level", $.identifier)),
+          ),
           seq("mark", "set", $._mark_value, optional(seq("/", $._mark_value))),
           seq("ct", "mark", choice(seq("set", $._mark_value), "save", "restore")),
           seq(
@@ -297,9 +303,17 @@ module.exports = grammar({
             seq(
               "mark",
               optional("!="),
-              choice(seq($._mark_value, optional(seq("/", $._mark_value))), $.set_ref),
+              choice(
+                seq(
+                  $._mark_value,
+                  optional(choice(seq("/", $._mark_value), seq("-", $._mark_value))),
+                ),
+                $.set_ref,
+              ),
             ),
             seq(choice("iif", "oif"), optional("!="), $._value),
+            // reverse-path filtering (#189)
+            "rpf",
           ),
         ),
       ),
@@ -314,12 +328,29 @@ module.exports = grammar({
 
     nat_rule: ($) =>
       choice(
-        seq("masquerade", repeat($._nat_qualifier)),
-        // `to ADDR[:PORT]`
-        seq("dnat", repeat($._nat_qualifier), "to", $._value, optional(seq(":", $.integer))),
-        seq("snat", repeat($._nat_qualifier), "to", $._value),
+        // `masquerade … [to :P[-Q]] [random]`, `redirect … [to :P]` (#189)
+        seq(
+          choice("masquerade", "redirect"),
+          repeat($._nat_qualifier),
+          optional(seq("to", ":", $._nat_ports)),
+          repeat($._nat_flag),
+        ),
+        // `to ADDR[-ADDR][:PORT[-PORT]] [fully-random|persistent]`
+        seq(
+          choice("dnat", "snat"),
+          repeat($._nat_qualifier),
+          "to",
+          $._value,
+          optional(seq("-", $._value)),
+          optional(seq(":", $._nat_ports)),
+          repeat($._nat_flag),
+        ),
         seq("translate", $._value, "to", $._value),
       ),
+
+    _nat_ports: ($) => seq($.integer, optional(seq("-", $.integer))),
+
+    _nat_flag: ($) => choice("random", "fully-random", "persistent"),
 
     // `src X`, `dst X`, `iif NAME`, `oif NAME`, `tcp|udp dport P`
     _nat_qualifier: ($) =>

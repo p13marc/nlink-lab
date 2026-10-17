@@ -3937,6 +3937,208 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     }
 }
 
+/// Accept one connection on `listener` within `wait`, and return its peer.
+fn accept_peer(
+    listener: &std::net::TcpListener,
+    wait: std::time::Duration,
+) -> std::net::SocketAddr {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        match listener.accept() {
+            Ok((_, peer)) => return peer,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "no connection arrived"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            Err(e) => panic!("accept: {e}"),
+        }
+    }
+}
+
+/// NAT port ranges and redirect (#189), with real traffic: the server sees
+/// the masqueraded connection come from the declared port range, and a
+/// connection to port 80 anywhere behind the router lands on the router's
+/// own 8080.
+#[tokio::test]
+async fn nat_port_ranges_and_redirect_on_a_router() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping nat_port_ranges_and_redirect_on_a_router: requires root");
+        return;
+    }
+    let lab_name = format!("natr-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node client {{ route default via 10.0.1.1 }}
+node gw : router {{
+  nat {{
+    masquerade src 10.0.1.0/24 oif wan0 to :40000-40010 random
+    redirect iif lan0 tcp dport 80 to :8080
+  }}
+}}
+node server
+link client:eth0 -- gw:lan0 {{ 10.0.1.10/24 -- 10.0.1.1/24 }}
+link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let bind = |node: &str, addr: &str| {
+        let addr = addr.to_string();
+        lab.ns_resolver_of(node)
+            .unwrap()
+            .netns()
+            .unwrap()
+            .run(move || std::net::TcpListener::bind(addr.as_str()))
+            .unwrap()
+            .unwrap()
+    };
+    let wait = std::time::Duration::from_secs(3);
+
+    let server = bind("server", "0.0.0.0:5555");
+    lab.tcp_connect("client", "10.0.2.10:5555".parse().unwrap(), wait)
+        .expect("client -> server:5555");
+    let peer = accept_peer(&server, wait);
+    assert_eq!(peer.ip().to_string(), "10.0.2.1", "masqueraded");
+    assert!(
+        (40000..=40010).contains(&peer.port()),
+        "source port {} outside the declared range",
+        peer.port()
+    );
+
+    let proxy = bind("gw", "0.0.0.0:8080");
+    lab.tcp_connect("client", "10.0.2.10:80".parse().unwrap(), wait)
+        .expect("port 80 is redirected to the router's 8080");
+    let peer = accept_peer(&proxy, wait);
+    assert_eq!(
+        peer.ip().to_string(),
+        "10.0.1.10",
+        "the redirect keeps the client"
+    );
+    // Nothing listens on the server's 81, and nothing redirects it.
+    assert!(
+        lab.tcp_connect("client", "10.0.2.10:81".parse().unwrap(), wait)
+            .is_err()
+    );
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// nlink 0.32 firewall statements (#189), with real traffic: `rpf` drops a
+/// spoofed source (and counts it) while the real one passes, and a
+/// negated port range lets 8080 through and drops 9090. A byte-rate limit
+/// and a mark range install and read back as declared (converged).
+#[tokio::test]
+async fn firewall_rpf_negated_ranges_and_byte_limits() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping firewall_rpf_negated_ranges_and_byte_limits: requires root");
+        return;
+    }
+    let lab_name = format!("fw032-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node client {{ route default via 10.0.1.1 }}
+node gw : router {{
+  firewall forward policy accept {{
+    drop rpf counter name spoofed
+    accept limit 1mb/second burst 64kb
+    mark 0x10-0x1f counter
+  }}
+}}
+node server {{
+  route default via 10.0.2.1
+  firewall policy accept {{
+    accept ct established,related
+    drop tcp dport != 8000-8999
+  }}
+}}
+link client:eth0 -- gw:lan0 {{ 10.0.1.10/24 -- 10.0.1.1/24 }}
+link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(
+        layered.is_empty(),
+        "the kernel reads every rule back as declared:\n{layered}"
+    );
+
+    // The server pings the client from its own address: routed. Then from a
+    // client-side address it does not own: gw's fib has no route back out of
+    // wan0 for it, so `rpf` drops it.
+    let ping = |args: &[&str]| lab.exec("server", "ping", args).unwrap().exit_code;
+    assert_eq!(
+        ping(&["-c", "1", "-W", "1", "10.0.1.10"]),
+        0,
+        "a real source passes"
+    );
+    let add = lab
+        .exec(
+            "server",
+            "ip",
+            &["addr", "add", "10.0.1.99/32", "dev", "eth0"],
+        )
+        .unwrap();
+    assert_eq!(add.exit_code, 0, "{}", add.stderr);
+    ping(&[
+        "-c",
+        "3",
+        "-i",
+        "0.2",
+        "-W",
+        "1",
+        "-I",
+        "10.0.1.99",
+        "10.0.1.10",
+    ]);
+    let spoofed = lab
+        .firewall_counters_blocking("gw")
+        .unwrap()
+        .into_iter()
+        .find(|c| c.name == "spoofed")
+        .expect("the spoofed counter");
+    assert!(
+        spoofed.packets >= 3,
+        "rpf dropped {} packets",
+        spoofed.packets
+    );
+
+    let bind = |port: u16| {
+        lab.ns_resolver_of("server")
+            .unwrap()
+            .netns()
+            .unwrap()
+            .run(move || std::net::TcpListener::bind(("0.0.0.0", port)))
+            .unwrap()
+            .unwrap()
+    };
+    let (_in_range, _out_of_range) = (bind(8080), bind(9090));
+    let wait = std::time::Duration::from_secs(2);
+    lab.tcp_connect("client", "10.0.2.10:8080".parse().unwrap(), wait)
+        .expect("8080 is inside the range");
+    let blocked = lab.tcp_connect("client", "10.0.2.10:9090".parse().unwrap(), wait);
+    assert!(
+        blocked
+            .as_ref()
+            .is_err_and(|e| e.to_string().contains("timed out")),
+        "9090 is outside the range, dropped: {blocked:?}"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── Plan 156 PR C — impair --show JSON view ────────────
 
 // Round-4 follow-up: `--show --json` returned `endpoints: {}` for any

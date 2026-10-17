@@ -22,7 +22,7 @@ pub fn exit_code_for(err: &nlink_lab::Error) -> u8 {
         nlink_lab::Error::Validation(_)
         | nlink_lab::Error::ValidationErrors(_)
         | nlink_lab::Error::InvalidTopology(_) => EXIT_VALIDATION,
-        nlink_lab::Error::Timeout(_) => EXIT_TIMEOUT,
+        nlink_lab::Error::Timeout(_) | nlink_lab::Error::TimedOut(_) => EXIT_TIMEOUT,
         _ => EXIT_FAILURE,
     }
 }
@@ -124,6 +124,11 @@ mod tests {
             exit_code_for(&nlink_lab::Error::Timeout(std::time::Duration::from_secs(
                 1
             ))),
+            EXIT_TIMEOUT
+        );
+        // A wait that gives up (`wait`, `wait-for`) is a timeout too.
+        assert_eq!(
+            exit_code_for(&nlink_lab::Error::TimedOut("timeout waiting".into())),
             EXIT_TIMEOUT
         );
         assert_eq!(

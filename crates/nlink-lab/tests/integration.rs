@@ -5538,6 +5538,124 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+/// Two handles of one lab, loaded before either saved: each one's spawned
+/// process survives the other's save. `save_state` used to write its own
+/// stale copy over the file, so the first spawn was lost.
+#[lab_test("examples/simple.nll")]
+async fn concurrent_saves_keep_each_others_changes(lab: RunningLab) {
+    let mut a = RunningLab::load(lab.name()).unwrap();
+    let mut b = RunningLab::load(lab.name()).unwrap();
+    let pa = a.spawn("host", &["sleep", "30"]).unwrap();
+    a.save_state().unwrap();
+    let pb = b.spawn("router", &["sleep", "31"]).unwrap();
+    b.save_state().unwrap();
+
+    let pids = |l: &RunningLab| -> Vec<u32> { l.pids().iter().map(|(_, p)| *p).collect() };
+    let after = RunningLab::load(lab.name()).unwrap();
+    assert!(
+        pids(&after).contains(&pa),
+        "a's spawn lost: {:?}",
+        after.pids()
+    );
+    assert!(
+        pids(&after).contains(&pb),
+        "b's spawn lost: {:?}",
+        after.pids()
+    );
+    for pid in [pa, pb] {
+        let _ = after.kill_process(pid);
+    }
+}
+
+/// `exec` with a timeout drains the child's output as it runs: 200 kB used
+/// to block the child on a full pipe until the timeout killed it, its
+/// output lost. A background grandchild holding the pipe does not hold the
+/// call past the deadline either.
+#[lab_test("examples/simple.nll")]
+async fn exec_with_a_timeout_returns_large_output_and_keeps_its_deadline(lab: RunningLab) {
+    let opts = |secs| nlink_lab::ExecOpts {
+        timeout: Some(std::time::Duration::from_secs(secs)),
+        ..Default::default()
+    };
+    let t = std::time::Instant::now();
+    let out = lab
+        .exec_with_opts(
+            "host",
+            "sh",
+            &["-c", "head -c 200000 /dev/zero | tr '\\0' x"],
+            opts(10),
+        )
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    assert_eq!(out.stdout.len(), 200_000);
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        t.elapsed()
+    );
+
+    let t = std::time::Instant::now();
+    let out = lab
+        .exec_with_opts("host", "sh", &["-c", "sleep 8 & echo hi"], opts(2))
+        .unwrap();
+    assert_eq!(out.stdout.trim(), "hi");
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(4),
+        "held past the 2 s deadline: {:?}",
+        t.elapsed()
+    );
+}
+
+/// A container node whose recorded init PID now names another process (the
+/// init exited and the number was reused, here by the test runner, which is
+/// in the host's namespace) is not reached through it: the loaded lab has
+/// PID 0 for it, and asking the node fails instead of reading the host's
+/// interfaces.
+#[tokio::test]
+async fn a_container_whose_init_pid_was_reused_is_not_reached_through_it() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("pid-reuse-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}" {{ runtime "podman" }}
+node c image "alpine:latest" cmd ["sleep", "infinity"]
+node h
+link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let (mut state, topology) = nlink_lab::state::load(&lab_name).unwrap();
+    let real = state.containers["c"].clone();
+    assert!(
+        real.starttime.is_some(),
+        "deploy records the init's start time"
+    );
+    state.containers.get_mut("c").unwrap().pid = std::process::id();
+    nlink_lab::state::save(&state, &topology).unwrap();
+
+    let reloaded = RunningLab::load(&lab_name).unwrap();
+    match reloaded.ns_resolver_of("c") {
+        Some(nlink_lab::deploy::NsRef::Container { pid, .. }) => assert_eq!(pid, 0),
+        other => panic!("{other:?}"),
+    }
+    assert!(reloaded.diagnose(Some("c")).await.is_err());
+
+    state.containers.insert("c".into(), real);
+    nlink_lab::state::save(&state, &topology).unwrap();
+    std::mem::forget(_guard);
+    RunningLab::load(&lab_name)
+        .unwrap()
+        .destroy()
+        .await
+        .unwrap();
+}
+
 // ─── firewall: reject, chains, matches on real traffic (#164) ───
 
 /// Start an iperf3 server on `port` in `node`, detached, and wait for it.

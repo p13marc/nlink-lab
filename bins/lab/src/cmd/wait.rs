@@ -26,7 +26,7 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         if Instant::now() >= deadline {
             eprintln!(" timeout after {timeout}s");
-            return Err(nlink_lab::Error::invalid_topology(format!(
+            return Err(nlink_lab::Error::TimedOut(format!(
                 "timeout waiting for lab '{name}' after {timeout}s"
             )));
         }

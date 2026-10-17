@@ -266,6 +266,20 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`apply` deletes a WireGuard interface the topology drops, and sets
   a `key` the topology writes** (#204). Both used to report no change.
   A `key auto` interface keeps its saved key, as before.
+- **NLL lowering fixes that change what a topology deploys** (#205):
+  - `defaults rate { … }` applies to every link without its own `rate`.
+    It was parsed and ignored.
+  - An imported module's `qdisc` blocks and its `validate` block's
+    `retries` / `interval` are kept; they were dropped.
+  - Subnet auto-assignment skips an address an explicit `port` gives.
+    The members after it are numbered one further than before: with
+    `port b { 10.0.0.1/24 }`, a gets `.2` (it got `.1`, as b did).
+  - `${r.eth0}` inside a `site` names the site's own `r`. It named a
+    top-level node `r`, if there was one.
+  - `lo pool NAME` with an undefined pool is a parse error; it was a
+    warning, then an "invalid CIDR".
+  - A glob member's two ends may not overlap: `h*h` no longer matches
+    `h`.
 - **`restart` works on a network member and on a node without links**
   (#204). It re-creates the node's bridge-network ports, its mgmt veth
   and its sysctls, and starts its `run` commands again. It used to
@@ -401,6 +415,30 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **Nested interpolation did not parse** (#205). `${leaf${i}.eth0}`
+  failed: the lexer ended an interpolation at its first `}`. The
+  tree-sitter grammar and the VS Code highlighting had the same rule.
+- **Imports and sites left names unprefixed** (#205): a network's
+  `impair a -- b`, WireGuard `peers` and `peer` blocks, BGP `neighbor`s
+  and, in a site, `qdisc` endpoints. Validation then failed on names
+  that did not exist. An import argument like `count=${n}` reached the
+  module as the text `${n}`.
+- **Profile bodies were not interpolated, and profiles, defaults and
+  pools inside `if` / `for` / `site` were ignored** (#205). The profile
+  a node names is checked after interpolation, so `node r : ${kind}`
+  works.
+- **A `for` inside a node, network or `nat` block saw only top-level
+  variables** (#205): an enclosing loop's variable or a site's `let` was
+  unknown in it. A network `port`'s name and addresses were not
+  interpolated.
+- **Glob network members only matched nodes declared before the
+  network** (#205).
+- **The expression evaluator panicked on overflow** (#205), and a
+  ternary split at a `:` inside quotes (`"fd00::1"`). An overflowing
+  expression is left as written.
+- **`render` wrote network ports that did not parse back to the same
+  addresses** (#205) once a port was explicit or the subnet had host
+  bits.
 - **A failed `apply` rolled back state the lab already had** (#204). Its
   journal held lab-wide inverses for what it only touched:
   - the lab's cgroup subtree, so the processes of every node with a

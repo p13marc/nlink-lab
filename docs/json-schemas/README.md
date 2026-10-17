@@ -27,8 +27,11 @@ have no typed struct yet.
 
 The upstream `nlink::ConfigDiff` / `nlink::NftablesDiff` values inside
 the layered diff are free-form objects in the schema (their shape is
-nlink's). The `inspect`, `exec`, `diagnose`, `render` and `diff` JSON
-shapes are documented inline in each subcommand's `--help`.
+nlink's). The shapes without a schema are described in prose: `exec`'s
+in [docs/cli/exec.md](../cli/exec.md), `diagnose`'s and `stats`'s in their
+`--help`; `inspect --json` prints the lab's topology (the archive summary
+for a `.nlz`), `render --json` the topology, and `diff --json` the
+topology diff with `total_changes`.
 
 ## Validating output
 

@@ -219,6 +219,45 @@ async fn diagnose_since_reports_real_rates(lab: RunningLab) {
 
     let again = lab.diagnose(Some("router")).await.unwrap();
     assert_eq!(eth0(&again).rates.rx_bytes_per_sec, 0.0);
+    // the kernel's fallback tunnels (on a host with their modules) are
+    // not the lab's (#226)
+    let names: Vec<&str> = again[0]
+        .interfaces
+        .iter()
+        .map(|i| i.name.as_str())
+        .collect();
+    assert!(
+        !names
+            .iter()
+            .any(|n| ["gre0", "gretap0", "sit0", "tunl0"].contains(n)),
+        "{names:?}"
+    );
+    // the router has no default route, on purpose: no warning (#226)
+    assert!(
+        again[0]
+            .issues
+            .iter()
+            .all(|i| !i.message.contains("default route")),
+        "{:?}",
+        again[0].issues
+    );
+}
+
+/// #226: `wait-for --exec` ran each probe without a timeout, so one that
+/// hung held the wait past `--timeout`, forever if it never returned.
+#[lab_test("examples/simple.nll")]
+async fn wait_for_exec_ends_a_hung_probe_at_the_timeout(lab: RunningLab) {
+    let started = std::time::Instant::now();
+    let r = lab
+        .wait_for_exec(
+            "host",
+            "sleep 30",
+            std::time::Duration::from_secs(2),
+            std::time::Duration::from_millis(100),
+        )
+        .await;
+    assert!(matches!(r, Err(nlink_lab::Error::TimedOut(_))), "{r:?}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(8));
 }
 
 #[lab_test("examples/simple.nll")]
@@ -4080,6 +4119,70 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     }
 }
 
+/// #226: across `destroy` and `deploy` of the same lab between two checks,
+/// the node's name opened again (on the new namespace) and the watch stayed
+/// on the dead one, reporting nothing more. And `--node` of a node the lab
+/// does not have was an empty watch.
+#[tokio::test]
+async fn watch_reports_gone_when_the_lab_is_redeployed() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping watch_reports_gone_when_the_lab_is_redeployed: requires root");
+        return;
+    }
+    let lab_name = format!("wredo-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let unknown = nlink_lab::WatchOpts {
+        node: Some("nope".into()),
+        ..Default::default()
+    };
+    assert!(matches!(
+        nlink_lab::watch_stream(&lab, &unknown),
+        Err(nlink_lab::Error::NodeNotFound { .. })
+    ));
+    let opts = nlink_lab::WatchOpts {
+        node: Some("a".into()),
+        family: nlink_lab::WatchFamily::Route,
+        ..Default::default()
+    };
+    let (mut rx, tasks) = nlink_lab::watch_stream(&lab, &opts)
+        .unwrap()
+        .expect("nodes to watch");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // well inside one 2 s check
+    lab.destroy().await.expect("destroy failed");
+    let lab = topo.deploy().await.expect("redeploy failed");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
+    let mut gone = false;
+    while !gone && std::time::Instant::now() < deadline {
+        if let Ok(Some(ev)) =
+            tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv()).await
+        {
+            gone = matches!(ev.kind, nlink_lab::watch::WatchEventKind::Gone);
+        }
+    }
+    assert!(gone, "the watch stayed on the destroyed namespace");
+    for t in tasks {
+        tokio::time::timeout(std::time::Duration::from_secs(2), t)
+            .await
+            .expect("a subscription task outlived its namespace")
+            .unwrap();
+    }
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
 /// Accept one connection on `listener` within `wait`, and return its peer.
 fn accept_peer(
     listener: &std::net::TcpListener,
@@ -7888,6 +7991,37 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     );
     assert_eq!(running(&lab, "sleep 6666"), 1);
 
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #226: at an `exec --timeout` on a container node only the runtime's
+/// client was killed, and the command ran on in the container.
+#[tokio::test]
+async fn an_exec_timeout_stops_the_command_in_the_container() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let lab_name = format!("ket-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}" {{ runtime "podman" }}
+node c image "alpine:latest" cmd ["sleep", "infinity"]
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let opts = nlink_lab::ExecOpts {
+        timeout: Some(std::time::Duration::from_secs(1)),
+        ..Default::default()
+    };
+    let r = lab.exec_with_opts("c", "sleep", &["4321"], opts);
+    assert!(matches!(r, Err(nlink_lab::Error::Timeout(_))), "{r:?}");
+    let ps = lab.exec("c", "ps", &[]).unwrap().stdout;
+    assert!(!ps.contains("sleep 4321"), "still running: {ps}");
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");
 }

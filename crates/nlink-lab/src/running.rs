@@ -123,7 +123,9 @@ pub struct ExecOutput {
     pub stdout: String,
     /// Standard error.
     pub stderr: String,
-    /// Process exit code.
+    /// Process exit code; `128 + signo` when a signal ended it, as a
+    /// shell reports it (it was `-1`, which `exec` turned into success,
+    /// #226).
     pub exit_code: i32,
 }
 
@@ -242,6 +244,11 @@ impl NodeDiagnostic {
     }
 }
 
+/// The fallback devices the tunnel modules create in each namespace.
+const FALLBACK_TUNNELS: &[&str] = &[
+    "gre0", "gretap0", "erspan0", "tunl0", "sit0", "ip_vti0", "ip6tnl0", "ip6gre0", "ip6_vti0",
+];
+
 /// The node's entry in an earlier [`RunningLab::diagnose`] result.
 fn previous_of<'a>(previous: &'a [NodeDiagnostic], node: &str) -> Option<&'a NodeDiagnostic> {
     previous.iter().find(|d| d.node == node)
@@ -252,7 +259,13 @@ async fn scan_node(
     conn: Connection<Route>,
     previous: Option<&NodeDiagnostic>,
 ) -> nlink::Result<DiagnosticReport> {
-    let diag = Diagnostics::new(conn);
+    // A lab node often has no default route on purpose (a router, the
+    // hosts of `examples/simple.nll`): every one was a warning (#226).
+    let config = nlink::netlink::diagnostics::DiagnosticsConfig {
+        warn_no_default_route: false,
+        ..Default::default()
+    };
+    let diag = Diagnostics::with_config(conn, config);
     match previous {
         // Only the timestamp and the interfaces' names, ifindexes and
         // counters are read back.
@@ -800,20 +813,33 @@ impl RunningLab {
                 all_args.push("-e");
                 all_args.push(pair.as_str());
             }
+            // tagged when it may have to be stopped: killing the runtime's
+            // client at the timeout left the command running (#226)
+            let tag = opts.timeout.map(|_| new_process_tag(self.name(), node));
+            let tag_env = tag.as_ref().map(|t| format!("{TAG_VAR}={t}"));
+            if let Some(env) = &tag_env {
+                all_args.push("-e");
+                all_args.push(env);
+            }
             all_args.push(&container.id);
             all_args.push(cmd);
             all_args.extend(args);
             let mut command = std::process::Command::new(rt_binary);
             command.args(&all_args);
-            if let Some(timeout) = opts.timeout {
+            if let (Some(timeout), Some(tag)) = (opts.timeout, &tag) {
                 let child = command
+                    .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .spawn()
                     .map_err(|e| {
                         Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
                     })?;
-                output_with_timeout(child, timeout)
+                output_with_timeout(child, timeout).inspect_err(|e| {
+                    if matches!(e, Error::Timeout(_)) {
+                        stop_tagged(container.pid, tag);
+                    }
+                })
             } else {
                 let output = command.output().map_err(|e| {
                     Error::deploy_failed(format!("exec in container '{node}' failed: {e}"))
@@ -821,7 +847,7 @@ impl RunningLab {
                 Ok(ExecOutput {
                     stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                     stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                    exit_code: output.status.code().unwrap_or(-1),
+                    exit_code: exit_code_of(output.status),
                 })
             }
         } else {
@@ -835,6 +861,8 @@ impl RunningLab {
                 command.env(k, v);
             }
             if let Some(timeout) = opts.timeout {
+                // as without a timeout: it read the caller's stdin (#226)
+                command.stdin(std::process::Stdio::null());
                 command.stdout(std::process::Stdio::piped());
                 command.stderr(std::process::Stdio::piped());
                 let child = crate::ns_exec::spawn(ns_name, command)
@@ -846,7 +874,7 @@ impl RunningLab {
                 Ok(ExecOutput {
                     stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                     stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                    exit_code: output.status.code().unwrap_or(-1),
+                    exit_code: exit_code_of(output.status),
                 })
             }
         }
@@ -909,6 +937,12 @@ impl RunningLab {
                 all_args.push("-e");
                 all_args.push(pair.as_str());
             }
+            let tag = opts.timeout.map(|_| new_process_tag(self.name(), node));
+            let tag_env = tag.as_ref().map(|t| format!("{TAG_VAR}={t}"));
+            if let Some(env) = &tag_env {
+                all_args.push("-e");
+                all_args.push(env);
+            }
             all_args.push(&container.id);
             all_args.push(cmd);
             all_args.extend(args);
@@ -919,7 +953,12 @@ impl RunningLab {
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit());
             run_with_optional_timeout(&mut command, opts.timeout).map_err(|e| match e {
-                Error::Timeout(_) => e,
+                Error::Timeout(_) => {
+                    if let Some(tag) = &tag {
+                        stop_tagged(container.pid, tag);
+                    }
+                    e
+                }
                 other => Error::deploy_failed(format!(
                     "attached exec in container '{node}' failed: {other}"
                 )),
@@ -1456,9 +1495,19 @@ impl RunningLab {
         let deadline = std::time::Instant::now() + timeout;
         loop {
             // A probe that cannot run (unknown node, no namespace) is an
-            // error, not "not ready yet" (#209).
-            if self.exec(node, "sh", &["-c", cmd])?.exit_code == 0 {
-                return Ok(());
+            // error, not "not ready yet" (#209). It runs in what is left of
+            // the timeout: one that hung held the wait past it (#226).
+            let left = deadline
+                .saturating_duration_since(std::time::Instant::now())
+                .max(std::time::Duration::from_millis(100));
+            let opts = ExecOpts {
+                timeout: Some(left),
+                ..Default::default()
+            };
+            match self.exec_with_opts(node, "sh", &["-c", cmd], opts) {
+                Ok(out) if out.exit_code == 0 => return Ok(()),
+                Ok(_) | Err(Error::Timeout(_)) => {}
+                Err(e) => return Err(e),
             }
             if std::time::Instant::now() >= deadline {
                 return Err(Error::TimedOut(format!(
@@ -1875,6 +1924,35 @@ impl RunningLab {
     /// A node or interface missing from `previous`, a link recreated since
     /// (its counters went backwards), or another link at the same ifindex
     /// has zero rates.
+    /// A node's report without the tunnel devices the kernel puts in
+    /// every new namespace when their modules are loaded (`gre0`, `sit0`,
+    /// …): always down, they were nine warnings on every node, in
+    /// `diagnose`, the backend and `top` (#226). One the topology declares
+    /// stays.
+    fn node_diagnostic(&self, node: &str, report: DiagnosticReport) -> NodeDiagnostic {
+        let mut diag = NodeDiagnostic::from_report(node, report);
+        let declared = |iface: &str| {
+            let ep = format!("{node}:{iface}");
+            self.topology
+                .links
+                .iter()
+                .any(|l| l.endpoints.contains(&ep))
+                || self
+                    .topology
+                    .networks
+                    .values()
+                    .any(|n| n.members.contains(&ep))
+                || self.topology.nodes.get(node).is_some_and(|n| {
+                    n.interfaces.contains_key(iface) || n.wireguard.contains_key(iface)
+                })
+        };
+        let fallback = |iface: &str| FALLBACK_TUNNELS.contains(&iface) && !declared(iface);
+        diag.interfaces.retain(|i| !fallback(&i.name));
+        diag.issues
+            .retain(|i| !i.interface.as_deref().is_some_and(fallback));
+        diag
+    }
+
     pub async fn diagnose_since(
         &self,
         node: Option<&str>,
@@ -1910,7 +1988,7 @@ impl RunningLab {
                 Err(e) => Err(Error::nlink(format!("connection for '{ns_name}'"), e)),
             };
             match scanned {
-                Ok(report) => results.push(NodeDiagnostic::from_report(node_name, report)),
+                Ok(report) => results.push(self.node_diagnostic(node_name, report)),
                 Err(e) => skip_or_fail(node_name, e)?,
             }
         }
@@ -1930,7 +2008,7 @@ impl RunningLab {
                 )),
             };
             match scanned {
-                Ok(report) => results.push(NodeDiagnostic::from_report(node_name, report)),
+                Ok(report) => results.push(self.node_diagnostic(node_name, report)),
                 Err(e) => skip_or_fail(node_name, e)?,
             }
         }
@@ -2765,7 +2843,7 @@ pub(crate) fn output_with_timeout(
     Ok(ExecOutput {
         stdout: text(&stdout),
         stderr: text(&stderr),
-        exit_code: status.code().unwrap_or(-1),
+        exit_code: exit_code_of(status),
     })
 }
 
@@ -2776,8 +2854,8 @@ fn run_with_optional_timeout(
     wait_with_optional_timeout(command.spawn().map_err(Error::Io)?, timeout)
 }
 
-/// Wait for `child`, killing it after `timeout`; its exit code (-1 when a
-/// signal ended it).
+/// Wait for `child`, killing it after `timeout`; its exit code
+/// ([`exit_code_of`]).
 fn wait_with_optional_timeout(
     mut child: std::process::Child,
     timeout: Option<std::time::Duration>,
@@ -2786,7 +2864,17 @@ fn wait_with_optional_timeout(
         wait_with_timeout(&mut child, t)?;
     }
     let status = child.wait().map_err(Error::Io)?;
-    Ok(status.code().unwrap_or(-1))
+    Ok(exit_code_of(status))
+}
+
+/// A process's exit code as a shell reports it: `128 + signo` when a
+/// signal ended it. It was `-1`, which `exec` clamped to 0 (#226).
+pub(crate) fn exit_code_of(status: std::process::ExitStatus) -> i32 {
+    use std::os::unix::process::ExitStatusExt;
+    status
+        .code()
+        .or_else(|| status.signal().map(|s| 128 + s))
+        .unwrap_or(1)
 }
 
 /// Start time (clock ticks since boot, field 22 of `/proc/<pid>/stat`)
@@ -3169,6 +3257,20 @@ mod proc_net_tcp_tests {
 #[cfg(test)]
 mod pid_identity_tests {
     use super::*;
+
+    #[test]
+    fn a_signal_death_is_128_plus_the_signal() {
+        // #226: it was -1, which `exec` exited 0 for
+        let status = |script: &str| {
+            std::process::Command::new("sh")
+                .args(["-c", script])
+                .status()
+                .unwrap()
+        };
+        assert_eq!(exit_code_of(status("kill -9 $$")), 137);
+        assert_eq!(exit_code_of(status("kill -TERM $$")), 143);
+        assert_eq!(exit_code_of(status("exit 3")), 3);
+    }
 
     #[test]
     fn host_starttime_of_self_is_stable_and_nonzero() {

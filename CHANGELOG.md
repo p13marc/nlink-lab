@@ -301,6 +301,19 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   additive under `apply --check --json`'s `topology`). `diff --json`
   prints the whole diff plus `total_changes`, instead of a summary with
   link counts.
+- **`exec`, `watch`, `diagnose`, `doctor`** (#226):
+  - a command a signal ended exits `128 + signo` (137 for SIGKILL), and
+    `ExecOutput::exit_code` / `exec --json`'s `exit_code` say so; it was
+    `-1`, and `exec` exited 0;
+  - `watch` needs privileges, `watch --node` of a node the lab does not
+    have is an error (exit 1), and `watch_stream` returns
+    `Error::NodeNotFound` for it (library API);
+  - `diagnose --json` issues are `{severity, message}` objects, and a
+    node's list holds the issues of no particular interface (an
+    interface's are under it only). No node warns for having no default
+    route;
+  - `doctor`'s container runtime check runs `BIN version`, as deploy
+    does, and its sysctl check says "not checked" unprivileged.
 - **Wi-Fi, `lint`, `inspect`, `stats`** (#223):
   - new validation errors: `wifi-passphrase` (a `wpa2` key of 8 to 63
     printable ASCII characters or 64 hex digits; none on a mesh point),
@@ -580,6 +593,28 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`exec` and the waits** (#226):
+  - `exec --timeout` on a container node stopped the runtime's client
+    only, and the command ran on in the container: it is tagged and
+    stopped there, as `kill` does since #215;
+  - `exec --json --timeout` on a namespace node read the caller's stdin;
+  - `wait-for --exec` ran each probe without a timeout, so one that hung
+    held the wait past `--timeout`, forever if it never returned;
+  - `wait` of an invalid lab name waited out its timeout, and `wait`
+    ignored `--quiet`.
+- **`watch`** (#226): unprivileged it retried "Operation not permitted"
+  forever; `--node nope` exited 0; `watch --json | head -1` panicked on
+  the closed pipe, and then hung; across `destroy` and `deploy` of the same
+  lab it stayed on the dead namespace and reported nothing more. That
+  changes made by nlink-lab itself print as drift is now documented.
+- **`diagnose` printed every interface issue twice**, and marked an
+  interface WARN for an info-level issue (#226). On a host with the
+  tunnel modules loaded, every node also listed the kernel's fallback
+  devices (`gre0`, `gretap0`, `sit0`, `tunl0` and five more), always down,
+  as warnings, in `diagnose`, the backend and `top`; they are left out
+  unless the topology declares one.
+- **Docs** (#226): `exec`'s exit codes and its `-v`, and where the JSON
+  shapes without a schema are described.
 - **Wi-Fi input hostapd or wpa_supplicant refused passed validation**
   (#223): a short `wpa2` key, a 64-hex one (written as a passphrase),
   an empty or long SSID. A mesh point's `wpa2` and `ssid` were ignored,

@@ -43,7 +43,9 @@ nftables events cover tables, chains, rules, sets, set elements and named object
 
 Each event is nlink's view of the object: a line such as `[r1/route] new_link ifindex=7 mtu=1500 name=d0 …`, and with `--json` a record such as `{"node":"r1","family":"route","kind":"event","event":{"object":"link","action":"new",…}}`. The event's name, `<action>_<object>`, is what `events --kind` filters drift on.
 
-A node whose stream ends prints `watch ended: <error>` (an `ended` record in `--json`) and is subscribed again after a backoff; one whose namespace is gone prints `namespace gone` (`gone`) and stops. The command exits when every node's watch has stopped.
+A node whose stream ends prints `watch ended: <error>` (an `ended` record in `--json`) and is subscribed again after a backoff; one whose namespace is gone, or was replaced by a redeploy of the lab, prints `namespace gone` (`gone`) and stops. The command exits when every node's watch has stopped, or when its output is closed.
+
+Every change is shown, whoever made it: what a concurrent `apply`, `impair`, `edit` or `restart` does prints like a hand edit.
 
 Usage: nlink-lab watch [OPTIONS] <LAB>
 

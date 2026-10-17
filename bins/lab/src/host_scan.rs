@@ -137,9 +137,55 @@ pub async fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
                 .map(|ns| (info.name.clone(), ns))
         })
         .collect();
-    let mut orphans = classify_orphans(&ifnames, &tagged, known, &lab_namespaces);
+    // Labs that own resources but have no readable state are not
+    // necessarily gone: classify them as registered labs whose state is
+    // unreadable, which keeps everything they own.
+    let candidates = tagged
+        .iter()
+        .filter_map(|(_, owner)| owner.clone())
+        .chain(nlink_lab::state::labs_with_pending_journal());
+    let mut known_plus = known.to_vec();
+    let protected = protected_labs(known, candidates, nlink_lab::state::exists, lab_busy);
+    known_plus.extend(protected.into_iter().map(|name| nlink_lab::state::LabInfo {
+        name,
+        node_count: 0,
+        created_at: String::new(),
+    }));
+    let mut orphans = classify_orphans(&ifnames, &tagged, &known_plus, &lab_namespaces);
     orphans.stale = classify_stale(&lab_namespaces, &netns);
     orphans
+}
+
+/// The labs among `candidates` that own host resources but are missing
+/// from `known` (no parseable `state.json`) and are still not orphans:
+///
+/// - one whose lock is held: a deploy, apply or destroy is running, and a
+///   deploy writes `state.json` only at the end, after its namespaces and
+///   journal exist;
+/// - one whose `state.json` exists but does not parse: `state::list` leaves
+///   it out, but it is a lab, not debris.
+///
+/// `has_state` and `busy` are [`nlink_lab::state::exists`] and [`lab_busy`]
+/// outside tests.
+fn protected_labs(
+    known: &[nlink_lab::state::LabInfo],
+    candidates: impl Iterator<Item = String>,
+    has_state: impl Fn(&str) -> bool,
+    busy: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let mut out: Vec<String> = candidates
+        .filter(|name| !name.is_empty() && !known.iter().any(|k| &k.name == name))
+        .collect();
+    out.sort();
+    out.dedup();
+    out.retain(|name| has_state(name) || busy(name));
+    out
+}
+
+/// Whether another process holds the lab's lock. Taking it to find out
+/// removes a lock file nobody holds, which is all such a file is.
+fn lab_busy(name: &str) -> bool {
+    !nlink_lab::state::remove_lock_if_unheld(name)
 }
 
 /// Ownership tag of a namespace as the classifier sees it: `None` for an
@@ -297,13 +343,20 @@ pub async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
         .filter(|lab| !nlink_lab::state::exists(lab))
         .collect();
     for lab in &pending {
+        // A deploy persists its journal as it goes and its state only at
+        // the end: a journal without state is just as much a deploy that
+        // is still running. Its lock says which; hold it while unwinding.
+        let Ok(guard) = nlink_lab::state::lock(lab) else {
+            println!("  skipped lab '{lab}': its lock is held (a deploy may be running)");
+            continue;
+        };
         if let Some(mut journal) = nlink_lab::deploy::rollback::Journal::load_pending(lab) {
             let n = journal.entries().len();
             journal.unwind().await;
             println!("  unwound {n} journal entries of interrupted lab '{lab}'");
             let _ = nlink_lab::state::remove(lab);
-            nlink_lab::state::remove_lock_if_unheld(lab);
         }
+        guard.remove_file();
     }
     // Lock files of labs that no longer exist (#103). Independent of the
     // host resources below, and done before their early returns so it
@@ -319,14 +372,41 @@ pub async fn reap_orphans(known: &[nlink_lab::state::LabInfo]) {
         }
         return;
     }
-    // Netns first: deleting a namespace reaps the veths inside it.
+    // Netns first: deleting a namespace reaps the veths inside it. Each
+    // owner's lock is held while its namespaces go, so a deploy that
+    // starts meanwhile waits instead of losing them.
+    let mut by_owner: std::collections::BTreeMap<String, Vec<&String>> = Default::default();
     for ns in &orphans.netns {
-        match nlink::netlink::namespace::delete(ns) {
-            Ok(()) => {
-                nlink_lab::netns_tag::untag(ns);
-                println!("  deleted namespace '{ns}'");
+        by_owner
+            .entry(tag_of(ns).unwrap_or_default())
+            .or_default()
+            .push(ns);
+    }
+    for (owner, namespaces) in by_owner {
+        let guard = if owner.is_empty() {
+            None
+        } else {
+            match nlink_lab::state::lock(&owner) {
+                Ok(guard) => Some(guard),
+                Err(_) => {
+                    println!("  skipped namespaces of lab '{owner}': its lock is held");
+                    continue;
+                }
             }
-            Err(e) => eprintln!("  warning: failed to delete namespace '{ns}': {e}"),
+        };
+        for ns in namespaces {
+            match nlink::netlink::namespace::delete(ns) {
+                Ok(()) => {
+                    nlink_lab::netns_tag::untag(ns);
+                    println!("  deleted namespace '{ns}'");
+                }
+                Err(e) => eprintln!("  warning: failed to delete namespace '{ns}': {e}"),
+            }
+        }
+        if let Some(guard) = guard
+            && !nlink_lab::state::exists(&owner)
+        {
+            guard.remove_file();
         }
     }
     if orphans.veths.is_empty() && orphans.bridges.is_empty() {
@@ -492,6 +572,40 @@ mod tests {
         let netns = vec![tagged("keep-a", "keep")];
         let orphans = classify_orphans(&[], &netns, &known, &[]);
         assert!(orphans.netns.is_empty(), "{orphans:?}");
+    }
+
+    /// A lab with no readable state is protected while its lock is held
+    /// (a deploy writes `state.json` last) or while a `state.json` exists
+    /// that does not parse; otherwise its resources are an orphan's.
+    #[test]
+    fn labs_without_readable_state_are_protected_while_busy_or_corrupt() {
+        let known = vec![info("live")];
+        let candidates = ["live", "deploying", "corrupt", "gone", "", "deploying"]
+            .into_iter()
+            .map(String::from);
+        let protected = protected_labs(
+            &known,
+            candidates,
+            |name| name == "corrupt",
+            |name| name == "deploying",
+        );
+        assert_eq!(protected, ["corrupt", "deploying"]);
+
+        // Classified as registered labs with unreadable state, their
+        // namespaces stay; the plain orphan's go.
+        let mut with = known.clone();
+        with.extend(protected.iter().map(|n| info(n)));
+        let netns = vec![
+            tagged("deploying-a", "deploying"),
+            tagged("corrupt-a", "corrupt"),
+            tagged("gone-a", "gone"),
+        ];
+        let orphans = classify_orphans(&[], &netns, &with, &[]);
+        assert_eq!(orphans.netns, vec!["gone-a".to_string()]);
+        // …and so does a deploying lab's mgmt bridge.
+        let bridge = nlink_lab::mgmt_bridge_name_for("deploying");
+        let orphans = classify_orphans(&[bridge], &[], &with, &[]);
+        assert!(orphans.bridges.is_empty(), "{orphans:?}");
     }
 
     #[test]

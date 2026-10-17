@@ -138,8 +138,8 @@ pub enum LabEventKind {
         node: String,
         #[serde(default)]
         pid: u32,
-        /// Exit status when the daemon could collect it (it is the
-        /// process's parent — e.g. `deploy --daemon`); a signal death is
+        /// Exit status when the collector could read it (the spawn
+        /// reaper's record, or as the process's parent); a signal death is
         /// reported shell-style as `128 + signo`. `None` when the process
         /// was reaped by someone else, so no status was observable.
         #[serde(default)]
@@ -149,18 +149,8 @@ pub enum LabEventKind {
 
 // ─── Query/Reply messages (clients → backend) ────────
 
-/// Request to execute a command in a node.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ExecRequest {
-    #[serde(default)]
-    pub node: String,
-    #[serde(default)]
-    pub cmd: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-}
-
-/// Response from command execution.
+/// What a command in a node printed and how it ended, as the desktop
+/// viewer shows it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecResponse {
     /// Wire-format version of the sender (`0` = pre-versioning backend).
@@ -182,78 +172,6 @@ versioned_default!(ExecResponse {
     stdout,
     stderr,
 });
-
-/// Request to modify impairment on an interface.
-///
-/// Netem knobs that are `None` are left unset on the interface. A
-/// request with every knob `None` and `clear == false` is rejected by
-/// the backend rather than guessed at — set `clear` to remove the
-/// impairment entirely.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImpairmentRequest {
-    /// Wire-format version of the sender (`0` = pre-versioning client).
-    #[serde(default)]
-    pub wire_version: u32,
-    #[serde(default)]
-    pub node: String,
-    #[serde(default)]
-    pub interface: String,
-    #[serde(default)]
-    pub delay: Option<String>,
-    #[serde(default)]
-    pub jitter: Option<String>,
-    #[serde(default)]
-    pub loss: Option<String>,
-    /// Bandwidth cap (e.g. `"100mbit"`), applied as netem `rate`.
-    #[serde(default)]
-    pub rate: Option<String>,
-    #[serde(default)]
-    pub corrupt: Option<String>,
-    #[serde(default)]
-    pub reorder: Option<String>,
-    /// Remove the impairment on `node:interface` instead of setting one.
-    /// The netem knobs are ignored when this is `true`.
-    #[serde(default)]
-    pub clear: bool,
-}
-
-versioned_default!(ImpairmentRequest {
-    node,
-    interface,
-    delay,
-    jitter,
-    loss,
-    rate,
-    corrupt,
-    reorder,
-    clear,
-});
-
-impl ImpairmentRequest {
-    /// `true` when no netem knob is set (regardless of `clear`).
-    pub fn is_empty(&self) -> bool {
-        self.delay.is_none()
-            && self.jitter.is_none()
-            && self.loss.is_none()
-            && self.rate.is_none()
-            && self.corrupt.is_none()
-            && self.reorder.is_none()
-    }
-}
-
-/// Response from impairment modification.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImpairmentResponse {
-    /// Wire-format version of the sender (`0` = pre-versioning backend).
-    #[serde(default)]
-    pub wire_version: u32,
-    #[serde(default)]
-    pub success: bool,
-    #[serde(default)]
-    pub message: String,
-}
-
-versioned_default!(ImpairmentResponse { success, message });
 
 /// Lab status response. The status RPC takes no request payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -305,17 +223,6 @@ mod tests {
         assert_eq!(e.wire_version, 0);
         assert!(!e.success);
 
-        let r: ExecRequest = serde_json::from_str("{}").unwrap();
-        assert!(r.args.is_empty());
-
-        let i: ImpairmentRequest = serde_json::from_str("{}").unwrap();
-        assert!(i.is_empty());
-        assert!(!i.clear);
-        assert!(i.rate.is_none());
-
-        let ir: ImpairmentResponse = serde_json::from_str("{}").unwrap();
-        assert!(ir.message.is_empty());
-
         let s: StatusResponse = serde_json::from_str("{}").unwrap();
         assert!(s.nodes.is_empty());
     }
@@ -353,10 +260,6 @@ mod tests {
             serde_json::from_str(r#"{"lab_name":"x","future_field":{"a":[1,2]}}"#).unwrap();
         assert_eq!(h.lab_name, "x");
 
-        let i: ImpairmentRequest =
-            serde_json::from_str(r#"{"node":"r","interface":"eth0","duplicate":"1%"}"#).unwrap();
-        assert_eq!(i.node, "r");
-
         let ev: LabEvent = serde_json::from_str(
             r#"{"kind":{"type":"InterfaceDown","node":"a","interface":"eth0","reason":"carrier"},"extra":true}"#,
         )
@@ -385,26 +288,5 @@ mod tests {
         );
         assert_eq!(ev.wire_version, WIRE_VERSION);
         assert_eq!(ExecResponse::default().wire_version, WIRE_VERSION);
-        assert_eq!(ImpairmentRequest::default().wire_version, WIRE_VERSION);
-    }
-
-    #[test]
-    fn impairment_request_rate_and_clear_round_trip() {
-        let req = ImpairmentRequest {
-            node: "r".into(),
-            interface: "eth0".into(),
-            rate: Some("100mbit".into()),
-            ..Default::default()
-        };
-        assert!(!req.is_empty());
-        let json = serde_json::to_string(&req).unwrap();
-        let back: ImpairmentRequest = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.rate.as_deref(), Some("100mbit"));
-        assert!(!back.clear);
-
-        let clear: ImpairmentRequest =
-            serde_json::from_str(r#"{"node":"r","interface":"eth0","clear":true}"#).unwrap();
-        assert!(clear.clear);
-        assert!(clear.is_empty());
     }
 }

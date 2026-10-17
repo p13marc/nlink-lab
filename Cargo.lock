@@ -3569,7 +3569,7 @@ dependencies = [
  "netring",
  "nlink",
  "nlink-lab",
- "nlink-lab-backend",
+ "nlink-lab-client",
  "nlink-lab-shared",
  "ratatui",
  "regex",
@@ -3585,7 +3585,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-width 0.2.2",
- "zenoh",
 ]
 
 [[package]]
@@ -3624,6 +3623,7 @@ dependencies = [
  "clap",
  "iced",
  "nlink-lab",
+ "nlink-lab-client",
  "nlink-lab-shared",
  "png",
  "serde",
@@ -3631,6 +3631,25 @@ dependencies = [
  "tempfile",
  "tokio",
  "zenoh",
+]
+
+[[package]]
+name = "nlink-labd"
+version = "0.13.0"
+dependencies = [
+ "clap",
+ "libc",
+ "nlink-lab",
+ "nlink-lab-client",
+ "nlink-lab-shared",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml 1.1.6+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

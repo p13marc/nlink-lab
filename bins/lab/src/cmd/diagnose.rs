@@ -27,31 +27,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .filter(|i| i.interface.is_none())
             .collect()
     }
-    let issue_json = |i: &nlink::netlink::diagnostics::Issue| {
-        serde_json::json!({
-            "severity": i.severity.to_string(),
-            "message": i.to_string(),
-        })
-    };
     if ctx.json {
         let json_results: Vec<serde_json::Value> = results
             .iter()
-            .map(|diag| {
-                serde_json::json!({
-                    "node": diag.node,
-                    "interfaces": diag.interfaces.iter().map(|iface| {
-                        serde_json::json!({
-                            "name": iface.name,
-                            "state": format!("{:?}", iface.state),
-                            "mtu": iface.mtu,
-                            "rx_bytes": iface.stats.rx_bytes(),
-                            "tx_bytes": iface.stats.tx_bytes(),
-                            "issues": iface.issues.iter().map(issue_json).collect::<Vec<_>>(),
-                        })
-                    }).collect::<Vec<_>>(),
-                    "issues": node_issues(diag).into_iter().map(issue_json).collect::<Vec<_>>(),
-                })
-            })
+            .map(nlink_lab::NodeDiagnostic::to_json)
             .collect();
         println!("{}", serde_json::to_string_pretty(&json_results)?);
     } else {

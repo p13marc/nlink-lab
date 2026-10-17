@@ -39,30 +39,29 @@ pub struct Args {
     #[arg(add = crate::ctx::node_completer(), long, value_name = "SUBSTR")]
     pub node: Option<String>,
 
-    /// Read metrics from a running `daemon` over Zenoh instead of
-    /// collecting them locally. No root needed; read-only.
+    /// Read metrics from the nlink-lab daemon (`nlink-labd`) instead of
+    /// collecting them: no root needed, read-only. What `top` does without
+    /// root, or with `NLINK_LAB_DAEMON` set (`ssh://HOST` for another
+    /// host's labs).
     #[arg(long)]
-    pub zenoh: bool,
-
-    /// Zenoh connect endpoint (implies `--zenoh`).
-    #[arg(long, value_name = "ENDPOINT")]
-    pub zenoh_connect: Option<String>,
+    pub daemon: bool,
 }
 
 /// Where snapshots come from.
 enum Source {
-    /// Collected in-process with the same collector `daemon` uses. Needs
-    /// root: it calls `RunningLab::diagnose`, which opens a netlink
+    /// Collected in-process with the same collector the daemon uses.
+    /// Needs root: it calls `RunningLab::diagnose`, which opens a netlink
     /// socket in every namespace.
     Local {
         lab: nlink_lab::RunningLab,
         collector: nlink_lab::metrics::MetricsCollector,
     },
-    /// A running `daemon`'s `metrics/snapshot` topic. Read-only.
-    Zenoh {
-        /// Owns the session and subscriber; ends when `rx` is dropped.
+    /// A metrics subscription to the daemon. Read-only.
+    Daemon {
+        /// Owns the connection and the call; ends when `rx` is dropped.
         _task: tokio::task::JoinHandle<()>,
-        rx: tokio::sync::mpsc::Receiver<MetricsSnapshot>,
+        /// A snapshot, or why the subscription ended.
+        rx: tokio::sync::mpsc::Receiver<Result<MetricsSnapshot, String>>,
         /// Unprivileged `state.json` read, for the impairment column.
         /// `None` when the daemon is on another host.
         lab: Option<nlink_lab::RunningLab>,
@@ -79,62 +78,75 @@ enum Due {
     /// Local: the interval elapsed, collect now — outside the `select!`,
     /// because the collector future is not cancel-safe.
     Collect,
-    /// Zenoh: the daemon published this.
+    /// Daemon: the subscription delivered this.
     Snapshot(MetricsSnapshot),
-    /// The daemon's stream ended.
-    Closed,
+    /// The subscription ended, and why.
+    Closed(String),
 }
 
 impl Source {
-    async fn open(args: &Args, lab: &str) -> nlink_lab::Result<Self> {
-        if args.zenoh || args.zenoh_connect.is_some() {
-            return Self::open_zenoh(args, lab).await;
-        }
-        if !crate::ctx::has_privileges() {
-            return Err(nlink_lab::Error::deploy_failed(
-                "top collects metrics locally, which needs root (same as `diagnose`): run it \
-                 with sudo, or start `nlink-lab daemon -L <lab>` and use `top -L <lab> --zenoh`",
-            ));
+    async fn open(args: &Args, lab: &str, interval: Duration) -> nlink_lab::Result<Self> {
+        let from_env = std::env::var_os("NLINK_LAB_DAEMON").is_some_and(|v| !v.is_empty());
+        if args.daemon || from_env || !crate::ctx::has_privileges() {
+            return Self::open_daemon(lab, interval, args.daemon || from_env).await;
         }
         let lab = nlink_lab::RunningLab::load(lab)?;
         let collector = nlink_lab::metrics::MetricsCollector::new(&lab);
         Ok(Source::Local { lab, collector })
     }
 
-    async fn open_zenoh(args: &Args, lab: &str) -> nlink_lab::Result<Self> {
-        // The daemon's metrics topic, as `nlink-lab daemon` publishes it.
-        let mut config = zenoh::Config::default();
-        if let Some(connect) = &args.zenoh_connect {
-            config
-                .insert_json5("connect/endpoints", &format!(r#"["{connect}"]"#))
-                .map_err(|e| nlink_lab::Error::deploy_failed(format!("bad zenoh config: {e}")))?;
-        }
-        let session = zenoh::open(config).await.map_err(|e| {
-            nlink_lab::Error::deploy_failed(format!("failed to open Zenoh session: {e}"))
+    /// Subscribe to the lab's metrics on the daemon `NLINK_LAB_DAEMON`
+    /// names (its socket by default). `asked`: the daemon was asked for,
+    /// rather than tried for want of root.
+    async fn open_daemon(lab: &str, interval: Duration, asked: bool) -> nlink_lab::Result<Self> {
+        use nlink_lab_client::{CallEvent, Client, Endpoint};
+        use nlink_lab_shared::api::{Notification, Request, StreamItem, Topic};
+        let endpoint = Endpoint::from_env();
+        let client = Client::connect(
+            &endpoint,
+            concat!("nlink-lab-top/", env!("CARGO_PKG_VERSION")),
+        )
+        .await
+        .map_err(|e| match e {
+            nlink_lab_client::ClientError::Io(_) if !asked => {
+                nlink_lab::Error::Privileges(format!(
+                    "top collects metrics itself as root, or reads them from the nlink-lab daemon, \
+                     and no daemon answers at {endpoint}: run top with sudo, or start the daemon \
+                     (`sudo systemctl enable --now nlink-labd.socket`)"
+                ))
+            }
+            e => crate::ctx::daemon_error(e),
         })?;
-        let topic = nlink_lab_shared::topics::metrics_snapshot(lab);
-        let subscriber = session
-            .declare_subscriber(&topic)
+        let mut call = client
+            .start(Request::Subscribe {
+                lab: Some(lab.to_string()),
+                topics: vec![Topic::Metrics],
+                interval_ms: Some(interval.as_millis() as u64),
+            })
             .await
-            .map_err(|e| nlink_lab::Error::deploy_failed(format!("subscribe to '{topic}': {e}")))?;
+            .map_err(crate::ctx::daemon_error)?;
         let (tx, rx) = tokio::sync::mpsc::channel(8);
-        // The session and subscriber live in the task, so `Source` stays
-        // free of zenoh handler generics.
         let task = tokio::spawn(async move {
-            let _session = session;
-            while let Ok(sample) = subscriber.recv_async().await {
-                let payload = sample.payload().to_bytes();
-                match serde_json::from_slice::<MetricsSnapshot>(&payload) {
-                    Ok(snap) => {
-                        if tx.send(snap).await.is_err() {
-                            return;
-                        }
-                    }
-                    Err(e) => tracing::warn!("bad metrics snapshot: {e}"),
+            let _client = client;
+            while let Some(event) = call.next().await {
+                let item = match event {
+                    CallEvent::Item(StreamItem::Notification {
+                        notification: Notification::Metrics { snapshot, .. },
+                    }) => Ok(snapshot),
+                    CallEvent::End(Err(e)) => Err(e.message),
+                    CallEvent::End(Ok(_)) => Err("the lab is gone".into()),
+                    _ => continue,
+                };
+                let last = item.is_err();
+                if tx.send(item).await.is_err() || last {
+                    return;
                 }
             }
+            let _ = tx
+                .send(Err("the connection to the daemon closed".into()))
+                .await;
         });
-        Ok(Source::Zenoh {
+        Ok(Source::Daemon {
             _task: task,
             rx,
             lab: nlink_lab::RunningLab::load(lab).ok(),
@@ -148,7 +160,7 @@ impl Source {
     fn refresh(&mut self) {
         let lab = match self {
             Source::Local { lab, .. } => Some(lab),
-            Source::Zenoh { lab, .. } => lab.as_mut(),
+            Source::Daemon { lab, .. } => lab.as_mut(),
         };
         if let Some(lab) = lab
             && let Ok(fresh) = nlink_lab::RunningLab::load(lab.name())
@@ -160,43 +172,45 @@ impl Source {
     fn lab(&self) -> Option<&nlink_lab::RunningLab> {
         match self {
             Source::Local { lab, .. } => Some(lab),
-            Source::Zenoh { lab, .. } => lab.as_ref(),
+            Source::Daemon { lab, .. } => lab.as_ref(),
         }
     }
 
-    /// Writes are only possible on the local source: there is no
-    /// `rpc/partition` topic, and `ImpairmentRequest` carries only six of
-    /// the ten impairment knobs.
+    /// Writes are only possible on the local source, for now.
     fn can_mutate(&self) -> bool {
         matches!(self, Source::Local { .. })
     }
 
-    /// Cancel-safe: sleeps on the ticker, or awaits the daemon's next
-    /// publication.
+    /// Cancel-safe: sleeps on the ticker, or awaits the subscription's
+    /// next snapshot.
     async fn due(&mut self, ticker: &mut tokio::time::Interval) -> Due {
         match self {
             Source::Local { .. } => {
                 ticker.tick().await;
                 Due::Collect
             }
-            Source::Zenoh { rx, ended, .. } => {
+            Source::Daemon { rx, ended, .. } => {
                 if *ended {
                     // Park forever: the loop must still answer keys, but
                     // this source will never produce anything again.
                     std::future::pending::<()>().await;
                 }
                 match rx.recv().await {
-                    Some(snap) => Due::Snapshot(snap),
+                    Some(Ok(snap)) => Due::Snapshot(snap),
+                    Some(Err(why)) => {
+                        *ended = true;
+                        Due::Closed(why)
+                    }
                     None => {
                         *ended = true;
-                        Due::Closed
+                        Due::Closed("the connection to the daemon closed".into())
                     }
                 }
             }
         }
     }
 
-    /// One local collection. Never called on the Zenoh source.
+    /// One local collection. Never called on the daemon source.
     async fn collect(&mut self) -> nlink_lab::Result<MetricsSnapshot> {
         self.refresh();
         match self {
@@ -204,8 +218,8 @@ impl Source {
                 let (snap, _events) = collector.snapshot(lab).await?;
                 Ok(snap)
             }
-            Source::Zenoh { .. } => Err(nlink_lab::Error::deploy_failed(
-                "the Zenoh source is push-only",
+            Source::Daemon { .. } => Err(nlink_lab::Error::deploy_failed(
+                "the daemon source is push-only",
             )),
         }
     }
@@ -265,7 +279,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         ));
     }
     let interval = args.interval.max(Duration::from_millis(100));
-    let mut source = Source::open(&args, &lab).await?;
+    let mut source = Source::open(&args, &lab, interval).await?;
     let mut app = App::new(&lab, interval, deployed_at_unix(&lab), source.can_mutate());
     if let Some(filter) = &args.node {
         app.filter = filter.to_lowercase();
@@ -311,29 +325,14 @@ async fn run_once(
             tokio::time::sleep(RATE_WINDOW).await;
             source.collect().await?
         }
-        Source::Zenoh { rx, .. } => {
-            // Bounded so a daemon that is not publishing cannot hang CI.
+        Source::Daemon { .. } => {
+            // Bounded so a daemon that does not deliver cannot hang CI.
             let wait = (interval * 5).max(Duration::from_secs(10));
-            match tokio::time::timeout(wait, rx.recv()).await {
-                // the daemon has been sampling: past its baseline
-                Ok(Some(snap)) => {
-                    app.flows_baseline = false;
-                    snap
-                }
-                Ok(None) => {
-                    return Err(nlink_lab::Error::deploy_failed(
-                        "the daemon's metrics stream ended",
-                    ));
-                }
-                // a timeout, exit 124: the exit code set here was replaced
-                // by the error's, 1 (#218)
-                Err(_) => {
-                    return Err(nlink_lab::Error::TimedOut(format!(
-                        "no metrics published within {}s — is `nlink-lab daemon` running?",
-                        wait.as_secs()
-                    )));
-                }
-            }
+            // a fresh collector's first snapshot has no rates: as on the
+            // local source, it is the baseline and the second is printed
+            let baseline = next_snapshot(source, wait).await?;
+            app.apply_snapshot(baseline, &container_nodes(source));
+            next_snapshot(source, wait).await?
         }
     };
     if ctx.json {
@@ -343,6 +342,25 @@ async fn run_once(
     app.apply_snapshot(snapshot, &container_nodes(source));
     print!("{}", ui::render_text(app));
     Ok(())
+}
+
+/// The daemon source's next snapshot, within `wait`.
+async fn next_snapshot(source: &mut Source, wait: Duration) -> nlink_lab::Result<MetricsSnapshot> {
+    let Source::Daemon { rx, .. } = source else {
+        return source.collect().await;
+    };
+    match tokio::time::timeout(wait, rx.recv()).await {
+        Ok(Some(Ok(snap))) => Ok(snap),
+        Ok(Some(Err(why))) => Err(nlink_lab::Error::deploy_failed(why)),
+        Ok(None) => Err(nlink_lab::Error::deploy_failed(
+            "the connection to the daemon closed",
+        )),
+        // a timeout, exit 124 (#218)
+        Err(_) => Err(nlink_lab::Error::TimedOut(format!(
+            "the daemon sent no metrics within {}s",
+            wait.as_secs()
+        ))),
+    }
 }
 
 async fn event_loop(
@@ -399,10 +417,8 @@ async fn event_loop(
                 app.apply_snapshot(snapshot, &container_nodes(source));
                 refresh_impairments(app, source);
             }
-            Step::Due(Due::Closed) => {
-                app.set_error(
-                    "the daemon's metrics stream ended — showing the last sample (q to quit)",
-                );
+            Step::Due(Due::Closed(why)) => {
+                app.set_error(format!("{why} — showing the last sample (q to quit)"));
             }
             Step::Input(Event::Key(key)) if key.kind == KeyEventKind::Press => {
                 if let Some(action) = app.on_key(key) {
@@ -474,11 +490,11 @@ mod tests {
 
     use super::*;
 
-    /// A Zenoh source whose producer has already gone away.
-    fn closed_zenoh_source() -> Source {
-        let (tx, rx) = tokio::sync::mpsc::channel::<MetricsSnapshot>(1);
+    /// A daemon source whose subscription has already gone away.
+    fn closed_daemon_source() -> Source {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<MetricsSnapshot, String>>(1);
         drop(tx);
-        Source::Zenoh {
+        Source::Daemon {
             _task: tokio::spawn(async {}),
             rx,
             lab: None,
@@ -492,11 +508,11 @@ mod tests {
     /// the daemon goes away.
     #[tokio::test]
     async fn a_closed_stream_reports_once_and_then_parks() {
-        let mut source = closed_zenoh_source();
+        let mut source = closed_daemon_source();
         let mut ticker = tokio::time::interval(Duration::from_secs(1));
 
         assert!(
-            matches!(source.due(&mut ticker).await, Due::Closed),
+            matches!(source.due(&mut ticker).await, Due::Closed(_)),
             "the first poll after the stream ends must report it"
         );
         // Every later poll must never resolve, so the `select!` falls
@@ -507,22 +523,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_zenoh_source_is_read_only_and_refuses_writes() {
-        let mut source = closed_zenoh_source();
+    async fn the_daemon_source_is_read_only_and_refuses_writes() {
+        let mut source = closed_daemon_source();
         assert!(!source.can_mutate());
         let err = source
             .act(Action::Partition {
                 endpoint: "a:eth0".into(),
             })
             .await
-            .expect_err("the Zenoh source cannot write");
+            .expect_err("the daemon source cannot write");
         assert!(err.contains("read-only"), "{err}");
     }
 
     #[tokio::test]
-    async fn collecting_from_the_zenoh_source_is_rejected() {
-        let mut source = closed_zenoh_source();
-        assert!(source.collect().await.is_err(), "Zenoh is push-only");
+    async fn collecting_from_the_daemon_source_is_rejected() {
+        let mut source = closed_daemon_source();
+        assert!(
+            source.collect().await.is_err(),
+            "the daemon source is push-only"
+        );
     }
 
     #[test]

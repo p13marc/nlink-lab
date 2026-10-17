@@ -295,17 +295,15 @@ impl TopoViewer {
             }
             Message::ExecSubmit => {
                 let lab = self.active_lab().cloned();
-                if let (Some(node), Some(session), Some(lab)) =
-                    (&self.selected_node, &self.zenoh_session, lab)
+                if let (Some(node), Some(lab)) = (&self.selected_node, lab)
                     && !self.exec_input.trim().is_empty()
                 {
                     self.exec_running = true;
                     self.exec_output = None;
-                    let session = session.clone();
                     let node = node.clone();
                     let input = self.exec_input.clone();
                     return Task::perform(
-                        crate::zenoh_client::exec_command(session, lab, node, input),
+                        crate::daemon::exec_command(lab, node, input),
                         Message::ExecResult,
                     );
                 }

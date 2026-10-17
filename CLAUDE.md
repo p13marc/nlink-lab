@@ -125,7 +125,10 @@ crates/nlink-lab/src/
   frr.rs            # FRR routing daemons: pathspaces, per-daemon config generation, neighbour resolution
   netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
-  ops/              # OpCtx: progress (OpEvent) + cancellation of deploy/apply/destroy/…
+  ops/              # OpCtx: progress (OpEvent) + cancellation of deploy/apply/destroy/…;
+                    #   view (LabStatus, LabSummary, impairments, processes, events with
+                    #   a cursor — what status/ps/stats and the daemon share), read (the
+                    #   API's read calls)
   host.rs           # orphan/stale detection + reaper (tag-gated), reported as Cleanups
   metrics.rs        # MetricsCollector: interface rates/states, top TCP flows, process exits
   logs.rs           # process log tail / cat / follow
@@ -133,6 +136,14 @@ crates/nlink-lab/src/
   wait.rs           # WaitCondition + RunningLab::wait_all (one deadline, progress, cancel)
 crates/nlink-lab-client/src/   # client of the daemon API: Endpoint (unix, ssh dial-stdio,
                                #   cmd), Client (handshake, multiplexed calls), Call
+bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.toml),
+                               #   listen (socket activation, bind 0666, sd_notify),
+                               #   authz (SO_PEERCRED/SO_PEERGROUPS -> Operator/Viewer),
+                               #   server (handshake, per-call tasks, cancel), calls
+                               #   (dispatch), hub (state-root scan, events tail,
+                               #   subscriptions, per-lab metrics threads), exec, audit
+dist/                          # systemd units (socket-activated nlink-labd), sysusers,
+                               #   tmpfiles — `just install-daemon`
 crates/nlink-lab-shared/src/
   api/              # daemon API (docs/API.md): Request (+ meta roles), Response,
                     #   StreamItem/Notification, OpEvent progress, ApiError, DTOs,
@@ -272,7 +283,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (40, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+CLI commands (39, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
 `deploy` (`.nll` or `.nlz`, with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
 `destroy` (`LAB…`, `--all`, `--orphans`), `apply` (`[FILE]`, default the recorded source; `--reset-impairments`),
 `ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,
@@ -288,14 +299,14 @@ impairments, partitions, processes, counters),
 `diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
 `wait [NODE]` (`--tcp`, `--exec`, `--file`, `--listening`, `--log`, `--fd-stable`),
 `ip` (`--iface`, `--cidr`),
-`ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`,
+`ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`,
 `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `node add|rm|restart`, `link add|rm|set` (`--mtu`, `--qdisc`), `fmt` (`--check`, `-w`, `-`), `lint`
 (`--strict`, `--allow`), `doctor` (`--fix`), `verify` (`--file`, the CI drift gate),
 `scenario`, `benchmark` (ping/iperf3 with metric asserts),
 `lsp` (LSP server over stdio, issue #56),
-`top` (`--interval`, `--once`, `--zenoh`, `--zenoh-connect`; ratatui TUI,
-issue #63).
+`top` (`--interval`, `--once`, `--daemon`; ratatui TUI, issue #63; without
+root it reads the daemon's metrics).
 
 Global flags: `--format text|json|ndjson` (`--json`), `--color auto|always|never`,
 `-v`/`-vv`, `-q`. Lab-scoped commands take `-L LAB`. Durations need a unit

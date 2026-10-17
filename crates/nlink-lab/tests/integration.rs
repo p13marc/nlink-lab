@@ -127,8 +127,10 @@ link r:eth1 -- b:eth0 {{ 10.0.2.1/24 -- 10.0.2.2/24 }}
     };
     let cap = nlink_lab::test_helpers::LabCapture::start(&lab.capture_targets()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
+    // two seconds of pings: on a loaded host a ring can come up after a
+    // shorter burst is over, and caught nothing once
     let ping = lab
-        .exec("a", "ping", &["-c3", "-i0.2", "10.0.2.2"])
+        .exec("a", "ping", &["-c10", "-i0.2", "10.0.2.2"])
         .unwrap();
     assert_eq!(ping.exit_code, 0, "{}", ping.stderr);
     let dir = tempfile::tempdir().unwrap();
@@ -137,8 +139,8 @@ link r:eth1 -- b:eth0 {{ 10.0.2.1/24 -- 10.0.2.2/24 }}
     for iface in ["eth0", "eth1"] {
         let path = dir.path().join(format!("{ns}-{iface}.pcap"));
         assert!(kept.contains(&path), "{path:?} not in {kept:?}");
-        // the 24-byte pcap header and some of the six ICMP packets (the
-        // first can go by before the ring is up)
+        // the 24-byte pcap header and some of the twenty ICMP packets
+        // (the first can go by before the ring is up)
         let len = std::fs::metadata(&path).unwrap().len();
         assert!(len > 24 + 3 * 100, "{path:?}: {len} bytes");
     }

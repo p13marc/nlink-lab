@@ -6,9 +6,9 @@ interfaces, and its TCP flows, refreshed every `--interval`. It is
 `--once --json` prints one metrics snapshot (what `metrics` did).
 
 ```bash
-sudo nlink-lab top -L mylab            # collect locally (needs root)
+sudo nlink-lab top -L mylab            # collect itself (root)
 sudo nlink-lab top -L mylab --interval 2s
-nlink-lab top -L mylab --zenoh         # read a running `daemon` (no root)
+nlink-lab top -L mylab                 # without root: read the daemon's
 nlink-lab top -L mylab --once          # one text frame, for pipes and CI
 ```
 
@@ -56,25 +56,28 @@ records the value for `heal` rather than lifting the partition.
 
 ## Two sources
 
-**Local (default)** collects with the same collector `daemon` uses, which
-calls `diagnose` in every namespace and therefore **needs root** — there is
-no partial snapshot to fall back to, so it fails immediately with a message
-pointing at `sudo` or `--zenoh`.
+**Local** (as root) collects the snapshots itself, with the collector
+the daemon uses: it calls `diagnose` in every namespace, which needs
+root. Every key works.
 
-**`--zenoh` / `--zenoh-connect ENDPOINT`** subscribes to a running
-[`daemon`](daemon.md)'s metrics topic instead. No root, and no write
-actions: there is no partition RPC and the impairment RPC carries only six
-of the ten knobs, so `i`/`c`/`p`/`h` are disabled and say so. The
-impairment column still works when the lab's state file is readable
-locally.
+**The daemon** (without root, with `--daemon`, or with
+`NLINK_LAB_DAEMON` set) subscribes to the lab's metrics on
+`nlink-labd`, the host daemon: its socket
+`/run/nlink-lab/api/api.sock`, or the endpoint `NLINK_LAB_DAEMON`
+names (`ssh://HOST` reaches another host's daemon over ssh). It needs
+the `nlink-lab-viewer` group, or `nlink-lab`, not root. It is
+read-only for now: `i`/`c`/`p`/`h` are disabled and say so. The
+impairment column still works when the lab's state is readable
+locally. Without root and without a daemon, `top` says how to get
+either.
 
 ## `--once`
 
 Prints a single frame as plain text and exits, touching no terminal
 control sequences — safe in pipes, in CI and under `watch -n1`. With
 `--json` it prints the raw metrics snapshot
-([schema](../json-schemas/metrics-snapshot.schema.json)), the same shape
-`metrics --format json` emits. The interactive view refuses to start
+([schema](../json-schemas/metrics-snapshot.schema.json)), which is what
+`metrics` printed. The interactive view refuses to start
 without a terminal and tells you to use `--once`.
 
 ## Reference
@@ -84,7 +87,7 @@ without a terminal and tells you to use `--once`.
 ```text
 Live terminal UI for a running lab (nodes, interfaces, flows).
 
-Collects a metrics snapshot every `--interval` with the same collector `daemon` uses, which needs root like `diagnose`; `--zenoh` / `--zenoh-connect` instead reads a running daemon's stream, with no root and no write actions.
+As root, collects a metrics snapshot every `--interval` itself, like `diagnose`. Without root (or with `--daemon`, or `NLINK_LAB_DAEMON` set) it reads them from the nlink-lab daemon, `nlink-labd`: no root needed, and no write actions.
 
 KEYS up/down or j/k  select        Tab  next pane      s  cycle sort i  impair prompt (`delay 50ms loss 1%`)           c  clear p  partition    h  heal       /  filter    ?  help    q  quit
 
@@ -109,11 +112,8 @@ Options:
       --node <SUBSTR>
           Start with the node/interface filter set to this substring
 
-      --zenoh
-          Read metrics from a running `daemon` over Zenoh instead of collecting them locally. No root needed; read-only
-
-      --zenoh-connect <ENDPOINT>
-          Zenoh connect endpoint (implies `--zenoh`)
+      --daemon
+          Read metrics from the nlink-lab daemon (`nlink-labd`) instead of collecting them: no root needed, read-only. What `top` does without root, or with `NLINK_LAB_DAEMON` set (`ssh://HOST` for another host's labs)
 
   -h, --help
           Print help (see a summary with '-h')

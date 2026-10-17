@@ -53,6 +53,11 @@ pub const REMOVED: &[Removed] = &[
         instead: "nlink-lab top --once --json (one snapshot)",
     },
     Removed {
+        name: "daemon",
+        instead: "nlink-lab top --daemon (nlink-labd, the host daemon, serves every lab: \
+                  sudo systemctl enable --now nlink-labd.socket)",
+    },
+    Removed {
         name: "edit",
         instead: "nlink-lab node add|rm, nlink-lab link add|rm|set, nlink-lab impair",
     },
@@ -68,6 +73,22 @@ pub struct RemovedFlag {
 
 /// Every removed flag.
 pub const REMOVED_FLAGS: &[RemovedFlag] = &[
+    RemovedFlag {
+        command: "deploy",
+        flag: "--daemon",
+        instead: "nlink-lab top --daemon (nlink-labd, the host daemon, serves every lab: \
+                  sudo systemctl enable --now nlink-labd.socket)",
+    },
+    RemovedFlag {
+        command: "top",
+        flag: "--zenoh",
+        instead: "nlink-lab top --daemon (NLINK_LAB_DAEMON=ssh://HOST for another host's labs)",
+    },
+    RemovedFlag {
+        command: "top",
+        flag: "--zenoh-connect",
+        instead: "nlink-lab top --daemon (NLINK_LAB_DAEMON=ssh://HOST for another host's labs)",
+    },
     RemovedFlag {
         command: "apply",
         flag: "--check",

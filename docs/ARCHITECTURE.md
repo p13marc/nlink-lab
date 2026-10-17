@@ -54,11 +54,14 @@ nlink-lab/                        ← workspace root
 │   │   ├── fuzz/                 NLL parser fuzz targets (not in workspace)
 │   │   └── tests/                Integration tests (root-gated)
 │   ├── nlink-lab-macros/         #[lab_test] proc macro
-│   └── nlink-lab-shared/         Zenoh topics + metrics types
+│   ├── nlink-lab-shared/         The daemon API (docs/API.md), Zenoh topics, metrics types
+│   └── nlink-lab-client/         Client of the daemon API (unix socket, ssh dial-stdio)
 ├── bins/
 │   ├── lab/                      `nlink-lab` CLI (clap; cmd/<name>.rs each)
-│   ├── nlink-lab-backend/        Zenoh backend daemon + HTTP endpoints
+│   ├── nlink-labd/               The host daemon: every lab behind one authenticated API
+│   ├── nlink-lab-backend/        Per-lab Zenoh publisher (metrics, topology) + HTTP endpoints
 │   └── topoviewer/               Experimental desktop viewer (iced)
+├── dist/                         systemd units, sysusers, tmpfiles for nlink-labd
 ├── examples/                     49 .nll files, all parse-tested
 ├── flatpak/                      Viewer packaging (manifest, metainfo, icon)
 ├── docs/                         User-facing docs (this dir)
@@ -665,9 +668,11 @@ Before opening a PR for a non-trivial change:
 
 ## Where to NOT touch (yet)
 
-- The Zenoh backend daemon (`bins/nlink-lab-backend/`) is a
-  parallel surface for live metrics. If you're adding a new
-  topology feature, the daemon is downstream — don't co-evolve.
+- The Zenoh backend (`bins/nlink-lab-backend/`) is a parallel
+  surface for live metrics, which the daemon (`bins/nlink-labd/`)
+  replaces. If you're adding a new topology feature, both are
+  downstream — don't co-evolve. A view both the CLI and the daemon
+  show belongs in `nlink_lab::ops::view`.
 - The topoviewer GUI (`bins/topoviewer/`) is an experimental
   iced-based viewer, not on the supported-surface list — see
   [GUI.md](GUI.md). It has no integration tests, so treat a change

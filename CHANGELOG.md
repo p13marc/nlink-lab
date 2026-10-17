@@ -79,6 +79,24 @@ under both (#233). Its waves land one by one below.
   `schema_version`. `snapshot ls --json` is `{schema_version, lab,
   snapshots}`. `destroy` without a name no longer picks the only lab:
   name it, or `-L`/`NLINK_LAB`/`use`.
+- **The host daemon replaces `nlink-lab daemon`** (#260):
+
+  | Was | Now |
+  |---|---|
+  | `nlink-lab daemon LAB`, `deploy --daemon` | `nlink-labd`, one daemon for every lab (`just install-daemon`, then `systemctl enable --now nlink-labd.socket`); one lab's Zenoh and HTTP telemetry: `nlink-lab-backend LAB` |
+  | `top --zenoh`, `top --zenoh-connect` | `top` without root, or `top --daemon` (`NLINK_LAB_DAEMON=ssh://HOST` for another host) |
+  | `just install` (SUID root) | `just install` (0755, run with sudo), or `just install-caps` |
+
+  The backend's `rpc/exec` and `rpc/impairment`, which anyone on the
+  network could call, are gone, and the topology it publishes is
+  redacted. In `nlink-lab-shared`, `messages::{ExecRequest,
+  ImpairmentRequest, ImpairmentResponse}` and `topics::{rpc_exec,
+  rpc_impairment}` are removed, and `DEFAULT_SOCKET` is in
+  `nlink_lab_shared::api` (the client re-exports it). `nlink_lab::Error`
+  has an `Api` variant: an error a daemon answered with. `status --json`
+  keeps its shape; its schema's type names are the library's
+  (`NodeView`, `LinkView`, …). A command run without root now fails with
+  `permission_denied` in `--json`, not `internal`.
 - **Authoring and testing** (#255): `graph FILE` and `render --dot`/
   `--mermaid`/`--ascii` are `render --diagram dot|mermaid|ascii FILE`.
   `validate --json`, `lint --json`, `fmt --check --json` and `diff
@@ -641,6 +659,25 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`nlink-labd`, the host daemon** (#260): every lab of the host,
+  whoever deployed it, behind the API of `docs/API.md` on
+  `/run/nlink-lab/api/api.sock`, socket-activated (`dist/`: systemd
+  units, sysusers, tmpfiles; `just install-daemon`).
+  - Who may do what comes from the kernel (`SO_PEERCRED`,
+    `SO_PEERGROUPS`): root and `nlink-lab` operate, `nlink-lab-viewer`
+    reads, anyone else is refused at the handshake. Operators' calls are
+    audited in `audit.ndjson`.
+  - It serves the reads (labs, a lab's status, its topology redacted,
+    processes, impairments, snapshots, events with a cursor, metrics,
+    diagnose, addresses, proc-stat, stats, the host scan), subscriptions
+    (labs, lifecycle, topology, metrics, runtime) and `exec` without a
+    terminal. A lab the CLI deploys is seen within a second.
+  - `ssh HOST nlink-labd dial-stdio` carries a connection to another
+    host.
+  - `top` reads its metrics when not run as root, and the desktop
+    viewer runs its commands through it.
+  - In the library, `nlink_lab::ops::view` holds the views `status`,
+    `ps`, `stats` and the daemon share, and `ops::read` the API's reads.
 - **`nlink-lab-client`** (#257), the Rust client of the daemon API:
   endpoints (`unix:PATH`, `ssh://HOST` through `nlink-labd dial-stdio`,
   `cmd:…`, `NLINK_LAB_DAEMON`), one connection with any number of calls,
@@ -851,6 +888,12 @@ under both (#233). Its waves land one by one below.
   now carry the set's name.
 
 ### Fixed
+
+- **A tracked process's liveness** (#260): a member of the state root's
+  group running `ps` or `status` saw every process root had spawned as
+  dead (`kill(pid, 0)` is EPERM for someone else's process, and was
+  read as "gone"); and a process reaped while it was being looked at
+  was reported alive, a flake of the root suite.
 
 - **A failed or cancelled deploy left `labs/<name>/` and its lock file**
   (#249): the lab never existed, and now nothing of it stays. The

@@ -134,10 +134,10 @@ pub enum Commands {
 
     /// Live terminal UI for a running lab (nodes, interfaces, flows).
     ///
-    /// Collects a metrics snapshot every `--interval` with the
-    /// same collector `daemon` uses, which needs root like `diagnose`;
-    /// `--zenoh` / `--zenoh-connect` instead reads a running daemon's
-    /// stream, with no root and no write actions.
+    /// As root, collects a metrics snapshot every `--interval` itself,
+    /// like `diagnose`. Without root (or with `--daemon`, or
+    /// `NLINK_LAB_DAEMON` set) it reads them from the nlink-lab daemon,
+    /// `nlink-labd`: no root needed, and no write actions.
     ///
     /// KEYS
     ///   up/down or j/k  select        Tab  next pane      s  cycle sort
@@ -345,9 +345,6 @@ pub enum Commands {
         static_script: bool,
     },
 
-    /// Start the Zenoh backend daemon for a running lab.
-    Daemon(cmd::daemon::Args),
-
     /// Create a topology file from a built-in template.
     Init(cmd::init::Args),
 }
@@ -369,7 +366,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("Network", &["impair", "node", "link", "ip", "capture"]),
-    ("Observe", &["events", "top", "diagnose", "daemon"]),
+    ("Observe", &["events", "top", "diagnose"]),
     ("Test", &["test", "scenario", "benchmark"]),
     (
         "Author",

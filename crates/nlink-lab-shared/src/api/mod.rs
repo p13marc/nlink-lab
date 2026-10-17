@@ -25,6 +25,11 @@ pub use frame::{ClientMsg, DataStream, Frame, FrameError, FrameKind, MAX_FRAME, 
 pub use request::{MethodMeta, OnDisconnect, Request, Role};
 pub use response::Response;
 
+/// The daemon's unix socket, where `nlink-labd` listens by default. Its
+/// directory is the daemon's own, so a sandbox (flatpak) can be given
+/// just it.
+pub const DEFAULT_SOCKET: &str = "/run/nlink-lab/api/api.sock";
+
 /// The API version: `(major, minor)`. A client and a daemon of different
 /// majors refuse each other at the handshake.
 pub const API_VERSION: (u32, u32) = (1, 0);

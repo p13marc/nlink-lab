@@ -11,7 +11,7 @@
         "null"
       ],
       "items": {
-        "$ref": "#/$defs/CounterRow"
+        "$ref": "#/$defs/CounterView"
       }
     },
     "created_at": {
@@ -28,7 +28,7 @@
     "impairments": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/ImpairmentRow"
+        "$ref": "#/$defs/ImpairmentView"
       }
     },
     "lab": {
@@ -37,7 +37,7 @@
     "links": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/LinkRow"
+        "$ref": "#/$defs/LinkView"
       }
     },
     "networks": {
@@ -49,7 +49,7 @@
     "nodes": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/NodeRow"
+        "$ref": "#/$defs/NodeView"
       }
     },
     "partitions": {
@@ -84,17 +84,17 @@
     "schema_version",
     "lab",
     "created_at",
-    "current",
     "nodes",
     "links",
     "networks",
     "impairments",
     "partitions",
     "processes",
-    "host_resources"
+    "host_resources",
+    "current"
   ],
   "$defs": {
-    "ContainerRow": {
+    "ContainerView": {
       "type": "object",
       "properties": {
         "id": {
@@ -111,7 +111,8 @@
         "pid"
       ]
     },
-    "CounterRow": {
+    "CounterView": {
+      "description": "A named firewall counter (`counter name …`), read live.",
       "type": "object",
       "properties": {
         "bytes": {
@@ -222,7 +223,7 @@
         "reorder"
       ]
     },
-    "ImpairmentRow": {
+    "ImpairmentView": {
       "description": "An endpoint's impairment as it is: a runtime one (`impair`) replaces\nthe declared one.",
       "type": "object",
       "properties": {
@@ -280,7 +281,7 @@
         }
       }
     },
-    "LinkRow": {
+    "LinkView": {
       "type": "object",
       "properties": {
         "addresses": {
@@ -307,7 +308,7 @@
         "endpoints"
       ]
     },
-    "NodeRow": {
+    "NodeView": {
       "description": "A node of the lab.",
       "type": "object",
       "properties": {
@@ -325,7 +326,7 @@
           "description": "The container's id and init pid, for a container node.",
           "anyOf": [
             {
-              "$ref": "#/$defs/ContainerRow"
+              "$ref": "#/$defs/ContainerView"
             },
             {
               "type": "null"

@@ -17,6 +17,7 @@ path = "src/main.rs"
 iced = { version = "0.14", features = ["canvas", "tokio"] }
 nlink-lab = { workspace = true }
 nlink-lab-shared = { workspace = true }
+nlink-lab-client = { workspace = true }
 zenoh = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }

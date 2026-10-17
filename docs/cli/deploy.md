@@ -22,12 +22,12 @@ DNS → routing daemons → processes → Wi-Fi. State is written to
 `--dry-run` prints the plan and stops before touching the
 kernel.
 
-`deploy` requires either root, SUID install, or
+`deploy` requires either root or
 `CAP_NET_ADMIN`+`CAP_SYS_ADMIN`. Some features need additional caps
 — `CAP_DAC_OVERRIDE` for DNS injection, `CAP_SYS_MODULE` for Wi-Fi.
 
 If a lab with the same name already exists, `deploy` errors with
-exit code 3 unless `--force` is passed.
+exit code 1 unless `--force` is passed.
 
 ## Arguments
 
@@ -148,9 +148,6 @@ Options:
 
       --force
           Destroy existing lab with same name before deploying
-
-      --daemon
-          Start the Zenoh backend daemon after deploying
 
       --skip-validate
           Skip validate block assertions after deploy

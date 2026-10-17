@@ -33,16 +33,26 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
         }
     }
 
-    // ── hwsim ──
-    let radios = crate::wifi::count_wifi_nodes(topology);
-    if radios > 0 {
-        let mut order = Vec::new();
+    // ── Wi-Fi radios ──
+    // All made in the first Wi-Fi node's namespace: one netgroup for the
+    // lab (#176).
+    if let Some(maker) = topology
+        .nodes
+        .iter()
+        .find(|(_, n)| !n.wifi.is_empty())
+        .map(|(n, _)| n)
+    {
         for (node_name, node) in &topology.nodes {
             for wifi in &node.wifi {
-                order.push((node_name.clone(), wifi.name.clone()));
+                ops.push(Op::CreateRadio {
+                    node: node_name.clone(),
+                    iface: wifi.name.clone(),
+                    radio: crate::wifi::radio_name(&topology.namespace_name(node_name), &wifi.name),
+                    mode: wifi.mode.clone(),
+                    maker: maker.clone(),
+                });
             }
         }
-        ops.push(Op::LoadHwsim { radios, order });
     }
 
     // ── host-reachable mgmt bridge ──

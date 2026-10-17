@@ -29,7 +29,7 @@ pub struct RunningLab {
     pids: Vec<(String, u32)>,
     /// Whether DNS hosts entries were injected into /etc/hosts.
     dns_injected: bool,
-    /// Whether mac80211_hwsim was loaded.
+    /// Whether the lab made Wi-Fi radios.
     wifi_loaded: bool,
     /// Partitioned endpoints (`impair --partition`), each with the
     /// impairment it had then (what an older nlink-lab restores on heal).
@@ -404,7 +404,8 @@ impl RunningLab {
         self.dns_injected
     }
 
-    /// Whether mac80211_hwsim was loaded.
+    /// Whether the lab made Wi-Fi radios (the name predates them: it
+    /// once meant that the lab loaded `mac80211_hwsim`).
     pub fn wifi_loaded(&self) -> bool {
         self.wifi_loaded
     }
@@ -1812,6 +1813,21 @@ impl RunningLab {
         // 1b. Drop the lab's cgroups now that its processes are gone
         crate::cgroup::remove_lab(&self.topology.lab.name);
 
+        // 1c. Delete the Wi-Fi radios, each from the namespace it is in:
+        // hwsim takes a request for a radio only from there (#176).
+        for (node_name, node) in &self.topology.nodes {
+            let Some(ns) = self.ns_resolver_of(node_name) else {
+                continue;
+            };
+            for wifi in &node.wifi {
+                let radio =
+                    crate::wifi::radio_name(&self.topology.namespace_name(node_name), &wifi.name);
+                if let Err(e) = crate::wifi::delete_radio(&ns, &radio).await {
+                    tracing::warn!("{e}");
+                }
+            }
+        }
+
         // 2. Remove containers
         if let Some(binary) = &self.runtime_binary {
             for container in self.containers.values() {
@@ -1897,9 +1913,8 @@ impl RunningLab {
             }
         }
 
-        // 5c. Unload mac80211_hwsim and clean up WiFi configs
+        // 5c. hostapd / wpa_supplicant configs
         if self.wifi_loaded {
-            crate::wifi::release_hwsim(&self.topology.lab.name);
             crate::wifi::cleanup_configs(&self.topology.lab.name);
         }
 

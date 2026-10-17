@@ -39,7 +39,7 @@ nlink-lab/                        ← workspace root
 │   │   │   ├── capture.rs        Packet capture (netring backend)
 │   │   │   ├── dns.rs            /etc/hosts injection / removal
 │   │   │   ├── frr.rs            FRR daemons (zebra, ospfd, bgpd)
-│   │   │   ├── wifi.rs           hostapd/wpa_supplicant + hwsim
+│   │   │   ├── wifi.rs           hostapd/wpa_supplicant + hwsim radios
 │   │   │   ├── container.rs      Docker / Podman wrapper
 │   │   │   ├── cgroup.rs         cpu/memory limits for container nodes
 │   │   │   ├── ns_exec.rs        setns + spawn (detached, reaped)
@@ -148,7 +148,7 @@ first, in *reverse* stage order.
 | # | Stage | What it creates |
 |---|-------|-----------------|
 | 1 | `Namespaces` | network namespaces and containers |
-| 2 | `Hwsim` | `mac80211_hwsim` load + PHY moves |
+| 2 | `Hwsim` | one `mac80211_hwsim` radio per Wi-Fi interface, moved to its node, interface named as declared |
 | 3 | `MgmtBridge` | host-reachable mgmt bridge + per-node veth peers |
 | 4 | `Networks` | bridge networks, member veths, VLANs |
 | 5 | `Links` | point-to-point veth pairs |
@@ -218,7 +218,7 @@ lock files and run in parallel without contention.
 
 **Global state caveat**: a few subsystems mutate host-global state
 without per-lab locks — `dns::inject_hosts` rewrites `/etc/hosts`,
-the mac80211_hwsim module load is process-global, etc. Two
+the mac80211_hwsim module is host-global, etc. Two
 parallel deploys that both touch one of these surfaces can race.
 The "Process & namespace model" section below has the full
 inventory.
@@ -317,8 +317,10 @@ parallel deploys that both exercise one of these can race:
 - **`/etc/hosts`** — `crates/nlink-lab/src/dns.rs` rewrites the
   managed section non-atomically across labs. Only matters when
   `dns hosts` is set in the topology.
-- **`mac80211_hwsim`** — kernel module load is process-global.
-  Multiple Wi-Fi labs share the same hwsim radio pool.
+- **`mac80211_hwsim`** — the module is host-global, but its radios
+  are not shared: each lab makes its own over netlink, in one of its
+  namespaces, so they hear one another and no other lab's (#176). The
+  module is loaded (`radios=0`) once and never unloaded.
 - **Default network namespace** — `mgmt host-reachable` adds a
   bridge to the *host* network namespace; the bridge name is
   hash-derived per lab, so no name collision, but allocation of

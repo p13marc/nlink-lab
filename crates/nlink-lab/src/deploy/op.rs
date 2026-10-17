@@ -225,9 +225,18 @@ pub enum Op {
         pull: Option<String>,
         opts: Box<CreateOpts>,
     },
-    LoadHwsim {
-        radios: u32,
-        order: Vec<(String, String)>,
+    /// A `mac80211_hwsim` radio for Wi-Fi interface `iface` of `node`
+    /// (#176). Made over netlink in `maker`'s namespace — the same for
+    /// every radio of the lab, so they share its netgroup and hear one
+    /// another, and no other lab's — then moved to `node`, where its
+    /// netdev is created as `iface`.
+    CreateRadio {
+        node: String,
+        iface: String,
+        /// The radio's (and its wiphy's) name, unique on the host.
+        radio: String,
+        mode: crate::types::WifiMode,
+        maker: String,
     },
     CreateMgmtBridge {
         name: String,
@@ -363,6 +372,11 @@ pub enum Op {
     RemoveDns {
         lab: String,
     },
+    DeleteRadio {
+        node: String,
+        iface: String,
+        radio: String,
+    },
 }
 
 impl Op {
@@ -374,7 +388,7 @@ impl Op {
             | CreateContainer { .. }
             | DeleteNamespace { .. }
             | RemoveContainer { .. } => Stage::Namespaces,
-            LoadHwsim { .. } => Stage::Hwsim,
+            CreateRadio { .. } | DeleteRadio { .. } => Stage::Hwsim,
             CreateMgmtBridge { .. } | CreateMgmtVeth { .. } | DeleteHostLink { .. } => {
                 Stage::MgmtBridge
             }
@@ -407,7 +421,9 @@ impl Op {
             CreateContainer { node, .. } | RemoveContainer { node, .. } => {
                 format!("container:{node}")
             }
-            LoadHwsim { .. } => "hwsim".into(),
+            CreateRadio { node, iface, .. } | DeleteRadio { node, iface, .. } => {
+                format!("radio:{node}:{iface}")
+            }
             CreateMgmtBridge { name, .. } => format!("hostlink:{name}"),
             CreateMgmtVeth { peer, .. } => format!("hostlink:{peer}"),
             DeleteHostLink { name } => format!("hostlink:{name}"),
@@ -466,6 +482,13 @@ impl Op {
                 pathspace: spec.pathspace.clone(),
                 daemons: spec.daemons.clone(),
             },
+            CreateRadio {
+                node, iface, radio, ..
+            } => DeleteRadio {
+                node: node.clone(),
+                iface: iface.clone(),
+                radio: radio.clone(),
+            },
             WifiDaemon { node, wifi } => KillWifiDaemon {
                 node: node.clone(),
                 name: wifi.name.clone(),
@@ -514,6 +537,7 @@ impl Op {
                 | KillWifiDaemon { .. }
                 | KillFrrDaemons { .. }
                 | RemoveDns { .. }
+                | DeleteRadio { .. }
         )
     }
 
@@ -523,7 +547,13 @@ impl Op {
         match self {
             CreateNamespace { node, ns } => format!("create namespace {ns} for {node}"),
             CreateContainer { node, image, .. } => format!("create container for {node} ({image})"),
-            LoadHwsim { radios, .. } => format!("load mac80211_hwsim radios={radios}"),
+            CreateRadio {
+                node,
+                iface,
+                radio,
+                mode,
+                ..
+            } => format!("radio {radio} → {node}:{iface} ({mode:?})"),
             CreateMgmtBridge { name, ip, prefix } => {
                 format!("create mgmt bridge {name} {ip}/{prefix}")
             }
@@ -586,6 +616,7 @@ impl Op {
             KillExec { node, index } => format!("{node}: stop exec[{index}]"),
             KillWifiDaemon { node, name, mode } => format!("{node}: stop wifi {name} ({mode:?})"),
             RemoveDns { lab } => format!("remove /etc/hosts entries for {lab}"),
+            DeleteRadio { node, radio, .. } => format!("delete radio {radio} of {node}"),
         }
     }
 }

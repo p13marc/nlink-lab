@@ -275,8 +275,9 @@ descriptors, kernel data structures). The known coordination points:
   race.
 - **Subnet pool** (`subnet auto/N`) is flock-protected.
 - Per-lab state files use per-lab flocks; they're independent.
-- mac80211_hwsim is a single host-wide module; parallel Wi-Fi labs
-  share its radio pool.
+- mac80211_hwsim is a single host-wide module, but each Wi-Fi lab
+  makes radios of its own over netlink and hears only them (#176):
+  parallel Wi-Fi labs share neither radios nor a medium.
 
 In practice we've validated 8 parallel deploys of `simple.nll` on a
 12-core machine. For higher fan-out, configure your test runner's

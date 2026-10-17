@@ -1,7 +1,8 @@
 # Wi-Fi emulation: AP with two stations.
 #
-# Uses mac80211_hwsim to create virtual Wi-Fi radios. Each node gets
-# one PHY moved into its namespace, then hostapd (AP) or wpa_supplicant
+# Uses mac80211_hwsim to create virtual Wi-Fi radios. Each interface
+# gets a radio of its own, made for the lab and moved into its node,
+# with the name it declares; then hostapd (AP) or wpa_supplicant
 # (station) handles association.
 #
 # Requires: mac80211_hwsim kernel module, hostapd, wpa_supplicant.

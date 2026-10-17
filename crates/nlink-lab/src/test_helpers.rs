@@ -141,7 +141,7 @@ pub struct CleanupReport {
 ///      `/etc/netns/<ns>` directory),
 ///    - the host-reachable mgmt bridge and its veth peers,
 ///    - containers named `<prefix>-<node>`,
-///    - hwsim configs / module when the topology has Wi-Fi nodes,
+///    - hostapd / wpa_supplicant configs when the topology has Wi-Fi nodes,
 ///    - `/etc/hosts` section, subnet-pool allocations, state dir.
 ///
 /// Requires root; without it the sweep simply reports warnings.
@@ -235,9 +235,9 @@ pub async fn cleanup_lab(topology: &Topology) -> CleanupReport {
         }
     }
 
+    // The lab's radios went with its namespaces (#176).
     if crate::wifi::count_wifi_nodes(topology) > 0 {
         crate::wifi::cleanup_configs(&lab_name);
-        crate::wifi::unload_hwsim();
     }
 
     if let Err(e) = crate::dns::remove_hosts(&lab_name) {

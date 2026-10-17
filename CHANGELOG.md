@@ -208,9 +208,26 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   one by hand sets it. `nlink_lab_backend::collector`'s
   `rates_between`, `IfaceCounters` and `IfaceRates` are removed; the
   collector's rates come from nlink.
+- **`mac80211_hwsim` is loaded with `radios=0` when it is not loaded,
+  and never unloaded** (#176). A lab deployed by 0.13 used radios the
+  module made at load: destroying it with this release leaves the module
+  loaded, with those radios. `sudo rmmod mac80211_hwsim` removes it once
+  no Wi-Fi lab is running.
+- **A mesh-point `wifi` without a `mesh-id`** (or with one longer than
+  32 bytes) is an error, `wifi-mesh-id`. It deployed with no mesh.
+- Library API (#176): `wifi::{load_hwsim, load_hwsim_for, release_hwsim,
+  unload_hwsim, plan_hwsim_load, can_unload_hwsim,
+  hwsim_users_excluding, loaded_hwsim_radios, HwsimUser, HwsimAction}`
+  are removed, and `Op::LoadHwsim` is `Op::CreateRadio` (one per
+  interface) with its inverse `Op::DeleteRadio`. `deploy --dry-run`
+  lists the radios. `wifi::generate_hostapd_conf` and
+  `generate_wpa_conf` take the node's control directory
+  (`wifi::ctrl_dir`).
 
 ### Added
 
+- **`examples/wifi-mesh.nll`**: three 802.11s mesh points that reach each
+  other (#176).
 - **`RunningLab::diagnose_since(node, previous)`** (#191): each
   interface's `rates` since an earlier `diagnose`, over the time between
   the two reads of its counters (nlink's `Diagnostics::scan_since`). A
@@ -356,8 +373,42 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   bond or VRF releases it.
 - **Wi-Fi labs could move a host's own Wi-Fi card into a node.** nlink
   now really moves a wiphy (it used to ack and ignore the request), and
-  nlink-lab took the first N wiphys; it takes only `mac80211_hwsim`
-  radios.
+  nlink-lab took the first N wiphys. Each Wi-Fi interface now gets a
+  radio made for it (below), so no other wiphy is ever moved.
+- **Wi-Fi radios are the lab's own** (#176). A deploy loaded
+  `mac80211_hwsim` with as many radios as every Wi-Fi lab on the host
+  needed, reloading it when too small (which broke the Wi-Fi of the
+  labs already running), and moved the radios into the nodes by index.
+  It now makes one radio per Wi-Fi interface over the hwsim
+  generic-netlink family, named `<namespace>-<iface>`, in one of the
+  lab's namespaces: a lab's radios hear one another and nothing else,
+  not another lab's nor the host's. Then:
+  - **the interface has the name it declares.** hwsim named its netdevs
+    `wlan0`, `wlan1`, … host-wide, so in `examples/wifi.nll` the second
+    and third nodes got `wlan1`/`wlan2` while hostapd, wpa_supplicant
+    and the addresses used `wlan0`;
+  - **a mesh forms.** A `mode mesh` interface is created as a mesh point
+    and joins over nl80211; the join used to run `iw … mesh join` on a
+    managed interface, and its failure was only logged. A failed join
+    now fails the deploy, and `iw` is not needed;
+  - **stations associate.** Every wpa_supplicant used the control
+    directory `/var/run/wpa_supplicant`, and `/run` is the host's in
+    every namespace: the second station's `wlan0` socket clashed with
+    the first's, and it exited. Each node's hostapd or wpa_supplicant
+    has a directory of its own, `/run/nlink-lab/wifi/<lab>/<node>`
+    (`wpa_cli -p DIR`);
+  - a 5 GHz channel writes `hw_mode=a` to hostapd's config (it wrote
+    `g`, which has no 5 GHz channels), and a daemon that exits at start
+    reports what it printed on stdout, where hostapd reports;
+  - `destroy` deletes the lab's radios, and a radio goes with its
+    namespace too.
+
+  Verified in a VM running Debian's 6.12.113 kernel. With the previous
+  build, `examples/wifi.nll` and `examples/wifi-mesh.nll` both failed
+  to deploy: "interface not found: wlan0" on their second node. Now both
+  stations associate and ping the AP, the three mesh points reach each
+  other, and two mesh labs with the same mesh-id each peer only with
+  their own nodes.
 - **The tree-sitter CI step that parses every example parsed nothing.**
   It only grepped for `ERROR`, so a run that printed no tree passed. That
   is how `examples/frr-bgp.nll` (`validate retries … interval … { … }`)

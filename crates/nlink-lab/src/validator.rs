@@ -28,6 +28,7 @@ use crate::helpers::{
 };
 use crate::types::{
     Assertion, BenchmarkTest, EndpointRef, Impairment, InterfaceKind, ScenarioAction, Topology,
+    WifiMode,
 };
 
 /// Every rule identifier the validator can emit, in dispatch order.
@@ -87,6 +88,7 @@ pub const RULE_IDS: &[&str] = &[
     "vxlan-vni-range",
     "vxlan-underlay-address",
     "wifi-channel-range",
+    "wifi-mesh-id",
     "macvlan-parent-set",
     "vrf-interface-exists",
     "assertion-node-exists",
@@ -417,6 +419,7 @@ impl Topology {
         validate_vxlan_vni(self, &mut issues);
         validate_vxlan_underlay(self, &mut issues);
         validate_wifi_channels(self, &mut issues);
+        validate_wifi_mesh_ids(self, &mut issues);
         validate_macvlan_parents(self, &mut issues);
         validate_vrf_interfaces(self, &interfaces, &mut issues);
         validate_test_refs(self, &interfaces, &mut issues);
@@ -2381,8 +2384,8 @@ fn validate_vxlan_vni(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     }
 }
 
-/// Channels the deployer can map to a frequency (mirrors
-/// `deploy::freq_from_channel`): 2.4 GHz 1-14 and 5 GHz 36/40/44/48.
+/// Channels the deployer writes hostapd configs and mesh joins for
+/// (`wifi::freq_mhz`): 2.4 GHz 1-14 and 5 GHz 36/40/44/48.
 fn is_supported_wifi_channel(channel: u32) -> bool {
     (1..=14).contains(&channel) || matches!(channel, 36 | 40 | 44 | 48)
 }
@@ -2403,6 +2406,31 @@ fn validate_wifi_channels(topology: &Topology, issues: &mut Vec<ValidationIssue>
                     location: Some(format!("nodes.{node_name}.wifi[{i}].channel")),
                 });
             }
+        }
+    }
+}
+
+/// A mesh point joins a mesh by its id, which nl80211 takes as 1 to 32
+/// bytes; without one the deploy fails at the join (#176).
+fn validate_wifi_mesh_ids(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    for (node_name, node) in sorted(&topology.nodes) {
+        for (i, wifi) in node.wifi.iter().enumerate() {
+            if wifi.mode != WifiMode::Mesh {
+                continue;
+            }
+            let problem = match wifi.mesh_id.as_deref() {
+                None => "needs a mesh-id".to_string(),
+                Some(id) if id.is_empty() || id.len() > 32 => {
+                    format!("mesh-id '{id}' is {} bytes; 1 to 32 are allowed", id.len())
+                }
+                Some(_) => continue,
+            };
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "wifi-mesh-id",
+                message: format!("Wi-Fi mesh point '{node_name}:{}' {problem}", wifi.name),
+                location: Some(format!("nodes.{node_name}.wifi[{i}].mesh_id")),
+            });
         }
     }
 }
@@ -4858,6 +4886,30 @@ node sta {
             hits[0].location.as_deref(),
             Some("nodes.ap.wifi[0].channel")
         );
+    }
+
+    #[test]
+    fn test_wifi_mesh_id() {
+        let result = parse_and_validate(
+            r#"lab "t"
+node a { wifi wlan0 mode mesh { channel 1 10.0.0.1/24 } }
+node b { wifi wlan0 mode mesh { mesh-id "this-mesh-id-is-longer-than-32-bytes" 10.0.0.2/24 } }
+node c { wifi wlan0 mode mesh { mesh-id "lab" 10.0.0.3/24 } }
+node d { wifi wlan0 mode station { ssid "x" 10.0.0.4/24 } }
+"#,
+        );
+        let hits = rules_of(&result, "wifi-mesh-id");
+        let at: Vec<_> = hits.iter().map(|h| h.location.as_deref()).collect();
+        assert_eq!(
+            at,
+            [
+                Some("nodes.a.wifi[0].mesh_id"),
+                Some("nodes.b.wifi[0].mesh_id")
+            ],
+            "{:?}",
+            result.issues()
+        );
+        assert!(hits[1].message.contains("36 bytes"), "{}", hits[1].message);
     }
 
     #[test]

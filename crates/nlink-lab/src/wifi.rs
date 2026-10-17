@@ -1,63 +1,54 @@
 //! Wi-Fi emulation support via mac80211_hwsim.
 //!
-//! Provides hostapd/wpa_supplicant configuration generation, hwsim module
-//! management, and PHY-to-namespace mapping.
+//! Provides hostapd/wpa_supplicant configuration generation and the
+//! radios Wi-Fi interfaces run on.
 //!
-//! # Sharing `mac80211_hwsim` between labs (issue #37)
+//! # Radios (#176)
 //!
-//! `mac80211_hwsim` is a single, host-global module whose radio count is
-//! fixed at load time (`radios=N`). Every PHY it creates lives in the root
-//! namespace until a deploy moves it into a node namespace, and `rmmod`
-//! destroys *all* of them — including the ones another running lab moved
-//! into its nodes. This module therefore treats the module as a shared,
-//! reference-counted resource:
+//! Each Wi-Fi interface gets a radio of its own, made at deploy time over
+//! the `MAC80211_HWSIM` generic-netlink family with no interface of its
+//! own, and named after the node's namespace and the interface
+//! ([`radio_name`]). A radio hears only radios of its netgroup, which is
+//! the namespace it was made in, so every radio of a lab is made in one
+//! namespace (the first Wi-Fi node's) and then moved to its node. There
+//! the interface is created with its declared name, as a station (hostapd
+//! turns an AP's into an access point) or a mesh point.
 //!
-//! * [`load_hwsim`] / [`load_hwsim_for`] add up the radios every other
-//!   deployed lab with `wifi_loaded` still needs (read from the state
-//!   files), compare the total against the loaded module's `radios=`
-//!   parameter, and only `rmmod`+`modprobe` when the current instance is
-//!   too small. A big-enough module is left untouched.
-//! * [`release_hwsim`] / [`unload_hwsim`] only `rmmod` when no other
-//!   deployed lab still has `wifi_loaded`.
-//! * [`has_hwsim`] probes availability without loading or unloading
-//!   anything.
-//!
-//! **Residual limitation.** When the loaded instance really is too small
-//! for the sum of all Wi-Fi labs, the only way to grow it is a reload, and
-//! that still kills the PHYs of every lab already running (their hostapd /
-//! wpa_supplicant lose their interfaces). nlink-lab logs a warning naming
-//! the affected labs before doing so. To avoid it, either deploy the
-//! largest Wi-Fi lab first, or pre-load the module by hand with enough
-//! radios for every lab you plan to run concurrently
-//! (`modprobe mac80211_hwsim radios=N`) — nlink-lab will then never
-//! reload it. Dynamic radio creation through the hwsim generic-netlink
-//! family would remove the limitation entirely but is not implemented.
+//! The lab's radios hear each other and nothing else: not another lab's,
+//! nor radios `modprobe mac80211_hwsim radios=N` made for the host. The
+//! module is loaded once, with `radios=0`, when it is not loaded yet, and
+//! never unloaded. `destroy` deletes the radios, and a radio made in a lab
+//! namespace also goes when the namespace it is in is deleted.
 
 use std::io::Write as _;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
+use nlink::netlink::genl::nl80211::{InterfaceType, WifiBand, channel_to_freq};
+use nlink::netlink::{Connection, Hwsim};
+
+use crate::deploy::NsRef;
 use crate::error::{Error, Result};
-use crate::types::WifiConfig;
-#[cfg(test)]
-use crate::types::WifiMode;
+use crate::types::{WifiConfig, WifiMode};
 
 /// sysfs directory that exists iff the module is loaded.
 const HWSIM_SYSFS_DIR: &str = "/sys/module/mac80211_hwsim";
 
-/// Load-time `radios=` parameter of the running module instance.
-const HWSIM_RADIOS_PARAM: &str = "/sys/module/mac80211_hwsim/parameters/radios";
-
 /// Generate a hostapd configuration file for an AP node.
-pub fn generate_hostapd_conf(config: &WifiConfig) -> String {
+///
+/// `ctrl_dir` is the node's control-socket directory ([`ctrl_dir`]).
+pub fn generate_hostapd_conf(config: &WifiConfig, ctrl_dir: &str) -> String {
     let ssid = config.ssid.as_deref().unwrap_or("nlink-lab");
     let channel = config.channel.unwrap_or(1);
+    // 802.11a above channel 14: `g` has no 5 GHz channels.
+    let hw_mode = if channel > 14 { "a" } else { "g" };
 
     let mut conf = format!(
         "interface={iface}\n\
          driver=nl80211\n\
+         ctrl_interface={ctrl_dir}\n\
          ssid={ssid}\n\
-         hw_mode=g\n\
+         hw_mode={hw_mode}\n\
          channel={channel}\n",
         iface = config.name,
     );
@@ -75,12 +66,14 @@ pub fn generate_hostapd_conf(config: &WifiConfig) -> String {
 }
 
 /// Generate a wpa_supplicant configuration file for a station node.
-pub fn generate_wpa_conf(config: &WifiConfig) -> String {
+///
+/// `ctrl_dir` is the node's control-socket directory ([`ctrl_dir`]).
+pub fn generate_wpa_conf(config: &WifiConfig, ctrl_dir: &str) -> String {
     let ssid = config.ssid.as_deref().unwrap_or("nlink-lab");
 
     if let Some(pass) = &config.passphrase {
         format!(
-            "ctrl_interface=/var/run/wpa_supplicant\n\
+            "ctrl_interface={ctrl_dir}\n\
              network={{\n\
              \tssid=\"{ssid}\"\n\
              \tpsk=\"{pass}\"\n\
@@ -89,7 +82,7 @@ pub fn generate_wpa_conf(config: &WifiConfig) -> String {
         )
     } else {
         format!(
-            "ctrl_interface=/var/run/wpa_supplicant\n\
+            "ctrl_interface={ctrl_dir}\n\
              network={{\n\
              \tssid=\"{ssid}\"\n\
              \tkey_mgmt=NONE\n\
@@ -98,254 +91,69 @@ pub fn generate_wpa_conf(config: &WifiConfig) -> String {
     }
 }
 
-// ── hwsim refcounting ───────────────────────────────────────────────
+// ── radios ──────────────────────────────────────────────────────────
 
-/// A deployed lab's claim on `mac80211_hwsim`, as recorded in its state.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HwsimUser {
-    /// Lab name.
-    pub lab: String,
-    /// `LabState::wifi_loaded` — whether the lab relies on hwsim PHYs.
-    pub wifi_loaded: bool,
-    /// Number of hwsim radios the lab's topology moved into its nodes.
-    pub radios: u32,
+/// The radio of Wi-Fi interface `iface` in namespace `ns`: its wiphy's
+/// name, unique on the host as the namespace is.
+pub fn radio_name(ns: &str, iface: &str) -> String {
+    format!("{ns}-{iface}")
 }
 
-/// What [`load_hwsim_for`] decided to do with the module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HwsimAction {
-    /// Module was not loaded: `modprobe mac80211_hwsim radios=N`.
-    Load {
-        /// Radio count passed to `modprobe`.
-        radios: u32,
-    },
-    /// Module is loaded with enough radios for every lab: left untouched.
-    Keep {
-        /// Radio count of the running instance.
-        radios: u32,
-    },
-    /// Module is loaded but too small: `rmmod` + `modprobe radios=N`.
-    ///
-    /// This destroys the PHYs of every other lab in `disrupts`.
-    Reload {
-        /// New radio count.
-        radios: u32,
-        /// Radio count of the instance being replaced.
-        previous: u32,
-        /// Number of other deployed labs whose Wi-Fi is broken by the reload.
-        disrupts: usize,
-    },
-}
-
-/// Decide how to satisfy a lab needing `needed` radios given the loaded
-/// module's radio count (`current`, `None` when not loaded) and the other
-/// deployed labs. Pure; see [`load_hwsim_for`] for the side effects.
-///
-/// The total radio requirement is `needed` plus the radios of every other
-/// lab with `wifi_loaded`: those PHYs are already inside that lab's
-/// namespaces, so they cannot be reused by the new lab.
-pub fn plan_hwsim_load(needed: u32, current: Option<u32>, others: &[HwsimUser]) -> HwsimAction {
-    let users: Vec<&HwsimUser> = others.iter().filter(|u| u.wifi_loaded).collect();
-    let in_use: u32 = users.iter().map(|u| u.radios).sum();
-    let total = needed.saturating_add(in_use);
-
-    match current {
-        None => HwsimAction::Load { radios: total },
-        Some(cur) if cur >= total => HwsimAction::Keep { radios: cur },
-        Some(cur) => HwsimAction::Reload {
-            radios: total,
-            previous: cur,
-            disrupts: users.len(),
-        },
+/// The interface type a Wi-Fi interface is created as. An AP starts as a
+/// station: hostapd makes it an access point.
+pub fn interface_type(mode: &WifiMode) -> InterfaceType {
+    match mode {
+        WifiMode::Ap | WifiMode::Station => InterfaceType::Station,
+        WifiMode::Mesh => InterfaceType::MeshPoint,
     }
 }
 
-/// Decide whether the module can be unloaded once `others` (every deployed
-/// lab except the one being destroyed) is what remains. Pure.
-pub fn can_unload_hwsim(others: &[HwsimUser]) -> bool {
-    !others.iter().any(|u| u.wifi_loaded)
+/// The centre frequency of `channel` in MHz: 2.4 GHz for 1-14, 5 GHz
+/// above (`wifi-channel-range` limits what a topology can ask for).
+pub fn freq_mhz(channel: u32) -> Option<u32> {
+    let band = if channel <= 14 {
+        WifiBand::Band2Ghz
+    } else {
+        WifiBand::Band5Ghz
+    };
+    channel_to_freq(channel, band)
 }
 
-/// Collect the hwsim claims of every deployed lab except `exclude`.
-///
-/// Reads each lab's state file through [`crate::state`]. A lab whose state
-/// cannot be read is reported as a Wi-Fi user with zero radios so that the
-/// unload path stays conservative (never `rmmod` under an unknown lab).
-pub fn hwsim_users_excluding(exclude: Option<&str>) -> Result<Vec<HwsimUser>> {
-    let mut users = Vec::new();
-    for info in crate::state::list()? {
-        if Some(info.name.as_str()) == exclude {
-            continue;
-        }
-        match crate::state::load(&info.name) {
-            Ok((state, topology)) => users.push(HwsimUser {
-                lab: info.name,
-                wifi_loaded: state.wifi_loaded,
-                radios: if state.wifi_loaded {
-                    count_wifi_nodes(&topology)
-                } else {
-                    0
-                },
-            }),
-            Err(e) => {
-                tracing::warn!(
-                    "cannot read state of lab '{}' ({e}); assuming it uses mac80211_hwsim",
-                    info.name
-                );
-                users.push(HwsimUser {
-                    lab: info.name,
-                    wifi_loaded: true,
-                    radios: 0,
-                });
-            }
-        }
+/// Load `mac80211_hwsim` with no radios of its own, unless it is loaded:
+/// the lab makes its radios over netlink, and a loaded module is left as
+/// it is, radios and all.
+pub fn ensure_hwsim() -> Result<()> {
+    if Path::new(HWSIM_SYSFS_DIR).exists() {
+        return Ok(());
     }
-    Ok(users)
-}
-
-/// Radio count of the loaded module instance, `None` when it is not loaded.
-pub fn loaded_hwsim_radios() -> Option<u32> {
-    if !Path::new(HWSIM_SYSFS_DIR).exists() {
-        return None;
-    }
-    // The parameter file is missing on some kernels (built-in module);
-    // treat that as "loaded, size unknown" = 0 so a deploy reloads.
-    Some(
-        std::fs::read_to_string(HWSIM_RADIOS_PARAM)
-            .ok()
-            .and_then(|s| s.trim().parse::<i64>().ok())
-            .map(|n| u32::try_from(n).unwrap_or(0))
-            .unwrap_or(0),
-    )
-}
-
-fn modprobe_hwsim(radios: u32) -> Result<()> {
     let status = std::process::Command::new("modprobe")
-        .args(["mac80211_hwsim", &format!("radios={radios}")])
+        .args(["mac80211_hwsim", "radios=0"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
         .map_err(|e| Error::deploy_failed(format!("failed to run modprobe: {e}")))?;
-
     if !status.success() {
         return Err(Error::deploy_failed(
-            "failed to load mac80211_hwsim kernel module",
+            "failed to load the mac80211_hwsim kernel module",
         ));
     }
     Ok(())
 }
 
-fn rmmod_hwsim() {
-    let _ = std::process::Command::new("rmmod")
-        .arg("mac80211_hwsim")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-}
-
-/// Make sure `mac80211_hwsim` is loaded with enough free radios for a lab
-/// that needs `radios` of them, without disturbing other deployed labs
-/// unless the module has to grow (see the module docs for the caveat).
-///
-/// `lab_name` is the lab being deployed; its own state file (if any) is
-/// ignored when counting other users. Returns the action taken.
-pub fn load_hwsim_for(lab_name: &str, radios: u32) -> Result<HwsimAction> {
-    let others = match hwsim_users_excluding(Some(lab_name)) {
-        Ok(u) => u,
-        Err(e) => {
-            tracing::warn!(
-                "cannot list deployed labs ({e}); sizing mac80211_hwsim for this lab only"
-            );
-            Vec::new()
-        }
-    };
-    let action = plan_hwsim_load(radios, loaded_hwsim_radios(), &others);
-    match action {
-        HwsimAction::Load { radios } => {
-            tracing::info!("loading mac80211_hwsim with radios={radios}");
-            modprobe_hwsim(radios)?;
-        }
-        HwsimAction::Keep { radios: cur } => {
-            tracing::info!("mac80211_hwsim already loaded with radios={cur}; reusing it");
-        }
-        HwsimAction::Reload {
-            radios,
-            previous,
-            disrupts,
-        } => {
-            if disrupts > 0 {
-                let names: Vec<&str> = others
-                    .iter()
-                    .filter(|u| u.wifi_loaded)
-                    .map(|u| u.lab.as_str())
-                    .collect();
-                tracing::warn!(
-                    "mac80211_hwsim is loaded with radios={previous} but {radios} are needed; \
-                     reloading it will break the Wi-Fi of running lab(s): {}. \
-                     Deploy the largest Wi-Fi lab first or pre-load the module with enough \
-                     radios to avoid this",
-                    names.join(", ")
-                );
-            } else {
-                tracing::info!(
-                    "mac80211_hwsim loaded with radios={previous}, reloading with radios={radios}"
-                );
-            }
-            rmmod_hwsim();
-            modprobe_hwsim(radios)?;
-        }
+/// Delete radio `radio`, which is in `ns`: hwsim deletes a radio only for
+/// a request from the namespace it is in. A radio that is not there (it
+/// went with its namespace, or was never made) is not an error.
+pub async fn delete_radio(ns: &NsRef, radio: &str) -> Result<()> {
+    let hwsim: Connection<Hwsim> = ns
+        .connection_async()
+        .await
+        .map_err(|e| Error::nlink(format!("hwsim connection for radio '{radio}'"), e))?;
+    match hwsim.del_radio_by_name(radio).await {
+        Ok(()) => Ok(()),
+        // ENODEV: hwsim's answer for a name it has no radio of here.
+        Err(e) if e.is_not_found() => Ok(()),
+        Err(e) => Err(Error::nlink(format!("failed to delete radio '{radio}'"), e)),
     }
-    Ok(action)
-}
-
-/// Load `mac80211_hwsim` for a lab needing `radios` radios.
-///
-/// Compatibility wrapper around [`load_hwsim_for`] for callers that do not
-/// pass the lab name: every deployed lab counts as an "other" user, which
-/// is exact because `deploy` refuses a lab name that is already deployed.
-pub fn load_hwsim(radios: u32) -> Result<()> {
-    load_hwsim_for("", radios).map(|_| ())
-}
-
-/// Drop `lab_name`'s claim on `mac80211_hwsim`: unload the module only if
-/// no *other* deployed lab still has `wifi_loaded`.
-///
-/// Safe to call before or after the lab's state file is removed. Returns
-/// `true` when the module was actually unloaded.
-pub fn release_hwsim(lab_name: &str) -> bool {
-    match hwsim_users_excluding(Some(lab_name)) {
-        Ok(others) if can_unload_hwsim(&others) => {
-            rmmod_hwsim();
-            true
-        }
-        Ok(others) => {
-            let names: Vec<&str> = others
-                .iter()
-                .filter(|u| u.wifi_loaded)
-                .map(|u| u.lab.as_str())
-                .collect();
-            tracing::info!(
-                "keeping mac80211_hwsim loaded: still used by lab(s) {}",
-                names.join(", ")
-            );
-            false
-        }
-        Err(e) => {
-            tracing::warn!("cannot list deployed labs ({e}); leaving mac80211_hwsim loaded");
-            false
-        }
-    }
-}
-
-/// Unload `mac80211_hwsim` unless any deployed lab still uses it.
-///
-/// Compatibility wrapper for callers that do not know which lab is being
-/// released; prefer [`release_hwsim`]. Because the lab being destroyed may
-/// still have its own state file at this point, this may keep the module
-/// loaded one destroy longer than necessary — which is harmless, whereas
-/// the previous unconditional `rmmod` broke every other Wi-Fi lab.
-pub fn unload_hwsim() {
-    release_hwsim("");
 }
 
 /// Check whether mac80211_hwsim is available, without loading or
@@ -363,6 +171,31 @@ pub fn has_hwsim() -> bool {
 }
 
 // ── daemon config files ─────────────────────────────────────────────
+
+/// Where node `node`'s hostapd or wpa_supplicant puts its control socket,
+/// named after the interface. `/run` is the host's in every namespace, so
+/// a shared `/var/run/wpa_supplicant` gave every station of a lab the
+/// same `wlan0` socket, and the second wpa_supplicant exited (#176).
+/// `wpa_cli -p DIR` / `hostapd_cli -p DIR` talk to it.
+pub fn ctrl_dir(lab_name: &str, node: &str) -> String {
+    format!("{WIFI_RUN_DIR}/{lab_name}/{node}")
+}
+
+/// Parent of every lab's [`ctrl_dir`]s.
+const WIFI_RUN_DIR: &str = "/run/nlink-lab/wifi";
+
+/// Create node `node`'s [`ctrl_dir`] (mode 0700) and return it: hostapd
+/// and wpa_supplicant make only its last component, and exit when its
+/// parent is missing.
+pub fn make_ctrl_dir(lab_name: &str, node: &str) -> Result<String> {
+    let dir = ctrl_dir(lab_name, node);
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&dir)
+        .map_err(|e| Error::deploy_failed(format!("failed to create {dir}: {e}")))?;
+    Ok(dir)
+}
 
 /// Directory holding a lab's hostapd / wpa_supplicant config files.
 ///
@@ -429,9 +262,11 @@ pub(crate) fn write_config_in(
     Ok(path)
 }
 
-/// Remove a lab's daemon config directory ([`config_dir`]).
+/// Remove a lab's daemon config directory ([`config_dir`]) and its
+/// control-socket directories ([`ctrl_dir`]).
 pub fn cleanup_configs(lab_name: &str) {
     cleanup_configs_in(&config_dir(lab_name));
+    cleanup_configs_in(&Path::new(WIFI_RUN_DIR).join(lab_name));
 }
 
 pub(crate) fn cleanup_configs_in(dir: &Path) {
@@ -453,14 +288,6 @@ mod tests {
 
     use super::*;
 
-    fn user(lab: &str, wifi_loaded: bool, radios: u32) -> HwsimUser {
-        HwsimUser {
-            lab: lab.into(),
-            wifi_loaded,
-            radios,
-        }
-    }
-
     #[test]
     fn test_generate_hostapd_conf_wpa2() {
         let config = WifiConfig {
@@ -472,8 +299,10 @@ mod tests {
             mesh_id: None,
             addresses: vec![],
         };
-        let conf = generate_hostapd_conf(&config);
+        let conf = generate_hostapd_conf(&config, "/run/nlink-lab/wifi/w/ap");
         assert!(conf.contains("interface=wlan0"));
+        assert!(conf.contains("ctrl_interface=/run/nlink-lab/wifi/w/ap\n"));
+        assert!(conf.contains("hw_mode=g\n"));
         assert!(conf.contains("ssid=testnet"));
         assert!(conf.contains("channel=6"));
         assert!(conf.contains("wpa=2"));
@@ -492,10 +321,18 @@ mod tests {
             mesh_id: None,
             addresses: vec![],
         };
-        let conf = generate_hostapd_conf(&config);
+        let conf = generate_hostapd_conf(&config, "/run/nlink-lab/wifi/w/ap");
         assert!(conf.contains("ssid=open-net"));
         assert!(conf.contains("channel=1")); // default
         assert!(!conf.contains("wpa="));
+        let conf = generate_hostapd_conf(
+            &WifiConfig {
+                channel: Some(36),
+                ..config
+            },
+            "/run/nlink-lab/wifi/w/ap",
+        );
+        assert!(conf.contains("hw_mode=a\nchannel=36\n"), "{conf}");
     }
 
     #[test]
@@ -509,7 +346,8 @@ mod tests {
             mesh_id: None,
             addresses: vec![],
         };
-        let conf = generate_wpa_conf(&config);
+        let conf = generate_wpa_conf(&config, "/run/nlink-lab/wifi/w/sta1");
+        assert!(conf.starts_with("ctrl_interface=/run/nlink-lab/wifi/w/sta1\n"));
         assert!(conf.contains("ssid=\"testnet\""));
         assert!(conf.contains("psk=\"secret123\""));
         assert!(conf.contains("key_mgmt=WPA-PSK"));
@@ -526,7 +364,8 @@ mod tests {
             mesh_id: None,
             addresses: vec![],
         };
-        let conf = generate_wpa_conf(&config);
+        let conf = generate_wpa_conf(&config, "/run/nlink-lab/wifi/w/sta2");
+        assert!(conf.starts_with("ctrl_interface=/run/nlink-lab/wifi/w/sta2\n"));
         assert!(conf.contains("ssid=\"open-net\""));
         assert!(conf.contains("key_mgmt=NONE"));
     }
@@ -552,82 +391,36 @@ node wired
         assert_eq!(count_wifi_nodes(&topo), 3);
     }
 
-    // ── refcount decisions ──────────────────────────────────────────
+    // ── radios ──────────────────────────────────────────────────────
 
+    /// Radio names follow the namespace, so two labs (or two interfaces
+    /// of one node) never ask for the same wiphy name.
     #[test]
-    fn plan_loads_when_module_absent() {
-        assert_eq!(
-            plan_hwsim_load(3, None, &[]),
-            HwsimAction::Load { radios: 3 }
-        );
-        // Other labs' radios are added even when loading fresh (they
-        // may be about to redeploy after an unrelated rmmod).
-        assert_eq!(
-            plan_hwsim_load(3, None, &[user("a", true, 2)]),
-            HwsimAction::Load { radios: 5 }
-        );
+    fn radios_are_named_after_namespace_and_interface() {
+        assert_eq!(radio_name("wifi-ap", "wlan0"), "wifi-ap-wlan0");
+        assert_ne!(radio_name("a-sta1", "wlan0"), radio_name("b-sta1", "wlan0"));
     }
 
+    /// An AP starts as a station (hostapd switches it); a mesh interface
+    /// is a mesh point from the start, so `join_mesh` needs no type change.
     #[test]
-    fn plan_keeps_module_that_is_big_enough() {
-        // Pre-loaded by hand with spare radios: never touch it.
-        assert_eq!(
-            plan_hwsim_load(2, Some(10), &[]),
-            HwsimAction::Keep { radios: 10 }
-        );
-        // Exactly enough for this lab plus the other running lab.
-        assert_eq!(
-            plan_hwsim_load(2, Some(5), &[user("a", true, 3)]),
-            HwsimAction::Keep { radios: 5 }
-        );
+    fn interfaces_are_created_with_the_type_their_mode_needs() {
+        assert_eq!(interface_type(&WifiMode::Ap), InterfaceType::Station);
+        assert_eq!(interface_type(&WifiMode::Station), InterfaceType::Station);
+        assert_eq!(interface_type(&WifiMode::Mesh), InterfaceType::MeshPoint);
     }
 
+    /// Every channel `wifi-channel-range` accepts has a frequency.
     #[test]
-    fn plan_ignores_labs_without_wifi() {
-        assert_eq!(
-            plan_hwsim_load(2, Some(2), &[user("wired", false, 0), user("x", false, 7)]),
-            HwsimAction::Keep { radios: 2 }
-        );
+    fn channels_map_to_their_centre_frequency() {
+        assert_eq!(freq_mhz(1), Some(2412));
+        assert_eq!(freq_mhz(6), Some(2437));
+        assert_eq!(freq_mhz(13), Some(2472));
+        assert_eq!(freq_mhz(14), Some(2484));
+        assert_eq!(freq_mhz(36), Some(5180));
+        assert_eq!(freq_mhz(48), Some(5240));
+        assert_eq!(freq_mhz(0), None);
     }
-
-    #[test]
-    fn plan_reloads_when_too_small_and_counts_disruption() {
-        assert_eq!(
-            plan_hwsim_load(
-                2,
-                Some(3),
-                &[user("a", true, 3), user("b", true, 1), user("c", false, 0)]
-            ),
-            HwsimAction::Reload {
-                radios: 6,
-                previous: 3,
-                disrupts: 2,
-            }
-        );
-        // Too small but nobody else is running: reload is harmless.
-        assert_eq!(
-            plan_hwsim_load(4, Some(2), &[]),
-            HwsimAction::Reload {
-                radios: 4,
-                previous: 2,
-                disrupts: 0,
-            }
-        );
-    }
-
-    #[test]
-    fn unload_only_when_no_other_wifi_lab() {
-        assert!(can_unload_hwsim(&[]));
-        assert!(can_unload_hwsim(&[user("wired", false, 0)]));
-        assert!(!can_unload_hwsim(&[
-            user("wired", false, 0),
-            user("wifi", true, 2)
-        ]));
-        // Unknown state is reported as a user with 0 radios: still blocks.
-        assert!(!can_unload_hwsim(&[user("broken", true, 0)]));
-    }
-
-    // ── config files ────────────────────────────────────────────────
 
     #[test]
     fn write_config_creates_private_file_in_private_dir() {

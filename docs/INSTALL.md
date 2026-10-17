@@ -144,7 +144,9 @@ Feature-specific extras:
 - `CAP_DAC_OVERRIDE` — DNS injection (`dns hosts` rewrites
   `/etc/hosts`).
 - `CAP_SYS_MODULE` — Wi-Fi emulation auto-loads `mac80211_hwsim`.
-  Or load it yourself: `sudo modprobe mac80211_hwsim`.
+  Or load it yourself: `sudo modprobe mac80211_hwsim radios=0` (a lab
+  makes the radios it needs over netlink; a module already loaded with
+  radios of its own is left alone).
 
 In CI, a runner with `CAP_NET_ADMIN` + `CAP_SYS_ADMIN` is enough;
 no Docker daemon is involved.

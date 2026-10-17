@@ -1644,6 +1644,10 @@ wifi_prop      = "wifi" IDENT "mode" ("ap" | "station" | "mesh") wifi_block?
 wifi_block     = "{" wifi_setting* "}"
 wifi_setting   = "ssid" STRING | "channel" INT | "wpa2" STRING
                | "mesh-id" STRING | CIDR
+#   Each wifi interface gets a mac80211_hwsim radio of its own, made
+#   for the lab (its radios hear one another, no other lab's) and named
+#   <namespace>-<iface>; the interface keeps its declared name. A mesh
+#   point needs a mesh-id of 1 to 32 bytes (wifi-mesh-id).
 
 # ── macvlan / ipvlan ─────────────────────────────
 macvlan_prop   = "macvlan" IDENT "parent" STRING ("mode" IDENT)? macvlan_block?

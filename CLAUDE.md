@@ -104,14 +104,14 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (71 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (72 rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
   scenario.rs       # Timed scenario execution engine (fault injection + validation)
   benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
   capture.rs        # Packet capture using netring (pcap output, BPF filters)
-  wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim mgmt)
+  wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim radios over netlink)
   deploy/           # Deployer — plan + execute (see "Deployment Sequence")
   running.rs        # RunningLab — interact with deployed lab
   state.rs          # State persistence ($XDG_STATE_HOME/nlink-lab/labs, schema 2, flock in .locks/; snapshots/<name>/ checkpoints)
@@ -137,7 +137,7 @@ bins/lab/src/
   util.rs           # tail, env pairs, byte sizes, BPF glue
 
 examples/
-  *.nll             # NLL topology examples (45 top-level; 54 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (46 top-level; 55 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -289,7 +289,7 @@ execute**:
                per-node Stack (network + nftables + WireGuard, one nlink Stack)
  op.rs         NsRef (Root | Named | Container), Stage, Op, Plan::diff
  plan/         PURE planners — nothing here touches the kernel:
-   topology.rs   namespaces, containers, hwsim, mgmt bridge, bridge
+   topology.rs   namespaces, containers, Wi-Fi radios, mgmt bridge, bridge
                  networks + member veths + VLANs, p2p veths, host-side
                  macvlan/ipvlan, links-up, sysctls, DNS overlays
    network.rs    topology_to_network_config (links — one declaration each,

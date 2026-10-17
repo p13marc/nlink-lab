@@ -25,7 +25,10 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if images.is_empty() {
         println!("No container images in topology.");
     } else {
-        let rt = nlink_lab::container::Runtime::detect()?;
+        // the runtime the deploy will use: detection preferred podman
+        // over a lab's `runtime "docker"`, and pulled into the wrong store
+        // (#209)
+        let rt = nlink_lab::container::Runtime::new(&topo.lab.runtime.clone().unwrap_or_default())?;
         for image in &images {
             eprint!("Pulling {image}...");
             rt.pull_image(image)?;

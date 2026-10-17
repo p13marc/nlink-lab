@@ -1,7 +1,7 @@
 //! `nlink-lab logs`.
 
 use crate::ctx::Ctx;
-use crate::util::{tail_follow, tail_lines};
+use crate::util::{tail_follow, tail_lines_at};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -47,32 +47,30 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let path = std::path::Path::new(if stderr { stderr_path } else { stdout_path });
         // `--tail N` reads only the tail of the file (a service log
         // can be gigabytes); without it the whole file is streamed.
-        let file_len = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-        let initial: String = match tail {
-            Some(n) => tail_lines(path, n as usize).map_err(|e| {
-                nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
-            })?,
-            None => std::fs::read_to_string(path).map_err(|e| {
-                nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
-            })?,
+        let read_err = |e: std::io::Error| {
+            nlink_lab::Error::deploy_failed(format!("failed to read log file: {e}"))
         };
-        if !initial.is_empty() {
-            print!("{initial}");
-            if !initial.ends_with('\n') {
-                println!();
+        let shown_up_to = match tail {
+            Some(n) => {
+                let (initial, len) = tail_lines_at(path, n as usize).map_err(read_err)?;
+                if !initial.is_empty() {
+                    println!("{initial}");
+                }
+                len
             }
-        }
+            None => crate::util::cat_to(path, &mut std::io::stdout().lock()).map_err(read_err)?,
+        };
         if follow {
-            // tail -F semantics: resume reading from current EOF,
+            // tail -F semantics: resume where the read above stopped,
             // poll, and reopen if the file is rotated/truncated.
-            tail_follow(path, file_len)?;
+            tail_follow(path, shown_up_to)?;
         }
         return Ok(());
     }
 
     // Container logs mode (node name)
     let node = node.ok_or_else(|| {
-        nlink_lab::Error::invalid_topology("either a node name or --pid is required")
+        nlink_lab::Error::invalid_argument("either a node name or --pid is required")
     })?;
     let container = running.container_for(&node).ok_or_else(|| {
         nlink_lab::Error::deploy_failed(format!(

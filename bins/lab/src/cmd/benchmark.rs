@@ -37,7 +37,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .find(|b| b.name == name)
         .cloned()
         .ok_or_else(|| {
-            nlink_lab::Error::invalid_topology(format!(
+            nlink_lab::Error::invalid_argument(format!(
                 "lab '{lab}' has no benchmark '{name}' (run without a name to list them)"
             ))
         })?;

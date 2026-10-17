@@ -6,6 +6,10 @@ pub fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
     let mut out = format!("graph {:?} {{\n", topo.lab.name);
     out += "  rankdir=LR;\n";
     out += "  node [shape=box];\n";
+    // every node, so one with no link or network is drawn too
+    for name in topo.nodes.keys() {
+        out += &format!("  \"{name}\";\n");
+    }
 
     for link in &topo.links {
         let (Some(a), Some(b)) = (
@@ -86,8 +90,10 @@ pub fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
             if let Some(r) = &imp.rate_cap {
                 parts.push(format!("cap={r}"));
             }
+            // `--` with an arrowhead: `->` is a syntax error in an
+            // undirected `graph` (#209)
             out += &format!(
-                "  \"{}\" -> \"{}\" [style=dashed, color=gray, label=\"{}\"];\n",
+                "  \"{}\" -- \"{}\" [dir=forward, style=dashed, color=gray, label=\"{}\"];\n",
                 imp.src,
                 imp.dst,
                 parts.join(" ")
@@ -97,4 +103,29 @@ pub fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
 
     out += "}\n";
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A network's per-pair impairment is an arrowed `--` edge: `->` is a
+    /// syntax error in an undirected `graph` (#209). A node without links
+    /// is drawn.
+    #[test]
+    fn pair_impairments_are_undirected_edges_and_lone_nodes_show() {
+        let topo = nlink_lab::parser::parse(
+            r#"lab "d"
+node a
+node b
+node lonely
+network lan { subnet 10.9.0.0/24  members [a:eth0, b:eth0]  impair a -- b { delay 5ms } }
+"#,
+        )
+        .unwrap();
+        let out = topology_to_dot(&topo);
+        assert!(!out.contains("->"), "{out}");
+        assert!(out.contains("\"a\" -- \"b\" [dir=forward"), "{out}");
+        assert!(out.contains("  \"lonely\";\n"), "{out}");
+    }
 }

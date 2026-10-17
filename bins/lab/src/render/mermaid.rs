@@ -3,14 +3,57 @@
 /// Mermaid `graph LR` rendering (renders inline in Forgejo/GitHub markdown).
 pub fn topology_to_mermaid(topo: &nlink_lab::Topology) -> String {
     use nlink_lab::EndpointRef;
-    fn id(s: &str) -> String {
+    // An id is the name with every other character an `_`, made unique
+    // (`x-y` and `x_y` were both `x_y`) and kept off Mermaid's keywords (a
+    // node named `end` broke the chart, #209). Networks are `net_<name>`.
+    const KEYWORDS: &[&str] = &[
+        "end",
+        "graph",
+        "subgraph",
+        "flowchart",
+        "direction",
+        "click",
+        "style",
+        "class",
+        "classDef",
+        "linkStyle",
+    ];
+    let sanitise = |s: &str| -> String {
         s.chars()
             .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
             .collect()
-    }
-    let mut out = String::from("graph LR\n");
+    };
     let mut nodes: Vec<&String> = topo.nodes.keys().collect();
     nodes.sort();
+    let mut net_names: Vec<&String> = topo.networks.keys().collect();
+    net_names.sort();
+    let mut taken = std::collections::BTreeSet::new();
+    let mut ids = std::collections::BTreeMap::new();
+    let wanted = nodes
+        .iter()
+        .map(|n| ((false, n.as_str()), sanitise(n)))
+        .chain(
+            net_names
+                .iter()
+                .map(|n| ((true, n.as_str()), format!("net_{}", sanitise(n)))),
+        );
+    for (key, base) in wanted {
+        let mut id = base.clone();
+        let mut n = 1;
+        while taken.contains(&id) || KEYWORDS.contains(&id.as_str()) {
+            n += 1;
+            id = format!("{base}_{n}");
+        }
+        taken.insert(id.clone());
+        ids.insert(key, id);
+    }
+    let id = |name: &str| {
+        ids.get(&(false, name))
+            .cloned()
+            .unwrap_or_else(|| sanitise(name))
+    };
+    let net_id = |name: &str| ids[&(true, name)].clone();
+    let mut out = String::from("graph LR\n");
     for n in nodes {
         let kind = if topo.nodes[n].image.is_some() {
             "[["
@@ -49,22 +92,20 @@ pub fn topology_to_mermaid(topo: &nlink_lab::Topology) -> String {
         }
         out += &format!("  {} ---|\"{label}\"| {}\n", id(&a.node), id(&b.node));
     }
-    let mut net_names: Vec<&String> = topo.networks.keys().collect();
-    net_names.sort();
     for name in net_names {
         let net = &topo.networks[name];
         let label = match &net.subnet {
             Some(sn) => format!("{name}<br/>{sn}"),
             None => name.clone(),
         };
-        out += &format!("  net_{}((\"{label}\"))\n", id(name));
+        out += &format!("  {}((\"{label}\"))\n", net_id(name));
         for member in &net.members {
             if let Some(ep) = EndpointRef::parse(member) {
                 out += &format!(
-                    "  {} ---|\"{}\"| net_{}\n",
+                    "  {} ---|\"{}\"| {}\n",
                     id(&ep.node),
                     ep.iface,
-                    id(name)
+                    net_id(name)
                 );
             }
         }
@@ -122,5 +163,22 @@ network lan { subnet 10.9.0.0/24  members [h:eth1, c:eth0]  impair h -- c { loss
         let topo = nlink_lab::parser::parse("lab \"m\"\nnode dc1-fw\n").unwrap();
         let out = topology_to_mermaid(&topo);
         assert!(out.contains("dc1_fw[\"dc1-fw\"]"), "{out}");
+    }
+
+    /// `x-y` and `x_y` were one id, and a node named `end` ended the chart
+    /// (#209).
+    #[test]
+    fn identifiers_are_unique_and_not_keywords() {
+        let topo = nlink_lab::parser::parse(
+            "lab \"m\"\nnode x-y\nnode x_y\nnode end\nlink x-y:eth0 -- end:eth0\n",
+        )
+        .unwrap();
+        let out = topology_to_mermaid(&topo);
+        assert!(out.contains("end_2[\"end\"]"), "{out}");
+        assert!(
+            out.contains("x_y[\"x-y\"]") && out.contains("x_y_2[\"x_y\"]"),
+            "{out}"
+        );
+        assert!(out.contains("x_y ---|\"eth0 — eth0\"| end_2"), "{out}");
     }
 }

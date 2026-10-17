@@ -49,21 +49,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let interval = std::time::Duration::from_millis(interval);
 
     let result = if let Some(ref tcp_addr) = tcp {
-        let (ip, port) = if let Some((ip, port_str)) = tcp_addr.rsplit_once(':') {
-            (
-                ip.to_string(),
-                port_str.parse::<u16>().map_err(|e| {
-                    nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
-                })?,
-            )
-        } else {
-            (
-                "127.0.0.1".to_string(),
-                tcp_addr.parse::<u16>().map_err(|e| {
-                    nlink_lab::Error::invalid_topology(format!("invalid port: {e}"))
-                })?,
-            )
-        };
+        let (ip, port) = crate::util::parse_tcp_target(tcp_addr)?;
         running
             .wait_for_tcp(&node, &ip, port, timeout, interval)
             .await
@@ -72,7 +58,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     } else if let Some(ref path) = file {
         running.wait_for_file(&node, path, timeout, interval).await
     } else {
-        return Err(nlink_lab::Error::invalid_topology(
+        return Err(nlink_lab::Error::invalid_argument(
             "one of --tcp, --exec, or --file is required".to_string(),
         ));
     };

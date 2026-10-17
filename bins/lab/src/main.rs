@@ -55,23 +55,20 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    // Set tracing level based on --verbose flag (default: warn, verbose: info)
+    // Tracing level: `RUST_LOG` if set, else warn (info with --verbose).
+    // `from_default_env` alone meant error: every warning was hidden (#209).
     let env_filter = if cli.verbose {
         tracing_subscriber::EnvFilter::new("info")
     } else {
-        tracing_subscriber::EnvFilter::from_default_env()
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"))
     };
-    // `lsp` speaks JSON-RPC on stdout: a single log line written there
-    // corrupts the framing and the editor drops the connection. Every
-    // other subcommand keeps the historical stdout writer.
-    if matches!(cli.command, Commands::Lsp(_)) {
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .with_writer(std::io::stderr)
-            .init();
-    } else {
-        tracing_subscriber::fmt().with_env_filter(env_filter).init();
-    }
+    // Log lines go to stderr: on stdout they corrupted `--json` documents,
+    // and `lsp`'s JSON-RPC framing.
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_writer(std::io::stderr)
+        .init();
 
     // Handle completions synchronously (no runtime needed)
     if let Commands::Completions { shell } = &cli.command {
@@ -103,10 +100,18 @@ fn main() -> ExitCode {
     };
     match rt.block_on(cmd::dispatch(&ctx, cli.command)) {
         Ok(()) => ExitCode::from(EXIT_CODE.load(std::sync::atomic::Ordering::SeqCst)),
+        Err(nlink_lab::Error::NllDiagnostic(diag)) if want_json_errors => {
+            // the envelope, with where in the file: miette's text was not
+            // JSON, though the docs promise an envelope under --json (#209)
+            eprintln!(
+                "{}",
+                serde_json::to_string_pretty(&output::render_diagnostic_json(&diag))
+                    .unwrap_or_else(|_| format!("error: {}", diag.message))
+            );
+            ExitCode::from(EXIT_VALIDATION)
+        }
         Err(nlink_lab::Error::NllDiagnostic(diag)) => {
-            // NLL diagnostics get their own rich miette renderer
-            // even under --json; the structured envelope below is
-            // for kernel/runtime errors.
+            // NLL diagnostics get their own rich miette renderer.
             let report = miette::Report::new(*diag);
             eprintln!("{report:?}");
             ExitCode::from(EXIT_VALIDATION)

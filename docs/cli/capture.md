@@ -35,7 +35,6 @@ readable by tcpdump, Wireshark, scapy, and tshark.
 | `-c`, `--count N` | Stop after N packets. |
 | `--duration SECS` | Stop after N seconds. |
 | `--snap-len BYTES` | Truncate each packet to N bytes. Default 262144 (full packet). |
-| `--json` | Emit each summary as a JSON line (without `-w`). |
 
 ### Typed BPF filter flags
 

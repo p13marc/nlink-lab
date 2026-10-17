@@ -1095,10 +1095,13 @@ impl RunningLab {
             self.namespace_for(node)?.to_string()
         };
 
-        let log_dir = opts
-            .log_dir
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| state::logs_dir(self.name()));
+        // Absolute: the paths are stored in the state file, and the
+        // exit-code reaper runs after `--workdir`'s chdir. A relative
+        // `--log-dir` broke `logs` and `ps` from any other directory (#209).
+        let log_dir = match opts.log_dir {
+            Some(dir) => std::path::absolute(dir)?,
+            None => state::logs_dir(self.name()),
+        };
         std::fs::create_dir_all(&log_dir)?;
 
         let cmd_basename = std::path::Path::new(cmd[0])
@@ -1370,6 +1373,12 @@ impl RunningLab {
         timeout: std::time::Duration,
         interval: std::time::Duration,
     ) -> Result<()> {
+        // An unknown node is an error, not "not listening yet": it used to
+        // wait out the whole timeout (#209).
+        self.ns_resolver_of(node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node.to_string(),
+            })?;
         let deadline = std::time::Instant::now() + timeout;
         let want: Option<std::net::IpAddr> = ip.parse().ok();
         loop {
@@ -1407,8 +1416,9 @@ impl RunningLab {
     ) -> Result<()> {
         let deadline = std::time::Instant::now() + timeout;
         loop {
-            let probe = self.exec(node, "sh", &["-c", cmd]);
-            if probe.is_ok_and(|o| o.exit_code == 0) {
+            // A probe that cannot run (unknown node, no namespace) is an
+            // error, not "not ready yet" (#209).
+            if self.exec(node, "sh", &["-c", cmd])?.exit_code == 0 {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
@@ -1449,8 +1459,12 @@ impl RunningLab {
         let interval = std::cmp::min(interval, std::time::Duration::from_millis(250));
         loop {
             for p in &paths {
-                if let Ok(contents) = std::fs::read_to_string(p)
-                    && contents.lines().any(|line| pattern.is_match(line))
+                // lossy: one byte that is not UTF-8 made the whole log
+                // unreadable, and the wait timed out (#209)
+                if let Ok(bytes) = std::fs::read(p)
+                    && String::from_utf8_lossy(&bytes)
+                        .lines()
+                        .any(|line| pattern.is_match(line))
                 {
                     return Ok(());
                 }
@@ -1574,8 +1588,7 @@ impl RunningLab {
     ) -> Result<()> {
         let deadline = std::time::Instant::now() + timeout;
         loop {
-            let probe = self.exec(node, "test", &["-e", path]);
-            if probe.is_ok_and(|o| o.exit_code == 0) {
+            if self.exec(node, "test", &["-e", path])?.exit_code == 0 {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
@@ -1828,6 +1841,14 @@ impl RunningLab {
         node: Option<&str>,
         previous: &[NodeDiagnostic],
     ) -> Result<Vec<NodeDiagnostic>> {
+        // an unknown node printed nothing and exited 0 (#209)
+        if let Some(name) = node
+            && !self.node_names().any(|n| n == name)
+        {
+            return Err(Error::NodeNotFound {
+                name: name.to_string(),
+            });
+        }
         let wanted = |name: &str| node.is_none_or(|filter| filter == name);
         let mut results = Vec::new();
 
@@ -1857,8 +1878,9 @@ impl RunningLab {
         Ok(results)
     }
 
-    /// Kill a tracked background process by PID.
-    pub fn kill_process(&self, pid: u32) -> Result<()> {
+    /// Kill a tracked background process by PID. `Ok(false)` when it had
+    /// already exited (`kill` said "Killed" for those, #209).
+    pub fn kill_process(&self, pid: u32) -> Result<bool> {
         if !self.pids.iter().any(|(_, p)| *p == pid) {
             return Err(Error::deploy_failed(format!(
                 "pid {pid} is not tracked by lab '{}'",
@@ -1866,7 +1888,7 @@ impl RunningLab {
             )));
         }
         match kill_tracked(pid, self.starttimes.get(&pid).copied()) {
-            KillOutcome::Signalled | KillOutcome::Gone => {
+            outcome @ (KillOutcome::Signalled | KillOutcome::Gone) => {
                 crate::events::record(
                     &self.topology.lab.name,
                     crate::events::LifecycleKind::Killed {
@@ -1878,7 +1900,7 @@ impl RunningLab {
                         pid,
                     },
                 );
-                Ok(())
+                Ok(matches!(outcome, KillOutcome::Signalled))
             }
             KillOutcome::Unverified => Err(Error::deploy_failed(format!(
                 "refusing to signal pid {pid}: its start time was not recorded (state file \
@@ -2806,7 +2828,7 @@ pub fn parse_signal(name: &str) -> Result<Signal> {
         "USR1" => Signal::Usr1,
         "USR2" => Signal::Usr2,
         _ => {
-            return Err(Error::invalid_topology(format!(
+            return Err(Error::invalid_argument(format!(
                 "unknown signal {name:?} (TERM, KILL, STOP, CONT, HUP, INT, USR1, USR2)"
             )));
         }
@@ -3171,6 +3193,36 @@ mod state_merge_tests {
 
     /// A tracked PID that is alive but started at another time is another
     /// process: `ps` reports ours as dead rather than the stranger as it.
+    /// A wait on a node the lab does not have is an error at once; it
+    /// waited out its whole timeout and exited 124 (#209).
+    #[tokio::test]
+    async fn waits_on_an_unknown_node_fail_at_once() {
+        let lab = RunningLab::new(
+            Topology::default(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            None,
+            Vec::new(),
+            false,
+            false,
+        );
+        let long = std::time::Duration::from_secs(30);
+        let tick = std::time::Duration::from_millis(10);
+        let start = std::time::Instant::now();
+        for result in [
+            lab.wait_for_tcp("nosuch", "127.0.0.1", 80, long, tick)
+                .await,
+            lab.wait_for_exec("nosuch", "true", long, tick).await,
+            lab.wait_for_file("nosuch", "/x", long, tick).await,
+        ] {
+            assert!(
+                matches!(result, Err(Error::NodeNotFound { .. })),
+                "{result:?}"
+            );
+        }
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    }
+
     #[test]
     fn a_reused_pid_is_not_alive() {
         let me = std::process::id();

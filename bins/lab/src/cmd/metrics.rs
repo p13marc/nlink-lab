@@ -24,8 +24,8 @@ pub struct Args {
     pub format: MetricsFormat,
 
     /// Number of samples then exit.
-    #[arg(short, long)]
-    pub count: Option<usize>,
+    #[arg(short, long, value_parser = clap::value_parser!(u64).range(1..))]
+    pub count: Option<u64>,
 
     /// Zenoh connect endpoint.
     #[arg(long)]
@@ -59,13 +59,17 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     eprintln!("Subscribing to metrics for lab '{lab}'... (Ctrl-C to stop)");
 
-    let mut samples = 0usize;
+    let mut samples = 0u64;
     loop {
         tokio::select! {
             Ok(sample) = subscriber.recv_async() => {
                 let payload = sample.payload().to_bytes();
-                if let Ok(snapshot) = serde_json::from_slice::<nlink_lab_shared::metrics::MetricsSnapshot>(&payload) {
+                if let Ok(mut snapshot) = serde_json::from_slice::<nlink_lab_shared::metrics::MetricsSnapshot>(&payload) {
                     samples += 1;
+                    // `--node` filters the JSON lines too (#209)
+                    if let Some(filter) = &node {
+                        snapshot.nodes.retain(|name, _| name == filter);
+                    }
 
                     if fmt == MetricsFormat::Json || ctx.json {
                         println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());

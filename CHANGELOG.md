@@ -266,6 +266,31 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 - **`apply` deletes a WireGuard interface the topology drops, and sets
   a `key` the topology writes** (#204). Both used to report no change.
   A `key auto` interface keeps its saved key, as before.
+- **A bad argument exits 1, not 2, and says "invalid argument"** (#209):
+  `--set noequals`, an unknown template, signal, lint rule, scenario or
+  benchmark name, a bad regex or `--env`, a missing `--tcp`/`--exec`/
+  `--file`. `docs/cli/README.md` always said 1; they were "invalid
+  topology", exit 2. Library API: new `Error::InvalidArgument`.
+- **Warnings are shown by default, and logs go to stderr** (#209).
+  Without `RUST_LOG` the level was error, not the documented warn. Log
+  lines went to stdout, inside `--json` documents.
+- **`--json` NLL parse errors are a JSON envelope** (#209) with `kind:
+  "parse"`, `file`, `line` and `column`; they were miette's text.
+- **Commands that change behaviour on their arguments** (#209):
+  - `impair LAB EP` with no flags is an error (it cleared the netem and
+    said "updated"), and so are `--partition` / `--heal` / `--clear`
+    with impairment flags (the flags were dropped);
+  - `impair --out-* --in-*` prints one JSON document;
+  - `kill` of a process that had already exited says so (`"action":
+    "already-exited"`); library API: `RunningLab::kill_process` returns
+    whether it signalled;
+  - `metrics --count 0` is refused;
+  - `--wait-tcp` / `wait-for --tcp` take `PORT`, `IP:PORT` or
+    `[IPv6]:PORT`, and refuse a host name;
+  - `capture --duration` / `--rotate`, `spawn --wait-fd-stable` and
+    `proc-stat --watch` refuse negative, non-finite and huge values (they
+    panicked);
+  - `doctor` no longer requires `ip`, which nlink-lab does not run.
 - **Assertions and benchmarks judge what they claim to** (#208):
   - `dns-resolves` compares the address column exactly: it passed on a
     substring (`10.0.0.1` for `10.0.0.12`, or any name);
@@ -440,6 +465,42 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
 
 ### Fixed
 
+- **`capture` filters** (#209):
+  - `--filter-src-ports 1,2 --filter-dst-ports 3,4` also matched source
+    port 2 to any destination (netring 0.30 left the later list off the
+    first list's extra branches); the CLI builds one branch per pair;
+  - an IPv6 `--filter-host` / `--filter-*-net` matched nothing without
+    `--filter-ipv6`.
+- **`graph` / `render --dot` wrote `->` edges in an undirected graph**
+  for a network `impair` block, which Graphviz rejects; and a node
+  without links was not drawn (#209).
+- **Mermaid ids collided** (`x-y` and `x_y`), and a node named `end`
+  broke the chart (#209).
+- **`init TEMPLATE --name X` kept the template's lab name** for five of
+  the twelve templates (#209).
+- **`spawn` checked `--wait-tcp` / `--wait-log` after starting the
+  process** (#209): a bad regex left a process running and a retry
+  started a second.
+- **`wait-for` and `spawn --wait-*` waited out the timeout on an unknown
+  node or a failed probe** (#209); they fail at once.
+- **`impair --out-* --in-*` on a network member applied the egress half
+  and then failed** (#209); the peer is resolved first.
+- **`verify --topology` and `edit --dry-run --json` missed the plan's
+  other work** (#209), such as a container re-created.
+- **`logs`** (#209):
+  - without `--tail` it read the whole log as UTF-8 and failed on
+    anything else; it streams the bytes now;
+  - `--follow` could repeat lines;
+  - `spawn --wait-log` never matched a non-UTF-8 log.
+- **`spawn --log-dir` with a relative path** broke `logs` and `ps` from
+  another directory (#209); it is made absolute.
+- **`pull` ignored the lab's `runtime`** (#209).
+- **`diagnose LAB NODE` with an unknown node printed nothing and exited
+  0** (#209).
+- **Smaller CLI fixes** (#209):
+  - `metrics --json --node` ignored the node;
+  - node completion offered no container nodes;
+  - `edit --set-mtu` changed the MTU before the other edits validated.
 - **Scenario `down` / `up` / `clear` failed on container nodes** (#208),
   and `clear` deleted the endpoint's whole root qdisc without telling the
   state file. It is `impair --clear` now: the netem goes, a declared rate

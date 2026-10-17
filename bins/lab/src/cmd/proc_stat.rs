@@ -46,7 +46,7 @@ pub struct Args {
     /// sample. NDJSON (one JSON object per line, or one array per line
     /// in the multi-process modes) when combined with `--json`. Stops
     /// on Ctrl-C.
-    #[arg(long, value_name = "SECS")]
+    #[arg(long, value_name = "SECS", value_parser = crate::util::parse_secs)]
     pub watch: Option<f64>,
 }
 

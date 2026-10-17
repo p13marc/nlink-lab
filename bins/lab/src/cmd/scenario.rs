@@ -36,7 +36,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .find(|s| s.name == name)
         .cloned()
         .ok_or_else(|| {
-            nlink_lab::Error::invalid_topology(format!(
+            nlink_lab::Error::invalid_argument(format!(
                 "lab '{lab}' has no scenario '{name}' (run without a name to list them)"
             ))
         })?;

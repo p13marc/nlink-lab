@@ -25,14 +25,17 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let running = nlink_lab::RunningLab::load(&lab)?;
     match signal {
         None => {
-            running.kill_process(pid)?;
+            let killed = running.kill_process(pid)?;
+            let action = if killed { "killed" } else { "already-exited" };
             if ctx.json {
                 println!(
                     "{}",
-                    serde_json::json!({ "lab": lab, "pid": pid, "action": "killed" })
+                    serde_json::json!({ "lab": lab, "pid": pid, "action": action })
                 );
-            } else {
+            } else if killed {
                 println!("Killed process {pid}");
+            } else {
+                println!("Process {pid} had already exited");
             }
         }
         Some(name) => {

@@ -34,7 +34,8 @@ captures stdout/stderr to log files.
 
 | Flag | Description |
 |------|-------------|
-| `--env KEY=VALUE` | Set environment variables. Repeatable. |
+| `-e`, `--env KEY=VALUE` | Set environment variables. Repeatable. |
+| `-t`, `--timeout DURATION` | Kill the command after this long (`30s`); exit 124. |
 | `--workdir DIR` | Working directory. For namespace nodes this is `chdir()` on the host filesystem; for container nodes it's passed as `-w <path>` to docker/podman. |
 | `--json` | Buffer output and emit `{exit_code, stdout, stderr, duration_ms}`. Streams are not visible until the command completes. |
 | `-v`, `--verbose` | Log at info level, on stderr (the global flag). |
@@ -135,14 +136,14 @@ Arguments:
           Command and arguments
 
 Options:
-      --env <KEY=VALUE>
-          Set environment variables (can be repeated: --env KEY=VALUE)
+  -e, --env <KEY=VALUE>
+          Set an environment variable (repeatable: -e KEY=VALUE)
 
       --workdir <DIR>
           Working directory for the command. For namespace nodes this is `chdir()` on the host filesystem; for container nodes it's passed as `-w <path>` to docker/podman
 
-      --timeout <SECS>
-          Maximum wall-clock time the command may run, in seconds. On expiry the child is sent SIGTERM, then SIGKILL after a 1s grace period. Exit code 124 on timeout (matches `coreutils timeout(1)`). Default: no timeout
+  -t, --timeout <DURATION>
+          Maximum wall-clock time the command may run (`30s`, `500ms`). On expiry the child is sent SIGTERM, then SIGKILL after a 1s grace period. Exit code 124 on timeout (matches `coreutils timeout(1)`). Default: no timeout
 
   -h, --help
           Print help

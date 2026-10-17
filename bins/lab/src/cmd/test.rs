@@ -3,7 +3,7 @@
 use anstream::{eprint, eprintln, print};
 use std::path::PathBuf;
 
-use crate::ctx::{Ctx, green, parse_set_params, red, require_root};
+use crate::ctx::{Ctx, green, red, require_root};
 use crate::output::{EXIT_VALIDATION, set_exit_code};
 
 #[derive(clap::Args)]
@@ -12,8 +12,8 @@ pub struct Args {
     pub path: PathBuf,
 
     /// Set a `param` value (repeatable) for every file: --set k=v.
-    #[arg(long = "set", value_name = "KEY=VALUE")]
-    pub params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub params: Vec<(String, String)>,
 
     /// Write JUnit XML results to file.
     #[arg(long)]
@@ -37,20 +37,10 @@ pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         fail_fast,
     } = args;
     require_root()?;
-    let cli_params = parse_set_params(&params)?;
+    let cli_params = params;
 
     // Collect .nll files
-    let files: Vec<PathBuf> = if path.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&path)?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "nll"))
-            .collect();
-        entries.sort();
-        entries
-    } else {
-        vec![path.clone()]
-    };
+    let files: Vec<PathBuf> = crate::cmd::common::collect_nll(&path, false)?;
 
     if files.is_empty() {
         eprintln!("No .nll files found in {}", path.display());

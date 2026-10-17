@@ -24,7 +24,7 @@ already-deployed lab and needs root:
 
 ```bash
 sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab daemon simple --interval 2
+sudo nlink-lab daemon simple --interval 2s
 ```
 
 It publishes on `nlink-lab/<lab>/…`:

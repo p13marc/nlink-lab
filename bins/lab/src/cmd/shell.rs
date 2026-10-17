@@ -21,12 +21,7 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, node, shell } = args;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
-    // Validate node exists
-    let node_names: Vec<&str> = running.node_names().collect();
-    if !node_names.contains(&node.as_str()) {
-        eprintln!("Available nodes: {}", node_names.join(", "));
-        return Err(nlink_lab::Error::NodeNotFound { name: node });
-    }
+    crate::cmd::common::require_node(&running, &node)?;
     // `exec -it` on a container node, the namespace (with its /etc/netns
     // overlay where the host allows one) on a namespace node (#179).
     let mode = nlink_lab::ExecMode {

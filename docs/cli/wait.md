@@ -35,10 +35,10 @@ Arguments:
           Lab name
 
 Options:
-  -t, --timeout <TIMEOUT>
-          Timeout in seconds (default: 30)
+  -t, --timeout <DURATION>
+          How long to wait
           
-          [default: 30]
+          [default: 30s]
 
   -h, --help
           Print help

@@ -1,8 +1,8 @@
 //! `nlink-lab edit` — live topology edits on top of `apply` (issue #69).
 
-use crate::ctx::{Ctx, require_root, yellow};
+use crate::ctx::{Ctx, require_root};
 use crate::output::{DryRunReport, print_layered};
-use anstream::{eprintln, println};
+use anstream::println;
 use nlink_lab::edit::Edit;
 
 #[derive(clap::Args)]
@@ -24,16 +24,16 @@ pub struct Args {
     pub add_link: Vec<String>,
 
     /// Remove the link that has this endpoint (repeatable).
-    #[arg(long, value_name = "NODE:IFACE")]
+    #[arg(long, value_name = "NODE:IFACE", value_parser = crate::args::endpoint)]
     pub remove_link: Vec<String>,
 
     /// Set the impairment of an endpoint: `a:eth0=delay=10ms,loss=1%,jitter=2ms,rate=10mbit`
     /// (repeatable; replaces the endpoint's whole impairment).
-    #[arg(long, value_name = "NODE:IFACE=K=V[,K=V…]")]
-    pub set_impair: Vec<String>,
+    #[arg(long, value_name = "NODE:IFACE=K=V[,K=V…]", value_parser = crate::args::endpoint_impairment)]
+    pub set_impair: Vec<(String, nlink_lab::Impairment)>,
 
     /// Clear the impairment of an endpoint (repeatable).
-    #[arg(long, value_name = "NODE:IFACE")]
+    #[arg(long, value_name = "NODE:IFACE", value_parser = crate::args::endpoint)]
     pub clear_impair: Vec<String>,
 
     /// Set a non-netem root qdisc on an endpoint:
@@ -41,17 +41,17 @@ pub struct Args {
     /// / `a:eth0=sfq,perturb=10s` / `a:eth0=prio,bands=3` (repeatable;
     /// replaces the endpoint's qdisc block). fq_codel takes `ecn` or
     /// `noecn`; without either, ECN is the kernel's default, on.
-    #[arg(long, value_name = "NODE:IFACE=KIND[,K=V…]")]
-    pub set_qdisc: Vec<String>,
+    #[arg(long, value_name = "NODE:IFACE=KIND[,K=V…]", value_parser = crate::args::endpoint_qdisc)]
+    pub set_qdisc: Vec<(String, nlink_lab::types::QdiscKind)>,
 
     /// Remove the qdisc block of an endpoint (repeatable).
-    #[arg(long, value_name = "NODE:IFACE")]
+    #[arg(long, value_name = "NODE:IFACE", value_parser = crate::args::endpoint)]
     pub clear_qdisc: Vec<String>,
 
     /// Set the MTU of a link, live, on both ends (`a:eth0=1280`).  The
     /// topology's declaration is updated so `verify` stays clean.
-    #[arg(long, value_name = "NODE:IFACE=MTU")]
-    pub set_mtu: Vec<String>,
+    #[arg(long, value_name = "NODE:IFACE=MTU", value_parser = crate::args::endpoint_mtu)]
+    pub set_mtu: Vec<(String, u32)>,
 
     /// Show the resulting plan without applying it.
     #[arg(long)]
@@ -100,25 +100,10 @@ pub fn edits_of(args: &Args) -> nlink_lab::Result<Vec<Edit>> {
             endpoint: ep.clone(),
         });
     }
-    for spec in &args.set_impair {
-        let (ep, props) = spec.split_once('=').ok_or_else(|| {
-            bad(format!(
-                "--set-impair {spec:?}: expected NODE:IFACE=K=V[,K=V…]"
-            ))
-        })?;
-        let mut impairment = nlink_lab::types::Impairment::default();
-        for kv in props.split(',') {
-            let (k, v) = kv
-                .split_once('=')
-                .ok_or_else(|| bad(format!("--set-impair {spec:?}: bad item {kv:?}")))?;
-            // One list of property names for `edit`, `top` and NLL.
-            impairment
-                .set_property(k, v)
-                .map_err(|e| bad(format!("--set-impair {spec:?}: {e}")))?;
-        }
+    for (endpoint, impairment) in &args.set_impair {
         edits.push(Edit::SetImpairment {
-            endpoint: ep.trim().to_string(),
-            impairment,
+            endpoint: endpoint.clone(),
+            impairment: impairment.clone(),
         });
     }
     for ep in &args.clear_impair {
@@ -126,17 +111,10 @@ pub fn edits_of(args: &Args) -> nlink_lab::Result<Vec<Edit>> {
             endpoint: ep.clone(),
         });
     }
-    for spec in &args.set_qdisc {
-        let (ep, rest) = spec.split_once('=').ok_or_else(|| {
-            bad(format!(
-                "--set-qdisc {spec:?}: expected NODE:IFACE=KIND[,K=V…]"
-            ))
-        })?;
-        let qdisc = nlink_lab::types::QdiscKind::parse_spec(rest)
-            .map_err(|e| bad(format!("--set-qdisc {spec:?}: {e}")))?;
+    for (endpoint, qdisc) in &args.set_qdisc {
         edits.push(Edit::SetQdisc {
-            endpoint: ep.trim().to_string(),
-            qdisc,
+            endpoint: endpoint.clone(),
+            qdisc: qdisc.clone(),
         });
     }
     for ep in &args.clear_qdisc {
@@ -144,9 +122,11 @@ pub fn edits_of(args: &Args) -> nlink_lab::Result<Vec<Edit>> {
             endpoint: ep.clone(),
         });
     }
-    for spec in &args.set_mtu {
-        let (endpoint, mtu) = parse_mtu_spec(spec)?;
-        edits.push(Edit::SetMtu { endpoint, mtu });
+    for (endpoint, mtu) in &args.set_mtu {
+        edits.push(Edit::SetMtu {
+            endpoint: endpoint.clone(),
+            mtu: *mtu,
+        });
     }
     if edits.is_empty() {
         return Err(bad(
@@ -162,24 +142,6 @@ fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Result
     nlink_lab::edit::apply_edits(topo, &edits_of(args)?)
 }
 
-/// `NODE:IFACE=MTU` -> (endpoint, mtu).
-pub fn parse_mtu_spec(spec: &str) -> nlink_lab::Result<(String, u32)> {
-    let (ep, mtu) = spec.split_once('=').ok_or_else(|| {
-        nlink_lab::Error::invalid_argument(format!(
-            "--set-mtu expects NODE:IFACE=MTU, got {spec:?}"
-        ))
-    })?;
-    let mtu: u32 = mtu.trim().parse().map_err(|_| {
-        nlink_lab::Error::invalid_argument(format!("--set-mtu: {mtu:?} is not an MTU"))
-    })?;
-    if !(68..=65535).contains(&mtu) {
-        return Err(nlink_lab::Error::invalid_argument(format!(
-            "--set-mtu: {mtu} is outside 68..=65535"
-        )));
-    }
-    Ok((ep.trim().to_string(), mtu))
-}
-
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     require_root()?;
     let mut running = nlink_lab::RunningLab::load(&args.lab)?;
@@ -187,9 +149,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // changes: a bad edit next to an MTU change used to fail after the MTU
     // changed (#209).
     let ed = nlink_lab::edit::edited(running.topology(), &edits_of(&args)?)?;
-    for w in &ed.warnings {
-        eprintln!("  {} {w}", yellow("WARN"));
-    }
+    crate::cmd::common::print_warnings(&ed.warnings);
     if !ed.structural {
         // MTU changes are applied directly (both ends, live) rather than
         // through the plan: the plan only knows an MTU at veth creation.
@@ -230,10 +190,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         for l in &ed.log {
             println!("  {l}");
         }
-        println!("Plan ({} op(s)):", plan.ops.len());
-        for op in &plan.ops {
-            println!("  {}", op.describe());
-        }
+        crate::cmd::common::print_plan(&plan);
         print_layered(&layered, &[]);
         return Ok(());
     }
@@ -296,7 +253,7 @@ mod tests {
         let mut a = args();
         a.add_node = vec!["c:r".into()];
         a.add_link = vec!["b:eth2--c:eth0=10.1.0.1/24--10.1.0.2/24".into()];
-        a.set_impair = vec!["c:eth0=delay=20ms,loss=1%".into()];
+        a.set_impair = vec![crate::args::endpoint_impairment("c:eth0=delay=20ms,loss=1%").unwrap()];
         let log = apply_edits(&mut t, &a).unwrap();
         assert_eq!(log.len(), 3, "{log:?}");
         assert_eq!(t.nodes["c"].profiles, vec!["r".to_string()]);
@@ -354,14 +311,9 @@ mod tests {
                 .to_string()
                 .contains("no link")
         );
-        let mut a = args();
-        a.set_impair = vec!["a:eth0=bogus=1".into()];
-        assert!(
-            apply_edits(&mut t, &a)
-                .unwrap_err()
-                .to_string()
-                .contains("unknown property")
-        );
+        // a bad impairment is the parser's: a usage error before anything
+        let e = crate::args::endpoint_impairment("a:eth0=bogus=1").unwrap_err();
+        assert!(e.contains("unknown impairment"), "{e}");
         assert!(
             apply_edits(&mut t, &args())
                 .unwrap_err()
@@ -372,11 +324,12 @@ mod tests {
     #[test]
     fn set_qdisc_parses_and_clears() {
         use nlink_lab::types::QdiscKind;
+        let q = |s: &str| crate::args::endpoint_qdisc(s);
         let mut topo = topo();
         let mut a = args();
         a.set_qdisc = vec![
-            "a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb".into(),
-            "b:eth0=fq_codel,target=5ms,ecn".into(),
+            q("a:eth0=tbf,rate=10mbit,burst=32kb,limit=100kb").unwrap(),
+            q("b:eth0=fq_codel,target=5ms,ecn").unwrap(),
         ];
         let log = apply_edits(&mut topo, &a).unwrap();
         assert_eq!(log.len(), 2);
@@ -393,17 +346,11 @@ mod tests {
         apply_edits(&mut topo, &a).unwrap();
         assert!(!topo.qdiscs.contains_key("a:eth0"));
 
-        let mut a = args();
-        a.set_qdisc = vec!["a:eth0=tbf,rate=10mbit".into()];
-        let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
+        let err = q("a:eth0=tbf,rate=10mbit").unwrap_err();
         assert!(err.contains("requires burst"), "{err}");
-        let mut a = args();
-        a.set_qdisc = vec!["a:eth0=tbf,rate=10mbit,burst=32kb".into()];
-        let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
+        let err = q("a:eth0=tbf,rate=10mbit,burst=32kb").unwrap_err();
         assert!(err.contains("requires limit"), "{err}");
-        let mut a = args();
-        a.set_qdisc = vec!["a:eth0=sfq,rate=1mbit".into()];
-        let err = apply_edits(&mut topo, &a).unwrap_err().to_string();
+        let err = q("a:eth0=sfq,rate=1mbit").unwrap_err();
         assert!(err.contains("unknown sfq parameter"), "{err}");
     }
 }

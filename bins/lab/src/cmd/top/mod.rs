@@ -23,9 +23,9 @@ pub struct Args {
     #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
-    /// Refresh interval in seconds.
-    #[arg(short, long, default_value_t = 1, value_name = "SECS")]
-    pub interval: u64,
+    /// Refresh interval (`1s`; 100ms at least).
+    #[arg(short, long, value_name = "DURATION", default_value = "1s", value_parser = crate::args::interval)]
+    pub interval: Duration,
 
     /// Print one text frame and exit: no terminal control, safe in pipes,
     /// CI and `watch`. With `--json`, prints the raw metrics snapshot.
@@ -37,7 +37,7 @@ pub struct Args {
     pub once: bool,
 
     /// Start with the node/interface filter set to this substring.
-    #[arg(add = crate::ctx::node_completer(), short, long, value_name = "SUBSTR")]
+    #[arg(add = crate::ctx::node_completer(), long, value_name = "SUBSTR")]
     pub node: Option<String>,
 
     /// Read metrics from a running `daemon` over Zenoh instead of
@@ -264,7 +264,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             "top needs a terminal; use `top --once` for a single text frame (pipes, CI, watch)",
         ));
     }
-    let interval = Duration::from_secs(args.interval.max(1));
+    let interval = args.interval.max(Duration::from_millis(100));
     let mut source = Source::open(&args).await?;
     let mut app = App::new(
         &args.lab,

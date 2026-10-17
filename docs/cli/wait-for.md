@@ -55,7 +55,7 @@ Arguments:
           Node name
 
 Options:
-      --tcp <TCP>
+      --tcp <[IP:]PORT>
           Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost). With --exec or --file too, all must hold, within one --timeout
 
       --exec <EXEC_CMD>
@@ -64,15 +64,15 @@ Options:
       --file <FILE>
           Wait for file to exist
 
-  -t, --timeout <TIMEOUT>
-          Timeout in seconds (default: 30)
+  -t, --timeout <DURATION>
+          How long to wait for all of them
           
-          [default: 30]
+          [default: 30s]
 
-      --interval <INTERVAL>
-          Poll interval in milliseconds (default: 500)
+  -i, --interval <DURATION>
+          How often to probe
           
-          [default: 500]
+          [default: 500ms]
 
   -h, --help
           Print help

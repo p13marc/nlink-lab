@@ -1,10 +1,11 @@
 //! `nlink-lab apply`.
 
-use anstream::{eprintln, print, println};
+use anstream::{print, println};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::ctx::{Ctx, parse_topology, require_root, validation_failed, yellow};
+use crate::cmd::common;
+use crate::ctx::{Ctx, parse_topology, require_root};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -13,8 +14,8 @@ pub struct Args {
 
     /// Set a `param` value (repeatable): --set wan_delay=50ms. Use the
     /// same values the lab was deployed with.
-    #[arg(long = "set", value_name = "KEY=VALUE")]
-    pub params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub params: Vec<(String, String)>,
 
     /// Show what would change without applying.
     #[arg(long)]
@@ -61,13 +62,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if skip_validate {
         desired.assertions.clear();
     }
-    let result = desired.validate();
-    for w in result.warnings() {
-        eprintln!("  {} {w}", yellow("WARN"));
-    }
-    if result.has_errors() {
-        return Err(validation_failed(&desired.lab.name, &result));
-    }
+    common::check_topology(&desired)?;
 
     // Load current topology from running lab state
     let lab_name = &desired.lab.name.clone();
@@ -105,15 +100,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // …and so does the plan's other work: a container re-created because
     // its options changed is in neither the lab graph nor the layers.
     let (removals, plan_ops): (Vec<String>, Vec<String>) = if check || dry_run {
-        let plan = nlink_lab::apply_plan_with(&running, &desired, &apply_opts)?;
-        (
-            plan.ops
-                .iter()
-                .filter(|o| o.is_removal())
-                .map(|o| o.describe())
-                .collect(),
-            plan.work().map(|o| o.describe()).collect(),
-        )
+        common::plan_lists(&nlink_lab::apply_plan_with(
+            &running,
+            &desired,
+            &apply_opts,
+        )?)
     } else {
         (Vec::new(), Vec::new())
     };
@@ -190,8 +181,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let change_count = layered.change_count() + removals.len() + plan_ops.len();
         if !ctx.quiet {
             println!("Drift detected for lab '{lab_name}':");
-            crate::output::print_layered(layered, &removals);
-            crate::output::print_plan_ops(&plan_ops);
+            common::print_drift(layered, &removals, &plan_ops);
             println!("{change_count} change(s) needed to converge");
         }
         return Err(nlink_lab::Error::Validation(format!(
@@ -205,16 +195,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         println!("Changes for lab '{lab_name}':");
         if let Some(layered) = &drift_view {
             println!("  (topology unchanged; the kernel has drifted from it)");
-            crate::output::print_layered(layered, &removals);
-            crate::output::print_plan_ops(&plan_ops);
+            common::print_drift(layered, &removals, &plan_ops);
             println!("{} change(s)", layered.change_count());
         } else if let Some(layered) = &layered_view {
-            crate::output::print_layered(layered, &removals);
-            crate::output::print_plan_ops(&plan_ops);
-            println!(
-                "{} change(s)",
-                layered.change_count() + removals.len() + plan_ops.len()
-            );
+            let n = common::print_drift(layered, &removals, &plan_ops);
+            println!("{n} change(s)");
         } else {
             print!("{diff}");
             println!("{} change(s)", diff.change_count());
@@ -259,36 +244,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             n => n,
         };
         println!("\nApplied {changes} change(s) in {elapsed:.0?}");
-        for a in running.assertion_results() {
-            if a.passed {
-                println!("  PASS {}", a.description);
-            } else {
-                println!(
-                    "  FAIL {}: {}",
-                    a.description,
-                    a.detail.as_deref().unwrap_or_default()
-                );
-            }
-        }
+        common::print_assertions(running.assertion_results());
     }
 
-    if assertions_failed {
-        if strict {
-            return Err(nlink_lab::Error::Validation(format!(
-                "{} of {} assertion(s) failed (lab {:?} left as applied for inspection)",
-                running
-                    .assertion_results()
-                    .iter()
-                    .filter(|a| !a.passed)
-                    .count(),
-                running.assertion_results().len(),
-                lab_name
-            )));
-        }
-        eprintln!(
-            "  {} assertions failed; pass --strict to make this fatal",
-            yellow("WARN")
-        );
-    }
-    Ok(())
+    common::assertions_outcome(running.assertion_results(), strict, lab_name, "as applied")
 }

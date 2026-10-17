@@ -31,9 +31,9 @@ pub struct Args {
     #[arg(long, value_name = "KIND")]
     pub kind: Vec<String>,
 
-    /// Runtime-event sampling interval in seconds (with --follow).
-    #[arg(long, default_value_t = 2)]
-    pub interval: u64,
+    /// Runtime-event sampling interval (with --follow).
+    #[arg(short, long, value_name = "DURATION", default_value = "2s", value_parser = crate::args::interval)]
+    pub interval: std::time::Duration,
 
     /// Also serve the stream on a unix socket: every client that connects
     /// receives one NDJSON record per line (with --follow).
@@ -306,7 +306,6 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         // 3. runtime: the backend's collector (process exits, link state)
         let tx = tx.clone();
-        let interval = Duration::from_secs(interval.max(1));
         tasks.push(tokio::spawn(async move {
             let mut collector = nlink_lab::metrics::MetricsCollector::new(&running);
             let mut ticker = tokio::time::interval(interval);

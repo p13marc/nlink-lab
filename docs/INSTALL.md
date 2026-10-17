@@ -217,7 +217,7 @@ lab and needs root:
 
 ```bash
 sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab daemon simple --interval 2 --http 127.0.0.1:9464
+sudo nlink-lab daemon simple --interval 2s --http 127.0.0.1:9464
 ```
 
 - `--http ADDR` serves `/metrics` (OpenMetrics) and

@@ -2,7 +2,6 @@
 //! flags, colour helpers, topology parsing with `--set`, and the
 //! root / capability check.
 
-use anstream::eprintln;
 /// Global flags shared by every subcommand handler.
 #[derive(Debug, Clone, Copy)]
 pub struct Ctx {
@@ -18,42 +17,15 @@ pub struct Ctx {
 
 pub use crate::output::style::{bold, green, red, yellow};
 
-/// Turn a failed validation into the structured error (exit 2, issues
-/// in the JSON envelope), printing the human-readable list first.
-pub fn validation_failed(lab: &str, result: &nlink_lab::ValidationResult) -> nlink_lab::Error {
-    eprintln!("Validation failed for {lab:?}:");
-    for e in result.errors() {
-        eprintln!("  {} {e}", red("ERROR"));
-    }
-    nlink_lab::Error::ValidationErrors(result.errors().cloned().collect())
-}
-
-/// Parse repeated `--set KEY=VALUE` strings into `(key, value)` pairs.
-pub fn parse_set_params(params: &[String]) -> nlink_lab::Result<Vec<(String, String)>> {
-    params
-        .iter()
-        .map(|p| {
-            let (key, value) = p.split_once('=').ok_or_else(|| {
-                nlink_lab::Error::invalid_argument(format!(
-                    "invalid --set format: '{p}' (expected KEY=VALUE)"
-                ))
-            })?;
-            Ok((key.to_string(), value.to_string()))
-        })
-        .collect()
-}
-
 /// Parse a topology file, optionally with CLI `--set` parameters.
 pub fn parse_topology(
     path: &std::path::Path,
-    params: &[String],
+    params: &[(String, String)],
 ) -> nlink_lab::Result<nlink_lab::Topology> {
-    let cli_params = parse_set_params(params)?;
-
-    if cli_params.is_empty() {
+    if params.is_empty() {
         nlink_lab::parser::parse_file(path)
     } else {
-        nlink_lab::parser::parse_file_with_params(path, &cli_params)
+        nlink_lab::parser::parse_file_with_params(path, params)
     }
 }
 

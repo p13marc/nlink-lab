@@ -16,8 +16,8 @@ AF_PACKET TPACKET_V3 ring-buffer reader. The capture runs inside
 the target node's namespace, so the interface is the per-node
 interface name (e.g. `eth0`, not the host-side veth peer).
 
-Without `-w`, capture prints one-line packet summaries to stdout.
-With `-w trace.pcap`, packets are written in libpcap format
+Without `-o`, capture prints one-line packet summaries to stdout.
+With `-o trace.pcap`, packets are written in libpcap format
 readable by tcpdump, Wireshark, scapy, and tshark.
 
 ## Arguments
@@ -31,9 +31,9 @@ readable by tcpdump, Wireshark, scapy, and tshark.
 
 | Flag | Description |
 |------|-------------|
-| `-w`, `--write FILE` | Write to pcap. Without this, summaries go to stdout. |
+| `-o`, `--output FILE` | Write to pcap (`--write` is an alias). Without this, summaries go to stdout. |
 | `-c`, `--count N` | Stop after N packets. |
-| `--duration SECS` | Stop after N seconds. |
+| `--duration DURATION` | Stop after this long (`30s`). |
 | `--snap-len BYTES` | Truncate each packet to N bytes. Default 262144 (full packet). |
 
 ### Typed BPF filter flags
@@ -79,7 +79,7 @@ For OR or hand-rolled bytecode, use the library API directly.
 sudo nlink-lab capture lab client:eth0 \
   -c 100 \
   --filter-tcp --filter-dst-port 80 \
-  -w http.pcap
+  -o http.pcap
 ```
 
 ### Watch traffic live with summaries
@@ -98,32 +98,32 @@ sudo nlink-lab capture lab router:wan --filter-icmp
 
 ```bash
 sudo nlink-lab capture lab server:eth0 \
-  --duration 30 \
-  -w /tmp/server-eth0.pcap
+  --duration 30s \
+  -o /tmp/server-eth0.pcap
 ```
 
 ### Capture both sides of a link in parallel
 
 ```bash
-sudo nlink-lab capture lab a:eth0 -w a-eth0.pcap &
-sudo nlink-lab capture lab b:eth0 -w b-eth0.pcap &
+sudo nlink-lab capture lab a:eth0 -o a-eth0.pcap &
+sudo nlink-lab capture lab b:eth0 -o b-eth0.pcap &
 wait
 ```
 
 ### Open in Wireshark
 
 ```bash
-sudo nlink-lab capture lab router:wan --duration 10 -w /tmp/trace.pcap
+sudo nlink-lab capture lab router:wan --duration 10s -o /tmp/trace.pcap
 wireshark /tmp/trace.pcap
 ```
 
 ### Pipe to tshark live
 
 ```bash
-sudo nlink-lab capture lab router:wan -w - -c 100 | tshark -r -
+sudo nlink-lab capture lab router:wan -o - -c 100 | tshark -r -
 ```
 
-(Some shells need `-w /dev/stdout` instead of `-w -`.)
+(Some shells need `-o /dev/stdout` instead of `-o -`.)
 
 ## Performance notes
 
@@ -166,13 +166,13 @@ Arguments:
           Endpoint (e.g., "router:eth0")
 
 Options:
-  -w, --write <WRITE>
-          Write to pcap file (default: print summaries to stdout)
+  -o, --output <FILE>
+          Write a pcap file (default: print summaries to stdout)
 
   -c, --count <COUNT>
           Capture N packets then stop
 
-  -f, --filter <FILTER>
+      --filter <FILTER>
           Legacy: full tcpdump filter expression (e.g., "tcp port 80"). Requires nlink-lab built with the `legacy-tcpdump-filter` feature *and* `tcpdump` on PATH. Default builds prefer the typed `--filter-*` flags below
 
       --filter-tcp
@@ -242,7 +242,7 @@ Options:
           Negate the entire filter (capture everything that does NOT match the other `--filter-*` flags)
 
       --duration <DURATION>
-          Stop after N seconds
+          Stop after this long (`30s`)
 
       --snap-len <SNAP_LEN>
           Snap length -- truncate packets to N bytes
@@ -253,10 +253,10 @@ Options:
           Drop outgoing packets at the kernel via `PACKET_IGNORE_OUTGOING`. Use this when capturing on `lo` to halve the packet count: loopback otherwise reports each packet twice (once outgoing, once incoming). No effect on non-loopback interfaces. (Requires kernel >= 4.20.)
 
       --max-size <SIZE>
-          Rotate the pcap file when the active segment exceeds this size (suffixes K/M/G accepted; e.g. `100M`). On rotation the active `<base>.pcap` becomes `<base>.pcap.1`, the previous `.1` becomes `.2`, etc. Requires `--write`. Round-5 §2.3
+          Rotate the pcap file when the active segment exceeds this size (suffixes K/M/G accepted; e.g. `100M`). On rotation the active `<base>.pcap` becomes `<base>.pcap.1`, the previous `.1` becomes `.2`, etc. Requires `--output`. Round-5 §2.3
 
-      --rotate <SECS>
-          Rotate the pcap file every SECS seconds since the last rotation. Composes with `--max-size` (whichever threshold fires first triggers the rotation). Requires `--write`
+      --rotate <DURATION>
+          Rotate the pcap file this long (`10m`) after the last rotation. Composes with `--max-size` (whichever threshold fires first triggers the rotation). Requires `--output`
 
       --keep <N>
           Number of *rotated* segments to keep (`<base>.pcap.1` through `<base>.pcap.<keep>`). The active `<base>.pcap` is always retained and doesn't count. Default: 5

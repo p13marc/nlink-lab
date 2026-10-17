@@ -64,8 +64,8 @@ deploy.
 ### Custom extract dir
 
 ```bash
-sudo nlink-lab import bug-repro.nlz -d /tmp/repro
-sudo nlink-lab import bug-repro.nlz -d ./labs/issue-42/
+sudo nlink-lab import bug-repro.nlz --dir /tmp/repro
+sudo nlink-lab import bug-repro.nlz --dir ./labs/issue-42/
 ```
 
 ### Use the rendered snapshot (skip parse)
@@ -152,7 +152,7 @@ Arguments:
           Path to a `.nlz` archive
 
 Options:
-  -d, --dir <DIR>
+      --dir <DIR>
           Extract to this directory. Default: `./<lab-name>/`
 
       --no-deploy

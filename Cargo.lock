@@ -3572,6 +3572,7 @@ dependencies = [
  "nlink-lab-backend",
  "nlink-lab-shared",
  "ratatui",
+ "regex",
  "schemars 1.2.2",
  "serde",
  "serde_json",

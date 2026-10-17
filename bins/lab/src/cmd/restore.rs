@@ -1,7 +1,7 @@
 //! `nlink-lab restore`.
 
-use crate::ctx::{Ctx, require_root, yellow};
-use anstream::{eprintln, print, println};
+use crate::ctx::{Ctx, require_root};
+use anstream::{print, println};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -77,11 +77,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     require_root()?;
-    let result = snapshot.topology.validate();
-    for w in result.warnings() {
-        eprintln!("  {} {w}", yellow("WARN"));
-    }
-    result.bail()?;
+    crate::cmd::common::check_topology(&snapshot.topology)?;
     let report = nlink_lab::restore(&mut running, &snapshot).await?;
     if ctx.json {
         println!(

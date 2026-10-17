@@ -47,14 +47,8 @@ Arguments:
           Lab name
 
 Options:
-  -n, --node <NODE>
+      --node <NODE>
           Filter to specific node
-
-  -f, --format <FORMAT>
-          Output format (`--json` selects json too)
-          
-          [default: table]
-          [possible values: table, json]
 
   -c, --count <COUNT>
           Number of samples then exit

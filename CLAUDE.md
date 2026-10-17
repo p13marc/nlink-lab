@@ -59,7 +59,7 @@ sudo nlink-lab exec --json simple router -- ip addr
 sudo nlink-lab spawn simple server -- /usr/bin/my-service --port 8080
 
 # Wait for a service to be ready
-sudo nlink-lab wait-for simple server --tcp 127.0.0.1:8080 --timeout 30
+sudo nlink-lab wait-for simple server --tcp 127.0.0.1:8080 --timeout 30s
 
 # Show node IP addresses (including mgmt0 for host-reachable labs)
 nlink-lab ip simple server --iface eth0
@@ -79,8 +79,8 @@ nlink-lab render examples/spine-leaf.nll
 
 # Capture packets on an interface (uses netring, zero-copy AF_PACKET)
 sudo nlink-lab capture simple router:eth0
-sudo nlink-lab capture simple router:eth0 -w trace.pcap
-sudo nlink-lab capture simple router:eth0 --filter-tcp --filter-port 80 -c 100 --duration 30
+sudo nlink-lab capture simple router:eth0 -o trace.pcap
+sudo nlink-lab capture simple router:eth0 --filter-tcp --filter-port 80 -c 100 --duration 30s
 
 # Show process logs (captured automatically for all background processes)
 nlink-lab logs simple --pid 12345

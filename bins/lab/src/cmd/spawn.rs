@@ -3,7 +3,6 @@
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, require_root};
-use crate::util::parse_env_pairs;
 use nlink_lab::wait::WaitCondition;
 
 /// Stream selector for `nlink-lab spawn --wait-log-stream`.
@@ -38,9 +37,9 @@ pub struct Args {
     #[arg(long)]
     pub log_dir: Option<PathBuf>,
 
-    /// Set environment variables (can be repeated: --env KEY=VALUE).
-    #[arg(long = "env", value_name = "KEY=VALUE")]
-    pub env_vars: Vec<String>,
+    /// Set an environment variable (repeatable: -e KEY=VALUE).
+    #[arg(short = 'e', long = "env", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub env_vars: Vec<(String, String)>,
 
     /// Working directory for the spawned process (chdir before exec).
     #[arg(long, value_name = "DIR")]
@@ -52,8 +51,8 @@ pub struct Args {
     /// only matches a service that bound to the loopback interface. If
     /// your service binds to a specific node IP (e.g., the interface
     /// address), pass that address here instead of `127.0.0.1`.
-    #[arg(long)]
-    pub wait_tcp: Option<String>,
+    #[arg(long, value_name = "[IP:]PORT", value_parser = crate::args::tcp_target)]
+    pub wait_tcp: Option<(String, u16)>,
 
     /// Wait for a stdout/stderr line matching REGEX before returning.
     ///
@@ -61,8 +60,8 @@ pub struct Args {
     /// rather than a port (e.g., `[STARTED] tunnel established`).
     /// Combinable with --wait-tcp; both must succeed before spawn
     /// returns. Fails the spawn on timeout.
-    #[arg(long, value_name = "REGEX")]
-    pub wait_log: Option<String>,
+    #[arg(long, value_parser = crate::args::regex, value_name = "REGEX")]
+    pub wait_log: Option<regex::Regex>,
 
     /// Which stream to monitor for --wait-log: stdout, stderr, or
     /// both. Default: both.
@@ -80,17 +79,17 @@ pub struct Args {
     pub wait_port: Option<u16>,
 
     /// Wait until the spawned process's open-fd count has been
-    /// stable for SECS seconds. Heuristic — prefer --wait-log or
+    /// stable for DURATION (`2s`). Heuristic — prefer --wait-log or
     /// --wait-port when a deterministic signal is available. A
     /// process can open more files later in its lifecycle.
     /// Round-5 §2.4.
-    #[arg(long, value_name = "SECS", value_parser = crate::util::parse_secs)]
-    pub wait_fd_stable: Option<f64>,
+    #[arg(long, value_name = "DURATION", value_parser = crate::args::duration)]
+    pub wait_fd_stable: Option<std::time::Duration>,
 
     /// Timeout for --wait-tcp / --wait-log / --wait-port /
-    /// --wait-fd-stable together, in seconds (default: 30).
-    #[arg(long, default_value = "30")]
-    pub wait_timeout: u64,
+    /// --wait-fd-stable together.
+    #[arg(long, value_name = "DURATION", default_value = "30s", value_parser = crate::args::duration)]
+    pub wait_timeout: std::time::Duration,
 
     /// Command and arguments.
     #[arg(trailing_var_arg = true, required = true)]
@@ -112,30 +111,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         wait_timeout,
         cmd,
     } = args;
-    // Every argument is checked before the process starts: a bad
-    // `--wait-log` regex used to start it, print its PID and fail, and a
-    // retry started a second one (#209).
-    let env_pairs = parse_env_pairs(&env_vars)?;
-    let wait_tcp = wait_tcp
-        .as_deref()
-        .map(nlink_lab::wait::parse_tcp_target)
-        .transpose()?;
-    let wait_log = wait_log
-        .as_deref()
-        .map(nlink_lab::wait::log_pattern)
-        .transpose()?;
+    // Every argument is checked (by clap) before the process starts: a
+    // bad `--wait-log` regex used to start it, print its PID and fail,
+    // and a retry started a second one (#209).
     require_root()?;
-    let env_refs: Vec<(&str, &str)> = env_pairs
+    let env_refs: Vec<(&str, &str)> = env_vars
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
     let mut running = nlink_lab::RunningLab::load(&lab)?;
-    // Validate node exists
-    let node_names: Vec<&str> = running.node_names().collect();
-    if !node_names.contains(&node.as_str()) {
-        eprintln!("Available nodes: {}", node_names.join(", "));
-        return Err(nlink_lab::Error::NodeNotFound { name: node });
-    }
+    crate::cmd::common::require_node(&running, &node)?;
     let args: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
     let opts = nlink_lab::SpawnOpts {
         log_dir: log_dir.as_deref(),
@@ -181,18 +166,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             pid: Some(pid),
         });
     }
-    if let Some(secs) = wait_fd_stable {
-        conditions.push(WaitCondition::FdStable {
-            pid,
-            stable_for: std::time::Duration::from_secs_f64(secs),
-        });
+    if let Some(stable_for) = wait_fd_stable {
+        conditions.push(WaitCondition::FdStable { pid, stable_for });
     }
     if !conditions.is_empty() {
         running
             .wait_all(
                 &node,
                 &conditions,
-                std::time::Duration::from_secs(wait_timeout),
+                wait_timeout,
                 std::time::Duration::from_millis(500),
                 &nlink_lab::OpCtx::default(),
             )

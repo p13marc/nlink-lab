@@ -144,16 +144,6 @@ impl<'a> DryRunReport<'a> {
     }
 }
 
-/// Human rendering of the plan's other work ([`DryRunReport::ops`]).
-pub fn print_plan_ops(ops: &[String]) {
-    if !ops.is_empty() {
-        println!("Plan:");
-        for op in ops {
-            println!("  + {op}");
-        }
-    }
-}
-
 /// Human rendering of a layered diff plus removal ops.
 pub fn print_layered(layered: &nlink_lab::diff::LayeredDiff, removals: &[String]) {
     let text = layered.to_string();

@@ -5,7 +5,6 @@ use std::time::Instant;
 
 use crate::ctx::{Ctx, require_root};
 use crate::output::{EXIT_FAILURE, EXIT_TIMEOUT, set_exit_code};
-use crate::util::parse_env_pairs;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -17,9 +16,9 @@ pub struct Args {
     #[arg(add = crate::ctx::node_completer())]
     pub node: String,
 
-    /// Set environment variables (can be repeated: --env KEY=VALUE).
-    #[arg(long = "env", value_name = "KEY=VALUE")]
-    pub env_vars: Vec<String>,
+    /// Set an environment variable (repeatable: -e KEY=VALUE).
+    #[arg(short = 'e', long = "env", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub env_vars: Vec<(String, String)>,
 
     /// Working directory for the command. For namespace nodes this is
     /// `chdir()` on the host filesystem; for container nodes it's passed
@@ -27,12 +26,12 @@ pub struct Args {
     #[arg(long, value_name = "DIR")]
     pub workdir: Option<PathBuf>,
 
-    /// Maximum wall-clock time the command may run, in seconds. On
+    /// Maximum wall-clock time the command may run (`30s`, `500ms`). On
     /// expiry the child is sent SIGTERM, then SIGKILL after a 1s
     /// grace period. Exit code 124 on timeout (matches
     /// `coreutils timeout(1)`). Default: no timeout.
-    #[arg(long, value_name = "SECS")]
-    pub timeout: Option<u64>,
+    #[arg(short = 't', long, value_name = "DURATION", value_parser = crate::args::duration)]
+    pub timeout: Option<std::time::Duration>,
 
     /// Command and arguments.
     #[arg(trailing_var_arg = true, required = true)]
@@ -49,15 +48,14 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         cmd,
     } = args;
     require_root()?;
-    let env_pairs = parse_env_pairs(&env_vars)?;
-    let env_refs: Vec<(&str, &str)> = env_pairs
+    let env_refs: Vec<(&str, &str)> = env_vars
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
     let opts = nlink_lab::ExecOpts {
         workdir: workdir.as_deref(),
         env: &env_refs,
-        timeout: timeout.map(std::time::Duration::from_secs),
+        timeout,
     };
 
     if ctx.json {
@@ -132,11 +130,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // Scripts that want captured/structured output should use
     // `--json`, which still buffers into the structured response.
     let running = nlink_lab::RunningLab::load(&lab)?;
-    let node_names: Vec<&str> = running.node_names().collect();
-    if !node_names.contains(&node.as_str()) {
-        eprintln!("Available nodes: {}", node_names.join(", "));
-        return Err(nlink_lab::Error::NodeNotFound { name: node });
-    }
+    crate::cmd::common::require_node(&running, &node)?;
     let args: Vec<&str> = cmd[1..].iter().map(|s| s.as_str()).collect();
     match running.exec_attached_with_opts(&node, &cmd[0], &args, opts) {
         Ok(code) => {

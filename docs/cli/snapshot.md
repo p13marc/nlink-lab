@@ -21,10 +21,10 @@ Arguments:
           Snapshot name to create (letters, digits, `-`, `_`, `.`)
 
 Options:
-  -d, --description <DESCRIPTION>
+      --description <DESCRIPTION>
           Free-text description stored with the snapshot
 
-  -l, --list
+      --list
           List the lab's snapshots (newest first)
 
       --delete <NAME>

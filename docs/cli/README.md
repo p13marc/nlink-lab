@@ -109,6 +109,19 @@ when they apply `errno`, `ext_ack`, `netns`, `hint`, `issues` (a parse
 error is one issue with rule `parse` and `location` `file:line:column`)
 and `nlink` (what nlink says about a failed netlink call).
 
+## Values
+
+- **Durations** carry a unit: `500ms`, `30s`, `1.5m`, `2h` (`ns`, `us`,
+  `ms`, `s`, `m`, `h`). A bare number is refused with a hint: `--timeout
+  30` read seconds in one command and milliseconds in another.
+- **`KEY=VALUE`** for `--set` and `--env`; **`NODE:IFACE`** for
+  endpoints. A malformed value is a usage error (exit 64) before
+  anything runs.
+- **Short flags mean one thing everywhere**: `-c` count, `-e` env,
+  `-f` follow, `-i` interval, `-o` output, `-s` signal, `-t` timeout,
+  `-w` write in place, plus the global `-q`, `-v`, `-h`, `-V`. Anything
+  else is long only.
+
 ## Exit codes
 
 One policy for every subcommand (the `--json` error document carries the

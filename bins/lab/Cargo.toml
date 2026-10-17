@@ -36,6 +36,9 @@ clap_complete = { workspace = true }
 anstream = "1"
 anstyle = "1"
 unicode-width = "0.2"
+# `spawn --wait-log REGEX` is parsed by clap (`args::regex`), so a bad
+# pattern is a usage error before the process starts.
+regex = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }

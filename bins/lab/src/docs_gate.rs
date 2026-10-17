@@ -277,17 +277,17 @@ fn every_documented_command_line_parses() {
                 }
                 Err(e) => Err(e),
             };
-            // a typed argument (a pid, a port) refuses `<pid>`: the line
-            // stands if it parses with a value there
+            // a typed argument (a pid, an endpoint) refuses `<pid>`: the
+            // line stands if it parses with a value of that shape there
             let filled: Vec<String> = argv
                 .iter()
-                .map(|w| {
-                    if w.starts_with('<') && w.ends_with('>') {
-                        "1".to_string()
-                    } else {
-                        w.clone()
-                    }
-                })
+                .map(
+                    |w| match w.strip_prefix('<').and_then(|w| w.strip_suffix('>')) {
+                        Some(name) if name.contains("endpoint") || name == "ep" => "a:eth0".into(),
+                        Some(_) => "1".into(),
+                        None => w.clone(),
+                    },
+                )
                 .collect();
             if let Err(e) = parses(&argv).or_else(|e| parses(&filled).map_err(|_| e)) {
                 let first = e.render().to_string();

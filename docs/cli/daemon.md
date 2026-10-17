@@ -46,10 +46,10 @@ Arguments:
           Lab name (must be deployed)
 
 Options:
-  -i, --interval <INTERVAL>
-          Metrics collection interval in seconds
+  -i, --interval <DURATION>
+          Metrics collection interval
           
-          [default: 2]
+          [default: 2s]
 
       --zenoh-mode <ZENOH_MODE>
           Zenoh mode: peer or client

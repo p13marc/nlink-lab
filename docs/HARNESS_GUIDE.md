@@ -33,7 +33,7 @@ parsing. It routes through nlink-lab's root context, so the
 
 ```bash
 nlink-lab proc-stat des-3m site_a 292086 --json
-nlink-lab proc-stat des-3m site_a 292086 --json --watch 5  # NDJSON, every 5s
+nlink-lab proc-stat des-3m site_a 292086 --json --watch 5s  # NDJSON, every 5s
 ```
 
 To sample more than one process, take them in a single call rather than
@@ -80,7 +80,7 @@ long (slow tests).
 
 ```bash
 nlink-lab spawn $LAB site_a --json \
-    --wait-log '^STARTED$' --wait-timeout 10 \
+    --wait-log '^STARTED$' --wait-timeout 10s \
     -- /usr/local/bin/zenohd --config $cfg
 ```
 
@@ -98,7 +98,7 @@ Probes AND-compose; specify multiple:
 
 ```bash
 nlink-lab spawn $LAB site_a --json \
-    --wait-log '^STARTED$' --wait-port 7447 --wait-timeout 10 \
+    --wait-log '^STARTED$' --wait-port 7447 --wait-timeout 10s \
     -- zenohd
 ```
 
@@ -163,7 +163,7 @@ incoming. Use `--dedupe-loopback` (Plan 156 PR H) to drop the
 outgoing copies at the kernel:
 
 ```bash
-nlink-lab capture $LAB site_a:lo --dedupe-loopback -w site_a-lo.pcap
+nlink-lab capture $LAB site_a:lo --dedupe-loopback -o site_a-lo.pcap
 ```
 
 Without the flag, your downstream processing has to dedupe.
@@ -174,7 +174,7 @@ Without the flag, your downstream processing has to dedupe.
 For multi-hour scenarios, use rotation (Plan 157 PR F):
 
 ```bash
-nlink-lab capture $LAB router:eth0 -w router.pcap \
+nlink-lab capture $LAB router:eth0 -o router.pcap \
     --max-size 100M --keep 5
 ```
 

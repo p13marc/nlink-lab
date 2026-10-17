@@ -9,9 +9,9 @@ pub struct Args {
     /// Lab name.
     pub name: String,
 
-    /// Timeout in seconds (default: 30).
-    #[arg(short, long, default_value = "30")]
-    pub timeout: u64,
+    /// How long to wait.
+    #[arg(short, long, value_name = "DURATION", default_value = "30s", value_parser = crate::args::duration)]
+    pub timeout: std::time::Duration,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -19,7 +19,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // a name no lab can have waited out the timeout (#226)
     nlink_lab::state::validate_lab_name(&name)?;
     let start = Instant::now();
-    let deadline = start + std::time::Duration::from_secs(timeout);
+    let deadline = start + timeout;
     if !ctx.quiet {
         eprint!("Waiting for lab '{name}'...");
     }
@@ -32,10 +32,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         if Instant::now() >= deadline {
             if !ctx.quiet {
-                eprintln!(" timeout after {timeout}s");
+                eprintln!(" timeout after {timeout:?}");
             }
             return Err(nlink_lab::Error::TimedOut(format!(
-                "timeout waiting for lab '{name}' after {timeout}s"
+                "timeout waiting for lab '{name}' after {timeout:?}"
             )));
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;

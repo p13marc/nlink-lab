@@ -138,6 +138,7 @@ qdisc hub:eth0 tbf {
   limit 100kb
 }
 qdisc hub:eth1 fq_codel { target 5ms ecn }
+qdisc hub:eth2 fq_codel { noecn }
 ---
 
 (source_file
@@ -154,7 +155,12 @@ qdisc hub:eth1 fq_codel { target 5ms ecn }
       (identifier)
       (identifier))
     (identifier)
-    (duration)))
+    (duration))
+  (qdisc_statement
+    (endpoint
+      (identifier)
+      (identifier))
+    (identifier)))
 
 ================
 Firewall chains

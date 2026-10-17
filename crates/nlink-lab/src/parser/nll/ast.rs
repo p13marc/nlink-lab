@@ -762,7 +762,8 @@ pub enum QdiscKindDef {
         limit: Option<u32>,
         flows: Option<u32>,
         quantum: Option<u32>,
-        ecn: bool,
+        /// `ecn` (Some(true)), `noecn` (Some(false)), or neither.
+        ecn: Option<bool>,
     },
     Sfq {
         perturb: Option<Val<Duration>>,

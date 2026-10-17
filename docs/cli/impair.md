@@ -153,10 +153,10 @@ Options:
           Ingress rate limit
 
       --partition
-          Simulate a network partition (save impairments, apply 100% loss)
+          Simulate a network partition: drop everything the endpoint sends and receives. Its qdiscs (netem, `qdisc` block, rate limit, per-pair matrix) stay as they are
 
       --heal
-          Restore pre-partition impairments
+          End a partition: traffic flows again, through what the endpoint had
 
   -h, --help
           Print help (see a summary with '-h')

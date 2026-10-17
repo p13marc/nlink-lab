@@ -167,10 +167,11 @@ the topology no longer has, which `apply` deletes. `wireguard` is nlink's
 Keys never appear in it: peers by public key, private and preshared keys
 as `*-set` flags.
 
-**Traffic-control changes appear only under `topology`.** Impairments,
-per-pair `impair` matrices, `qdisc` blocks and rate limits are applied
-imperatively rather than through the declarative `NetworkConfig` the
-`network` layer diffs, so a netem edit shows up there and nowhere else.
+**Traffic control is in both.** `topology` says which impairment, `qdisc`
+block, rate limit or per-pair matrix the file changed; `network` has what
+the kernel needs for it: `qdiscs-to-add`/`-replace`/`-remove` and the
+`tc` trees (classes, leaves, filters) of each device. A qdisc deleted
+by hand shows only under `network`, as drift.
 
 `apply --check` exits 2 when `no_op` is false.
 

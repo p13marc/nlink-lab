@@ -112,13 +112,11 @@ pub struct DryRunReport<'a> {
     pub lab: &'a str,
     pub no_op: bool,
     pub change_count: usize,
-    /// Lab-graph changes: nodes, links, routes, sysctls, nftables — and
-    /// **every traffic-control change**, which lives only here.
-    /// Impairments, per-pair `impair` matrices, `qdisc` blocks and rate
-    /// limits are applied imperatively, outside the declarative
-    /// `NetworkConfig` the `network` layer diffs, so without this field
-    /// `apply --check --json` reported a netem edit as no change at all
-    /// (#108). Elided when empty.
+    /// Lab-graph changes: nodes, links, routes, sysctls, nftables,
+    /// impairments, per-pair `impair` matrices, `qdisc` blocks, rate
+    /// limits — what the topology files differ in. The kernel side of a
+    /// traffic-control change is in `network` (the qdiscs and trees it
+    /// declares), with any drift from it (#108). Elided when empty.
     #[serde(skip_serializing_if = "nlink_lab::diff::TopologyDiff::is_empty")]
     pub topology: &'a nlink_lab::diff::TopologyDiff,
     /// Typed per-node `NetworkConfig` diff. Empty map elided.

@@ -125,6 +125,45 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   builds one with a struct literal adds `wireguard: Default::default()`.
 - **A `network { mtu }` lab deployed by an older nlink-lab keeps its
   1500-byte member veths** until it is redeployed (#161).
+- **Traffic control is declared** (#108). Impairments, `qdisc` blocks,
+  rate limits and per-pair matrices are part of each node's `Stack` op,
+  not ops of their own: `Op::Netem`, `Op::Qdisc`, `Op::RateLimit`,
+  `Op::NetworkImpairments`, `Op::ClearQdisc`, `Op::RemoveRateLimit` and
+  `Stage::Tc` are gone from `deploy --dry-run` / `apply --check` plans
+  and from the library API, and so are the matching rollback entries (a
+  journal from an interrupted deploy of an older nlink-lab that holds
+  them is not loaded; deleting its namespaces clears their qdiscs).
+  `apply --check --json` lists the kernel side in `network`
+  (`qdiscs-to-add`/`-replace`/`-remove`, `tc` trees), and a qdisc
+  deleted by hand is drift there.
+- **A partition no longer replaces the root qdisc** (#168). It drops
+  both directions with a matchall filter on a clsact qdisc and leaves
+  the root as it is, so `tc qdisc show` keeps showing the endpoint's
+  netem, `qdisc` block or tree, and `impair --show --json` reports
+  `partition: true` without `loss_pct: 100`. A partition now survives
+  an `apply` that changes the endpoint's impairment (only
+  `--reset-impairments` drops it). An endpoint partitioned by an older
+  nlink-lab still carries that version's 100%-loss netem: `impair
+  --clear` it after upgrading (`--heal` leaves it).
+- **`impair --clear` restores what the topology declares besides an
+  impairment** (a `qdisc` block, a rate limit, a per-pair matrix); it
+  used to leave the interface bare.
+- **`impair` on a network's per-pair source is the matrix's default**
+  (#169), here and in the topology: an endpoint `impair` used to be
+  dropped there silently. A `qdisc` block or `rate` on such a source is
+  now an error (`network-impair-conflicts`).
+- **`QdiscKind::FqCodel::ecn` is `Option<bool>`** (library API and JSON
+  topologies, #173): `Some(true)` is `ecn`, `Some(false)` the new
+  `noecn`, `None` the kernel's default (on). A JSON topology with
+  `"ecn": false` used to mean the default and now turns ECN off; state
+  files never wrote `false`, so they keep their meaning.
+- **What the first `apply` after upgrading from 0.13.0 replaces once**,
+  now that traffic control is compared (measured by deploying every
+  example with 0.13.0, then `apply --check`): a `prio`'s root, which
+  moves to handle `1:`; a netem whose loss nlink now rounds as tc does,
+  at a root or a per-pair leaf (nlink #633); and a rate limit's ingress
+  redirect and IFB alias, which is how #149's fix reaches a lab deployed
+  before it. Labs deployed by a build of this release see no change.
 
 ### Added
 
@@ -219,8 +258,9 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   nlink redirected ingress traffic to the IFB with a mirred *ingress*
   redirect, so packets never reached the shaper or the stack; it is a
   matchall egress redirect now. `examples/iperf-benchmark.nll` shapes
-  both directions again. A lab deployed with an older nlink-lab keeps
-  the old redirect until its rate limit is applied again.
+  both directions again. A lab deployed with an older nlink-lab gets the
+  new redirect on its first `apply`, since traffic control is declared
+  and compared (#108).
 - **An `fq_codel` with `flows` could not be edited (#171)**: every apply
   after the first was EINVAL. nlink-lab's own sfq delete-and-re-add
   workaround goes, as nlink now replaces both itself.
@@ -279,6 +319,20 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   removed, and `apply --check`, `verify` and `apply` all said there was
   nothing to do. `LayeredDiff` has a WireGuard layer, and `apply`
   converges it.
+- **Removing a network's last per-pair `impair` left its HTB tree** on the
+  source interface: the op had no inverse. Declared, it is removed with
+  the rest (#108).
+- **`impair --partition` / `--heal` destroyed the endpoint's `qdisc`,
+  rate limit or per-pair tree** (#168), and `apply` never put it back:
+  partition replaced the root with a 100%-loss netem, heal deleted it.
+- **An endpoint `impair` on a per-pair source was silently lost** (#169):
+  the per-pair tree replaced it. It is the tree's default impairment now.
+- **`fq_codel` could not turn ECN off** (#173): `noecn` does; the spec
+  now says ECN is on by default.
+- **Traffic control drift was invisible**: a qdisc deleted by hand was
+  never reported, and `apply` re-installed only what changed in the
+  file. It is drift in `apply --check`/`verify` now, and `apply` repairs
+  it (#108).
 - **Docs:**
   - `docs/cli/apply.md` showed an `apply --check --json` payload that
     never existed. It now shows output from a real run.
@@ -298,6 +352,12 @@ the redesigns it asked for (nlink #534). What reaches nlink-lab here:
   stack with `Stack::plan_in`, saved WireGuard keys included.
 - `Plan::diff` compares ops by value (`PartialEq`) rather than by their
   `Debug` text.
+- Traffic control is planned in `deploy/plan/tc.rs` (`QdiscSpec`,
+  `RateLimiter::declare`, `PerPeerImpairer::declare`) and applied with
+  each node's `Stack`; a runtime `impair`, `--clear`, `--partition` or
+  `--heal` reconciles the node's traffic control alone, against what it
+  declared before the change. `docs/ARCHITECTURE.md` lost two stages it
+  still listed (`Routes`, `Tc`).
 - A deploy or apply runs its plan on a thread and runtime of its own,
   so `deploy()`/`apply()` stay `Send` (nlink 0.32's request futures, as
   the plan composes them, trip rustc's higher-ranked `Send` check,

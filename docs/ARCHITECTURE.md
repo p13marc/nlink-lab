@@ -155,13 +155,11 @@ first, in *reverse* stage order.
 | 6 | `HostLinks` | host macvlan/ipvlan moved into namespaces |
 | 7 | `LinksUp` | bring nlink-lab-created interfaces up |
 | 8 | `Sysctls` | per-node sysctls |
-| 9 | `Stack` | the declarative per-node stack: links, addresses, routes, nftables, WireGuard |
-| 10 | `Routes` | routes in non-main (VRF) tables, owned explicitly because nlink's purge only converges the main table (#83) |
-| 11 | `Tc` | netem, per-pair impairments, rate limits |
-| 12 | `Dns` | `/etc/hosts` and per-namespace `/etc` overlays |
-| 13 | `RoutingDaemons` | FRR (zebra + ospfd/bgpd) — after DNS, before user processes, so services see converged routes (#65) |
-| 14 | `Processes` | background processes and healthchecks |
-| 15 | `Wifi` | hostapd / wpa_supplicant / mesh join |
+| 9 | `Stack` | the declarative per-node stack: links, addresses, routes (VRF tables included), traffic control (netem, `qdisc` blocks, rate limits, per-pair matrices, partitions), nftables, WireGuard |
+| 10 | `Dns` | `/etc/hosts` and per-namespace `/etc` overlays |
+| 11 | `RoutingDaemons` | FRR (zebra + ospfd/bgpd) — after DNS, before user processes, so services see converged routes (#65) |
+| 12 | `Processes` | background processes and healthchecks |
+| 13 | `Wifi` | hostapd / wpa_supplicant / mesh join |
 
 Every netlink resource commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig`, planned and

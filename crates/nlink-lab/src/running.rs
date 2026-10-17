@@ -30,7 +30,8 @@ pub struct RunningLab {
     dns_injected: bool,
     /// Whether mac80211_hwsim was loaded.
     wifi_loaded: bool,
-    /// Saved impairments before partition (endpoint → Impairment).
+    /// Partitioned endpoints (`impair --partition`), each with the
+    /// impairment it had then (what an older nlink-lab restores on heal).
     saved_impairments: BTreeMap<String, crate::types::Impairment>,
     /// Impairments set at runtime (`impair`), persisted so `apply`,
     /// `verify` and snapshots see them (#59).
@@ -1384,25 +1385,25 @@ impl RunningLab {
     ///
     /// The value is recorded in the lab state (`live_impairments`) so a
     /// later `apply`, `verify` or `snapshot` sees what is really installed
-    /// instead of the topology's declaration (#59). A partitioned endpoint
-    /// keeps its partition; the new value becomes what `heal` restores.
+    /// instead of the topology's declaration (#59). It becomes the
+    /// endpoint's root netem, taking over from a `qdisc` block or rate
+    /// limit there until cleared; on the source interface of a network's
+    /// per-pair matrix it is the matrix's default impairment (#169). A
+    /// partitioned endpoint stays partitioned.
     pub async fn set_impairment(
         &mut self,
         endpoint: &str,
         impairment: &crate::types::Impairment,
     ) -> Result<()> {
-        if self.saved_impairments.contains_key(endpoint) {
-            // Partitioned: remember the new value for `heal`, leave the
-            // 100% loss in place.
-            self.saved_impairments
-                .insert(endpoint.to_string(), impairment.clone());
-            self.live_impairments
-                .insert(endpoint.to_string(), impairment.clone());
-            return self.save_state();
-        }
-        self.install_impairment(endpoint, impairment).await?;
-        self.live_impairments
-            .insert(endpoint.to_string(), impairment.clone());
+        let value = impairment.clone();
+        self.change_tc(endpoint, |lab| {
+            if lab.saved_impairments.contains_key(endpoint) {
+                lab.saved_impairments
+                    .insert(endpoint.to_string(), value.clone());
+            }
+            lab.live_impairments.insert(endpoint.to_string(), value);
+        })
+        .await?;
         crate::events::record(
             &self.topology.lab.name,
             crate::events::LifecycleKind::Impaired {
@@ -1413,80 +1414,79 @@ impl RunningLab {
         self.save_state()
     }
 
-    /// Delete the root qdisc (removes all netem config) without touching
-    /// the bookkeeping. Idempotent: a missing qdisc is the same as
-    /// "already cleared" — `del_qdisc_if_exists` (nlink 0.24) returns
-    /// Ok(false) rather than a `QdiscNotFound` error we'd have to match.
-    async fn uninstall_impairment(&self, endpoint: &str) -> Result<()> {
+    /// Apply `change` to the runtime state (`live_impairments`,
+    /// partitions), then converge `endpoint`'s node on its traffic
+    /// control: declared before and after the change, and reconciled
+    /// (#108). If that fails, the runtime state is put back.
+    async fn change_tc(&mut self, endpoint: &str, change: impl FnOnce(&mut Self)) -> Result<()> {
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
-        let conn = self.route_conn_for(&ep.node)?;
-        conn.del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
-            .await
-            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
+        let handle = self
+            .ns_resolver_of(&ep.node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: ep.node.clone(),
+            })?;
+        let (live, saved) = (
+            self.live_impairments.clone(),
+            self.saved_impairments.clone(),
+        );
+        let before = crate::deploy::live_view(self);
+        change(self);
+        let after = crate::deploy::live_view(self);
+        if let Err(e) = crate::deploy::reconcile_node_tc(
+            &handle,
+            &ep.node,
+            (&before.0, &before.1),
+            (&after.0, &after.1),
+        )
+        .await
+        {
+            self.live_impairments = live;
+            self.saved_impairments = saved;
+            return Err(e);
+        }
         Ok(())
     }
 
-    /// Install a netem qdisc without touching the bookkeeping.
-    async fn install_impairment(
-        &self,
-        endpoint: &str,
-        impairment: &crate::types::Impairment,
-    ) -> Result<()> {
-        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
-            endpoint: endpoint.to_string(),
-        })?;
-        let conn = self.route_conn_for(&ep.node)?;
-
-        let netem = crate::deploy::build_netem(impairment)?;
-
-        // `replace_qdisc` is add-or-update in one idempotent call, so no
-        // change-then-add fallback that used to swallow every error from
-        // the first attempt (issue #40).
-        conn.replace_qdisc(&ep.iface, netem)
-            .await
-            .map_err(|e| Error::deploy_failed(format!("set impairment on '{endpoint}': {e}")))
-    }
-
-    /// Whether the given endpoint is currently in
-    /// [`partition`](Self::partition)ed state — i.e. its pre-partition
-    /// impairment is saved off and a 100% loss qdisc is installed.
-    /// Used by `nlink-lab impair --show --json` to surface the
-    /// partition flag distinct from "user installed `--loss 100%`".
+    /// Whether the given endpoint is currently
+    /// [`partition`](Self::partition)ed. Used by `nlink-lab impair --show
+    /// --json` to surface the partition flag distinct from "user
+    /// installed `--loss 100%`".
     pub fn is_partitioned(&self, endpoint: &str) -> bool {
         self.saved_impairments.contains_key(endpoint)
     }
 
-    /// Remove all impairments from an interface.
+    /// Remove all impairments from an interface, and its partition.
     ///
-    /// Idempotent: a `QdiscNotFound` from the kernel is treated as
-    /// success — we're converging on the same end state. Other errors
-    /// propagate. Also prunes any `saved_impairments` bookkeeping for
-    /// this endpoint so a subsequent [`partition`](Self::partition) on
-    /// the same endpoint goes through the real install path instead of
-    /// short-circuiting on a stale "is partitioned" flag.
+    /// The root qdisc is deleted, then the endpoint converges on what the
+    /// topology declares other than an impairment: a `qdisc` block, a rate
+    /// limit, a network's per-pair matrix (without a default impairment).
+    /// Deleting it first also removes a 100%-loss netem that an older
+    /// nlink-lab installed for a partition. Idempotent.
     pub async fn clear_impairment(&mut self, endpoint: &str) -> Result<()> {
-        self.uninstall_impairment(endpoint).await?;
-
-        // Drop any "is partitioned" bookkeeping for this endpoint and
-        // persist. Without this, a follow-up `partition()` would see
-        // the stale entry and return early without installing the
-        // qdisc — the silent no-op reported as round-4 §1.
-        let removed_partition = self.saved_impairments.remove(endpoint).is_some();
+        let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
+            endpoint: endpoint.to_string(),
+        })?;
+        self.route_conn_for(&ep.node)?
+            .del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
+            .await
+            .map_err(|e| Error::deploy_failed(format!("clear impairment on '{endpoint}': {e}")))?;
         // A cleared endpoint is "no impairment" until the topology says
         // otherwise again: record the empty value so `apply` does not
         // reinstall the declared one behind the operator's back.
-        let changed_live = if self.topology.impairments.contains_key(endpoint) {
-            self.live_impairments
-                .insert(endpoint.to_string(), crate::types::Impairment::default());
-            true
-        } else {
-            self.live_impairments.remove(endpoint).is_some()
-        };
-        if removed_partition || changed_live {
-            self.save_state()?;
-        }
+        let declared = self.topology.impairments.contains_key(endpoint);
+        self.change_tc(endpoint, |lab| {
+            lab.saved_impairments.remove(endpoint);
+            if declared {
+                lab.live_impairments
+                    .insert(endpoint.to_string(), crate::types::Impairment::default());
+            } else {
+                lab.live_impairments.remove(endpoint);
+            }
+        })
+        .await?;
+        self.save_state()?;
         crate::events::record(
             &self.topology.lab.name,
             crate::events::LifecycleKind::ImpairCleared {
@@ -1496,30 +1496,26 @@ impl RunningLab {
         Ok(())
     }
 
-    /// Partition an endpoint: save current impairment, apply 100% loss.
+    /// Partition an endpoint: drop everything it sends and receives. A
+    /// matchall drop on both hooks of a clsact qdisc, ahead of any other
+    /// filter; its root qdisc and the tree under it (netem, `qdisc`
+    /// block, rate limit, per-pair matrix) stay as they are (#168).
     pub async fn partition(&mut self, endpoint: &str) -> Result<()> {
-        // Don't double-partition (preserve original saved config)
         if self.saved_impairments.contains_key(endpoint) {
             return Ok(());
         }
-
-        // What `heal` should put back: the runtime value if the operator
-        // set one, else the topology's declaration (or nothing).
+        // Recorded with the impairment in effect, which older nlink-lab
+        // versions restore on `heal`.
         let current = self
             .live_impairments
             .get(endpoint)
             .or_else(|| self.topology.impairments.get(endpoint))
             .cloned()
             .unwrap_or_default();
-
-        self.saved_impairments.insert(endpoint.to_string(), current);
-
-        // Apply 100% loss
-        let partition_imp = crate::types::Impairment {
-            loss: Some("100%".to_string()),
-            ..Default::default()
-        };
-        self.install_impairment(endpoint, &partition_imp).await?;
+        self.change_tc(endpoint, |lab| {
+            lab.saved_impairments.insert(endpoint.to_string(), current);
+        })
+        .await?;
         self.save_state()?;
         crate::events::record(
             &self.topology.lab.name,
@@ -1530,19 +1526,18 @@ impl RunningLab {
         Ok(())
     }
 
-    /// Heal an endpoint: restore saved impairment from before partition.
+    /// Heal an endpoint: take its partition's drop filters away. What it
+    /// carried under them is still there.
     pub async fn heal(&mut self, endpoint: &str) -> Result<()> {
-        let saved = self.saved_impairments.remove(endpoint).ok_or_else(|| {
-            Error::deploy_failed(format!("endpoint '{endpoint}' is not partitioned"))
-        })?;
-
-        if saved == crate::types::Impairment::default() {
-            // Back to "nothing installed" — one `healed` record, not an
-            // `impair_cleared` as well.
-            self.uninstall_impairment(endpoint).await?;
-        } else {
-            self.install_impairment(endpoint, &saved).await?;
+        if !self.saved_impairments.contains_key(endpoint) {
+            return Err(Error::deploy_failed(format!(
+                "endpoint '{endpoint}' is not partitioned"
+            )));
         }
+        self.change_tc(endpoint, |lab| {
+            lab.saved_impairments.remove(endpoint);
+        })
+        .await?;
         self.save_state()?;
         crate::events::record(
             &self.topology.lab.name,

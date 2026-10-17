@@ -10,15 +10,13 @@ use std::collections::BTreeMap;
 
 use nlink::netlink::bridge_vlan::BridgeVlanBuilder;
 use nlink::netlink::namespace;
-use nlink::netlink::ratelimit::RateLimiter;
 use nlink::{Connection, Route};
 
 use super::op::{Op, Plan, Stage};
 use super::rollback::{Journal, Undo};
-use super::{NsRef, apply_network_impairments, guard_namespace_absent};
+use super::{NsRef, guard_namespace_absent};
 use crate::container::Runtime;
 use crate::error::{Error, Result};
-use crate::helpers::parse_rate_bps;
 use crate::running::RunningLab;
 use crate::state::{self, ContainerState};
 use crate::types::Topology;
@@ -84,7 +82,10 @@ impl ApplyEnv {
     }
 
     /// Environment seeded from a running lab (apply mode).
-    pub fn from_running(running: &RunningLab, desired: &Topology) -> Result<Self> {
+    /// `current` is the running lab's plan (runtime impairments and
+    /// partitions overlaid): its stacks are what each node declared, so
+    /// what the desired ones no longer declare is removed.
+    pub fn from_running(running: &RunningLab, desired: &Topology, current: &Plan) -> Result<Self> {
         let mut env = Self::for_deploy(desired)?;
         env.lab = running.name().to_string();
         if env.runtime.is_none()
@@ -121,7 +122,7 @@ impl ApplyEnv {
             .iter()
             .map(|(name, node)| (name.clone(), node.vrfs.values().map(|v| v.table).collect()))
             .collect();
-        env.previous_network = super::previous_network_configs(running.topology());
+        env.previous_network = super::stack_networks(current);
         Ok(env)
     }
 
@@ -638,97 +639,6 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             );
             super::apply_stack_for_node(&handle, node, cfg, plan).await?;
         }
-        Op::Netem {
-            node,
-            iface,
-            impairment,
-        } => {
-            let conn = env.route(node)?;
-            let netem = super::build_netem(impairment)?;
-            conn.replace_qdisc(iface.as_str(), netem)
-                .await
-                .map_err(|e| {
-                    Error::deploy_failed(format!("failed to apply netem on '{node}:{iface}': {e}"))
-                })?;
-            journal.record(Undo::ClearQdisc {
-                ns: env.handle(node)?.clone(),
-                iface: iface.clone(),
-            });
-        }
-        Op::Qdisc { node, iface, qdisc } => {
-            let conn = env.route(node)?;
-            let kind = qdisc.kind.name();
-            let replace = async |built: super::BuiltQdisc| match built {
-                super::BuiltQdisc::Tbf(c) => conn.replace_qdisc(iface.as_str(), c).await,
-                super::BuiltQdisc::FqCodel(c) => conn.replace_qdisc(iface.as_str(), c).await,
-                super::BuiltQdisc::Sfq(c) => conn.replace_qdisc(iface.as_str(), c).await,
-                // `prio` gets root handle 1:, so a firewall's `classify 1:N`
-                // (`meta priority set`) names its bands: `prio_classify`
-                // ignores a priority whose major is not the qdisc's (#167).
-                super::BuiltQdisc::Prio(c) => {
-                    conn.replace_qdisc_full(
-                        iface.as_str(),
-                        nlink::TcHandle::ROOT,
-                        Some(nlink::TcHandle::major_only(1)),
-                        c,
-                    )
-                    .await
-                }
-            };
-            // A root qdisc is replaced in place (#108). nlink 0.31's
-            // `replace_qdisc` looks at the slot first (nlink #486): sfq,
-            // which has no change op, and an fq_codel whose `flows`
-            // changed are grafted anew, and the same `flows` is not sent
-            // again (the kernel refuses any `flows` on a live fq_codel).
-            // It used to be EINVAL for both; nlink-lab worked around sfq.
-            let res = replace(super::build_qdisc(qdisc)?).await;
-            res.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to apply {kind} qdisc on '{node}:{iface}': {e}"
-                ))
-            })?;
-            journal.record(Undo::ClearQdisc {
-                ns: env.handle(node)?.clone(),
-                iface: iface.clone(),
-            });
-        }
-        Op::NetworkImpairments => {
-            apply_network_impairments(&env.topology, &env.ns).await?;
-        }
-        Op::RateLimit { node, iface, limit } => {
-            let conn = env.route(node)?;
-            let mut limiter = RateLimiter::new(iface);
-            if let Some(egress) = &limit.egress {
-                let bits = parse_rate_bps(egress).map_err(|e| {
-                    Error::deploy_failed(format!("bad egress rate on '{node}:{iface}': {e}"))
-                })?;
-                limiter = limiter.egress(nlink::util::Rate::bits_per_sec(bits));
-            }
-            if let Some(ingress) = &limit.ingress {
-                let bits = parse_rate_bps(ingress).map_err(|e| {
-                    Error::deploy_failed(format!("bad ingress rate on '{node}:{iface}': {e}"))
-                })?;
-                limiter = limiter.ingress(nlink::util::Rate::bits_per_sec(bits));
-            }
-            // `burst` is a byte size (issue #71); it applies to whichever
-            // directions are limited (a no-op otherwise).
-            if let Some(burst) = &limit.burst {
-                let bytes = crate::helpers::parse_size(burst).map_err(|e| {
-                    Error::deploy_failed(format!("bad burst on '{node}:{iface}': {e}"))
-                })?;
-                limiter = limiter.burst_size(nlink::util::Bytes::new(bytes));
-            }
-            let report = limiter.reconcile(&conn).await.map_err(|e| {
-                Error::deploy_failed(format!(
-                    "failed to reconcile rate limit on '{node}:{iface}': {e}"
-                ))
-            })?;
-            tracing::debug!(endpoint = %format!("{node}:{iface}"), changes = report.changes_made, "rate limit reconcile complete");
-            journal.record(Undo::RemoveRateLimit {
-                ns: env.handle(node)?.clone(),
-                iface: iface.clone(),
-            });
-        }
         Op::DnsInject { lab } => {
             let entries = crate::dns::generate_hosts_entries(&env.topology);
             crate::dns::inject_hosts(lab, &entries)?;
@@ -1033,29 +943,6 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 tracing::warn!("failed to delete host link '{name}': {e}");
             }
             env.mgmt_peers.retain(|_, p| p != name);
-        }
-        // A rate limit is more than its root qdisc: ingress shaping adds an
-        // `ffff:` qdisc with a redirect filter and an `ifb_<iface>` device,
-        // which clearing the root alone left running.
-        Op::RemoveRateLimit { node, iface } => {
-            if let Ok(conn) = env.route(node) {
-                RateLimiter::new(iface).remove(&conn).await.map_err(|e| {
-                    Error::deploy_failed(format!(
-                        "failed to remove rate limit on '{node}:{iface}': {e}"
-                    ))
-                })?;
-            }
-        }
-        Op::ClearQdisc { node, iface } => {
-            if let Ok(conn) = env.route(node) {
-                conn.del_qdisc_if_exists(iface.as_str(), nlink::TcHandle::ROOT)
-                    .await
-                    .map_err(|e| {
-                        Error::deploy_failed(format!(
-                            "failed to clear qdisc on '{node}:{iface}': {e}"
-                        ))
-                    })?;
-            }
         }
         Op::KillExec { node, index } => {
             let key = format!("{node}:{index}");

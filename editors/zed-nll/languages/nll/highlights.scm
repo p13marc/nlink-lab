@@ -55,7 +55,7 @@
 (impairment_statement "impair" @keyword)
 (rate_statement "rate" @keyword)
 (qdisc_statement "qdisc" @keyword)
-(qdisc_statement ["rate" "burst" "limit" "peakrate" "mtu" "target" "interval" "flows" "quantum" "perturb" "bands" "ecn"] @keyword)
+(qdisc_statement ["rate" "burst" "limit" "peakrate" "mtu" "target" "interval" "flows" "quantum" "perturb" "bands" "ecn" "noecn"] @keyword)
 (qdisc_statement (identifier) @type)
 (rate_properties "burst" @keyword)
 (port_definition ["port" "pvid" "vlans" "tagged" "untagged"] @keyword)

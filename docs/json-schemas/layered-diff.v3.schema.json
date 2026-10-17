@@ -43,7 +43,7 @@
       "minimum": 0
     },
     "topology": {
-      "description": "Lab-graph changes: nodes, links, routes, sysctls, nftables — and\n**every traffic-control change**, which lives only here.\nImpairments, per-pair `impair` matrices, `qdisc` blocks and rate\nlimits are applied imperatively, outside the declarative\n`NetworkConfig` the `network` layer diffs, so without this field\n`apply --check --json` reported a netem edit as no change at all\n(#108). Elided when empty.",
+      "description": "Lab-graph changes: nodes, links, routes, sysctls, nftables,\nimpairments, per-pair `impair` matrices, `qdisc` blocks, rate\nlimits — what the topology files differ in. The kernel side of a\ntraffic-control change is in `network` (the qdiscs and trees it\ndeclares), with any drift from it (#108). Elided when empty.",
       "$ref": "#/$defs/TopologyDiff"
     },
     "wireguard": {
@@ -6288,7 +6288,11 @@
           "type": "object",
           "properties": {
             "ecn": {
-              "type": "boolean"
+              "description": "ECN marking: `Some(true)` (`ecn`), `Some(false)` (`noecn`), or\nthe kernel's default, which is on (#173).",
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "flows": {
               "type": [

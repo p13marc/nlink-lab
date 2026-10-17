@@ -139,9 +139,7 @@ impl NsRef {
 use std::collections::BTreeMap;
 
 use crate::container::CreateOpts;
-use crate::types::{
-    EndpointRef, ExecConfig, Impairment, IpvlanConfig, MacvlanConfig, RateLimit, WifiConfig,
-};
+use crate::types::{EndpointRef, ExecConfig, IpvlanConfig, MacvlanConfig, WifiConfig};
 
 /// Deploy stages, in execution order. A plan is sorted by stage; a
 /// rollback / removal walks stages in reverse.
@@ -164,10 +162,10 @@ pub enum Stage {
     LinksUp,
     /// Per-node sysctls.
     Sysctls,
-    /// Declarative per-node stack (links/addresses/routes, nftables, WireGuard).
+    /// Declarative per-node stack: links, addresses, routes and traffic
+    /// control (netem, `qdisc` blocks, rate limits, per-pair matrices,
+    /// partitions), nftables, WireGuard.
     Stack,
-    /// Traffic control: netem, per-pair impairments, rate limits.
-    Tc,
     /// /etc/hosts and per-namespace /etc overlays.
     Dns,
     /// FRR daemons (zebra + ospfd/bgpd) — after DNS overlays, before user
@@ -213,7 +211,7 @@ pub enum Op {
         name: String,
         image: String,
         pull: Option<String>,
-        opts: CreateOpts,
+        opts: Box<CreateOpts>,
     },
     LoadHwsim {
         radios: u32,
@@ -276,24 +274,6 @@ pub enum Op {
         node: String,
         cfg: Box<StackConfig>,
     },
-    Netem {
-        node: String,
-        iface: String,
-        impairment: Impairment,
-    },
-    /// All per-pair `impair a -- b` matrices of every `network` block.
-    NetworkImpairments,
-    RateLimit {
-        node: String,
-        iface: String,
-        limit: RateLimit,
-    },
-    /// A non-netem root qdisc (`qdisc a:eth0 tbf { … }`, #67).
-    Qdisc {
-        node: String,
-        iface: String,
-        qdisc: crate::types::QdiscConfig,
-    },
     DnsInject {
         lab: String,
     },
@@ -348,14 +328,6 @@ pub enum Op {
         ns: String,
         name: String,
     },
-    ClearQdisc {
-        node: String,
-        iface: String,
-    },
-    RemoveRateLimit {
-        node: String,
-        iface: String,
-    },
     KillNodeProcesses {
         node: String,
     },
@@ -403,12 +375,6 @@ impl Op {
             LinksUp { .. } => Stage::LinksUp,
             Sysctls { .. } => Stage::Sysctls,
             Stack { .. } => Stage::Stack,
-            Netem { .. }
-            | NetworkImpairments
-            | RateLimit { .. }
-            | Qdisc { .. }
-            | ClearQdisc { .. }
-            | RemoveRateLimit { .. } => Stage::Tc,
             DnsInject { .. } | DnsNetnsEtc { .. } | RemoveDns { .. } => Stage::Dns,
             StartupDelay { .. }
             | Exec { .. }
@@ -446,14 +412,6 @@ impl Op {
             LinksUp { node, .. } => format!("linksup:{node}"),
             Sysctls { node, .. } => format!("sysctls:{node}"),
             Stack { node, .. } => format!("stack:{node}"),
-            Netem { node, iface, .. } | ClearQdisc { node, iface } => {
-                format!("qdisc:{node}:{iface}")
-            }
-            NetworkImpairments => "network-impairments".into(),
-            Qdisc { node, iface, .. } => format!("qdisc:{node}:{iface}"),
-            RateLimit { node, iface, .. } | RemoveRateLimit { node, iface } => {
-                format!("ratelimit:{node}:{iface}")
-            }
             DnsInject { lab } | RemoveDns { lab } => format!("dns:{lab}"),
             DnsNetnsEtc { ns, .. } => format!("dns-etc:{ns}"),
             StartupDelay { node, .. } => format!("delay:{node}"),
@@ -518,18 +476,6 @@ impl Op {
                 node: node.clone(),
                 iface: cfg.name.clone(),
             },
-            Qdisc { node, iface, .. } => ClearQdisc {
-                node: node.clone(),
-                iface: iface.clone(),
-            },
-            Netem { node, iface, .. } => ClearQdisc {
-                node: node.clone(),
-                iface: iface.clone(),
-            },
-            RateLimit { node, iface, .. } => RemoveRateLimit {
-                node: node.clone(),
-                iface: iface.clone(),
-            },
             DnsInject { lab } => RemoveDns { lab: lab.clone() },
             Exec {
                 node, index, exec, ..
@@ -551,8 +497,6 @@ impl Op {
                 | DeleteLink { .. }
                 | DeleteHostLink { .. }
                 | DeleteBridge { .. }
-                | ClearQdisc { .. }
-                | RemoveRateLimit { .. }
                 | KillNodeProcesses { .. }
                 | KillExec { .. }
                 | KillWifiDaemon { .. }
@@ -599,14 +543,8 @@ impl Op {
             LinksUp { node, ifaces } => format!("{node}: up {}", ifaces.join(",")),
             Sysctls { node, entries } => format!("{node}: {} sysctl(s)", entries.len()),
             Stack { node, .. } => {
-                format!("{node}: reconcile links/addresses/routes, nftables, wireguard")
+                format!("{node}: reconcile links/addresses/routes/tc, nftables, wireguard")
             }
-            Netem { node, iface, .. } => format!("netem on {node}:{iface}"),
-            Qdisc { node, iface, qdisc } => {
-                format!("{} qdisc on {node}:{iface}", qdisc.kind.name())
-            }
-            NetworkImpairments => "per-pair network impairments".into(),
-            RateLimit { node, iface, .. } => format!("rate limit on {node}:{iface}"),
             DnsInject { lab } => format!("inject /etc/hosts entries for {lab}"),
             DnsNetnsEtc { ns, .. } => format!("/etc/netns/{ns} overlay"),
             StartupDelay { node, delay } => format!("{node}: wait {delay}"),
@@ -632,8 +570,6 @@ impl Op {
             DeleteLink { node, iface } => format!("delete link {node}:{iface}"),
             DeleteHostLink { name } => format!("delete host link {name}"),
             DeleteBridge { ns, name } => format!("delete bridge {name} in {ns}"),
-            ClearQdisc { node, iface } => format!("clear qdisc on {node}:{iface}"),
-            RemoveRateLimit { node, iface } => format!("remove rate limit on {node}:{iface}"),
             KillNodeProcesses { node } => format!("stop background processes of {node}"),
             KillExec { node, index } => format!("{node}: stop exec[{index}]"),
             KillWifiDaemon { node, name, mode } => format!("{node}: stop wifi {name} ({mode:?})"),
@@ -698,8 +634,6 @@ impl Plan {
         removals.retain(|o| match o {
             Op::DeleteBridge { ns, .. } => !dying_ns.contains(ns.as_str()),
             Op::DeleteLink { node, .. }
-            | Op::ClearQdisc { node, .. }
-            | Op::RemoveRateLimit { node, .. }
             | Op::KillNodeProcesses { node }
             | Op::KillExec { node, .. }
             | Op::KillWifiDaemon { node, .. } => !dying.contains(node.as_str()),
@@ -720,7 +654,6 @@ impl Plan {
                     // reconcile-style ops: always re-run (idempotent)
                     Op::Stack { .. }
                     | Op::LinksUp { .. }
-                    | Op::NetworkImpairments
                     | Op::DnsInject { .. }
                     | Op::DnsNetnsEtc { .. } => changes.push(op.clone()),
                     // an edited exec is stopped (background) and re-run;
@@ -750,32 +683,6 @@ impl Plan {
                                 "apply: bridge {} changed but bridge edits are not applied yet",
                                 op.key()
                             );
-                        }
-                    }
-                    // A root qdisc is *replaced*, never deleted first.
-                    // `Op::Netem`/`Op::Qdisc` apply through
-                    // `Connection::replace_qdisc`, i.e. `RTM_NEWQDISC`
-                    // with `NLM_F_CREATE | NLM_F_REPLACE`: with the same
-                    // kind the kernel changes it in place, keeping the
-                    // handle, the netem seed and the accumulated
-                    // statistics, and with a different kind it creates
-                    // and grafts atomically. Emitting the generic
-                    // `ClearQdisc` removal first instead dropped the
-                    // interface to `noqueue` in between — a window with
-                    // no impairment at all, which is a correctness bug
-                    // for a scenario whose premise is "this link is
-                    // capped for the whole phase" and not only a
-                    // measurement one (#108). nlink removed the same
-                    // del-then-add sequence from its declarative applier
-                    // in 0.19 for the same reason.
-                    //
-                    // Clearing an impairment outright still emits
-                    // `ClearQdisc`: that op is in `desired.ops` for
-                    // neither side, so it comes from the removal pass
-                    // above, which this arm does not touch.
-                    Op::Netem { .. } | Op::Qdisc { .. } => {
-                        if *existing != op {
-                            changes.push(op.clone());
                         }
                     }
                     // everything else: re-create when the payload changed
@@ -841,73 +748,42 @@ network lan { subnet 10.9.0.0/24  members [r:eth1, h:eth1] }
         crate::deploy::plan_for(&t).unwrap()
     }
 
-    /// Changing an impairment must be *one* op. Emitting the generic
-    /// `ClearQdisc` removal first would leave the interface on
-    /// `noqueue` in between, i.e. briefly unimpaired, and hand the new
-    /// netem a fresh handle, seed and zeroed counters (#108).
+    /// Traffic control is declared in the node's stack (#108): a changed
+    /// impairment changes the `Stack` op of both endpoints' nodes, and
+    /// nothing else; nlink then replaces the netem in place.
     #[test]
-    fn a_changed_impairment_replaces_in_place() {
+    fn a_changed_impairment_is_a_stack_change() {
         let lab = |delay: &str| {
-            format!(
+            plan_of(&format!(
                 r#"lab "q"
 node a
 node b
 link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay {delay} }}
 "#
-            )
+            ))
         };
-        let plan = Plan::diff(&plan_of(&lab("5ms")), &plan_of(&lab("40ms")));
-        let tc: Vec<&Op> = plan
-            .ops
-            .iter()
-            .filter(|o| matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. }))
-            .collect();
-        assert!(
-            tc.iter().all(|o| matches!(o, Op::Netem { .. })),
-            "a changed impairment must not be preceded by a teardown: {tc:?}"
-        );
-        assert_eq!(tc.len(), 2, "one Netem per endpoint: {tc:?}");
-    }
-
-    /// Removing an impairment altogether still tears the qdisc down —
-    /// that is the only way back to no impairment, and it comes from
-    /// the removal pass rather than the changed-payload arm.
-    #[test]
-    fn a_removed_impairment_still_clears_the_qdisc() {
-        let with = r#"lab "q"
-node a
-node b
-link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms }
-"#;
-        let without = r#"lab "q"
-node a
-node b
-link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
-"#;
-        let plan = Plan::diff(&plan_of(with), &plan_of(without));
-        assert!(
-            plan.ops.iter().any(|o| matches!(o, Op::ClearQdisc { .. })),
-            "dropping the impairment must clear the qdisc: {:?}",
-            plan.ops
-        );
-    }
-
-    /// An unchanged impairment is still no ops at all.
-    #[test]
-    fn an_unchanged_impairment_is_a_no_op() {
-        let nll = r#"lab "q"
-node a
-node b
-link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  delay 5ms rate 1mbit }
-"#;
-        let plan = Plan::diff(&plan_of(nll), &plan_of(nll));
-        assert!(
-            !plan
-                .ops
+        let stack = |p: &Plan, n: &str| {
+            p.ops
                 .iter()
-                .any(|o| matches!(o, Op::Netem { .. } | Op::ClearQdisc { .. })),
-            "re-applying the same impairment must touch nothing: {:?}",
-            plan.ops
+                .find_map(|o| match o {
+                    Op::Stack { node, cfg } if node == n => Some(cfg.clone()),
+                    _ => None,
+                })
+                .expect("stack op")
+        };
+        let (cur, des) = (lab("5ms"), lab("40ms"));
+        for n in ["a", "b"] {
+            let (c, d) = (stack(&cur, n), stack(&des, n));
+            assert_eq!(c.network.qdiscs().len(), 1, "{n}: one declared netem");
+            assert_ne!(c, d, "{n}: the delay is in the stack");
+        }
+        let diff = Plan::diff(&cur, &des);
+        assert!(
+            diff.ops
+                .iter()
+                .all(|o| matches!(o, Op::Stack { .. } | Op::LinksUp { .. })),
+            "{:?}",
+            diff.ops
         );
     }
 }

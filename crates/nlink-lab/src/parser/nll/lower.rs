@@ -6637,7 +6637,7 @@ qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum
                 limit: Some(10240),
                 flows: Some(1024),
                 quantum: Some(1514),
-                ecn: true,
+                ecn: Some(true),
             }
         );
         assert!(
@@ -6674,6 +6674,30 @@ qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum
         let src = "lab \"t\"\nnode a\nqdisc a:eth0 tbf { rate 10mbit burst 10ms }\n";
         let (_, span) = parse_err_span(src);
         assert_eq!(&src[span], "10ms");
+        // `ecn` and `noecn` contradict each other, and belong to fq_codel (#173)
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 fq_codel { ecn noecn }\n";
+        let (msg, span) = parse_err_span(src);
+        assert_eq!(&src[span], "noecn");
+        assert!(msg.contains("contradict"), "{msg}");
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 sfq { noecn }\n";
+        let (msg, _) = parse_err_span(src);
+        assert!(msg.contains("'noecn' is not a sfq parameter"), "{msg}");
+    }
+
+    #[test]
+    fn fq_codel_noecn_lowers_and_renders() {
+        let src = "lab \"t\"\nnode a\nqdisc a:eth0 fq_codel { limit 1000 noecn }\n";
+        let topo = parse_and_lower(src);
+        assert!(matches!(
+            topo.qdiscs["a:eth0"].kind,
+            types::QdiscKind::FqCodel {
+                ecn: Some(false),
+                ..
+            }
+        ));
+        let rendered = crate::render::try_render(&topo).unwrap();
+        assert!(rendered.contains("noecn"), "{rendered}");
+        assert_eq!(parse_and_lower(&rendered).qdiscs, topo.qdiscs);
     }
 
     #[test]

@@ -1232,8 +1232,10 @@ pub enum QdiscKind {
         flows: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         quantum: Option<u32>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        ecn: bool,
+        /// ECN marking: `Some(true)` (`ecn`), `Some(false)` (`noecn`), or
+        /// the kernel's default, which is on (#173).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ecn: Option<bool>,
     },
     /// Stochastic fairness queuing.
     Sfq {

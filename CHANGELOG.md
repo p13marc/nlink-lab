@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-18
+
+The redesign release, and a breaking one: read the Migration section
+before upgrading a script. The CLI is regrouped into 39 commands with
+one vocabulary — the lab is `-L`, `$NLINK_LAB`, `nlink-lab use`, or the
+only one running; durations need a unit; `--format text|json|ndjson`;
+usage errors exit 64; deploy, apply and restore show live progress and
+cancel on Ctrl-C; a removed command says what replaced it. State lives
+in one root, `/var/lib/nlink-lab`, for every user. A host daemon,
+`nlink-labd`, serves every lab behind one authenticated API over a unix
+socket and over Zenoh (mutual TLS off the host), replacing
+`nlink-lab-backend` and `nlink-lab daemon`. The desktop app,
+`nlink-lab-gui`, now edits, deploys and applies topologies and changes
+running labs through it — impairments, snapshots, processes, consoles,
+captures, shells, scenarios — and ships as a plain binary with an
+`install.sh` as well as a flatpak.
+
 Built on **nlink 0.32** (#158). nlink 0.31 fixed every bug nlink-lab
 reported while adopting 0.30 (nlink #456, #458–#533), and 0.32 carries
 the redesigns it asked for (nlink #534). What reaches nlink-lab here:

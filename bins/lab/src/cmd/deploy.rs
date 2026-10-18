@@ -9,9 +9,25 @@ use crate::ctx::{Ctx, green, parse_topology, require_root};
 use crate::host_scan::force_cleanup;
 use crate::render::{print_deploy_summary, print_topology_summary};
 
+/// `deploy --json`: the lab that was deployed (its name after
+/// `--suffix`/`--unique`).
+#[derive(serde::Serialize, schemars::JsonSchema)]
+pub struct DeployReport {
+    pub lab: String,
+    pub nodes: usize,
+    pub links: usize,
+    pub duration_ms: u64,
+    /// The `validate { … }` results, when there are assertions.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub assertions: Vec<nlink_lab::test_runner::AssertionResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assertions_failed: Option<bool>,
+}
+
 #[derive(clap::Args)]
 pub struct Args {
-    /// Path to the topology file (.nll).
+    /// The topology file (`.nll`), or a lab archive (`.nlz`: `archive
+    /// create` makes one), deployed with the params in it.
     pub topology: PathBuf,
 
     /// Validate only, don't actually deploy.
@@ -46,6 +62,11 @@ pub struct Args {
     /// Auto-generate unique lab name suffix (appends PID).
     #[arg(long)]
     pub unique: bool,
+
+    /// With an archive: deploy its rendered topology instead of parsing
+    /// its NLL (an archive made by a newer nlink-lab).
+    #[arg(long)]
+    pub no_reparse: bool,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -59,16 +80,38 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         strict,
         suffix,
         unique,
+        no_reparse,
     } = args;
-    let mut topo = parse_topology(&topology, &params)?;
-    if unique {
-        topo.lab.add_suffix(&std::process::id().to_string());
-    } else if let Some(ref sfx) = suffix {
-        topo.lab.add_suffix(sfx);
+    let suffix = if unique {
+        Some(std::process::id().to_string())
+    } else {
+        suffix
+    };
+    let archive = common::is_archive(&topology);
+    if archive && !params.is_empty() {
+        return Err(nlink_lab::Error::invalid_argument(
+            "--set does not apply to an archive: its params are in it",
+        ));
     }
-    if skip_validate {
-        topo.assertions.clear();
-    }
+    let adjust = |mut topo: nlink_lab::Topology| {
+        if let Some(sfx) = &suffix {
+            topo.lab.add_suffix(sfx);
+        }
+        if skip_validate {
+            topo.assertions.clear();
+        }
+        topo
+    };
+    let mut topo = if archive {
+        // a scratch copy to validate: `--force` must not destroy a lab
+        // for an archive that does not deploy (#221)
+        let scratch = std::env::temp_dir().join(format!("nlink-lab-nlz-{}", std::process::id()));
+        let topo = common::archive_topology(&topology, &scratch, no_reparse);
+        let _ = std::fs::remove_dir_all(&scratch);
+        adjust(topo?)
+    } else {
+        adjust(parse_topology(&topology, &params)?)
+    };
     common::check_topology(&topo)?;
 
     if dry_run {
@@ -106,6 +149,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
     }
 
+    if archive {
+        // the lab's files live with its state, and go with it
+        let dir = nlink_lab::state::state_dir(&topo.lab.name).join("source");
+        topo = adjust(common::archive_topology(&topology, &dir, no_reparse)?);
+    }
+
     let start = Instant::now();
     let lab = topo.deploy().await?;
     let elapsed = start.elapsed();
@@ -115,11 +164,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .ok()
             .map(|p| p.to_string_lossy().into_owned()),
         params: params.clone(),
-        suffix: if unique {
-            Some(std::process::id().to_string())
-        } else {
-            suffix.clone()
-        },
+        suffix: suffix.clone(),
     };
     if let Err(e) = nlink_lab::state::set_source(lab.name(), &source) {
         tracing::warn!("could not record the source of '{}': {e}", lab.name());
@@ -127,17 +172,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let assertions_failed = lab.assertions_failed();
 
     if ctx.json {
-        let mut report = serde_json::json!({
-            "name": topo.lab.name,
-            "nodes": topo.nodes.len(),
-            "links": topo.links.len(),
-            "deploy_time_ms": elapsed.as_millis() as u64,
-        });
-        if !lab.assertion_results().is_empty() {
-            report["assertions"] = serde_json::to_value(lab.assertion_results())?;
-            report["assertions_failed"] = serde_json::Value::Bool(assertions_failed);
-        }
-        println!("{report}");
+        let report = DeployReport {
+            lab: topo.lab.name.clone(),
+            nodes: topo.nodes.len(),
+            links: topo.links.len(),
+            duration_ms: elapsed.as_millis() as u64,
+            assertions_failed: (!lab.assertion_results().is_empty()).then_some(assertions_failed),
+            assertions: lab.assertion_results().to_vec(),
+        };
+        crate::output::emit_json(ctx, &report)?;
     } else {
         println!(
             "{} Lab {:?} deployed in {:.0?}",

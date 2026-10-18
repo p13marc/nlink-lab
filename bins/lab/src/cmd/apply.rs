@@ -9,22 +9,25 @@ use crate::ctx::{Ctx, parse_topology, require_root};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Path to the updated topology file (.nll).
-    pub topology: PathBuf,
+    /// The changed topology file (`.nll` or `.nlz`). Default: the file
+    /// the lab was deployed from (or last applied), with its params.
+    pub topology: Option<PathBuf>,
 
-    /// Set a `param` value (repeatable): --set wan_delay=50ms. Use the
-    /// same values the lab was deployed with.
+    /// The lab to apply it to. Default: the file's lab (with the suffix
+    /// it was deployed with), else `$NLINK_LAB`, `nlink-lab use`, the
+    /// only lab.
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
+
+    /// Set a `param` value (repeatable): --set wan_delay=50ms. Default:
+    /// the values the lab was deployed with, when the file is too.
     #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
     pub params: Vec<(String, String)>,
 
-    /// Show what would change without applying.
+    /// Show what would change without applying (`verify --file FILE`
+    /// is the CI drift gate).
     #[arg(long)]
     pub dry_run: bool,
-
-    /// Drift check — exit non-zero if the live lab differs from
-    /// the NLL. Useful as a CI gate. Implies --dry-run.
-    #[arg(long)]
-    pub check: bool,
 
     /// Fail (exit 2) when any `validate { … }` assertion fails after
     /// the changes are applied. The lab stays as applied for inspection.
@@ -44,21 +47,92 @@ pub struct Args {
     pub reset_impairments: bool,
 }
 
+/// The topology to converge on, and the source to record for the next
+/// `apply`: `file` (or the lab's recorded source), parsed with `params`
+/// (or the recorded ones), named like the running lab (its deploy
+/// suffix added).
+fn desired_topology(
+    file: Option<PathBuf>,
+    lab: &crate::ctx::LabArg,
+    params: Vec<(String, String)>,
+) -> nlink_lab::Result<(nlink_lab::Topology, nlink_lab::state::LabSource)> {
+    let target = match (&file, &lab.lab) {
+        (_, Some(lab)) => Some(lab.clone()),
+        (None, None) => Some(lab.resolve()?),
+        (Some(_), None) => None,
+    };
+    let recorded = target
+        .as_deref()
+        .and_then(nlink_lab::state::source_of)
+        .unwrap_or_default();
+    let (path, params) = match file {
+        Some(path) => (path, params),
+        None => {
+            let lab = target.as_deref().unwrap_or_default();
+            let path = recorded.path.clone().ok_or_else(|| {
+                nlink_lab::Error::invalid_argument(format!(
+                    "lab '{lab}' has no recorded topology file: `nlink-lab apply FILE`"
+                ))
+            })?;
+            let params = if params.is_empty() {
+                recorded.params.clone()
+            } else {
+                params
+            };
+            (PathBuf::from(path), params)
+        }
+    };
+    let mut desired = if common::is_archive(&path) {
+        let name = target.clone().unwrap_or_default();
+        common::archive_topology(
+            &path,
+            &nlink_lab::state::state_dir(&name).join("source"),
+            false,
+        )?
+    } else {
+        parse_topology(&path, &params)?
+    };
+    // a lab deployed with `--suffix`/`--unique` is named after its file
+    // plus that suffix
+    if let Some(target) = &target
+        && desired.lab.name != *target
+        && let Some(sfx) = &recorded.suffix
+        && format!("{}-{sfx}", desired.lab.name) == *target
+    {
+        desired.lab.add_suffix(sfx);
+    }
+    if let Some(target) = &target
+        && desired.lab.name != *target
+    {
+        return Err(nlink_lab::Error::invalid_argument(format!(
+            "{} is the topology of lab '{}', not '{target}'",
+            path.display(),
+            desired.lab.name
+        )));
+    }
+    let source = nlink_lab::state::LabSource {
+        path: std::path::absolute(&path)
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned()),
+        params,
+        suffix: recorded.suffix,
+    };
+    Ok((desired, source))
+}
+
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args {
         topology,
+        lab,
         params,
         dry_run,
-        check,
         strict,
         skip_validate,
         reset_impairments,
     } = args;
     let apply_opts = nlink_lab::ApplyOptions { reset_impairments };
-    // --check implies --dry-run.
-    let dry_run = dry_run || check;
 
-    let mut desired = parse_topology(&topology, &params)?;
+    let (mut desired, source) = desired_topology(topology, &lab, params)?;
     if skip_validate {
         desired.assertions.clear();
     }
@@ -78,7 +152,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     let diff = nlink_lab::diff_topologies(current, &desired);
 
-    // Plan 158f Phase 2 — when --check or --dry-run is set,
+    // Plan 158f Phase 2 — when --dry-run is set,
     // compute the layered diff (topology + per-namespace
     // NetworkConfig + NftablesConfig) so the user sees the
     // full set of kernel changes apply would commit, not
@@ -88,8 +162,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // dump round-trip per (node, protocol family). For a
     // 50-node lab that's ~100 dumps; in practice ms-scale
     // on a quiet host. The cost only applies on
-    // --check/--dry-run paths; normal apply doesn't pay it.
-    let layered_view = if check || dry_run {
+    // --dry-run path; normal apply doesn't pay it.
+    let layered_view = if dry_run {
         Some(nlink_lab::compute_layered_diff_with(&running, &desired, &apply_opts).await?)
     } else {
         None
@@ -99,7 +173,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // still declare, never what disappeared (#83).
     // …and so does the plan's other work: a container re-created because
     // its options changed is in neither the lab graph nor the layers.
-    let (removals, plan_ops): (Vec<String>, Vec<String>) = if check || dry_run {
+    let (removals, plan_ops): (Vec<String>, Vec<String>) = if dry_run {
         common::plan_lists(&nlink_lab::apply_plan_with(
             &running,
             &desired,
@@ -116,18 +190,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .expect("layered_view is Some when dry_run");
         let report =
             crate::output::DryRunReport::new(lab_name, layered, &removals).with_ops(&plan_ops);
-        let no_op = report.no_op;
-        let change_count = report.change_count;
         println!("{}", serde_json::to_string_pretty(&report)?);
-        if check && !no_op {
-            return Err(nlink_lab::Error::Validation(format!(
-                "drift detected: {change_count} change(s) needed to converge"
-            )));
-        }
         return Ok(());
     }
 
-    // Non-JSON path. For --check / --dry-run, render the
+    // Non-JSON path. For --dry-run, render the
     // layered diff (richer than the lab-graph-only
     // TopologyDiff). For ordinary apply, the existing
     // TopologyDiff render is what gets printed.
@@ -135,7 +202,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         && removals.is_empty()
         && plan_ops.is_empty();
 
-    if (check || dry_run) && layered_is_empty {
+    if (dry_run) && layered_is_empty {
         if !ctx.quiet {
             println!("No changes to apply.");
         }
@@ -145,7 +212,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // `verify` reports, or what a newer nlink-lab plans differently for the
     // same file (a forward chain that now accepts). Look before saying so.
     let mut drift_view = None;
-    if !(check || dry_run) && diff.is_empty() {
+    if !dry_run && diff.is_empty() {
         require_root()?;
         let layered = nlink_lab::compute_layered_diff_with(&running, &desired, &apply_opts).await?;
         // A change only the plan sees (container options) is work too: it
@@ -158,11 +225,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 println!(
                     "{}",
                     serde_json::json!({
-                        "name": lab_name,
+                        "schema_version": 1,
+                        "lab": lab_name,
                         "ops": 0,
                         "removed": 0,
                         "applied": [],
-                        "apply_time_ms": 0,
+                        "duration_ms": 0,
                     })
                 );
             } else if !ctx.quiet {
@@ -171,22 +239,6 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             return Ok(());
         }
         drift_view = Some(layered);
-    }
-
-    // --check: exit non-zero if any layered drift.
-    if check {
-        let layered = layered_view
-            .as_ref()
-            .expect("layered_view is Some when check");
-        let change_count = layered.change_count() + removals.len() + plan_ops.len();
-        if !ctx.quiet {
-            println!("Drift detected for lab '{lab_name}':");
-            common::print_drift(layered, &removals, &plan_ops);
-            println!("{change_count} change(s) needed to converge");
-        }
-        return Err(nlink_lab::Error::Validation(format!(
-            "drift detected: {change_count} change(s) needed to converge"
-        )));
     }
 
     // Under `--json`, stdout carries the one JSON document printed after
@@ -217,16 +269,21 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let start = Instant::now();
     let report = nlink_lab::apply_with(&mut running, &desired, &apply_opts).await?;
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
+    // what the next `apply` without a file converges on
+    if let Err(e) = nlink_lab::state::set_source(lab_name, &source) {
+        tracing::warn!("could not record the source of '{lab_name}': {e}");
+    }
     let elapsed = start.elapsed();
     let assertions_failed = running.assertions_failed();
 
     if ctx.json {
         let mut out = serde_json::json!({
-            "name": lab_name,
+            "schema_version": 1,
+            "lab": lab_name,
             "ops": report.ops,
             "removed": report.removed,
             "applied": report.applied,
-            "apply_time_ms": elapsed.as_millis() as u64,
+            "duration_ms": elapsed.as_millis() as u64,
         });
         if !running.assertion_results().is_empty() {
             out["assertions"] = serde_json::to_value(running.assertion_results())?;

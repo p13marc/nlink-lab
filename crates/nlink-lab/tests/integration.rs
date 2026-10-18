@@ -2300,7 +2300,7 @@ async fn compute_layered_diff_reports_non_empty_when_address_changes() {
 // Spawns the CLI rather than calling library code directly so
 // regressions in `bins/lab/src/main.rs` can't slip past.
 #[tokio::test]
-async fn apply_check_json_emits_schema_v3_envelope() {
+async fn verify_json_emits_schema_v3_envelope() {
     if unsafe { libc::geteuid() } != 0 {
         eprintln!("skipping apply_check_json_emits_schema_v2_envelope: requires root");
         return;
@@ -2335,16 +2335,18 @@ async fn apply_check_json_emits_schema_v3_envelope() {
              run `cargo build --bin nlink-lab` first",
         );
 
+    // `verify --file` is the drift gate `apply --check` was (#246)
     let output = std::process::Command::new(&target_dir)
         .args([
             "--json",
-            "apply",
-            "--check",
-            "--dry-run",
+            "verify",
+            "-L",
+            lab.name(),
+            "--file",
             concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/simple.nll"),
         ])
         .output()
-        .expect("failed to run nlink-lab apply --check --json");
+        .expect("failed to run nlink-lab verify --file --json");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let envelope: serde_json::Value = serde_json::from_str(&stdout)

@@ -1,4 +1,4 @@
-//! `nlink-lab restore`.
+//! `nlink-lab snapshot restore`.
 
 use crate::ctx::{Ctx, require_root};
 use anstream::{print, println};
@@ -8,7 +8,7 @@ pub struct Args {
     #[command(flatten)]
     pub lab: crate::ctx::LabArg,
 
-    /// Snapshot name (see `nlink-lab snapshot --list`).
+    /// Snapshot name (see `nlink-lab snapshot ls`).
     pub name: String,
 
     /// Show the plan without changing anything.

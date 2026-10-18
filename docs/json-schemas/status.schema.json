@@ -1,0 +1,410 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "counters": {
+      "description": "Named firewall counters, read live (root only: absent otherwise).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/CounterRow"
+      }
+    },
+    "created_at": {
+      "description": "RFC 3339.",
+      "type": "string"
+    },
+    "current": {
+      "description": "The caller's current lab (`nlink-lab use`).",
+      "type": "boolean"
+    },
+    "host_resources": {
+      "description": "The mgmt bridge's name and every declared subnet, to spot\ncollisions between labs."
+    },
+    "impairments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ImpairmentRow"
+      }
+    },
+    "lab": {
+      "type": "string"
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LinkRow"
+      }
+    },
+    "networks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NodeRow"
+      }
+    },
+    "partitions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "processes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProcessInfo"
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LabSource"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "lab",
+    "created_at",
+    "current",
+    "nodes",
+    "links",
+    "networks",
+    "impairments",
+    "partitions",
+    "processes",
+    "host_resources"
+  ],
+  "$defs": {
+    "ContainerRow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "pid"
+      ]
+    },
+    "CounterRow": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "packets": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "node",
+        "name",
+        "packets",
+        "bytes"
+      ]
+    },
+    "Impairment": {
+      "description": "Network impairment configuration (netem).",
+      "type": "object",
+      "properties": {
+        "corrupt": {
+          "description": "Packet corruption (e.g., \"0.01%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay": {
+          "description": "Delay (e.g., \"10ms\", \"100us\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay_correlation": {
+          "description": "Correlation of successive delay values (e.g., \"25%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duplicate": {
+          "description": "Packet duplication (e.g., \"1%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jitter": {
+          "description": "Jitter (e.g., \"2ms\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "netem queue limit in packets (default 1000).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss": {
+          "description": "Packet loss, in `tc`'s grammar: independent loss (`\"0.1%\"`), or a\nnetem Markov model for **bursty** loss — Gilbert-Elliott\n`\"gemodel p [r [1-h [1-k]]]\"` (e.g. `\"gemodel 1% 30% 50% 0.1%\"`) or\nthe 4-state `\"state p13 [p31 [p32 [p23 [p14]]]]\"` (#153). A model's\nvalues and defaults are nlink's, checked against iproute2.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss_correlation": {
+          "description": "netem's loss \"correlation\" (e.g., \"25%\"). **It does not make loss\nbursty, it lowers the loss rate**: netem averages each random draw\nwith the previous one, so a small loss probability almost never\ntriggers (`loss 0.5%` with `loss-correlation 25%` drops ~0 %). See\n[`Impairment::loss_correlation_warning`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate": {
+          "description": "Bandwidth rate limit (e.g., \"100mbit\", \"1gbit\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reorder": {
+          "description": "Packet reordering (e.g., \"0.5%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "delay",
+        "jitter",
+        "loss",
+        "rate",
+        "corrupt",
+        "reorder"
+      ]
+    },
+    "ImpairmentRow": {
+      "description": "An endpoint's impairment as it is: a runtime one (`impair`) replaces\nthe declared one.",
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "impairment": {
+          "$ref": "#/$defs/Impairment"
+        },
+        "runtime": {
+          "description": "Set at runtime, not declared.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "endpoint",
+        "impairment",
+        "runtime"
+      ]
+    },
+    "LabSource": {
+      "description": "Where a lab came from: the topology file, its `--set` parameters and\nthe suffix `deploy --suffix`/`--unique` added to its name.",
+      "type": "object",
+      "properties": {
+        "params": {
+          "description": "`--set KEY=VALUE` parameters, in order.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "path": {
+          "description": "Absolute path of the topology file, when it came from one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suffix": {
+          "description": "The suffix added to the topology's lab name (and prefix).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LinkRow": {
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "required": [
+        "endpoints"
+      ]
+    },
+    "NodeRow": {
+      "description": "A node of the lab.",
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "description": "Interface → addresses, `mgmt0` included.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "container": {
+          "description": "The container's id and init pid, for a container node.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContainerRow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`namespace` or `container`.",
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "node",
+        "kind",
+        "addresses"
+      ]
+    },
+    "ProcessInfo": {
+      "description": "Status of a tracked background process.\n\n**Retention**: tracked processes are *not* removed from the lab's PID\nlist when they exit. They remain with `alive == false` until the lab\nis destroyed (or the state file is cleaned manually). Consumers\npolling for \"is X still running?\" must check [`alive`](Self::alive),\nnot just look up the PID.",
+      "type": "object",
+      "properties": {
+        "alive": {
+          "description": "Whether the process is still alive (`kill(pid, 0)` returns 0).\n\nStays `false` after the process exits — the entry is kept for\npost-mortem inspection (log paths, exit ordering). See the\ntype-level retention note above.",
+          "type": "boolean"
+        },
+        "exit_code": {
+          "description": "Exit code once the process has exited, read from the `.rc` file the\nspawn reaper writes next to the logs (`128 + signo` for a signal\ndeath). `None` while alive, or for processes spawned by a release\nwithout the reaper.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "host_pid": {
+          "description": "Explicit alias for `pid`. Equal today because nlink-lab does not\nuse `CLONE_NEWPID` (host_pid == ns_pid for every spawned\nprocess). The field exists so consumers that explicitly want\n\"the host PID\" can name it; if a future nlink-lab adds\n`CLONE_NEWPID`, an `ns_pid` field will join `host_pid` and\n`pid` will follow `host_pid`. See `docs/ARCHITECTURE.md`\n\"Process & namespace model\".",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "node": {
+          "description": "Node the process runs in.",
+          "type": "string"
+        },
+        "pid": {
+          "description": "Process ID.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "stderr_log": {
+          "description": "Path to stderr log file (if captured).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stdout_log": {
+          "description": "Path to stdout log file (if captured).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "node",
+        "pid",
+        "host_pid",
+        "alive"
+      ]
+    }
+  }
+}

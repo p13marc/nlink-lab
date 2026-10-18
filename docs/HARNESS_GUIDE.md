@@ -258,7 +258,7 @@ clean).
 
 ### Stale state from crashed runs
 
-`nlink-lab status --scan` reports both **orphans** (host resources
+`nlink-lab ls --scan` reports both **orphans** (host resources
 without state files — typically from a SIGKILL'd deploy) and
 **stale** labs (state files claiming namespaces no longer present —
 typically from a reboot or WSL restart). Both are cleanable:

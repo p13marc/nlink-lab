@@ -51,6 +51,25 @@ pub struct Document<'a, R: schemars::JsonSchema> {
     pub report: &'a R,
 }
 
+/// Print `doc` as the JSON document `--json` (pretty) or `--format
+/// ndjson` (one line) asks for, after a `schema_version` of 1: for a
+/// command whose text is not a [`Report`].
+pub fn emit_json<R: serde::Serialize + schemars::JsonSchema>(
+    ctx: &Ctx,
+    doc: &R,
+) -> nlink_lab::Result<()> {
+    let doc = Document {
+        schema_version: 1,
+        report: doc,
+    };
+    if ctx.format == Format::Ndjson {
+        println!("{}", serde_json::to_string(&doc)?);
+    } else {
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+    }
+    Ok(())
+}
+
 /// Print `report` on stdout in the format `ctx` asks for.
 pub fn emit<R: Report + schemars::JsonSchema>(ctx: &Ctx, report: &R) -> nlink_lab::Result<()> {
     let doc = Document {
@@ -68,7 +87,7 @@ pub fn emit<R: Report + schemars::JsonSchema>(ctx: &Ctx, report: &R) -> nlink_la
     Ok(())
 }
 
-/// The `apply --dry-run --json` / `apply --check --json` / `verify --json`
+/// The `apply --dry-run --json` / `verify --json`
 /// envelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).
 #[derive(serde::Serialize, schemars::JsonSchema)]
 #[schemars(title = "nlink-lab apply --dry-run / --check / verify --json (v3)")]
@@ -180,12 +199,4 @@ pub struct ValidateReport<'a> {
 pub struct RuleInfo {
     pub rule: &'static str,
     pub severity: nlink_lab::Severity,
-}
-
-/// `status --scan --json` envelope.
-#[derive(serde::Serialize, schemars::JsonSchema)]
-#[schemars(title = "nlink-lab status --scan --json")]
-pub struct StatusScanReport<'a> {
-    pub labs: &'a [nlink_lab::state::LabInfo],
-    pub orphans: &'a crate::host_scan::Orphans,
 }

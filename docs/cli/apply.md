@@ -68,7 +68,7 @@ nlink-lab apply --dry-run examples/wan-impairment.nll
 ### CI gate — fail if the lab has drifted
 
 ```bash
-nlink-lab apply --check topo.nll
+nlink-lab verify --file topo.nll
 # exit 0: no drift
 # exit non-zero: drift detected; the diff is printed to stderr
 ```
@@ -76,10 +76,10 @@ nlink-lab apply --check topo.nll
 Or with structured output:
 
 ```bash
-nlink-lab --json apply --check topo.nll \
+nlink-lab --json verify --file topo.nll \
   | jq -e '.no_op == true' \
   || { echo "drift detected"; exit 1; }
-# or simply rely on the exit code: `nlink-lab apply --check topo.nll` exits 2 on drift
+# or simply rely on the exit code: `nlink-lab verify --file topo.nll` exits 2 on drift
 ```
 
 The `--json` flag with `--dry-run`/`--check` emits the schema-v3 envelope
@@ -173,7 +173,7 @@ the kernel needs for it: `qdiscs-to-add`/`-replace`/`-remove` and the
 `tc` trees (classes, leaves, filters) of each device. A qdisc deleted
 by hand shows only under `network`, as drift.
 
-`apply --check` exits 2 when `no_op` is false.
+`nlink-lab verify --file FILE` exits 2 when `no_op` is false: the CI drift gate.
 
 ### Repair drift
 
@@ -236,23 +236,25 @@ it can. Use `--json` to see the unhandled diff items.
 ```text
 Apply topology changes to a running lab.
 
-Reconciles the live lab state to match an updated NLL, issuing only the deltas. Add `--check` to fail on any drift (a CI gate). Add `--json --dry-run` for machine-parseable diff output.
+Reconciles the live lab with a changed topology, issuing only the deltas. Without FILE, the file the lab was deployed from (or last applied) is read again, with its params. `--dry-run` shows the changes (`--json` for the machine-readable diff); `verify --file FILE` is the CI drift gate.
 
-Usage: nlink-lab apply [OPTIONS] <TOPOLOGY>
+JSON OUTPUT: { "schema_version": 1, "lab", "ops", "removed", "applied", "duration_ms", "assertions"?, "assertions_failed"? }
+
+Usage: nlink-lab apply [OPTIONS] [TOPOLOGY]
 
 Arguments:
-  <TOPOLOGY>
-          Path to the updated topology file (.nll)
+  [TOPOLOGY]
+          The changed topology file (`.nll` or `.nlz`). Default: the file the lab was deployed from (or last applied), with its params
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --set <KEY=VALUE>
-          Set a `param` value (repeatable): --set wan_delay=50ms. Use the same values the lab was deployed with
+          Set a `param` value (repeatable): --set wan_delay=50ms. Default: the values the lab was deployed with, when the file is too
 
       --dry-run
-          Show what would change without applying
-
-      --check
-          Drift check — exit non-zero if the live lab differs from the NLL. Useful as a CI gate. Implies --dry-run
+          Show what would change without applying (`verify --file FILE` is the CI drift gate)
 
       --strict
           Fail (exit 2) when any `validate { … }` assertion fails after the changes are applied. The lab stays as applied for inspection

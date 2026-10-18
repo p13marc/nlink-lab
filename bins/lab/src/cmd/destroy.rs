@@ -1,128 +1,151 @@
 //! `nlink-lab destroy`.
 
-use crate::ctx::{Ctx, require_root};
+use crate::ctx::{Ctx, LabFrom, require_root};
 use crate::host_scan::{force_cleanup, reap_orphans};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name (omit with --all or --orphans).
-    pub name: Option<String>,
+    /// The labs to destroy. Without one: `-L`, `$NLINK_LAB` or the
+    /// current lab (`nlink-lab use`) — never a guess at the only lab.
+    #[arg(add = crate::ctx::lab_completer(), conflicts_with_all = ["all", "lab"])]
+    pub names: Vec<String>,
 
-    /// Continue cleanup even if some resources are already gone.
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
+
+    /// Clean up a lab whose state is gone or unreadable: its namespaces
+    /// (unless another lab owns them) and its mgmt bridge.
     #[arg(long)]
     pub force: bool,
 
-    /// Destroy all running labs.
+    /// Destroy every running lab.
     #[arg(long)]
     pub all: bool,
 
     /// Also reap mgmt bridges / veths / namespaces with no state file
     /// (left behind by a crashed deploy), and remove lock files of labs
     /// that no longer exist. A lab whose lock is held (a deploy still
-    /// running) or whose state file does not parse is left alone.
-    /// Implies best-effort cleanup; can be combined with a lab name or
-    /// --all, or used on its own.
+    /// running) or whose state file does not parse is left alone. Alone,
+    /// it destroys no lab.
     #[arg(long)]
     pub orphans: bool,
 }
 
-pub async fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+/// Destroy one lab, or clean up after it with `force`. A lab that does
+/// not exist is already destroyed.
+async fn destroy_one(name: &str, force: bool, quiet: bool) -> nlink_lab::Result<&'static str> {
+    // before `--force` can sweep with it: `""` or `..` named the state
+    // directory itself (#221)
+    nlink_lab::state::validate_lab_name(name)?;
+    match nlink_lab::RunningLab::load(name) {
+        Ok(lab) => {
+            let summary = (
+                lab.namespace_count(),
+                lab.topology()
+                    .nodes
+                    .values()
+                    .filter(|n| n.image.is_some())
+                    .count(),
+                lab.process_status().iter().filter(|p| p.alive).count(),
+            );
+            lab.destroy().await?;
+            if !quiet {
+                let (nodes, containers, processes) = summary;
+                let mut parts = vec![format!("{nodes} node(s)")];
+                if containers > 0 {
+                    parts.push(format!("{containers} container(s)"));
+                }
+                if processes > 0 {
+                    parts.push(format!("{processes} process(es) killed"));
+                }
+                println!("Destroyed '{name}' ({})", parts.join(", "));
+            }
+            Ok("destroyed")
+        }
+        Err(e) if force => {
+            eprintln!("warning: state of '{name}' not usable, cleaning up: {e}");
+            force_cleanup(name, name).await;
+            if !quiet {
+                println!("Force-cleaned '{name}'");
+            }
+            Ok("force_cleaned")
+        }
+        // Idempotent: destroying a lab that does not exist is a no-op
+        Err(nlink_lab::Error::NotFound { .. }) => Ok("absent"),
+        Err(e) => Err(e),
+    }
+}
+
+pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args {
-        name,
+        names,
+        lab,
         force,
         all,
         orphans,
     } = args;
-    require_root()?;
-    if all {
-        let labs = nlink_lab::RunningLab::list()?;
-        if labs.is_empty() && !orphans {
-            println!("No running labs.");
-            return Ok(());
-        }
-        // One lab failing does not stop the others; the count says what
-        // was destroyed, and the exit code that something was not.
-        let mut destroyed = 0;
-        let mut failed = Vec::new();
-        for info in &labs {
-            let result = match nlink_lab::RunningLab::load(&info.name) {
-                Ok(lab) => lab.destroy().await.map(|()| "Destroyed"),
-                Err(_) if force => {
-                    force_cleanup(&info.name, &info.name).await;
-                    Ok("Force-cleaned")
-                }
-                Err(e) => Err(e),
-            };
-            match result {
-                Ok(what) => {
-                    println!("{what} '{}'", info.name);
-                    destroyed += 1;
-                }
-                Err(e) => {
-                    eprintln!("Failed to destroy '{}': {e}", info.name);
-                    failed.push(info.name.clone());
-                }
-            }
-        }
-        if !labs.is_empty() {
-            println!("{destroyed} lab(s) destroyed");
-        }
-        if orphans {
-            reap_orphans(&nlink_lab::RunningLab::list()?).await;
-        }
-        if !failed.is_empty() {
-            return Err(nlink_lab::Error::deploy_failed(format!(
-                "{} lab(s) not destroyed: {}",
-                failed.len(),
-                failed.join(", ")
+    let names: Vec<String> = if all {
+        nlink_lab::RunningLab::list()?
+            .into_iter()
+            .map(|l| l.name)
+            .collect()
+    } else if !names.is_empty() {
+        names
+    } else if lab.lab.is_some() || !orphans {
+        let (name, from) = crate::ctx::resolve_lab(lab.lab.as_deref())?;
+        // the only running lab is a guess, and destroying it is final
+        if from == LabFrom::Only {
+            return Err(nlink_lab::Error::invalid_argument(format!(
+                "name the lab to destroy: `nlink-lab destroy {name}` (or -L, NLINK_LAB, `nlink-lab use`)"
             )));
         }
-        return Ok(());
+        vec![name]
+    } else {
+        Vec::new()
+    };
+    require_root()?;
+    if all && names.is_empty() && !orphans && !ctx.quiet {
+        println!("No running labs.");
     }
-    if orphans && name.is_none() {
-        // `destroy --orphans` alone: reap without touching state-backed labs.
-        let labs = nlink_lab::RunningLab::list()?;
-        reap_orphans(&labs).await;
-        return Ok(());
-    }
-    let name = name.ok_or_else(|| {
-        nlink_lab::Error::deploy_failed("lab name required (or use --all/--orphans)")
-    })?;
-    // before `--force` can sweep with it: `""` or `..` named the state
-    // directory itself (#221)
-    nlink_lab::state::validate_lab_name(&name)?;
-    match nlink_lab::RunningLab::load(&name) {
-        Ok(lab) => {
-            let node_count = lab.namespace_count();
-            let topo = lab.topology();
-            let container_count = topo.nodes.values().filter(|n| n.image.is_some()).count();
-            let link_count = topo.links.len();
-            let process_count = lab.process_status().iter().filter(|p| p.alive).count();
-            lab.destroy().await?;
-            println!("Lab {name:?} destroyed:");
-            println!("  Nodes:       {node_count}");
-            if container_count > 0 {
-                println!("  Containers:  {container_count} stopped and removed");
+    // One lab failing does not stop the others; the exit code says that
+    // something was not destroyed.
+    let mut results = Vec::new();
+    let mut failed = Vec::new();
+    for name in &names {
+        match destroy_one(name, force, ctx.quiet || ctx.json).await {
+            Ok(what) => {
+                // the caller's current lab is gone: forget it, not leave
+                // every next command failing on it
+                let uid = crate::ctx::caller_uid();
+                if nlink_lab::state::context_get(uid).as_deref() == Some(name.as_str()) {
+                    let _ = nlink_lab::state::context_set(uid, None);
+                }
+                results.push(serde_json::json!({ "lab": name, "result": what }))
             }
-            println!("  Links:       {link_count}");
-            if process_count > 0 {
-                println!("  Processes:   {process_count} killed");
+            Err(e) => {
+                eprintln!("Failed to destroy '{name}': {e}");
+                failed.push(name.clone());
+                results.push(
+                    serde_json::json!({ "lab": name, "result": "failed", "error": e.to_string() }),
+                );
             }
         }
-        Err(e) if force => {
-            eprintln!("warning: state not found, attempting force cleanup: {e}");
-            force_cleanup(&name, &name).await;
-            println!("Lab {name:?} force-cleaned");
-        }
-        Err(nlink_lab::Error::NotFound { .. }) => {
-            // Idempotent: destroying a non-existent lab is a no-op
-        }
-        Err(e) => return Err(e),
     }
-    // `destroy NAME --orphans`: the named lab, then the reaping the flag
-    // asks for. It used to be ignored with a name.
     if orphans {
         reap_orphans(&nlink_lab::RunningLab::list()?).await;
+    }
+    if ctx.json {
+        println!(
+            "{}",
+            serde_json::json!({ "schema_version": 1, "labs": results })
+        );
+    }
+    if !failed.is_empty() {
+        return Err(nlink_lab::Error::deploy_failed(format!(
+            "{} lab(s) not destroyed: {}",
+            failed.len(),
+            failed.join(", ")
+        )));
     }
     Ok(())
 }

@@ -17,10 +17,11 @@ The day-to-day commands.
 | [`use`](use.md) | Select the current lab that lab-scoped commands act on |
 | [`validate`](validate.md) | Parse + validate without deploying |
 | [`edit`](edit.md) | Edit a running lab in place (nodes, links, impairments) |
-| [`snapshot`](snapshot.md) | Checkpoint a running lab |
-| [`restore`](restore.md) | Restore a lab from a checkpoint |
-| [`apply`](apply.md) | Reconcile a running lab to an edited NLL |
-| [`status`](status.md) | List running labs and their nodes |
+| [`snapshot`](snapshot.md) | Checkpoints of a running lab: `save`, `ls`, `rm`, `restore` |
+| [`apply`](apply.md) | Reconcile a running lab to an edited NLL (default: its recorded source) |
+| [`ls`](ls.md) | List the labs on this host (`--scan`: orphans and stale labs) |
+| [`status`](status.md) | One lab: nodes, addresses, containers, links, impairments, processes |
+| [`archive`](archive.md) | Portable `.nlz` archives: `create`, `extract`, `inspect` |
 
 ## Interaction
 
@@ -45,7 +46,6 @@ What's actually running.
 | Command | What |
 |---------|------|
 | [`ip`](ip.md) | Show node IP addresses |
-| [`inspect`](inspect.md) | Full lab overview (nodes, links, addresses) |
 | [`render`](render.md) | Lower an NLL to flat NLL / JSON / Dot / ASCII |
 | [`graph`](graph.md) | Topology graph (Dot) |
 | [`diff`](diff.md) | Diff two NLL topologies |
@@ -53,7 +53,6 @@ What's actually running.
 | [`verify`](verify.md) | Check a running lab for drift against its topology |
 | [`metrics`](metrics.md) | Zenoh metrics export |
 | [`top`](top.md) | Live TUI: nodes, interfaces, flows |
-| [`containers`](containers.md) | List container nodes |
 | [`events`](events.md) | Lifecycle event log (deploy, impair, spawn, drift) |
 
 ## Network ops
@@ -74,8 +73,7 @@ Things you'd reach for in a chaos test.
 | [`lint`](lint.md) | Style and portability advice for a topology |
 | [`doctor`](doctor.md) | Check this host for everything nlink-lab needs |
 | [`test`](test.md) | Deploy → validate → destroy across one or more NLL files |
-| [`export`](export.md) | Export a lab as plain text or a portable `.nlz` archive |
-| [`import`](import.md) | Import a `.nlz` archive — verify, extract, deploy |
+| [`export`](export.md) | A running lab's topology as TOML, NLL or JSON |
 | [`pull`](pull.md) | Pre-pull container images for a topology |
 | [`completions`](completions.md) | Generate shell completions |
 | [`lsp`](lsp.md) | Language server for `.nll` files (stdio) |
@@ -107,7 +105,7 @@ that lab's nodes and endpoints.
 `--skip-validate` belongs to `deploy` only (it drops the `validate {}`
 assertions); `--set KEY=VALUE` is accepted by every command that reads a
 topology (`deploy`, `apply`, `validate`, `render`, `graph`, `diff`,
-`pull`, `test`, `export --archive`).
+`pull`, `test`, `verify --file`, `archive create`).
 
 Under `--json`, a failure is printed on stderr as the daemon API's error
 document (`docs/API.md`): `code`, `message`, `chain`, `exit_code`, and
@@ -137,7 +135,7 @@ same value in `exit_code`):
 |------|---------|
 | 0 | Success |
 | 1 | Error (lab not found, kernel/netlink failure, lock held by another process) |
-| 2 | A negative result: validation, assertion or drift failure — `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `benchmark`, `apply --check` |
+| 2 | A negative result: validation, assertion or drift failure — `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `benchmark`, `verify` |
 | 64 | Usage error: a command line that does not parse, or a removed command (which says what replaced it) |
 | 124 | Timeout (`exec --timeout`, `wait-for`) |
 | 130 | Interrupted or cancelled |

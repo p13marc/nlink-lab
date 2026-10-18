@@ -2251,6 +2251,15 @@ impl Topology {
         crate::deploy::deploy(self).await
     }
 
+    /// [`deploy`](Self::deploy), reporting its progress to `ctx` and
+    /// rolled back when `ctx` is cancelled (#236).
+    pub async fn deploy_with(
+        &self,
+        ctx: &crate::ops::OpCtx,
+    ) -> crate::Result<crate::running::RunningLab> {
+        crate::deploy::deploy_with(self, ctx).await
+    }
+
     /// Get the effective namespace name for a node.
     pub fn namespace_name(&self, node_name: &str) -> String {
         format!("{}-{}", self.lab.prefix(), node_name)

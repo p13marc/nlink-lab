@@ -89,12 +89,37 @@ pub fn parse_threshold(unit: MetricUnit, value: &str) -> Option<f64> {
 
 /// Run all tests in a benchmark.
 pub fn run_benchmark(lab: &RunningLab, benchmark: &Benchmark) -> Result<BenchmarkResult> {
+    run_benchmark_with(lab, benchmark, &crate::ops::OpCtx::default())
+}
+
+/// [`run_benchmark`], reporting each test's result to `ctx` and stopping
+/// between tests when it is cancelled (#236). Blocking, like the tools it
+/// runs: an async caller runs it in `spawn_blocking`.
+pub fn run_benchmark_with(
+    lab: &RunningLab,
+    benchmark: &Benchmark,
+    ctx: &crate::ops::OpCtx,
+) -> Result<BenchmarkResult> {
+    ctx.set_lab(lab.name());
+    ctx.started();
+    let result = benchmark_ctx(lab, benchmark, ctx);
+    ctx.finished(&result, false);
+    result
+}
+
+fn benchmark_ctx(
+    lab: &RunningLab,
+    benchmark: &Benchmark,
+    ctx: &crate::ops::OpCtx,
+) -> Result<BenchmarkResult> {
     let ip_map = crate::ipmap::build_ip_map(lab.topology());
 
     let mut test_results = Vec::new();
     let mut all_passed = true;
 
-    for test in &benchmark.tests {
+    let total = benchmark.tests.len();
+    for (i, test) in benchmark.tests.iter().enumerate() {
+        ctx.check()?;
         let result = match test {
             BenchmarkTest::Ping {
                 from, to, count, ..
@@ -124,6 +149,12 @@ pub fn run_benchmark(lab: &RunningLab, benchmark: &Benchmark) -> Result<Benchmar
         if !result.passed {
             all_passed = false;
         }
+        ctx.emit(nlink_lab_shared::api::OpPhase::Assertion {
+            description: result.description.clone(),
+            passed: result.passed,
+            detail: result.detail.clone(),
+        });
+        ctx.step(i + 1, total, || result.description.clone());
         test_results.push(result);
     }
 

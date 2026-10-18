@@ -80,6 +80,7 @@ pub mod ipmap;
 pub mod lint;
 pub mod netns_tag;
 pub mod ns_exec;
+pub mod ops;
 pub mod parser;
 pub mod portability;
 pub mod privileges;
@@ -102,12 +103,17 @@ pub use builder::Lab;
 pub use deploy::apply_diff;
 pub use deploy::{
     ApplyOptions, ApplyReport, NsRef, Op, Plan, Stage, apply, apply_plan, apply_plan_with,
-    apply_with, compute_layered_diff, compute_layered_diff_with, plan_for, reattach_node, restore,
+    apply_with, apply_with_ctx, compute_layered_diff, compute_layered_diff_with, deploy_with,
+    plan_for, reattach_node, reattach_node_with, restore, restore_with,
 };
 pub use diff::{LayeredDiff, TopologyDiff, diff_topologies};
 pub use error::{Error, Result};
 pub use events::{LifecycleEvent, LifecycleKind};
 pub use lint::{LINT_RULE_IDS, LintFinding, lint};
+/// The daemon API's wire types: what an [`OpCtx`] reports is an
+/// [`api::OpEvent`].
+pub use nlink_lab_shared::api;
+pub use ops::{CancelToken, OpCtx, ProgressSink};
 pub use proc_stat::ProcStat;
 pub use running::{
     ExecOpts, ExecOutput, LogStream, NodeDiagnostic, ProcessInfo, RunningLab, Signal, SpawnOpts,

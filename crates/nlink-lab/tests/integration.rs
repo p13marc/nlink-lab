@@ -8100,3 +8100,150 @@ async fn container_options_reach_the_container() {
         .to_string();
     assert!(err.contains("not present locally"), "{err}");
 }
+
+/// #236: a deploy reports its plan, then each stage in plan order, its
+/// steps, and ends with `Finished`; the destroy reports its phases.
+#[tokio::test]
+async fn deploy_reports_progress_in_order() {
+    use nlink_lab::api::{OpEvent, OpOutcome, OpPhase};
+    use std::sync::{Arc, Mutex};
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: needs root");
+        return;
+    }
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/simple.nll"
+    ))
+    .unwrap();
+    let name = format!("prog-{}", std::process::id());
+    let src = src.replacen("lab \"simple\"", &format!("lab \"{name}\""), 1);
+    let topo = nlink_lab::parser::parse(&src).unwrap();
+    let _guard = LabCleanup { name: name.clone() };
+    let seen = Arc::new(Mutex::new(Vec::<OpEvent>::new()));
+    let sink = {
+        let seen = seen.clone();
+        move |e: OpEvent| seen.lock().unwrap().push(e)
+    };
+    let ctx = nlink_lab::OpCtx::new("deploy", "").with_sink(Arc::new(sink));
+    let lab = topo.deploy_with(&ctx).await.expect("deploy failed");
+
+    let events = std::mem::take(&mut *seen.lock().unwrap());
+    assert!(events.iter().all(|e| e.lab == name && e.op == ctx.id()));
+    let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
+    assert!(seqs.windows(2).all(|w| w[1] > w[0]), "{seqs:?}");
+    assert!(matches!(&events[0].phase, OpPhase::Started { kind, .. } if kind == "deploy"));
+    let OpPhase::Planned { stages, ops, .. } = &events[1].phase else {
+        panic!("no plan first: {:?}", events[1]);
+    };
+    let staged: Vec<(String, usize)> = events
+        .iter()
+        .filter_map(|e| match &e.phase {
+            OpPhase::Stage { stage, ops, .. } => Some((stage.clone(), *ops)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(&staged, stages, "stages out of plan order");
+    let last_step = events.iter().rev().find_map(|e| match &e.phase {
+        OpPhase::Step { done, total, .. } => Some((*done, *total)),
+        _ => None,
+    });
+    assert_eq!(last_step, Some((*ops, *ops)));
+    assert!(matches!(
+        &events.last().unwrap().phase,
+        OpPhase::Finished {
+            outcome: OpOutcome::Succeeded,
+            ..
+        }
+    ));
+
+    std::mem::forget(_guard);
+    let ctx = nlink_lab::OpCtx::new("destroy", "").with_sink(Arc::new({
+        let seen = seen.clone();
+        move |e: OpEvent| seen.lock().unwrap().push(e)
+    }));
+    lab.destroy_with(&ctx).await.expect("destroy failed");
+    let events = std::mem::take(&mut *seen.lock().unwrap());
+    let steps: Vec<(usize, usize)> = events
+        .iter()
+        .filter_map(|e| match &e.phase {
+            OpPhase::Step { done, total, .. } => Some((*done, *total)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps.first(), Some(&(1, 6)), "{events:?}");
+    assert_eq!(steps.last(), Some(&(6, 6)), "{events:?}");
+}
+
+/// #236: cancelling a deploy while it waits for a healthcheck ends the
+/// wait at once and rolls the deploy back: no namespace, no ownership tag,
+/// no `/etc/netns` directory, no state is left.
+#[tokio::test]
+async fn cancel_during_a_healthcheck_rolls_back() {
+    use nlink_lab::api::{OpEvent, OpOutcome, OpPhase, WaitKind};
+    use std::sync::{Arc, Mutex};
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping: needs root");
+        return;
+    }
+    let name = format!("pcan-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        "lab \"{name}\" {{ dns hosts }}\nnode a {{ healthcheck \"false\" {{ interval 200ms timeout 60s }} }}\nnode b\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}\n"
+    ))
+    .unwrap();
+    let _guard = LabCleanup { name: name.clone() };
+    let cancel = nlink_lab::CancelToken::new();
+    let seen = Arc::new(Mutex::new(Vec::<OpEvent>::new()));
+    let sink = {
+        let (seen, cancel) = (seen.clone(), cancel.clone());
+        move |e: OpEvent| {
+            if matches!(
+                &e.phase,
+                OpPhase::Waiting {
+                    what: WaitKind::Healthcheck { .. },
+                    ..
+                }
+            ) {
+                cancel.cancel();
+            }
+            seen.lock().unwrap().push(e)
+        }
+    };
+    let ctx = nlink_lab::OpCtx::new("deploy", "")
+        .with_sink(Arc::new(sink))
+        .with_cancel(cancel);
+    let started = std::time::Instant::now();
+    let err = topo.deploy_with(&ctx).await.err().expect("deploy passed");
+    assert!(matches!(err, nlink_lab::Error::Cancelled(_)), "{err}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+
+    let events = seen.lock().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.phase, OpPhase::RollingBack { .. })),
+        "{events:?}"
+    );
+    assert!(matches!(
+        &events.last().unwrap().phase,
+        OpPhase::Finished {
+            outcome: OpOutcome::Cancelled,
+            ..
+        }
+    ));
+    for node in ["a", "b"] {
+        let ns = format!("{name}-{node}");
+        assert!(
+            !std::path::Path::new("/var/run/netns").join(&ns).exists(),
+            "{ns} left"
+        );
+        assert!(!nlink_lab::netns_tag::is_tagged(&ns), "{ns} tag left");
+        assert!(
+            !std::path::Path::new(nlink_lab::netns_tag::NETNS_ETC_DIR)
+                .join(&ns)
+                .exists(),
+            "/etc/netns/{ns} left"
+        );
+    }
+    assert!(!nlink_lab::state::exists(&name), "state left");
+}

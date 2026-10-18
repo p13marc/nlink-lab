@@ -119,6 +119,7 @@ crates/nlink-lab/src/
   frr.rs            # FRR routing daemons: pathspaces, per-daemon config generation, neighbour resolution
   netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
+  ops/              # OpCtx: progress (OpEvent) + cancellation of deploy/apply/destroy/…
 crates/nlink-lab-shared/src/
   api/              # daemon API (docs/API.md): Request (+ meta roles), Response,
                     #   StreamItem/Notification, OpEvent progress, ApiError, DTOs,

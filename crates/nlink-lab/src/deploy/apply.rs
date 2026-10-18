@@ -51,6 +51,8 @@ pub(super) struct ApplyEnv {
     /// Resolved FRR daemon binaries (filled by the preflight when the
     /// plan starts routing daemons, #65).
     pub frr_bins: BTreeMap<crate::frr::Daemon, std::path::PathBuf>,
+    /// The operation's progress and cancellation (#236).
+    pub ctx: crate::ops::OpCtx,
 }
 
 impl ApplyEnv {
@@ -81,6 +83,7 @@ impl ApplyEnv {
             previous_vrf_tables: BTreeMap::new(),
             previous_network: BTreeMap::new(),
             frr_bins: BTreeMap::new(),
+            ctx: crate::ops::OpCtx::default(),
         })
     }
 
@@ -164,23 +167,50 @@ pub(super) async fn execute(plan: &Plan, env: &mut ApplyEnv, journal: &mut Journ
     if !frr_needed.is_empty() {
         env.frr_bins = crate::frr::require_daemons(&frr_needed)?;
     }
+    // the stages in order, with their op counts, for the progress (#236)
+    let mut stages: Vec<(Stage, usize)> = Vec::new();
     for op in &plan.ops {
+        match stages.last_mut() {
+            Some((s, n)) if *s == op.stage() => *n += 1,
+            _ => stages.push((op.stage(), 1)),
+        }
+    }
+    let total = plan.ops.len();
+    let mut stage_index = 0;
+    for (done, op) in plan.ops.iter().enumerate() {
+        // cancelled: stop here, and the caller rolls back what was done
+        env.ctx.check()?;
         let stage = op.stage();
         if last_stage != Some(stage) {
             tracing::info!("stage {stage:?}");
             last_stage = Some(stage);
+            let ops = stages.get(stage_index).map_or(0, |(_, n)| *n);
+            env.ctx.emit(nlink_lab_shared::api::OpPhase::Stage {
+                stage: stage.name().to_string(),
+                index: stage_index,
+                of: stages.len(),
+                ops,
+            });
+            stage_index += 1;
         }
         tracing::debug!("op: {}", op.describe());
         execute_one(op, env, journal).await.map_err(|e| {
             tracing::debug!("op failed: {}: {e}", op.describe());
             e
         })?;
+        env.ctx.step(done + 1, total, || op.describe());
     }
     if plan.ops.iter().any(|o| matches!(o, Op::WifiDaemon { .. })) {
         tracing::info!("waiting for WiFi association...");
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let settle = std::time::Duration::from_secs(2);
+        env.ctx.waiting(
+            nlink_lab_shared::api::WaitKind::WifiAssociation,
+            None,
+            Some(settle),
+        );
+        env.ctx.sleep(settle).await?;
     }
-    wait_frr_converged(plan, env).await;
+    wait_frr_converged(plan, env).await?;
     Ok(())
 }
 
@@ -188,7 +218,7 @@ pub(super) async fn execute(plan: &Plan, env: &mut ApplyEnv, journal: &mut Journ
 /// FRR nodes expect, so `validate { reach … }` and user processes see
 /// converged routes. `NLINK_LAB_FRR_WAIT=<secs>` overrides the 30 s
 /// budget (`0` disables); without `vtysh` a fixed 5 s settle is used.
-async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) {
+async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) -> Result<()> {
     let nodes: Vec<(&String, &crate::frr::FrrNodeSpec)> = plan
         .ops
         .iter()
@@ -198,24 +228,40 @@ async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) {
         })
         .collect();
     if nodes.is_empty() {
-        return;
+        return Ok(());
     }
     let budget = std::env::var("NLINK_LAB_FRR_WAIT")
         .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())
         .unwrap_or(30);
     if budget == 0 {
-        return;
+        return Ok(());
     }
+    use nlink_lab_shared::api::WaitKind;
     let Some(vtysh) = crate::frr::locate_vtysh() else {
         tracing::info!("waiting 5s for FRR to converge (no vtysh to ask)");
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        return;
+        let settle = std::time::Duration::from_secs(5);
+        env.ctx.waiting(
+            WaitKind::FrrConvergence,
+            Some("no vtysh to ask: a fixed settle".into()),
+            Some(settle),
+        );
+        return env.ctx.sleep(settle).await;
     };
     tracing::info!("waiting for FRR adjacencies (up to {budget}s)...");
+    let expected: usize = nodes
+        .iter()
+        .map(|(_, s)| s.expected_ospf_neighbors + s.expected_bgp_peers)
+        .sum();
+    env.ctx.waiting(
+        WaitKind::FrrConvergence,
+        Some(format!("{expected} adjacencies and sessions")),
+        Some(std::time::Duration::from_secs(budget)),
+    );
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(budget);
     loop {
         let mut all_ok = true;
+        let mut up = 0usize;
         for (node, spec) in &nodes {
             let Ok(handle) = env.handle(node) else {
                 continue;
@@ -228,27 +274,32 @@ async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) {
                     Err(_) => 0,
                 }
             };
-            if spec.expected_ospf_neighbors > 0
-                && count("show ip ospf neighbor json", "\"Full/") < spec.expected_ospf_neighbors
-            {
-                all_ok = false;
+            if spec.expected_ospf_neighbors > 0 {
+                let full = count("show ip ospf neighbor json", "\"Full/");
+                up += full.min(spec.expected_ospf_neighbors);
+                all_ok &= full >= spec.expected_ospf_neighbors;
             }
-            if spec.expected_bgp_peers > 0
-                && count("show bgp summary json", "\"state\":\"Established\"")
-                    < spec.expected_bgp_peers
-            {
-                all_ok = false;
+            if spec.expected_bgp_peers > 0 {
+                let established = count("show bgp summary json", "\"state\":\"Established\"");
+                up += established.min(spec.expected_bgp_peers);
+                all_ok &= established >= spec.expected_bgp_peers;
             }
         }
+        env.ctx
+            .wait_progress(WaitKind::FrrConvergence, up, expected, None);
         if all_ok {
             tracing::info!("FRR converged");
-            return;
+            return Ok(());
         }
         if std::time::Instant::now() >= deadline {
             tracing::warn!("FRR did not converge within {budget}s; continuing");
-            return;
+            env.ctx.log(
+                "warn",
+                format!("FRR did not converge within {budget}s ({up}/{expected}); continuing"),
+            );
+            return Ok(());
         }
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        env.ctx.sleep(std::time::Duration::from_millis(500)).await?;
     }
 }
 
@@ -309,8 +360,28 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     )));
                 }
                 Some("never") => {}
-                Some("always") => rt.pull_image(image)?,
-                _ => rt.ensure_image(image)?,
+                Some("always") => {
+                    env.ctx.waiting(
+                        nlink_lab_shared::api::WaitKind::ImagePull {
+                            image: image.clone(),
+                        },
+                        Some(node.clone()),
+                        None,
+                    );
+                    rt.pull_image(image)?
+                }
+                _ => {
+                    if env.ctx.reporting() && !rt.has_image(image) {
+                        env.ctx.waiting(
+                            nlink_lab_shared::api::WaitKind::ImagePull {
+                                image: image.clone(),
+                            },
+                            Some(node.clone()),
+                            None,
+                        );
+                    }
+                    rt.ensure_image(image)?
+                }
             }
             let info = rt.create(name, image, opts)?;
             journal.record(Undo::RemoveContainer {
@@ -645,7 +716,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 ))
             })?;
             tracing::debug!("startup-delay {delay} for node '{node}'");
-            tokio::time::sleep(d).await;
+            env.ctx.sleep(d).await?;
         }
         Op::Exec { node, index, exec } => exec_op(node, *index, exec, env, journal)?,
         Op::Healthcheck {
@@ -674,6 +745,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             // host, in the container's network namespace only (#217).
             let container = handle.container_id().map(str::to_string);
             tracing::info!("waiting for healthcheck on '{node}': {cmd}");
+            let what = || nlink_lab_shared::api::WaitKind::Healthcheck { node: node.clone() };
+            env.ctx.waiting(what(), Some(cmd.clone()), Some(limit));
             let deadline = std::time::Instant::now() + limit;
             let mut failed = 0u32;
             loop {
@@ -726,7 +799,13 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         "healthcheck timeout for node '{node}': {cmd}"
                     )));
                 }
-                tokio::time::sleep(every).await;
+                env.ctx.wait_progress(
+                    what(),
+                    failed as usize,
+                    retries.map_or(0, |r| r as usize),
+                    Some(format!("{failed} failed probe(s)")),
+                );
+                env.ctx.sleep(every).await?;
             }
         }
         Op::FrrDaemons { node, spec } => {

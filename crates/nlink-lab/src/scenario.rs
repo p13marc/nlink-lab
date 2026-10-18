@@ -46,6 +46,29 @@ pub struct ActionResult {
 /// Run a scenario against a deployed lab. Mutable: `clear` records what it
 /// cleared, as `impair --clear` does.
 pub async fn run_scenario(lab: &mut RunningLab, scenario: &Scenario) -> Result<ScenarioResult> {
+    run_scenario_with(lab, scenario, &crate::ops::OpCtx::default()).await
+}
+
+/// [`run_scenario`], reporting each action to `ctx` and stopping between
+/// steps when it is cancelled (#236). What ran stays done: a scenario has
+/// no journal, `impair --clear` undoes its impairments.
+pub async fn run_scenario_with(
+    lab: &mut RunningLab,
+    scenario: &Scenario,
+    ctx: &crate::ops::OpCtx,
+) -> Result<ScenarioResult> {
+    ctx.set_lab(lab.name());
+    ctx.started();
+    let result = scenario_ctx(lab, scenario, ctx).await;
+    ctx.finished(&result, false);
+    result
+}
+
+async fn scenario_ctx(
+    lab: &mut RunningLab,
+    scenario: &Scenario,
+    ctx: &crate::ops::OpCtx,
+) -> Result<ScenarioResult> {
     let start = std::time::Instant::now();
     let mut step_results = Vec::new();
     let mut all_passed = true;
@@ -54,10 +77,20 @@ pub async fn run_scenario(lab: &mut RunningLab, scenario: &Scenario) -> Result<S
         // Wait until the step's time offset
         let elapsed_ms = start.elapsed().as_millis() as u64;
         if step.time_ms > elapsed_ms {
-            tokio::time::sleep(std::time::Duration::from_millis(step.time_ms - elapsed_ms)).await;
+            ctx.sleep(std::time::Duration::from_millis(step.time_ms - elapsed_ms))
+                .await?;
         }
+        ctx.check()?;
 
         let step_result = execute_step(lab, &scenario.name, step).await?;
+        for action in &step_result.actions {
+            ctx.emit(nlink_lab_shared::api::OpPhase::ScenarioAction {
+                time_ms: step.time_ms,
+                description: action.description.clone(),
+                ok: action.ok,
+                detail: action.detail.clone(),
+            });
+        }
         if step_result.actions.iter().any(|a| !a.ok) {
             all_passed = false;
         }

@@ -1,7 +1,7 @@
 //! `nlink-lab impair`.
 
 use crate::ctx::{Ctx, require_root};
-use crate::util::collect_impair_show;
+use nlink_lab::impair_parse::collect_show as collect_impair_show;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -242,19 +242,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
             let out = egress != nlink_lab::Impairment::default();
             let inn = ingress != nlink_lab::Impairment::default();
-            // The peer first: when there is none (a network member), the
-            // egress half was applied before the error (#209).
-            let peer = if inn {
-                Some(running.peer_endpoint(&endpoint)?)
-            } else {
-                None
-            };
-            if out {
-                running.set_impairment(&endpoint, &egress).await?;
-            }
-            if let Some(peer) = &peer {
-                running.set_impairment(peer, &ingress).await?;
-            }
+            let peer = running
+                .set_directed_impairment(&endpoint, out.then_some(&egress), inn.then_some(&ingress))
+                .await?;
             // one report, so `--json` prints one document
             let action = match (out, inn) {
                 (true, true) => "updated egress and ingress impairment on",

@@ -308,7 +308,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let tx = tx.clone();
         let interval = Duration::from_secs(interval.max(1));
         tasks.push(tokio::spawn(async move {
-            let mut collector = nlink_lab_backend::collector::MetricsCollector::new(&running);
+            let mut collector = nlink_lab::metrics::MetricsCollector::new(&running);
             let mut ticker = tokio::time::interval(interval);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {

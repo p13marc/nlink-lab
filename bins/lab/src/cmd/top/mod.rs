@@ -57,7 +57,7 @@ enum Source {
     /// socket in every namespace.
     Local {
         lab: nlink_lab::RunningLab,
-        collector: nlink_lab_backend::collector::MetricsCollector,
+        collector: nlink_lab::metrics::MetricsCollector,
     },
     /// A running `daemon`'s `metrics/snapshot` topic. Read-only.
     Zenoh {
@@ -98,7 +98,7 @@ impl Source {
             ));
         }
         let lab = nlink_lab::RunningLab::load(&args.lab)?;
-        let collector = nlink_lab_backend::collector::MetricsCollector::new(&lab);
+        let collector = nlink_lab::metrics::MetricsCollector::new(&lab);
         Ok(Source::Local { lab, collector })
     }
 

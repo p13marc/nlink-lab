@@ -160,7 +160,7 @@ Options:
           Wait until the spawned process's open-fd count has been stable for SECS seconds. Heuristic — prefer --wait-log or --wait-port when a deterministic signal is available. A process can open more files later in its lifecycle. Round-5 §2.4
 
       --wait-timeout <WAIT_TIMEOUT>
-          Timeout for --wait-tcp / --wait-log / --wait-port / --wait-fd-stable in seconds (default: 30)
+          Timeout for --wait-tcp / --wait-log / --wait-port / --wait-fd-stable together, in seconds (default: 30)
           
           [default: 30]
 

@@ -42,6 +42,11 @@ under both (#233). Its waves land one by one below.
   `DeployFailed` with the same message).
 - **`Topology` has a `sites` field** (library API and JSON), and
   `LabState` a `source` field; both are skipped when empty.
+- **`RunningLab::wait_for_port` takes the pid as `Option<u32>`** (#238):
+  without one, it reads the node's `/proc/net/tcp`.
+- **`spawn`'s `--wait-*` share one `--wait-timeout`** (#238): it bounds
+  all of them together. Before, each waited up to the full timeout in
+  turn, so four of them could take four times as long.
 
 - **A `qdisc … tbf` block needs a `limit`.** Without one the kernel gives
   the TBF no queue, and it drops every packet. On 0.29 such a qdisc
@@ -518,6 +523,23 @@ under both (#233). Its waves land one by one below.
   async runtime's threads, and a lab whose FRR does not converge in time
   says so in a warning (it was silent). `nlink_lab::api` re-exports the
   wire types.
+- **Shared logic in the library** (#238), for the daemon and the desktop
+  app. The CLI prints what these return:
+  - `nlink_lab::host`: the orphan scan, the reaper and the forced cleanup.
+    They report what they did as `Cleanup` records and no longer print;
+  - `nlink_lab::metrics`: the metrics collector, out of the backend;
+  - `nlink_lab::logs`: a log's tail, all of it, or followed;
+  - `nlink_lab::edit`: the typed edit list behind `edit`, including a
+    network's per-pair impairment, with `edited()` (validated) and
+    `apply_edited()`;
+  - `nlink_lab::wait`: `WaitCondition` and `RunningLab::wait_all`, with one
+    deadline, progress through `OpCtx` and cancellation;
+  - `RunningLab::impair(endpoint, impairment, Direction)` and
+    `set_directed_impairment`; `impair_parse::collect_show`;
+  - `RunningLab::prepare_exec`: one way to start a command in a node.
+    `exec`, the attached exec and `shell` all use it.
+- **`wait-for --tcp`, `--exec` and `--file` combine** (#238): all of them
+  must hold. Before, only the first one given was used.
 - **Library groundwork for the 0.14 CLI, daemon and GUI** (#234):
   - `Topology::redacted()` hides WireGuard keys, Wi-Fi passphrases and
     container env values, for every view that leaves the process;

@@ -1,7 +1,8 @@
 //! `nlink-lab logs`.
 
 use crate::ctx::Ctx;
-use crate::util::{tail_follow, tail_lines_at};
+use crate::util::tail_follow;
+use nlink_lab::logs::tail_lines_at;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -58,7 +59,9 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 }
                 len
             }
-            None => crate::util::cat_to(path, &mut std::io::stdout().lock()).map_err(read_err)?,
+            None => {
+                nlink_lab::logs::cat_to(path, &mut std::io::stdout().lock()).map_err(read_err)?
+            }
         };
         if follow {
             // tail -F semantics: resume where the read above stopped,

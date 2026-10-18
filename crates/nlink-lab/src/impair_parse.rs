@@ -37,6 +37,45 @@ pub struct ImpairShow {
     pub rate_bps: Option<u64>,
 }
 
+/// An endpoint's impairment as installed (`impair --show --json`). `ImpairShow`'s
+/// fields (qdisc, delay_ms, jitter_ms, loss_pct, rate_bps) flatten in
+/// next to a `partition` flag pulled from `RunningLab::is_partitioned`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ShownImpairment {
+    #[serde(flatten)]
+    pub shown: ImpairShow,
+    /// `true` iff the endpoint is in `partition` state (i.e. its
+    /// pre-partition impairment is in `saved_impairments`). A user who
+    /// installed `--loss 100%` directly is *not* partitioned by this
+    /// definition — the flag tracks the partition/heal lifecycle.
+    pub partition: bool,
+}
+
+/// Every endpoint in the topology with its root qdisc, read over netlink
+/// (#179), and its partition flag. A node that is not running is skipped.
+pub fn collect_show(
+    running: &crate::RunningLab,
+) -> crate::Result<std::collections::BTreeMap<String, Option<ShownImpairment>>> {
+    use crate::EndpointRef;
+    let mut out = std::collections::BTreeMap::new();
+    for ep_str in topology_endpoints(running.topology()) {
+        let ep = EndpointRef::parse(&ep_str).ok_or_else(|| {
+            crate::Error::invalid_topology(format!("malformed endpoint {ep_str:?} in topology"))
+        })?;
+        if running.ns_resolver_of(&ep.node).is_none() {
+            continue;
+        }
+        let entry = running
+            .impair_show_blocking(&ep_str)?
+            .map(|shown| ShownImpairment {
+                shown,
+                partition: running.is_partitioned(&ep_str),
+            });
+        out.insert(ep_str, entry);
+    }
+    Ok(out)
+}
+
 /// Collect every endpoint reference declared anywhere in a topology —
 /// `links`, `networks.members`, and `impairments` keys — sorted and
 /// deduplicated. Pure function, used by `nlink-lab impair --show

@@ -62,9 +62,5 @@ tokio-stream = "0.1"
 # Parsing the lab's ISO 8601 `created_at` for the `top` header uptime.
 time = { workspace = true, features = ["parsing"] }
 
-# `spawn --wait-log REGEX` compiles the user's regex CLI-side and
-# passes it to `RunningLab::wait_for_log_line` (Plan 155 PR E).
-regex = "1"
-
 [dev-dependencies]
 tempfile = "3"

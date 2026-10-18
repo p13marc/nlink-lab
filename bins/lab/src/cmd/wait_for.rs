@@ -1,6 +1,7 @@
 //! `nlink-lab wait-for`.
 
 use crate::ctx::{Ctx, require_root};
+use nlink_lab::wait::WaitCondition;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -13,6 +14,7 @@ pub struct Args {
     pub node: String,
 
     /// Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost).
+    /// With --exec or --file too, all must hold, within one --timeout.
     #[arg(long)]
     pub tcp: Option<String>,
 
@@ -48,20 +50,31 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let timeout = std::time::Duration::from_secs(timeout);
     let interval = std::time::Duration::from_millis(interval);
 
-    let result = if let Some(ref tcp_addr) = tcp {
-        let (ip, port) = crate::util::parse_tcp_target(tcp_addr)?;
-        running
-            .wait_for_tcp(&node, &ip, port, timeout, interval)
-            .await
-    } else if let Some(ref cmd) = exec_cmd {
-        running.wait_for_exec(&node, cmd, timeout, interval).await
-    } else if let Some(ref path) = file {
-        running.wait_for_file(&node, path, timeout, interval).await
-    } else {
+    let mut conditions = Vec::new();
+    if let Some(tcp_addr) = &tcp {
+        let (ip, port) = nlink_lab::wait::parse_tcp_target(tcp_addr)?;
+        conditions.push(WaitCondition::Tcp { ip, port });
+    }
+    if let Some(cmd) = exec_cmd {
+        conditions.push(WaitCondition::Exec(cmd));
+    }
+    if let Some(path) = file {
+        conditions.push(WaitCondition::File(path));
+    }
+    if conditions.is_empty() {
         return Err(nlink_lab::Error::invalid_argument(
             "one of --tcp, --exec, or --file is required".to_string(),
         ));
-    };
+    }
+    let result = running
+        .wait_all(
+            &node,
+            &conditions,
+            timeout,
+            interval,
+            &nlink_lab::OpCtx::default(),
+        )
+        .await;
 
     match result {
         Ok(()) => {

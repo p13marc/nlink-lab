@@ -41,7 +41,7 @@ use serde::Serialize;
 use tracing::{info, warn};
 use zenoh::config::EndPoint;
 
-pub mod collector;
+pub use nlink_lab::metrics as collector;
 pub mod handlers;
 pub mod http;
 
@@ -568,12 +568,7 @@ fn encode<T: Serialize>(what: &str, value: &T) -> Option<Vec<u8>> {
 }
 
 /// Seconds since the Unix epoch (0 if the clock is before it).
-pub fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
+pub use nlink_lab::metrics::now_unix;
 
 #[cfg(test)]
 mod tests {

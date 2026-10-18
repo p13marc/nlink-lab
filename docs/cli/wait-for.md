@@ -56,7 +56,7 @@ Arguments:
 
 Options:
       --tcp <TCP>
-          Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost)
+          Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost). With --exec or --file too, all must hold, within one --timeout
 
       --exec <EXEC_CMD>
           Wait for command to succeed (exit 0)

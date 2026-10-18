@@ -27,38 +27,29 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         eprintln!("Available nodes: {}", node_names.join(", "));
         return Err(nlink_lab::Error::NodeNotFound { name: node });
     }
-    if let Some(container) = running.container_for(&node) {
-        let runtime = running.runtime();
-        let rt = runtime.binary();
-        let status = std::process::Command::new(rt)
-            .args(["exec", "-it", &container.id, &shell])
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .map_err(|e| nlink_lab::Error::deploy_failed(format!("exec failed: {e}")))?;
-        pass_through_status(status);
-        Ok(())
-    } else {
-        // Spawned into the namespace by nlink with the node's /etc/netns
-        // overlay where the host allows one, as `ip netns exec` does (#179).
-        use nlink::netlink::namespace::{NetnsCommand, Overlay};
-        let ns = running.namespace_for(&node)?;
-        let mut cmd = std::process::Command::new(&shell);
-        cmd.stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit());
-        let status = NetnsCommand::new(ns, cmd)
-            .and_then(|c| c.etc_overlay(Overlay::BestEffort).spawn())
-            .map_err(|e| nlink_lab::Error::nlink(format!("shell in '{node}'"), e))?
-            .wait()
-            .map_err(|e| nlink_lab::Error::deploy_failed(format!("shell in '{node}': {e}")))?;
-        pass_through_status(status);
-        Ok(())
-    }
+    // `exec -it` on a container node, the namespace (with its /etc/netns
+    // overlay where the host allows one) on a namespace node (#179).
+    let mode = nlink_lab::ExecMode {
+        stdin: true,
+        tty: running.container_for(&node).is_some(),
+        ..Default::default()
+    };
+    let mut prepared =
+        running.prepare_exec(&node, &shell, &[], &nlink_lab::ExecOpts::default(), mode)?;
+    prepared
+        .command()
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+    let status = prepared
+        .spawn()?
+        .child
+        .wait()
+        .map_err(|e| nlink_lab::Error::deploy_failed(format!("shell in '{node}': {e}")))?;
+    pass_through_status(status);
+    Ok(())
 }
 
-/// The shell's exit status becomes ours (signal death → 128+signo).
 fn pass_through_status(status: std::process::ExitStatus) {
     use std::os::unix::process::ExitStatusExt;
     let code = status

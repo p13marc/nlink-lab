@@ -134,7 +134,13 @@ async fn an_operator_reads_an_empty_host() {
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::InvalidArgument));
     // what is not served yet says so
     let err = client
-        .call(Request::Destroy { lab: "nope".into() })
+        .call(Request::Shell {
+            lab: "nope".into(),
+            node: "a".into(),
+            shell: None,
+            rows: 24,
+            cols: 80,
+        })
         .await
         .unwrap_err();
     assert!(
@@ -168,6 +174,8 @@ async fn a_viewer_reads_but_does_not_operate() {
             tty: false,
             timeout_ms: None,
         },
+        Request::Destroy { lab: "x".into() },
+        Request::CancelOp { op: "op-1".into() },
     ] {
         match client.call(request).await.unwrap_err() {
             ClientError::Api(e) => {
@@ -307,4 +315,86 @@ async fn dial_stdio_relays_a_connection() {
     let client = Client::connect(&endpoint, "test/0").await.unwrap();
     assert_eq!(client.welcome().role, Role::Operator);
     assert!(client.list_labs().await.unwrap().is_empty());
+}
+
+fn topology_json(text: &str) -> serde_json::Value {
+    serde_json::to_value(nlink_lab::parser::parse(text).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn an_operator_plans_and_is_told_what_does_not_deploy() {
+    let d = daemon(&my_group(), "no-such-group-nlink").await;
+    let client = Client::connect(&d.endpoint, "test/0").await.unwrap();
+    let simple =
+        "lab \"planned\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n";
+
+    // a plan reads nothing but the topology
+    match client
+        .call(Request::PlanDeploy {
+            topology: topology_json(simple),
+        })
+        .await
+        .unwrap()
+    {
+        Response::Report { kind, report } => {
+            assert_eq!(kind, "plan");
+            let ops = report.as_array().unwrap();
+            assert!(ops.iter().any(|o| o["stage"] == "namespaces"), "{report}");
+        }
+        other => panic!("{other:?}"),
+    }
+
+    // a topology that does not validate is refused before it is queued
+    let broken =
+        "lab \"broken\"\nnode a\nlink a:eth0 -- ghost:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n";
+    let topology = serde_json::to_value(
+        nlink_lab::parser::parse(broken).unwrap_or_else(|_| nlink_lab::Topology::default()),
+    )
+    .unwrap();
+    let err = client
+        .call(Request::Deploy {
+            topology,
+            options: Default::default(),
+            source: None,
+        })
+        .await
+        .unwrap_err();
+    match err {
+        ClientError::Api(e) => assert_eq!(e.code, ErrorCode::Validation, "{e:?}"),
+        other => panic!("{other:?}"),
+    }
+
+    // a source bundle that does not parse says where
+    let err = client
+        .call(Request::Deploy {
+            topology: serde_json::Value::Null,
+            options: Default::default(),
+            source: Some(nlink_lab_shared::api::SourceBundle {
+                path: "lab.nll".into(),
+                text: "lab \"x\"\nnode\n".into(),
+                imports: Default::default(),
+                params: vec![],
+            }),
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, ClientError::Api(e) if e.code == ErrorCode::Validation),
+        "{err:?}"
+    );
+
+    // no jobs ran: none is listed, and an unknown one is not found
+    match client.call(Request::ListOps).await.unwrap() {
+        Response::Ops { ops } => assert!(ops.is_empty(), "{ops:?}"),
+        other => panic!("{other:?}"),
+    }
+    for request in [
+        Request::AttachOp { op: "op-99".into() },
+        Request::CancelOp { op: "op-99".into() },
+    ] {
+        match client.call(request).await.unwrap_err() {
+            ClientError::Api(e) => assert_eq!(e.code, ErrorCode::NotFound),
+            other => panic!("{other:?}"),
+        }
+    }
 }

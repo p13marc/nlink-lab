@@ -659,6 +659,23 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The daemon changes labs** (#266): every change of the API — deploy
+  (a topology, or a source bundle: the file, its imports and params,
+  kept with the lab), apply, check, verify, destroy, snapshot, restore,
+  scenario, benchmark, assertions, image pull, orphan reaping, impair
+  in both directions, partition, heal, a network's pair impairment,
+  spawn with its wait, kill, a container node's restart.
+  - A lab's changes run one after the other, on a thread of their own;
+    one behind others says its position.
+  - The long ones are jobs: they stream their progress, go on when the
+    client detaches, disconnects or drops its `Call`, and `attach_op`,
+    `list_ops`, `cancel_op` and the `ops` topic find them.
+  - The operations live in `nlink_lab::ops::mutate`, which the CLI
+    shares (the strict end of assertions, `pull`, `node restart`,
+    `verify`, the dry-run report, the edits).
+  - `top` through the daemon: an operator's `i`/`c`/`p`/`h` keys work, and
+    the impairment column is the daemon's (it was empty without read
+    access to the state root).
 - **`nlink-labd`, the host daemon** (#260): every lab of the host,
   whoever deployed it, behind the API of `docs/API.md` on
   `/run/nlink-lab/api/api.sock`, socket-activated (`dist/`: systemd

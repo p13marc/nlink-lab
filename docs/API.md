@@ -120,9 +120,34 @@ The daemon answers every request; what it does not serve yet ends with
   --json` prints), `get_topology`, `list_processes`, `get_impairments`,
   `list_snapshots`, `read_events`, `get_metrics`, `diagnose`,
   `node_addresses`, `proc_stat`, `stats`, `scan_host`;
-- `subscribe` to `labs`, `lifecycle`, `topology`, `metrics` and
-  `runtime`;
-- `exec`, without a terminal (`tty: false`).
+- `subscribe` to `labs`, `lifecycle`, `topology`, `metrics`, `runtime`
+  and `ops`;
+- `exec`, without a terminal (`tty: false`);
+- every change: `deploy` (a `topology`, or a `source` bundle: the entry
+  file's text, its imports by relative path, its params), `apply`,
+  `destroy`, `restart`, `snapshot`, `delete_snapshot`, `restore`,
+  `run_scenario`, `run_benchmark`, `run_assertions`, `pull_images`,
+  `reap_orphans`, `impair`, `clear_impairment`, `partition`, `heal`,
+  `set_pair_impairment`, `spawn`, `kill`; and `plan_deploy`,
+  `check_apply` and `verify`, which change nothing;
+- the jobs: `list_ops`, `attach_op`, `cancel_op`.
+
+A lab's changes run one after the other, whoever asks: a change behind
+others streams `queued` with its position. The long ones (`deploy`,
+`apply`, `destroy`, `restart`, `restore`, the scenario, benchmark,
+assertion, pull and reap runs) are **jobs**: the call streams `started`
+with the job's `op`, then its progress, and ends with `done`. A client
+that sends `detach` — or goes away, or drops its `Call` — leaves the
+job running, and the call ends with `detached`; `attach_op` replays the
+job's events and follows the rest, `list_ops` lists the jobs (the
+finished ones for half an hour), and `cancel_op`, like `cancel` on the
+call, stops one: a deploy, apply or restore rolls back. Dropping an
+interactive call (`exec`, a subscription) cancels it.
+
+A source bundle's files are kept with the lab
+(`<state>/labs/<lab>/source/`), so its paths, and a later `apply` of
+it, work on the daemon's host; a `topology` sent without one must only
+name files that exist there.
 
 The daemon sees every lab of the state root within a scan (a second),
 whoever deployed it. Each lab's `revision` is a hash of its topology:

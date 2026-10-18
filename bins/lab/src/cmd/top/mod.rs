@@ -40,9 +40,9 @@ pub struct Args {
     pub node: Option<String>,
 
     /// Read metrics from the nlink-lab daemon (`nlink-labd`) instead of
-    /// collecting them: no root needed, read-only. What `top` does without
-    /// root, or with `NLINK_LAB_DAEMON` set (`ssh://HOST` for another
-    /// host's labs).
+    /// collecting them: no root needed, and the write keys work for an
+    /// operator. What `top` does without root, or with `NLINK_LAB_DAEMON`
+    /// set (`ssh://HOST` for another host's labs).
     #[arg(long)]
     pub daemon: bool,
 }
@@ -56,9 +56,17 @@ enum Source {
         lab: nlink_lab::RunningLab,
         collector: nlink_lab::metrics::MetricsCollector,
     },
-    /// A metrics subscription to the daemon. Read-only.
+    /// A metrics subscription to the daemon; an operator also changes
+    /// impairments through it.
     Daemon {
-        /// Owns the connection and the call; ends when `rx` is dropped.
+        /// The connection; `None` in tests.
+        client: Option<nlink_lab_client::Client>,
+        lab_name: String,
+        /// The caller is an operator: the write keys work.
+        operator: bool,
+        /// The lab's impairments as the daemon says them.
+        impairments: Vec<nlink_lab_shared::api::EndpointImpairment>,
+        /// Owns the subscription; ends when `rx` is dropped.
         _task: tokio::task::JoinHandle<()>,
         /// A snapshot, or why the subscription ended.
         rx: tokio::sync::mpsc::Receiver<Result<MetricsSnapshot, String>>,
@@ -117,6 +125,7 @@ impl Source {
             }
             e => crate::ctx::daemon_error(e),
         })?;
+        let operator = client.welcome().role == nlink_lab_shared::api::Role::Operator;
         let mut call = client
             .start(Request::Subscribe {
                 lab: Some(lab.to_string()),
@@ -127,7 +136,6 @@ impl Source {
             .map_err(crate::ctx::daemon_error)?;
         let (tx, rx) = tokio::sync::mpsc::channel(8);
         let task = tokio::spawn(async move {
-            let _client = client;
             while let Some(event) = call.next().await {
                 let item = match event {
                     CallEvent::Item(StreamItem::Notification {
@@ -146,12 +154,40 @@ impl Source {
                 .send(Err("the connection to the daemon closed".into()))
                 .await;
         });
-        Ok(Source::Daemon {
+        let mut source = Source::Daemon {
+            client: Some(client),
+            lab_name: lab.to_string(),
+            operator,
+            impairments: Vec::new(),
             _task: task,
             rx,
             lab: nlink_lab::RunningLab::load(lab).ok(),
             ended: false,
-        })
+        };
+        source.fetch_impairments().await;
+        Ok(source)
+    }
+
+    /// The daemon source's impairments, asked again. A failure keeps the
+    /// last ones: the column is not worth an error.
+    async fn fetch_impairments(&mut self) {
+        let Source::Daemon {
+            client: Some(client),
+            lab_name,
+            impairments,
+            ..
+        } = self
+        else {
+            return;
+        };
+        let request = nlink_lab_shared::api::Request::GetImpairments {
+            lab: lab_name.clone(),
+        };
+        if let Ok(nlink_lab_shared::api::Response::Impairments { endpoints }) =
+            client.call(request).await
+        {
+            *impairments = endpoints;
+        }
     }
 
     /// The lab as its state file has it now. Loaded once, a container
@@ -176,9 +212,12 @@ impl Source {
         }
     }
 
-    /// Writes are only possible on the local source, for now.
+    /// Writes need root on the local source, an operator on the daemon's.
     fn can_mutate(&self) -> bool {
-        matches!(self, Source::Local { .. })
+        match self {
+            Source::Local { .. } => true,
+            Source::Daemon { operator, .. } => *operator,
+        }
     }
 
     /// Cancel-safe: sleeps on the ticker, or awaits the subscription's
@@ -228,8 +267,19 @@ impl Source {
     /// a failed impairment must never take the TUI down.
     async fn act(&mut self, action: Action) -> Result<String, String> {
         self.refresh();
-        let Source::Local { lab, .. } = self else {
-            return Err("this source is read-only".to_string());
+        let lab = match self {
+            Source::Local { lab, .. } => lab,
+            Source::Daemon {
+                client: Some(client),
+                lab_name,
+                operator: true,
+                ..
+            } => {
+                let result = act_on_daemon(client, lab_name, action).await;
+                self.fetch_impairments().await;
+                return result;
+            }
+            Source::Daemon { .. } => return Err("this source is read-only".to_string()),
         };
         match action {
             Action::Impair {
@@ -414,6 +464,7 @@ async fn event_loop(
             },
             Step::Due(Due::Snapshot(snapshot)) => {
                 source.refresh();
+                source.fetch_impairments().await;
                 app.apply_snapshot(snapshot, &container_nodes(source));
                 refresh_impairments(app, source);
             }
@@ -455,7 +506,64 @@ fn container_nodes(source: &Source) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A write key through the daemon: the request an operator may make.
+async fn act_on_daemon(
+    client: &nlink_lab_client::Client,
+    lab: &str,
+    action: Action,
+) -> Result<String, String> {
+    use nlink_lab_shared::api::{Direction, ImpairmentSpec, Request};
+    let lab = lab.to_string();
+    let (request, done) = match action {
+        Action::Impair {
+            endpoint,
+            impairment,
+        } => {
+            let done = format!("{endpoint}: {}", impairment.summary());
+            let request = Request::Impair {
+                lab,
+                endpoint,
+                direction: Direction::Out,
+                spec: ImpairmentSpec::from(&impairment),
+            };
+            (request, done)
+        }
+        Action::Clear { endpoint } => (
+            Request::ClearImpairment {
+                lab,
+                endpoint: endpoint.clone(),
+            },
+            format!("{endpoint}: impairment cleared"),
+        ),
+        Action::Partition { endpoint } => (
+            Request::Partition {
+                lab,
+                endpoint: endpoint.clone(),
+            },
+            format!("{endpoint}: partitioned (loss 100%)"),
+        ),
+        Action::Heal { endpoint } => (
+            Request::Heal {
+                lab,
+                endpoint: endpoint.clone(),
+            },
+            format!("{endpoint}: healed"),
+        ),
+    };
+    client
+        .call(request)
+        .await
+        .map(|_| done)
+        .map_err(|e| e.to_string())
+}
+
 fn refresh_impairments(app: &mut App, source: &Source) {
+    if let Source::Daemon { impairments, .. } = source {
+        let (mut declared, mut live, mut partitioned) = Default::default();
+        daemon_impairments(impairments, &mut declared, &mut live, &mut partitioned);
+        app.set_impairments(&declared, &live, &partitioned);
+        return;
+    }
     let Some(lab) = source.lab() else {
         app.impairments.clear();
         return;
@@ -465,6 +573,29 @@ fn refresh_impairments(app: &mut App, source: &Source) {
         lab.live_impairments(),
         lab.partitions(),
     );
+}
+
+type Impairments = std::collections::BTreeMap<String, nlink_lab::Impairment>;
+
+/// The daemon's view of the impairments as the maps `App` reads: what the
+/// topology declares, what `impair` set, what is partitioned.
+fn daemon_impairments(
+    endpoints: &[nlink_lab_shared::api::EndpointImpairment],
+    declared: &mut Impairments,
+    live: &mut Impairments,
+    partitioned: &mut Impairments,
+) {
+    for e in endpoints {
+        if let Some(d) = &e.declared {
+            declared.insert(e.endpoint.clone(), d.into());
+        }
+        if let Some(l) = &e.live {
+            live.insert(e.endpoint.clone(), l.into());
+        }
+        if e.partitioned {
+            partitioned.insert(e.endpoint.clone(), nlink_lab::Impairment::default());
+        }
+    }
 }
 
 /// The lab's `created_at` as unix seconds, for the header uptime; `0`
@@ -495,6 +626,10 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<MetricsSnapshot, String>>(1);
         drop(tx);
         Source::Daemon {
+            client: None,
+            lab_name: "lab".into(),
+            operator: false,
+            impairments: Vec::new(),
             _task: tokio::spawn(async {}),
             rx,
             lab: None,
@@ -542,6 +677,35 @@ mod tests {
             source.collect().await.is_err(),
             "the daemon source is push-only"
         );
+    }
+
+    #[test]
+    fn the_daemons_impairments_fill_the_column() {
+        use nlink_lab_shared::api::{EndpointImpairment, ImpairmentSpec};
+        let spec = |d: &str| ImpairmentSpec {
+            delay: Some(d.into()),
+            ..Default::default()
+        };
+        let endpoints = vec![
+            EndpointImpairment {
+                endpoint: "a:eth0".into(),
+                declared: Some(spec("10ms")),
+                live: Some(spec("50ms")),
+                partitioned: false,
+            },
+            EndpointImpairment {
+                endpoint: "b:eth0".into(),
+                declared: None,
+                live: None,
+                partitioned: true,
+            },
+        ];
+        let (mut declared, mut live, mut partitioned) = Default::default();
+        daemon_impairments(&endpoints, &mut declared, &mut live, &mut partitioned);
+        let shown = app::effective_impairments(&declared, &live, &partitioned);
+        assert_eq!(shown["a:eth0"].origin, "live");
+        assert!(shown["a:eth0"].summary.contains("50ms"));
+        assert_eq!(shown["b:eth0"].origin, "partitioned");
     }
 
     #[test]

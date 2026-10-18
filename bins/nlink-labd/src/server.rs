@@ -8,8 +8,8 @@ use std::time::Instant;
 
 use nlink_lab::CancelToken;
 use nlink_lab_shared::api::{
-    API_VERSION, ApiError, ClientMsg, DataStream, ErrorCode, Frame, Request, Response, Role,
-    ServerMsg, StreamItem, api_major, api_version_string,
+    API_VERSION, ApiError, ClientMsg, DataStream, ErrorCode, Frame, OnDisconnect, Request,
+    Response, Role, ServerMsg, StreamItem, api_major, api_version_string,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -22,6 +22,7 @@ use crate::hub::Hub;
 pub(crate) struct Shared {
     pub groups: Groups,
     pub hub: Arc<Hub>,
+    pub jobs: Arc<crate::jobs::Jobs>,
     pub audit: Audit,
     pub started: Instant,
     pub clients: AtomicUsize,
@@ -34,7 +35,7 @@ pub(crate) fn server_name() -> String {
 }
 
 /// What the daemon serves beyond the API's version.
-const FEATURES: &[&str] = &["read", "subscribe", "exec"];
+const FEATURES: &[&str] = &["read", "subscribe", "exec", "operations", "jobs"];
 
 /// What a running call receives from its client.
 #[derive(Debug)]
@@ -51,7 +52,20 @@ pub(crate) enum Input {
 
 struct CallHandle {
     cancel: CancelToken,
+    detach: CancelToken,
+    on_disconnect: OnDisconnect,
     input: mpsc::UnboundedSender<Input>,
+}
+
+impl CallHandle {
+    /// The client leaves the call (`detach`, or it went away): a long
+    /// operation goes on, anything else stops.
+    fn leave(&self) {
+        match self.on_disconnect {
+            OnDisconnect::Continue => self.detach.cancel(),
+            OnDisconnect::Cancel => self.cancel.cancel(),
+        }
+    }
 }
 
 type Calls = Arc<Mutex<HashMap<u32, CallHandle>>>;
@@ -62,6 +76,8 @@ pub(crate) struct CallCtx {
     pub id: u32,
     out: mpsc::Sender<Frame>,
     pub cancel: CancelToken,
+    /// Set when the client leaves a long operation running.
+    pub detached: CancelToken,
     pub input: mpsc::UnboundedReceiver<Input>,
     pub peer: Arc<Peer>,
     pub role: Role,
@@ -304,10 +320,14 @@ async fn connection(stream: tokio::net::UnixStream, shared: Arc<Shared>, shutdow
                 ClientMsg::Call { request } => {
                     start(call, *request, role, peer.clone(), &shared, &calls, &out).await;
                 }
-                // nothing runs detached yet: leaving a call ends it
-                ClientMsg::Cancel | ClientMsg::Detach => {
+                ClientMsg::Cancel => {
                     if let Some(h) = calls.lock().unwrap().get(&call) {
                         h.cancel.cancel();
+                    }
+                }
+                ClientMsg::Detach => {
+                    if let Some(h) = calls.lock().unwrap().get(&call) {
+                        h.leave();
                     }
                 }
                 ClientMsg::Eof => send_input(&calls, call, Input::Eof),
@@ -319,9 +339,9 @@ async fn connection(stream: tokio::net::UnixStream, shared: Arc<Shared>, shutdow
             }
         }
     }
-    // the client is gone: so are its calls
+    // the client is gone: its calls stop, its long operations go on
     for (_, h) in calls.lock().unwrap().drain() {
-        h.cancel.cancel();
+        h.leave();
     }
     shared.clients.fetch_sub(1, Ordering::Relaxed);
     if welcomed {
@@ -365,6 +385,7 @@ async fn start(
     }
     let (input_tx, input) = mpsc::unbounded_channel();
     let cancel = CancelToken::new();
+    let detached = CancelToken::new();
     let in_use = {
         let mut calls = calls.lock().unwrap();
         let in_use = calls.contains_key(&call);
@@ -373,6 +394,8 @@ async fn start(
                 call,
                 CallHandle {
                     cancel: cancel.clone(),
+                    detach: detached.clone(),
+                    on_disconnect: meta.on_disconnect,
                     input: input_tx,
                 },
             );
@@ -392,6 +415,7 @@ async fn start(
         id: call,
         out: out.clone(),
         cancel,
+        detached,
         input,
         peer,
         role,

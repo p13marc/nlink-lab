@@ -92,6 +92,18 @@ impl Hub {
         self.latest.lock().unwrap().get(lab).cloned()
     }
 
+    /// An operation's progress, for the `ops` topic.
+    pub fn publish_op(&self, event: &nlink_lab_shared::api::OpEvent) {
+        let lab = Some(event.lab.as_str()).filter(|l| !l.is_empty());
+        self.publish(
+            lab,
+            Topic::Ops,
+            Notification::OpProgress {
+                event: event.clone(),
+            },
+        );
+    }
+
     fn publish(&self, lab: Option<&str>, topic: Topic, notification: Notification) {
         // no subscriber is not an error
         let _ = self.tx.send(Arc::new(Note {
@@ -212,10 +224,7 @@ impl Hub {
                 "subscribe to one topic at least",
             ));
         }
-        if let Some(t) = topics
-            .iter()
-            .find(|t| matches!(t, Topic::Ops | Topic::Drift))
-        {
+        if let Some(t) = topics.iter().find(|t| matches!(t, Topic::Drift)) {
             return Err(ApiError::new(
                 ErrorCode::Unsupported,
                 format!("`{t:?}` notifications are not served by this daemon yet"),

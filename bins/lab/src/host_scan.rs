@@ -2,7 +2,7 @@
 //! CLI always has: one indented line per action, failures as warnings.
 
 use nlink_lab::host::{Cleanup, Resource};
-pub use nlink_lab::host::{Orphans, find_orphans, node_link_count};
+pub use nlink_lab::host::{Orphans, find_orphans};
 
 /// [`nlink_lab::host::force_cleanup`], printed on stderr.
 pub async fn force_cleanup(name: &str, prefix: &str) {

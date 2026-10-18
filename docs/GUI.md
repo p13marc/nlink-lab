@@ -79,11 +79,12 @@ nlink-lab top -L simple --once       # one text frame, for pipes and CI
 ```
 
 As root, `top` collects the metrics itself; without root it reads them
-from the daemon, read-only (`NLINK_LAB_DAEMON=ssh://HOST` reads another
-host's). `--once` prints a single frame and exits, which is what you
-want in a CI log. `--interval` sets the refresh period, and the screen
-is interactive — sort, filter, and (as root) impair or partition the
-selected interface without leaving it. See [cli/top.md](cli/top.md) for
+from the daemon (`NLINK_LAB_DAEMON=ssh://HOST` reads another host's).
+`--once` prints a single frame and exits, which is what you want in a CI
+log. `--interval` sets the refresh period, and the screen is
+interactive — sort, filter, and (as root, or as a member of `nlink-lab`
+through the daemon) impair or partition the selected interface without
+leaving it. See [cli/top.md](cli/top.md) for
 the full key map.
 
 ---

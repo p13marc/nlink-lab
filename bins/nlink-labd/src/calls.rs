@@ -14,6 +14,10 @@ pub(crate) fn cancelled() -> ApiError {
 
 /// Run `request` to its result.
 pub(crate) async fn dispatch(ctx: &mut CallCtx, request: Request) -> Result<Response, ApiError> {
+    if request.meta().mutating && !matches!(request, Request::CancelOp { .. }) {
+        let jobs = ctx.shared.jobs.clone();
+        return jobs.run(ctx, request).await;
+    }
     match request {
         Request::Ping => Ok(Response::Pong),
         Request::WhoAmI => Ok(Response::WhoAmI {
@@ -77,7 +81,46 @@ pub(crate) async fn dispatch(ctx: &mut CallCtx, request: Request) -> Result<Resp
             )
             .await
         }
+        Request::ListOps => Ok(Response::Ops {
+            ops: ctx.shared.jobs.list(),
+        }),
+        Request::AttachOp { op } => {
+            let jobs = ctx.shared.jobs.clone();
+            jobs.attach(ctx, &op).await
+        }
+        Request::CancelOp { op } => ctx.shared.jobs.cancel(&op),
+        // they read the kernel's state or a topology sent, and change nothing
+        req
+        @ (Request::PlanDeploy { .. } | Request::CheckApply { .. } | Request::Verify { .. }) => {
+            local(ctx, req).await
+        }
         other => read(ctx, other).await,
+    }
+}
+
+/// A request the library's operations answer without changing a lab, off
+/// the event loop.
+async fn local(ctx: &CallCtx, request: Request) -> Result<Response, ApiError> {
+    let method = request.method();
+    let work = tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("a runtime: {e}")))?;
+        let ctx = nlink_lab::OpCtx::default();
+        Ok::<_, ApiError>(rt.block_on(nlink_lab::ops::mutate::handle(request, &ctx)))
+    });
+    tokio::select! {
+        done = work => match done {
+            Ok(Ok(Some(result))) => result.map_err(|e| e.to_api()),
+            Ok(Ok(None)) => Err(ApiError::new(
+                ErrorCode::Unsupported,
+                format!("`{method}` is not served by this daemon yet"),
+            )),
+            Ok(Err(e)) => Err(e),
+            Err(e) => Err(ApiError::new(ErrorCode::Internal, format!("`{method}` failed: {e}"))),
+        },
+        _ = ctx.cancel.cancelled() => Err(cancelled()),
     }
 }
 

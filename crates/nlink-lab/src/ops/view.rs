@@ -366,6 +366,95 @@ pub fn node_stats(running: &RunningLab, only: Option<&str>) -> Vec<NodeStats> {
     rows
 }
 
+/// The `apply --dry-run --json` / `verify --json`
+/// envelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).
+#[derive(serde::Serialize, schemars::JsonSchema)]
+#[schemars(title = "nlink-lab apply --dry-run / --check / verify --json (v3)")]
+pub struct DryRunReport<'a> {
+    /// Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`
+    /// fields (Plan 160 / 0.7.0) — use `topology` / `network` /
+    /// `nftables` / `wireguard` / `removals`. `topology` and `wireguard`
+    /// were added later and are additive, so the marker did not move.
+    pub schema_version: u32,
+    pub lab: &'a str,
+    pub no_op: bool,
+    pub change_count: usize,
+    /// Lab-graph changes: nodes, links, routes, sysctls, nftables,
+    /// impairments, per-pair `impair` matrices, `qdisc` blocks, rate
+    /// limits — what the topology files differ in. The kernel side of a
+    /// traffic-control change is in `network` (the qdiscs and trees it
+    /// declares), with any drift from it (#108). Elided when empty.
+    #[serde(skip_serializing_if = "crate::diff::TopologyDiff::is_empty")]
+    pub topology: &'a crate::diff::TopologyDiff,
+    /// Typed per-node `NetworkConfig` diff. Empty map elided.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub network: &'a std::collections::BTreeMap<String, crate::diff::ConfigDiff>,
+    /// Typed per-node `NftablesDiff`. Empty map elided.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub nftables: &'a std::collections::BTreeMap<String, crate::diff::NftablesDiff>,
+    /// Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and
+    /// allowed-ips that differ from the declared tunnels (public keys
+    /// only; private and preshared keys as presence flags). Empty map
+    /// elided. Additive, so the marker stays `3`. Free-form in the
+    /// schema: nlink 0.32 derives one that does not match the JSON (keys
+    /// as byte arrays, presence flags as keys; marcpardo/nlink#876).
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
+    pub wireguard: &'a std::collections::BTreeMap<String, crate::diff::WireguardConfigDiff>,
+    /// Removal ops from the plan diff (deleted nodes, links, VRF-table
+    /// routes, …), one description per op. Elided when empty.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    pub removals: &'a [String],
+    /// The plan's other work, one description per op: what neither the
+    /// lab graph nor the declarative layers show, such as a container
+    /// re-created because its options changed, or a process restarted
+    /// (#204). Elided when empty; additive, so the marker stays `3`.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    pub ops: &'a [String],
+}
+
+impl<'a> DryRunReport<'a> {
+    pub fn new(
+        lab: &'a str,
+        layered: &'a crate::diff::LayeredDiff,
+        removals: &'a [String],
+    ) -> Self {
+        Self {
+            schema_version: 3,
+            lab,
+            no_op: layered.is_empty() && removals.is_empty(),
+            change_count: layered.change_count() + removals.len(),
+            topology: &layered.topology,
+            network: &layered.network,
+            nftables: &layered.nftables,
+            wireguard: &layered.wireguard,
+            removals,
+            ops: &[],
+        }
+    }
+
+    /// With the plan's other work ([`DryRunReport::ops`]).
+    pub fn with_ops(mut self, ops: &'a [String]) -> Self {
+        self.no_op &= ops.is_empty();
+        self.change_count += ops.len();
+        self.ops = ops;
+        self
+    }
+}
+
+/// The plan's removals and its other work, one description per op: what
+/// a dry run reports besides the layered diff.
+pub fn plan_lists(plan: &crate::Plan) -> (Vec<String>, Vec<String>) {
+    let removals = plan
+        .ops
+        .iter()
+        .filter(|o| o.is_removal())
+        .map(|o| o.describe())
+        .collect();
+    let work = plan.work().map(|o| o.describe()).collect();
+    (removals, work)
+}
+
 /// Lifecycle events of `lab`, of these `kinds` (every kind when empty),
 /// and the cursor to read on from (a byte offset into `events.ndjson`).
 ///

@@ -137,7 +137,8 @@ pub enum Commands {
     /// As root, collects a metrics snapshot every `--interval` itself,
     /// like `diagnose`. Without root (or with `--daemon`, or
     /// `NLINK_LAB_DAEMON` set) it reads them from the nlink-lab daemon,
-    /// `nlink-labd`: no root needed, and no write actions.
+    /// `nlink-labd`: no root needed. The write keys then need the
+    /// `nlink-lab` group (an operator); a viewer only watches.
     ///
     /// KEYS
     ///   up/down or j/k  select        Tab  next pane      s  cycle sort

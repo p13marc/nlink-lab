@@ -1,8 +1,10 @@
 //! Operations: what the CLI, the daemon and the desktop app all run, with
 //! one context for their progress and cancellation (#236), and the views
-//! and read calls they share (#233).
+//! and read calls they share (#233), and the operations that change
+//! labs (#266).
 
 mod ctx;
+pub mod mutate;
 pub mod read;
 pub mod view;
 

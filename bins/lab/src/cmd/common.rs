@@ -63,20 +63,12 @@ pub fn assertions_outcome(
     lab: &str,
     left: &str,
 ) -> nlink_lab::Result<()> {
-    let failed = results.iter().filter(|a| !a.passed).count();
-    if failed == 0 {
-        return Ok(());
+    if nlink_lab::ops::mutate::assertions_outcome(results, strict, lab, left)? > 0 {
+        eprintln!(
+            "  {} assertions failed; pass --strict to make this fatal",
+            yellow("WARN")
+        );
     }
-    if strict {
-        return Err(nlink_lab::Error::Validation(format!(
-            "{failed} of {} assertion(s) failed (lab {lab:?} left {left} for inspection)",
-            results.len()
-        )));
-    }
-    eprintln!(
-        "  {} assertions failed; pass --strict to make this fatal",
-        yellow("WARN")
-    );
     Ok(())
 }
 
@@ -94,18 +86,7 @@ pub fn print_plan(plan: &nlink_lab::Plan) {
     }
 }
 
-/// A plan's removals and its other work, described: what `apply` and
-/// `verify` count as changes besides the layered diff.
-pub fn plan_lists(plan: &nlink_lab::Plan) -> (Vec<String>, Vec<String>) {
-    let removals = plan
-        .ops
-        .iter()
-        .filter(|o| o.is_removal())
-        .map(|o| o.describe())
-        .collect();
-    let work = plan.work().map(|o| o.describe()).collect();
-    (removals, work)
-}
+pub use nlink_lab::ops::view::plan_lists;
 
 /// The changes between a lab and its topology: the layered diff, the
 /// removals and the plan's other work. Returns how many there are.

@@ -1212,6 +1212,55 @@
         "ts_ms"
       ]
     },
+    "OpInfo": {
+      "description": "An operation the daemon runs or ran (`list_ops`): a deploy, an apply,\na scenario…",
+      "type": "object",
+      "properties": {
+        "actor": {
+          "description": "Who asked: `user (uid)`.",
+          "type": "string"
+        },
+        "error": {
+          "description": "Why it failed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`deploy`, `apply`, `destroy`, …",
+          "type": "string"
+        },
+        "lab": {
+          "description": "The lab it is about; empty for the host's (`reap_orphans`).",
+          "type": "string"
+        },
+        "op": {
+          "type": "string"
+        },
+        "queued_at": {
+          "description": "RFC 3339.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/OpState"
+        }
+      },
+      "required": [
+        "op",
+        "kind",
+        "lab",
+        "actor",
+        "state",
+        "queued_at"
+      ]
+    },
     "OpOutcome": {
       "description": "How an operation ended.",
       "oneOf": [
@@ -1271,6 +1320,30 @@
             "outcome",
             "error"
           ]
+        }
+      ]
+    },
+    "OpState": {
+      "description": "Where an operation is.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        {
+          "description": "Behind others on its lab.",
+          "type": "string",
+          "const": "queued"
+        },
+        {
+          "description": "It failed and what it had done was undone.",
+          "type": "string",
+          "const": "rolled_back"
         }
       ]
     },
@@ -1610,7 +1683,9 @@
           "properties": {
             "ops": {
               "type": "array",
-              "items": true
+              "items": {
+                "$ref": "#/$defs/OpInfo"
+              }
             },
             "result": {
               "type": "string",
@@ -1620,6 +1695,23 @@
           "required": [
             "result",
             "ops"
+          ]
+        },
+        {
+          "description": "The client left a long operation running (`detach`, or it went\naway): `attach_op` follows it again.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string",
+              "const": "detached"
+            }
+          },
+          "required": [
+            "result",
+            "op"
           ]
         },
         {

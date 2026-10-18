@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{EndpointImpairment, LabSummary, ProcessDto, SnapshotDto};
+use super::{EndpointImpairment, LabSummary, OpInfo, ProcessDto, SnapshotDto};
 use crate::metrics::MetricsSnapshot;
 
 /// The result of a call. Each request has the variant named after what
@@ -66,7 +66,12 @@ pub enum Response {
         report: serde_json::Value,
     },
     Ops {
-        ops: Vec<serde_json::Value>,
+        ops: Vec<OpInfo>,
+    },
+    /// The client left a long operation running (`detach`, or it went
+    /// away): `attach_op` follows it again.
+    Detached {
+        op: String,
     },
     /// A lifecycle operation finished; `lab` is the lab it made or changed.
     Done {

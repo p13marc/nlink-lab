@@ -26,6 +26,11 @@ env:
   # Cap build parallelism: cargo otherwise defaults to nproc (6 on
   # vm-runner-01) per job, against a lane capacity of 2.
   CARGO_BUILD_JOBS: "2"
+  # Debug info is most of target/ and of the linker's memory, and the
+  # workspace grew (the daemon's zenoh, the app's iced and wgpu): three
+  # test lanes building it in parallel took the runner VM down (#293).
+  # A panic still has its line numbers.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   fmt:
@@ -53,6 +58,8 @@ jobs:
           cache-targets: false
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      # the app without its embedded terminal: the test lanes build it once
+      - run: cargo clippy -p nlink-lab-gui --all-targets --no-default-features -- -D warnings
 
   test:
     runs-on: ubuntu-24.04
@@ -69,10 +76,13 @@ jobs:
         with:
           key: t-${{ matrix.features || 'default' }}
           cache-targets: false
-      - run: cargo build --workspace --all-targets ${{ matrix.features }}
+      # The desktop app (iced, wgpu: the biggest build by far) has one
+      # feature, its embedded terminal: it is built and tested in the
+      # default lane only, and clippy checks it without the feature.
+      - run: cargo build --workspace --all-targets ${{ matrix.features }} ${{ matrix.features != '' && '--exclude nlink-lab-gui' || '' }}
       # crates/nlink-lab/tests/integration.rs needs root/netns — it runs on
       # the privileged lane (integration.yml); everything else runs here.
-      - run: cargo test --workspace ${{ matrix.features }} --exclude nlink-lab
+      - run: cargo test --workspace ${{ matrix.features }} --exclude nlink-lab ${{ matrix.features != '' && '--exclude nlink-lab-gui' || '' }}
       - run: cargo test -p nlink-lab ${{ matrix.features }} --lib
       - run: cargo test -p nlink-lab ${{ matrix.features }} --doc
       # doc-CI gate: every ```nll block and relative link under docs/ (Plan 150 D)

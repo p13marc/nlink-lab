@@ -16,6 +16,8 @@ env:
   # Guarded by the first step so a missing mount does not fail the build.
   RUSTC_WRAPPER: /srv/cache/bin/sccache
   CARGO_INCREMENTAL: "0"
+  # debug info is most of target/ and of the linker's memory (#293)
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   integration:

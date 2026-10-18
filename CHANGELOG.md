@@ -889,6 +889,14 @@ under both (#233). Its waves land one by one below.
 
 ### Fixed
 
+- **`destroy` stops what a lab's commands left running** (#263): a
+  daemon an `exec` started (`iperf3 -s -D`), a shell's `&`, a child a
+  spawned process forked. They are not tracked, so they ran on in the
+  deleted namespace and kept it alive, interfaces included, while `ip
+  netns list` showed nothing. Every process left in a namespace node is
+  sent SIGTERM, then SIGKILL a second later; `destroy --force` and
+  `--orphans` do the same before deleting a namespace.
+
 - **A tracked process's liveness** (#260): a member of the state root's
   group running `ps` or `status` saw every process root had spawned as
   dead (`kill(pid, 0)` is EPERM for someone else's process, and was

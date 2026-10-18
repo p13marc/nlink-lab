@@ -408,6 +408,75 @@ async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
     );
 }
 
+/// `destroy` stops what a lab's commands left running in its namespaces,
+/// which nothing tracks: a daemon an `exec` started, and one that ignores
+/// SIGTERM. Each kept its deleted namespace alive — the root suite's
+/// `iperf3 -s -D` servers had piled up by the hundred.
+#[tokio::test]
+async fn destroy_stops_what_the_lab_left_running() {
+    if unsafe { libc::geteuid() } != 0 {
+        eprintln!("skipping destroy_stops_what_the_lab_left_running: requires root");
+        return;
+    }
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "strays-{}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#,
+        std::process::id()
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let out = lab
+        .exec(
+            "a",
+            "sh",
+            &[
+                "-c",
+                "sleep 7301 </dev/null >/dev/null 2>&1 & \
+                 (trap '' TERM; exec sleep 7302) </dev/null >/dev/null 2>&1 &",
+            ],
+        )
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    let cmdline = |pid: u32| {
+        std::fs::read(format!("/proc/{pid}/cmdline"))
+            .map(|b| String::from_utf8_lossy(&b).replace('\0', " "))
+            .unwrap_or_default()
+    };
+    let strays: Vec<u32> = lab
+        .node_pids("a")
+        .unwrap()
+        .into_iter()
+        .filter(|&p| cmdline(p).starts_with("sleep 730"))
+        .collect();
+    assert_eq!(strays.len(), 2, "both sleeps run in a: {strays:?}");
+    assert!(lab.process_status().is_empty(), "neither is tracked");
+
+    let started = std::time::Instant::now();
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+    // the one that ignores SIGTERM is killed after a second's grace
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    for _ in 0..40 {
+        if strays.iter().all(|&p| pid_dead(p)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    panic!(
+        "still running after destroy: {:?}",
+        strays
+            .iter()
+            .map(|&p| (p, proc_state(p)))
+            .collect::<Vec<_>>()
+    );
+}
+
 /// `/proc/<pid>/stat` state letter, `None` when the pid is gone.
 fn proc_state(pid: u32) -> Option<char> {
     let st = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;

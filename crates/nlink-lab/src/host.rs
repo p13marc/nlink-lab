@@ -102,6 +102,7 @@ pub async fn force_cleanup(name: &str, prefix: &str) -> Vec<Cleanup> {
     let prefix = format!("{prefix}-");
     match nlink::netlink::namespace::list() {
         Ok(all) => {
+            let mut mine = Vec::new();
             for ns in all.iter().filter(|ns| ns.starts_with(&prefix)) {
                 if let Some(owner) = crate::netns_tag::lab_of(ns)
                     && owner != name
@@ -113,6 +114,10 @@ pub async fn force_cleanup(name: &str, prefix: &str) -> Vec<Cleanup> {
                     });
                     continue;
                 }
+                mine.push(ns.clone());
+            }
+            stop_namespace_processes(&mine).await;
+            for ns in &mine {
                 match nlink::netlink::namespace::delete(ns) {
                     Ok(()) => {
                         crate::netns_tag::untag(ns);
@@ -360,6 +365,77 @@ async fn list_ip_links_with(conn: &nlink::Connection<nlink::Route>) -> Vec<Strin
     }
 }
 
+/// Stop every process whose network namespace is one of `namespaces`
+/// (named namespaces): SIGTERM, then SIGKILL for whatever still runs a
+/// second later. What a lab's commands leave behind — a daemon an `exec`
+/// started (`iperf3 -D`), a shell's `&` — is not a tracked process, and
+/// it kept a deleted namespace alive, interfaces included, for as long as
+/// it ran. Returns how many processes there were.
+pub async fn stop_namespace_processes(namespaces: &[String]) -> usize {
+    let dir = std::path::Path::new(nlink::netlink::namespace::NETNS_RUN_DIR);
+    let ids: Vec<(u64, u64)> = namespaces
+        .iter()
+        .filter_map(|ns| ns_identity(dir.join(ns)))
+        .collect();
+    let first = pids_in(&ids);
+    if first.is_empty() {
+        return 0;
+    }
+    signal_all(&first, libc::SIGTERM);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let left = pids_in(&ids);
+        if left.is_empty() {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            tracing::info!(
+                "{} process(es) in the lab's namespaces outlived SIGTERM: killed",
+                left.len()
+            );
+            signal_all(&left, libc::SIGKILL);
+            break;
+        }
+    }
+    first.len()
+}
+
+/// `(dev, ino)` of a namespace file: equal for two processes in one
+/// namespace (what `ip netns pids` compares).
+fn ns_identity(path: impl AsRef<std::path::Path>) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let md = std::fs::metadata(path).ok()?;
+    Some((md.dev(), md.ino()))
+}
+
+/// Every process but this one whose network namespace is one of `ids`.
+/// A zombie has none any more, and a process gone mid-walk is skipped.
+fn pids_in(ids: &[(u64, u64)]) -> Vec<u32> {
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let me = std::process::id();
+    let Ok(proc_dir) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    proc_dir
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+        .filter(|&pid| pid != me)
+        .filter(|pid| {
+            ns_identity(format!("/proc/{pid}/ns/net")).is_some_and(|id| ids.contains(&id))
+        })
+        .collect()
+}
+
+fn signal_all(pids: &[u32], signal: libc::c_int) {
+    for &pid in pids {
+        // SAFETY: kill(2) on a process just seen in a lab namespace.
+        unsafe { libc::kill(pid as i32, signal) };
+    }
+}
+
 /// Named network namespaces on the host (`/var/run/netns`).
 fn list_netns() -> Vec<String> {
     nlink::netlink::namespace::list().unwrap_or_else(|e| {
@@ -515,6 +591,8 @@ pub async fn reap_orphans(known: &[crate::state::LabInfo]) -> Vec<Cleanup> {
                 }
             }
         };
+        let names: Vec<String> = namespaces.iter().map(|ns| ns.to_string()).collect();
+        stop_namespace_processes(&names).await;
         for ns in namespaces {
             match nlink::netlink::namespace::delete(ns) {
                 Ok(()) => {

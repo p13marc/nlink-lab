@@ -32,7 +32,7 @@ List background processes (alive and exited) tracked by `spawn`.
 
 Exited processes remain in the listing with `alive: false` so post-mortem inspection (which log files? when did they exit?) is possible. They are pruned only when the lab is destroyed. Consumers polling "is X still running?" must check the `alive` field, not just look up the PID — or pass `--alive-only` to filter dead entries out at the source.
 
-JSON OUTPUT (with `--json`): [ { "node": str, "pid": int, "host_pid": int, "alive": bool, "stdout_log": str | null, "stderr_log": str | null }, ... ] Schema: docs/json-schemas/ps.schema.json
+JSON OUTPUT (with `--json`): { "schema_version": 2, "lab": str, "processes": [ { "node": str, "pid": int, "host_pid": int, "alive": bool, "exit_code": int | null, "stdout_log": str | null, "stderr_log": str | null }, ... ] } Schema: docs/json-schemas/ps.schema.json. With `--quiet`, the PIDs, one per line.
 
 Usage: nlink-lab ps [OPTIONS] <LAB>
 

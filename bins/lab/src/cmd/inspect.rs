@@ -1,6 +1,7 @@
 //! `nlink-lab inspect`.
 
 use crate::ctx::{Ctx, bold};
+use anstream::println;
 
 #[derive(clap::Args)]
 pub struct Args {

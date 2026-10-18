@@ -3559,6 +3559,8 @@ dependencies = [
 name = "nlink-lab-cli"
 version = "0.13.0"
 dependencies = [
+ "anstream",
+ "anstyle",
  "clap",
  "clap_complete",
  "crossterm",
@@ -3581,6 +3583,7 @@ dependencies = [
  "tower-lsp-server",
  "tracing",
  "tracing-subscriber",
+ "unicode-width 0.2.2",
  "zenoh",
 ]
 

@@ -227,9 +227,12 @@ pub enum Commands {
     /// entries out at the source.
     ///
     /// JSON OUTPUT (with `--json`):
-    ///   [ { "node": str, "pid": int, "host_pid": int, "alive": bool,
-    ///       "stdout_log": str | null, "stderr_log": str | null }, ... ]
-    /// Schema: docs/json-schemas/ps.schema.json
+    ///   { "schema_version": 2, "lab": str,
+    ///     "processes": [ { "node": str, "pid": int, "host_pid": int,
+    ///       "alive": bool, "exit_code": int | null,
+    ///       "stdout_log": str | null, "stderr_log": str | null }, ... ] }
+    /// Schema: docs/json-schemas/ps.schema.json. With `--quiet`, the PIDs,
+    /// one per line.
     Ps(cmd::ps::Args),
 
     /// Kill a tracked background process.
@@ -400,8 +403,129 @@ pub enum Commands {
     Init(cmd::init::Args),
 }
 
+/// The top-level help's groups, in order: every visible command is in
+/// exactly one (a unit test checks).
+pub const GROUPS: &[(&str, &[&str])] = &[
+    (
+        "Lifecycle",
+        &[
+            "deploy",
+            "apply",
+            "destroy",
+            "status",
+            "inspect",
+            "containers",
+            "verify",
+            "snapshot",
+            "restore",
+            "export",
+            "import",
+        ],
+    ),
+    (
+        "Run",
+        &[
+            "exec",
+            "shell",
+            "spawn",
+            "wait",
+            "wait-for",
+            "ps",
+            "kill",
+            "logs",
+            "stats",
+            "proc-stat",
+            "restart",
+        ],
+    ),
+    ("Network", &["impair", "edit", "ip", "capture"]),
+    (
+        "Observe",
+        &["events", "watch", "top", "metrics", "diagnose", "daemon"],
+    ),
+    ("Test", &["test", "scenario", "benchmark"]),
+    (
+        "Author",
+        &[
+            "validate", "lint", "fmt", "render", "graph", "diff", "init", "pull",
+        ],
+    ),
+    ("Host", &["doctor", "completions", "lsp"]),
+];
+
+/// The top-level help template: the commands under their [`GROUPS`]
+/// headings (clap lists subcommands in one block only).
+pub fn grouped_help(cmd: &clap::Command) -> String {
+    let width = GROUPS
+        .iter()
+        .flat_map(|(_, names)| names.iter())
+        .map(|n| n.len())
+        .max()
+        .unwrap_or(0);
+    // one line each: the first clause, cut to 100 columns
+    let room = 100 - width - 4;
+    let about = |name: &str| {
+        let about = cmd
+            .find_subcommand(name)
+            .and_then(|c| c.get_about())
+            .map(|a| a.to_string())
+            .unwrap_or_default();
+        let first = about
+            .split("; ")
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches('.');
+        if first.chars().count() <= room {
+            first.to_string()
+        } else {
+            let cut: String = first.chars().take(room - 1).collect();
+            format!("{}…", cut.trim_end())
+        }
+    };
+    let mut out = String::from("{before-help}{about-with-newline}\n{usage-heading} {usage}\n");
+    for (group, names) in GROUPS {
+        out.push_str(&format!("\n{group}:\n"));
+        for name in *names {
+            // a `{` in an about line would read as a template tag
+            let about = about(name).replace('{', "(").replace('}', ")");
+            out.push_str(&format!("  {name:<width$}  {about}\n"));
+        }
+    }
+    out.push_str("\nOptions:\n{options}{after-help}");
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_command_is_in_one_help_group() {
+        let cmd = crate::command();
+        let visible: Vec<&str> = cmd
+            .get_subcommands()
+            .filter(|c| !c.is_hide_set())
+            .map(|c| c.get_name())
+            .collect();
+        let grouped: Vec<&str> = super::GROUPS
+            .iter()
+            .flat_map(|(_, names)| names.iter().copied())
+            .collect();
+        for name in &visible {
+            let n = grouped.iter().filter(|g| *g == name).count();
+            assert_eq!(n, 1, "`{name}` is in {n} help groups");
+        }
+        for name in &grouped {
+            assert!(
+                visible.contains(name),
+                "group lists `{name}`, no such command"
+            );
+        }
+        let help = cmd.clone().render_help().to_string();
+        assert!(
+            help.contains("Lifecycle:") && help.contains("  deploy "),
+            "{help}"
+        );
+    }
+
     /// Every JSON Schema under `docs/json-schemas/` must be valid JSON,
     /// and every generated one must match what `docs-gen --schemas`
     /// produces from the types (CI runs the same check via git diff).

@@ -92,24 +92,34 @@ These are accepted by every subcommand:
 
 | Flag | What |
 |------|------|
-| `--json` | Emit machine-parseable JSON instead of human text (errors become a JSON envelope on stderr; an NLL parse error's has `kind: "parse"`, `file`, `line` and `column`) |
-| `--verbose`, `-v` | Show deployment steps / tracing (`info` level) |
-| `--quiet`, `-q` | Suppress non-error output |
+| `--format text\|json\|ndjson` | `text` for people; `json`, one pretty document; `ndjson`, one compact document per line (what streams always print). JSON documents carry a `schema_version`; errors become the API's error document on stderr (see below) |
+| `--json` | Shorthand for `--format json` |
+| `--color auto\|always\|never` | Colour the output: `auto` colours a stream that is a terminal, unless `NO_COLOR` is set (`CLICOLOR` and `CLICOLOR_FORCE` are honoured too). Decided per stream |
+| `-v`, `-vv` | Show deployment steps and `info` logs; `-vv` adds `debug` |
+| `--quiet`, `-q` | Suppress non-error output; list commands (`ps`) print only ids |
 
 `--skip-validate` belongs to `deploy` only (it drops the `validate {}`
 assertions); `--set KEY=VALUE` is accepted by every command that reads a
 topology (`deploy`, `apply`, `validate`, `render`, `graph`, `diff`,
 `pull`, `test`, `export --archive`).
 
+Under `--json`, a failure is printed on stderr as the daemon API's error
+document (`docs/API.md`): `code`, `message`, `chain`, `exit_code`, and
+when they apply `errno`, `ext_ack`, `netns`, `hint`, `issues` (a parse
+error is one issue with rule `parse` and `location` `file:line:column`)
+and `nlink` (what nlink says about a failed netlink call).
+
 ## Exit codes
 
-One policy for every subcommand (the `--json` error envelope carries the
+One policy for every subcommand (the `--json` error document carries the
 same value in `exit_code`):
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Error (bad arguments, lab not found, kernel/netlink failure, lock held by another process) |
-| 2 | Validation, assertion or drift failure: `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `benchmark`, `apply --check` |
+| 1 | Error (lab not found, kernel/netlink failure, lock held by another process) |
+| 2 | A negative result: validation, assertion or drift failure — `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `benchmark`, `apply --check` |
+| 64 | Usage error: a command line that does not parse, or a removed command (which says what replaced it) |
 | 124 | Timeout (`exec --timeout`, `wait-for`) |
+| 130 | Interrupted or cancelled |
 | child's code | `exec` and `shell` pass the command's exit status through |

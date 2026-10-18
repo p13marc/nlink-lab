@@ -62,6 +62,12 @@ An error is the same object the CLI prints with `--json`:
  "hint": "nlink-lab ls"}
 ```
 
+The CLI prints the same document on stderr under `--json`. A failed
+netlink call adds `nlink`: nlink's `kind` of failure, the `object`, its
+`context` and the extended ack's `ext_ack_offset`; an NLL parse error is
+a `validation` error with one issue, `{"rule": "parse", "location":
+"file:line:column"}`.
+
 `code` is one of `not_found`, `already_exists`, `locked`, `busy`,
 `invalid_argument`, `validation`, `timeout`, `cancelled`,
 `permission_denied`, `version_mismatch`, `unsupported`, `kernel`, `io`,

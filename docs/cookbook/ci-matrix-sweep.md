@@ -142,11 +142,13 @@ For GitHub Actions / GitLab CI, emit JUnit XML and let the runner
 render the matrix:
 
 ```bash
-sudo nlink-lab test --junit results.xml \
-  --set latency=10ms wan-test.nll \
-  --set latency=50ms wan-test.nll \
-  --set latency=500ms wan-test.nll
+for latency in 10ms 50ms 500ms; do
+  sudo nlink-lab test --junit "results-$latency.xml" --set latency=$latency wan-test.nll
+done
 ```
+
+`--set` applies to every file of one `test` run, so a sweep is one run
+per value, each with its own JUnit file.
 
 (`test` is the all-in-one verb: deploy + run validate blocks +
 destroy.)

@@ -1,5 +1,6 @@
 //! `nlink-lab test`.
 
+use anstream::{eprint, eprintln, print};
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, green, parse_set_params, red, require_root};

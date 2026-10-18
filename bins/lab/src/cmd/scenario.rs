@@ -2,6 +2,7 @@
 
 use crate::ctx::{Ctx, green, red, require_root};
 use crate::output::{EXIT_VALIDATION, set_exit_code};
+use anstream::println;
 
 #[derive(clap::Args)]
 pub struct Args {

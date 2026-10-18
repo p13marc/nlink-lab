@@ -1,6 +1,7 @@
 //! `nlink-lab restore`.
 
 use crate::ctx::{Ctx, require_root, yellow};
+use anstream::{eprintln, print, println};
 
 #[derive(clap::Args)]
 pub struct Args {

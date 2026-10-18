@@ -1,10 +1,29 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Array_of_ProcessInfo",
-  "type": "array",
-  "items": {
-    "$ref": "#/$defs/ProcessInfo"
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "lab": {
+      "type": "string"
+    },
+    "processes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProcessInfo"
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
   },
+  "required": [
+    "schema_version",
+    "lab",
+    "processes"
+  ],
   "$defs": {
     "ProcessInfo": {
       "description": "Status of a tracked background process.\n\n**Retention**: tracked processes are *not* removed from the lab's PID\nlist when they exit. They remain with `alive == false` until the lab\nis destroyed (or the state file is cleaned manually). Consumers\npolling for \"is X still running?\" must check [`alive`](Self::alive),\nnot just look up the PID.",

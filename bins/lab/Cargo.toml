@@ -32,6 +32,10 @@ nlink = { workspace = true }
 netring = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
+# Output: styles stripped per stream (`--color`), table cell widths.
+anstream = "1"
+anstyle = "1"
+unicode-width = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }

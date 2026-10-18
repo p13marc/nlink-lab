@@ -189,6 +189,29 @@ inspector:
 The dock's **Processes** starts a command on a node (split like a
 shell would split it, nothing expanded) and stops a running one.
 
+### Commands, logs, captures, shells
+
+Also an operator's:
+
+- **Console** (the dock): a node and a command — run, its output
+  streamed as it comes (stderr in red), **Stop** sends it `SIGINT`. Each
+  run stays as a chip until closed; so do the logs and captures below.
+  A node's **Console** in the inspector opens it on that node.
+- A tracked process's **Log** (in **Processes**): its tail, then what
+  it writes, until stopped.
+- An interface's **Capture…**: the packets, into the pcap file the save
+  dialog names, as they come, until stopped — for Wireshark.
+- A node's **Terminal**: a shell on the node, in the app. The terminal
+  runs `nlink-lab-gui pty-bridge`, which relays it to the daemon's
+  `shell` — so it reaches a node wherever the daemon is (`--daemon
+  ssh://HOST` too). Built without the `embedded-terminal` feature, the
+  shell opens in the desktop's terminal emulator (`$TERMINAL`, else
+  `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xterm`).
+
+Over Zenoh the daemon serves none of these: they need its socket or
+ssh. Closing a lab's tab stops its sessions and closes its terminals.
+
+
 
 ### Keys
 

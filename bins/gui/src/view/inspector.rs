@@ -270,6 +270,20 @@ fn node<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str, op: bool) -> Column<'
     if !n.profiles.is_empty() {
         c = c.push(field("profiles", n.profiles.join(", ")));
     }
+    if tab.live().is_some_and(|l| op && !l.gone) {
+        use crate::message::SessionMsg;
+        c = c.push(
+            row![
+                button(text("Console").size(13))
+                    .style(button::secondary)
+                    .on_press(Message::Session(SessionMsg::ConsoleOn(id.to_string()))),
+                button(text("Terminal").size(13))
+                    .style(button::secondary)
+                    .on_press(Message::Session(SessionMsg::Terminal(id.to_string()))),
+            ]
+            .spacing(8),
+        );
+    }
     c = live_node(c, tab, id);
     if !ifaces.is_empty() || !n.interfaces.is_empty() {
         c = c.push(heading("Interfaces"));
@@ -495,6 +509,15 @@ fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str, op: bool) -> Colu
             .unwrap_or("")
             .to_lowercase();
         c = c.push(field("qdisc", name));
+    }
+    if tab.live().is_some_and(|l| op && !l.gone) {
+        c = c.push(
+            button(text("Capture…").size(13))
+                .style(button::secondary)
+                .on_press(Message::Session(crate::message::SessionMsg::Capture(
+                    ep.to_string(),
+                ))),
+        );
     }
     if let Some(l) = tab.live()
         && let Some(e) = l.editor.as_ref().filter(|e| e.endpoint == ep)

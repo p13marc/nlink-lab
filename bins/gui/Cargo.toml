@@ -13,8 +13,17 @@ description = "The nlink-lab desktop app"
 name = "nlink-lab-gui"
 path = "src/main.rs"
 
+[features]
+default = ["embedded-terminal"]
+# terminals as widgets in the app (iced_term, alacritty's terminal); without
+# it, a node's shell opens in the desktop's terminal emulator
+embedded-terminal = ["dep:iced_term"]
+
 [dependencies]
 iced = { version = "0.14", features = ["canvas", "tokio"] }
+# pinned: pre-1.0, its API moves between minors
+iced_term = { version = "=0.8.0", optional = true }
+libc = { workspace = true }
 nlink-lab = { workspace = true }
 nlink-lab-view = { workspace = true }
 nlink-lab-shared = { workspace = true }
@@ -36,4 +45,3 @@ iced_test = "0.14"
 tempfile = "3"
 # a real daemon, in-process, for the backend's tests
 nlink-labd = { path = "../nlink-labd" }
-libc = { workspace = true }

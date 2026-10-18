@@ -688,6 +688,13 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **Sessions in the desktop app** (#281), an operator's: a console
+  that runs a command on a node and streams its output (Stop sends
+  `SIGINT`), a tracked process's log followed, packets captured into a
+  pcap file, and a shell on a node in an embedded terminal (iced_term,
+  feature `embedded-terminal`, on by default; without it, the desktop's
+  terminal emulator). The terminal runs `nlink-lab-gui pty-bridge`,
+  which relays it to the daemon's `shell`.
 - **Changing a running lab from the desktop app** (#279), as an
   operator of the daemon (a viewer sees the controls disabled):
   - an interface's impairment — the ten knobs, the direction, presets —

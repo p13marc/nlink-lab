@@ -66,6 +66,11 @@ jobs:
           bin=$(cargo test -p nlink-labd --test e2e --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/e2e-[^"]+' | head -1)
           test -n "$bin" || { echo "::error::daemon e2e test binary not found"; exit 1; }
           sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+      - name: Desktop app against a real lab
+        run: |
+          bin=$(cargo test -p nlink-lab-gui --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/nlink_lab_gui-[^"]+' | head -1)
+          test -n "$bin" || { echo "::error::desktop app test binary not found"; exit 1; }
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --exact daemon_tests::sessions_reach_a_real_lab
       - name: No lab debris left behind
         if: always()
         run: |

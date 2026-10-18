@@ -14,9 +14,13 @@ use iced::{Alignment, Color, Element, Length, Theme};
 use crate::message::{Message, Shortcut};
 use crate::model::{App, Level, Route};
 
-pub fn view(app: &App) -> Element<'_, Message> {
-    let body: Element<'_, Message> = match (app.route, app.current()) {
-        (Route::Workspace, Some(tab)) => workspace::view(app, tab),
+/// The app; `terminals` are the terminal widgets, where there are any.
+pub fn view<'a>(
+    app: &'a App,
+    terminals: Option<&'a crate::term::Terminals>,
+) -> Element<'a, Message> {
+    let body: Element<'a, Message> = match (app.route, app.current()) {
+        (Route::Workspace, Some(tab)) => workspace::view(app, tab, terminals),
         _ => home::view(app),
     };
     let mut layers = stack![column![top_bar(app), body]]

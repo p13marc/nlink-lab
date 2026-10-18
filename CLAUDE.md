@@ -211,6 +211,10 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
   control.rs        #   changing a lab: impairment/pair editors, presets, Action
                     #   (toast, refetch), undo requests, Confirm (typed-name destroy)
   spark.rs          #   sparkline canvas
+  session.rs        #   console runs, logs, captures: lines (cap, \r), state, cancel
+  term.rs           #   terminal host: iced_term widgets (feature embedded-terminal)
+                    #   or an external emulator, both running `pty-bridge`
+  bridge.rs         #   `nlink-lab-gui pty-bridge`: raw pty <-> the daemon's `shell`
   message.rs        #   Message, CanvasMsg, Shortcut
   reduce.rs         #   reduce(app, msg) -> Vec<Effect>: every behaviour, pure, tested
   effect.rs         #   Effect + run: loads, layouts (off the UI thread), rfd dialogs,

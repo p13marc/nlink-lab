@@ -11,7 +11,7 @@ use crate::backend::Feed;
 use crate::control::{Action, Confirm, ConfirmWhat, ImpairEditor, PairEditor};
 use crate::doc::{Source, Target};
 use crate::effect::{Effect, Fetch};
-use crate::message::{CanvasMsg, Control, Fetched, Message, Shortcut};
+use crate::message::{CanvasMsg, Control, Fetched, Message, SessionMsg, Shortcut};
 use crate::model::{App, Camera, Conn, DockTab, EVENTS, Kind, Level, Route, Tab, TabId};
 
 /// A zoom step, for the keys and buttons.
@@ -30,10 +30,7 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
             }
             vec![]
         }
-        Message::CloseTab(id) => {
-            close(app, id);
-            vec![]
-        }
+        Message::CloseTab(id) => close(app, id),
         Message::Shortcut(s) => shortcut(app, s),
 
         Message::OpenDialog => vec![Effect::PickFile],
@@ -245,6 +242,38 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
         }
         Message::Fetched { lab, fetched } => fetched_into(app, &lab, *fetched),
         Message::Control(c) => control(app, c),
+        Message::Session(m) => session(app, m),
+        Message::SessionData {
+            lab,
+            id,
+            stream,
+            text,
+        } => {
+            if let Some(s) = find_session(app, &lab, id) {
+                s.output(stream, &text);
+            }
+            vec![]
+        }
+        Message::SessionBytes { lab, id, total } => {
+            if let Some(s) = find_session(app, &lab, id) {
+                s.bytes = total;
+            }
+            vec![]
+        }
+        Message::SessionEnded { lab, id, how, ok } => {
+            if let Some(s) = find_session(app, &lab, id) {
+                // stopped by the user: said so, not as a failure
+                let (how, ok) = if s.cancel.is_cancelled() && !ok {
+                    ("stopped".to_string(), true)
+                } else {
+                    (how, ok)
+                };
+                s.end(how, ok);
+            }
+            vec![]
+        }
+        // the terminal host's, handled before reduce
+        Message::Term(_) => vec![],
         Message::Send {
             lab,
             request,
@@ -571,11 +600,19 @@ fn layout(t: &mut Tab) -> Vec<Effect> {
     }]
 }
 
-fn close(app: &mut App, id: TabId) {
+fn close(app: &mut App, id: TabId) -> Vec<Effect> {
     let Some(i) = app.tabs.iter().position(|t| t.id == id) else {
-        return;
+        return vec![];
     };
-    app.tabs.remove(i);
+    let tab = app.tabs.remove(i);
+    // what the tab ran stops with it
+    let mut effects = Vec::new();
+    if let Some(l) = tab.live() {
+        for s in &l.sessions {
+            s.cancel.cancel();
+        }
+        effects.extend(l.terminals.iter().map(|t| Effect::CloseTerminal(t.id)));
+    }
     if app.active == Some(id) {
         // the neighbour on the left, else the new first one
         app.active = app
@@ -587,6 +624,7 @@ fn close(app: &mut App, id: TabId) {
     if app.tabs.is_empty() {
         app.route = Route::Home;
     }
+    effects
 }
 
 fn select(t: &mut Tab, hit: Option<Hit>) {
@@ -1287,6 +1325,247 @@ fn called(
     effects
 }
 
+fn find_session<'a>(
+    app: &'a mut App,
+    lab: &str,
+    id: u64,
+) -> Option<&'a mut crate::session::Session> {
+    app.lab_tab_mut(lab)?
+        .live_mut()?
+        .sessions
+        .iter_mut()
+        .find(|s| s.id == id)
+}
+
+/// Keep a lab's sessions few: the oldest ended ones go.
+fn prune(l: &mut crate::model::Live) {
+    while l.sessions.len() > crate::model::SESSIONS {
+        match l.sessions.iter().position(|s| !s.running()) {
+            Some(i) => {
+                l.sessions.remove(i);
+            }
+            None => break,
+        }
+    }
+}
+
+fn session(app: &mut App, m: SessionMsg) -> Vec<Effect> {
+    use crate::session::{Session, SessionKind, TermInfo};
+    use nlink_lab_shared::api::{CaptureFilter, LogStream, Request};
+    // terminals end and retitle whichever tab they are in
+    match &m {
+        SessionMsg::TerminalEnded(id) | SessionMsg::TerminalTitle(id, _) => {
+            for t in app.tabs.iter_mut().filter_map(Tab::live_mut) {
+                if let Some(info) = t.terminals.iter_mut().find(|x| x.id == *id) {
+                    match &m {
+                        SessionMsg::TerminalTitle(_, title) => info.title = title.clone(),
+                        _ => info.ended = true,
+                    }
+                }
+            }
+            return vec![];
+        }
+        _ => {}
+    }
+    // starting something asks more of the user and the connection
+    let starts = matches!(
+        m,
+        SessionMsg::Run
+            | SessionMsg::Logs(_)
+            | SessionMsg::Capture(_)
+            | SessionMsg::CaptureTo { .. }
+            | SessionMsg::Terminal(_)
+    );
+    if starts {
+        if !app.operator() {
+            app.toast(
+                Level::Error,
+                "Read-only: commands, logs, captures and shells are an operator's",
+            );
+            return vec![];
+        }
+        if app.backend().is_none() {
+            app.toast(Level::Error, "Not connected to the daemon");
+            return vec![];
+        }
+        if matches!(m, SessionMsg::Terminal(_))
+            && matches!(app.target, Some(crate::backend::Target::Demo))
+        {
+            app.toast(
+                Level::Info,
+                "The demo has no shells: a running lab's would open here",
+            );
+            return vec![];
+        }
+    }
+    let target = app.target.clone();
+    let backend = app.backend().cloned();
+    let new_id = app.next_id();
+    let Some(t) = app.current_mut() else {
+        return vec![];
+    };
+    let topology_nodes: Vec<String> = t
+        .topology
+        .as_ref()
+        .map(|t| t.nodes.keys().cloned().collect())
+        .unwrap_or_default();
+    let dock = &mut t.dock;
+    let Kind::Live(l) = &mut t.kind else {
+        return vec![];
+    };
+    let lab = l.lab.clone();
+    // forms and the console's own state first: anyone may
+    match m {
+        SessionMsg::ConsoleNode(v) => {
+            l.console.node = Some(v);
+            return vec![];
+        }
+        SessionMsg::ConsoleCommand(v) => {
+            l.console.command = v;
+            return vec![];
+        }
+        SessionMsg::ConsoleOn(v) => {
+            l.console.node = Some(v);
+            *dock = DockTab::Console;
+            return vec![];
+        }
+        SessionMsg::Select(id) => {
+            l.active_session = Some(id);
+            return vec![];
+        }
+        SessionMsg::SelectTerminal(id) => {
+            l.active_terminal = Some(id);
+            return vec![];
+        }
+        SessionMsg::Stop(id) => {
+            if let Some(s) = l.sessions.iter_mut().find(|s| s.id == id && s.running()) {
+                s.cancel.cancel();
+                s.note("stopping…");
+            }
+            return vec![];
+        }
+        SessionMsg::Close(id) => {
+            if let Some(i) = l.sessions.iter().position(|s| s.id == id) {
+                l.sessions[i].cancel.cancel();
+                l.sessions.remove(i);
+            }
+            l.active_session = l.sessions.last().map(|s| s.id);
+            return vec![];
+        }
+        SessionMsg::CloseTerminal(id) => {
+            l.terminals.retain(|x| x.id != id);
+            l.active_terminal = l.terminals.last().map(|x| x.id);
+            return vec![Effect::CloseTerminal(id)];
+        }
+        _ => {}
+    }
+    let Some(backend) = backend else {
+        return vec![];
+    };
+    // a session: made, shown, run
+    let mut start = |l: &mut crate::model::Live, kind: SessionKind, request: Request, sink| {
+        let session = Session::new(new_id, kind);
+        let cancel = session.cancel.clone();
+        l.sessions.push(session);
+        prune(l);
+        l.active_session = Some(new_id);
+        *dock = DockTab::Console;
+        vec![Effect::Session {
+            backend: backend.clone(),
+            lab: lab.clone(),
+            id: new_id,
+            request: Box::new(request),
+            cancel,
+            sink,
+        }]
+    };
+    match m {
+        SessionMsg::Run => {
+            let command = l.console.command.trim().to_string();
+            let argv = crate::control::split_command(&command);
+            let node = l
+                .console
+                .node
+                .clone()
+                .or_else(|| topology_nodes.first().cloned());
+            let Some(node) = node.filter(|_| !argv.is_empty()) else {
+                return vec![];
+            };
+            l.console.node = Some(node.clone());
+            l.console.command.clear();
+            let request = Request::Exec {
+                lab: lab.clone(),
+                node: node.clone(),
+                argv,
+                env: Vec::new(),
+                workdir: None,
+                stdin: false,
+                tty: false,
+                timeout_ms: None,
+            };
+            start(l, SessionKind::Exec { node, command }, request, None)
+        }
+        SessionMsg::Logs(pid) => {
+            let node = l
+                .processes
+                .iter()
+                .find(|p| p.pid == pid)
+                .map(|p| p.node.clone())
+                .unwrap_or_default();
+            let request = Request::Logs {
+                lab: lab.clone(),
+                pid,
+                stream: LogStream::default(),
+                tail: Some(200),
+                follow: true,
+            };
+            start(l, SessionKind::Logs { pid, node }, request, None)
+        }
+        SessionMsg::Capture(endpoint) => vec![Effect::PickCapture { endpoint, lab }],
+        SessionMsg::CaptureTo {
+            endpoint,
+            path: Some(path),
+        } => {
+            let request = Request::Capture {
+                lab: lab.clone(),
+                endpoint: endpoint.clone(),
+                filter: CaptureFilter::default(),
+                count: None,
+                duration_ms: None,
+            };
+            start(
+                l,
+                SessionKind::Capture {
+                    endpoint,
+                    path: path.clone(),
+                },
+                request,
+                Some(path),
+            )
+        }
+        SessionMsg::Terminal(node) => {
+            let Some(target) = target else {
+                return vec![];
+            };
+            l.terminals.push(TermInfo {
+                id: new_id,
+                node: node.clone(),
+                title: node.clone(),
+                ended: false,
+            });
+            l.active_terminal = Some(new_id);
+            *dock = DockTab::Terminal;
+            vec![Effect::OpenTerminal {
+                id: new_id,
+                lab,
+                node,
+                target,
+            }]
+        }
+        _ => vec![],
+    }
+}
+
 fn canvas(app: &mut App, msg: CanvasMsg) -> Vec<Effect> {
     let Some(t) = app.current_mut() else {
         return vec![];
@@ -1363,12 +1642,10 @@ fn shortcut(app: &mut App, s: Shortcut) -> Vec<Effect> {
         }
         // the rest act on the tab in front
         _ if !in_workspace => vec![],
-        Shortcut::CloseTab => {
-            if let Some(id) = app.active {
-                close(app, id);
-            }
-            vec![]
-        }
+        Shortcut::CloseTab => match app.active {
+            Some(id) => close(app, id),
+            None => vec![],
+        },
         Shortcut::Reload => reduce(app, Message::Reload),
         Shortcut::Fit => {
             if let Some(t) = app.current_mut() {
@@ -1496,6 +1773,39 @@ pub(crate) mod testing {
                 Effect::ListLabs(crate::backend::Backend::Fake(fake)) => {
                     Message::Labs(fake.summaries())
                 }
+                // a demo session: its items, at once (a log is stopped
+                // after its first line, as a user would)
+                Effect::Session {
+                    backend: crate::backend::Backend::Fake(fake),
+                    lab,
+                    id,
+                    request,
+                    cancel,
+                    sink: None,
+                } => {
+                    use iced::futures::StreamExt;
+                    let follow = matches!(*request, nlink_lab_shared::api::Request::Logs { .. });
+                    let stream = fake.session(*request, cancel.clone());
+                    let items: Vec<_> = futures_lite_block(async move {
+                        let mut stream = stream;
+                        let mut out = Vec::new();
+                        while let Some(item) = stream.next().await {
+                            let end = matches!(item, crate::backend::SessionItem::End(_));
+                            out.push(item);
+                            if follow && out.len() == 1 {
+                                cancel.cancel();
+                            }
+                            if end {
+                                break;
+                            }
+                        }
+                        out
+                    });
+                    for item in items {
+                        effects.extend(reduce(app, crate::effect::session_message(&lab, id, item)));
+                    }
+                    continue;
+                }
                 Effect::Call {
                     backend: crate::backend::Backend::Fake(fake),
                     lab,
@@ -1516,6 +1826,15 @@ pub(crate) mod testing {
             effects.extend(reduce(app, next));
         }
         rest
+    }
+
+    /// Run `f` to its end on a runtime of its own.
+    fn futures_lite_block<T>(f: impl std::future::Future<Output = T>) -> T {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(f)
     }
 
     /// Connected to the demo, its labs listed.
@@ -2476,5 +2795,181 @@ mod tests {
             app.toasts.last().unwrap().text,
             "Could not signal 1: no such process"
         );
+    }
+
+    // ── sessions ──
+
+    use crate::message::SessionMsg as S;
+
+    fn sess(app: &mut App, m: S) -> Vec<Effect> {
+        let e = reduce(app, Message::Session(m));
+        settle(app, e)
+    }
+
+    #[test]
+    fn a_command_runs_in_the_console() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let node = live_tab(&app, &lab)
+            .topology
+            .as_ref()
+            .unwrap()
+            .nodes
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        sess(&mut app, S::ConsoleOn(node.clone()));
+        assert_eq!(live_tab(&app, &lab).dock, DockTab::Console);
+        // nothing to run: nothing runs
+        assert!(sess(&mut app, S::Run).is_empty());
+        assert!(live_tab(&app, &lab).live().unwrap().sessions.is_empty());
+        sess(&mut app, S::ConsoleCommand("ping -c 1 'a b'".into()));
+        sess(&mut app, S::Run);
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert!(l.console.command.is_empty(), "the line is cleared");
+        let s = l.sessions.last().unwrap();
+        assert_eq!(l.active_session, Some(s.id));
+        assert!(!s.running());
+        let text: Vec<&str> = s.shown().map(|(_, t)| t).collect();
+        assert!(text.iter().any(|t| t.contains("ping -c 1 a b")), "{text:?}");
+        assert_eq!(text.last(), Some(&"exit 0"));
+    }
+
+    #[test]
+    fn a_log_is_followed_and_stopped() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let pid = live_tab(&app, &lab).live().unwrap().processes[0].pid;
+        sess(&mut app, S::Logs(pid));
+        let s = live_tab(&app, &lab)
+            .live()
+            .unwrap()
+            .sessions
+            .last()
+            .unwrap();
+        assert!(matches!(s.kind, crate::session::SessionKind::Logs { pid: p, .. } if p == pid));
+        assert!(s.shown().any(|(_, t)| t.contains("line 0")));
+        // stopped by the user: said so, not as a failure
+        assert!(
+            matches!(&s.state, crate::session::State::Ended { how, ok: true } if how == "stopped")
+        );
+    }
+
+    #[test]
+    fn sessions_close_and_stay_few() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        sess(&mut app, S::ConsoleCommand("true".into()));
+        for _ in 0..(crate::model::SESSIONS + 3) {
+            sess(&mut app, S::ConsoleCommand("true".into()));
+            sess(&mut app, S::Run);
+        }
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert_eq!(l.sessions.len(), crate::model::SESSIONS);
+        let first = l.sessions[0].id;
+        sess(&mut app, S::Close(first));
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert!(l.sessions.iter().all(|s| s.id != first));
+        assert_eq!(l.active_session, l.sessions.last().map(|s| s.id));
+    }
+
+    #[test]
+    fn a_capture_asks_where_and_the_demo_refuses_it() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let e = reduce(&mut app, Message::Session(S::Capture("x:eth0".into())));
+        assert!(matches!(&e[..], [Effect::PickCapture { endpoint, .. }] if endpoint == "x:eth0"));
+        // cancelled: nothing
+        assert!(
+            sess(
+                &mut app,
+                S::CaptureTo {
+                    endpoint: "x:eth0".into(),
+                    path: None
+                }
+            )
+            .is_empty()
+        );
+        let e = reduce(
+            &mut app,
+            Message::Session(S::CaptureTo {
+                endpoint: "x:eth0".into(),
+                path: Some("/tmp/x.pcap".into()),
+            }),
+        );
+        let [
+            Effect::Session {
+                sink: Some(p), id, ..
+            },
+        ] = &e[..]
+        else {
+            panic!("{e:?}")
+        };
+        assert_eq!(p, &std::path::PathBuf::from("/tmp/x.pcap"));
+        let id = *id;
+        reduce(
+            &mut app,
+            Message::SessionEnded {
+                lab: lab.clone(),
+                id,
+                how: "the demo captures nothing".into(),
+                ok: false,
+            },
+        );
+        let s = live_tab(&app, &lab)
+            .live()
+            .unwrap()
+            .sessions
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap();
+        assert!(matches!(
+            &s.state,
+            crate::session::State::Ended { ok: false, .. }
+        ));
+    }
+
+    #[test]
+    fn terminals_open_on_a_daemon_and_close_with_their_tab() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        // the demo has no shells
+        assert!(reduce(&mut app, Message::Session(S::Terminal("x".into()))).is_empty());
+        app.target = Some(crate::backend::Target::Daemon(
+            nlink_lab_client::Endpoint::Unix("/run/x.sock".into()),
+        ));
+        let e = reduce(&mut app, Message::Session(S::Terminal("x".into())));
+        let [Effect::OpenTerminal { id, node, .. }] = &e[..] else {
+            panic!("{e:?}")
+        };
+        assert_eq!(node, "x");
+        let id = *id;
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert_eq!((l.active_terminal, l.terminals.len()), (Some(id), 1));
+        assert_eq!(live_tab(&app, &lab).dock, DockTab::Terminal);
+        reduce(
+            &mut app,
+            Message::Session(S::TerminalTitle(id, "root@x: ~".into())),
+        );
+        reduce(&mut app, Message::Session(S::TerminalEnded(id)));
+        let t = &live_tab(&app, &lab).live().unwrap().terminals[0];
+        assert_eq!((t.title.as_str(), t.ended), ("root@x: ~", true));
+        // closing the tab closes its terminals
+        let tab = app.active.unwrap();
+        let e = reduce(&mut app, Message::CloseTab(tab));
+        assert!(matches!(&e[..], [Effect::CloseTerminal(t)] if *t == id));
+    }
+
+    #[test]
+    fn a_viewer_runs_nothing() {
+        let mut app = app();
+        demo_lab(&mut app);
+        if let Conn::Up { who, .. } = &mut app.conn {
+            who.role = nlink_lab_shared::api::Role::Viewer;
+        }
+        sess(&mut app, S::ConsoleCommand("ls".into()));
+        assert!(reduce(&mut app, Message::Session(S::Run)).is_empty());
+        assert!(app.toasts.last().unwrap().text.starts_with("Read-only"));
     }
 }

@@ -1,22 +1,28 @@
 //! The dock: the topology's problems, and its source.
 
 use iced::widget::{
-    button, column, container, pick_list, rich_text, row, scrollable, span, text, text_input,
+    button, column, container, pick_list, rich_text, row, scrollable, space, span, text, text_input,
 };
 use iced::{Alignment, Element, Font, Length, Theme};
 
 use super::muted;
 use crate::doc::Severity;
 use crate::live::Tone;
-use crate::message::Control;
 use crate::message::Message;
+use crate::message::{Control, SessionMsg};
 use crate::model::{App, Design, DockTab, Live, Tab};
 
-pub fn view<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
+pub fn view<'a>(
+    app: &'a App,
+    tab: &'a Tab,
+    terminals: Option<&'a crate::term::Terminals>,
+) -> Element<'a, Message> {
     match (tab.dock, tab.design(), tab.live()) {
         (DockTab::Problems, Some(d), _) => problems(d),
         (DockTab::Source, Some(d), _) => source(d),
         (DockTab::Processes, _, Some(l)) => processes(tab, l, app.operator()),
+        (DockTab::Console, _, Some(l)) => console(tab, l, app.operator()),
+        (DockTab::Terminal, _, Some(l)) => terminal(l, app.operator(), terminals),
         (_, _, Some(l)) => events(l),
         _ => container(muted("Nothing here.")).padding(10).into(),
     }
@@ -195,6 +201,12 @@ fn processes<'a>(tab: &'a Tab, l: &'a Live, operator: bool) -> Element<'a, Messa
                     .font(Font::MONOSPACE)
                     .width(Length::Fixed(80.0)),
                 text(status).size(13).width(Length::Fill),
+                operator.then(|| {
+                    button(text("Log").size(12))
+                        .style(button::text)
+                        .padding([2, 8])
+                        .on_press(Message::Session(SessionMsg::Logs(p.pid)))
+                }),
                 (operator && p.alive).then(|| {
                     button(text("Stop").size(12))
                         .style(button::secondary)
@@ -207,4 +219,175 @@ fn processes<'a>(tab: &'a Tab, l: &'a Live, operator: bool) -> Element<'a, Messa
         )
     });
     scrollable(container(list).padding(8)).into()
+}
+
+fn s(m: SessionMsg) -> Message {
+    Message::Session(m)
+}
+
+/// The console: a command line, its runs and the logs followed as chips,
+/// the chosen one's output.
+fn console<'a>(tab: &'a Tab, l: &'a Live, operator: bool) -> Element<'a, Message> {
+    use crate::session::{State, Stream};
+    let mut col = column![].spacing(8).padding(8);
+    if operator && !l.gone {
+        let mut nodes: Vec<String> = tab
+            .topology
+            .as_ref()
+            .map(|t| t.nodes.keys().cloned().collect())
+            .unwrap_or_default();
+        nodes.sort_by(|a, b| nlink_lab_view::layout::natural(a, b));
+        let node = l.console.node.clone().or_else(|| nodes.first().cloned());
+        col = col.push(
+            row![
+                pick_list(nodes, node, |v| s(SessionMsg::ConsoleNode(v)))
+                    .placeholder("node")
+                    .text_size(13),
+                text_input("a command, e.g. ping -c 3 10.0.0.2", &l.console.command)
+                    .size(13)
+                    .font(Font::MONOSPACE)
+                    .on_input(|v| s(SessionMsg::ConsoleCommand(v)))
+                    .on_submit(s(SessionMsg::Run)),
+                button(text("Run").size(13))
+                    .style(button::primary)
+                    .on_press(s(SessionMsg::Run)),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        );
+    } else if !operator {
+        col = col.push(muted("Read-only: commands are an operator's."));
+    }
+    if l.sessions.is_empty() {
+        return col
+            .push(muted(
+                "Commands run here, logs followed from Processes, captures from an interface.",
+            ))
+            .into();
+    }
+    let chips = l.sessions.iter().fold(row![].spacing(4), |r, x| {
+        let active = l.active_session == Some(x.id);
+        let label = if x.running() {
+            format!("● {}", x.title())
+        } else {
+            x.title()
+        };
+        r.push(
+            row![
+                button(text(label).size(12))
+                    .style(if active {
+                        button::secondary
+                    } else {
+                        button::text
+                    })
+                    .padding([2, 8])
+                    .on_press(s(SessionMsg::Select(x.id))),
+                button(text("×").size(12))
+                    .style(button::text)
+                    .padding([2, 4])
+                    .on_press(s(SessionMsg::Close(x.id))),
+            ]
+            .align_y(Alignment::Center),
+        )
+    });
+    col = col.push(
+        scrollable(chips).direction(scrollable::Direction::Horizontal(
+            scrollable::Scrollbar::default(),
+        )),
+    );
+    let Some(x) = l
+        .active_session
+        .and_then(|id| l.sessions.iter().find(|x| x.id == id))
+    else {
+        return col.into();
+    };
+    // the output, coloured by stream, kept at its end as it grows
+    const ERR: iced::Color = iced::Color::from_rgb(0.87, 0.28, 0.30);
+    const NOTE: iced::Color = iced::Color::from_rgb(0.45, 0.55, 0.65);
+    let spans: Vec<text::Span<'_, ()>> = x
+        .shown()
+        .map(|(stream, line)| {
+            let sp = span(format!("{line}\n"));
+            match stream {
+                Stream::Out => sp,
+                Stream::Err => sp.color(ERR),
+                Stream::Note => sp.color(NOTE),
+            }
+        })
+        .collect();
+    let footer = match &x.state {
+        State::Running => row![
+            muted(if x.bytes > 0 {
+                format!("running · {} bytes", x.bytes)
+            } else {
+                "running".to_string()
+            }),
+            space::horizontal(),
+            button(text("Stop").size(12))
+                .style(button::secondary)
+                .padding([2, 8])
+                .on_press(s(SessionMsg::Stop(x.id))),
+        ],
+        State::Ended { how, .. } => row![muted(how.as_str())],
+    };
+    col.push(
+        scrollable(rich_text(spans).font(Font::MONOSPACE).size(12))
+            .anchor_bottom()
+            .width(Length::Fill)
+            .height(Length::Fill),
+    )
+    .push(footer.align_y(Alignment::Center))
+    .into()
+}
+
+/// The lab's terminals: a tab each, the chosen one's widget.
+fn terminal<'a>(
+    l: &'a Live,
+    operator: bool,
+    terminals: Option<&'a crate::term::Terminals>,
+) -> Element<'a, Message> {
+    if !operator {
+        return container(muted("Read-only: shells are an operator's."))
+            .padding(10)
+            .into();
+    }
+    if l.terminals.is_empty() {
+        return container(muted(
+            "Open a shell on a node from the inspector: select it, then Terminal.",
+        ))
+        .padding(10)
+        .into();
+    }
+    let chips = l.terminals.iter().fold(row![].spacing(4), |r, t| {
+        let active = l.active_terminal == Some(t.id);
+        let label = if t.ended {
+            format!("{} (ended)", t.title)
+        } else {
+            t.title.clone()
+        };
+        r.push(
+            row![
+                button(text(label).size(12))
+                    .style(if active {
+                        button::secondary
+                    } else {
+                        button::text
+                    })
+                    .padding([2, 8])
+                    .on_press(s(SessionMsg::SelectTerminal(t.id))),
+                button(text("×").size(12))
+                    .style(button::text)
+                    .padding([2, 4])
+                    .on_press(s(SessionMsg::CloseTerminal(t.id))),
+            ]
+            .align_y(Alignment::Center),
+        )
+    });
+    let widget: Element<'a, Message> = match (l.active_terminal, terminals) {
+        (Some(id), Some(host)) if crate::term::Terminals::EMBEDDED => host
+            .view(id)
+            .unwrap_or_else(|| muted("This terminal has closed.").into()),
+        _ => muted("The shell opened in the desktop's terminal.").into(),
+    };
+    column![chips, widget].spacing(6).padding(6).into()
 }

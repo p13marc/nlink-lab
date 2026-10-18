@@ -76,6 +76,29 @@ pub enum Effect {
         action: crate::control::Action,
         undo: Option<Box<Message>>,
     },
+    /// A session: its data, until it ends or `cancel`; into `sink`, a
+    /// file, for a capture.
+    Session {
+        backend: Backend,
+        lab: String,
+        id: u64,
+        request: Box<nlink_lab_shared::api::Request>,
+        cancel: nlink_lab::CancelToken,
+        sink: Option<PathBuf>,
+    },
+    /// Ask where a capture goes.
+    PickCapture {
+        endpoint: String,
+        lab: String,
+    },
+    /// A terminal widget running a shell on `node` (the host makes it).
+    OpenTerminal {
+        id: u64,
+        lab: String,
+        node: String,
+        target: Target,
+    },
+    CloseTerminal(u64),
     /// Ask the daemon for a lab's data.
     Fetch {
         backend: Backend,
@@ -261,6 +284,50 @@ pub fn run(effect: Effect) -> Task<Message> {
                 undo,
             }
         }),
+        Effect::Session {
+            backend,
+            lab,
+            id,
+            request,
+            cancel,
+            sink,
+        } => {
+            let stream = backend.session(*request, cancel);
+            match sink {
+                None => Task::run(stream, move |item| session_message(&lab, id, item)),
+                Some(path) => Task::run(capture_stream(stream, path), move |item| match item {
+                    Captured::Bytes(total) => Message::SessionBytes {
+                        lab: lab.clone(),
+                        id,
+                        total,
+                    },
+                    Captured::End(how, ok) => Message::SessionEnded {
+                        lab: lab.clone(),
+                        id,
+                        how,
+                        ok,
+                    },
+                }),
+            }
+        }
+        Effect::PickCapture { endpoint, lab } => Task::perform(
+            async move {
+                let name = format!("{lab}-{}.pcap", endpoint.replace(':', "-"));
+                let path = rfd::AsyncFileDialog::new()
+                    .set_title(format!("Capture {endpoint} into"))
+                    .set_file_name(name)
+                    .add_filter("pcap", &["pcap"])
+                    .save_file()
+                    .await
+                    .map(|f| f.path().to_path_buf());
+                (endpoint, path)
+            },
+            |(endpoint, path)| {
+                Message::Session(crate::message::SessionMsg::CaptureTo { endpoint, path })
+            },
+        ),
+        // the host's: `main::update` takes them before they get here
+        Effect::OpenTerminal { .. } | Effect::CloseTerminal(_) => Task::none(),
         Effect::Fetch { backend, lab, what } => {
             let name = lab.clone();
             Task::perform(fetch(backend, lab, what), move |fetched| Message::Fetched {
@@ -327,6 +394,146 @@ async fn fetch(backend: Backend, lab: String, what: Fetch) -> Fetched {
         _ => Positions::new(),
     };
     fetched(answer, pins)
+}
+
+/// A session's item as a message.
+pub fn session_message(lab: &str, id: u64, item: crate::backend::SessionItem) -> Message {
+    use crate::backend::SessionItem;
+    use nlink_lab_shared::api::{DataStream, Response};
+    match item {
+        SessionItem::Data(stream, bytes) => Message::SessionData {
+            lab: lab.to_string(),
+            id,
+            stream: if stream == DataStream::Stderr {
+                crate::session::Stream::Err
+            } else {
+                crate::session::Stream::Out
+            },
+            text: String::from_utf8_lossy(&bytes).into_owned(),
+        },
+        SessionItem::End(r) => {
+            let (how, ok) = match r {
+                Ok(Response::Exited {
+                    code,
+                    signal,
+                    timed_out,
+                    ..
+                }) => crate::session::exit_text(code, signal, timed_out),
+                Ok(_) => ("ended".into(), true),
+                Err(e) => (e, false),
+            };
+            Message::SessionEnded {
+                lab: lab.to_string(),
+                id,
+                how,
+                ok,
+            }
+        }
+    }
+}
+
+enum Captured {
+    Bytes(u64),
+    End(String, bool),
+}
+
+/// A capture written to `path` to its end: how it ended. (What the app
+/// streams, collected: for the tests.)
+#[cfg(test)]
+pub async fn capture_to(
+    stream: iced::futures::stream::BoxStream<'static, crate::backend::SessionItem>,
+    path: PathBuf,
+) -> (String, bool) {
+    use iced::futures::StreamExt;
+    let mut s = Box::pin(capture_stream(stream, path));
+    while let Some(item) = s.next().await {
+        if let Captured::End(how, ok) = item {
+            return (how, ok);
+        }
+    }
+    ("ended".into(), false)
+}
+
+/// A capture's pcap written to `path` as it comes: the bytes so far
+/// (every 64 KiB at most once), then how it ended.
+fn capture_stream(
+    stream: iced::futures::stream::BoxStream<'static, crate::backend::SessionItem>,
+    path: PathBuf,
+) -> impl iced::futures::Stream<Item = Captured> {
+    use crate::backend::SessionItem;
+    use iced::futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+    struct S {
+        stream: iced::futures::stream::BoxStream<'static, SessionItem>,
+        file: Option<tokio::fs::File>,
+        path: PathBuf,
+        total: u64,
+        told: u64,
+        done: bool,
+    }
+    iced::futures::stream::unfold(
+        S {
+            stream,
+            file: None,
+            path,
+            total: 0,
+            told: 0,
+            done: false,
+        },
+        |mut s| async move {
+            if s.done {
+                return None;
+            }
+            loop {
+                match s.stream.next().await {
+                    Some(SessionItem::Data(_, bytes)) => {
+                        if s.file.is_none() {
+                            match tokio::fs::File::create(&s.path).await {
+                                Ok(f) => s.file = Some(f),
+                                Err(e) => {
+                                    s.done = true;
+                                    let how = format!("{}: {e}", s.path.display());
+                                    return Some((Captured::End(how, false), s));
+                                }
+                            }
+                        }
+                        if let Some(f) = s.file.as_mut()
+                            && let Err(e) = f.write_all(&bytes).await
+                        {
+                            s.done = true;
+                            let how = format!("{}: {e}", s.path.display());
+                            return Some((Captured::End(how, false), s));
+                        }
+                        s.total += bytes.len() as u64;
+                        if s.total - s.told >= 64 * 1024 {
+                            s.told = s.total;
+                            return Some((Captured::Bytes(s.total), s));
+                        }
+                    }
+                    Some(SessionItem::End(r)) => {
+                        if let Some(f) = s.file.as_mut() {
+                            let _ = f.flush().await;
+                        }
+                        s.done = true;
+                        let total = s.total;
+                        let (how, ok) = match r {
+                            Ok(_) => (
+                                format!("{total} bytes written to {}", s.path.display()),
+                                true,
+                            ),
+                            Err(e) if total > 0 => (
+                                format!("{e}; {total} bytes written to {}", s.path.display()),
+                                true,
+                            ),
+                            Err(e) => (e, false),
+                        };
+                        return Some((Captured::End(how, ok), s));
+                    }
+                    None => return None,
+                }
+            }
+        },
+    )
 }
 
 pub fn run_all(effects: Vec<Effect>) -> Task<Message> {

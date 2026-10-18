@@ -186,3 +186,201 @@ async fn no_daemon_is_an_error_to_retry() {
         .unwrap_err();
     assert!(!err.is_empty());
 }
+
+/// A lab's nodes as the sessions reach them: a command's output and exit,
+/// a command stopped, a capture into a file, a shell through the bridge.
+/// Root: it deploys a lab.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sessions_reach_a_real_lab() {
+    use crate::backend::SessionItem;
+    use nlink_lab_shared::api::DataStream;
+    if !nlink_lab::privileges::has_privileges() {
+        eprintln!("skipping sessions_reach_a_real_lab: requires root");
+        return;
+    }
+    state_root();
+    let lab = format!("gui-e2e-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        "lab \"{lab}\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {{ 10.239.0.1/24 -- 10.239.0.2/24 }}\n"
+    ))
+    .unwrap();
+    let running = topo.deploy().await.expect("deploy");
+    struct Destroy(Option<nlink_lab::RunningLab>);
+    impl Drop for Destroy {
+        fn drop(&mut self) {
+            if let Some(lab) = self.0.take() {
+                std::thread::spawn(move || {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+                    let _ = rt.block_on(lab.destroy());
+                })
+                .join()
+                .unwrap();
+            }
+        }
+    }
+    let _destroy = Destroy(Some(running));
+    let d = daemon(false).await;
+    let (backend, _) = Backend::connect(Target::Daemon(d.unix.clone()))
+        .await
+        .unwrap();
+    let exec = |argv: &[&str]| Request::Exec {
+        lab: lab.clone(),
+        node: "a".into(),
+        argv: argv.iter().map(|s| s.to_string()).collect(),
+        env: Vec::new(),
+        workdir: None,
+        stdin: false,
+        tty: false,
+        timeout_ms: None,
+    };
+
+    // a command: its streams, its exit
+    let items: Vec<SessionItem> = backend
+        .clone()
+        .session(
+            exec(&["sh", "-c", "echo hi; echo oops >&2; exit 3"]),
+            CancelToken::new(),
+        )
+        .collect()
+        .await;
+    let out: Vec<u8> = items
+        .iter()
+        .filter_map(|i| match i {
+            SessionItem::Data(DataStream::Stdout, b) => Some(b.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(String::from_utf8_lossy(&out), "hi\n");
+    assert!(
+        items
+            .iter()
+            .any(|i| matches!(i, SessionItem::Data(DataStream::Stderr, _)))
+    );
+    assert!(
+        matches!(
+            items.last(),
+            Some(SessionItem::End(Ok(Response::Exited { code: Some(3), .. })))
+        ),
+        "{items:?}"
+    );
+
+    // a command stopped: SIGINT, and it ends
+    let cancel = CancelToken::new();
+    let mut sleep = backend
+        .clone()
+        .session(exec(&["sleep", "30"]), cancel.clone());
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    cancel.cancel();
+    let end = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(SessionItem::End(r)) = sleep.next().await {
+                return r;
+            }
+        }
+    })
+    .await
+    .expect("stopped in time");
+    assert!(
+        matches!(
+            end,
+            Ok(Response::Exited {
+                code: None | Some(130),
+                ..
+            })
+        ),
+        "{end:?}"
+    );
+
+    // a capture while a ping crosses the link, into a pcap file
+    let dir = tempfile::tempdir().unwrap();
+    let pcap = dir.path().join("a.pcap");
+    let cancel = CancelToken::new();
+    let capture = backend.clone().session(
+        Request::Capture {
+            lab: lab.clone(),
+            endpoint: "a:eth0".into(),
+            filter: Default::default(),
+            count: None,
+            duration_ms: None,
+        },
+        cancel.clone(),
+    );
+    let written = tokio::spawn(crate::effect::capture_to(capture, pcap.clone()));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let ping: Vec<SessionItem> = backend
+        .clone()
+        .session(
+            exec(&["ping", "-c", "3", "-i", "0.2", "10.239.0.2"]),
+            CancelToken::new(),
+        )
+        .collect()
+        .await;
+    assert!(
+        matches!(
+            ping.last(),
+            Some(SessionItem::End(Ok(Response::Exited { code: Some(0), .. })))
+        ),
+        "{ping:?}"
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    cancel.cancel();
+    let (how, ok) = tokio::time::timeout(Duration::from_secs(10), written)
+        .await
+        .expect("the capture ends")
+        .unwrap();
+    assert!(ok, "{how}");
+    let bytes = std::fs::read(&pcap).unwrap();
+    assert!(bytes.len() > 24 + 3 * 98, "{} bytes: {how}", bytes.len());
+    assert!(
+        [
+            [0xd4, 0xc3, 0xb2, 0xa1],
+            [0xa1, 0xb2, 0xc3, 0xd4],
+            [0x4d, 0x3c, 0xb2, 0xa1]
+        ]
+        .contains(&[bytes[0], bytes[1], bytes[2], bytes[3]]),
+        "a pcap file"
+    );
+
+    // a shell through the bridge: what is typed, its output, its exit
+    let (mut keys, input) = tokio::io::duplex(4096);
+    let (output, mut screen) = tokio::io::duplex(65536);
+    let shell = tokio::spawn({
+        let endpoint = d.unix.clone();
+        let lab = lab.clone();
+        async move {
+            crate::bridge::relay_io(
+                &endpoint,
+                crate::bridge::Shell {
+                    lab,
+                    node: "b".into(),
+                    shell: Some("/bin/sh".into()),
+                },
+                (24, 80),
+                input,
+                output,
+                None,
+            )
+            .await
+        }
+    });
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    keys.write_all(b"echo from-$(hostname -s 2>/dev/null || echo b)-shell; exit 7\n")
+        .await
+        .unwrap();
+    let code = tokio::time::timeout(Duration::from_secs(15), shell)
+        .await
+        .expect("the shell ends")
+        .unwrap();
+    assert_eq!(code, Ok(7));
+    let mut seen = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_millis(500), screen.read_to_end(&mut seen)).await;
+    assert!(
+        String::from_utf8_lossy(&seen).contains("-shell"),
+        "{}",
+        String::from_utf8_lossy(&seen)
+    );
+}

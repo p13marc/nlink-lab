@@ -487,6 +487,21 @@ under both (#233). Its waves land one by one below.
 
 ### Added
 
+- **The daemon API's types** (#235), in `nlink-lab-shared::api`: every
+  request (`Request`, with its role and behaviour in `Request::meta()`),
+  response, streamed item, notification and error (`ApiError`, with the
+  CLI's exit code), the progress of an operation (`OpEvent`), the DTOs a
+  client edits (`ImpairmentSpec` with all ten knobs, `Direction`), the
+  unix-socket framing (`Frame`, `ClientMsg`, `ServerMsg`) and
+  `API_VERSION`. Documented in `docs/API.md`, with generated schemas
+  `api-client.v1` and `api-server.v1`. `nlink_lab::Error::to_api()`
+  turns a library error into one.
+- **`Impairment::parse_spec` and `QdiscKind::parse_spec`** (#235): the
+  impairment and qdisc grammars of `top`'s prompt and `edit --set-qdisc`,
+  in the library for every front end. An impairment may be written
+  `delay 50ms loss 1%` or `delay=50ms,loss=1%`, and a `loss` value runs
+  to the next property, so a netem loss model is one value (`loss gemodel
+  1% 30% 70% 0.1%`), which the prompt refused.
 - **Library groundwork for the 0.14 CLI, daemon and GUI** (#234):
   - `Topology::redacted()` hides WireGuard keys, Wi-Fi passphrases and
     container env values, for every view that leaves the process;

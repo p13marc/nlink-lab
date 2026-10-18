@@ -1,0 +1,1966 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerMsg",
+  "description": "The daemon's message.",
+  "oneOf": [
+    {
+      "description": "The answer to `Hello`.",
+      "type": "object",
+      "properties": {
+        "api": {
+          "type": "string"
+        },
+        "features": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "host": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "server": {
+          "type": "string"
+        },
+        "t": {
+          "type": "string",
+          "const": "welcome"
+        },
+        "uid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "t",
+        "api",
+        "server",
+        "host",
+        "uid",
+        "user",
+        "role",
+        "features"
+      ]
+    },
+    {
+      "description": "An item a call streams.",
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "event"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/OpEvent"
+            },
+            "item": {
+              "type": "string",
+              "const": "op"
+            }
+          },
+          "required": [
+            "item",
+            "event"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "item": {
+              "type": "string",
+              "const": "notification"
+            },
+            "notification": {
+              "$ref": "#/$defs/Notification"
+            }
+          },
+          "required": [
+            "item",
+            "notification"
+          ]
+        },
+        {
+          "description": "The call started what it is about: an operation, a process.",
+          "type": "object",
+          "properties": {
+            "item": {
+              "type": "string",
+              "const": "started"
+            },
+            "op": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pid": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "item"
+          ]
+        },
+        {
+          "description": "A slow reader missed `dropped` items.",
+          "type": "object",
+          "properties": {
+            "dropped": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "item": {
+              "type": "string",
+              "const": "lagged"
+            }
+          },
+          "required": [
+            "item",
+            "dropped"
+          ]
+        }
+      ],
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "description": "The call's end: `ok` or `err`.",
+      "type": "object",
+      "properties": {
+        "err": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApiError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Response"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "t": {
+          "type": "string",
+          "const": "end"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "pong"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    }
+  ],
+  "$defs": {
+    "ApiError": {
+      "description": "A failed call.",
+      "type": "object",
+      "properties": {
+        "chain": {
+          "description": "The error and its causes, outermost first.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "errno": {
+          "description": "The kernel's errno, when the kernel refused.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "exit_code": {
+          "description": "The CLI's exit code for it: 1 error, 2 validation, 124 timeout,\n130 cancelled.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "ext_ack": {
+          "description": "The kernel's extended ack text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hint": {
+          "description": "What to do about it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issues": {
+          "description": "Validation issues, for `Validation`."
+        },
+        "message": {
+          "description": "The whole message, as the CLI prints it.",
+          "type": "string"
+        },
+        "netns": {
+          "description": "The namespace the failing call ran in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "exit_code"
+      ]
+    },
+    "EndpointImpairment": {
+      "description": "The impairment of one endpoint as it is: what the topology declares,\nwhat `impair` set at runtime, and whether it is partitioned.",
+      "type": "object",
+      "properties": {
+        "declared": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImpairmentSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImpairmentSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partitioned": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "endpoint",
+        "partitioned"
+      ]
+    },
+    "ErrorCode": {
+      "description": "What kind of failure: what a client branches on.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "already_exists",
+            "busy",
+            "timeout",
+            "cancelled",
+            "unsupported",
+            "io",
+            "internal"
+          ]
+        },
+        {
+          "description": "No such lab, node, process, snapshot.",
+          "type": "string",
+          "const": "not_found"
+        },
+        {
+          "description": "Another operation holds the lab.",
+          "type": "string",
+          "const": "locked"
+        },
+        {
+          "description": "A bad request: a malformed argument, an unknown method.",
+          "type": "string",
+          "const": "invalid_argument"
+        },
+        {
+          "description": "The topology does not validate.",
+          "type": "string",
+          "const": "validation"
+        },
+        {
+          "description": "The caller may not do this.",
+          "type": "string",
+          "const": "permission_denied"
+        },
+        {
+          "description": "Client and daemon speak different API majors.",
+          "type": "string",
+          "const": "version_mismatch"
+        },
+        {
+          "description": "The kernel refused (netlink, nftables).",
+          "type": "string",
+          "const": "kernel"
+        }
+      ]
+    },
+    "ImpairmentSpec": {
+      "description": "An impairment (netem), every knob optional: what `impair` sets and the\nGUI's editor edits. Values are in NLL's units (`\"10ms\"`, `\"1%\"`,\n`\"100mbit\"`).",
+      "type": "object",
+      "properties": {
+        "corrupt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay_correlation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duplicate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jitter": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loss_correlation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reorder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "InterfaceMetrics": {
+      "description": "Metrics for a single interface.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "rx_bps": {
+          "description": "Receive rate in **bits** per second — the unit [`format_rate`]\nexpects. nlink's rate over the time between the previous tick's\nread of the link counters and this one's\n(`RunningLab::diagnose_since`); `0` on the first sample for an\ninterface and on any tick whose counters stepped backwards.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_bytes": {
+          "description": "Cumulative bytes received, straight off the link's\n`rtnl_link_stats64` — not from tc, which accounts nothing on the\n`noqueue` qdisc an un-impaired veth carries.\n\nCounted since the interface appeared, so a consumer can\ndifference two samples to get the bytes in a window it chooses\n*after* the run — which a rate, already averaged over the\ncollector's own tick, cannot give.\n\nMonotonic only within one interface lifetime: recreating the\ninterface restarts it at zero. Detect a backwards step rather\nthan assuming monotonicity across a whole run.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_dropped": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_errors": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_pkts": {
+          "description": "Cumulative packets received. See [`Self::rx_bytes`] for the\nmonotonicity caveat.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "rx_pps": {
+          "description": "Receive packets per second, over the same interval and with the\nsame first-sample and reset rules as [`Self::rx_bps`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "state": {
+          "type": "string",
+          "default": ""
+        },
+        "tc_drops": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tc_qlen": {
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_bps": {
+          "description": "Transmit rate in **bits** per second. See [`Self::rx_bps`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_bytes": {
+          "description": "Cumulative bytes transmitted. See [`Self::rx_bytes`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_dropped": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_errors": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_pkts": {
+          "description": "Cumulative packets transmitted. See [`Self::rx_bytes`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_pps": {
+          "description": "Transmit packets per second. See [`Self::rx_pps`].",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "rx_bps",
+        "tx_bps",
+        "rx_pps",
+        "tx_pps",
+        "rx_bytes",
+        "tx_bytes",
+        "rx_pkts",
+        "tx_pkts",
+        "rx_errors",
+        "tx_errors",
+        "rx_dropped",
+        "tx_dropped",
+        "tc_drops",
+        "tc_qlen"
+      ]
+    },
+    "LabSummary": {
+      "description": "One running lab, as a list shows it.",
+      "type": "object",
+      "properties": {
+        "containers": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "created_at": {
+          "description": "RFC 3339.",
+          "type": "string",
+          "default": ""
+        },
+        "health": {
+          "description": "`running`, or `stale` when namespaces it claims are gone.",
+          "type": "string",
+          "default": ""
+        },
+        "impaired": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "lab": {
+          "type": "string"
+        },
+        "links": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "nodes": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "partitioned": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "processes": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "revision": {
+          "description": "sha256 of the lab's topology: changes when an `apply` changes it.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "lab",
+        "nodes",
+        "containers",
+        "links",
+        "created_at",
+        "health",
+        "impaired",
+        "partitioned",
+        "processes",
+        "revision"
+      ]
+    },
+    "MetricsSnapshot": {
+      "description": "A point-in-time snapshot of all node metrics.",
+      "type": "object",
+      "properties": {
+        "lab_name": {
+          "type": "string",
+          "default": ""
+        },
+        "nodes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/NodeMetrics"
+          },
+          "default": {}
+        },
+        "timestamp": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "wire_version": {
+          "description": "Wire-format version of the sender (`0` = pre-versioning backend).",
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "wire_version",
+        "lab_name",
+        "timestamp",
+        "nodes"
+      ]
+    },
+    "NodeMetrics": {
+      "description": "Metrics for a single node.",
+      "type": "object",
+      "properties": {
+        "interfaces": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InterfaceMetrics"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sockets": {
+          "description": "Top TCP flows by goodput in this node's namespace, attributed to\nthe owning process where resolvable (Plan 160 / nlink 0.24\nsockdiag). Covers bare-namespace and container nodes alike — a\ncontainer's namespace is its init pid's, since 0.11.0. Empty when\nno flow moved data between the last two collector ticks.\n`#[serde(default)]` keeps the snapshot wire-compatible with\nbackends that predate the field.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SocketRateMetric"
+          }
+        }
+      },
+      "required": [
+        "interfaces",
+        "issues"
+      ]
+    },
+    "Notification": {
+      "description": "A notification of a subscription.",
+      "oneOf": [
+        {
+          "description": "Labs that appeared, changed (counts, health) or went away.",
+          "type": "object",
+          "properties": {
+            "added": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/LabSummary"
+              }
+            },
+            "notification": {
+              "type": "string",
+              "const": "labs_changed"
+            },
+            "removed": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "type": "string"
+              }
+            },
+            "updated": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/LabSummary"
+              }
+            }
+          },
+          "required": [
+            "notification",
+            "added",
+            "updated",
+            "removed"
+          ]
+        },
+        {
+          "description": "A lifecycle event of the lab, as `events.ndjson` records it.",
+          "type": "object",
+          "properties": {
+            "event": true,
+            "lab": {
+              "type": "string"
+            },
+            "notification": {
+              "type": "string",
+              "const": "lifecycle"
+            }
+          },
+          "required": [
+            "notification",
+            "lab",
+            "event"
+          ]
+        },
+        {
+          "description": "An interface went up or down, a process exited.",
+          "type": "object",
+          "properties": {
+            "event": true,
+            "lab": {
+              "type": "string"
+            },
+            "notification": {
+              "type": "string",
+              "const": "runtime"
+            }
+          },
+          "required": [
+            "notification",
+            "lab",
+            "event"
+          ]
+        },
+        {
+          "description": "A change nobody made through nlink-lab.",
+          "type": "object",
+          "properties": {
+            "detail": true,
+            "lab": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "notification": {
+              "type": "string",
+              "const": "drift"
+            }
+          },
+          "required": [
+            "notification",
+            "lab",
+            "node",
+            "detail"
+          ]
+        },
+        {
+          "description": "The latest metrics of the lab (`crate::metrics::MetricsSnapshot`).",
+          "type": "object",
+          "properties": {
+            "lab": {
+              "type": "string"
+            },
+            "notification": {
+              "type": "string",
+              "const": "metrics"
+            },
+            "snapshot": {
+              "$ref": "#/$defs/MetricsSnapshot"
+            }
+          },
+          "required": [
+            "notification",
+            "lab",
+            "snapshot"
+          ]
+        },
+        {
+          "description": "The lab's topology changed: fetch it again (`get_topology`).",
+          "type": "object",
+          "properties": {
+            "lab": {
+              "type": "string"
+            },
+            "notification": {
+              "type": "string",
+              "const": "topology_changed"
+            },
+            "revision": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "notification",
+            "lab",
+            "revision"
+          ]
+        },
+        {
+          "description": "Progress of an operation on the lab.",
+          "type": "object",
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/OpEvent"
+            },
+            "notification": {
+              "type": "string",
+              "const": "op_progress"
+            }
+          },
+          "required": [
+            "notification",
+            "event"
+          ]
+        }
+      ]
+    },
+    "OpEvent": {
+      "description": "One step of an operation's progress (deploy, apply, destroy, restore,\nscenario, benchmark, test). `seq` orders them; `ts_ms` is the Unix time\nin milliseconds.",
+      "type": "object",
+      "properties": {
+        "lab": {
+          "type": "string"
+        },
+        "op": {
+          "description": "The operation's id: it is re-attached by it.",
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "ts_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Waiting behind `position` other operations on the lab.",
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "queued"
+            },
+            "position": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "phase",
+            "position"
+          ]
+        },
+        {
+          "description": "`kind` is `deploy`, `apply`, …; `actor` who asked (`user (uid)`).",
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "phase": {
+              "type": "string",
+              "const": "started"
+            }
+          },
+          "required": [
+            "phase",
+            "kind"
+          ]
+        },
+        {
+          "description": "The plan: its stages with how many ops each, and the removals.",
+          "type": "object",
+          "properties": {
+            "ops": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "const": "planned"
+            },
+            "removals": {
+              "type": "integer",
+              "format": "uint",
+              "default": 0,
+              "minimum": 0
+            },
+            "stages": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "phase",
+            "stages",
+            "ops",
+            "removals"
+          ]
+        },
+        {
+          "description": "A stage begins (`index` of `of`), with its op count.",
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "of": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "ops": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "const": "stage"
+            },
+            "stage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "phase",
+            "stage",
+            "index",
+            "of",
+            "ops"
+          ]
+        },
+        {
+          "description": "`done` of `total` ops of the whole plan; the latest one.",
+          "type": "object",
+          "properties": {
+            "describe": {
+              "type": "string"
+            },
+            "done": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "const": "step"
+            },
+            "total": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "phase",
+            "done",
+            "total",
+            "describe"
+          ]
+        },
+        {
+          "description": "A wait starts: for `what`, until `deadline_ms` from now at most.",
+          "type": "object",
+          "properties": {
+            "deadline_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phase": {
+              "type": "string",
+              "const": "waiting"
+            },
+            "what": {
+              "$ref": "#/$defs/WaitKind"
+            }
+          },
+          "required": [
+            "phase",
+            "what"
+          ]
+        },
+        {
+          "description": "How a wait is going (`done` of `total`, e.g. FRR adjacencies).",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "done": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "const": "wait_progress"
+            },
+            "total": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "what": {
+              "$ref": "#/$defs/WaitKind"
+            }
+          },
+          "required": [
+            "phase",
+            "what",
+            "done",
+            "total"
+          ]
+        },
+        {
+          "description": "A message: `level` is `info` or `warn`.",
+          "type": "object",
+          "properties": {
+            "level": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "phase": {
+              "type": "string",
+              "const": "log"
+            }
+          },
+          "required": [
+            "phase",
+            "level",
+            "message"
+          ]
+        },
+        {
+          "description": "A `validate { … }` assertion's result.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "passed": {
+              "type": "boolean"
+            },
+            "phase": {
+              "type": "string",
+              "const": "assertion"
+            }
+          },
+          "required": [
+            "phase",
+            "description",
+            "passed"
+          ]
+        },
+        {
+          "description": "A scenario action at `time_ms` into the scenario.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "phase": {
+              "type": "string",
+              "const": "scenario_action"
+            },
+            "time_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "phase",
+            "time_ms",
+            "description",
+            "ok"
+          ]
+        },
+        {
+          "description": "The operation failed or was cancelled: undoing `entries` changes.",
+          "type": "object",
+          "properties": {
+            "entries": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "const": "rolling_back"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "phase",
+            "reason",
+            "entries"
+          ]
+        },
+        {
+          "description": "The end.",
+          "type": "object",
+          "properties": {
+            "elapsed_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "outcome": {
+              "$ref": "#/$defs/OpOutcome"
+            },
+            "phase": {
+              "type": "string",
+              "const": "finished"
+            }
+          },
+          "required": [
+            "phase",
+            "outcome",
+            "elapsed_ms"
+          ]
+        }
+      ],
+      "required": [
+        "op",
+        "lab",
+        "seq",
+        "ts_ms"
+      ]
+    },
+    "OpOutcome": {
+      "description": "How an operation ended.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "succeeded"
+            }
+          },
+          "required": [
+            "outcome"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ApiError"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "outcome",
+            "error"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "outcome"
+          ]
+        },
+        {
+          "description": "It failed and what it had done was undone.",
+          "type": "object",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ApiError"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "rolled_back"
+            }
+          },
+          "required": [
+            "outcome",
+            "error"
+          ]
+        }
+      ]
+    },
+    "ProcessDto": {
+      "description": "A tracked background process.",
+      "type": "object",
+      "properties": {
+        "alive": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "node": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "stderr": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stdout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "node",
+        "pid",
+        "alive"
+      ]
+    },
+    "Response": {
+      "description": "The result of a call. Each request has the variant named after what\nit returns; `Ok` for those that return nothing.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "string",
+              "const": "ok"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "string",
+              "const": "pong"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "api": {
+              "type": "string"
+            },
+            "features": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "type": "string"
+              }
+            },
+            "host": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string",
+              "const": "who_am_i"
+            },
+            "role": {
+              "$ref": "#/$defs/Role"
+            },
+            "server": {
+              "type": "string"
+            },
+            "uid": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "user": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "result",
+            "server",
+            "host",
+            "api",
+            "uid",
+            "user",
+            "role",
+            "features"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "clients": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "labs": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "legacy_labs": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "type": "string"
+              }
+            },
+            "result": {
+              "type": "string",
+              "const": "daemon_status"
+            },
+            "server": {
+              "type": "string"
+            },
+            "uptime_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "result",
+            "server",
+            "uptime_ms",
+            "labs",
+            "clients",
+            "legacy_labs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "labs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/LabSummary"
+              }
+            },
+            "result": {
+              "type": "string",
+              "const": "labs"
+            }
+          },
+          "required": [
+            "result",
+            "labs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": true,
+            "lab": {
+              "$ref": "#/$defs/LabSummary"
+            },
+            "result": {
+              "type": "string",
+              "const": "lab"
+            }
+          },
+          "required": [
+            "result",
+            "lab",
+            "detail"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "lab": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string",
+              "const": "topology"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "topology": true
+          },
+          "required": [
+            "result",
+            "lab",
+            "revision",
+            "topology"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "processes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProcessDto"
+              }
+            },
+            "result": {
+              "type": "string",
+              "const": "processes"
+            }
+          },
+          "required": [
+            "result",
+            "processes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EndpointImpairment"
+              }
+            },
+            "result": {
+              "type": "string",
+              "const": "impairments"
+            }
+          },
+          "required": [
+            "result",
+            "endpoints"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "string",
+              "const": "snapshots"
+            },
+            "snapshots": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SnapshotDto"
+              }
+            }
+          },
+          "required": [
+            "result",
+            "snapshots"
+          ]
+        },
+        {
+          "description": "`next` is the cursor to read on from.",
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": true
+            },
+            "next": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "result": {
+              "type": "string",
+              "const": "events"
+            }
+          },
+          "required": [
+            "result",
+            "events",
+            "next"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "string",
+              "const": "metrics"
+            },
+            "snapshot": {
+              "$ref": "#/$defs/MetricsSnapshot"
+            }
+          },
+          "required": [
+            "result",
+            "snapshot"
+          ]
+        },
+        {
+          "description": "Free-form reports with a documented shape (diagnose, addresses,\nproc-stat, stats, plans, diffs, scenario and benchmark results).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "report": true,
+            "result": {
+              "type": "string",
+              "const": "report"
+            }
+          },
+          "required": [
+            "result",
+            "kind",
+            "report"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ops": {
+              "type": "array",
+              "items": true
+            },
+            "result": {
+              "type": "string",
+              "const": "ops"
+            }
+          },
+          "required": [
+            "result",
+            "ops"
+          ]
+        },
+        {
+          "description": "A lifecycle operation finished; `lab` is the lab it made or changed.",
+          "type": "object",
+          "properties": {
+            "lab": {
+              "type": "string"
+            },
+            "op": {
+              "type": "string"
+            },
+            "report": {
+              "default": null
+            },
+            "result": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "result",
+            "op",
+            "lab",
+            "report"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pid": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "result": {
+              "type": "string",
+              "const": "spawned"
+            },
+            "stderr": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "stdout": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "result",
+            "pid"
+          ]
+        },
+        {
+          "description": "An exec, a shell or a wait's command ended.",
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "result": {
+              "type": "string",
+              "const": "exited"
+            },
+            "signal": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            },
+            "timed_out": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "result",
+            "duration_ms",
+            "timed_out"
+          ]
+        },
+        {
+          "description": "The exec's output, for a buffered exec.",
+          "type": "object",
+          "properties": {
+            "duration_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "exit_code": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "result": {
+              "type": "string",
+              "const": "output"
+            },
+            "stderr": {
+              "type": "string"
+            },
+            "stdout": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "result",
+            "stdout",
+            "stderr",
+            "exit_code",
+            "duration_ms"
+          ]
+        }
+      ]
+    },
+    "Role": {
+      "description": "Who may call a method.",
+      "oneOf": [
+        {
+          "description": "Reads only.",
+          "type": "string",
+          "const": "viewer"
+        },
+        {
+          "description": "Changes labs, runs commands in them.",
+          "type": "string",
+          "const": "operator"
+        }
+      ]
+    },
+    "SnapshotDto": {
+      "description": "A snapshot of a lab.",
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "links": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "created_at",
+        "nodes",
+        "links"
+      ]
+    },
+    "SocketRateMetric": {
+      "description": "One TCP flow's goodput over the last collector interval, attributed\nto a process. Plain data (no nlink dependency) — the backend\ncollector fills it from nlink's `SocketRateTracker` +\n`SocketOwnerMap`.",
+      "type": "object",
+      "properties": {
+        "comm": {
+          "description": "Owning process command name, or `\"-\"` when unresolved (a\nshort-lived or other-user process the `/proc` walk couldn't see).",
+          "type": "string",
+          "default": ""
+        },
+        "local": {
+          "description": "Local `ip:port`.",
+          "type": "string",
+          "default": ""
+        },
+        "pid": {
+          "description": "Owning PID, when resolved.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "remote": {
+          "description": "Remote `ip:port`.",
+          "type": "string",
+          "default": ""
+        },
+        "retrans_ratio": {
+          "description": "Retransmission overhead: Δbytes_retrans / Δbytes_sent.",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "rx_bytes_per_sec": {
+          "description": "Receive goodput (application bytes/second).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "tx_bytes_per_sec": {
+          "description": "Transmit goodput (application bytes/second the peer acked).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "comm",
+        "pid",
+        "local",
+        "remote",
+        "tx_bytes_per_sec",
+        "rx_bytes_per_sec",
+        "retrans_ratio"
+      ]
+    },
+    "WaitKind": {
+      "description": "What a wait waits for.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "image_pull"
+            }
+          },
+          "required": [
+            "kind",
+            "image"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "container_start"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "healthcheck"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "frr_convergence"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "wifi_association"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "assertion_retries"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "readiness"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ]
+        }
+      ]
+    }
+  }
+}

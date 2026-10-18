@@ -3533,6 +3533,7 @@ dependencies = [
  "nlink-lab",
  "nlink-lab-client",
  "nlink-lab-shared",
+ "nlink-lab-view",
  "ratatui",
  "regex",
  "schemars 1.2.2",
@@ -3594,6 +3595,14 @@ dependencies = [
  "tempfile",
  "tokio",
  "zenoh",
+]
+
+[[package]]
+name = "nlink-lab-view"
+version = "0.13.0"
+dependencies = [
+ "nlink-lab",
+ "nlink-lab-shared",
 ]
 
 [[package]]

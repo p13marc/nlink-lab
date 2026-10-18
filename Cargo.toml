@@ -5,6 +5,7 @@ members = [
     "crates/nlink-lab-macros",
     "crates/nlink-lab-shared",
     "crates/nlink-lab-client",
+    "crates/nlink-lab-view",
     "bins/lab",
     "bins/nlink-labd",
     "bins/topoviewer",
@@ -59,3 +60,4 @@ nlink-lab = { path = "crates/nlink-lab" }
 nlink-lab-macros = { path = "crates/nlink-lab-macros" }
 nlink-lab-shared = { path = "crates/nlink-lab-shared" }
 nlink-lab-client = { path = "crates/nlink-lab-client" }
+nlink-lab-view = { path = "crates/nlink-lab-view" }

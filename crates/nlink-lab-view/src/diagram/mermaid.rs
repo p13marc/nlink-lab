@@ -1,4 +1,4 @@
-//! Mermaid rendering (`graph --mermaid`, `render --mermaid`).
+//! Mermaid (`render --diagram mermaid`, the desktop app's export).
 
 /// Mermaid `graph LR` rendering (renders inline in Forgejo/GitHub markdown).
 pub fn topology_to_mermaid(topo: &nlink_lab::Topology) -> String {

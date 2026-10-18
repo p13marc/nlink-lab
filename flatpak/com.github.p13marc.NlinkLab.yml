@@ -4,7 +4,7 @@ runtime-version: "25.08"
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-command: nlink-lab-topoviewer
+command: nlink-lab-gui
 
 finish-args:
   # Wayland and X11 display access
@@ -21,20 +21,18 @@ finish-args:
   - --filesystem=/run/nlink-lab/zenoh
   # Access to config directory
   - --filesystem=xdg-config/nlink-lab:create
-  # Read a `.nll` passed as the positional argument (static mode): with no
-  # host filesystem access at all, that path could never be opened (#48).
+  # Read a `.nll` passed on the command line: files picked in the open
+  # dialog come through the portal, these need a path the sandbox sees.
   - --filesystem=xdg-documents:ro
-  # …and somewhere to put a PNG export.
-  - --filesystem=xdg-pictures:create
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:
-    CARGO_HOME: /run/build/nlink-lab-topoviewer/cargo
+    CARGO_HOME: /run/build/nlink-lab-gui/cargo
     RUST_BACKTRACE: "1"
 
 modules:
-  - name: nlink-lab-topoviewer
+  - name: nlink-lab-gui
     buildsystem: simple
     build-options:
       # Allow network during build to fetch crates
@@ -42,8 +40,8 @@ modules:
         - --share=network
     build-commands:
       - cargo fetch --manifest-path Cargo.toml
-      - cargo build --release -p nlink-lab-topoviewer
-      - install -Dm755 target/release/nlink-lab-topoviewer ${FLATPAK_DEST}/bin/nlink-lab-topoviewer
+      - cargo build --release -p nlink-lab-gui
+      - install -Dm755 target/release/nlink-lab-gui ${FLATPAK_DEST}/bin/nlink-lab-gui
       - install -Dm644 flatpak/com.github.p13marc.NlinkLab.desktop ${FLATPAK_DEST}/share/applications/com.github.p13marc.NlinkLab.desktop
       - install -Dm644 flatpak/com.github.p13marc.NlinkLab.metainfo.xml ${FLATPAK_DEST}/share/metainfo/com.github.p13marc.NlinkLab.metainfo.xml
       # `text/x-nll` is ours; without this glob the desktop file's

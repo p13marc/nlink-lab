@@ -95,6 +95,16 @@ pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
     parse(input).map_err(|e| attach_source(e, input, filename))
 }
 
+/// [`parse_with_params`], with diagnostics located in `name`: a source
+/// that is no file, like the desktop app's unsaved templates.
+pub fn parse_named_with_params(
+    input: &str,
+    name: &str,
+    params: &[(String, String)],
+) -> Result<Topology> {
+    parse_with_params(input, params).map_err(|e| attach_source(e, input, name))
+}
+
 /// Turn a bare `NllParse` error into an `NllDiagnostic` carrying the
 /// source it was raised against, so miette points at the right file —
 /// an error inside an imported module is attributed to that module,

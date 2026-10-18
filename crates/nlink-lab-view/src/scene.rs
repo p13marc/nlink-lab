@@ -78,16 +78,29 @@ pub struct Badge {
     pub tone: Tone,
 }
 
+/// Which side of its point a text starts from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Anchor {
+    Start,
+    Middle,
+    End,
+}
+
 /// One end of an edge: where its label goes, and its badge.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EdgeEnd {
     /// The endpoint, `node:iface`, when the end has an interface.
     pub endpoint: Option<String>,
-    /// A point just outside the node, along the edge: the label's anchor.
+    /// A point just outside the node, on the edge.
     pub at: Pos,
     /// The interface, and its address with `addresses`.
     pub label: Option<String>,
     pub badge: Option<Badge>,
+    /// Where the label's and the badge's lines are centred vertically,
+    /// beside the edge rather than across it, and how they align there.
+    pub label_at: Pos,
+    pub badge_at: Pos,
+    pub anchor: Anchor,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -172,6 +185,163 @@ const END_GAP: f32 = 16.0;
 const EDGE_SLOP: f32 = 6.0;
 /// How far a site's region reaches past its nodes.
 const REGION_PAD: f32 = 28.0;
+/// A label's line, at the renderers' 10 px.
+const LINE: f32 = 12.0;
+
+/// Put an end's label and badge beside the edge at its point `at`.
+fn place(end: &mut EdgeEnd, dx: f32, dy: f32, second: bool) {
+    let lines = usize::from(end.label.is_some()) + usize::from(end.badge.is_some());
+    let (spots, anchor) = beside(end.at, dx, dy, lines, second);
+    end.label_at = spots[0];
+    end.badge_at = if end.label.is_some() {
+        spots.get(1).copied().unwrap_or(spots[0])
+    } else {
+        spots[0]
+    };
+    end.anchor = anchor;
+}
+
+/// The box a 10 px line of `chars` characters takes, centred vertically
+/// on `p`: an estimate, enough to keep labels apart.
+fn text_box(p: Pos, chars: usize, anchor: Anchor) -> Rect {
+    let w = chars as f32 * 5.6;
+    let x = match anchor {
+        Anchor::Start => p.x,
+        Anchor::Middle => p.x - w / 2.0,
+        Anchor::End => p.x - w,
+    };
+    Rect {
+        x,
+        y: p.y - LINE / 2.0,
+        w,
+        h: LINE,
+    }
+}
+
+fn end_boxes(end: &EdgeEnd) -> Vec<Rect> {
+    let mut out = Vec::new();
+    if let Some(l) = &end.label {
+        out.push(text_box(end.label_at, l.chars().count(), end.anchor));
+    }
+    if let Some(b) = &end.badge {
+        out.push(text_box(end.badge_at, b.text.chars().count(), end.anchor));
+    }
+    out
+}
+
+fn overlap(a: &Rect, b: &Rect) -> bool {
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+/// Labels that would cover another label or a node step further along
+/// their edge, a few times at most and never past its middle; one that
+/// still finds no room is left out (the inspector has it), but for a
+/// live impairment's or a partition's badge. The selection's edges go
+/// first, so theirs always show.
+fn untangle(scene: &mut Scene, selected: Option<&str>) {
+    const STEP: f32 = 14.0;
+    let nodes: Vec<Rect> = scene.nodes.iter().map(|n| n.rect).collect();
+    let mine = |e: &SceneEdge| {
+        e.selected
+            || selected.is_some_and(|s| {
+                e.ends.iter().any(|end| {
+                    end.endpoint
+                        .as_deref()
+                        .is_some_and(|ep| ep.split(':').next() == Some(s))
+                })
+            })
+    };
+    let mut order: Vec<usize> = (0..scene.edges.len()).collect();
+    order.sort_by_key(|i| !mine(&scene.edges[*i]));
+    let mut placed: Vec<Rect> = Vec::new();
+    for i in order {
+        let e = &mut scene.edges[i];
+        let keep_all = mine(e);
+        let len = ((e.to.x - e.from.x).powi(2) + (e.to.y - e.from.y).powi(2)).sqrt();
+        let room = (len / 2.0 - END_GAP).max(0.0);
+        let dirs = [
+            unit(e.from, e.control.unwrap_or(e.to)),
+            unit(e.to, e.control.unwrap_or(e.from)),
+        ];
+        for (k, (end, (dx, dy))) in e.ends.iter_mut().zip(dirs).enumerate() {
+            let second = k == 1;
+            let start = end.at;
+            let mut moved = 0.0;
+            loop {
+                let boxes = end_boxes(end);
+                let clear = boxes
+                    .iter()
+                    .all(|b| !placed.iter().chain(&nodes).any(|o| overlap(b, o)));
+                if clear || keep_all {
+                    placed.extend(boxes);
+                    break;
+                }
+                if moved + STEP > room {
+                    // no room: back where it was, without what does not fit
+                    end.at = start;
+                    end.label = None;
+                    if end.badge.as_ref().is_some_and(|b| b.tone == Tone::Muted) {
+                        end.badge = None;
+                    }
+                    place(end, dx, dy, second);
+                    placed.extend(end_boxes(end));
+                    break;
+                }
+                end.at = Pos::new(end.at.x + dx * STEP, end.at.y + dy * STEP);
+                moved += STEP;
+                place(end, dx, dy, second);
+            }
+        }
+    }
+}
+
+/// Where an end's lines go, from the point `p` on the edge and the edge's
+/// direction `(dx, dy)` away from the node: beside the line, the second
+/// end on the other side from the first, so the two never meet. `lines`
+/// is how many there are (label, badge); the result is each line's centre
+/// and the anchor.
+fn beside(p: Pos, dx: f32, dy: f32, lines: usize, second: bool) -> (Vec<Pos>, Anchor) {
+    let n = lines.max(1) as f32;
+    let stack = |x: f32, first_y: f32| {
+        (0..lines.max(1))
+            .map(|i| Pos::new(x, first_y + LINE * i as f32))
+            .collect::<Vec<_>>()
+    };
+    // the first end right of the line, the second left of it
+    let (x, anchor) = if second {
+        (p.x - 6.0, Anchor::End)
+    } else {
+        (p.x + 6.0, Anchor::Start)
+    };
+    if dx.abs() < 0.35 {
+        // up or down: beside the line, centred on the point
+        (stack(x, p.y - (n - 1.0) * LINE / 2.0), anchor)
+    } else if dy.abs() < 0.35 {
+        // sideways: above the line (the second end below), running away
+        // from the node so the text never reaches back over it
+        let (x, anchor) = if dx > 0.0 {
+            (p.x - 8.0, Anchor::Start)
+        } else {
+            (p.x + 8.0, Anchor::End)
+        };
+        let first = if second {
+            p.y + 8.0
+        } else {
+            p.y - 8.0 - (n - 1.0) * LINE
+        };
+        (stack(x, first), anchor)
+    } else {
+        // a diagonal: the free side, up for a `\` and down for a `/` on
+        // the right, the other way round on the left
+        let up = (dx * dy > 0.0) != second;
+        let first = if up {
+            p.y - 8.0 - (n - 1.0) * LINE
+        } else {
+            p.y + 8.0
+        };
+        (stack(x, first), anchor)
+    }
+}
 
 /// Where the segment from `c` (a box's centre) toward `to` leaves `r`.
 fn leave(r: &Rect, c: Pos, to: Pos) -> Pos {
@@ -262,7 +432,8 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
         let aim_a = control.unwrap_or(cb);
         let aim_b = control.unwrap_or(ca);
         let (from, to) = (leave(&ra, ca, aim_a), leave(&rb, cb, aim_b));
-        let end = |at: Pos,
+        let end = |second: bool,
+                   at: Pos,
                    toward: Pos,
                    endpoint: Option<String>,
                    iface: &Option<String>,
@@ -284,17 +455,22 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
                 Some(a) => format!("{i} {a}"),
                 None => i.clone(),
             });
-            EdgeEnd {
+            let mut end = EdgeEnd {
                 endpoint,
                 at: Pos::new(at.x + dx * END_GAP, at.y + dy * END_GAP),
                 label,
                 badge,
-            }
+                label_at: at,
+                badge_at: at,
+                anchor: Anchor::Start,
+            };
+            place(&mut end, dx, dy, second);
+            end
         };
         let addr = |k: usize| e.addresses.as_ref().map(|a| &a[k]);
         let ends = [
-            end(from, aim_a, e.a.endpoint(), &e.a.iface, addr(0)),
-            end(to, aim_b, e.b.endpoint(), &e.b.iface, addr(1)),
+            end(false, from, aim_a, e.a.endpoint(), &e.a.iface, addr(0)),
+            end(true, to, aim_b, e.b.endpoint(), &e.b.iface, addr(1)),
         ];
         let partitioned = ends
             .iter()
@@ -374,11 +550,19 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
             selected: o.selected.is_some_and(|s| s == n.id),
         });
     }
+    untangle(&mut scene, o.selected);
+    // the labels too: a fit or an export shows them whole
+    let labels: Vec<Rect> = scene
+        .edges
+        .iter()
+        .flat_map(|e| e.ends.iter().flat_map(end_boxes))
+        .collect();
     scene.bounds = scene
         .nodes
         .iter()
         .map(|n| n.rect)
         .chain(scene.regions.iter().map(|r| r.rect))
+        .chain(labels)
         .reduce(|a, b| a.union(&b));
     scene
 }
@@ -561,5 +745,134 @@ mod tests {
         let end = link.ends.iter().find(|e| e.endpoint.is_some()).unwrap();
         assert!(matches!(s.hit(end.at), Some(Hit::Endpoint(_))));
         assert_eq!(s.hit(Pos::new(-10_000.0, -10_000.0)), None);
+    }
+
+    #[test]
+    fn end_labels_sit_beside_the_line() {
+        let p = Pos::new(100.0, 100.0);
+        // down: right of the line, centred on the point; the other end left
+        let (spots, a) = beside(p, 0.0, 1.0, 2, false);
+        assert_eq!(a, Anchor::Start);
+        assert!(spots.iter().all(|s| s.x > p.x));
+        assert!(spots[0].y < p.y && spots[1].y > p.y);
+        let (spots, a) = beside(p, 0.0, -1.0, 1, true);
+        assert_eq!(a, Anchor::End);
+        assert!(spots[0].x < p.x);
+        // rightwards: above the line, running away from the node; the
+        // other end below
+        let (spots, a) = beside(p, 1.0, 0.0, 2, false);
+        assert_eq!(a, Anchor::Start);
+        assert!(spots.iter().all(|s| s.y < p.y) && spots[0].x < p.x);
+        let (spots, a) = beside(p, -1.0, 0.0, 1, true);
+        assert_eq!(a, Anchor::End);
+        assert!(spots[0].y > p.y);
+        // diagonals: the free side
+        let (spots, _) = beside(p, 0.7, 0.7, 1, false);
+        assert!(spots[0].x > p.x && spots[0].y < p.y);
+        let (spots, _) = beside(p, 0.7, -0.7, 1, false);
+        assert!(spots[0].x > p.x && spots[0].y > p.y);
+        let (spots, _) = beside(p, -0.7, -0.7, 1, true);
+        assert!(spots[0].x < p.x && spots[0].y > p.y);
+    }
+
+    #[test]
+    fn labels_that_collide_step_along_their_edge() {
+        // two edges leaving a node side by side: their labels would meet
+        let g = TopoGraph::from_topology(
+            &nlink_lab::parser::parse(
+                "lab \"c\"\nnode a\nnode b\nnode c\n\
+                 link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n\
+                 link a:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }\n",
+            )
+            .unwrap(),
+            &GraphOptions::default(),
+        );
+        let mut pos = Positions::new();
+        pos.insert("a".into(), Pos::new(0.0, 0.0));
+        pos.insert("b".into(), Pos::new(-60.0, 300.0));
+        pos.insert("c".into(), Pos::new(60.0, 300.0));
+        let none = BTreeMap::new();
+        let s = build(
+            &g,
+            &pos,
+            &Overlays {
+                metrics: None,
+                impairments: &none,
+                selected: None,
+                addresses: true,
+                rates: false,
+            },
+        );
+        let boxes: Vec<Rect> = s
+            .edges
+            .iter()
+            .flat_map(|e| e.ends.iter().flat_map(end_boxes))
+            .collect();
+        for (i, a) in boxes.iter().enumerate() {
+            for b in &boxes[i + 1..] {
+                assert!(!overlap(a, b), "{a:?} {b:?}");
+            }
+            for n in &s.nodes {
+                assert!(!overlap(a, &n.rect), "{a:?} over {}", n.id);
+            }
+        }
+    }
+
+    #[test]
+    fn labels_without_room_are_left_out_but_the_selections_stay() {
+        // many parallel-ish edges into one node: no room for every label
+        let mut nll = String::from("lab \"x\"\nnode hub\n");
+        for i in 0..12 {
+            nll += &format!(
+                "node n{i}\nlink hub:e{i} -- n{i}:eth0 {{ 10.0.{i}.1/24 -- 10.0.{i}.2/24 }}\n"
+            );
+        }
+        let g = TopoGraph::from_topology(
+            &nlink_lab::parser::parse(&nll).unwrap(),
+            &GraphOptions::default(),
+        );
+        let mut pos = Positions::new();
+        pos.insert("hub".into(), Pos::new(0.0, 0.0));
+        for i in 0..12 {
+            pos.insert(format!("n{i}"), Pos::new(i as f32 * 30.0 - 165.0, 200.0));
+        }
+        let none = BTreeMap::new();
+        let scene = |selected| {
+            build(
+                &g,
+                &pos,
+                &Overlays {
+                    metrics: None,
+                    impairments: &none,
+                    selected,
+                    addresses: true,
+                    rates: false,
+                },
+            )
+        };
+        let s = scene(None);
+        let shown = s
+            .edges
+            .iter()
+            .flat_map(|e| &e.ends)
+            .filter(|e| e.label.is_some())
+            .count();
+        assert!(shown < 24, "some left out");
+        let boxes: Vec<Rect> = s
+            .edges
+            .iter()
+            .flat_map(|e| e.ends.iter().flat_map(end_boxes))
+            .collect();
+        for (i, a) in boxes.iter().enumerate() {
+            assert!(boxes[i + 1..].iter().all(|b| !overlap(a, b)), "{a:?}");
+        }
+        // the selected node's edges keep every label
+        let s = scene(Some("hub"));
+        assert!(
+            s.edges
+                .iter()
+                .flat_map(|e| &e.ends)
+                .all(|e| e.label.is_some())
+        );
     }
 }

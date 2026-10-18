@@ -22,6 +22,7 @@ library for netlink operations.
 cargo build                       # Build everything
 cargo build -p nlink-lab          # Build the library
 cargo build -p nlink-lab-cli      # Build the CLI binary
+cargo build -p nlink-lab-gui      # Build the desktop app (iced)
 cargo test -p nlink-lab --lib     # Run library unit tests
 cargo test                        # Run all tests
 ```
@@ -161,15 +162,19 @@ crates/nlink-lab-shared/src/
   api/              # daemon API (docs/API.md): Request (+ meta roles), Response,
                     #   StreamItem/Notification, OpEvent progress, ApiError, DTOs,
                     #   unix-socket Frame codec, API_VERSION
-  metrics.rs        # MetricsSnapshot and friends (backend, top, viewer)
+  metrics.rs        # MetricsSnapshot and friends (daemon, top, desktop app)
   templates/        # Built-in topology templates for `nlink-lab init`
 crates/nlink-lab-view/src/      # what the desktop app draws, renderer-free (pure, tested):
   graph.rs          # TopoGraph: nodes by kind, links/ports/tunnels/host NICs/mgmt, site regions
-  layout.rs         # layered, circle, force (Fruchterman–Reingold), auto; pins kept; bounds
+  layout.rs         # layered (multi-root for fabrics, wide layers wrapped), circle (DFS
+                    #   order), force (Fruchterman–Reingold), auto; pins kept; extend
+                    #   (new nodes beside the placed ones); bounds; natural order
   metrics.rs        # MetricsStore: per-interface rates + history, error heat, staleness
   impair.rs         # effective_impairments (shared with `top`)
-  scene.rs          # Scene: shapes, badges, parallel-edge curves, hit test (Hit)
+  scene.rs          # Scene: shapes, badges, parallel-edge curves, end labels beside the
+                    #   line (untangled, left out without room), hit test (Hit)
   svg.rs            # Scene -> SVG
+  diagram/          # DOT / Mermaid / ASCII of a Topology (`render --diagram`, exports)
 
 bins/lab/src/
   main.rs           # entry: Cli (global --format/--json/--color/-v/-q), usage errors
@@ -191,9 +196,25 @@ bins/lab/src/
                     #   symbols (token queries)
   cmd/top/          # `top`: app (pure state + keys), ui (widgets +
                     #   `--once` text frame), mod (source, event loop)
-  render/           # dot / ascii / mermaid topology renderers
+  render/           # validate/deploy summaries (diagrams: nlink_lab_view::diagram)
   host_scan.rs      # prints nlink_lab::host cleanups
   util.rs           # env pairs, byte sizes, BPF glue, impair --show lines
+
+bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
+  model.rs          #   App (route, tabs, toasts), Tab (source, params, problems),
+                    #   TopoView (graph, positions, pins, camera, selection, scene)
+  message.rs        #   Message, CanvasMsg, Shortcut
+  reduce.rs         #   reduce(app, msg) -> Vec<Effect>: every behaviour, pure, tested
+  effect.rs         #   Effect + run: loads, layouts (off the UI thread), rfd dialogs,
+                    #   exports, settings/pins writes
+  doc.rs            #   Source (file | unsaved template), load: parse + validate -> problems
+  canvas.rs         #   canvas::Program painting the Scene in 3 caches; no keys
+  keys.rs           #   shortcuts from keyboard::listen() (never while typing)
+  settings.rs       #   gui.toml (theme, layout, toggles, recent), per-file pins
+  export.rs         #   SVG / PNG (resvg) / DOT / Mermaid
+  view/             #   home, workspace (pane_grid), inspector, dock
+  ui_tests.rs       #   headless frames (iced_test), every example drawn;
+                    #   NLINK_LAB_GUI_SNAPSHOTS=DIR keeps them as PNGs
 
 examples/
   *.nll             # NLL topology examples (46 top-level; 55 incl. cookbook/ and imports/)
@@ -426,7 +447,7 @@ useful for spotting hand-edits that bypass `apply`. Powered by
 ## Design Documents
 
 - `docs/NLL_DSL_DESIGN.md` — NLL language specification and examples
-- `docs/INSTALL.md` — Installation (binaries, source, capabilities, flatpak viewer)
-- `docs/GUI.md` — Live views: backend, `top`, the experimental desktop viewer
+- `docs/INSTALL.md` — Installation (binaries, source, capabilities, flatpak app)
+- `docs/GUI.md` — The daemon, `top`, the experimental desktop app (`nlink-lab-gui`)
 - `docs/plans/NLINK_LAB-original-design.md` — The original design proposal (historical)
 - `docs/plans/` — Active implementation plans

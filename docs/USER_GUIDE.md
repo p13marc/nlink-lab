@@ -518,8 +518,8 @@ tooling. From here:
   [`docs/NLL_DSL_DESIGN.md`](NLL_DSL_DESIGN.md).
 - **CLI reference**: every command has a page in
   [`docs/cli/`](cli/).
-- **Live views**: [`GUI.md`](GUI.md) — the metrics backend,
-  `nlink-lab top`, and the experimental desktop viewer.
+- **Live views**: [`GUI.md`](GUI.md) — the daemon,
+  `nlink-lab top`, and the experimental desktop app.
 - **Harness patterns**: [`HARNESS_GUIDE.md`](HARNESS_GUIDE.md) if
   you are building test tooling on top of nlink-lab.
 - **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) is the
@@ -1442,7 +1442,7 @@ sudo nlink-lab deploy ./labs/my-dc.nll
 
 ---
 
-## The Daemon, Live Metrics and the TopoViewer
+## The Daemon, Live Metrics and the Desktop App
 
 ### The daemon
 
@@ -1452,15 +1452,15 @@ the `nlink-lab` group operate; the `nlink-lab-viewer` group reads;
 anyone else is refused. Install it with `just install-daemon` and start
 it with `sudo systemctl enable --now nlink-labd.socket` (see
 [INSTALL.md](INSTALL.md#the-daemon-live-metrics-and-the-gui)).
-`nlink-lab top` reads its metrics when not run as root, the viewer runs
-commands through it, and `ssh HOST nlink-labd dial-stdio` carries it to
-a client on another machine.
+`nlink-lab top` reads its metrics when not run as root, and
+`ssh HOST nlink-labd dial-stdio` carries it to a client on another
+machine.
 
 ### Telemetry: Zenoh and HTTP
 
 The daemon publishes every lab's per-interface metrics (rx/tx bytes,
-packets, errors, drops, bitrates) over Zenoh, for the viewer's live
-mode and other subscribers, under `nlink-lab/<lab>/`:
+packets, errors, drops, bitrates) over Zenoh, for any subscriber,
+under `nlink-lab/<lab>/`:
 
 - `metrics/snapshot` -- full metrics snapshot (all nodes, all interfaces)
 - `metrics/<node>/<iface>` -- per-interface metrics
@@ -1518,23 +1518,19 @@ nlink-lab --json top -L mylab --once --node router
 
 Table output shows per-interface rx/tx rates, packet counts, errors, and drops.
 
-### TopoViewer GUI
+### Desktop app
 
-The topoviewer is an experimental Iced-based desktop app that
-visualizes a topology. It has three modes:
+`nlink-lab-gui` is an experimental iced app that draws a topology from
+its file and keeps up as you edit it: every kind of node, networks,
+tunnels and sites, layouts you can rearrange, an inspector for what a
+node, link or interface declares, the topology's problems, and SVG,
+PNG, DOT and Mermaid exports.
 
 ```bash
-nlink-lab-topoviewer topology.nll     # static -- just parse and lay out a file
-nlink-lab-topoviewer --lab mylab      # live -- follow a running lab
-nlink-lab-topoviewer                  # discovery -- list labs on the bus
+nlink-lab-gui topology.nll --set wan_delay=80ms
 ```
 
-Live and discovery mode need the daemon above; on one host, zenoh
-peer scouting finds it with no flags. It gives you a force-directed
-layout, live per-interface throughput on the links, pan/zoom/drag,
-click-select, an exec box for the selected node, and PNG export.
-
 It ships as a flatpak bundle —
-[INSTALL.md](INSTALL.md#option-c--the-desktop-viewer-flatpak) — and
-[GUI.md](GUI.md) covers the sandbox limits and what "experimental"
-means here.
+[INSTALL.md](INSTALL.md#option-c--the-desktop-app-flatpak) — and
+[GUI.md](GUI.md) covers what it does, its keys, the sandbox limits and
+what "experimental" means here.

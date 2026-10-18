@@ -225,7 +225,7 @@ Where nlink-lab is **worse** than containerlab today:
    distributing across hosts (for actual scale) doesn't.
 3. **No web UI.** There is an interactive terminal dashboard
    (`nlink-lab top`), Dot/ASCII/Mermaid output from
-   `nlink-lab render --diagram`, and an experimental desktop viewer — but
+   `nlink-lab render --diagram`, and an experimental desktop app — but
    nothing you can point a browser at. See [GUI.md](GUI.md).
 4. **Docs are younger.** containerlab has years of accumulated
    recipes, blog posts, conference talks. nlink-lab has the

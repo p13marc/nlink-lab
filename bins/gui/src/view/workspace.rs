@@ -1,0 +1,157 @@
+//! A tab: the toolbar, then the canvas, the inspector and the dock in a
+//! pane grid.
+
+use iced::widget::{Canvas, button, checkbox, container, pane_grid, pick_list, row, space, text};
+use iced::{Alignment, Element, Length, Theme};
+
+use super::{dock, inspector, muted};
+use crate::canvas::TopoCanvas;
+use crate::doc::Source;
+use crate::export::Format;
+use crate::message::{Message, Shortcut};
+use crate::model::{App, DockTab, Pane, Tab};
+use crate::settings::LayoutPref;
+
+pub fn view<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
+    let grid = pane_grid(&tab.panes, |_, pane, _| {
+        let (title, body): (Element<'a, Message>, Element<'a, Message>) = match pane {
+            Pane::Canvas => (canvas_title(tab), canvas(tab)),
+            Pane::Inspector => (text("Inspector").size(13).into(), inspector::view(tab)),
+            Pane::Dock => (dock_title(tab), dock::view(tab)),
+        };
+        pane_grid::Content::new(container(body).width(Length::Fill).height(Length::Fill))
+            .title_bar(
+                pane_grid::TitleBar::new(title)
+                    .padding([3, 8])
+                    .style(super::bar),
+            )
+            .style(pane_style)
+    })
+    .spacing(4)
+    .on_resize(8, Message::PaneResized);
+    iced::widget::column![toolbar(app, tab), container(grid).padding(4)].into()
+}
+
+fn pane_style(theme: &Theme) -> container::Style {
+    container::Style {
+        border: iced::Border {
+            width: 1.0,
+            color: theme.extended_palette().background.strong.color,
+            radius: 4.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
+fn toolbar<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
+    let tool = |label: &'a str, msg: Message| {
+        button(text(label).size(13))
+            .style(button::secondary)
+            .on_press(msg)
+    };
+    let can_export = tab.topology.is_some() && tab.view.scene.bounds.is_some();
+    let export = Format::ALL.iter().fold(
+        row![muted("Export")].spacing(4).align_y(Alignment::Center),
+        |r, f| {
+            r.push(
+                button(text(f.label()).size(13))
+                    .style(button::secondary)
+                    .on_press_maybe(can_export.then_some(Message::Export(*f))),
+            )
+        },
+    );
+    let mut bar = row![
+        tool("Reload", Message::Reload),
+        muted("Layout"),
+        pick_list(LayoutPref::ALL, Some(tab.view.layout), Message::SetLayout).text_size(13),
+        tool("Fit", Message::Shortcut(Shortcut::Fit)),
+        tool("−", Message::Shortcut(Shortcut::ZoomOut)),
+        tool("+", Message::Shortcut(Shortcut::ZoomIn)),
+        checkbox(app.settings.show_addresses)
+            .label("Addresses")
+            .text_size(13)
+            .on_toggle(|_| Message::ToggleAddresses),
+        checkbox(app.settings.show_mgmt)
+            .label("Management")
+            .text_size(13)
+            .on_toggle(|_| Message::ToggleMgmt),
+        space::horizontal(),
+        export,
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center);
+    if matches!(tab.source, Source::Untitled { .. }) {
+        bar = bar.push(
+            button(text("Save as…").size(13))
+                .style(button::primary)
+                .on_press(Message::SaveAs),
+        );
+    }
+    container(bar).padding([6, 10]).width(Length::Fill).into()
+}
+
+fn canvas_title(tab: &Tab) -> Element<'_, Message> {
+    let mut r = row![text(tab.title()).size(13)]
+        .spacing(10)
+        .align_y(Alignment::Center);
+    if tab.loading {
+        r = r.push(muted("loading…"));
+    } else if tab.view.laying_out {
+        r = r.push(muted("laying out…"));
+    }
+    if tab.stale {
+        r = r.push(
+            text("does not parse: showing the last version that did")
+                .size(12)
+                .style(text::warning),
+        );
+    }
+    r.into()
+}
+
+fn canvas(tab: &Tab) -> Element<'_, Message> {
+    let placeholder = if tab.topology.is_none() {
+        Some(if tab.loading {
+            "Loading…"
+        } else {
+            "This topology does not parse: see Problems"
+        })
+    } else if tab.view.positions.is_empty() {
+        Some(if tab.view.graph.nodes.is_empty() {
+            "No nodes yet"
+        } else {
+            "Laying out…"
+        })
+    } else {
+        None
+    };
+    Canvas::new(TopoCanvas {
+        view: &tab.view,
+        placeholder,
+    })
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into()
+}
+
+fn dock_title(tab: &Tab) -> Element<'_, Message> {
+    let page = |label: String, page: DockTab| {
+        button(text(label).size(13))
+            .style(if tab.dock == page {
+                button::secondary
+            } else {
+                button::text
+            })
+            .padding([2, 8])
+            .on_press(Message::Dock(page))
+    };
+    row![
+        page(
+            format!("Problems ({})", tab.problems.len()),
+            DockTab::Problems
+        ),
+        page("Source".into(), DockTab::Source),
+    ]
+    .spacing(4)
+    .into()
+}

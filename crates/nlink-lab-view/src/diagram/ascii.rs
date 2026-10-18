@@ -1,4 +1,4 @@
-//! Plain-text rendering (`render --ascii`).
+//! Plain text (`render --diagram ascii`).
 
 pub fn topology_to_ascii(topo: &nlink_lab::Topology) -> String {
     use std::collections::HashSet;

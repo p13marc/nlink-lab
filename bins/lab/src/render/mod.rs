@@ -1,13 +1,7 @@
-//! Text renderings of a [`nlink_lab::Topology`] (DOT, Mermaid, ASCII)
-//! and the short summaries printed by `validate` / `deploy`.
+//! The short summaries printed by `validate` / `deploy`; the diagrams
+//! (DOT, Mermaid, ASCII) are `nlink_lab_view::diagram`'s.
 
-mod ascii;
-mod dot;
-mod mermaid;
-
-pub use ascii::topology_to_ascii;
-pub use dot::topology_to_dot;
-pub use mermaid::topology_to_mermaid;
+pub use nlink_lab_view::diagram::{topology_to_ascii, topology_to_dot, topology_to_mermaid};
 
 pub fn print_topology_summary(topo: &nlink_lab::Topology) {
     println!("  Nodes:       {}", topo.nodes.len());

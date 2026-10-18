@@ -8,7 +8,7 @@ members = [
     "crates/nlink-lab-view",
     "bins/lab",
     "bins/nlink-labd",
-    "bins/topoviewer",
+    "bins/gui",
 ]
 exclude = ["crates/nlink-lab/fuzz"]
 

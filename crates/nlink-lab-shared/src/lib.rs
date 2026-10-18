@@ -1,14 +1,14 @@
 //! Shared types for nlink-lab Zenoh communication.
 //!
 //! This crate defines the message types and topic helpers used by the
-//! nlink-lab backend daemon and its clients (CLI metrics, TopoViewer GUI).
+//! nlink-lab daemon and its clients (`top`, the desktop app).
 //!
 //! # Architecture
 //!
 //! ```text
 //! Frontend (unprivileged)          Backend (CAP_NET_ADMIN)
 //! ├── nlink-lab metrics CLI        ├── nlink-lab daemon
-//! ├── TopoViewer GUI               │
+//! ├── desktop app (nlink-lab-gui)  │
 //! └── External tools               └── Publishes via Zenoh
 //!     │                                 │
 //!     └── nlink-lab-shared types ───────┘

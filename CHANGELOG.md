@@ -79,6 +79,16 @@ under both (#233). Its waves land one by one below.
   `schema_version`. `snapshot ls --json` is `{schema_version, lab,
   snapshots}`. `destroy` without a name no longer picks the only lab:
   name it, or `-L`/`NLINK_LAB`/`use`.
+- **The desktop viewer is `nlink-lab-gui`** (#276), rebuilt; the flatpak
+  keeps its app-id, `com.github.p13marc.NlinkLab`, and its bundle is
+  `nlink-lab-gui-VERSION.flatpak`.
+
+  | Was | Now |
+  |---|---|
+  | `nlink-lab-topoviewer FILE` | `nlink-lab-gui FILE…` (one tab each), with `--set NAME=VALUE` |
+  | `nlink-lab-topoviewer --lab LAB`, discovery, `--zenoh-connect` | gone for now: the app draws topologies from their files |
+  | PNG export: a screenshot of the window into `~/Pictures` | **Export**: SVG or PNG of the drawing, DOT or Mermaid, where the save dialog says |
+
 - **`nlink-lab-backend` is gone** (#270): `nlink-labd` publishes every
   lab's telemetry on the same Zenoh topics and serves the HTTP.
 
@@ -675,6 +685,38 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The desktop app, `nlink-lab-gui`** (#276): a topology drawn from
+  its file, kept up as the file changes.
+  - Home: open a file, a recent one, or a built-in template (unsaved
+    until **Save as…**). One tab per topology: the canvas, an inspector
+    (what the selected node, link or interface declares; with nothing
+    selected, the lab and its params), and a dock with the topology's
+    problems — what `validate` reports, a parse error with its line —
+    and its source.
+  - Every kind of node, networks and their members, WireGuard and VXLAN
+    tunnels, sites as regions, the management network on demand,
+    declared impairments at their interfaces. Labels sit beside their
+    edges and are left out where there is no room (never the selected
+    node's).
+  - Layouts: Auto (a circle for rings and small dense labs, layers for
+    trees and fabrics, spines first; force otherwise), Layered, Force,
+    Circle, computed off the UI thread. A dragged node stays where it is
+    put, per file, until `Shift+L`; a node the file gains is placed
+    beside its neighbours without moving the others.
+  - A file that stops parsing keeps its last drawing, said so, with the
+    error under Problems. Params from `--set` or the inspector's form.
+  - Export the drawing as SVG or PNG, the topology as DOT or Mermaid.
+  - Keys through `keyboard::listen()` only (`F1` lists them), so typing
+    in a field never triggers one; the canvas handles none. System, light
+    or dark theme. Settings in `$XDG_CONFIG_HOME/nlink-lab/gui.toml`.
+  - The state changes only in a pure `reduce`, which returns the effects
+    to run: every behaviour is a plain test, and every screen and every
+    example is drawn headless in the tests.
+- **`render --diagram`'s DOT, Mermaid and ASCII** are in
+  `nlink_lab_view::diagram` (#276), for the desktop app's exports too.
+- **`nlink_lab::parser::nll::parse_named_with_params`** (#276): an NLL
+  source that is no file, with params, its parse errors located in a
+  name.
 - **`nlink-lab-view`** (#273), what the desktop app draws, without a
   renderer:
   - the topology as a graph: nodes by kind (host, router, container,

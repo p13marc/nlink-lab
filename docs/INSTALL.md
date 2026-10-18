@@ -6,8 +6,8 @@ the first.
 | Artifact | What it is | How it ships |
 |----------|------------|--------------|
 | `nlink-lab` | The CLI — deploy, exec, impair, capture, everything | release tarball, or `cargo build` |
-| `nlink-labd` | The host daemon: every lab behind one authenticated API (`top` without root, the viewer, remote clients), their telemetry over Zenoh, OpenMetrics | same release tarball, with its systemd units, or `just install-daemon` |
-| `nlink-lab-topoviewer` | Experimental desktop topology viewer (iced) | flatpak bundle only |
+| `nlink-labd` | The host daemon: every lab behind one authenticated API (`top` without root, remote clients), their telemetry over Zenoh, OpenMetrics | same release tarball, with its systemd units, or `just install-daemon` |
+| `nlink-lab-gui` | Experimental desktop app (iced) | flatpak bundle only |
 
 Releases live at
 <https://git.marcpardo.eu/marcpardo/nlink-lab/releases>.
@@ -100,9 +100,9 @@ A man page is a separate step (it needs `help2man`):
 just man            # installs /usr/local/share/man/man1/nlink-lab.1
 ```
 
-## Option C — the desktop viewer (flatpak)
+## Option C — the desktop app (flatpak)
 
-`nlink-lab-topoviewer` is **experimental** — see
+`nlink-lab-gui` is **experimental** — see
 [GUI.md](GUI.md) for what it can and cannot do. It ships only as a
 flatpak bundle attached to each release:
 
@@ -112,8 +112,8 @@ flatpak remote-add --if-not-exists --user \
     flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 VER=0.13.0
-curl -LO https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER/nlink-lab-topoviewer-$VER.flatpak
-flatpak install --user ./nlink-lab-topoviewer-$VER.flatpak
+curl -LO https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER/nlink-lab-gui-$VER.flatpak
+flatpak install --user ./nlink-lab-gui-$VER.flatpak
 
 flatpak run com.github.p13marc.NlinkLab
 ```
@@ -121,11 +121,11 @@ flatpak run com.github.p13marc.NlinkLab
 To build it yourself instead:
 
 ```bash
-cargo build --release -p nlink-lab-topoviewer
-./target/release/nlink-lab-topoviewer --help
+cargo build --release -p nlink-lab-gui
+./target/release/nlink-lab-gui --help
 ```
 
-The viewer needs a display (Wayland or X11) plus working GPU
+The app needs a display (Wayland or X11) plus working GPU
 drivers — wgpu loads Vulkan/GL at runtime, so a headless server
 will not run it.
 
@@ -229,8 +229,8 @@ the 0.14 CHANGELOG.
 
 `nlink-labd` serves every lab of the host through one API on
 `/run/nlink-lab/api/api.sock` (see [API.md](API.md)): `nlink-lab top`
-reads its metrics when not run as root, the viewer runs commands
-through it, and a client elsewhere reaches it over ssh
+reads its metrics when not run as root, and a client elsewhere reaches
+it over ssh
 (`ssh HOST nlink-labd dial-stdio`). Install and start it:
 
 ```bash
@@ -241,7 +241,7 @@ sudo usermod -aG nlink-lab-viewer "$USER"   # read; nlink-lab to operate
 
 It records every call an operator makes in
 `/var/lib/nlink-lab/audit.ndjson`, publishes every lab's telemetry over
-Zenoh (what the viewer's live mode follows), and reads
+Zenoh, and reads
 `/etc/nlink-lab/daemon.toml` when it exists — every key is optional:
 
 ```toml

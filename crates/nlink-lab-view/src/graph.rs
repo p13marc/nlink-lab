@@ -59,7 +59,7 @@ pub struct End {
 }
 
 impl End {
-    fn of(node: &str, iface: Option<&str>) -> Self {
+    pub(crate) fn of(node: &str, iface: Option<&str>) -> Self {
         Self {
             node: node.to_string(),
             iface: iface.map(str::to_string),

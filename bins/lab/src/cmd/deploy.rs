@@ -38,10 +38,6 @@ pub struct Args {
     #[arg(long)]
     pub force: bool,
 
-    /// Start the Zenoh backend daemon after deploying.
-    #[arg(long)]
-    pub daemon: bool,
-
     /// Skip validate block assertions after deploy.
     #[arg(long)]
     pub skip_validate: bool,
@@ -74,7 +70,6 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         topology,
         dry_run,
         force,
-        daemon,
         skip_validate,
         params,
         strict,
@@ -221,9 +216,5 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     common::assertions_outcome(lab.assertion_results(), strict, &topo.lab.name, "deployed")?;
-
-    if daemon {
-        nlink_lab_backend::run(lab, nlink_lab_backend::BackendOpts::default()).await?;
-    }
     Ok(())
 }

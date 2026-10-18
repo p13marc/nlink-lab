@@ -1,12 +1,13 @@
 # Installing nlink-lab
 
-Three separate artifacts ship from this repo. Most people only need
+Four separate artifacts ship from this repo. Most people only need
 the first.
 
 | Artifact | What it is | How it ships |
 |----------|------------|--------------|
 | `nlink-lab` | The CLI — deploy, exec, impair, capture, everything | release tarball, or `cargo build` |
-| `nlink-lab-backend` | Zenoh daemon publishing live metrics + RPC for one lab | same release tarball, or `cargo build` |
+| `nlink-labd` | The host daemon: every lab behind one authenticated API (`top` without root, the viewer, remote clients) | same release tarball, with its systemd units, or `just install-daemon` |
+| `nlink-lab-backend` | Zenoh publisher of one lab's live metrics and topology (the viewer's live mode, OpenMetrics) | same release tarball, or `cargo build` |
 | `nlink-lab-topoviewer` | Experimental desktop topology viewer (iced) | flatpak bundle only |
 
 Releases live at
@@ -19,8 +20,8 @@ Releases live at
 - **Linux**, kernel 4.19+ (5.x recommended). Network namespaces,
   veth, netem and nftables are all kernel features — there is no
   macOS or Windows build.
-- **Privileges**: root, a SUID install, or `CAP_NET_ADMIN` +
-  `CAP_SYS_ADMIN`. See [Privileges](#privileges) below.
+- **Privileges**: root (sudo), or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`.
+  See [Privileges](#privileges) below.
 - **Rust 1.98+** (edition 2024) if you build from source. The
   repo pins the toolchain in `rust-toolchain.toml`, so `rustup`
   will fetch the right compiler on its own.
@@ -52,8 +53,8 @@ wireguard-tools` for the optional surface.
 ## Option A — prebuilt binaries (fastest)
 
 Each release attaches `nlink-lab-<version>-x86_64-linux-gnu.tar.gz`
-containing the CLI, the backend, shell completions and the
-licence/changelog. It does **not** contain the GUI.
+containing the CLI, the daemon and its systemd units, the backend,
+shell completions and the licence/changelog. It does **not** contain the GUI.
 
 ```bash
 VER=0.13.0   # check the releases page for the newest
@@ -65,12 +66,20 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 tar xzf nlink-lab-$VER-x86_64-linux-gnu.tar.gz
 cd nlink-lab-$VER-x86_64-linux-gnu
-sudo install -m 755 nlink-lab nlink-lab-backend /usr/local/bin/
+sudo install -m 755 nlink-lab nlink-labd nlink-lab-backend /usr/local/bin/
 ```
 
-That gives you a plain (non-SUID) install you run under `sudo`. To
-run it as an unprivileged user instead, see
-[Privileges](#privileges).
+That gives you a plain install you run under `sudo`. To run it as an
+unprivileged user instead, see [Privileges](#privileges). The daemon
+is optional; to run it:
+
+```bash
+sudo install -m 644 systemd/nlink-labd.* /etc/systemd/system/
+sudo install -D -m 644 sysusers.d/nlink-lab.conf /etc/sysusers.d/nlink-lab.conf
+sudo install -D -m 644 tmpfiles.d/nlink-lab.conf /etc/tmpfiles.d/nlink-lab.conf
+sudo systemd-sysusers && sudo systemd-tmpfiles --create
+sudo systemctl daemon-reload && sudo systemctl enable --now nlink-labd.socket
+```
 
 ## Option B — from source
 
@@ -78,18 +87,16 @@ run it as an unprivileged user instead, see
 git clone https://git.marcpardo.eu/marcpardo/nlink-lab.git
 cd nlink-lab
 
-just install        # SUID root install of the CLI — full feature support
+just install          # the CLI in /usr/local/bin, run with sudo
 # or
-just install-caps   # file capabilities instead of SUID
-# or, by hand, with no privilege bit at all:
-cargo build --release -p nlink-lab-cli -p nlink-lab-backend
-sudo install -m 755 target/release/nlink-lab \
-                    target/release/nlink-lab-backend /usr/local/bin/
+just install-caps     # the CLI with file capabilities instead
+just install-daemon   # the daemon, its systemd units and groups
+# the Zenoh backend, for the viewer's live mode:
+cargo build --release -p nlink-lab-backend
+sudo install -m 755 target/release/nlink-lab-backend /usr/local/bin/
 ```
 
-`just install` and `just install-caps` install **the CLI only**. If
-you want live metrics or the GUI, install `nlink-lab-backend`
-alongside it with the `cargo build` line above.
+The recipes run `sudo` themselves: run them as yourself.
 
 A man page is a separate step (it needs `help2man`):
 
@@ -135,9 +142,12 @@ that is `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`, however you get them.
 
 | Approach | Command | Trade-off |
 |----------|---------|-----------|
-| `sudo` per invocation | `sudo nlink-lab deploy lab.nll` | Nothing to install. Verbose. |
-| SUID root | `just install` | Every feature works, including Wi-Fi. The binary runs as root for anyone who can execute it — fine on a dev box, think twice on a shared host. |
-| File capabilities | `just install-caps` | No SUID. Grants `cap_net_admin,cap_sys_admin,cap_dac_override`. Wi-Fi (`mac80211_hwsim` auto-load) additionally needs `CAP_SYS_MODULE`. |
+| `sudo` per invocation | `sudo nlink-lab deploy lab.nll` | Every feature works. |
+| File capabilities | `just install-caps` | Grants `cap_net_admin,cap_sys_admin,cap_dac_override` to whoever runs the binary. Wi-Fi (`mac80211_hwsim` auto-load) additionally needs `CAP_SYS_MODULE`. |
+
+There is no SUID install any more: a SUID nlink-lab ran commands as
+root in any lab for anyone who could execute it. Reading labs without
+root goes through the state root's group or the daemon instead.
 
 Feature-specific extras:
 
@@ -206,6 +216,12 @@ sudo groupadd --system nlink-lab
 sudo usermod -aG nlink-lab "$USER"     # log in again to pick it up
 ```
 
+With the daemon running, `nlink-lab` membership is **root-equivalent**,
+like the `docker` group: its members operate the host's labs through
+the daemon, commands run as root in them included. Give people who
+only watch `nlink-lab-viewer` instead (`just install-daemon` creates
+both groups).
+
 Labs deployed by nlink-lab 0.13 or older live in the deploying user's
 `~/.local/state/nlink-lab`. `nlink-lab doctor` lists them; destroy them
 with the old version before upgrading, or move them as described in
@@ -213,15 +229,32 @@ the 0.14 CHANGELOG.
 
 ---
 
-## Live metrics and the GUI
+## The daemon, live metrics and the GUI
 
-The viewer, `nlink-lab top --zenoh` and the OpenMetrics endpoint
-are all fed by the backend, which attaches to one already-deployed
-lab and needs root:
+`nlink-labd` serves every lab of the host through one API on
+`/run/nlink-lab/api/api.sock` (see [API.md](API.md)): `nlink-lab top`
+reads its metrics when not run as root, the viewer runs commands
+through it, and a client elsewhere reaches it over ssh
+(`ssh HOST nlink-labd dial-stdio`). Install and start it:
+
+```bash
+just install-daemon
+sudo systemctl enable --now nlink-labd.socket
+sudo usermod -aG nlink-lab-viewer "$USER"   # read; nlink-lab to operate
+```
+
+It reads `/etc/nlink-lab/daemon.toml` when it exists (every key is
+optional: `socket`, `operator_group`, `viewer_group`, `rescan_ms`,
+`metrics_interval_ms`, `audit_log`), and records every call an
+operator makes in `/var/lib/nlink-lab/audit.ndjson`.
+
+The viewer's live mode and the OpenMetrics endpoint are fed by the
+Zenoh backend, which attaches to one already-deployed lab and needs
+root:
 
 ```bash
 sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab daemon -L simple --interval 2s --http 127.0.0.1:9464
+sudo nlink-lab-backend simple --interval 2 --http 127.0.0.1:9464
 ```
 
 - `--http ADDR` serves `/metrics` (OpenMetrics) and
@@ -229,11 +262,8 @@ sudo nlink-lab daemon -L simple --interval 2s --http 127.0.0.1:9464
 - Same-host viewers find the lab through zenoh peer scouting, no
   flags needed.
 - Across machines, listen on one side and connect from the other:
-  `--zenoh-listen tcp/0.0.0.0:7447` on the daemon,
+  `--zenoh-listen tcp/0.0.0.0:7447` on the backend,
   `--zenoh-connect tcp/<host>:7447` on the viewer.
-
-`nlink-lab-backend simple` is the same thing as a standalone
-binary, for running it under systemd.
 
 ---
 
@@ -253,7 +283,7 @@ breaking changes always carry a Migration note.
 
 ```bash
 sudo nlink-lab destroy --all          # tear down running labs first
-just uninstall                        # removes /usr/local/bin/nlink-lab
+just uninstall                        # the CLI, the daemon and its units
 sudo rm -f /usr/local/bin/nlink-lab-backend
 sudo rm -f /usr/local/share/man/man1/nlink-lab.1
 sudo rm -rf /var/lib/nlink-lab        # state, logs, snapshots, events

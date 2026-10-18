@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use nlink_lab::ops::view::NodeStats;
+
 use crate::ctx::{Ctx, require_root};
 use crate::output::{Report, Table, emit, table::terminal_width};
 
@@ -43,16 +45,6 @@ pub struct Args {
     /// one document per sample).
     #[arg(long, value_name = "DURATION", value_parser = crate::args::interval)]
     pub watch: Option<Duration>,
-}
-
-/// One node's cgroup usage.
-#[derive(serde::Serialize, schemars::JsonSchema)]
-pub struct NodeStats {
-    pub node: String,
-    /// `namespace` or `container`.
-    pub kind: &'static str,
-    #[serde(flatten)]
-    pub usage: nlink_lab::cgroup::Usage,
 }
 
 /// `stats`'s result without process flags.
@@ -150,44 +142,6 @@ impl Report for ProcsReport {
     }
 }
 
-fn node_stats(running: &nlink_lab::RunningLab, only: Option<&str>) -> Vec<NodeStats> {
-    let lab = running.name();
-    let wanted = |name: &str| only.is_none_or(|n| n == name);
-    // Namespace nodes with cpu/memory limits: cgroup usage (#66).
-    let mut rows: Vec<NodeStats> = running
-        .topology()
-        .nodes
-        .iter()
-        .filter(|(name, n)| {
-            wanted(name) && n.image.is_none() && (n.cpu.is_some() || n.memory.is_some())
-        })
-        .filter_map(|(name, _)| {
-            nlink_lab::cgroup::usage(lab, name).map(|usage| NodeStats {
-                node: name.clone(),
-                kind: "namespace",
-                usage,
-            })
-        })
-        .collect();
-    for (name, c) in running.containers() {
-        if !wanted(name) {
-            continue;
-        }
-        match nlink_lab::cgroup::process_dir(c.pid)
-            .and_then(|dir| nlink_lab::cgroup::usage_of(&dir))
-        {
-            Some(usage) => rows.push(NodeStats {
-                node: name.clone(),
-                kind: "container",
-                usage,
-            }),
-            None => tracing::warn!("cannot read the cgroup of container node '{name}'"),
-        }
-    }
-    rows.sort_by(|a, b| a.node.cmp(&b.node));
-    rows
-}
-
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let lab = args.lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
@@ -225,7 +179,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 ctx,
                 &StatsReport {
                     lab: lab.clone(),
-                    nodes: node_stats(&running, args.node.as_deref()),
+                    nodes: nlink_lab::ops::view::node_stats(&running, args.node.as_deref()),
                 },
             )?;
         }

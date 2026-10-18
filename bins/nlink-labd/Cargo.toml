@@ -1,0 +1,36 @@
+[package]
+name = "nlink-labd"
+description = "The nlink-lab host daemon: every lab of the host behind one authenticated API, on a unix socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# not on crates.io: releases are Forgejo tarballs + flatpak (deny.toml relies on this)
+publish = false
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "nlink_labd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nlink-labd"
+path = "src/main.rs"
+
+[dependencies]
+nlink-lab = { workspace = true }
+nlink-lab-shared = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+libc = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+nlink-lab-client = { workspace = true }
+tempfile = "3"

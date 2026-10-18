@@ -8,7 +8,6 @@ pub mod archive;
 pub mod benchmark;
 pub mod capture;
 pub mod common;
-pub mod daemon;
 pub mod deploy;
 pub mod destroy;
 pub mod diagnose;
@@ -95,7 +94,6 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
             // Already handled before async runtime
             Ok(())
         }
-        Commands::Daemon(args) => daemon::run(ctx, args).await,
         Commands::Init(args) => init::run(ctx, args),
     }
 }

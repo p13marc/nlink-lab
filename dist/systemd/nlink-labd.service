@@ -1,0 +1,18 @@
+[Unit]
+Description=nlink-lab daemon: the host's network labs behind one API
+Documentation=https://git.marcpardo.eu/marcpardo/nlink-lab/src/branch/master/docs/API.md
+Requires=nlink-labd.socket
+After=nlink-labd.socket network.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/local/bin/nlink-labd serve
+Restart=on-failure
+# Stopping the daemon stops it alone: the labs' processes (spawned
+# services, FRR, hostapd) run in its cgroup and must outlive it.
+KillMode=process
+
+[Install]
+Also=nlink-labd.socket
+WantedBy=multi-user.target

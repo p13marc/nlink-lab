@@ -115,6 +115,16 @@ pub fn has_privileges() -> bool {
     nlink_lab::privileges::has_privileges()
 }
 
+/// A failed call to the daemon as the CLI reports it: the daemon's own
+/// error as it sent it, exit code included.
+pub fn daemon_error(e: nlink_lab_client::ClientError) -> nlink_lab::Error {
+    match e {
+        nlink_lab_client::ClientError::Api(api) => nlink_lab::Error::Api(api),
+        nlink_lab_client::ClientError::Io(io) => nlink_lab::Error::Io(io),
+        other => nlink_lab::Error::deploy_failed(format!("the daemon: {other}")),
+    }
+}
+
 // ── dynamic shell completion (issue #62) ──────────────────────────
 // `COMPLETE=bash nlink-lab` (see `completions --help`) makes the shell
 // call back into the binary; these completers answer with live data.
@@ -288,9 +298,10 @@ pub fn require_root() -> nlink_lab::Result<()> {
     if has_privileges() {
         Ok(())
     } else {
-        Err(nlink_lab::Error::deploy_failed(
-            "this command needs root (sudo), a SUID binary, or CAP_NET_ADMIN+CAP_SYS_ADMIN \
-             (see `just install-caps`)",
+        Err(nlink_lab::Error::Privileges(
+            "this command needs root (sudo), or CAP_NET_ADMIN+CAP_SYS_ADMIN \
+             (see `just install-caps`)"
+                .into(),
         ))
     }
 }

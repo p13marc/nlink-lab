@@ -168,6 +168,11 @@ pub enum Error {
         "lab '{name}' is in the old state directory {path}: run `sudo nlink-lab doctor --fix` to move it"
     )]
     MovedState { name: String, path: PathBuf },
+
+    /// What the daemon answered a call with (#233): reported as it is,
+    /// exit code included.
+    #[error("{0}")]
+    Api(Box<nlink_lab_shared::api::ApiError>),
 }
 
 /// Rich NLL parse error with source context for miette rendering.
@@ -311,6 +316,7 @@ impl Error {
     pub fn to_api(&self) -> nlink_lab_shared::api::ApiError {
         use nlink_lab_shared::api::{ApiError, ErrorCode};
         let code = match self {
+            Error::Api(api) => return (**api).clone(),
             Error::Io(e) => match e.kind() {
                 std::io::ErrorKind::PermissionDenied => ErrorCode::PermissionDenied,
                 std::io::ErrorKind::NotFound => ErrorCode::NotFound,

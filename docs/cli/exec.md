@@ -15,7 +15,7 @@ node. Stdio streams live by default — good for `ping`, `tail -f`,
 interactive services. Pass `--json` for buffered output with
 structured exit code, stdout, stderr, and duration.
 
-`exec` requires the same caps as `deploy`: root, SUID, or
+`exec` requires the same caps as `deploy`: root, or
 `CAP_NET_ADMIN`+`CAP_SYS_ADMIN`.
 
 For long-lived background processes that should survive across

@@ -7,44 +7,64 @@ deploy or test a lab.
 
 | Surface | What it is | Status |
 |---------|------------|--------|
+| `nlink-labd` | The host daemon: every lab behind one authenticated API | supported |
 | `nlink-lab top` | Terminal dashboard (ratatui) over a running lab | supported |
-| `nlink-lab daemon --http` | OpenMetrics + JSON HTTP endpoints | supported |
+| `nlink-lab-backend --http` | OpenMetrics + JSON HTTP endpoints for one lab | supported |
 | `nlink-lab-topoviewer` | Desktop topology viewer (iced) | **experimental** |
 
-All three read the same data. `top --zenoh` and the viewer
-subscribe to the backend's zenoh topics; `--http` exposes the same
-snapshot over HTTP for Prometheus and friends.
+`top` without root reads the daemon's metrics, and the viewer runs its
+commands through it. The viewer's live topology and metrics still come
+from the per-lab Zenoh backend, as does `--http` for Prometheus and
+friends, until the daemon serves Zenoh and HTTP itself.
 
 ---
 
-## The backend (what feeds everything)
+## The daemon
 
-Live views need `nlink-lab daemon`, which attaches to an
-already-deployed lab and needs root:
+`nlink-labd` serves every lab of the host, whoever deployed it (the
+CLI, a test, the daemon itself), over the API of [API.md](API.md):
+
+```bash
+just install-daemon                           # binary, units, groups (sudo inside)
+sudo systemctl enable --now nlink-labd.socket # started on first use
+```
+
+It listens on `/run/nlink-lab/api/api.sock` and decides per
+connection who may do what, from the caller's credentials: root and
+the `nlink-lab` group operate (change labs, run commands in them), the
+`nlink-lab-viewer` group reads, anyone else is refused. Over ssh, a
+client runs `ssh HOST nlink-labd dial-stdio` (the `ssh://HOST`
+endpoint) and is the ssh user there. Every call an operator makes is
+recorded in `/var/lib/nlink-lab/audit.ndjson`.
+
+## The Zenoh backend
+
+The viewer's live mode follows a lab's Zenoh topics, which
+`nlink-lab-backend`, a per-lab process, publishes. It attaches to a
+deployed lab and needs root:
 
 ```bash
 sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab daemon -L simple --interval 2s
+sudo nlink-lab-backend simple --interval 2
 ```
 
 It publishes on `nlink-lab/<lab>/…`:
 
 | Topic | Carries |
 |-------|---------|
-| `topology` | the resolved topology (also a queryable, so late subscribers get it) |
+| `topology` | the resolved topology, without its secrets (also a queryable, so late subscribers get it) |
 | `health` | lab health summary — this is what discovery lists |
 | `metrics/snapshot` | all per-node, per-interface counters in one message |
 | `metrics/<node>/<iface>` | one interface |
 | `events`, `lifecycle` | the lifecycle event log |
-| `rpc/exec`, `rpc/impairment`, `rpc/status` | request/response |
+| `rpc/status` | a lab summary, on request |
 
-Add `--http 127.0.0.1:9464` for `/metrics` (OpenMetrics) plus
-`/api/v1/{snapshot,health,topology}` if you would rather scrape
-than subscribe.
-
-`nlink-lab-backend <lab>` is the same daemon as a standalone
-binary — the CLI arm calls the same library entry point — which is
-the one to run under systemd.
+It runs nothing and changes nothing: its `rpc/exec` and
+`rpc/impairment`, which anyone on the network could call, are gone;
+the daemon does both, for callers it knows. Add `--http
+127.0.0.1:9464` for `/metrics` (OpenMetrics) plus
+`/api/v1/{snapshot,health,topology}` if you would rather scrape than
+subscribe.
 
 ---
 
@@ -53,18 +73,18 @@ the one to run under systemd.
 A terminal dashboard, no extra install, no GUI stack:
 
 ```bash
-sudo nlink-lab top -L simple         # collect locally (needs root)
-nlink-lab top -L simple --zenoh      # read a running daemon (no root)
+sudo nlink-lab top -L simple         # collect itself (root)
+nlink-lab top -L simple              # without root: read the daemon's
 nlink-lab top -L simple --once       # one text frame, for pipes and CI
 ```
 
-Collecting locally needs root; reading a running `daemon` over
-zenoh does not. `--once` prints a single frame and exits, which is
-what you want in a CI log. `--interval` sets the refresh period,
-`--zenoh-connect` points at a remote backend, and the screen is
-interactive — sort, filter, and impair or partition the selected
-interface without leaving it. See [cli/top.md](cli/top.md) for the
-full key map.
+As root, `top` collects the metrics itself; without root it reads them
+from the daemon, read-only (`NLINK_LAB_DAEMON=ssh://HOST` reads another
+host's). `--once` prints a single frame and exits, which is what you
+want in a CI log. `--interval` sets the refresh period, and the screen
+is interactive — sort, filter, and (as root) impair or partition the
+selected interface without leaving it. See [cli/top.md](cli/top.md) for
+the full key map.
 
 ---
 
@@ -85,11 +105,11 @@ nlink-lab-topoviewer                    # discovery — list labs on the bus
 ```
 
 Static mode needs nothing else running. Live and discovery mode
-need the backend (above); on one host zenoh peer scouting finds it
+need the Zenoh backend (above); on one host zenoh peer scouting finds it
 with no flags. Across machines:
 
 ```bash
-sudo nlink-lab daemon -L simple --zenoh-listen tcp/0.0.0.0:7447
+sudo nlink-lab-backend simple --zenoh-listen tcp/0.0.0.0:7447
 nlink-lab-topoviewer --lab simple --zenoh-connect tcp/<host>:7447
 ```
 
@@ -102,8 +122,9 @@ is ignored, with a warning, when you pass a topology file without
 - Drag nodes; pan, zoom, and fit-to-screen.
 - Toggle interface addresses and live per-interface metrics.
 - Click a node for its detail sidebar.
-- Run a command in the selected node from the sidebar — this goes
-  out as an `rpc/exec` request, so it only works in live mode.
+- Run a command in the selected node from the sidebar, through the
+  daemon (its socket, or the endpoint `NLINK_LAB_DAEMON` names), as an
+  operator; it is stopped after 30 s.
 - Export the canvas to PNG, written to `$XDG_PICTURES_DIR`
   (falling back to `~/Pictures`, then the working directory) with
   a millisecond-stamped filename.

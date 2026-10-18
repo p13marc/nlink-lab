@@ -7,6 +7,7 @@ use clap::Parser;
 
 mod app;
 mod canvas;
+mod daemon;
 mod layout;
 mod zenoh_client;
 

@@ -58,19 +58,32 @@ fmt-check:
 fmt:
     cargo +nightly fmt
 
-# Install nlink-lab system-wide (SUID root — full feature support)
+# Install the CLI system-wide (changing labs then needs sudo, or install-caps)
 install:
     cargo build --release -p nlink-lab-cli
-    sudo install -o root -g root -m 4755 target/release/nlink-lab /usr/local/bin/nlink-lab
-    @echo "Installed /usr/local/bin/nlink-lab (SUID root)"
+    sudo install -o root -g root -m 755 target/release/nlink-lab /usr/local/bin/nlink-lab
+    @echo "Installed /usr/local/bin/nlink-lab"
 
-# Install with capabilities only (no SUID — some features may require sudo)
+# Install the daemon (nlink-labd) with its systemd units and groups
+install-daemon:
+    cargo build --release -p nlink-labd
+    sudo install -o root -g root -m 755 target/release/nlink-labd /usr/local/bin/nlink-labd
+    sudo install -m 644 dist/systemd/nlink-labd.service dist/systemd/nlink-labd.socket /etc/systemd/system/
+    sudo install -D -m 644 dist/sysusers.d/nlink-lab.conf /etc/sysusers.d/nlink-lab.conf
+    sudo install -D -m 644 dist/tmpfiles.d/nlink-lab.conf /etc/tmpfiles.d/nlink-lab.conf
+    sudo systemd-sysusers /etc/sysusers.d/nlink-lab.conf
+    sudo systemd-tmpfiles --create /etc/tmpfiles.d/nlink-lab.conf
+    sudo systemctl daemon-reload
+    @echo "Installed /usr/local/bin/nlink-labd. Start it: sudo systemctl enable --now nlink-labd.socket"
+    @echo "Let users in: sudo usermod -aG nlink-lab-viewer USER (read) or nlink-lab (operate)"
+
+# Install with capabilities instead of running it with sudo (some features still need sudo)
 install-caps:
     cargo build --release -p nlink-lab-cli
     sudo install -m 755 target/release/nlink-lab /usr/local/bin/nlink-lab
     sudo setcap cap_net_admin,cap_sys_admin,cap_dac_override+ep /usr/local/bin/nlink-lab
     @echo "Installed /usr/local/bin/nlink-lab with CAP_NET_ADMIN,CAP_SYS_ADMIN,CAP_DAC_OVERRIDE"
-    @echo "Note: WiFi features require CAP_SYS_MODULE (add it or use 'just install' for SUID)"
+    @echo "Note: WiFi features require CAP_SYS_MODULE (add it, or run them with sudo)"
 
 # Generate and install man page
 man:
@@ -80,10 +93,13 @@ man:
     rm -f nlink-lab.1
     @echo "Installed man page: man nlink-lab"
 
-# Uninstall
+# Uninstall the CLI and the daemon (the state root stays)
 uninstall:
-    sudo rm -f /usr/local/bin/nlink-lab
-    @echo "Removed /usr/local/bin/nlink-lab"
+    -sudo systemctl disable --now nlink-labd.socket nlink-labd.service
+    sudo rm -f /usr/local/bin/nlink-lab /usr/local/bin/nlink-labd
+    sudo rm -f /etc/systemd/system/nlink-labd.service /etc/systemd/system/nlink-labd.socket
+    -sudo systemctl daemon-reload
+    @echo "Removed nlink-lab and nlink-labd"
 
 # Render a topology (expand loops/variables)
 render file:

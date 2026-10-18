@@ -8,7 +8,7 @@ use iced::Subscription;
 use iced::futures::Stream;
 use iced::futures::stream::unfold;
 
-use nlink_lab_shared::messages::{ExecRequest, ExecResponse, HealthStatus, TopologyUpdate};
+use nlink_lab_shared::messages::{HealthStatus, TopologyUpdate};
 use nlink_lab_shared::metrics::MetricsSnapshot;
 
 use crate::app::Message;
@@ -92,40 +92,6 @@ pub fn topology_subscription(session: Arc<zenoh::Session>) -> Subscription<Messa
 }
 
 // ─── Queries ─────────────────────────────────────────────
-
-/// Execute a command in a lab node via Zenoh RPC.
-pub async fn exec_command(
-    session: Arc<zenoh::Session>,
-    lab: String,
-    node: String,
-    input: String,
-) -> Result<ExecResponse, String> {
-    let mut parts = split_command(&input).into_iter();
-    let cmd = parts.next().ok_or("empty command")?;
-    let args: Vec<String> = parts.collect();
-
-    let request = ExecRequest { node, cmd, args };
-    let payload = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-
-    let topic = nlink_lab_shared::topics::rpc_exec(&lab);
-    let replies = session
-        .get(&topic)
-        .payload(payload)
-        .await
-        .map_err(|e| format!("zenoh get: {e}"))?;
-
-    match replies.recv_async().await {
-        Ok(reply) => match reply.result() {
-            Ok(sample) => {
-                let bytes = sample.payload().to_bytes();
-                serde_json::from_slice::<ExecResponse>(&bytes)
-                    .map_err(|e| format!("deserialize: {e}"))
-            }
-            Err(e) => Err(format!("query error: {e}")),
-        },
-        Err(_) => Err("no reply received".to_string()),
-    }
-}
 
 /// Ask the backend for a lab's current topology.
 ///

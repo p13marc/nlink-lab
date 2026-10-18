@@ -11,8 +11,8 @@ The API is defined once, in `nlink-lab-shared::api`, and carried by two
 transports with the same messages:
 
 - a **unix socket**, `/run/nlink-lab/api/api.sock`, with the framing
-  below. Who may connect is decided by the socket's group, and what a
-  connection may do by the caller's uid (`SO_PEERCRED`) and groups;
+  below. Anyone may connect; what a connection may do is decided by the
+  caller's uid (`SO_PEERCRED`) and groups (`SO_PEERGROUPS`);
 - **Zenoh**, for remote clients and for tools that already speak it.
 
 The JSON schemas are generated from the types:
@@ -35,6 +35,14 @@ Every method has a role (`Request::meta()`):
 |------|-----|
 | `viewer` | read labs, topologies (redacted), metrics, events, logs |
 | `operator` | everything: deploy, apply, destroy, impair, exec, shell, capture, an unredacted topology |
+
+On the unix socket, root and the members of `nlink-lab` are operators,
+the members of `nlink-lab-viewer` viewers (both groups are the
+daemon's configuration's, `/etc/nlink-lab/daemon.toml`). Anyone else is
+refused at the `hello`, with `permission_denied` and a hint. A call
+beyond the caller's role ends with `permission_denied`. Every call an
+operator makes is recorded in `/var/lib/nlink-lab/audit.ndjson`: who,
+the method, the lab, how it ended — not environment values.
 
 Topologies are sent **redacted** by default: WireGuard private keys,
 Wi-Fi passphrases and container environment values read `<redacted>`.
@@ -102,6 +110,42 @@ let lab = topology.deploy_with(&ctx).await?; // cancel.cancel() rolls it back
  "total": 88, "describe": "veth r1:eth0 ↔ r2:eth0"}}
 ```
 
+## Served today
+
+The daemon answers every request; what it does not serve yet ends with
+`unsupported`. Served:
+
+- `ping`, `who_am_i`, `daemon_status`;
+- the reads: `list_labs`, `get_lab` (the lab's summary and what `status
+  --json` prints), `get_topology`, `list_processes`, `get_impairments`,
+  `list_snapshots`, `read_events`, `get_metrics`, `diagnose`,
+  `node_addresses`, `proc_stat`, `stats`, `scan_host`;
+- `subscribe` to `labs`, `lifecycle`, `topology`, `metrics` and
+  `runtime`;
+- `exec`, without a terminal (`tty: false`).
+
+The daemon sees every lab of the state root within a scan (a second),
+whoever deployed it. Each lab's `revision` is a hash of its topology:
+`topology_changed` announces a new one.
+
+`read_events` returns the events and a cursor, `next`. Without `since`
+it returns the latest `limit` events (every one without a limit); with
+the `next` of an earlier read, the first `limit` events after it.
+
+A subscription first sends what is (`labs_changed` with every lab as
+`added`; the latest metrics when a collector already runs), then what
+changes. Metrics and runtime notifications are a lab's: they need
+`lab`, and a collector runs while someone subscribes, at the fastest
+subscriber's `interval_ms` (250 ms at least). A subscription to a lab
+ends, with `ok`, when the lab goes away.
+
+`exec` streams the command's stdout and stderr as data, its stdin from
+`stdin` data and `eof` when asked (`stdin: true`), forwards `signal`,
+and ends with `exited`. The command starts from a minimal environment
+(`PATH`, `HOME`, `LANG`) plus the `env` it is given. A cancel, a
+`timeout_ms` or a client that goes away stops it: SIGTERM, then
+SIGKILL a second later.
+
 ## The unix socket
 
 Frames, both ways:
@@ -117,8 +161,8 @@ opens with `hello`, the daemon answers `welcome`:
 
 ```json
 {"t": "hello", "api": "1.0", "client": "my-tool/0.1", "features": []}
-{"t": "welcome", "api": "1.0", "server": "0.14.0", "host": "lab1",
- "uid": 1000, "user": "alice", "role": "operator", "features": []}
+{"t": "welcome", "api": "1.0", "server": "nlink-labd/0.14.0", "host": "lab1",
+ "uid": 1000, "user": "alice", "role": "operator", "features": ["read", "subscribe", "exec"]}
 ```
 
 Then each call gets an id, chosen by the client:
@@ -129,7 +173,12 @@ Then each call gets an id, chosen by the client:
 ```
 
 The client can also send `cancel`, `detach`, `eof` (end of stdin),
-`resize` (a pty's rows and cols), `signal` and `ping` for a call.
+`resize` (a pty's rows and cols), `signal` and `ping` for a call. A
+connection whose first message is not a `hello` is closed.
+
+Over ssh, `nlink-labd dial-stdio` relays its stdin and stdout to the
+socket: `ssh HOST nlink-labd dial-stdio` is a connection to that host's
+daemon, as the ssh user.
 
 ## The Rust client
 

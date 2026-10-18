@@ -61,6 +61,11 @@ jobs:
           bin=$(cargo test -p nlink-lab --all-features --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
           test -n "$bin" || { echo "::error::integration test binary (all features) not found"; exit 1; }
           sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+      - name: Daemon end-to-end
+        run: |
+          bin=$(cargo test -p nlink-labd --test e2e --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/e2e-[^"]+' | head -1)
+          test -n "$bin" || { echo "::error::daemon e2e test binary not found"; exit 1; }
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
       - name: No lab debris left behind
         if: always()
         run: |

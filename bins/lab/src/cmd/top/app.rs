@@ -150,13 +150,14 @@ pub struct App {
     /// delta to report.
     pub flows_baseline: bool,
     pub impairments: BTreeMap<String, Impair>,
-    /// False for the read-only Zenoh source.
+    /// False for the read-only daemon source.
     pub can_mutate: bool,
     pub should_quit: bool,
 }
 
 /// Shown when a write key is pressed on a read-only source.
-const READONLY_HINT: &str = "impair/partition need the local source (root); --zenoh is read-only";
+const READONLY_HINT: &str =
+    "impair/partition need the local source (root): the daemon's is read-only";
 
 impl App {
     pub fn new(lab: &str, interval: Duration, deployed_at: u64, can_mutate: bool) -> Self {

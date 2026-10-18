@@ -24,7 +24,8 @@
 //! - emits [`LabEvent`](nlink_lab_shared::messages::LabEvent)s on the
 //!   `events` topic when an interface changes state or a tracked
 //!   background process exits;
-//! - serves the `rpc/exec`, `rpc/impairment` and `rpc/status` queryables.
+//! - serves the `rpc/status` and `topology` queryables. It runs nothing
+//!   and changes nothing: `nlink-labd` does, for callers it knows (#233).
 
 // `nlink_lab::Error` is deliberately unboxed (see the Plan 159f note in
 // `nlink-lab/src/error.rs`); match the allow the library and CLI already carry.
@@ -319,14 +320,6 @@ pub async fn serve(
         .unwrap_or(0);
 
     // ── Queryables ─────────────────────────────────────────
-    let exec_queryable =
-        declare_queryable(session, "exec queryable", topics::rpc_exec(&lab_name)).await?;
-    let impair_queryable = declare_queryable(
-        session,
-        "impairment queryable",
-        topics::rpc_impairment(&lab_name),
-    )
-    .await?;
     let status_queryable =
         declare_queryable(session, "status queryable", topics::rpc_status(&lab_name)).await?;
     // The topology is published once below; a viewer that connects later
@@ -335,7 +328,8 @@ pub async fn serve(
         declare_queryable(session, "topology queryable", topics::topology(&lab_name)).await?;
 
     // ── Publish initial topology ───────────────────────────
-    let topo = lab.topology();
+    // published to whoever listens: without its secrets
+    let topo = &lab.topology().redacted();
     let topo_update = TopologyUpdate {
         wire_version: nlink_lab_shared::WIRE_VERSION,
         lab_name: lab_name.clone(),
@@ -372,7 +366,8 @@ pub async fn serve(
 
     // ── HTTP endpoint (optional) ───────────────────────────
     let http_state: http::Shared = Default::default();
-    http_state.write().await.topology = serde_json::to_value(lab.topology()).unwrap_or_default();
+    http_state.write().await.topology =
+        serde_json::to_value(lab.topology().redacted()).unwrap_or_default();
     let http_task = match opts.http {
         Some(addr) => {
             Some(
@@ -496,14 +491,6 @@ pub async fn serve(
                 if http_task.is_some() {
                     http_state.write().await.health = Some(status);
                 }
-            }
-
-            Ok(query) = exec_queryable.recv_async() => {
-                handlers::handle_exec(&lab, query).await;
-            }
-
-            Ok(query) = impair_queryable.recv_async() => {
-                handlers::handle_impairment(&mut lab, query).await;
             }
 
             Ok(query) = status_queryable.recv_async() => {

@@ -33,16 +33,6 @@ pub fn lifecycle(lab: &str) -> String {
     format!("nlink-lab/{lab}/lifecycle")
 }
 
-/// RPC: execute command in a node.
-pub fn rpc_exec(lab: &str) -> String {
-    format!("nlink-lab/{lab}/rpc/exec")
-}
-
-/// RPC: modify impairment on an interface.
-pub fn rpc_impairment(lab: &str) -> String {
-    format!("nlink-lab/{lab}/rpc/impairment")
-}
-
 /// RPC: get lab status summary.
 pub fn rpc_status(lab: &str) -> String {
     format!("nlink-lab/{lab}/rpc/status")
@@ -77,7 +67,7 @@ mod tests {
             metrics_iface("dc", "spine1", "eth0"),
             "nlink-lab/dc/metrics/spine1/eth0"
         );
-        assert_eq!(rpc_exec("dc"), "nlink-lab/dc/rpc/exec");
+        assert_eq!(rpc_status("dc"), "nlink-lab/dc/rpc/status");
     }
 
     #[test]

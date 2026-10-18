@@ -112,7 +112,7 @@ side-by-side examples, and migration notes — lives at
 
 **Start here**
 
-- [Install](docs/INSTALL.md) — binaries, source, capabilities vs SUID, completions, the flatpak viewer.
+- [Install](docs/INSTALL.md) — binaries, source, capabilities, the daemon, completions, the flatpak viewer.
 - [User guide](docs/USER_GUIDE.md) — a 60-minute walkthrough that grows one topology into a WAN with WireGuard, firewall, chaos injection and a `cargo test` integration.
 - [NLL language spec](docs/NLL_DSL_DESIGN.md) — every keyword, with examples.
 - [CLI reference](docs/cli/) — one page per subcommand, generated from the clap definitions.
@@ -157,15 +157,15 @@ in the [CHANGELOG](CHANGELOG.md), newest first.
 ## Requirements
 
 - Linux kernel 4.19+ (5.x recommended)
-- One of: root, a SUID install, or `CAP_NET_ADMIN` +
-  `CAP_SYS_ADMIN`. `CAP_DAC_OVERRIDE` for DNS injection,
+- Root (sudo) or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN` to change labs;
+  `CAP_DAC_OVERRIDE` for DNS injection,
   `CAP_SYS_MODULE` for Wi-Fi (mac80211_hwsim auto-load).
 - Rust 1.98+ (edition 2024) to build from source
 - `iproute2` and `iputils-ping` on the host; `nlink-lab doctor`
   checks these and the optional extras (`nft`, `tc`, `wg`,
   `iperf3`, `hostapd`, docker/podman)
 
-Full details, including capabilities vs SUID, in
+Full details, including capabilities and the daemon, in
 [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Editor support

@@ -355,6 +355,26 @@ pub struct NodeDiagnostic {
 }
 
 impl NodeDiagnostic {
+    /// As `diagnose --json` and the daemon print it: `{node, interfaces:
+    /// [{name, state, mtu, rx_bytes, tx_bytes, issues}], issues}`, each
+    /// issue `{severity, message}`. An interface's issues are listed under
+    /// it only; the node's own list has the others (#226).
+    pub fn to_json(&self) -> serde_json::Value {
+        let issue = |i: &nlink::netlink::diagnostics::Issue| serde_json::json!({ "severity": i.severity.to_string(), "message": i.to_string() });
+        serde_json::json!({
+            "node": self.node,
+            "interfaces": self.interfaces.iter().map(|iface| serde_json::json!({
+                "name": iface.name,
+                "state": format!("{:?}", iface.state),
+                "mtu": iface.mtu,
+                "rx_bytes": iface.stats.rx_bytes(),
+                "tx_bytes": iface.stats.tx_bytes(),
+                "issues": iface.issues.iter().map(issue).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+            "issues": self.issues.iter().filter(|i| i.interface.is_none()).map(issue).collect::<Vec<_>>(),
+        })
+    }
+
     fn from_report(node: &str, report: DiagnosticReport) -> Self {
         Self {
             node: node.to_string(),
@@ -3208,7 +3228,8 @@ impl Signal {
         }
     }
 
-    fn number(self) -> libc::c_int {
+    /// The signal's number.
+    pub fn number(self) -> libc::c_int {
         match self {
             Signal::Term => libc::SIGTERM,
             Signal::Kill => libc::SIGKILL,
@@ -3283,27 +3304,38 @@ pub(crate) fn signal_tracked(
 /// where `comm` may contain spaces and parentheses, so we parse from
 /// the last `)` rightward.
 pub(crate) fn pid_is_alive(pid: u32) -> bool {
-    if unsafe { libc::kill(pid as i32, 0) } != 0 {
+    // SAFETY: signal 0 only checks that the process exists.
+    if unsafe { libc::kill(pid as i32, 0) } != 0
+        // EPERM: it exists, and is someone else's — a root-spawned
+        // process asked about by a member of the state root's group
+        && std::io::Error::last_os_error().raw_os_error() != Some(libc::EPERM)
+    {
         return false; // ESRCH: PID is gone entirely.
     }
     // PID exists. Check if it's a zombie.
-    let stat_path = format!("/proc/{pid}/stat");
-    if let Ok(content) = std::fs::read_to_string(&stat_path)
-        && let Some(after_comm) = content.rsplit_once(')')
-    {
-        let mut fields = after_comm.1.split_whitespace();
-        if let Some(state) = fields.next() {
-            return state != "Z";
-        }
+    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(content) => content
+            .rsplit_once(')')
+            .and_then(|(_, rest)| rest.split_whitespace().next())
+            .is_none_or(|state| state != "Z"),
+        // reaped between the two looks: a zombie that was, so not alive
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        // unreadable — kill(pid, 0) said the PID is at least present
+        Err(_) => true,
     }
-    // /proc unreadable or unparseable — fall back to "alive" since
-    // kill(pid, 0) said the PID is at least present.
-    true
 }
 
 #[cfg(test)]
 mod pid_alive_tests {
     use super::*;
+
+    /// Someone else's live process is alive: as a user, `kill(1, 0)` is
+    /// EPERM, which read as "gone" made every root-spawned process look
+    /// dead to a non-root `ps`.
+    #[test]
+    fn another_users_process_is_alive() {
+        assert!(pid_is_alive(1));
+    }
 
     /// A live, busy process is reported alive.
     #[test]

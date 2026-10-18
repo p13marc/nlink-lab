@@ -18,11 +18,12 @@ The short version, from a clone:
 ```bash
 git clone https://git.marcpardo.eu/marcpardo/nlink-lab.git
 cd nlink-lab
-just install        # SUID root — full feature support
+just install        # the CLI, in /usr/local/bin (run it with sudo)
 ```
 
-Or grab the release tarball instead of building, or use file
-capabilities instead of SUID, or install the desktop viewer:
+Or grab the release tarball instead of building, use file
+capabilities instead of sudo, install the daemon, or install the
+desktop viewer:
 [INSTALL.md](INSTALL.md) has all of it, plus shell completions and
 the runtime-binary checklist.
 
@@ -1169,20 +1170,12 @@ sudo nlink-lab capture -L <lab> <endpoint> [-o capture.pcap] [-c 100] [--filter-
 
 Reads packets in the node's namespace through an AF_PACKET ring. `-o` writes a pcap file. `-c` limits the packet count. `--filter-*` builds a BPF filter.
 
-### daemon
-
-```bash
-sudo nlink-lab daemon -L <lab> [--interval 2s] [--zenoh-mode peer] [--zenoh-listen tcp/0.0.0.0:7447]
-```
-
-Starts the Zenoh backend. Publishes per-interface metrics at the specified interval. See "Daemon Mode and TopoViewer" below.
-
 ### top
 
 ```bash
 sudo nlink-lab top -L <lab>                  # live TUI
 sudo nlink-lab --json top -L <lab> --once    # one metrics snapshot
-nlink-lab top -L <lab> --zenoh               # from a running daemon, no root
+nlink-lab top -L <lab>                       # without root: from the daemon
 ```
 
 ### init
@@ -1333,7 +1326,7 @@ nlink-lab events -L mylab                     # deployed, spawned, impaired, …
 nlink-lab events -L mylab --since 10m --kind impaired --kind partitioned
 sudo nlink-lab events -L mylab --follow       # + drift (RTNETLINK/nftables) + runtime
 sudo nlink-lab events -L mylab --follow --json --socket /run/mylab-events.sock
-nlink-lab daemon -L mylab --http 127.0.0.1:9100  # then GET /api/v1/events, /api/v1/events/stream (SSE)
+sudo nlink-lab-backend mylab --http 127.0.0.1:9100  # then GET /api/v1/events, /api/v1/events/stream (SSE)
 ```
 
 Lifecycle lines live in `<state>/<lab>/events.ndjson` (rotated at 10 MB);
@@ -1450,32 +1443,41 @@ sudo nlink-lab deploy ./labs/my-dc.nll
 
 ---
 
-## Daemon Mode and TopoViewer
+## The Daemon, Live Metrics and the TopoViewer
 
-### Zenoh Backend Daemon
+### The daemon
 
-The daemon collects per-interface metrics (rx/tx bytes, packets, errors, drops, bitrates) and publishes them over Zenoh, and answers RPC for `exec`, `impairment` and `status`.
+`nlink-labd` serves every lab of the host, whoever deployed it, over
+one API ([API.md](API.md)) on `/run/nlink-lab/api/api.sock`. Root and
+the `nlink-lab` group operate; the `nlink-lab-viewer` group reads;
+anyone else is refused. Install it with `just install-daemon` and start
+it with `sudo systemctl enable --now nlink-labd.socket` (see
+[INSTALL.md](INSTALL.md#the-daemon-live-metrics-and-the-gui)).
+`nlink-lab top` reads its metrics when not run as root, the viewer runs
+commands through it, and `ssh HOST nlink-labd dial-stdio` carries it to
+a client on another machine.
 
-Start it with the deploy:
+### Zenoh backend
+
+The backend collects one lab's per-interface metrics (rx/tx bytes,
+packets, errors, drops, bitrates) and publishes them over Zenoh, for the
+viewer's live mode and Prometheus. Attach it to a running lab:
 
 ```bash
-sudo nlink-lab deploy topology.nll --daemon
-```
-
-Or attach to a lab that is already running:
-
-```bash
-sudo nlink-lab daemon -L mylab --interval 2s
-sudo nlink-lab daemon -L mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
+sudo nlink-lab-backend mylab --interval 2
+sudo nlink-lab-backend mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
 ```
 
 It publishes under `nlink-lab/<lab>/`:
 
 - `metrics/snapshot` -- full metrics snapshot (all nodes, all interfaces)
 - `metrics/<node>/<iface>` -- per-interface metrics
-- `topology`, `health` -- the resolved topology (also a queryable, so late subscribers get it) and the health summary discovery uses
+- `topology`, `health` -- the resolved topology without its secrets (also a queryable, so late subscribers get it) and the health summary discovery uses
 - `events`, `lifecycle` -- the lifecycle event log
-- `rpc/exec`, `rpc/impairment`, `rpc/status` -- request/response
+- `rpc/status` -- a lab summary, on request
+
+It runs nothing and changes nothing: the daemon does, for callers it
+knows.
 
 With `--http`, the same snapshot is available at `/metrics`
 (OpenMetrics) and `/api/v1/{snapshot,health,topology}` — which is
@@ -1500,20 +1502,21 @@ series.
 `nlink-lab top` puts the same data on one screen, refreshed in place:
 
 ```bash
-sudo nlink-lab top -L mylab         # collect locally (needs root)
-nlink-lab top -L mylab --zenoh      # read a running daemon (no root)
+sudo nlink-lab top -L mylab         # collect itself (root)
+nlink-lab top -L mylab              # without root: read the daemon's
 nlink-lab top -L mylab --once       # one plain-text frame, for scripts
 ```
 
 Three panes — nodes, the selected node's interfaces (with the impairment in
 effect and where it came from), and its TCP flows. `↑↓`/`jk` select, `Tab`
 switches pane, `s` sorts, `/` filters, and `i`/`c`/`p`/`h` impair, clear,
-partition and heal the selected interface using the same calls as
-`nlink-lab impair`. Full reference: [`docs/cli/top.md`](cli/top.md).
+partition and heal the selected interface (as root) using the same
+calls as `nlink-lab impair`. Full reference: [`docs/cli/top.md`](cli/top.md).
 
 ### Streaming Metrics
 
-Subscribe from any machine (no root required):
+Without root, through the daemon (`NLINK_LAB_DAEMON=ssh://HOST` for
+another host's labs):
 
 ```bash
 nlink-lab top -L mylab --once

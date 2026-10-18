@@ -1,0 +1,15 @@
+[Unit]
+Description=nlink-lab daemon socket
+Documentation=https://git.marcpardo.eu/marcpardo/nlink-lab/src/branch/master/docs/API.md
+
+[Socket]
+ListenStream=/run/nlink-lab/api/api.sock
+# Anyone may connect: the daemon decides per connection, from the
+# caller's credentials, who reads (nlink-lab-viewer), who operates
+# (nlink-lab, root) and who is refused.
+SocketMode=0666
+DirectoryMode=0755
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

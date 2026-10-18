@@ -2,8 +2,7 @@
 
 use std::path::PathBuf;
 
-/// The daemon's socket, where `nlink-labd` listens by default.
-pub const DEFAULT_SOCKET: &str = "/run/nlink-lab/api/api.sock";
+pub use nlink_lab_shared::api::DEFAULT_SOCKET;
 
 /// How to reach a daemon.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -18,6 +18,7 @@ use nlink_lab_shared::api::Topic;
 
 mod backend;
 mod canvas;
+mod control;
 mod doc;
 mod effect;
 mod export;

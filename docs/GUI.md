@@ -168,6 +168,28 @@ after an `apply` or a restore, and on top of it:
 A lab that is destroyed stays on screen, said so, and comes back to
 life if it is deployed again.
 
+### Changing a running lab
+
+An operator of the daemon (root, or the `nlink-lab` group) changes the
+lab from its tab; a viewer sees the same controls, disabled. In the
+inspector:
+
+- **an interface**: its impairment — the ten knobs `nlink-lab impair`
+  takes, which direction, presets (WAN, satellite, lossy Wi-Fi, 3G,
+  flaky) — applied, cleared, or the interface cut off (**Partition**,
+  **Heal**). Each change's toast has an **Undo** that puts back what was
+  there;
+- **a network**: an impairment from one member to another, with a rate
+  cap, set or cleared; the declared pairs are listed;
+- **a container node**: **Restart**;
+- **the lab**, with nothing selected: its snapshots — **Save** one with
+  a note; **Restore…** shows what would change first, **Delete** asks —
+  and **Destroy…**, which asks for the lab's name typed.
+
+The dock's **Processes** starts a command on a node (split like a
+shell would split it, nothing expanded) and stops a running one.
+
+
 ### Keys
 
 `F1` (or `?`) shows them. They never fire while you type in a field.
@@ -210,7 +232,7 @@ The bundle is confined:
 
 ### Why "experimental"
 
-- It shows topologies and running labs; it does not deploy or change
+- It shows topologies and changes running labs; it does not deploy
   them.
 - It is the only artifact with no plain-binary release; you get a
   flatpak bundle or you build it.

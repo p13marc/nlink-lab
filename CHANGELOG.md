@@ -688,6 +688,16 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **Changing a running lab from the desktop app** (#279), as an
+  operator of the daemon (a viewer sees the controls disabled):
+  - an interface's impairment — the ten knobs, the direction, presets —
+    applied, cleared, partitioned or healed, each with an **Undo** that
+    puts back what was there;
+  - a network's impairment between two members, with a rate cap;
+  - snapshots saved, deleted, and restored after a dry run shows what
+    would change; **Destroy**, behind the lab's name typed;
+  - processes started on a node and stopped; a container restarted.
+  The demo (`--demo`) takes changes too, and has a lab with a network.
 - **Running labs in the desktop app** (#277), through the daemon's API:
   its socket, `ssh://HOST`, or Zenoh (where the daemon streams nothing,
   so the labs and metrics are asked for every second).

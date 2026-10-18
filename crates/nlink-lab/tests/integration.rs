@@ -8047,16 +8047,25 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     let _guard = LabCleanup {
         name: lab.name().to_string(),
     };
-    let running = |lab: &RunningLab, what: &str| {
-        let ps = lab.exec("c", "ps", &[]).unwrap().stdout;
-        ps.lines().filter(|l| l.contains(what)).count()
+    // how many of `what` run in the container once it settles on `want`:
+    // a `podman exec` takes its time to start under load, so a fixed
+    // sleep was a coin toss
+    let running = |lab: &RunningLab, what: &str, want: usize| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let ps = lab.exec("c", "ps", &[]).unwrap().stdout;
+            let n = ps.lines().filter(|l| l.contains(what)).count();
+            if n == want || std::time::Instant::now() > deadline {
+                return n;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
     };
     let pid = lab.spawn_with_logs("c", &["sleep", "4242"], None).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    assert_eq!(running(&lab, "sleep 4242"), 1);
+    assert_eq!(running(&lab, "sleep 4242", 1), 1);
     assert!(lab.kill_process(pid).unwrap());
     assert_eq!(
-        running(&lab, "sleep 4242"),
+        running(&lab, "sleep 4242", 0),
         0,
         "killed, still running in the container"
     );
@@ -8064,13 +8073,12 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     nlink_lab::apply(&mut lab, &topo("6666"))
         .await
         .expect("apply failed");
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_eq!(running(&lab, "sleep 6666", 1), 1);
     assert_eq!(
-        running(&lab, "sleep 5555"),
+        running(&lab, "sleep 5555", 0),
         0,
         "the old run is still running"
     );
-    assert_eq!(running(&lab, "sleep 6666"), 1);
 
     std::mem::forget(_guard);
     lab.destroy().await.expect("destroy failed");

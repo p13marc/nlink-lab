@@ -262,3 +262,55 @@ fn a_running_lab_renders_live() {
     snapshot(&app, &Theme::Light, "live-lab");
     assert!(app.current().unwrap().live().is_some_and(|l| l.lab == lab));
 }
+
+#[test]
+fn the_controls_render() {
+    use crate::message::Control;
+    let mut app = App::new(crate::settings::Settings::default(), None);
+    let (_, lab) = demo_lab(&mut app);
+    let ep = app
+        .current()
+        .unwrap()
+        .live()
+        .unwrap()
+        .endpoints
+        .iter()
+        .find(|e| e.live.is_some())
+        .unwrap()
+        .endpoint
+        .clone();
+    reduce(
+        &mut app,
+        Message::Canvas(CanvasMsg::Select(Some(Hit::Endpoint(ep)))),
+    );
+    snapshot(&app, &Theme::Light, "control-impair");
+    reduce(&mut app, Message::Control(Control::AskDestroy));
+    reduce(
+        &mut app,
+        Message::Control(Control::Typed(lab[..3].to_string())),
+    );
+    snapshot(&app, &Theme::Dark, "control-destroy");
+    // the processes page, with its start form
+    reduce(&mut app, Message::Control(Control::Cancel));
+    reduce(&mut app, Message::Dock(crate::model::DockTab::Processes));
+    snapshot(&app, &Theme::Light, "control-processes");
+    // a network's pair form, in the campus lab
+    let e = reduce(&mut app, Message::OpenLab("demo-campus".into()));
+    settle(&mut app, e);
+    let net = app
+        .current()
+        .unwrap()
+        .view
+        .graph
+        .nodes
+        .iter()
+        .find(|n| n.id.starts_with("net:"))
+        .unwrap()
+        .id
+        .clone();
+    reduce(
+        &mut app,
+        Message::Canvas(CanvasMsg::Select(Some(Hit::Node(net)))),
+    );
+    snapshot(&app, &Theme::Light, "control-pairs");
+}

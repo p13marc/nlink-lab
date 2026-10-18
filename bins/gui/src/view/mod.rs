@@ -1,11 +1,14 @@
 //! What the app looks like: a function of its state.
 
+mod controls;
 mod dock;
 mod home;
 mod inspector;
 mod workspace;
 
-use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack, text};
+use iced::widget::{
+    button, column, container, mouse_area, opaque, row, scrollable, space, stack, text, text_input,
+};
 use iced::{Alignment, Color, Element, Length, Theme};
 
 use crate::message::{Message, Shortcut};
@@ -21,6 +24,9 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .height(Length::Fill);
     if !app.toasts.is_empty() {
         layers = layers.push(toasts(app));
+    }
+    if let Some(c) = &app.confirm {
+        layers = layers.push(confirm(c));
     }
     if app.help {
         layers = layers.push(help());
@@ -120,6 +126,11 @@ fn toasts(app: &App) -> Element<'_, Message> {
             container(
                 row![
                     text(&t.text).size(13).width(Length::Fill),
+                    t.action.as_ref().map(|(label, msg)| {
+                        button(text(label.as_str()).size(13))
+                            .style(button::secondary)
+                            .on_press((**msg).clone())
+                    }),
                     button(text("×").size(13))
                         .style(button::text)
                         .on_press(Message::DismissToast(t.id)),
@@ -152,6 +163,74 @@ fn toasts(app: &App) -> Element<'_, Message> {
         .align_bottom(Length::Fill)
         .padding(16)
         .into()
+}
+
+/// A change that asks first: what it does, the lab's name to type for a
+/// destroy, Confirm and Cancel.
+fn confirm(c: &crate::control::Confirm) -> Element<'_, Message> {
+    use crate::control::ConfirmWhat;
+    use crate::message::Control;
+    let lab = c.lab.as_str();
+    let (title, body): (String, Element<'_, Message>) = match &c.what {
+        ConfirmWhat::Destroy => (
+            format!("Destroy {lab}?"),
+            column![
+                text("Its nodes, links, processes and containers go, for everyone.").size(13),
+                text_input(lab, &c.typed)
+                    .on_input(|v| Message::Control(Control::Typed(v)))
+                    .on_submit(Message::Control(Control::Confirm))
+                    .size(13),
+                muted("Type the lab's name to confirm."),
+            ]
+            .spacing(8)
+            .into(),
+        ),
+        ConfirmWhat::Restore { name, plan } => (
+            format!("Restore {lab} to {name}?"),
+            scrollable(text(plan.as_str()).size(12).font(iced::Font::MONOSPACE))
+                .height(Length::Fixed(260.0))
+                .into(),
+        ),
+        ConfirmWhat::DeleteSnapshot { name } => (
+            format!("Delete the snapshot {name}?"),
+            text("It cannot be restored afterwards.").size(13).into(),
+        ),
+    };
+    let card = container(
+        column![
+            text(title).size(18),
+            body,
+            row![
+                space::horizontal(),
+                button(text("Cancel").size(13))
+                    .style(button::secondary)
+                    .on_press(Message::Control(Control::Cancel)),
+                button(text("Confirm").size(13))
+                    .style(button::danger)
+                    .on_press_maybe(c.ready().then_some(Message::Control(Control::Confirm))),
+            ]
+            .spacing(8),
+        ]
+        .spacing(14),
+    )
+    .padding(20)
+    .style(container::bordered_box)
+    .max_width(560);
+    opaque(
+        mouse_area(container(opaque(card)).center(Length::Fill).style(|_| {
+            container::Style {
+                background: Some(
+                    Color {
+                        a: 0.45,
+                        ..Color::BLACK
+                    }
+                    .into(),
+                ),
+                ..container::Style::default()
+            }
+        }))
+        .on_press(Message::Control(Control::Cancel)),
+    )
 }
 
 fn help<'a>() -> Element<'a, Message> {

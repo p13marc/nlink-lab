@@ -163,6 +163,13 @@ crates/nlink-lab-shared/src/
                     #   unix-socket Frame codec, API_VERSION
   metrics.rs        # MetricsSnapshot and friends (backend, top, viewer)
   templates/        # Built-in topology templates for `nlink-lab init`
+crates/nlink-lab-view/src/      # what the desktop app draws, renderer-free (pure, tested):
+  graph.rs          # TopoGraph: nodes by kind, links/ports/tunnels/host NICs/mgmt, site regions
+  layout.rs         # layered, circle, force (Fruchterman–Reingold), auto; pins kept; bounds
+  metrics.rs        # MetricsStore: per-interface rates + history, error heat, staleness
+  impair.rs         # effective_impairments (shared with `top`)
+  scene.rs          # Scene: shapes, badges, parallel-edge curves, hit test (Hit)
+  svg.rs            # Scene -> SVG
 
 bins/lab/src/
   main.rs           # entry: Cli (global --format/--json/--color/-v/-q), usage errors

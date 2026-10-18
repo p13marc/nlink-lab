@@ -11,6 +11,7 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nlink_lab::Impairment;
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, SocketRateMetric};
+pub use nlink_lab_view::impair::{Impair, effective_impairments};
 
 /// Which pane has the cursor.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -100,15 +101,6 @@ pub enum Action {
     Heal {
         endpoint: String,
     },
-}
-
-/// The impairment in effect on an endpoint, and where it comes from.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Impair {
-    /// `delay 50ms loss 1%`; empty when nothing is applied.
-    pub summary: String,
-    /// `topology`, `live` or `partitioned`.
-    pub origin: &'static str,
 }
 
 /// One Nodes-pane row, materialised from the snapshot's `HashMap` into a
@@ -522,60 +514,6 @@ fn sort_rows(rows: &mut [NodeRow], sort: Sort) {
                 .then_with(|| a.name.cmp(&b.name))
         }),
     }
-}
-
-/// Pure core of [`App::set_impairments`]: a partition wins over a live
-/// edit, which wins over the topology's declared value.
-pub fn effective_impairments(
-    topology: &BTreeMap<String, Impairment>,
-    live: &BTreeMap<String, Impairment>,
-    partitions: &BTreeMap<String, Impairment>,
-) -> BTreeMap<String, Impair> {
-    let mut out = BTreeMap::new();
-    for (endpoint, imp) in topology {
-        let summary = imp.summary();
-        if !summary.is_empty() {
-            out.insert(
-                endpoint.clone(),
-                Impair {
-                    summary,
-                    origin: "topology",
-                },
-            );
-        }
-    }
-    for (endpoint, imp) in live {
-        let summary = imp.summary();
-        if summary.is_empty() {
-            // A cleared endpoint: `clear_impairment` records an empty
-            // impairment so a later `apply` does not reinstall it.
-            out.remove(endpoint);
-        } else {
-            out.insert(
-                endpoint.clone(),
-                Impair {
-                    summary,
-                    origin: "live",
-                },
-            );
-        }
-    }
-    for (endpoint, saved) in partitions {
-        let saved = saved.summary();
-        let summary = if saved.is_empty() {
-            "loss 100%".to_string()
-        } else {
-            format!("loss 100% (restores: {saved})")
-        };
-        out.insert(
-            endpoint.clone(),
-            Impair {
-                summary,
-                origin: "partitioned",
-            },
-        );
-    }
-    out
 }
 
 /// Parse the `i` prompt: `delay 50ms loss 1%`, or `delay=50ms loss=1%`

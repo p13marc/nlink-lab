@@ -675,6 +675,20 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`nlink-lab-view`** (#273), what the desktop app draws, without a
+  renderer:
+  - the topology as a graph: nodes by kind (host, router, container,
+    bridge, external), links, a bridge's ports, WireGuard and VXLAN
+    tunnels, host NICs, the management network (hidden by default),
+    sites as regions;
+  - layered, circle and force-directed layouts, chosen automatically,
+    with pinned nodes kept where they are;
+  - a metrics store: each interface's rates and their history, an
+    error heat that fades once errors stop, and whether samples stopped
+    coming;
+  - the effective impairments `top` shows, moved out of it;
+  - a scene to paint, with badges, parallel links drawn apart and a hit
+    test; and its SVG.
 - **The daemon's API over Zenoh** (#271): requests on
   `nlink-lab/@rpc/<host>/viewer` and `…/operator`, the call's messages
   as replies (sessions stay on the unix socket and ssh). With

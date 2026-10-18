@@ -30,6 +30,7 @@ mod exec;
 mod hub;
 mod jobs;
 mod server;
+mod sessions;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;

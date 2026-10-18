@@ -132,21 +132,6 @@ async fn an_operator_reads_an_empty_host() {
         .await
         .unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::InvalidArgument));
-    // what is not served yet says so
-    let err = client
-        .call(Request::Shell {
-            lab: "nope".into(),
-            node: "a".into(),
-            shell: None,
-            rows: 24,
-            cols: 80,
-        })
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(&err, ClientError::Api(e) if e.code == ErrorCode::Unsupported),
-        "{err:?}"
-    );
 }
 
 #[tokio::test]
@@ -395,6 +380,49 @@ async fn an_operator_plans_and_is_told_what_does_not_deploy() {
         match client.call(request).await.unwrap_err() {
             ClientError::Api(e) => assert_eq!(e.code, ErrorCode::NotFound),
             other => panic!("{other:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn sessions_say_what_is_wrong() {
+    use nlink_lab_shared::api::LogStream;
+    let d = daemon(&my_group(), "no-such-group-nlink").await;
+    let client = Client::connect(&d.endpoint, "test/0").await.unwrap();
+    for (request, code) in [
+        (
+            Request::Shell {
+                lab: "nope".into(),
+                node: "a".into(),
+                shell: None,
+                rows: 24,
+                cols: 80,
+            },
+            ErrorCode::NotFound,
+        ),
+        (
+            Request::Logs {
+                lab: "nope".into(),
+                pid: 1,
+                stream: LogStream::Both,
+                tail: None,
+                follow: false,
+            },
+            ErrorCode::NotFound,
+        ),
+        (Request::Export { lab: "nope".into() }, ErrorCode::NotFound),
+        (
+            Request::Subscribe {
+                lab: None,
+                topics: vec![Topic::Drift],
+                interval_ms: None,
+            },
+            ErrorCode::InvalidArgument,
+        ),
+    ] {
+        match client.call(request.clone()).await.unwrap_err() {
+            ClientError::Api(e) => assert_eq!(e.code, code, "{request:?}: {e:?}"),
+            other => panic!("{request:?}: {other:?}"),
         }
     }
 }

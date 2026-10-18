@@ -280,6 +280,166 @@ fn parse_hex_or_dec(s: &str) -> Result<u64> {
     }
 }
 
+/// The BPF filter a [`CaptureFilter`](crate::api::CaptureFilter) says,
+/// built with netring's typed builder: `None` when it keeps everything.
+/// Its `expression` is compiled by `tcpdump`, in a build with the
+/// `legacy-tcpdump-filter` feature only. The CLI's `--filter-*` flags and
+/// the daemon's `capture` share it.
+pub fn build_filter(f: &crate::api::CaptureFilter) -> Result<Option<BpfFilter>> {
+    if let Some(expr) = &f.expression {
+        if f.has_conditions() {
+            return Err(Error::invalid_argument(
+                "a tcpdump expression goes alone, without typed filter conditions",
+            ));
+        }
+        return legacy_filter(expr).map(Some);
+    }
+    if f.is_empty() {
+        return Ok(None);
+    }
+    let cidr = |field: &str, s: &Option<String>| -> Result<Option<netring::IpNet>> {
+        s.as_deref()
+            .map(|s| {
+                s.parse::<netring::IpNet>()
+                    .map_err(|e| Error::invalid_argument(format!("invalid {field} {s:?}: {e}")))
+            })
+            .transpose()
+    };
+    let (net, src_net, dst_net) = (
+        cidr("net", &f.net)?,
+        cidr("src_net", &f.src_net)?,
+        cidr("dst_net", &f.dst_net)?,
+    );
+    // An IPv6 address needs the IPv6 ethertype check: without a family
+    // the builder checks for IPv4, then reads IPv6 address offsets, and
+    // the filter matched nothing (#209).
+    let v6 = [f.host, f.src_host, f.dst_host]
+        .iter()
+        .flatten()
+        .any(|a| a.is_ipv6())
+        || [net, src_net, dst_net]
+            .iter()
+            .flatten()
+            .any(|n| n.is_ipv6());
+    // Everything but the port lists, for each branch below.
+    let base = |mut b: netring::BpfFilterBuilder| {
+        if f.ipv4 {
+            b = b.ipv4();
+        }
+        if f.ipv6 || (v6 && !f.ipv4 && !f.arp) {
+            b = b.ipv6();
+        }
+        if f.arp {
+            b = b.arp();
+        }
+        // a VLAN id implies the VLAN check, so the ethertype check and the
+        // offset shift come before the id match
+        if f.vlan || f.vlan_id.is_some() {
+            b = b.vlan();
+        }
+        if let Some(vid) = f.vlan_id {
+            b = b.vlan_id(vid);
+        }
+        if f.tcp {
+            b = b.tcp();
+        }
+        if f.udp {
+            b = b.udp();
+        }
+        if f.icmp {
+            b = b.icmp();
+        }
+        if let Some(proto) = f.ip_proto {
+            b = b.ip_proto(proto);
+        }
+        if let Some(addr) = f.host {
+            b = b.host(addr);
+        }
+        if let Some(addr) = f.src_host {
+            b = b.src_host(addr);
+        }
+        if let Some(addr) = f.dst_host {
+            b = b.dst_host(addr);
+        }
+        if let Some(n) = net {
+            b = b.net(n);
+        }
+        if let Some(n) = src_net {
+            b = b.src_net(n);
+        }
+        if let Some(n) = dst_net {
+            b = b.dst_net(n);
+        }
+        if let Some(p) = f.port {
+            b = b.port(p);
+        }
+        if let Some(p) = f.src_port {
+            b = b.src_port(p);
+        }
+        if let Some(p) = f.dst_port {
+            b = b.dst_port(p);
+        }
+        b
+    };
+    // One OR branch per combination of the port lists, each with the whole
+    // chain. netring 0.30's `ports()` copies only the fragments before it
+    // into its extra branches, so source ports 1,2 with destination ports
+    // 3,4 also matched source port 2 to any port (#209; fixed in netring
+    // after 0.31.1).
+    let each = |ports: &[u16]| -> Vec<Option<u16>> {
+        if ports.is_empty() {
+            vec![None]
+        } else {
+            ports.iter().copied().map(Some).collect()
+        }
+    };
+    let mut combos = Vec::new();
+    for p in each(&f.ports) {
+        for sp in each(&f.src_ports) {
+            for dp in each(&f.dst_ports) {
+                combos.push((p, sp, dp));
+            }
+        }
+    }
+    let with_ports = |mut b: netring::BpfFilterBuilder,
+                      (p, sp, dp): (Option<u16>, Option<u16>, Option<u16>)| {
+        if let Some(p) = p {
+            b = b.port(p);
+        }
+        if let Some(p) = sp {
+            b = b.src_port(p);
+        }
+        if let Some(p) = dp {
+            b = b.dst_port(p);
+        }
+        b
+    };
+    let mut b = with_ports(base(BpfFilter::builder()), combos[0]);
+    for &combo in &combos[1..] {
+        b = b.or(|branch| with_ports(base(branch), combo));
+    }
+    if f.not {
+        b = b.negate();
+    }
+    b.build()
+        .map(Some)
+        .map_err(|e| Error::invalid_argument(format!("BPF filter build failed: {e}")))
+}
+
+#[cfg(feature = "legacy-tcpdump-filter")]
+fn legacy_filter(expr: &str) -> Result<BpfFilter> {
+    compile_bpf_filter(expr)
+}
+
+#[cfg(not(feature = "legacy-tcpdump-filter"))]
+fn legacy_filter(_expr: &str) -> Result<BpfFilter> {
+    Err(Error::invalid_argument(
+        "a tcpdump expression needs nlink-lab built with the `legacy-tcpdump-filter` \
+         feature (which shells out to `tcpdump -dd`); the typed conditions (tcp, \
+         dst_port, host, src_net, …) need neither",
+    ))
+}
+
 // ── Capture config & result ───────────────────────────────────────────────
 
 /// Configuration for a packet capture session.
@@ -305,6 +465,21 @@ pub struct CaptureConfig {
     /// once with `PACKET_HOST` (receive-side). Default: false.
     /// (Round-5 §2.6.)
     pub ignore_outgoing: bool,
+}
+
+impl CaptureConfig {
+    /// A capture of every packet on `interface`, whole, with a small ring.
+    pub fn on(interface: &str) -> Self {
+        Self {
+            interface: interface.to_string(),
+            snap_len: 262_144,
+            count: None,
+            duration: None,
+            bpf_filter: None,
+            profile: RingProfile::LowMemory,
+            ignore_outgoing: false,
+        }
+    }
 }
 
 /// Result of a completed capture session.
@@ -333,6 +508,9 @@ pub enum CaptureOutput {
         rotate_after: Option<Duration>,
         keep: usize,
     },
+    /// Write one pcap stream to any writer: the daemon sends it to its
+    /// client (#267). A write that fails ends the capture.
+    Stream(Box<dyn Write + Send>),
 }
 
 impl CaptureOutput {
@@ -348,6 +526,7 @@ enum PcapSink {
     None,
     Single(PcapWriter<File>),
     Rotating(RotatingPcapWriter),
+    Stream(PcapWriter<Box<dyn Write + Send>>),
 }
 
 impl PcapSink {
@@ -361,6 +540,7 @@ impl PcapSink {
             PcapSink::None => Ok(()),
             PcapSink::Single(w) => w.write_packet(ts, data, orig_len),
             PcapSink::Rotating(w) => w.write_packet(ts, data, orig_len),
+            PcapSink::Stream(w) => w.write_packet(ts, data, orig_len),
         }
     }
 }
@@ -550,6 +730,9 @@ fn capture_in_namespace(
             keep,
             config.snap_len,
         )?),
+        CaptureOutput::Stream(writer) => {
+            PcapSink::Stream(PcapWriter::new(writer, config.snap_len)?)
+        }
     };
 
     // Bounded poll source over the ring. Each `PacketBatch` is a zero-copy

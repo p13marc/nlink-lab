@@ -247,3 +247,78 @@ impl OpState {
         !matches!(self, OpState::Queued | OpState::Running)
     }
 }
+
+/// What a capture keeps (`capture`): every condition set must hold, the
+/// port lists match any of theirs, and `not` keeps the rest instead. The
+/// CLI's `--filter-*` flags say the same.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default)]
+pub struct CaptureFilter {
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tcp: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub udp: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub icmp: bool,
+    /// An IP protocol number.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip_proto: Option<u8>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub ipv4: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub ipv6: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub arp: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub vlan: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vlan_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<std::net::IpAddr>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src_host: Option<std::net::IpAddr>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dst_host: Option<std::net::IpAddr>,
+    /// A CIDR.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub net: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src_net: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dst_net: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dst_port: Option<u16>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ports: Vec<u16>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub src_ports: Vec<u16>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub dst_ports: Vec<u16>,
+    /// Keep what does not match.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub not: bool,
+    /// A tcpdump expression instead of the conditions above: only a
+    /// daemon built with `legacy-tcpdump-filter` (and `tcpdump`) compiles
+    /// one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
+}
+
+impl CaptureFilter {
+    /// Whether it sets no condition (and no expression): every packet.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Whether it sets a condition besides `expression`.
+    pub fn has_conditions(&self) -> bool {
+        Self {
+            expression: None,
+            ..self.clone()
+        } != Self::default()
+    }
+}

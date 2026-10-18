@@ -89,6 +89,7 @@ pub mod parser;
 pub mod portability;
 pub mod privileges;
 pub mod proc_stat;
+pub mod pty;
 pub mod render;
 pub mod running;
 pub mod scenario;

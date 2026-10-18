@@ -969,3 +969,266 @@ scenario "slow" {{
     shutdown.cancel();
     unsafe { std::env::remove_var("NLINK_LAB_STATE_DIR") };
 }
+
+const SESSIONS: &str = "labd-e2e-sessions";
+
+/// Data of `stream` until `needle` shows up in it, within `within`.
+async fn data_until(
+    call: &mut nlink_lab_client::Call,
+    stream: DataStream,
+    needle: &str,
+    within: Duration,
+) -> String {
+    let mut seen = String::new();
+    let deadline = Instant::now() + within;
+    while !seen.contains(needle) {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match tokio::time::timeout(left, call.next()).await {
+            Ok(Some(CallEvent::Data(s, bytes))) if s == stream => {
+                seen.push_str(&String::from_utf8_lossy(&bytes));
+            }
+            Ok(Some(CallEvent::End(r))) => panic!("ended: {r:?} after {seen:?}"),
+            Ok(Some(_)) => {}
+            Ok(None) => panic!("closed after {seen:?}"),
+            Err(_) => panic!("no {needle:?} within {within:?}: {seen:?}"),
+        }
+    }
+    seen
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_daemon_runs_sessions() {
+    // `just ci` runs it rootless; the privileged CI lane runs it as root
+    if !nlink_lab::privileges::has_privileges() {
+        eprintln!("skipping the_daemon_runs_sessions: requires root");
+        return;
+    }
+    use nlink_lab_shared::api::{LogStream, WaitSpec};
+    let _serial = SERIAL.lock().await;
+    let (_root, _dir, shutdown, _endpoint, client) = start_daemon().await;
+    let _cleanup = Cleanup(&[SESSIONS]);
+    let running = topology(SESSIONS, 235).deploy().await.expect("deploy");
+
+    // ── a shell on a terminal: its size, a resize, its exit code ──
+    let mut shell = client
+        .start(Request::Shell {
+            lab: SESSIONS.into(),
+            node: "a".into(),
+            shell: Some("sh".into()),
+            rows: 24,
+            cols: 80,
+        })
+        .await
+        .unwrap();
+    shell.stdin(b"stty size\n").unwrap();
+    data_until(&mut shell, DataStream::Pty, "24 80", Duration::from_secs(5)).await;
+    shell.resize(40, 100).unwrap();
+    shell.stdin(b"stty size\n").unwrap();
+    data_until(
+        &mut shell,
+        DataStream::Pty,
+        "40 100",
+        Duration::from_secs(5),
+    )
+    .await;
+    shell.stdin(b"exit 3\n").unwrap();
+    let (_, _, end) = finish(&mut shell).await;
+    assert!(
+        matches!(end, Ok(Response::Exited { code: Some(3), .. })),
+        "{end:?}"
+    );
+
+    // ── a spawned process's log, followed ──
+    let pid = match client
+        .call(Request::Spawn {
+            lab: SESSIONS.into(),
+            node: "a".into(),
+            argv: ["sh", "-c", "echo first; sleep 0.5; echo second; sleep 60"]
+                .map(String::from)
+                .to_vec(),
+            env: vec![],
+            workdir: None,
+            wait: None,
+        })
+        .await
+        .unwrap()
+    {
+        Response::Spawned { pid, .. } => pid,
+        other => panic!("{other:?}"),
+    };
+    let mut logs = client
+        .start(Request::Logs {
+            lab: SESSIONS.into(),
+            pid,
+            stream: LogStream::Stdout,
+            tail: None,
+            follow: true,
+        })
+        .await
+        .unwrap();
+    let seen = data_until(
+        &mut logs,
+        DataStream::Stdout,
+        "second",
+        Duration::from_secs(5),
+    )
+    .await;
+    assert!(seen.contains("first"), "{seen}");
+    logs.cancel().unwrap();
+    let (_, _, end) = finish(&mut logs).await;
+    assert!(
+        matches!(&end, Err(ClientError::Api(e)) if e.code == ErrorCode::Cancelled),
+        "{end:?}"
+    );
+    client
+        .call(Request::Kill {
+            lab: SESSIONS.into(),
+            pid,
+            signal: None,
+        })
+        .await
+        .unwrap();
+
+    // ── a capture while a ping runs ──
+    let ping = match client
+        .call(Request::Spawn {
+            lab: SESSIONS.into(),
+            node: "a".into(),
+            argv: ["ping", "-i", "0.2", "10.235.0.2"]
+                .map(String::from)
+                .to_vec(),
+            env: vec![],
+            workdir: None,
+            wait: None,
+        })
+        .await
+        .unwrap()
+    {
+        Response::Spawned { pid, .. } => pid,
+        other => panic!("{other:?}"),
+    };
+    let mut capture = client
+        .start(Request::Capture {
+            lab: SESSIONS.into(),
+            endpoint: "a:eth0".into(),
+            filter: nlink_lab_shared::api::CaptureFilter {
+                icmp: true,
+                ..Default::default()
+            },
+            count: Some(4),
+            duration_ms: Some(10_000),
+        })
+        .await
+        .unwrap();
+    let mut pcap = Vec::new();
+    let report = loop {
+        match capture.next().await.unwrap() {
+            CallEvent::Data(DataStream::Pcap, bytes) => pcap.extend(bytes),
+            CallEvent::End(r) => break r.unwrap(),
+            _ => {}
+        }
+    };
+    match report {
+        Response::Report { kind, report } => {
+            assert_eq!(kind, "capture");
+            assert_eq!(report["packets"], 4, "{report}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // the pcap's magic (nanosecond, little-endian) and more than a header
+    assert_eq!(
+        &pcap[..4],
+        &0xa1b23c4du32.to_le_bytes(),
+        "{:x?}",
+        &pcap[..8]
+    );
+    assert!(pcap.len() > 24 + 4 * 60, "{} bytes", pcap.len());
+    client
+        .call(Request::Kill {
+            lab: SESSIONS.into(),
+            pid: ping,
+            signal: None,
+        })
+        .await
+        .unwrap();
+
+    // ── waits: one met, one that times out ──
+    client
+        .call(Request::WaitFor {
+            lab: SESSIONS.into(),
+            node: "a".into(),
+            cond: WaitSpec {
+                file: Some("/proc/self".into()),
+                timeout_ms: 5000,
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+    let late = client
+        .call(Request::WaitFor {
+            lab: SESSIONS.into(),
+            node: "a".into(),
+            cond: WaitSpec {
+                file: Some("/no/such/file".into()),
+                timeout_ms: 600,
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&late, ClientError::Api(e) if e.code == ErrorCode::Timeout),
+        "{late:?}"
+    );
+
+    // ── the lab as an archive ──
+    let mut export = client
+        .start(Request::Export {
+            lab: SESSIONS.into(),
+        })
+        .await
+        .unwrap();
+    let mut archive = Vec::new();
+    let report = loop {
+        match export.next().await.unwrap() {
+            CallEvent::Data(DataStream::Archive, bytes) => archive.extend(bytes),
+            CallEvent::End(r) => break r.unwrap(),
+            _ => {}
+        }
+    };
+    match report {
+        Response::Report { report, .. } => {
+            assert_eq!(report["bytes"].as_u64(), Some(archive.len() as u64));
+            assert!(archive.len() > 100);
+        }
+        other => panic!("{other:?}"),
+    }
+
+    // ── a hand edit is drift ──
+    let mut drift = client
+        .start(Request::Subscribe {
+            lab: Some(SESSIONS.into()),
+            topics: vec![Topic::Drift],
+            interval_ms: None,
+        })
+        .await
+        .unwrap();
+    // the watch subscribes in every node first
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let out = running
+        .exec("a", "ip", &["link", "set", "dev", "eth0", "mtu", "1400"])
+        .unwrap();
+    assert_eq!(out.exit_code, 0, "{}", out.stderr);
+    match next_notification(&mut drift, Duration::from_secs(5)).await {
+        Notification::Drift { lab, node, .. } => {
+            assert_eq!((lab.as_str(), node.as_str()), (SESSIONS, "a"));
+        }
+        other => panic!("{other:?}"),
+    }
+    drop(drift);
+
+    shutdown.cancel();
+    running.destroy().await.unwrap();
+    unsafe { std::env::remove_var("NLINK_LAB_STATE_DIR") };
+}

@@ -136,6 +136,7 @@ crates/nlink-lab/src/
   logs.rs           # process log tail / cat / follow
   edit.rs           # Edit model: live topology edits (nodes, links, impairments, qdiscs, pairs, MTU)
   wait.rs           # WaitCondition + RunningLab::wait_all (one deadline, progress, cancel)
+  pty.rs            # pseudo-terminals: Pty::open/attach (setsid + controlling tty), resize
 crates/nlink-lab-client/src/   # client of the daemon API: Endpoint (unix, ssh dial-stdio,
                                #   cmd), Client (handshake, multiplexed calls), Call
 bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.toml),
@@ -145,7 +146,9 @@ bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.
                                #   (dispatch), hub (state-root scan, events tail,
                                #   subscriptions, per-lab metrics threads), jobs (one
                                #   queue per lab on its own thread, detachable jobs:
-                               #   attach_op/list_ops/cancel_op), exec, audit
+                               #   attach_op/list_ops/cancel_op), exec (pipes or a pty,
+                               #   shell), sessions (logs, capture, wait_for, export),
+                               #   audit
 dist/                          # systemd units (socket-activated nlink-labd), sysusers,
                                #   tmpfiles — `just install-daemon`
 crates/nlink-lab-shared/src/

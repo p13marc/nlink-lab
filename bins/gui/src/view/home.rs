@@ -102,6 +102,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
 
     let page = column![
         open,
+        heading("Running labs"),
+        labs(app),
         heading("Recent"),
         recent,
         heading("Start from a template"),
@@ -133,5 +135,94 @@ fn card(theme: &Theme, status: button::Status) -> button::Style {
             radius: 6.0.into(),
         },
         ..button::Style::default()
+    }
+}
+
+/// The labs the daemon serves, and how the connection to it goes.
+fn labs(app: &App) -> Element<'_, Message> {
+    use crate::model::Conn;
+    let target = app
+        .target
+        .as_ref()
+        .map(|t| t.to_string())
+        .unwrap_or_default();
+    match &app.conn {
+        Conn::Off => muted("Started with --offline: topologies from their files only.").into(),
+        Conn::Connecting { .. } => muted(format!("Connecting to {target}…")).into(),
+        Conn::Down { reason, .. } => column![
+            row![
+                text(format!("No daemon answers at {target}")).size(13),
+                button(text("Retry").size(13))
+                    .style(button::secondary)
+                    .on_press(Message::Reconnect),
+            ]
+            .spacing(12)
+            .align_y(Alignment::Center),
+            muted(reason.as_str()),
+            muted(
+                "Start it with `sudo systemctl enable --now nlink-labd.socket`, \
+                 or look around with `nlink-lab-gui --demo`."
+            ),
+        ]
+        .spacing(4)
+        .into(),
+        Conn::Up { who, backend, .. } => {
+            let about = if backend.is_demo() {
+                "The demo: made-up labs, made-up metrics.".to_string()
+            } else {
+                format!(
+                    "{} on {}, as {} ({})",
+                    who.server,
+                    who.host,
+                    who.user,
+                    crate::backend::role_name(who.role)
+                )
+            };
+            let mut col = column![muted(about)].spacing(2);
+            if app.labs.is_empty() {
+                return col
+                    .push(muted(
+                        "No lab is running: deploy one with `sudo nlink-lab deploy FILE`.",
+                    ))
+                    .into();
+            }
+            let cell = |s: String, w: f32| text(s).size(13).width(Length::Fixed(w));
+            col = col.push(
+                row![
+                    muted("Lab").width(Length::Fill),
+                    muted("Nodes").width(Length::Fixed(60.0)),
+                    muted("Links").width(Length::Fixed(60.0)),
+                    muted("Impaired").width(Length::Fixed(80.0)),
+                    muted("Processes").width(Length::Fixed(80.0)),
+                    muted("Health").width(Length::Fixed(80.0)),
+                ]
+                .spacing(8)
+                .padding([0, 8]),
+            );
+            for l in &app.labs {
+                let impaired = if l.partitioned > 0 {
+                    format!("{} +{} cut", l.impaired, l.partitioned)
+                } else {
+                    l.impaired.to_string()
+                };
+                col = col.push(
+                    button(
+                        row![
+                            text(&l.lab).size(14).width(Length::Fill),
+                            cell(l.nodes.to_string(), 60.0),
+                            cell(l.links.to_string(), 60.0),
+                            cell(impaired, 80.0),
+                            cell(l.processes.to_string(), 80.0),
+                            cell(l.health.clone(), 80.0),
+                        ]
+                        .spacing(8),
+                    )
+                    .style(button::text)
+                    .width(Length::Fill)
+                    .on_press(Message::OpenLab(l.lab.clone())),
+                );
+            }
+            col.into()
+        }
     }
 }

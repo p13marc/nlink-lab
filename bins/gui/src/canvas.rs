@@ -8,7 +8,7 @@ use iced::mouse::{self, Cursor};
 use iced::widget::canvas::stroke::LineDash;
 use iced::widget::canvas::{self, Action, Cache, Event, Frame, Geometry, Path, Stroke, Text};
 use iced::{Point, Rectangle, Renderer, Size, Theme, Vector, alignment, window};
-use nlink_lab_view::scene::{Anchor, Rect, SceneEdge, SceneNode, point_at};
+use nlink_lab_view::scene::{Anchor, Rect, SceneEdge, SceneNode};
 use nlink_lab_view::{Hit, NodeKind, Pos, Scene};
 
 use crate::message::{CanvasMsg, Message};
@@ -403,14 +403,14 @@ fn edge(f: &mut Frame, e: &SceneEdge, xf: Xf, pal: &Palette) {
             f.fill_text(line(badge.text.clone(), end.badge_at, pal.tone(badge.tone)));
         }
     }
-    if let (Some(rate), Some(font)) = (&e.rate, xf.font(10.0)) {
+    if let Some(rate) = &e.rate {
         f.fill_text(Text {
             content: rate.clone(),
-            position: xf.pt(point_at(e, 0.5)) - Vector::new(0.0, 6.0 * xf.scale),
-            color: pal.text_muted,
-            size: font.into(),
+            position: xf.pt(e.rate_at),
+            color: pal.tone(nlink_lab_view::scene::Tone::Good),
+            size: size.into(),
             align_x: iced::widget::text::Alignment::Center,
-            align_y: alignment::Vertical::Bottom,
+            align_y: alignment::Vertical::Center,
             ..Text::default()
         });
     }

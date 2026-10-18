@@ -86,7 +86,10 @@ under both (#233). Its waves land one by one below.
   | Was | Now |
   |---|---|
   | `nlink-lab-topoviewer FILE` | `nlink-lab-gui FILE…` (one tab each), with `--set NAME=VALUE` |
-  | `nlink-lab-topoviewer --lab LAB`, discovery, `--zenoh-connect` | gone for now: the app draws topologies from their files |
+  | `nlink-lab-topoviewer --lab LAB` | `nlink-lab-gui -L LAB`, through the daemon's API (#277) |
+  | discovery | Home lists the daemon's labs (#277) |
+  | `--zenoh-connect ENDPOINT` | `--daemon zenoh:ENDPOINT` (#277), or `--daemon ssh://HOST` |
+  | the sidebar's exec box | gone for now |
   | PNG export: a screenshot of the window into `~/Pictures` | **Export**: SVG or PNG of the drawing, DOT or Mermaid, where the save dialog says |
 
 - **`nlink-lab-backend` is gone** (#270): `nlink-labd` publishes every
@@ -685,6 +688,21 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **Running labs in the desktop app** (#277), through the daemon's API:
+  its socket, `ssh://HOST`, or Zenoh (where the daemon streams nothing,
+  so the labs and metrics are asked for every second).
+  - Home lists the running labs as they come and go; `-L LAB` follows
+    one from the start, `--daemon` names another daemon.
+  - A lab's tab: its topology, again after an `apply` or a restore;
+    rates on the links, coloured by load; a node red while its errors
+    grow; the impairment in effect at each interface (declared, live, a
+    partition); a stale indicator when the metrics stop. The inspector
+    shows a node's interfaces now, with sparklines, and its processes;
+    the dock, the lab's events and processes.
+  - The connection is shown and retried with a backoff; a destroyed lab
+    stays on screen, marked, until it is deployed again. Placements are
+    kept per lab.
+  - `--demo`: made-up labs with made-up metrics, nothing installed.
 - **The desktop app, `nlink-lab-gui`** (#276): a topology drawn from
   its file, kept up as the file changes.
   - Home: open a file, a recent one, or a built-in template (unsaved

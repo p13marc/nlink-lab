@@ -6,9 +6,13 @@ use std::time::SystemTime;
 use iced::widget::pane_grid;
 use nlink_lab_view::{Hit, Pos, Positions};
 
+use nlink_lab::Topology;
+use nlink_lab_shared::api::{EndpointImpairment, LabSummary, ProcessDto};
+
+use crate::backend::{Backend, Feed};
 use crate::doc::Loaded;
 use crate::export::Format;
-use crate::model::{Camera, DockTab, TabId};
+use crate::model::{Camera, DockTab, TabId, Who};
 use crate::settings::{LayoutPref, ThemePref};
 
 #[derive(Debug, Clone)]
@@ -40,6 +44,40 @@ pub enum Message {
     Changed {
         tab: TabId,
         modified: Option<SystemTime>,
+    },
+
+    // the daemon
+    /// Connected (with a new epoch), or why not.
+    Connected(Result<(Backend, Who), String>),
+    /// Try again.
+    Reconnect,
+    /// The connection of `epoch` broke.
+    Lost {
+        epoch: u64,
+        reason: String,
+    },
+    /// Every lab there is.
+    Labs(Vec<LabSummary>),
+    /// What a subscription brought: of every lab (`lab: None`), or of one.
+    Feed {
+        epoch: u64,
+        lab: Option<String>,
+        feed: Feed,
+    },
+    /// A lab's subscription ended.
+    FeedEnded {
+        epoch: u64,
+        lab: String,
+        reason: String,
+    },
+    /// Subscribe to `lab` again.
+    RetryFeed(String),
+    /// Follow `lab` in a tab, or go to its tab.
+    OpenLab(String),
+    /// What the daemon answered for a lab.
+    Fetched {
+        lab: String,
+        fetched: Box<Fetched>,
     },
 
     // params
@@ -82,8 +120,24 @@ pub enum Message {
     /// Background work finished (a write, a poll, a dialog closed); an
     /// error is shown.
     Done(Result<(), String>),
-    Tick,
+    /// The clock: milliseconds since the start.
+    Tick(u64),
     DismissToast(u64),
+}
+
+/// A lab's data, as fetched.
+#[derive(Debug, Clone)]
+pub enum Fetched {
+    Topology {
+        revision: String,
+        topology: Result<Box<Topology>, String>,
+        /// Where the user put its nodes, last time.
+        pins: nlink_lab_view::Positions,
+    },
+    Impairments(Vec<EndpointImpairment>),
+    Processes(Vec<ProcessDto>),
+    Events(Vec<serde_json::Value>),
+    Failed(String),
 }
 
 /// What the canvas reports.

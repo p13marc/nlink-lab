@@ -80,7 +80,10 @@ fn toolbar<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
     ]
     .spacing(8)
     .align_y(Alignment::Center);
-    if matches!(tab.source, Source::Untitled { .. }) {
+    if matches!(
+        tab.design().map(|d| &d.source),
+        Some(Source::Untitled { .. })
+    ) {
         bar = bar.push(
             button(text("Save as…").size(13))
                 .style(button::primary)
@@ -94,27 +97,58 @@ fn canvas_title(tab: &Tab) -> Element<'_, Message> {
     let mut r = row![text(tab.title()).size(13)]
         .spacing(10)
         .align_y(Alignment::Center);
-    if tab.loading {
-        r = r.push(muted("loading…"));
-    } else if tab.view.laying_out {
-        r = r.push(muted("laying out…"));
+    if let Some(d) = tab.design() {
+        if d.loading {
+            r = r.push(muted("loading…"));
+        } else if tab.view.laying_out {
+            r = r.push(muted("laying out…"));
+        }
+        if d.stale {
+            r = r.push(
+                text("does not parse: showing the last version that did")
+                    .size(12)
+                    .style(super::tone_text(nlink_lab_view::scene::Tone::Warn)),
+            );
+        }
     }
-    if tab.stale {
+    if let Some(l) = tab.live() {
+        use nlink_lab_view::scene::Tone;
+        let (word, tone) = if l.gone {
+            ("destroyed: showing what it was".to_string(), Tone::Bad)
+        } else if let Some(e) = &l.error {
+            (e.clone(), Tone::Bad)
+        } else if tab.view.stale {
+            ("metrics stopped".to_string(), Tone::Warn)
+        } else if l.metrics_at.is_some() {
+            ("live".to_string(), Tone::Good)
+        } else {
+            ("waiting for metrics…".to_string(), Tone::Muted)
+        };
         r = r.push(
-            text("does not parse: showing the last version that did")
+            text(format!("● {word}"))
                 .size(12)
-                .style(text::warning),
+                .style(super::tone_text(tone)),
         );
+        if !l.revision.is_empty() {
+            r = r.push(muted(format!("revision {}", short(&l.revision))));
+        }
     }
     r.into()
 }
 
+/// A revision's first characters, as git shows a commit.
+fn short(revision: &str) -> &str {
+    revision.get(..8).unwrap_or(revision)
+}
+
 fn canvas(tab: &Tab) -> Element<'_, Message> {
     let placeholder = if tab.topology.is_none() {
-        Some(if tab.loading {
-            "Loading…"
-        } else {
-            "This topology does not parse: see Problems"
+        Some(match (tab.design(), tab.live()) {
+            (Some(d), _) if d.loading => "Loading…",
+            (Some(_), _) => "This topology does not parse: see Problems",
+            (_, Some(l)) if l.gone => "This lab is not running",
+            (_, Some(l)) if l.error.is_some() => "The lab's topology did not come: see above",
+            _ => "Waiting for the lab's topology…",
         })
     } else if tab.view.positions.is_empty() {
         Some(if tab.view.graph.nodes.is_empty() {
@@ -135,7 +169,19 @@ fn canvas(tab: &Tab) -> Element<'_, Message> {
 }
 
 fn dock_title(tab: &Tab) -> Element<'_, Message> {
-    let page = |label: String, page: DockTab| {
+    let page = |page: DockTab| {
+        let label = match page {
+            DockTab::Problems => format!(
+                "Problems ({})",
+                tab.design().map_or(0, |d| d.problems.len())
+            ),
+            DockTab::Source => "Source".into(),
+            DockTab::Events => format!("Events ({})", tab.live().map_or(0, |l| l.events.len())),
+            DockTab::Processes => format!(
+                "Processes ({})",
+                tab.live().map_or(0, |l| l.processes.len())
+            ),
+        };
         button(text(label).size(13))
             .style(if tab.dock == page {
                 button::secondary
@@ -145,13 +191,8 @@ fn dock_title(tab: &Tab) -> Element<'_, Message> {
             .padding([2, 8])
             .on_press(Message::Dock(page))
     };
-    row![
-        page(
-            format!("Problems ({})", tab.problems.len()),
-            DockTab::Problems
-        ),
-        page("Source".into(), DockTab::Source),
-    ]
-    .spacing(4)
-    .into()
+    tab.dock_pages()
+        .iter()
+        .fold(row![].spacing(4), |r, p| r.push(page(*p)))
+        .into()
 }

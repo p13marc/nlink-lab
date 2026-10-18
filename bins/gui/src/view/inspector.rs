@@ -7,6 +7,8 @@ use nlink_lab::Topology;
 use nlink_lab_view::graph::EdgeKind;
 use nlink_lab_view::{Hit, NodeKind};
 
+use nlink_lab_shared::metrics::format_rate;
+
 use super::{field, heading, muted};
 use crate::message::{CanvasMsg, Message};
 use crate::model::Tab;
@@ -53,8 +55,27 @@ fn lab<'a>(tab: &'a Tab, topo: &'a Topology) -> Column<'a, Message> {
     if let Some(d) = &topo.lab.description {
         c = c.push(text(d).size(13));
     }
-    if let Some(p) = tab.source.path() {
+    if let Some(p) = tab.design().and_then(|d| d.source.path()) {
         c = c.push(field("file", p.display().to_string()));
+    }
+    if let Some(l) = tab.live() {
+        if let Some(s) = &l.summary {
+            c = c.push(field("health", s.health.clone()));
+            c = c.push(field("deployed", s.created_at.replace('T', " ")));
+            c = c.push(field("processes", s.processes.to_string()));
+            if s.impaired + s.partitioned > 0 {
+                c = c.push(field(
+                    "impaired",
+                    format!("{} live, {} partitioned", s.impaired, s.partitioned),
+                ));
+            }
+        }
+        if !l.revision.is_empty() {
+            c = c.push(field(
+                "revision",
+                l.revision.chars().take(12).collect::<String>(),
+            ));
+        }
     }
     let count = |k: NodeKind| tab.view.graph.nodes.iter().filter(|n| n.kind == k).count();
     let nodes = [NodeKind::Router, NodeKind::Host, NodeKind::Container]
@@ -89,13 +110,13 @@ fn lab<'a>(tab: &'a Tab, topo: &'a Topology) -> Column<'a, Message> {
     if !topo.assertions.is_empty() {
         c = c.push(field("assertions", topo.assertions.len().to_string()));
     }
-    if !tab.declared.is_empty() {
+    if let Some(d) = tab.design().filter(|d| !d.declared.is_empty()) {
         c = c.push(rule::horizontal(1));
         c = c.push(heading("Params"));
-        for (name, default) in &tab.declared {
-            let value = tab.param_edits.get(name).map(String::as_str).unwrap_or("");
+        for (name, default) in &d.declared {
+            let value = d.param_edits.get(name).map(String::as_str).unwrap_or("");
             let name_owned = name.clone();
-            let overridden = tab.params.contains_key(name);
+            let overridden = d.params.contains_key(name);
             c = c.push(
                 row![
                     text(if overridden {
@@ -124,7 +145,7 @@ fn lab<'a>(tab: &'a Tab, topo: &'a Topology) -> Column<'a, Message> {
                     .on_press(Message::ApplyParams),
                 button(text("Defaults").size(13))
                     .style(button::secondary)
-                    .on_press_maybe((!tab.params.is_empty()).then_some(Message::ResetParams)),
+                    .on_press_maybe((!d.params.is_empty()).then_some(Message::ResetParams)),
             ]
             .spacing(8),
         );
@@ -228,6 +249,7 @@ fn node<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str) -> Column<'a, Message
     if !n.profiles.is_empty() {
         c = c.push(field("profiles", n.profiles.join(", ")));
     }
+    c = live_node(c, tab, id);
     if !ifaces.is_empty() || !n.interfaces.is_empty() {
         c = c.push(heading("Interfaces"));
         for (iface, peer, addr) in ifaces {
@@ -412,7 +434,24 @@ fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str) -> Column<'a, Mes
             .align_y(Alignment::Center),
         );
     }
+    if let Some((s, (rx, tx))) = tab
+        .view
+        .metrics
+        .as_ref()
+        .filter(|m| m.has_data() && !tab.view.stale)
+        .and_then(|m| Some((m.series(node, iface)?, m.rate(node, iface)?)))
+    {
+        c = c.push(field("state", s.state.clone()));
+        c = c.push(field(
+            "rates",
+            format!("↓ {}  ↑ {}", format_rate(rx), format_rate(tx)),
+        ));
+        c = c.push(crate::spark::spark(&s.rx_bps, &s.tx_bps));
+    }
     match tab.view.impairments.get(ep) {
+        Some(imp) if tab.live().is_some() => {
+            c = c.push(field("netem", format!("{} ({})", imp.summary, imp.origin)))
+        }
         Some(imp) => c = c.push(field("netem", imp.summary.clone())),
         None => c = c.push(field("netem", "none")),
     }
@@ -435,6 +474,59 @@ fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str) -> Column<'a, Mes
             .unwrap_or("")
             .to_lowercase();
         c = c.push(field("qdisc", name));
+    }
+    c
+}
+
+/// A running node's interfaces as they are (their rates, recent and now)
+/// and its processes.
+fn live_node<'a>(mut c: Column<'a, Message>, tab: &'a Tab, id: &'a str) -> Column<'a, Message> {
+    let Some(l) = tab.live() else {
+        return c;
+    };
+    if let Some(m) = tab
+        .view
+        .metrics
+        .as_ref()
+        .filter(|m| m.has_data() && !tab.view.stale)
+    {
+        let mut rows: Vec<_> = m.interfaces(id).collect();
+        rows.sort_by(|a, b| nlink_lab_view::layout::natural(a.0, b.0));
+        if !rows.is_empty() {
+            c = c.push(heading("Now"));
+            for (iface, s) in rows {
+                let (rx, tx) = s.rate();
+                let hot = s.heat > 0.0;
+                c = c.push(
+                    row![
+                        link_to(iface.to_string(), Hit::Endpoint(format!("{id}:{iface}"))),
+                        column![
+                            text(format!("↓ {}  ↑ {}", format_rate(rx), format_rate(tx))).size(12),
+                            muted(if hot {
+                                format!("{} · errors growing", s.state)
+                            } else {
+                                s.state.clone()
+                            }),
+                        ]
+                        .width(Length::Fill),
+                        crate::spark::spark(&s.rx_bps, &s.tx_bps),
+                    ]
+                    .spacing(8)
+                    .align_y(Alignment::Center),
+                );
+            }
+        }
+    }
+    let procs: Vec<_> = l.processes.iter().filter(|p| p.node == id).collect();
+    if !procs.is_empty() {
+        c = c.push(heading("Tracked processes"));
+        for p in procs {
+            c = c.push(muted(format!(
+                "pid {} — {}",
+                p.pid,
+                if p.alive { "running" } else { "exited" }
+            )));
+        }
     }
     c
 }

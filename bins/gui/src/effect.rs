@@ -9,9 +9,10 @@ use iced::Task;
 use nlink_lab::Topology;
 use nlink_lab_view::{Positions, Scene, TopoGraph, layout};
 
+use crate::backend::{Backend, Target};
 use crate::doc::{self, Source};
 use crate::export::{self, Format};
-use crate::message::Message;
+use crate::message::{Fetched, Message};
 use crate::model::TabId;
 use crate::settings::{Dirs, LayoutPref, Settings};
 
@@ -58,7 +59,33 @@ pub enum Effect {
         file: PathBuf,
         pins: Positions,
     },
+    /// Connect to the daemon, or the demo.
+    Connect(Target),
+    /// `message`, after a while: a reconnection's backoff.
+    Later {
+        ms: u64,
+        message: Box<Message>,
+    },
+    /// Ask for the labs there are.
+    ListLabs(Backend),
+    /// Ask the daemon for a lab's data.
+    Fetch {
+        backend: Backend,
+        lab: String,
+        what: Fetch,
+    },
     Quit,
+}
+
+#[derive(Debug, Clone)]
+pub enum Fetch {
+    /// With where the user put its nodes, under this key.
+    Topology {
+        pins: Option<(Dirs, PathBuf)>,
+    },
+    Impairments,
+    Processes,
+    Events,
 }
 
 /// Where `graph`'s nodes go with `pref`, keeping `pinned`.
@@ -198,8 +225,83 @@ pub fn run(effect: Effect) -> Task<Message> {
             move || crate::settings::save_pins(&dirs, &file, &pins),
             Message::Done,
         ),
+        Effect::Connect(target) => Task::perform(Backend::connect(target), Message::Connected),
+        Effect::Later { ms, message } => Task::perform(
+            async move { tokio::time::sleep(std::time::Duration::from_millis(ms)).await },
+            move |()| *message,
+        ),
+        Effect::ListLabs(backend) => Task::perform(
+            async move { backend.call(nlink_lab_shared::api::Request::ListLabs).await },
+            |r| match r {
+                Ok(nlink_lab_shared::api::Response::Labs { labs }) => Message::Labs(labs),
+                Ok(other) => Message::Done(Err(format!("unexpected answer {other:?}"))),
+                Err(e) => Message::Done(Err(e)),
+            },
+        ),
+        Effect::Fetch { backend, lab, what } => {
+            let name = lab.clone();
+            Task::perform(fetch(backend, lab, what), move |fetched| Message::Fetched {
+                lab: name,
+                fetched: Box::new(fetched),
+            })
+        }
         Effect::Quit => iced::exit(),
     }
+}
+
+/// The request that fetches `what` of `lab`.
+pub fn request_of(lab: &str, what: &Fetch) -> nlink_lab_shared::api::Request {
+    use nlink_lab_shared::api::Request;
+    let lab = lab.to_string();
+    match what {
+        Fetch::Topology { .. } => Request::GetTopology { lab, redact: true },
+        Fetch::Impairments => Request::GetImpairments { lab },
+        Fetch::Processes => Request::ListProcesses { lab },
+        Fetch::Events => Request::ReadEvents {
+            lab,
+            since: None,
+            kinds: Vec::new(),
+            limit: None,
+        },
+    }
+}
+
+/// The daemon's answer as what the tab takes: `pins` are the user's
+/// placements, read with a topology.
+pub fn fetched(
+    answer: Result<nlink_lab_shared::api::Response, String>,
+    pins: Positions,
+) -> Fetched {
+    use nlink_lab_shared::api::Response;
+    match answer {
+        Ok(Response::Topology {
+            revision, topology, ..
+        }) => Fetched::Topology {
+            revision,
+            topology: serde_json::from_value(topology)
+                .map(Box::new)
+                .map_err(|e| format!("the lab's topology: {e}")),
+            pins,
+        },
+        Ok(Response::Impairments { endpoints }) => Fetched::Impairments(endpoints),
+        Ok(Response::Processes { processes }) => Fetched::Processes(processes),
+        Ok(Response::Events { events, .. }) => Fetched::Events(events),
+        Ok(other) => Fetched::Failed(format!("unexpected answer {other:?}")),
+        Err(e) => Fetched::Failed(e),
+    }
+}
+
+async fn fetch(backend: Backend, lab: String, what: Fetch) -> Fetched {
+    let answer = backend.call(request_of(&lab, &what)).await;
+    let pins = match what {
+        Fetch::Topology {
+            pins: Some((dirs, key)),
+        } => tokio::task::spawn_blocking(move || crate::settings::load_pins(&dirs, &key))
+            .await
+            .unwrap_or_default(),
+        _ => Positions::new(),
+    };
+    fetched(answer, pins)
 }
 
 pub fn run_all(effects: Vec<Effect>) -> Task<Message> {

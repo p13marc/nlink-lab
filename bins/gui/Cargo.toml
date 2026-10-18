@@ -17,6 +17,11 @@ path = "src/main.rs"
 iced = { version = "0.14", features = ["canvas", "tokio"] }
 nlink-lab = { workspace = true }
 nlink-lab-view = { workspace = true }
+nlink-lab-shared = { workspace = true }
+# the daemon's client; `zenoh` for a daemon reached over Zenoh
+nlink-lab-client = { workspace = true, features = ["zenoh"] }
+serde_json = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
@@ -29,3 +34,6 @@ resvg = "0.48"
 [dev-dependencies]
 iced_test = "0.14"
 tempfile = "3"
+# a real daemon, in-process, for the backend's tests
+nlink-labd = { path = "../nlink-labd" }
+libc = { workspace = true }

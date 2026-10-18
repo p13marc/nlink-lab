@@ -1,10 +1,11 @@
 //! `nlink-lab deploy`.
 
-use anstream::{eprintln, println};
+use anstream::println;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::ctx::{Ctx, green, parse_topology, red, require_root, validation_failed, yellow};
+use crate::cmd::common;
+use crate::ctx::{Ctx, green, parse_topology, require_root};
 use crate::host_scan::force_cleanup;
 use crate::render::{print_deploy_summary, print_topology_summary};
 
@@ -30,8 +31,8 @@ pub struct Args {
     pub skip_validate: bool,
 
     /// Set NLL parameters (can be repeated: --set key=value).
-    #[arg(long = "set", value_name = "KEY=VALUE")]
-    pub params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub params: Vec<(String, String)>,
 
     /// Append suffix to lab name (for parallel test safety).
     #[arg(long)]
@@ -68,16 +69,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if skip_validate {
         topo.assertions.clear();
     }
-    let result = topo.validate();
-
-    // Print warnings
-    for w in result.warnings() {
-        eprintln!("  {} {w}", yellow("WARN"));
-    }
-
-    if result.has_errors() {
-        return Err(validation_failed(&topo.lab.name, &result));
-    }
+    common::check_topology(&topo)?;
 
     if dry_run {
         println!("Topology {:?} is valid", topo.lab.name);
@@ -94,15 +86,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 .collect();
             println!("{}", serde_json::to_string_pretty(&ops)?);
         } else if !ctx.quiet {
-            println!("\nPlan ({} ops):", plan.ops.len());
-            let mut last = None;
-            for op in &plan.ops {
-                if last != Some(op.stage()) {
-                    println!("  [{:?}]", op.stage());
-                    last = Some(op.stage());
-                }
-                println!("    {}", op.describe());
-            }
+            println!();
+            common::print_plan(&plan);
         }
         return Ok(());
     }
@@ -129,7 +114,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         path: std::path::absolute(&topology)
             .ok()
             .map(|p| p.to_string_lossy().into_owned()),
-        params: crate::ctx::parse_set_params(&params)?,
+        params: params.clone(),
         suffix: if unique {
             Some(std::process::id().to_string())
         } else {
@@ -185,35 +170,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             );
             println!("  nlink-lab destroy {}         # tear down", topo.lab.name);
         }
-        for a in lab.assertion_results() {
-            if !a.passed {
-                eprintln!(
-                    "  {} {}{}",
-                    red("FAIL"),
-                    a.description,
-                    a.detail
-                        .as_ref()
-                        .map(|d| format!(": {d}"))
-                        .unwrap_or_default()
-                );
-            }
-        }
+        common::print_assertions(lab.assertion_results());
     }
 
-    if assertions_failed {
-        if strict {
-            return Err(nlink_lab::Error::Validation(format!(
-                "{} of {} assertion(s) failed (lab {:?} left deployed for inspection)",
-                lab.assertion_results().iter().filter(|a| !a.passed).count(),
-                lab.assertion_results().len(),
-                topo.lab.name
-            )));
-        }
-        eprintln!(
-            "  {} assertions failed; pass --strict to make this fatal",
-            yellow("WARN")
-        );
-    }
+    common::assertions_outcome(lab.assertion_results(), strict, &topo.lab.name, "deployed")?;
 
     if daemon {
         nlink_lab_backend::run(lab, nlink_lab_backend::BackendOpts::default()).await?;

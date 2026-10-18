@@ -2,13 +2,6 @@
 
 use crate::ctx::Ctx;
 
-/// `metrics --format` values.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MetricsFormat {
-    Table,
-    Json,
-}
-
 #[derive(clap::Args)]
 pub struct Args {
     /// Lab name.
@@ -16,12 +9,8 @@ pub struct Args {
     pub lab: String,
 
     /// Filter to specific node.
-    #[arg(add = crate::ctx::node_completer(), short, long)]
+    #[arg(add = crate::ctx::node_completer(), long)]
     pub node: Option<String>,
-
-    /// Output format (`--json` selects json too).
-    #[arg(short, long, value_enum, default_value_t = MetricsFormat::Table)]
-    pub format: MetricsFormat,
 
     /// Number of samples then exit.
     #[arg(short, long, value_parser = clap::value_parser!(u64).range(1..))]
@@ -36,7 +25,6 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args {
         lab,
         node,
-        format: fmt,
         count,
         zenoh_connect,
     } = args;
@@ -71,7 +59,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                         snapshot.nodes.retain(|name, _| name == filter);
                     }
 
-                    if fmt == MetricsFormat::Json || ctx.json {
+                    if ctx.json {
                         println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
                     } else {
                         // Clear screen for table mode

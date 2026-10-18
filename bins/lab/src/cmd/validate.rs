@@ -1,9 +1,10 @@
 //! `nlink-lab validate`.
 
-use anstream::{eprintln, println};
+use anstream::println;
 use std::path::PathBuf;
 
-use crate::ctx::{Ctx, parse_topology, validation_failed, yellow};
+use crate::cmd::common;
+use crate::ctx::{Ctx, parse_topology};
 use crate::output::{EXIT_VALIDATION, set_exit_code};
 use crate::render::print_topology_summary;
 
@@ -14,8 +15,8 @@ pub struct Args {
     pub topology: Option<PathBuf>,
 
     /// Set NLL parameters (can be repeated: --set key=value).
-    #[arg(long = "set", value_name = "KEY=VALUE")]
-    pub params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub params: Vec<(String, String)>,
 
     /// Show resolved IP addresses for all interfaces.
     #[arg(long)]
@@ -83,12 +84,9 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         return Ok(());
     }
 
-    for w in result.warnings() {
-        eprintln!("  {} {w}", yellow("WARN"));
-    }
-
+    common::print_warnings(result.warnings());
     if result.has_errors() {
-        return Err(validation_failed(&topo.lab.name, &result));
+        return Err(common::validation_failed(&topo.lab.name, &result));
     }
 
     println!("Topology {:?} is valid", topo.lab.name);

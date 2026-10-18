@@ -55,6 +55,23 @@ under both (#233). Its waves land one by one below.
 - **`ps --json` is an object** (#241): `{"schema_version": 2, "lab": …,
   "processes": [ … ]}`, not a bare array. Every JSON document gets a
   `schema_version` as the CLI waves reach its command.
+- **Durations need a unit** (#242): `--timeout`, `--interval`,
+  `--duration`, `--watch`, `--rotate`, `--wait-timeout` and
+  `--wait-fd-stable` read `500ms`, `30s`, `2m`. A bare number is refused
+  with a hint; it used to be seconds in `wait-for --timeout`, milliseconds
+  in `wait-for --interval`, and fractional seconds elsewhere.
+
+  | Was | Now |
+  |---|---|
+  | `wait-for … --timeout 30 --interval 500` | `--timeout 30s --interval 500ms` |
+  | `exec --timeout 5`, `wait -t 30`, `spawn --wait-timeout 10` | `5s`, `30s`, `10s` |
+  | `top -i 2`, `events --interval 2`, `daemon -i 2` | `2s` |
+  | `capture --duration 30 --rotate 600`, `proc-stat --watch 5` | `30s`, `600s`, `5s` |
+- **Short flags mean one thing** (#242): `capture -w FILE` is `-o FILE`
+  (`--output`; `--write` stays as an alias). `capture -f`, `metrics -n`,
+  `top -n`, `init -n`, `snapshot -d`/`-l` and `import -d` are long only
+  (`--filter`, `--node`, `--name`, `--description`, `--list`, `--dir`).
+  `metrics --format` is gone: the global `--format` applies.
 - **The top-level help lists commands by group** (Lifecycle, Run,
   Network, Observe, Test, Author, Host): a script that read the
   `Commands:` block reads `nlink-lab docs-gen --list-commands` instead.
@@ -546,6 +563,12 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **One value grammar** (#242): `--set` and `--env` (`exec`/`spawn`
+  have `-e` now) are `KEY=VALUE`, endpoints `NODE:IFACE`, signals,
+  TCP targets, byte sizes, `--wait-log` regexes and `edit`'s impairment,
+  qdisc and MTU values are checked by the parser, so a bad one is a usage
+  error before anything runs. `exec -t` is its timeout. `deploy` prints
+  passed assertions too, as `apply` does.
 - **A docs gate and pruned reference pages** (#241): every `nlink-lab …`
   command line in the README, `CLAUDE.md` and `docs/` shell blocks must
   parse with the CLI as it is (a unit test). `docs-gen` recurses into

@@ -18,7 +18,7 @@ pub struct Args {
     pub output: Option<PathBuf>,
 
     /// Override the lab name.
-    #[arg(short, long)]
+    #[arg(long)]
     pub name: Option<String>,
 
     /// Overwrite existing files.

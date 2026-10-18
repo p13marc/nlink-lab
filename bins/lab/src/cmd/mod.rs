@@ -6,6 +6,7 @@
 pub mod apply;
 pub mod benchmark;
 pub mod capture;
+pub mod common;
 pub mod containers;
 pub mod daemon;
 pub mod deploy;

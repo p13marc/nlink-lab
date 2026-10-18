@@ -312,7 +312,7 @@ sudo nlink-lab spawn wan site-b-server -- \
     python3 -m http.server 80 --bind 0.0.0.0
 
 # A wait-for: block until the port accepts connections
-sudo nlink-lab wait-for wan site-b-server --tcp 0.0.0.0:80 --timeout 5
+sudo nlink-lab wait-for wan site-b-server --tcp 0.0.0.0:80 --timeout 5s
 
 # From site-a-client: HTTP works (port 80 accept)
 sudo nlink-lab exec wan site-a-client -- curl -fsS site-b-server/
@@ -1155,15 +1155,15 @@ Modify netem parameters at runtime without redeploying. `--show` displays curren
 ### capture
 
 ```bash
-sudo nlink-lab capture <lab> <endpoint> [-w capture.pcap] [-c 100] [--filter-tcp --filter-port 80]
+sudo nlink-lab capture <lab> <endpoint> [-o capture.pcap] [-c 100] [--filter-tcp --filter-port 80]
 ```
 
-Runs tcpdump inside the node's namespace. `-w` writes to pcap file. `-c` limits packet count. `-f` sets BPF filter.
+Reads packets in the node's namespace through an AF_PACKET ring. `-o` writes a pcap file. `-c` limits the packet count. `--filter-*` builds a BPF filter.
 
 ### daemon
 
 ```bash
-sudo nlink-lab daemon <lab> [--interval 2] [--zenoh-mode peer] [--zenoh-listen tcp/0.0.0.0:7447]
+sudo nlink-lab daemon <lab> [--interval 2s] [--zenoh-mode peer] [--zenoh-listen tcp/0.0.0.0:7447]
 ```
 
 Starts the Zenoh backend. Publishes per-interface metrics at the specified interval. See "Daemon Mode and TopoViewer" below.
@@ -1204,7 +1204,7 @@ sudo nlink-lab impair mylab --show
 Capture traffic on any interface:
 
 ```bash
-sudo nlink-lab capture mylab router:eth0 -w /tmp/router-eth0.pcap --filter-icmp
+sudo nlink-lab capture mylab router:eth0 -o /tmp/router-eth0.pcap --filter-icmp
 ```
 
 Open the pcap with Wireshark or tcpdump for analysis.
@@ -1246,10 +1246,10 @@ Start services after deployment and wait for readiness:
 sudo nlink-lab spawn mylab server -- /usr/bin/my-service --port 8080
 
 # Wait for TCP port to accept connections
-sudo nlink-lab wait-for mylab server --tcp 127.0.0.1:8080 --timeout 30
+sudo nlink-lab wait-for mylab server --tcp 127.0.0.1:8080 --timeout 30s
 # Port-only shorthand resolves to 127.0.0.1 inside the namespace
 # Use the full IP if the service binds to a specific interface address
-sudo nlink-lab wait-for mylab server --tcp 8080 --timeout 30
+sudo nlink-lab wait-for mylab server --tcp 8080 --timeout 30s
 
 # Wait for a command to succeed
 sudo nlink-lab wait-for mylab server --exec "curl -sf http://localhost:8080/health"
@@ -1433,7 +1433,7 @@ nlink-lab init --list
 Create a lab from a template:
 
 ```bash
-nlink-lab init spine-leaf -n my-dc -o ./labs/
+nlink-lab init spine-leaf --name my-dc -o ./labs/
 sudo nlink-lab deploy ./labs/my-dc.nll
 ```
 
@@ -1454,7 +1454,7 @@ sudo nlink-lab deploy topology.nll --daemon
 Or attach to a lab that is already running:
 
 ```bash
-sudo nlink-lab daemon mylab --interval 2
+sudo nlink-lab daemon mylab --interval 2s
 sudo nlink-lab daemon mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
 ```
 

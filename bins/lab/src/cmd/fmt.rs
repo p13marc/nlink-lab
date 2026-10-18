@@ -20,25 +20,6 @@ pub struct Args {
     pub write: bool,
 }
 
-fn collect(path: &std::path::Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    if path.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(path)?
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .collect();
-        entries.sort();
-        for e in entries {
-            if e.is_dir() {
-                collect(&e, out)?;
-            } else if e.extension().is_some_and(|x| x == "nll") {
-                out.push(e);
-            }
-        }
-    } else {
-        out.push(path.to_path_buf());
-    }
-    Ok(())
-}
-
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args {
         paths,
@@ -60,7 +41,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     let mut files = Vec::new();
     for p in &paths {
-        collect(p, &mut files)?;
+        files.extend(crate::cmd::common::collect_nll(p, true)?);
     }
     let mut changed = Vec::new();
     for path in &files {

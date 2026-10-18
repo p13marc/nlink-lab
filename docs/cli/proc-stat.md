@@ -70,8 +70,8 @@ Options:
       --pidfile-glob <PATTERN>
           Sample the processes the node's pidfiles name: every file matching this absolute path, whose file name may hold `*` and `?` (`'/run/*.pid'`). Read from the host, through the container's root on a container node. Each record's `name` is the pidfile's stem; a stale pidfile is skipped
 
-      --watch <SECS>
-          Sample every SECS seconds, emitting one record per sample. NDJSON (one JSON object per line, or one array per line in the multi-process modes) when combined with `--json`. Stops on Ctrl-C
+      --watch <DURATION>
+          Sample at this interval (`2s`), emitting one record per sample. NDJSON (one JSON object per line, or one array per line in the multi-process modes) when combined with `--json`. Stops on Ctrl-C
 
   -h, --help
           Print help (see a summary with '-h')

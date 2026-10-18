@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::ctx::{Ctx, parse_set_params};
+use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -27,8 +27,8 @@ pub struct Args {
     pub no_rendered: bool,
 
     /// (with --archive) NLL `param` overrides recorded in the archive.
-    #[arg(long = "set", value_name = "KEY=VALUE", requires = "archive")]
-    pub set_params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value, requires = "archive")]
+    pub set_params: Vec<(String, String)>,
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -52,7 +52,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 ArchiveSource::Lab { name: lab.clone() }
             };
 
-        let params = parse_set_params(&set_params)?;
+        let params = set_params;
 
         let out_path = output.unwrap_or_else(|| {
             let basename = match &source {

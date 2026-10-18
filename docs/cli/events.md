@@ -25,10 +25,10 @@ Options:
       --kind <KIND>
           Only these event kinds (repeatable): lifecycle names such as `deployed`, `impaired`, `spawned`; drift names, `<action>_<object>` as `watch` prints them (`new_address`, `del_route`, `new_nft_rule`) or `ended`/`gone`; or the sources `lifecycle`, `drift`, `runtime`
 
-      --interval <INTERVAL>
-          Runtime-event sampling interval in seconds (with --follow)
+  -i, --interval <DURATION>
+          Runtime-event sampling interval (with --follow)
           
-          [default: 2]
+          [default: 2s]
 
       --socket <PATH>
           Also serve the stream on a unix socket: every client that connects receives one NDJSON record per line (with --follow)

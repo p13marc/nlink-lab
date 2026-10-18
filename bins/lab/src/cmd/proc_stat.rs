@@ -42,12 +42,12 @@ pub struct Args {
     )]
     pub pidfile_glob: Option<String>,
 
-    /// Sample every SECS seconds, emitting one record per
+    /// Sample at this interval (`2s`), emitting one record per
     /// sample. NDJSON (one JSON object per line, or one array per line
     /// in the multi-process modes) when combined with `--json`. Stops
     /// on Ctrl-C.
-    #[arg(long, value_name = "SECS", value_parser = crate::util::parse_secs)]
-    pub watch: Option<f64>,
+    #[arg(long, value_name = "DURATION", value_parser = crate::args::interval)]
+    pub watch: Option<std::time::Duration>,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -69,7 +69,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let running = nlink_lab::RunningLab::load(&lab)?;
     // Single sample = one shot then exit. --watch = NDJSON
     // (or text) stream until Ctrl-C.
-    let interval = watch.map(std::time::Duration::from_secs_f64);
+    let interval = watch;
     loop {
         // `--all` and `--pidfile-glob` are re-resolved every tick: a
         // sampled lab churns, and the point of the flags is to follow the

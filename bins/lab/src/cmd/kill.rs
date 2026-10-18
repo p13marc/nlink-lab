@@ -15,8 +15,8 @@ pub struct Args {
     /// STOP, CONT, HUP, INT, USR1, USR2 (with or without the SIG prefix).
     /// STOP/CONT freeze and thaw a process in place -- a "TCP answers,
     /// application is dead" peer for resilience tests.
-    #[arg(long, short = 's')]
-    pub signal: Option<String>,
+    #[arg(long, short = 's', value_parser = crate::args::signal)]
+    pub signal: Option<nlink_lab::Signal>,
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -38,8 +38,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 println!("Process {pid} had already exited");
             }
         }
-        Some(name) => {
-            let signal = nlink_lab::parse_signal(&name)?;
+        Some(signal) => {
             running.signal_process(pid, signal)?;
             if ctx.json {
                 println!(

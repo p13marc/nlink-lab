@@ -34,65 +34,6 @@ pub fn compile_legacy_bpf_filter(_expr: &str) -> nlink_lab::Result<netring::BpfF
     ))
 }
 
-/// Parse a byte-size CLI argument with optional K/M/G suffix.
-/// Decimal-SI units (1K = 1000, 1M = 1_000_000) — same convention as
-/// `tcpdump -C`. Round-5 §2.3.
-pub fn parse_byte_size(s: &str) -> std::result::Result<u64, String> {
-    let s = s.trim();
-    let (num_str, mul) = if let Some(rest) = s.strip_suffix(['G', 'g']) {
-        (rest, 1_000_000_000u64)
-    } else if let Some(rest) = s.strip_suffix(['M', 'm']) {
-        (rest, 1_000_000u64)
-    } else if let Some(rest) = s.strip_suffix(['K', 'k']) {
-        (rest, 1_000u64)
-    } else {
-        (s, 1u64)
-    };
-    let n: u64 = num_str
-        .parse()
-        .map_err(|e| format!("invalid byte size {s:?}: {e}"))?;
-    // overflowed (a panic in a debug build, a wrapped size otherwise)
-    n.checked_mul(mul)
-        .ok_or_else(|| format!("byte size {s:?} is too large"))
-}
-
-/// Parse a `SECS` CLI argument: a finite, non-negative number of seconds
-/// that fits a `Duration`. `Duration::from_secs_f64` panics on anything
-/// else (`--duration -1`, `nan`, `1e30`, #209).
-pub fn parse_secs(s: &str) -> std::result::Result<f64, String> {
-    let secs: f64 = s
-        .trim()
-        .parse()
-        .map_err(|e| format!("invalid number of seconds {s:?}: {e}"))?;
-    std::time::Duration::try_from_secs_f64(secs)
-        .map(|_| secs)
-        .map_err(|_| format!("{s:?} is not a duration in seconds (finite, not negative)"))
-}
-
-/// Parse repeated `--env KEY=VALUE` strings into `(key, value)` pairs.
-///
-/// Returns an error on entries missing `=`. The parsed pairs are
-/// applied to the child process via `Command::env(k, v)` (additive on
-/// top of the inherited environment) — *not* by wrapping the command
-/// in `/usr/bin/env`. The wrapper approach was the previous behaviour
-/// and silently broke the per-process logfile naming convention,
-/// because `argv[0]` ended up being `env` rather than the user's
-/// binary. See round-3 feedback §3.1.
-pub fn parse_env_pairs(env_vars: &[String]) -> nlink_lab::Result<Vec<(String, String)>> {
-    env_vars
-        .iter()
-        .map(|s| {
-            s.split_once('=')
-                .ok_or_else(|| {
-                    nlink_lab::Error::invalid_argument(format!(
-                        "invalid --env {s:?} (expected KEY=VALUE)"
-                    ))
-                })
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-        })
-        .collect()
-}
-
 /// Build the `host_resources` block for `status --json <lab>`.
 ///
 /// Reports the host-side artefacts a lab installs, so consumers can
@@ -193,35 +134,6 @@ fn rate_text(bits: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_env_pairs_accepts_valid() {
-        let inputs = vec![
-            "FOO=bar".to_string(),
-            "EMPTY=".to_string(),
-            "X=y=z".to_string(),
-        ];
-        let pairs = parse_env_pairs(&inputs).unwrap();
-        assert_eq!(
-            pairs,
-            vec![
-                ("FOO".to_string(), "bar".to_string()),
-                ("EMPTY".to_string(), "".to_string()),
-                // `split_once` splits on the *first* `=`, so the value gets
-                // `y=z`. Keeps `--env DSN=postgres://u@h/db?x=y` working.
-                ("X".to_string(), "y=z".to_string()),
-            ]
-        );
-    }
-
-    #[test]
-    fn parse_env_pairs_rejects_missing_equals() {
-        let inputs = vec!["NOEQ".to_string()];
-        let err = parse_env_pairs(&inputs).unwrap_err();
-        let s = err.to_string();
-        assert!(s.contains("NOEQ"), "error should name the bad entry: {s}");
-    }
 
     /// `topology_endpoints` must collect from every place a topology
     /// can declare an endpoint — `links`, `networks.members`, and

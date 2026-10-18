@@ -10,7 +10,7 @@ pub struct Args {
     pub archive: PathBuf,
 
     /// Extract to this directory. Default: `./<lab-name>/`
-    #[arg(short = 'd', long)]
+    #[arg(long)]
     pub dir: Option<PathBuf>,
 
     /// Extract + validate only; don't deploy.

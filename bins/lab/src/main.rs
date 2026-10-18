@@ -5,6 +5,7 @@
 // (compile-time only, no runtime effect).
 #![recursion_limit = "256"]
 
+mod args;
 mod cli;
 mod cmd;
 mod ctx;

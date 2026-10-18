@@ -11,6 +11,7 @@ pub struct Args {
     pub lab: String,
 
     /// Endpoint (e.g., "router:eth0"). Not required with --show.
+    #[arg(value_parser = crate::args::endpoint)]
     pub endpoint: Option<String>,
 
     /// Show every endpoint's root qdisc, one line each: netem's delay,

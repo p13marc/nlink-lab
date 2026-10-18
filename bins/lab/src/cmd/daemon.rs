@@ -8,9 +8,9 @@ pub struct Args {
     #[arg(add = crate::ctx::lab_completer())]
     pub lab: String,
 
-    /// Metrics collection interval in seconds.
-    #[arg(short, long, default_value = "2")]
-    pub interval: u64,
+    /// Metrics collection interval.
+    #[arg(short, long, value_name = "DURATION", default_value = "2s", value_parser = crate::args::interval)]
+    pub interval: std::time::Duration,
 
     /// Zenoh mode: peer or client.
     #[arg(long, default_value = "peer")]
@@ -45,7 +45,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // queryables, events, sockdiag flows — the CLI used to run a
     // private fork that ignored every flag below (#43).
     let opts = nlink_lab_backend::BackendOpts {
-        interval: std::time::Duration::from_secs(interval),
+        interval,
         zenoh_mode: zenoh_mode.parse()?,
         zenoh_listen: zenoh_listen.into_iter().collect(),
         zenoh_connect: zenoh_connect.into_iter().collect(),
@@ -53,7 +53,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     };
     if !ctx.quiet {
         println!(
-            "Starting Zenoh backend for lab '{}' ({} nodes, every {}s)",
+            "Starting Zenoh backend for lab '{}' ({} nodes, every {:?})",
             lab,
             running.namespace_count(),
             interval

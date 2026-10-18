@@ -7,7 +7,7 @@ in one screen.
 
 ```bash
 sudo nlink-lab top mylab               # collect locally (needs root)
-sudo nlink-lab top mylab --interval 2
+sudo nlink-lab top mylab --interval 2s
 nlink-lab top mylab --zenoh            # read a running `daemon` (no root)
 nlink-lab top mylab --once             # one text frame, for pipes and CI
 ```
@@ -97,17 +97,17 @@ Arguments:
           Lab name
 
 Options:
-  -i, --interval <SECS>
-          Refresh interval in seconds
+  -i, --interval <DURATION>
+          Refresh interval (`1s`; 100ms at least)
           
-          [default: 1]
+          [default: 1s]
 
       --once
           Print one text frame and exit: no terminal control, safe in pipes, CI and `watch`. With `--json`, prints the raw metrics snapshot.
           
           Collecting locally, this samples twice half a second apart — a rate is a delta between two samples, so a single collection would report every interface as idle.
 
-  -n, --node <SUBSTR>
+      --node <SUBSTR>
           Start with the node/interface filter set to this substring
 
       --zenoh

@@ -124,7 +124,7 @@ ls satellite-mesh/
 Custom extract dir:
 
 ```bash
-sudo nlink-lab import bug-repro.nlz -d /tmp/repro
+sudo nlink-lab import bug-repro.nlz --dir /tmp/repro
 ```
 
 Use the rendered snapshot directly (skip re-parsing the NLL —

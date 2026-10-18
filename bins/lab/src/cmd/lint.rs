@@ -13,8 +13,8 @@ pub struct Args {
     pub topology: Option<PathBuf>,
 
     /// Set NLL parameters (can be repeated: --set key=value).
-    #[arg(long = "set", value_name = "KEY=VALUE")]
-    pub params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub params: Vec<(String, String)>,
 
     /// Silence one lint rule (repeatable).
     #[arg(long, value_name = "RULE", add = crate::ctx::lint_rule_completer())]

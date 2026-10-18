@@ -462,7 +462,7 @@ For network behavior bugs, also include:
 
 ```bash
 # A short pcap from the failing path
-sudo nlink-lab capture <lab> <ep> -w bug.pcap --duration 5
+sudo nlink-lab capture <lab> <ep> -o bug.pcap --duration 5s
 ```
 
 The pcap + the `.nlz` archive are usually enough to repro

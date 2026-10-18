@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, parse_topology, require_root};
-use crate::output::{DryRunReport, EXIT_VALIDATION, print_layered, set_exit_code};
+use crate::output::{DryRunReport, EXIT_VALIDATION, set_exit_code};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -17,8 +17,8 @@ pub struct Args {
     pub topology: Option<PathBuf>,
 
     /// Set a `param` value for --topology (repeatable): --set key=value.
-    #[arg(long = "set", value_name = "KEY=VALUE")]
-    pub params: Vec<String>,
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    pub params: Vec<(String, String)>,
 }
 
 /// Exit 0 when the kernel state of every node matches the topology, 2
@@ -45,23 +45,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
     let plan = nlink_lab::apply_plan(&running, &desired)?;
-    let removals: Vec<String> = plan
-        .ops
-        .iter()
-        .filter(|o| o.is_removal())
-        .map(|o| o.describe())
-        .collect();
     // and the plan's other work, as `apply --check` counts it: a change
     // that only re-creates a container verified clean (#209)
-    let plan_ops: Vec<String> = plan.work().map(|o| o.describe()).collect();
+    let (removals, plan_ops) = crate::cmd::common::plan_lists(&plan);
     let report = DryRunReport::new(&lab, &layered, &removals).with_ops(&plan_ops);
     let drift = !report.no_op;
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if drift {
         println!("Drift detected for lab {lab:?}:");
-        print_layered(&layered, &removals);
-        crate::output::print_plan_ops(&plan_ops);
+        crate::cmd::common::print_drift(&layered, &removals, &plan_ops);
         println!("{} change(s) needed to converge", report.change_count);
     } else if !ctx.quiet {
         println!("Lab {lab:?} matches its topology (no drift).");

@@ -48,7 +48,7 @@ Options:
   -o, --output <OUTPUT>
           Output directory (default: current directory)
 
-  -n, --name <NAME>
+      --name <NAME>
           Override the lab name
 
       --force

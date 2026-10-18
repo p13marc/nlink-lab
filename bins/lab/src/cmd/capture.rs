@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, require_root};
-use crate::util::{compile_legacy_bpf_filter, parse_byte_size, parse_filter_cidr};
+use crate::util::{compile_legacy_bpf_filter, parse_filter_cidr};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -12,10 +12,11 @@ pub struct Args {
     pub lab: String,
 
     /// Endpoint (e.g., "router:eth0").
+    #[arg(value_parser = crate::args::endpoint)]
     pub endpoint: String,
 
-    /// Write to pcap file (default: print summaries to stdout).
-    #[arg(short, long)]
+    /// Write a pcap file (default: print summaries to stdout).
+    #[arg(short = 'o', long = "output", alias = "write", value_name = "FILE")]
     pub write: Option<PathBuf>,
 
     /// Capture N packets then stop.
@@ -26,7 +27,7 @@ pub struct Args {
     /// 80"). Requires nlink-lab built with the
     /// `legacy-tcpdump-filter` feature *and* `tcpdump` on PATH.
     /// Default builds prefer the typed `--filter-*` flags below.
-    #[arg(short, long)]
+    #[arg(long)]
     pub filter: Option<String>,
 
     /// Match only TCP (sets ip_proto=6).
@@ -124,9 +125,9 @@ pub struct Args {
     #[arg(long = "filter-not")]
     pub filter_not: bool,
 
-    /// Stop after N seconds.
-    #[arg(long, value_parser = crate::util::parse_secs)]
-    pub duration: Option<f64>,
+    /// Stop after this long (`30s`).
+    #[arg(long, value_name = "DURATION", value_parser = crate::args::duration)]
+    pub duration: Option<std::time::Duration>,
 
     /// Snap length -- truncate packets to N bytes.
     #[arg(long, default_value = "262144")]
@@ -143,16 +144,16 @@ pub struct Args {
     /// Rotate the pcap file when the active segment exceeds this
     /// size (suffixes K/M/G accepted; e.g. `100M`). On rotation
     /// the active `<base>.pcap` becomes `<base>.pcap.1`, the
-    /// previous `.1` becomes `.2`, etc. Requires `--write`.
+    /// previous `.1` becomes `.2`, etc. Requires `--output`.
     /// Round-5 §2.3.
-    #[arg(long, value_name = "SIZE", value_parser = parse_byte_size)]
+    #[arg(long, value_name = "SIZE", value_parser = crate::args::byte_size)]
     pub max_size: Option<u64>,
 
-    /// Rotate the pcap file every SECS seconds since the last
+    /// Rotate the pcap file this long (`10m`) after the last
     /// rotation. Composes with `--max-size` (whichever threshold
-    /// fires first triggers the rotation). Requires `--write`.
-    #[arg(long, value_name = "SECS", value_parser = crate::util::parse_secs)]
-    pub rotate: Option<f64>,
+    /// fires first triggers the rotation). Requires `--output`.
+    #[arg(long, value_name = "DURATION", value_parser = crate::args::interval)]
+    pub rotate: Option<std::time::Duration>,
 
     /// Number of *rotated* segments to keep (`<base>.pcap.1`
     /// through `<base>.pcap.<keep>`). The active `<base>.pcap`
@@ -190,7 +191,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         interface: ep.iface.clone(),
         snap_len,
         count,
-        duration: duration.map(std::time::Duration::from_secs_f64),
+        duration,
         bpf_filter: bpf,
         profile: netring::RingProfile::LowMemory,
         ignore_outgoing: dedupe_loopback,
@@ -213,10 +214,10 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     // Build the output sink. --max-size or --rotate need
-    // --write (rotation only makes sense for file output).
+    // --output (rotation only makes sense for file output).
     if (max_size.is_some() || rotate.is_some()) && write.is_none() {
         return Err(nlink_lab::Error::invalid_argument(
-            "--max-size and --rotate require --write",
+            "--max-size and --rotate require --output",
         ));
     }
     let output = match write {
@@ -224,7 +225,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             nlink_lab::capture::CaptureOutput::RotatingPcap {
                 base: path,
                 max_size,
-                rotate_after: rotate.map(std::time::Duration::from_secs_f64),
+                rotate_after: rotate,
                 keep,
             }
         }

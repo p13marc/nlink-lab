@@ -495,8 +495,75 @@ pub fn grouped_help(cmd: &clap::Command) -> String {
     out
 }
 
+/// What each short flag means, for every command (a unit test checks):
+/// one letter, one long name. `docs/cli/README.md` lists them too.
+#[cfg(test)]
+const SHORT_FLAGS: &[(char, &str)] = &[
+    ('c', "count"),
+    ('e', "env"),
+    ('f', "follow"),
+    ('h', "help"),
+    ('i', "interval"),
+    ('L', "lab"),
+    ('o', "output"),
+    ('q', "quiet"),
+    ('s', "signal"),
+    ('t', "timeout"),
+    ('v', "verbose"),
+    ('V', "version"),
+    ('w', "write"),
+];
+
 #[cfg(test)]
 mod tests {
+    /// A short flag means one thing everywhere, and no command has a
+    /// flag of a global one's name (it would shadow it).
+    #[test]
+    fn short_flags_mean_one_thing() {
+        fn walk(cmd: &clap::Command, path: &str, globals: &[String], bad: &mut Vec<String>) {
+            for a in cmd.get_arguments() {
+                if a.is_global_set() && !path.is_empty() {
+                    continue;
+                }
+                if let Some(short) = a.get_short() {
+                    let long = a.get_long().unwrap_or("-");
+                    match super::SHORT_FLAGS.iter().find(|(c, _)| *c == short) {
+                        Some((_, meant)) if *meant == long => {}
+                        Some((_, meant)) => bad.push(format!(
+                            "`{path}` -{short} is --{long}; -{short} means --{meant}"
+                        )),
+                        None => bad.push(format!(
+                            "`{path}` -{short} (--{long}) is not in SHORT_FLAGS"
+                        )),
+                    }
+                }
+                if !path.is_empty()
+                    && let Some(long) = a.get_long()
+                    && globals.iter().any(|g| g == long)
+                {
+                    bad.push(format!("`{path}` --{long} shadows the global --{long}"));
+                }
+            }
+            for sub in cmd.get_subcommands() {
+                walk(
+                    sub,
+                    format!("{path} {}", sub.get_name()).trim(),
+                    globals,
+                    bad,
+                );
+            }
+        }
+        let cmd = crate::command();
+        let globals: Vec<String> = cmd
+            .get_arguments()
+            .filter(|a| a.is_global_set())
+            .filter_map(|a| a.get_long().map(str::to_string))
+            .collect();
+        let mut bad = Vec::new();
+        walk(&cmd, "", &globals, &mut bad);
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     #[test]
     fn every_command_is_in_one_help_group() {
         let cmd = crate::command();

@@ -15,8 +15,8 @@ pub struct Args {
 
     /// Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost).
     /// With --exec or --file too, all must hold, within one --timeout.
-    #[arg(long)]
-    pub tcp: Option<String>,
+    #[arg(long, value_name = "[IP:]PORT", value_parser = crate::args::tcp_target)]
+    pub tcp: Option<(String, u16)>,
 
     /// Wait for command to succeed (exit 0).
     #[arg(long = "exec")]
@@ -26,13 +26,13 @@ pub struct Args {
     #[arg(long)]
     pub file: Option<String>,
 
-    /// Timeout in seconds (default: 30).
-    #[arg(short, long, default_value = "30")]
-    pub timeout: u64,
+    /// How long to wait for all of them.
+    #[arg(short, long, value_name = "DURATION", default_value = "30s", value_parser = crate::args::duration)]
+    pub timeout: std::time::Duration,
 
-    /// Poll interval in milliseconds (default: 500).
-    #[arg(long, default_value = "500")]
-    pub interval: u64,
+    /// How often to probe.
+    #[arg(short, long, value_name = "DURATION", default_value = "500ms", value_parser = crate::args::interval)]
+    pub interval: std::time::Duration,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -47,12 +47,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     } = args;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
-    let timeout = std::time::Duration::from_secs(timeout);
-    let interval = std::time::Duration::from_millis(interval);
 
     let mut conditions = Vec::new();
-    if let Some(tcp_addr) = &tcp {
-        let (ip, port) = nlink_lab::wait::parse_tcp_target(tcp_addr)?;
+    if let Some((ip, port)) = tcp {
         conditions.push(WaitCondition::Tcp { ip, port });
     }
     if let Some(cmd) = exec_cmd {

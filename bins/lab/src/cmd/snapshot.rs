@@ -13,11 +13,11 @@ pub struct Args {
     pub name: Option<String>,
 
     /// Free-text description stored with the snapshot.
-    #[arg(long, short = 'd')]
+    #[arg(long)]
     pub description: Option<String>,
 
     /// List the lab's snapshots (newest first).
-    #[arg(long, short = 'l')]
+    #[arg(long)]
     pub list: bool,
 
     /// Delete a snapshot.

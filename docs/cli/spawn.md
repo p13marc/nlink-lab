@@ -131,13 +131,13 @@ Options:
       --log-dir <LOG_DIR>
           Directory for stdout/stderr log files (default: lab state dir)
 
-      --env <KEY=VALUE>
-          Set environment variables (can be repeated: --env KEY=VALUE)
+  -e, --env <KEY=VALUE>
+          Set an environment variable (repeatable: -e KEY=VALUE)
 
       --workdir <DIR>
           Working directory for the spawned process (chdir before exec)
 
-      --wait-tcp <WAIT_TCP>
+      --wait-tcp <[IP:]PORT>
           Wait for TCP port after spawn (e.g., "127.0.0.1:8080" or "8080").
           
           The probe runs inside the node's namespace, so `127.0.0.1:<port>` only matches a service that bound to the loopback interface. If your service binds to a specific node IP (e.g., the interface address), pass that address here instead of `127.0.0.1`.
@@ -156,13 +156,13 @@ Options:
       --wait-port <PORT>
           Wait until the spawned process has a TCP listener on PORT inside its namespace. Reads `/proc/<pid>/net/tcp{,6}` — no actual `connect(2)` is attempted, so this works for services that bind to non-routable addresses or that would log connection-refused on probe attempts. Combinable with --wait-tcp / --wait-log (all AND-compose). Round-5 §2.4
 
-      --wait-fd-stable <SECS>
-          Wait until the spawned process's open-fd count has been stable for SECS seconds. Heuristic — prefer --wait-log or --wait-port when a deterministic signal is available. A process can open more files later in its lifecycle. Round-5 §2.4
+      --wait-fd-stable <DURATION>
+          Wait until the spawned process's open-fd count has been stable for DURATION (`2s`). Heuristic — prefer --wait-log or --wait-port when a deterministic signal is available. A process can open more files later in its lifecycle. Round-5 §2.4
 
-      --wait-timeout <WAIT_TIMEOUT>
-          Timeout for --wait-tcp / --wait-log / --wait-port / --wait-fd-stable together, in seconds (default: 30)
+      --wait-timeout <DURATION>
+          Timeout for --wait-tcp / --wait-log / --wait-port / --wait-fd-stable together
           
-          [default: 30]
+          [default: 30s]
 
   -h, --help
           Print help (see a summary with '-h')

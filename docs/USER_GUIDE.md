@@ -1035,7 +1035,7 @@ pathspace per node:
 ```bash
 sudo nlink-lab exec -L ospf-demo r1 -- vtysh -N nl-ospf-demo-r1 -c "show ip ospf neighbor"
 sudo nlink-lab exec -L ospf-demo r1 -- ip route       # OSPF routes carry `proto ospf`
-sudo nlink-lab watch -L ospf-demo --family route      # watch reconvergence live
+sudo nlink-lab events -f -L ospf-demo --source drift --family route      # watch reconvergence live
 sudo nlink-lab impair -L ospf-demo r1:eth0 --partition   # then watch the reroute
 nlink-lab ps -L ospf-demo                             # zebra/ospfd are tracked pids
 ```
@@ -1087,7 +1087,7 @@ lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
 | `capture` | Capture packets on an interface (tcpdump) |
 | `diagnose` | Run diagnostics on a lab |
 | `daemon` | Start the Zenoh backend daemon for a running lab |
-| `metrics` | Stream live metrics from a lab via Zenoh |
+| `top` | Live view of a lab: nodes, interfaces, flows (`--once --json`: one metrics snapshot) |
 | `init` | Create a topology file from a built-in template |
 | `graph` | Print topology as DOT graph |
 | `render` | Expand loops/variables/imports and print flat NLL (`--json`, `--dot`, `--ascii`) |
@@ -1155,7 +1155,7 @@ Hot-reload: compares the new topology against the running lab and applies only t
 ### impair
 
 ```bash
-sudo nlink-lab impair -L <lab> <endpoint> --delay 50ms --jitter 5ms --loss 1%
+sudo nlink-lab impair -L <lab> <endpoint> delay 50ms jitter 5ms loss 1%
 sudo nlink-lab impair -L <lab> --show
 sudo nlink-lab impair -L <lab> <endpoint> --clear
 ```
@@ -1178,13 +1178,13 @@ sudo nlink-lab daemon -L <lab> [--interval 2s] [--zenoh-mode peer] [--zenoh-list
 
 Starts the Zenoh backend. Publishes per-interface metrics at the specified interval. See "Daemon Mode and TopoViewer" below.
 
-### metrics
+### top
 
 ```bash
-nlink-lab metrics -L <lab> [--node router] [--format table] [--count 10] [--zenoh-connect tcp/127.0.0.1:7447]
+sudo nlink-lab top -L <lab>                  # live TUI
+sudo nlink-lab --json top -L <lab> --once    # one metrics snapshot
+nlink-lab top -L <lab> --zenoh               # from a running daemon, no root
 ```
-
-Subscribes to live metrics from a running daemon. Does not require root. `--count` exits after N samples. `--format json` for machine-readable output.
 
 ### init
 
@@ -1204,7 +1204,7 @@ Creates a topology file from a built-in template. Use `--list` to see available 
 No redeployment needed. Change delay, jitter, loss, or rate on any interface:
 
 ```bash
-sudo nlink-lab impair -L mylab router:wan0 --delay 100ms --loss 5%
+sudo nlink-lab impair -L mylab router:wan0 delay 100ms loss 5%
 sudo nlink-lab impair -L mylab router:wan0 --clear
 sudo nlink-lab impair -L mylab --show
 ```
@@ -1315,11 +1315,13 @@ nlink-lab ip --json -L mylab server            # JSON output
 
 ### Asymmetric Impairments
 
-Apply different impairments per direction:
+Apply different impairments per direction: `--dir in` sets what the
+endpoint receives (it goes on its link's other end), `--dir both` the
+same both ways.
 
 ```bash
-sudo nlink-lab impair -L mylab router:wan0 --out-delay 50ms --in-delay 200ms
-sudo nlink-lab impair -L mylab router:wan0 --out-loss 0% --in-loss 5%
+sudo nlink-lab impair -L mylab router:wan0 delay 50ms
+sudo nlink-lab impair -L mylab router:wan0 delay 200ms loss 5% --dir in
 ```
 
 ### Events
@@ -1345,7 +1347,7 @@ chaos run, before a risky `apply`, or to hand a colleague a known state:
 
 ```bash
 sudo nlink-lab snapshot save -L mylab before-chaos --description "clean baseline"
-sudo nlink-lab impair -L mylab wan:eth0 --loss 30%
+sudo nlink-lab impair -L mylab wan:eth0 loss 30%
 sudo nlink-lab impair -L mylab core:eth1 --partition
 sudo nlink-lab snapshot save -L mylab chaos
 sudo nlink-lab snapshot ls -L mylab
@@ -1515,8 +1517,8 @@ partition and heal the selected interface using the same calls as
 Subscribe from any machine (no root required):
 
 ```bash
-nlink-lab metrics -L mylab
-nlink-lab metrics -L mylab --node router --format json --count 5
+nlink-lab top -L mylab --once
+nlink-lab --json top -L mylab --once --node router
 ```
 
 Table output shows per-interface rx/tx rates, packet counts, errors, and drops.

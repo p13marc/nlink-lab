@@ -213,7 +213,7 @@ v3**; the v1 `diff` / `layered_summary` /
 `layered_summary_deprecated` fields were removed in 0.7.0 after
 their deprecation window.
 
-`nlink-lab watch -L <lab>` subscribes to every node's nftables and
+`nlink-lab events -f --source drift -L <lab>` subscribes to every node's nftables and
 RTNETLINK multicast and prints one line per drift — the way to
 catch hand-edits that bypass `apply`.
 

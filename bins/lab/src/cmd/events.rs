@@ -13,19 +13,39 @@ pub struct Args {
     pub lab: crate::ctx::LabArg,
 
     /// Keep running: tail new lifecycle events and merge live drift
-    /// (`watch`) and runtime events (process exits, interface state).
-    /// Drift and runtime sources need root; without it only the
-    /// lifecycle log is followed.
+    /// (RTNETLINK and nftables changes in the nodes) and runtime events
+    /// (process exits, interface state). Drift and runtime need root;
+    /// without it only the lifecycle log is followed.
     #[arg(long, short = 'f')]
     pub follow: bool,
 
+    /// Only these sources (repeatable; default all): `lifecycle` (what
+    /// nlink-lab did), `drift` (kernel changes, live: with -f), `runtime`
+    /// (process exits and link state, live: with -f). `-f --source drift`
+    /// is what `watch` was.
+    #[arg(long, value_enum, value_name = "SOURCE")]
+    pub source: Vec<Source>,
+
+    /// Drift: the netlink family to watch.
+    #[arg(long, value_enum, default_value_t = Family::Both)]
+    pub family: Family,
+
+    /// Drift: one node only (nothing else is subscribed).
+    #[arg(long, add = crate::ctx::node_completer())]
+    pub node: Option<String>,
+
+    /// Drift: also show the resync replay after an ENOBUFS recovery
+    /// (marked `[snapshot]`).
+    #[arg(long)]
+    pub include_snapshot: bool,
+
     /// Only events newer than this (`10m`, `2h`, `30s`).
-    #[arg(long, value_name = "DURATION")]
-    pub since: Option<String>,
+    #[arg(long, value_name = "DURATION", value_parser = crate::args::duration)]
+    pub since: Option<Duration>,
 
     /// Only these event kinds (repeatable): lifecycle names such as
     /// `deployed`, `impaired`, `spawned`; drift names, `<action>_<object>`
-    /// as `watch` prints them (`new_address`, `del_route`, `new_nft_rule`)
+    /// as drift records name them (`new_address`, `del_route`, `new_nft_rule`)
     /// or `ended`/`gone`; or the sources `lifecycle`, `drift`, `runtime`.
     #[arg(long, value_name = "KIND")]
     pub kind: Vec<String>,
@@ -40,13 +60,39 @@ pub struct Args {
     pub socket: Option<PathBuf>,
 }
 
+/// `--source`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Lifecycle,
+    Drift,
+    Runtime,
+}
+
+/// `--family`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum Family {
+    Route,
+    Nftables,
+    Both,
+}
+
+impl From<Family> for nlink_lab::WatchFamily {
+    fn from(v: Family) -> Self {
+        match v {
+            Family::Route => nlink_lab::WatchFamily::Route,
+            Family::Nftables => nlink_lab::WatchFamily::Nftables,
+            Family::Both => nlink_lab::WatchFamily::Both,
+        }
+    }
+}
+
 /// One record on the merged stream.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum Event {
     /// Recorded by a CLI operation (`events.ndjson`).
     Lifecycle(nlink_lab::LifecycleEvent),
-    /// RTNETLINK / nftables change inside a node (`nlink-lab watch`).
+    /// RTNETLINK / nftables change inside a node (`--source drift`).
     Drift {
         ts: String,
         #[serde(flatten)]
@@ -156,9 +202,8 @@ fn now_iso8601() -> String {
 
 /// `--since` cut-off as an RFC 3339 timestamp (events are compared as
 /// strings; both are UTC RFC 3339, so lexical order is time order).
-fn since_cutoff(since: &str) -> nlink_lab::Result<String> {
-    let d = nlink_lab::helpers::parse_duration(since)?;
-    Ok(nlink_lab::events::since_iso8601(d))
+fn since_cutoff(since: Duration) -> String {
+    nlink_lab::events::since_iso8601(since)
 }
 
 struct Filter {
@@ -197,6 +242,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args {
         lab,
         follow,
+        source,
+        family,
+        node,
+        include_snapshot,
         since,
         kind,
         interval,
@@ -206,17 +255,25 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if !nlink_lab::state::exists(&lab) {
         return Err(nlink_lab::Error::NotFound { name: lab });
     }
+    let asked = |s: Source| source.contains(&s);
+    let want = |s: Source| source.is_empty() || asked(s);
+    if !follow && !want(Source::Lifecycle) {
+        return Err(nlink_lab::Error::invalid_argument(
+            "drift and runtime events are live: add -f",
+        ));
+    }
     let filter = Filter {
         kinds: kind,
-        since: since.as_deref().map(since_cutoff).transpose()?,
+        since: since.map(since_cutoff),
     };
 
     // History first.
-    let history = nlink_lab::events::read(&lab)?;
-    for e in history {
-        let ev = Event::Lifecycle(e);
-        if filter.keep(&ev) {
-            println!("{}", emit(ctx, &ev));
+    if want(Source::Lifecycle) {
+        for e in nlink_lab::events::read(&lab)? {
+            let ev = Event::Lifecycle(e);
+            if filter.keep(&ev) {
+                println!("{}", emit(ctx, &ev));
+            }
         }
     }
     if !follow {
@@ -235,7 +292,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     //    start. Polling by path missed `destroyed` and then polled a
     //    missing file forever, and a new file past the old offset lost its
     //    first lines (#210).
-    {
+    if want(Source::Lifecycle) {
         let tx = tx.clone();
         let path = nlink_lab::events::events_path(&lab);
         let start = std::fs::File::open(&path).ok().map(|f| {
@@ -286,10 +343,22 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     let is_root = unsafe { libc::geteuid() } == 0;
+    if !is_root && (asked(Source::Drift) || asked(Source::Runtime)) {
+        // unprivileged, every subscription failed with EPERM, retried (#226)
+        crate::ctx::require_root()?;
+    }
     let running = nlink_lab::RunningLab::load(&lab)?;
-    if is_root {
+    if let Some(node) = &node {
+        crate::cmd::common::require_node(&running, node)?;
+    }
+    if is_root && want(Source::Drift) {
         // 2. drift: RTNETLINK + nftables subscriptions per node
-        let opts = nlink_lab::WatchOpts::default();
+        let opts = nlink_lab::WatchOpts {
+            family: family.into(),
+            json: ctx.json,
+            node,
+            include_snapshot,
+        };
         if let Some((mut drift_rx, subs)) = nlink_lab::watch_stream(&running, &opts)? {
             tasks.extend(subs);
             let tx = tx.clone();
@@ -304,7 +373,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 }
             }));
         }
-        // 3. runtime: the backend's collector (process exits, link state)
+    }
+    if is_root && want(Source::Runtime) {
+        // 3. runtime: the metrics collector (process exits, link state)
         let tx = tx.clone();
         tasks.push(tokio::spawn(async move {
             let mut collector = nlink_lab::metrics::MetricsCollector::new(&running);
@@ -331,7 +402,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 }
             }
         }));
-    } else {
+    }
+    if !is_root && !ctx.quiet {
         eprintln!("events: not root — following the lifecycle log only (drift/runtime need root)");
     }
     drop(tx);

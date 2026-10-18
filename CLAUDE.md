@@ -261,18 +261,17 @@ CLI commands (lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the on
 `ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,
 impairments, partitions, processes, counters),
 `snapshot save|ls|rm|restore` (`--dry-run`), `archive create|extract|inspect`,
-`events` (`--follow`, `--since`, `--kind`, `--socket`),
+`events` (`--follow`, `--source lifecycle|drift|runtime`, `--family`, `--node`, `--since`, `--kind`, `--socket`),
 `exec` (`--json`, `--env`, `--workdir`),
 `spawn` (`--log-dir`, `--env`, `--workdir`, `--wait-tcp`),
 `shell` (interactive TTY), `validate` (with `--set`, `--show-ips`), `test`
 (`--junit`, `--tap`, `--fail-fast`), `render`
 (`--json`, `--dot`, `--ascii`, `--set`),
-`impair` (`--out-*`/`--in-*`, `--partition`/`--heal`),
+`impair EP SPEC…` (`--dir out|in|both`, `--clear`, `--partition`/`--heal`, `--pair SRC DST`, `--show`),
 `graph`, `diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
-`watch` (`--family route|nftables|both`, `--json` for NDJSON),
 `wait [NODE]` (`--tcp`, `--exec`, `--file`, `--listening`, `--log`, `--fd-stable`),
 `ip` (`--iface`, `--cidr`),
-`ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`, `metrics`,
+`ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`,
 `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `node add|rm|restart`, `link add|rm|set` (`--mtu`, `--qdisc`), `fmt` (`--check`, `-w`, `-`), `lint`
 (`--strict`, `--allow`), `doctor` (`--fix`), `verify` (`--file`, the CI drift gate),
@@ -355,7 +354,7 @@ Plan 160 (0.7.0) bumped it to **schema v3**, removing the v1
 `diff` / `layered_summary` / `layered_summary_deprecated`
 fallback fields after their one-release deprecation window.
 
-`nlink-lab watch -L <lab>` (Plan 159b) subscribes to every node's
+`nlink-lab events -f --source drift` (Plan 159b) subscribes to every node's
 nftables + RTNETLINK multicast and prints one line per drift —
 useful for spotting hand-edits that bypass `apply`. Powered by
 0.19's `Connection<P>::subscribe_all_with_resync`.

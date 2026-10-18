@@ -51,7 +51,6 @@ What's actually running.
 | [`diff`](diff.md) | Diff two NLL topologies |
 | [`diagnose`](diagnose.md) | Per-lab health checks |
 | [`verify`](verify.md) | Check a running lab for drift against its topology |
-| [`metrics`](metrics.md) | Zenoh metrics export |
 | [`top`](top.md) | Live TUI: nodes, interfaces, flows |
 | [`events`](events.md) | Lifecycle event log (deploy, impair, spawn, drift) |
 
@@ -78,8 +77,6 @@ Things you'd reach for in a chaos test.
 | [`completions`](completions.md) | Generate shell completions |
 | [`lsp`](lsp.md) | Language server for `.nll` files (stdio) |
 | [`daemon`](daemon.md) | Run the zenoh backend for a lab (metrics, RPC, events) |
-| [`metrics`](metrics.md) | Stream live metrics published by `daemon` |
-| [`watch`](watch.md) | Print RTNETLINK + nftables drift events for a lab |
 | [`scenario`](scenario.md) | Run a `scenario` block from a deployed lab's topology |
 | [`benchmark`](benchmark.md) | Run a `benchmark` block from a deployed lab's topology |
 | [`wait`](wait.md) | Block until a lab's state file exists (deploy finished) |

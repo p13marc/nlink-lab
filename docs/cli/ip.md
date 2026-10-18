@@ -7,18 +7,18 @@
 ```text
 Show IP addresses assigned to a node
 
-Usage: nlink-lab ip [OPTIONS] <NODE>
+Usage: nlink-lab ip [OPTIONS] <NODE[:IFACE]>
 
 Arguments:
-  <NODE>
-          Node name
+  <NODE[:IFACE]>
+          The node, or one of its interfaces: `server`, `server:eth0`
 
 Options:
   -L, --lab <LAB>
           The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
 
       --iface <IFACE>
-          Filter by interface name
+          Only this interface (`NODE:IFACE` says the same)
 
       --cidr
           Show CIDR notation (include prefix length)

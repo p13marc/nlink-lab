@@ -24,7 +24,7 @@
           ]
         },
         {
-          "description": "RTNETLINK / nftables change inside a node (`nlink-lab watch`).",
+          "description": "RTNETLINK / nftables change inside a node (`--source drift`).",
           "type": "object",
           "properties": {
             "node": {

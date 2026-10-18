@@ -30,7 +30,6 @@ pub mod lint;
 pub mod logs;
 pub mod ls;
 pub mod lsp;
-pub mod metrics;
 pub mod node;
 pub mod ps;
 pub mod pull;
@@ -48,7 +47,6 @@ pub mod use_lab;
 pub mod validate;
 pub mod verify;
 pub mod wait;
-pub mod watch;
 
 use crate::cli::Commands;
 use crate::ctx::Ctx;
@@ -85,7 +83,6 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Diagnose(args) => diagnose::run(ctx, args).await,
         Commands::Capture(args) => capture::run(ctx, args),
         Commands::Wait(args) => wait::run(ctx, args).await,
-        Commands::Watch(args) => watch::run(ctx, args).await,
         Commands::Ip(args) => ip::run(ctx, args),
         Commands::Diff(args) => diff::run(ctx, args),
         Commands::Export(args) => export::run(ctx, args),
@@ -101,7 +98,6 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
             Ok(())
         }
         Commands::Daemon(args) => daemon::run(ctx, args).await,
-        Commands::Metrics(args) => metrics::run(ctx, args).await,
         Commands::Init(args) => init::run(ctx, args),
     }
 }

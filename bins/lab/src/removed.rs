@@ -41,6 +41,14 @@ pub const REMOVED: &[Removed] = &[
         instead: "nlink-lab node restart NODE",
     },
     Removed {
+        name: "watch",
+        instead: "nlink-lab events -f --source drift",
+    },
+    Removed {
+        name: "metrics",
+        instead: "nlink-lab top --once --json (one snapshot)",
+    },
+    Removed {
         name: "edit",
         instead: "nlink-lab node add|rm, nlink-lab link add|rm|set, nlink-lab impair",
     },
@@ -85,6 +93,96 @@ pub const REMOVED_FLAGS: &[RemovedFlag] = &[
         command: "verify",
         flag: "--topology",
         instead: "nlink-lab verify --file FILE",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--delay",
+        instead: "nlink-lab impair EP delay VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--jitter",
+        instead: "nlink-lab impair EP jitter VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--loss",
+        instead: "nlink-lab impair EP loss VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--rate",
+        instead: "nlink-lab impair EP rate VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--corrupt",
+        instead: "nlink-lab impair EP corrupt VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--reorder",
+        instead: "nlink-lab impair EP reorder VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--duplicate",
+        instead: "nlink-lab impair EP duplicate VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--delay-correlation",
+        instead: "nlink-lab impair EP delay-correlation VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--loss-correlation",
+        instead: "nlink-lab impair EP loss-correlation VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--limit",
+        instead: "nlink-lab impair EP limit VALUE (e.g. impair r1:eth0 delay 50ms loss 1%)",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--out-delay",
+        instead: "nlink-lab impair EP delay VALUE --dir out",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--out-jitter",
+        instead: "nlink-lab impair EP jitter VALUE --dir out",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--out-loss",
+        instead: "nlink-lab impair EP loss VALUE --dir out",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--out-rate",
+        instead: "nlink-lab impair EP rate VALUE --dir out",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--in-delay",
+        instead: "nlink-lab impair EP delay VALUE --dir in",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--in-jitter",
+        instead: "nlink-lab impair EP jitter VALUE --dir in",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--in-loss",
+        instead: "nlink-lab impair EP loss VALUE --dir in",
+    },
+    RemovedFlag {
+        command: "impair",
+        flag: "--in-rate",
+        instead: "nlink-lab impair EP rate VALUE --dir in",
     },
 ];
 

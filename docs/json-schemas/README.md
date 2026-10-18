@@ -22,7 +22,7 @@ have no typed struct yet.
 | `nlink-lab stats NODE --pid PID --json` / `--procs` | `stats-procs.schema.json` | generated (`ProcsReport`) |
 | `nlink-lab doctor --json` | `doctor.schema.json` | generated (`DoctorReport`) |
 | `nlink-lab lint --json` | `lint.schema.json` | generated (`LintReport`) |
-| `nlink-lab metrics --format json` (one line per snapshot) | `metrics-snapshot.schema.json` | generated (`MetricsSnapshot`) |
+| `nlink-lab top --once --json` | `metrics-snapshot.schema.json` | generated (`MetricsSnapshot`) |
 | `nlink-lab spawn --json` | `spawn.schema.json` | hand-written |
 | `nlink-lab impair --show --json` | `impair-show.schema.json` | hand-written |
 | daemon API, client → daemon ([API.md](../API.md)) | `api-client.v1.schema.json` | generated (`api::ClientMsg`) |

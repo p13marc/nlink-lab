@@ -2324,6 +2324,16 @@ impl RunningLab {
             }
         }
 
+        // 1a. Then what the lab's commands left in its namespaces, which
+        // nothing tracks (`exec … iperf3 -D`, a shell's `&`): it would
+        // keep each deleted namespace alive. Containers stop with their
+        // runtime.
+        let namespaces: Vec<String> = self.namespace_names.values().cloned().collect();
+        let strays = crate::host::stop_namespace_processes(&namespaces).await;
+        if strays > 0 {
+            tracing::info!("stopped {strays} untracked process(es) in the lab's namespaces");
+        }
+
         // 1b. Drop the lab's cgroups now that its processes are gone
         crate::cgroup::remove_lab(&self.topology.lab.name);
         step(1);

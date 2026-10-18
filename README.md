@@ -139,21 +139,22 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and the Rust API are stable across patch
 releases; breaking changes are flagged in the CHANGELOG with a
 migration note. Built on
-[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.29.
+[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.32.
 
-Current release: **0.13.0** (2026-10-02) — the loss release.
-`loss-correlation` was documented as bursty loss; it **lowers** a
-small loss rate instead (`loss 0.5% loss-correlation 25%` drops
-~0 %), and `validate`, `deploy`, `apply`, `edit` and `impair` now
-warn with the rate netem will really produce. Bursty loss proper
-is netem's loss models, in tc's own grammar: `loss gemodel 1% 30%`
-or `loss state …`, in NLL, `impair --loss` and `edit --set-impair`.
-An impairment replace now sets the whole netem state — see the
-CHANGELOG's Changed note.
+Current release: **0.14.0** (2026-10-18) — the redesign release.
+The CLI is regrouped into 39 commands with one vocabulary (`-L`
+or a current lab, durations with units, `--format`, live
+progress, exit 64 for usage errors); state lives in one root,
+`/var/lib/nlink-lab`; a host daemon, `nlink-labd`, serves every
+lab over a unix socket and Zenoh; and the desktop app edits,
+deploys and changes labs through it. It breaks scripts on
+purpose: the CHANGELOG's Migration section maps every old command
+and flag to its new form, and a removed command says what
+replaced it.
 
-0.11.1 fixed a zombie per `spawn` in a long-lived caller and
-squared the documentation up with the code. Earlier releases are
-in the [CHANGELOG](CHANGELOG.md), newest first.
+0.13.0 was the loss release (`loss-correlation` lowers a small
+loss rate; netem's loss models write bursty loss). Earlier
+releases are in the [CHANGELOG](CHANGELOG.md), newest first.
 
 ## Requirements
 

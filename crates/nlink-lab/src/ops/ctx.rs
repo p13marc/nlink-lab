@@ -273,12 +273,17 @@ impl OpCtx {
     /// Report the end: succeeded, failed, cancelled, or rolled back after
     /// `rolled_back` failed.
     pub fn finished<T>(&self, result: &Result<T>, rolled_back: bool) {
-        let depth = self
-            .depth
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |d| {
-                Some(d.saturating_sub(1))
-            })
-            .unwrap_or(0);
+        // one level down, never below none: the depth before (what
+        // `fetch_update` did; 1.99 renames it, and the MSRV is 1.98)
+        let mut depth = self.depth.load(Ordering::Relaxed);
+        while let Err(now) = self.depth.compare_exchange_weak(
+            depth,
+            depth.saturating_sub(1),
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            depth = now;
+        }
         if depth > 1 {
             return;
         }

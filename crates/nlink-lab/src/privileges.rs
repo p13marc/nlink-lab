@@ -1,15 +1,15 @@
-//! Whether this process may deploy a lab: root, or the two capabilities
-//! nlink-lab needs. Shared by the CLI's `require_root` and the
-//! `#[lab_test]` gate, which checked the euid only (#222).
+//! Whether this process may deploy a lab: the two capabilities nlink-lab
+//! needs, which root normally has. Shared by the CLI's `require_root`
+//! and the `#[lab_test]` gate, which checked the euid only (#222).
 
 const CAP_NET_ADMIN: u64 = 12;
 const CAP_SYS_ADMIN: u64 = 21;
 
-/// Root, or CAP_NET_ADMIN + CAP_SYS_ADMIN in the effective set.
+/// CAP_NET_ADMIN + CAP_SYS_ADMIN in the effective set. Root in a
+/// container can lack them — a CI job's is uid 0 with neither — and was
+/// taken for privileged, so root tests ran there and failed on EPERM;
+/// only when `/proc` cannot say does uid 0 count.
 pub fn has_privileges() -> bool {
-    if unsafe { libc::geteuid() } == 0 {
-        return true;
-    }
     std::fs::read_to_string("/proc/self/status")
         .ok()
         .and_then(|s| {
@@ -19,7 +19,8 @@ pub fn has_privileges() -> bool {
                     .map(cap_eff_has_net_and_sys_admin)
             })
         })
-        .unwrap_or(false)
+        // SAFETY: geteuid cannot fail.
+        .unwrap_or_else(|| unsafe { libc::geteuid() } == 0)
 }
 
 /// Whether a `CapEff` bitmask (hex, as in `/proc/self/status`) grants
@@ -44,6 +45,8 @@ mod tests {
         assert!(!cap_eff_has_net_and_sys_admin("0000000000001000"));
         // only CAP_CHOWN — used to pass the old `!= 0` check
         assert!(!cap_eff_has_net_and_sys_admin("0000000000000001"));
+        // a container's root: the default set, neither admin bit (CI)
+        assert!(!cap_eff_has_net_and_sys_admin("00000000800405fb"));
         assert!(!cap_eff_has_net_and_sys_admin("garbage"));
     }
 }

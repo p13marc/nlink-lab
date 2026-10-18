@@ -208,6 +208,8 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
                     #   (polls where the daemon streams nothing: Zenoh)
   fake.rs           #   --demo: made-up labs, metrics, impairments, events
   live.rs           #   lifecycle/runtime events -> timeline lines (+ what to refetch)
+  control.rs        #   changing a lab: impairment/pair editors, presets, Action
+                    #   (toast, refetch), undo requests, Confirm (typed-name destroy)
   spark.rs          #   sparkline canvas
   message.rs        #   Message, CanvasMsg, Shortcut
   reduce.rs         #   reduce(app, msg) -> Vec<Effect>: every behaviour, pure, tested

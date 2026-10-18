@@ -9,20 +9,22 @@ use nlink_lab_view::{Hit, NodeKind};
 
 use nlink_lab_shared::metrics::format_rate;
 
+use super::controls;
 use super::{field, heading, muted};
 use crate::message::{CanvasMsg, Message};
-use crate::model::Tab;
+use crate::model::{App, Tab};
 
-pub fn view(tab: &Tab) -> Element<'_, Message> {
+pub fn view<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
     let Some(topo) = &tab.topology else {
         return column![muted("Nothing to inspect yet.")].padding(10).into();
     };
+    let op = app.operator();
     let body = match &tab.view.selection {
-        None => lab(tab, topo),
+        None => lab(tab, topo, op),
         Some(Hit::Region(site)) => region(tab, site),
-        Some(Hit::Node(id)) => node(tab, topo, id),
+        Some(Hit::Node(id)) => node(tab, topo, id, op),
         Some(Hit::Edge(id)) => edge(tab, topo, id),
-        Some(Hit::Endpoint(ep)) => endpoint(tab, topo, ep),
+        Some(Hit::Endpoint(ep)) => endpoint(tab, topo, ep, op),
     };
     scrollable(body.spacing(6).padding(10).width(Length::Fill)).into()
 }
@@ -46,7 +48,7 @@ fn kind_name(k: NodeKind) -> &'static str {
     }
 }
 
-fn lab<'a>(tab: &'a Tab, topo: &'a Topology) -> Column<'a, Message> {
+fn lab<'a>(tab: &'a Tab, topo: &'a Topology, op: bool) -> Column<'a, Message> {
     let mut c = column![heading(if topo.lab.name.is_empty() {
         "(unnamed lab)"
     } else {
@@ -170,7 +172,12 @@ fn lab<'a>(tab: &'a Tab, topo: &'a Topology) -> Column<'a, Message> {
                 .on_press(Message::Unpin),
         );
     }
-    c.push(muted("Click a node, a link or an interface to inspect it."))
+    c = c.push(muted("Click a node, a link or an interface to inspect it."));
+    if let Some(l) = tab.live() {
+        c = c.push(controls::snapshots(l, op));
+        c = c.push(controls::destroy(l, op));
+    }
+    c
 }
 
 fn region<'a>(tab: &'a Tab, site: &'a str) -> Column<'a, Message> {
@@ -183,7 +190,7 @@ fn region<'a>(tab: &'a Tab, site: &'a str) -> Column<'a, Message> {
     c
 }
 
-fn node<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str) -> Column<'a, Message> {
+fn node<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str, op: bool) -> Column<'a, Message> {
     let g = &tab.view.graph;
     let Some(gn) = g.node(id) else {
         return column![muted("Not in the topology any more.")];
@@ -207,6 +214,11 @@ fn node<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str) -> Column<'a, Message
         c = c.push(heading("Members"));
         for m in &n.members {
             c = c.push(link_to(m.clone(), Hit::Endpoint(m.clone())));
+        }
+        if let Some(l) = tab.live()
+            && let Some(p) = l.pairs.as_ref().filter(|p| p.network == net)
+        {
+            c = c.push(controls::pairs(p, l, topo, op));
         }
         return c;
     }
@@ -236,6 +248,15 @@ fn node<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str) -> Column<'a, Message
     };
     if let Some(image) = &n.image {
         c = c.push(field("image", image.as_str()));
+        if let Some(l) = tab.live().filter(|l| op && !l.gone) {
+            c = c.push(
+                button(text("Restart").size(13))
+                    .style(button::secondary)
+                    .on_press_maybe((l.pending == 0).then(|| {
+                        Message::Control(crate::message::Control::Restart(id.to_string()))
+                    })),
+            );
+        }
         if let Some(cpu) = &n.cpu {
             c = c.push(field("cpu", cpu.as_str()));
         }
@@ -397,12 +418,12 @@ fn edge<'a>(tab: &'a Tab, topo: &'a Topology, id: &'a str) -> Column<'a, Message
     c
 }
 
-fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str) -> Column<'a, Message> {
+fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str, op: bool) -> Column<'a, Message> {
     let (node, iface) = ep.split_once(':').unwrap_or((ep, ""));
     let mut c = column![
         heading(ep),
         row![
-            muted("node"),
+            muted("node").width(Length::Fixed(96.0)),
             link_to(node.to_string(), Hit::Node(node.to_string()))
         ]
         .spacing(8)
@@ -421,7 +442,7 @@ fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str) -> Column<'a, Mes
         let peer = other.endpoint().unwrap_or_else(|| other.node.clone());
         c = c.push(
             row![
-                muted("peer"),
+                muted("peer").width(Length::Fixed(96.0)),
                 link_to(
                     peer.clone(),
                     match other.endpoint() {
@@ -474,6 +495,12 @@ fn endpoint<'a>(tab: &'a Tab, topo: &'a Topology, ep: &'a str) -> Column<'a, Mes
             .unwrap_or("")
             .to_lowercase();
         c = c.push(field("qdisc", name));
+    }
+    if let Some(l) = tab.live()
+        && let Some(e) = l.editor.as_ref().filter(|e| e.endpoint == ep)
+        && !l.gone
+    {
+        c = c.push(controls::impair(e, l, op));
     }
     c
 }

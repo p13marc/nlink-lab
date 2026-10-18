@@ -16,8 +16,8 @@ pub fn view<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
     let grid = pane_grid(&tab.panes, |_, pane, _| {
         let (title, body): (Element<'a, Message>, Element<'a, Message>) = match pane {
             Pane::Canvas => (canvas_title(tab), canvas(tab)),
-            Pane::Inspector => (text("Inspector").size(13).into(), inspector::view(tab)),
-            Pane::Dock => (dock_title(tab), dock::view(tab)),
+            Pane::Inspector => (text("Inspector").size(13).into(), inspector::view(app, tab)),
+            Pane::Dock => (dock_title(tab), dock::view(app, tab)),
         };
         pane_grid::Content::new(container(body).width(Length::Fill).height(Length::Fill))
             .title_bar(

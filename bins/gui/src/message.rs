@@ -7,9 +7,12 @@ use iced::widget::pane_grid;
 use nlink_lab_view::{Hit, Pos, Positions};
 
 use nlink_lab::Topology;
-use nlink_lab_shared::api::{EndpointImpairment, LabSummary, ProcessDto};
+use nlink_lab_shared::api::{
+    Direction, EndpointImpairment, LabSummary, ProcessDto, Request, Response, SnapshotDto,
+};
 
 use crate::backend::{Backend, Feed};
+use crate::control::{Action, Preset};
 use crate::doc::Loaded;
 use crate::export::Format;
 use crate::model::{Camera, DockTab, TabId, Who};
@@ -79,6 +82,21 @@ pub enum Message {
         lab: String,
         fetched: Box<Fetched>,
     },
+    /// Change the lab in front.
+    Control(Control),
+    /// Send `request` about `lab` (an Undo's).
+    Send {
+        lab: String,
+        request: Box<Request>,
+        action: Action,
+    },
+    /// The answer to a change: with what undoes it.
+    Called {
+        lab: String,
+        action: Action,
+        result: Result<Box<Response>, String>,
+        undo: Option<Box<Message>>,
+    },
 
     // params
     ParamEdited {
@@ -137,7 +155,45 @@ pub enum Fetched {
     Impairments(Vec<EndpointImpairment>),
     Processes(Vec<ProcessDto>),
     Events(Vec<serde_json::Value>),
+    Snapshots(Vec<SnapshotDto>),
     Failed(String),
+}
+
+/// What the controls of a lab's tab do.
+#[derive(Debug, Clone)]
+pub enum Control {
+    // the impairment editor of the selected endpoint
+    Field(usize, String),
+    Direction(Direction),
+    Preset(Preset),
+    Impair,
+    Clear,
+    Partition,
+    Heal,
+    // the pair form of the selected network
+    PairSrc(String),
+    PairDst(String),
+    PairField(usize, String),
+    PairRateCap(String),
+    SetPair,
+    ClearPair,
+    // snapshots
+    SnapshotName(String),
+    SnapshotNote(String),
+    Snapshot,
+    AskRestore(String),
+    AskDelete(String),
+    // the lab, its nodes, its processes
+    AskDestroy,
+    Restart(String),
+    SpawnNode(String),
+    SpawnCommand(String),
+    Spawn,
+    Kill(u32),
+    // the confirmation
+    Typed(String),
+    Confirm,
+    Cancel,
 }
 
 /// What the canvas reports.

@@ -8,9 +8,10 @@ use nlink_lab_shared::api::{LabSummary, Notification};
 use nlink_lab_view::Hit;
 
 use crate::backend::Feed;
+use crate::control::{Action, Confirm, ConfirmWhat, ImpairEditor, PairEditor};
 use crate::doc::{Source, Target};
 use crate::effect::{Effect, Fetch};
-use crate::message::{CanvasMsg, Fetched, Message, Shortcut};
+use crate::message::{CanvasMsg, Control, Fetched, Message, Shortcut};
 use crate::model::{App, Camera, Conn, DockTab, EVENTS, Kind, Level, Route, Tab, TabId};
 
 /// A zoom step, for the keys and buttons.
@@ -243,6 +244,18 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
             fetch_all(app, &lab)
         }
         Message::Fetched { lab, fetched } => fetched_into(app, &lab, *fetched),
+        Message::Control(c) => control(app, c),
+        Message::Send {
+            lab,
+            request,
+            action,
+        } => call(app, &lab, *request, action, None),
+        Message::Called {
+            lab,
+            action,
+            result,
+            undo,
+        } => called(app, &lab, action, result, undo),
 
         Message::ParamEdited { name, value } => {
             if let Some(d) = app.current_mut().and_then(Tab::design_mut) {
@@ -647,6 +660,7 @@ fn fetch_all(app: &mut App, lab: &str) -> Vec<Effect> {
         Fetch::Impairments,
         Fetch::Processes,
         Fetch::Events,
+        Fetch::Snapshots,
     ]
     .into_iter()
     .map(|what| Effect::Fetch {
@@ -842,6 +856,12 @@ fn fetched_into(app: &mut App, lab: &str, fetched: Fetched) -> Vec<Effect> {
             }
             vec![]
         }
+        Fetched::Snapshots(snapshots) => {
+            if let Some(l) = t.live_mut() {
+                l.snapshots = snapshots;
+            }
+            vec![]
+        }
         Fetched::Failed(e) => {
             if let Some(l) = t.live_mut() {
                 l.error = Some(e);
@@ -851,6 +871,422 @@ fn fetched_into(app: &mut App, lab: &str, fetched: Fetched) -> Vec<Effect> {
     }
 }
 
+/// The editors of a lab tab's selection: an endpoint's impairment, a
+/// network's pairs.
+fn editors(t: &mut Tab) {
+    let selection = t.view.selection.clone();
+    let Some(l) = t.live_mut() else {
+        return;
+    };
+    l.editor = match &selection {
+        Some(Hit::Endpoint(ep)) => Some(ImpairEditor::of(
+            ep,
+            l.endpoints.iter().find(|e| &e.endpoint == ep),
+        )),
+        _ => None,
+    };
+    l.pairs = match &selection {
+        Some(Hit::Node(id)) => id.strip_prefix("net:").map(PairEditor::new),
+        _ => None,
+    };
+}
+
+/// Send `request` about `lab`, for `action`.
+fn call(
+    app: &mut App,
+    lab: &str,
+    request: nlink_lab_shared::api::Request,
+    action: Action,
+    undo: Option<Box<Message>>,
+) -> Vec<Effect> {
+    let Some(backend) = app.backend().cloned() else {
+        app.toast(Level::Error, action.failed("not connected"));
+        return vec![];
+    };
+    if let Some(l) = app.lab_tab_mut(lab).and_then(Tab::live_mut) {
+        l.pending += 1;
+    }
+    vec![Effect::Call {
+        backend,
+        lab: lab.to_string(),
+        request: Box::new(request),
+        action,
+        undo,
+    }]
+}
+
+/// An Undo: sending `request` for `action`.
+fn undo_of(
+    lab: &str,
+    (request, action): (nlink_lab_shared::api::Request, Action),
+) -> Option<Box<Message>> {
+    Some(Box::new(Message::Send {
+        lab: lab.to_string(),
+        request: Box::new(request),
+        action,
+    }))
+}
+
+fn control(app: &mut App, c: Control) -> Vec<Effect> {
+    use nlink_lab_shared::api::Request;
+    // the confirmation first: it outlives the tab it came from
+    match c {
+        Control::Typed(s) => {
+            if let Some(cf) = &mut app.confirm {
+                cf.typed = s;
+            }
+            return vec![];
+        }
+        Control::Cancel => {
+            app.confirm = None;
+            return vec![];
+        }
+        Control::Confirm => {
+            return match app.confirm.take() {
+                Some(cf) if cf.ready() => {
+                    let (request, action) = cf.request();
+                    call(app, &cf.lab, request, action, None)
+                }
+                other => {
+                    app.confirm = other;
+                    vec![]
+                }
+            };
+        }
+        _ => {}
+    }
+    let operator = app.operator();
+    let Some(t) = app.current_mut() else {
+        return vec![];
+    };
+    let Some(l) = t.live_mut() else {
+        return vec![];
+    };
+    let lab = l.lab.clone();
+    // the forms change as the user types, whoever they are
+    match &c {
+        Control::Field(i, v) => {
+            if let Some(slot) = l.editor.as_mut().and_then(|e| e.fields.get_mut(*i)) {
+                *slot = v.clone();
+            }
+            return vec![];
+        }
+        Control::Direction(d) => {
+            if let Some(e) = l.editor.as_mut() {
+                e.direction = *d;
+            }
+            return vec![];
+        }
+        Control::Preset(p) => {
+            if let Some(e) = l.editor.as_mut() {
+                e.preset(*p);
+            }
+            return vec![];
+        }
+        Control::PairSrc(v) => {
+            if let Some(p) = l.pairs.as_mut() {
+                p.src = Some(v.clone());
+            }
+            return vec![];
+        }
+        Control::PairDst(v) => {
+            if let Some(p) = l.pairs.as_mut() {
+                p.dst = Some(v.clone());
+            }
+            return vec![];
+        }
+        Control::PairField(i, v) => {
+            if let Some(slot) = l.pairs.as_mut().and_then(|p| p.fields.get_mut(*i)) {
+                *slot = v.clone();
+            }
+            return vec![];
+        }
+        Control::PairRateCap(v) => {
+            if let Some(p) = l.pairs.as_mut() {
+                p.rate_cap = v.clone();
+            }
+            return vec![];
+        }
+        Control::SnapshotName(v) => {
+            l.snapshot_form.name = v.clone();
+            return vec![];
+        }
+        Control::SnapshotNote(v) => {
+            l.snapshot_form.description = v.clone();
+            return vec![];
+        }
+        Control::SpawnNode(v) => {
+            l.spawn_form.node = Some(v.clone());
+            return vec![];
+        }
+        Control::SpawnCommand(v) => {
+            l.spawn_form.command = v.clone();
+            return vec![];
+        }
+        _ => {}
+    }
+    if !operator {
+        app.toast(
+            Level::Error,
+            "Read-only: the daemon makes you a viewer (the nlink-lab group operates)",
+        );
+        return vec![];
+    }
+    let before =
+        |l: &crate::model::Live, ep: &str| l.endpoints.iter().find(|e| e.endpoint == ep).cloned();
+    match c {
+        Control::Impair => {
+            let Some(e) = l.editor.clone() else {
+                return vec![];
+            };
+            if e.is_empty() {
+                app.toast(Level::Error, "Nothing to set: fill a knob in, or Clear");
+                return vec![];
+            }
+            let undo = undo_of(
+                &lab,
+                crate::control::undo_request(&lab, before(l, &e.endpoint).as_ref(), &e.endpoint),
+            );
+            let request = Request::Impair {
+                lab: lab.clone(),
+                endpoint: e.endpoint.clone(),
+                direction: e.direction,
+                spec: e.spec(),
+            };
+            let action = Action::Impair {
+                spec: crate::control::describe(&e.spec()),
+                endpoint: e.endpoint,
+            };
+            call(app, &lab, request, action, undo)
+        }
+        Control::Clear | Control::Partition | Control::Heal => {
+            let Some(ep) = l.editor.as_ref().map(|e| e.endpoint.clone()) else {
+                return vec![];
+            };
+            let prior = before(l, &ep);
+            let (request, action, undo) = match c {
+                Control::Clear => (
+                    Request::ClearImpairment {
+                        lab: lab.clone(),
+                        endpoint: ep.clone(),
+                    },
+                    Action::Clear {
+                        endpoint: ep.clone(),
+                    },
+                    undo_of(
+                        &lab,
+                        crate::control::undo_request(&lab, prior.as_ref(), &ep),
+                    ),
+                ),
+                Control::Partition => (
+                    Request::Partition {
+                        lab: lab.clone(),
+                        endpoint: ep.clone(),
+                    },
+                    Action::Partition {
+                        endpoint: ep.clone(),
+                    },
+                    undo_of(
+                        &lab,
+                        (
+                            Request::Heal {
+                                lab: lab.clone(),
+                                endpoint: ep.clone(),
+                            },
+                            Action::Heal {
+                                endpoint: ep.clone(),
+                            },
+                        ),
+                    ),
+                ),
+                _ => (
+                    Request::Heal {
+                        lab: lab.clone(),
+                        endpoint: ep.clone(),
+                    },
+                    Action::Heal {
+                        endpoint: ep.clone(),
+                    },
+                    undo_of(
+                        &lab,
+                        (
+                            Request::Partition {
+                                lab: lab.clone(),
+                                endpoint: ep.clone(),
+                            },
+                            Action::Partition {
+                                endpoint: ep.clone(),
+                            },
+                        ),
+                    ),
+                ),
+            };
+            call(app, &lab, request, action, undo)
+        }
+        Control::SetPair | Control::ClearPair => {
+            let Some(p) = l.pairs.clone() else {
+                return vec![];
+            };
+            let (Some(src), Some(dst)) = (p.src.clone(), p.dst.clone()) else {
+                app.toast(Level::Error, "Pick the two members first");
+                return vec![];
+            };
+            let clear = matches!(c, Control::ClearPair);
+            let request = Request::SetPairImpairment {
+                lab: lab.clone(),
+                network: p.network.clone(),
+                src: src.clone(),
+                dst: dst.clone(),
+                spec: if clear { None } else { p.spec() },
+                rate_cap: if clear { None } else { p.rate_cap() },
+            };
+            let action = Action::Pair {
+                network: p.network,
+                src,
+                dst,
+            };
+            call(app, &lab, request, action, None)
+        }
+        Control::Snapshot => {
+            let form = l.snapshot_form.clone();
+            let name = form.name.trim().to_string();
+            if name.is_empty() {
+                app.toast(Level::Error, "Name the snapshot first");
+                return vec![];
+            }
+            let request = Request::Snapshot {
+                lab: lab.clone(),
+                name: name.clone(),
+                description: Some(form.description.trim().to_string()).filter(|d| !d.is_empty()),
+            };
+            call(app, &lab, request, Action::Snapshot { name }, None)
+        }
+        Control::AskRestore(name) => {
+            let request = Request::Restore {
+                lab: lab.clone(),
+                name: name.clone(),
+                dry_run: true,
+            };
+            call(app, &lab, request, Action::RestorePlan { name }, None)
+        }
+        Control::AskDelete(name) => {
+            app.confirm = Some(Confirm {
+                lab,
+                what: ConfirmWhat::DeleteSnapshot { name },
+                typed: String::new(),
+            });
+            vec![]
+        }
+        Control::AskDestroy => {
+            app.confirm = Some(Confirm {
+                lab,
+                what: ConfirmWhat::Destroy,
+                typed: String::new(),
+            });
+            vec![]
+        }
+        Control::Restart(node) => {
+            let request = Request::Restart {
+                lab: lab.clone(),
+                node: node.clone(),
+            };
+            call(app, &lab, request, Action::Restart { node }, None)
+        }
+        Control::Spawn => {
+            let form = l.spawn_form.clone();
+            let argv = crate::control::split_command(&form.command);
+            let Some(node) = form.node.filter(|_| !argv.is_empty()) else {
+                app.toast(Level::Error, "Pick a node and write a command first");
+                return vec![];
+            };
+            let request = Request::Spawn {
+                lab: lab.clone(),
+                node: node.clone(),
+                argv,
+                env: Vec::new(),
+                workdir: None,
+                wait: None,
+            };
+            call(app, &lab, request, Action::Spawn { node }, None)
+        }
+        Control::Kill(pid) => {
+            let request = Request::Kill {
+                lab: lab.clone(),
+                pid,
+                signal: None,
+            };
+            call(app, &lab, request, Action::Kill { pid }, None)
+        }
+        _ => vec![],
+    }
+}
+
+/// The answer to a change.
+fn called(
+    app: &mut App,
+    lab: &str,
+    action: Action,
+    result: Result<Box<nlink_lab_shared::api::Response>, String>,
+    undo: Option<Box<Message>>,
+) -> Vec<Effect> {
+    use nlink_lab_shared::api::Response;
+    if let Some(l) = app.lab_tab_mut(lab).and_then(Tab::live_mut) {
+        l.pending = l.pending.saturating_sub(1);
+    }
+    let response = match result {
+        Ok(r) => r,
+        Err(e) => {
+            app.toast(Level::Error, action.failed(&e));
+            return vec![];
+        }
+    };
+    match (&action, *response) {
+        (
+            Action::RestorePlan { name },
+            Response::Report { report, .. } | Response::Done { report, .. },
+        ) => {
+            app.confirm = Some(Confirm {
+                lab: lab.to_string(),
+                what: ConfirmWhat::Restore {
+                    name: name.clone(),
+                    plan: crate::control::describe_plan(&report),
+                },
+                typed: String::new(),
+            });
+            return vec![];
+        }
+        (Action::Snapshot { .. }, _) => {
+            if let Some(l) = app.lab_tab_mut(lab).and_then(Tab::live_mut) {
+                l.snapshot_form = Default::default();
+            }
+        }
+        (Action::Destroy, _) => {
+            if let Some(l) = app.lab_tab_mut(lab).and_then(Tab::live_mut) {
+                l.gone = true;
+            }
+        }
+        _ => {}
+    }
+    app.toast_with(
+        Level::Info,
+        action.done(lab),
+        undo.map(|u| ("Undo".to_string(), *u)),
+    );
+    let changes = action.changes();
+    let mut effects = Vec::new();
+    for (wanted, what) in [
+        (changes.impairments, Fetch::Impairments),
+        (changes.processes, Fetch::Processes),
+        (changes.snapshots, Fetch::Snapshots),
+        (changes.topology, Fetch::Topology { pins: None }),
+    ] {
+        if wanted {
+            effects.extend(fetch(app, lab, what));
+        }
+    }
+    effects
+}
+
 fn canvas(app: &mut App, msg: CanvasMsg) -> Vec<Effect> {
     let Some(t) = app.current_mut() else {
         return vec![];
@@ -858,6 +1294,7 @@ fn canvas(app: &mut App, msg: CanvasMsg) -> Vec<Effect> {
     match msg {
         CanvasMsg::Select(hit) => {
             select(t, hit);
+            editors(t);
             vec![]
         }
         CanvasMsg::Drag { node, to } => {
@@ -1059,6 +1496,18 @@ pub(crate) mod testing {
                 Effect::ListLabs(crate::backend::Backend::Fake(fake)) => {
                     Message::Labs(fake.summaries())
                 }
+                Effect::Call {
+                    backend: crate::backend::Backend::Fake(fake),
+                    lab,
+                    request,
+                    action,
+                    undo,
+                } => Message::Called {
+                    lab,
+                    action,
+                    result: fake.call(*request).map(Box::new),
+                    undo,
+                },
                 other => {
                     rest.push(other);
                     continue;
@@ -1557,7 +2006,7 @@ mod tests {
         let mut app = app();
         let (_, lab) = demo_lab(&mut app);
         assert!(matches!(app.conn, Conn::Up { epoch: 1, .. }));
-        assert_eq!(app.labs.len(), 2);
+        assert_eq!(app.labs.len(), crate::fake::LABS.len());
         let t = live_tab(&app, &lab);
         let l = t.live().unwrap();
         assert!(t.topology.is_some(), "{:?}", l.error);
@@ -1691,7 +2140,7 @@ mod tests {
         };
         reduce(&mut app, changed(vec![], vec![lab.clone()]));
         assert!(live_tab(&app, &lab).live().unwrap().gone);
-        assert_eq!(app.labs.len(), 1);
+        assert_eq!(app.labs.len(), crate::fake::LABS.len() - 1);
         assert!(app.toasts.iter().any(|t| t.text.contains("destroyed")));
         let summary = fake.summaries().into_iter().find(|s| s.lab == lab).unwrap();
         let gen_before = live_tab(&app, &lab).live().unwrap().feed_gen;
@@ -1699,7 +2148,7 @@ mod tests {
         let l = live_tab(&app, &lab).live().unwrap();
         assert!(!l.gone);
         assert!(l.feed_gen > gen_before, "subscribed again");
-        assert_eq!(e.len(), 4, "everything fetched again");
+        assert_eq!(e.len(), 5, "everything fetched again");
     }
 
     #[test]
@@ -1793,5 +2242,239 @@ mod tests {
         let mut app = App::new(Settings::default(), Some(dirs));
         demo_lab(&mut app);
         assert_eq!(live_tab(&app, &lab).view.positions[&node], to);
+    }
+
+    // ── changing a running lab ──
+
+    use crate::control::{Action as CAction, ConfirmWhat as CWhat};
+    use crate::message::Control as C;
+
+    fn ctl(app: &mut App, c: C) {
+        let e = reduce(app, Message::Control(c));
+        settle(app, e);
+    }
+
+    fn effective<'a>(
+        app: &'a App,
+        lab: &str,
+        ep: &str,
+    ) -> Option<&'a nlink_lab_view::impair::Impair> {
+        live_tab(app, lab).view.impairments.get(ep)
+    }
+
+    /// The demo lab's endpoint with something set live on it, selected.
+    fn select_live_endpoint(app: &mut App, lab: &str) -> String {
+        let ep = live_tab(app, lab)
+            .live()
+            .unwrap()
+            .endpoints
+            .iter()
+            .find(|e| e.live.is_some())
+            .unwrap()
+            .endpoint
+            .clone();
+        reduce(
+            app,
+            Message::Canvas(CanvasMsg::Select(Some(Hit::Endpoint(ep.clone())))),
+        );
+        ep
+    }
+
+    #[test]
+    fn an_impairment_is_set_and_undone() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let ep = select_live_endpoint(&mut app, &lab);
+        let editor = live_tab(&app, &lab).live().unwrap().editor.clone().unwrap();
+        assert_eq!(editor.endpoint, ep);
+        assert_eq!(editor.fields[0], "80ms", "starts from what is set");
+        ctl(&mut app, C::Field(0, "120ms".into()));
+        ctl(&mut app, C::Impair);
+        assert!(
+            effective(&app, &lab, &ep)
+                .unwrap()
+                .summary
+                .contains("120ms")
+        );
+        let toast = app.toasts.last().unwrap().clone();
+        assert!(toast.text.contains("Impaired"), "{toast:?}");
+        // Undo puts the 80ms back
+        let (label, undo) = toast.action.unwrap();
+        assert_eq!(label, "Undo");
+        let e = reduce(&mut app, *undo);
+        settle(&mut app, e);
+        assert!(effective(&app, &lab, &ep).unwrap().summary.contains("80ms"));
+        // and Clear leaves nothing in effect
+        ctl(&mut app, C::Clear);
+        assert!(effective(&app, &lab, &ep).is_none());
+    }
+
+    #[test]
+    fn a_partition_is_cut_and_healed() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let ep = select_live_endpoint(&mut app, &lab);
+        ctl(&mut app, C::Partition);
+        assert_eq!(effective(&app, &lab, &ep).unwrap().origin, "partitioned");
+        let undo = app.toasts.last().unwrap().action.clone().unwrap().1;
+        let e = reduce(&mut app, *undo);
+        settle(&mut app, e);
+        assert_ne!(effective(&app, &lab, &ep).unwrap().origin, "partitioned");
+    }
+
+    #[test]
+    fn an_empty_editor_sets_nothing_and_a_viewer_changes_nothing() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        select_live_endpoint(&mut app, &lab);
+        for i in 0..10 {
+            ctl(&mut app, C::Field(i, String::new()));
+        }
+        assert!(reduce(&mut app, Message::Control(C::Impair)).is_empty());
+        assert!(app.toasts.last().unwrap().text.contains("Nothing to set"));
+        if let Conn::Up { who, .. } = &mut app.conn {
+            who.role = nlink_lab_shared::api::Role::Viewer;
+        }
+        ctl(&mut app, C::Field(0, "5ms".into()));
+        assert!(reduce(&mut app, Message::Control(C::Impair)).is_empty());
+        assert!(app.toasts.last().unwrap().text.starts_with("Read-only"));
+        assert!(reduce(&mut app, Message::Control(C::AskDestroy)).is_empty());
+        assert!(app.confirm.is_none());
+    }
+
+    #[test]
+    fn a_snapshot_is_saved_and_restored_after_its_plan() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        ctl(&mut app, C::Snapshot);
+        assert!(
+            app.toasts
+                .last()
+                .unwrap()
+                .text
+                .contains("Name the snapshot")
+        );
+        ctl(&mut app, C::SnapshotName("clean".into()));
+        ctl(&mut app, C::Snapshot);
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert_eq!(l.snapshots.len(), 1);
+        assert!(l.snapshot_form.name.is_empty(), "the form is cleared");
+        // a restore shows its plan first
+        ctl(&mut app, C::AskRestore("clean".into()));
+        let Some(confirm) = app.confirm.clone() else {
+            panic!("a confirmation")
+        };
+        assert!(matches!(&confirm.what, CWhat::Restore { plan, .. } if plan.contains("change(s)")));
+        ctl(&mut app, C::Confirm);
+        assert!(app.confirm.is_none());
+        assert!(
+            live_tab(&app, &lab)
+                .view
+                .impairments
+                .values()
+                .all(|i| i.origin == "topology")
+        );
+        ctl(&mut app, C::AskDelete("clean".into()));
+        ctl(&mut app, C::Confirm);
+        assert!(live_tab(&app, &lab).live().unwrap().snapshots.is_empty());
+    }
+
+    #[test]
+    fn a_destroy_needs_the_labs_name_typed() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        ctl(&mut app, C::AskDestroy);
+        assert!(reduce(&mut app, Message::Control(C::Confirm)).is_empty());
+        assert!(app.confirm.is_some(), "still asking");
+        ctl(&mut app, C::Typed(lab.clone()));
+        let e = reduce(&mut app, Message::Control(C::Confirm));
+        assert!(matches!(
+            &e[..],
+            [Effect::Call {
+                action: CAction::Destroy,
+                ..
+            }]
+        ));
+        settle(&mut app, e);
+        assert!(live_tab(&app, &lab).live().unwrap().gone);
+        assert!(app.toasts.last().unwrap().text.contains("Destroyed"));
+        // Cancel closes it
+        ctl(&mut app, C::AskDestroy);
+        ctl(&mut app, C::Cancel);
+        assert!(app.confirm.is_none());
+    }
+
+    #[test]
+    fn processes_start_and_stop() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let before = live_tab(&app, &lab).live().unwrap().processes.len();
+        let node = live_tab(&app, &lab)
+            .topology
+            .as_ref()
+            .unwrap()
+            .nodes
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        ctl(&mut app, C::SpawnNode(node.clone()));
+        ctl(&mut app, C::SpawnCommand("iperf3 -s -p '5201'".into()));
+        ctl(&mut app, C::Spawn);
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert_eq!(l.processes.len(), before + 1);
+        let pid = l.processes.last().unwrap().pid;
+        ctl(&mut app, C::Kill(pid));
+        let l = live_tab(&app, &lab).live().unwrap();
+        assert!(!l.processes.iter().find(|p| p.pid == pid).unwrap().alive);
+        assert_eq!(l.pending, 0);
+    }
+
+    #[test]
+    fn a_pair_is_set_between_two_members() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        if let Some(l) = app.lab_tab_mut(&lab).and_then(Tab::live_mut) {
+            l.pairs = Some(crate::control::PairEditor::new("lan"));
+        }
+        assert!(reduce(&mut app, Message::Control(C::SetPair)).is_empty());
+        ctl(&mut app, C::PairSrc("a".into()));
+        ctl(&mut app, C::PairDst("b".into()));
+        ctl(&mut app, C::PairField(0, "7ms".into()));
+        let e = reduce(&mut app, Message::Control(C::SetPair));
+        let [Effect::Call { request, .. }] = &e[..] else {
+            panic!("{e:?}")
+        };
+        assert!(matches!(
+            &**request,
+            nlink_lab_shared::api::Request::SetPairImpairment { network, spec: Some(s), .. }
+                if network == "lan" && s.delay.as_deref() == Some("7ms")
+        ));
+        let e = reduce(&mut app, Message::Control(C::ClearPair));
+        assert!(matches!(
+            &e[..],
+            [Effect::Call { request, .. }]
+                if matches!(&**request, nlink_lab_shared::api::Request::SetPairImpairment { spec: None, .. })
+        ));
+    }
+
+    #[test]
+    fn a_failure_is_said() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let e = reduce(
+            &mut app,
+            Message::Called {
+                lab,
+                action: CAction::Kill { pid: 1 },
+                result: Err("no such process".into()),
+                undo: None,
+            },
+        );
+        assert!(e.is_empty());
+        assert_eq!(
+            app.toasts.last().unwrap().text,
+            "Could not signal 1: no such process"
+        );
     }
 }

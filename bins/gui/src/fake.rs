@@ -4,34 +4,42 @@
 //! live app without a daemon, and what the tests draw.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use iced::futures::stream::{self, BoxStream, StreamExt};
 use nlink_lab::Topology;
 use nlink_lab_shared::api::{
     EndpointImpairment, ImpairmentSpec, LabSummary, Notification, ProcessDto, Request, Response,
-    Role, Topic,
+    Role, SnapshotDto, Topic,
 };
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics};
 
 use crate::backend::Feed;
 use crate::model::Who;
 
+#[derive(Clone)]
 struct Lab {
     name: String,
     topology: Topology,
     endpoints: Vec<EndpointImpairment>,
     processes: Vec<ProcessDto>,
     events: Vec<serde_json::Value>,
+    snapshots: Vec<SnapshotDto>,
 }
 
+/// The demo's labs, changed by what the user does to them.
 pub struct Fake {
-    labs: Vec<Lab>,
+    labs: Mutex<Vec<Lab>>,
     start: Instant,
 }
 
 /// The demo's labs: a template each, under a name.
-const LABS: &[(&str, &str)] = &[("demo-fabric", "spine-leaf"), ("demo-wan", "wan")];
+pub const LABS: &[(&str, &str)] = &[
+    ("demo-fabric", "spine-leaf"),
+    ("demo-wan", "wan"),
+    ("demo-campus", "vlan-trunk"),
+];
 
 impl Default for Fake {
     fn default() -> Self {
@@ -47,13 +55,17 @@ impl Fake {
                 let t = nlink_lab::templates::get(template)?;
                 let topology =
                     nlink_lab::parser::parse(&nlink_lab::templates::render(t, Some(name))).ok()?;
-                Some(lab(name, topology))
+                Some(new_lab(name, topology))
             })
             .collect();
         Self {
-            labs,
+            labs: Mutex::new(labs),
             start: Instant::now(),
         }
+    }
+
+    fn labs(&self) -> std::sync::MutexGuard<'_, Vec<Lab>> {
+        self.labs.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn who(&self) -> Who {
@@ -61,19 +73,60 @@ impl Fake {
             server: format!("nlink-lab-gui {} (demo)", env!("CARGO_PKG_VERSION")),
             host: "demo".into(),
             user: "you".into(),
-            role: Role::Viewer,
+            // the demo is yours to change
+            role: Role::Operator,
         }
     }
 
-    fn lab(&self, name: &str) -> Result<&Lab, String> {
-        self.labs
+    fn lab(&self, name: &str) -> Result<Lab, String> {
+        self.labs()
             .iter()
             .find(|l| l.name == name)
+            .cloned()
             .ok_or_else(|| format!("lab '{name}' not found"))
     }
 
+    /// Change lab `name` with `f`, recording `event`.
+    fn change(
+        &self,
+        name: &str,
+        event: serde_json::Value,
+        f: impl FnOnce(&mut Lab),
+    ) -> Result<Response, String> {
+        let mut labs = self.labs();
+        let l = labs
+            .iter_mut()
+            .find(|l| l.name == name)
+            .ok_or_else(|| format!("lab '{name}' not found"))?;
+        f(l);
+        if let Some(o) = event.as_object() {
+            let mut v = serde_json::json!({"ts": "2026-10-18T10:00:00Z", "lab": name});
+            if let Some(m) = v.as_object_mut() {
+                m.extend(o.clone());
+            }
+            l.events.push(v);
+        }
+        Ok(Response::Ok)
+    }
+
+    /// The endpoint's entry, made when there is none.
+    fn endpoint<'a>(l: &'a mut Lab, endpoint: &str) -> &'a mut EndpointImpairment {
+        if !l.endpoints.iter().any(|e| e.endpoint == endpoint) {
+            l.endpoints.push(EndpointImpairment {
+                endpoint: endpoint.to_string(),
+                declared: None,
+                live: None,
+                partitioned: false,
+            });
+        }
+        l.endpoints
+            .iter_mut()
+            .find(|e| e.endpoint == endpoint)
+            .expect("just made")
+    }
+
     pub fn summaries(&self) -> Vec<LabSummary> {
-        self.labs
+        self.labs()
             .iter()
             .map(|l| LabSummary {
                 lab: l.name.clone(),
@@ -125,6 +178,144 @@ impl Fake {
             Request::GetMetrics { lab } => Response::Metrics {
                 snapshot: self.metrics(&lab, self.start.elapsed().as_secs_f64())?,
             },
+            Request::ListSnapshots { lab } => Response::Snapshots {
+                snapshots: self.lab(&lab)?.snapshots,
+            },
+            Request::Impair {
+                lab,
+                endpoint,
+                spec,
+                ..
+            } => {
+                let event = serde_json::json!({"event": "impaired", "endpoint": endpoint,
+                    "impairment": serde_json::to_value(&spec).unwrap_or_default()});
+                return self.change(&lab, event, |l| {
+                    Self::endpoint(l, &endpoint).live = Some(spec);
+                });
+            }
+            Request::ClearImpairment { lab, endpoint } => {
+                let event = serde_json::json!({"event": "impair_cleared", "endpoint": endpoint});
+                // as the daemon does: an empty live impairment, so the
+                // declared one does not come back
+                return self.change(&lab, event, |l| {
+                    Self::endpoint(l, &endpoint).live = Some(ImpairmentSpec::default());
+                });
+            }
+            Request::Partition { lab, endpoint } => {
+                let event = serde_json::json!({"event": "partitioned", "endpoint": endpoint});
+                return self.change(&lab, event, |l| {
+                    Self::endpoint(l, &endpoint).partitioned = true;
+                });
+            }
+            Request::Heal { lab, endpoint } => {
+                let event = serde_json::json!({"event": "healed", "endpoint": endpoint});
+                return self.change(&lab, event, |l| {
+                    Self::endpoint(l, &endpoint).partitioned = false;
+                });
+            }
+            Request::SetPairImpairment { lab, .. } => {
+                return self.change(&lab, serde_json::Value::Null, |_| {});
+            }
+            Request::Snapshot {
+                lab,
+                name,
+                description,
+            } => {
+                let event = serde_json::json!({"event": "snapshot_taken", "name": name});
+                return self.change(&lab, event, |l| {
+                    l.snapshots.retain(|s| s.name != name);
+                    l.snapshots.push(SnapshotDto {
+                        name,
+                        created_at: "2026-10-18T10:00:00Z".into(),
+                        description,
+                        nodes: l.topology.nodes.len(),
+                        links: l.topology.links.len(),
+                    });
+                });
+            }
+            Request::DeleteSnapshot { lab, name } => {
+                return self.change(&lab, serde_json::Value::Null, |l| {
+                    l.snapshots.retain(|s| s.name != name);
+                });
+            }
+            Request::Restore {
+                lab,
+                name,
+                dry_run: true,
+            } => {
+                let l = self.lab(&lab)?;
+                if !l.snapshots.iter().any(|s| s.name == name) {
+                    return Err(format!("snapshot '{name}' not found"));
+                }
+                let changed: Vec<&str> = l
+                    .endpoints
+                    .iter()
+                    .filter(|e| e.live.is_some() || e.partitioned)
+                    .map(|e| e.endpoint.as_str())
+                    .collect();
+                Response::Report {
+                    kind: "dry_run".into(),
+                    report: serde_json::json!({
+                        "schema_version": 3, "lab": lab, "no_op": changed.is_empty(),
+                        "change_count": changed.len(), "topology": {"impairments": changed},
+                    }),
+                }
+            }
+            Request::Restore { lab, name, .. } => {
+                let event = serde_json::json!({"event": "restored", "name": name});
+                return self.change(&lab, event, |l| {
+                    for e in &mut l.endpoints {
+                        e.live = None;
+                        e.partitioned = false;
+                    }
+                });
+            }
+            Request::Destroy { lab } => {
+                let mut labs = self.labs();
+                let before = labs.len();
+                labs.retain(|l| l.name != lab);
+                if labs.len() == before {
+                    return Err(format!("lab '{lab}' not found"));
+                }
+                Response::Ok
+            }
+            // nothing to restart in a made-up lab
+            Request::Restart { lab, .. } => {
+                return self.change(&lab, serde_json::Value::Null, |_| {});
+            }
+            Request::Spawn {
+                lab, node, argv, ..
+            } => {
+                let mut labs = self.labs();
+                let l = labs
+                    .iter_mut()
+                    .find(|l| l.name == lab)
+                    .ok_or_else(|| format!("lab '{lab}' not found"))?;
+                let pid = 4100 + l.processes.len() as u32;
+                l.processes.push(ProcessDto {
+                    node: node.clone(),
+                    pid,
+                    alive: true,
+                    ..Default::default()
+                });
+                l.events
+                    .push(serde_json::json!({"ts": "2026-10-18T10:00:00Z", "lab": lab,
+                    "event": "spawned", "node": node, "pid": pid, "cmd": argv.join(" ")}));
+                Response::Spawned {
+                    pid,
+                    stdout: None,
+                    stderr: None,
+                }
+            }
+            Request::Kill { lab, pid, .. } => {
+                let event = serde_json::json!({"event": "killed", "pid": pid});
+                return self.change(&lab, event, |l| {
+                    for p in l.processes.iter_mut().filter(|p| p.pid == pid) {
+                        p.alive = false;
+                        p.exit_code = Some(143);
+                    }
+                });
+            }
             other => {
                 return Err(format!(
                     "the demo does not do {}",
@@ -237,7 +428,7 @@ fn endpoints(t: &Topology) -> Vec<String> {
     out
 }
 
-fn lab(name: &str, topology: Topology) -> Lab {
+fn new_lab(name: &str, topology: Topology) -> Lab {
     let eps = endpoints(&topology);
     let mut endpoints: Vec<EndpointImpairment> = topology
         .impairments
@@ -332,6 +523,7 @@ fn lab(name: &str, topology: Topology) -> Lab {
         endpoints,
         processes,
         events,
+        snapshots: Vec::new(),
     }
 }
 

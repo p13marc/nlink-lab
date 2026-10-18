@@ -68,6 +68,14 @@ pub enum Effect {
     },
     /// Ask for the labs there are.
     ListLabs(Backend),
+    /// Change a lab: `request`, for `action`, undone by `undo`.
+    Call {
+        backend: Backend,
+        lab: String,
+        request: Box<nlink_lab_shared::api::Request>,
+        action: crate::control::Action,
+        undo: Option<Box<Message>>,
+    },
     /// Ask the daemon for a lab's data.
     Fetch {
         backend: Backend,
@@ -86,6 +94,7 @@ pub enum Fetch {
     Impairments,
     Processes,
     Events,
+    Snapshots,
 }
 
 /// Where `graph`'s nodes go with `pref`, keeping `pinned`.
@@ -238,6 +247,20 @@ pub fn run(effect: Effect) -> Task<Message> {
                 Err(e) => Message::Done(Err(e)),
             },
         ),
+        Effect::Call {
+            backend,
+            lab,
+            request,
+            action,
+            undo,
+        } => Task::perform(async move { backend.call(*request).await }, move |result| {
+            Message::Called {
+                lab,
+                action,
+                result: result.map(Box::new),
+                undo,
+            }
+        }),
         Effect::Fetch { backend, lab, what } => {
             let name = lab.clone();
             Task::perform(fetch(backend, lab, what), move |fetched| Message::Fetched {
@@ -263,6 +286,7 @@ pub fn request_of(lab: &str, what: &Fetch) -> nlink_lab_shared::api::Request {
             kinds: Vec::new(),
             limit: None,
         },
+        Fetch::Snapshots => Request::ListSnapshots { lab },
     }
 }
 
@@ -286,6 +310,7 @@ pub fn fetched(
         Ok(Response::Impairments { endpoints }) => Fetched::Impairments(endpoints),
         Ok(Response::Processes { processes }) => Fetched::Processes(processes),
         Ok(Response::Events { events, .. }) => Fetched::Events(events),
+        Ok(Response::Snapshots { snapshots }) => Fetched::Snapshots(snapshots),
         Ok(other) => Fetched::Failed(format!("unexpected answer {other:?}")),
         Err(e) => Fetched::Failed(e),
     }

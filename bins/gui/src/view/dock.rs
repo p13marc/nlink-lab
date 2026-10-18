@@ -1,19 +1,22 @@
 //! The dock: the topology's problems, and its source.
 
-use iced::widget::{button, column, container, rich_text, row, scrollable, span, text};
+use iced::widget::{
+    button, column, container, pick_list, rich_text, row, scrollable, span, text, text_input,
+};
 use iced::{Alignment, Element, Font, Length, Theme};
 
 use super::muted;
 use crate::doc::Severity;
 use crate::live::Tone;
+use crate::message::Control;
 use crate::message::Message;
-use crate::model::{Design, DockTab, Live, Tab};
+use crate::model::{App, Design, DockTab, Live, Tab};
 
-pub fn view(tab: &Tab) -> Element<'_, Message> {
+pub fn view<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
     match (tab.dock, tab.design(), tab.live()) {
         (DockTab::Problems, Some(d), _) => problems(d),
         (DockTab::Source, Some(d), _) => source(d),
-        (DockTab::Processes, _, Some(l)) => processes(l),
+        (DockTab::Processes, _, Some(l)) => processes(tab, l, app.operator()),
         (_, _, Some(l)) => events(l),
         _ => container(muted("Nothing here.")).padding(10).into(),
     }
@@ -137,20 +140,48 @@ fn events(l: &Live) -> Element<'_, Message> {
     scrollable(container(list).padding(8)).into()
 }
 
-/// The lab's tracked processes.
-fn processes(l: &Live) -> Element<'_, Message> {
+/// The lab's tracked processes; an operator starts and stops them.
+fn processes<'a>(tab: &'a Tab, l: &'a Live, operator: bool) -> Element<'a, Message> {
+    let ok = operator && l.pending == 0 && !l.gone;
+    let mut top = column![].spacing(8);
+    if operator && !l.gone {
+        let mut nodes: Vec<String> = tab
+            .topology
+            .as_ref()
+            .map(|t| t.nodes.keys().cloned().collect())
+            .unwrap_or_default();
+        nodes.sort_by(|a, b| nlink_lab_view::layout::natural(a, b));
+        top = top.push(
+            row![
+                pick_list(nodes, l.spawn_form.node.clone(), |v| {
+                    Message::Control(Control::SpawnNode(v))
+                })
+                .placeholder("node")
+                .text_size(13),
+                text_input("a command, e.g. iperf3 -s", &l.spawn_form.command)
+                    .size(13)
+                    .on_input(|v| Message::Control(Control::SpawnCommand(v)))
+                    .on_submit(Message::Control(Control::Spawn)),
+                button(text("Start").size(13))
+                    .style(button::primary)
+                    .on_press_maybe(ok.then_some(Message::Control(Control::Spawn))),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        );
+    }
     if l.processes.is_empty() {
-        return container(muted("No tracked process: `nlink-lab spawn` starts one."))
+        return container(top.push(muted("No tracked process yet.")))
             .padding(10)
             .into();
     }
     let head = row![
         muted("Node").width(Length::Fixed(160.0)),
         muted("PID").width(Length::Fixed(80.0)),
-        muted("Status"),
+        muted("Status").width(Length::Fill),
     ]
     .spacing(8);
-    let list = l.processes.iter().fold(column![head].spacing(4), |col, p| {
+    let list = l.processes.iter().fold(top.push(head), |col, p| {
         let status = match (p.alive, p.exit_code) {
             (true, _) => "running".to_string(),
             (false, Some(c)) => format!("exited, status {c}"),
@@ -163,9 +194,16 @@ fn processes(l: &Live) -> Element<'_, Message> {
                     .size(13)
                     .font(Font::MONOSPACE)
                     .width(Length::Fixed(80.0)),
-                text(status).size(13),
+                text(status).size(13).width(Length::Fill),
+                (operator && p.alive).then(|| {
+                    button(text("Stop").size(12))
+                        .style(button::secondary)
+                        .padding([2, 8])
+                        .on_press_maybe(ok.then_some(Message::Control(Control::Kill(p.pid))))
+                }),
             ]
-            .spacing(8),
+            .spacing(8)
+            .align_y(Alignment::Center),
         )
     });
     scrollable(container(list).padding(8)).into()

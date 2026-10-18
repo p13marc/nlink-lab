@@ -6,13 +6,14 @@ use std::time::SystemTime;
 
 use iced::widget::pane_grid;
 use nlink_lab::Topology;
-use nlink_lab_shared::api::{EndpointImpairment, LabSummary, ProcessDto, Role};
+use nlink_lab_shared::api::{EndpointImpairment, LabSummary, ProcessDto, Role, SnapshotDto};
 use nlink_lab_view::graph::GraphOptions;
 use nlink_lab_view::impair::{Impair, effective_impairments};
 use nlink_lab_view::scene::{self, Overlays};
 use nlink_lab_view::{Hit, MetricsStore, Positions, Scene, TopoGraph};
 
 use crate::backend::{Backend, Target};
+use crate::control::{Confirm, ImpairEditor, PairEditor, SnapshotForm, SpawnForm};
 use crate::doc::{Problem, Source};
 use crate::live::EventLine;
 use crate::settings::{Dirs, LayoutPref, Settings};
@@ -35,6 +36,8 @@ pub struct App {
     pub toasts: Vec<Toast>,
     /// The shortcuts sheet.
     pub help: bool,
+    /// A change waiting for the user's yes.
+    pub confirm: Option<Confirm>,
     /// What to connect to; `None`: nothing.
     pub target: Option<Target>,
     /// The daemon, or the demo's stand-in.
@@ -58,6 +61,7 @@ impl App {
             active: None,
             toasts: Vec::new(),
             help: false,
+            confirm: None,
             target: None,
             conn: Conn::Off,
             epoch: 0,
@@ -98,17 +102,37 @@ impl App {
     }
 
     pub fn toast(&mut self, level: Level, text: impl Into<String>) {
+        self.toast_with(level, text, None);
+    }
+
+    /// A toast with a button: its label, and what it does.
+    pub fn toast_with(
+        &mut self,
+        level: Level,
+        text: impl Into<String>,
+        action: Option<(String, crate::message::Message)>,
+    ) {
         let id = self.next_id();
         self.toasts.push(Toast {
             id,
             level,
             text: text.into(),
-            ttl: Toast::TICKS,
+            ttl: if action.is_some() {
+                Toast::TICKS * 2
+            } else {
+                Toast::TICKS
+            },
+            action: action.map(|(l, m)| (l, Box::new(m))),
         });
         // the oldest go first when they pile up
         if self.toasts.len() > 4 {
             self.toasts.remove(0);
         }
+    }
+
+    /// Whether the user may change labs: an operator of the daemon.
+    pub fn operator(&self) -> bool {
+        matches!(&self.conn, Conn::Up { who, .. } if who.role == Role::Operator)
     }
 
     /// The backend, when connected.
@@ -157,13 +181,15 @@ pub enum Level {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Toast {
     pub id: u64,
     pub level: Level,
     pub text: String,
     /// Ticks left before it goes.
     pub ttl: u8,
+    /// A button: its label, and what it does (Undo).
+    pub action: Option<(String, Box<crate::message::Message>)>,
 }
 
 impl Toast {
@@ -201,7 +227,7 @@ pub struct Tab {
 
 pub enum Kind {
     Design(Design),
-    Live(Live),
+    Live(Box<Live>),
 }
 
 /// A topology from its source.
@@ -243,6 +269,15 @@ pub struct Live {
     pub feed_gen: u64,
     /// Why the lab's data does not come, when it does not.
     pub error: Option<String>,
+    pub snapshots: Vec<SnapshotDto>,
+    /// The impairment editor of the selected endpoint.
+    pub editor: Option<ImpairEditor>,
+    /// The pair form of the selected network.
+    pub pairs: Option<PairEditor>,
+    pub snapshot_form: SnapshotForm,
+    pub spawn_form: SpawnForm,
+    /// Requests sent and not answered yet: their buttons wait.
+    pub pending: usize,
 }
 
 /// The events a lab tab keeps.
@@ -281,7 +316,7 @@ impl Tab {
         view.metrics = Some(MetricsStore::default());
         Self {
             id,
-            kind: Kind::Live(Live {
+            kind: Kind::Live(Box::new(Live {
                 lab,
                 revision: String::new(),
                 summary: None,
@@ -293,7 +328,13 @@ impl Tab {
                 gone: false,
                 feed_gen: 0,
                 error: None,
-            }),
+                snapshots: Vec::new(),
+                editor: None,
+                pairs: None,
+                snapshot_form: SnapshotForm::default(),
+                spawn_form: SpawnForm::default(),
+                pending: 0,
+            })),
             topology: None,
             view,
             panes: panes(),
@@ -317,14 +358,14 @@ impl Tab {
 
     pub fn live(&self) -> Option<&Live> {
         match &self.kind {
-            Kind::Live(l) => Some(l),
+            Kind::Live(l) => Some(l.as_ref()),
             Kind::Design(_) => None,
         }
     }
 
     pub fn live_mut(&mut self) -> Option<&mut Live> {
         match &mut self.kind {
-            Kind::Live(l) => Some(l),
+            Kind::Live(l) => Some(l.as_mut()),
             Kind::Design(_) => None,
         }
     }

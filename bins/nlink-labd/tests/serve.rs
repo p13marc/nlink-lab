@@ -488,6 +488,7 @@ async fn http_serves_the_labs_and_their_metrics() {
 }
 
 // zenoh refuses tokio's current-thread scheduler
+#[cfg(feature = "zenoh")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn zenoh_listens_on_its_socket_only() {
     use std::os::unix::fs::PermissionsExt;
@@ -540,6 +541,7 @@ async fn zenoh_listens_on_its_socket_only() {
 }
 
 /// A free port on loopback, given back for the daemon to take.
+#[cfg(feature = "zenoh")]
 fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -549,6 +551,7 @@ fn free_port() -> u16 {
 }
 
 /// Wait for a path to exist.
+#[cfg(feature = "zenoh")]
 async fn exists(path: &std::path::Path) {
     for _ in 0..100 {
         if path.exists() {
@@ -560,6 +563,7 @@ async fn exists(path: &std::path::Path) {
 }
 
 // zenoh refuses tokio's current-thread scheduler
+#[cfg(feature = "zenoh")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_api_over_zenohs_unix_socket_is_a_viewers() {
     let zsock = std::sync::Arc::new(std::sync::Mutex::new(std::path::PathBuf::new()));
@@ -612,6 +616,7 @@ async fn the_api_over_zenohs_unix_socket_is_a_viewers() {
 
 /// A CA and the certificates it signs, written as PEM files under `dir`:
 /// `ca.pem`, and `<name>.pem` + `<name>.key` for each name.
+#[cfg(feature = "zenoh")]
 fn certificates(dir: &std::path::Path, names: &[&str]) {
     use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, DnType, IsCa, KeyPair};
     let mut ca = CertificateParams::new(Vec::<String>::new()).unwrap();
@@ -630,6 +635,7 @@ fn certificates(dir: &std::path::Path, names: &[&str]) {
     }
 }
 
+#[cfg(feature = "zenoh")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mutual_tls_and_the_access_control_decide_the_role() {
     let pki = tempfile::tempdir().unwrap();

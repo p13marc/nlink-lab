@@ -297,6 +297,13 @@ pub fn rule_completer() -> clap_complete::ArgValueCompleter {
 pub fn require_root() -> nlink_lab::Result<()> {
     if has_privileges() {
         Ok(())
+    } else if unsafe { libc::geteuid() } == 0 {
+        // a container's root, without the capabilities (#293)
+        Err(nlink_lab::Error::Privileges(
+            "this command needs CAP_NET_ADMIN and CAP_SYS_ADMIN, which this root lacks \
+             (in a container: --cap-add NET_ADMIN --cap-add SYS_ADMIN, or --privileged)"
+                .into(),
+        ))
     } else {
         Err(nlink_lab::Error::Privileges(
             "this command needs root (sudo), or CAP_NET_ADMIN+CAP_SYS_ADMIN \

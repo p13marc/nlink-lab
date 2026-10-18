@@ -1087,6 +1087,12 @@ under both (#233). Its waves land one by one below.
 
 ### Fixed
 
+- **Root without the capabilities is not privileged** (#293): a
+  container's root often lacks CAP_NET_ADMIN and CAP_SYS_ADMIN, and was
+  taken for privileged because its uid is 0, so a deploy failed on
+  "Operation not permitted" creating a namespace. The CLI now says the
+  capabilities are missing, and root-gated tests skip, as for any other
+  user; the effective capabilities decide.
 - **A missing container host file is said before the runtime runs**
   (#285): `config FILE` or `env-file FILE` that does not exist fails
   the deploy naming it and where it was looked for, rather than with

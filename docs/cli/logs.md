@@ -46,9 +46,9 @@ Show container logs or per-process logs from `nlink-lab spawn`.
 
 Without `--pid`: shows the container's stdout/stderr (node must be a container).  With `--pid`: shows the per-process log file written by `spawn`. Per-process log files live at:
 
-`$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
+`/var/lib/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
 
-(defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The path is stable; consumers can read it directly.
+(under `$NLINK_LAB_STATE_DIR` when it is set). The path is stable; consumers can read it directly.
 
 Usage: nlink-lab logs [OPTIONS] <LAB> [NODE]
 

@@ -60,6 +60,37 @@ pub struct RunningLab {
     baseline: std::sync::Mutex<Baseline>,
 }
 
+/// A copy of the handle, baseline included: the copy saves only what it
+/// changes itself, as two loads of the lab would (#234: the daemon hands
+/// one to a blocking task).
+impl Clone for RunningLab {
+    fn clone(&self) -> Self {
+        Self {
+            topology: self.topology.clone(),
+            namespace_names: self.namespace_names.clone(),
+            containers: self.containers.clone(),
+            runtime_binary: self.runtime_binary.clone(),
+            pids: self.pids.clone(),
+            dns_injected: self.dns_injected,
+            wifi_loaded: self.wifi_loaded,
+            saved_impairments: self.saved_impairments.clone(),
+            live_impairments: self.live_impairments.clone(),
+            process_logs: self.process_logs.clone(),
+            process_tags: self.process_tags.clone(),
+            starttimes: self.starttimes.clone(),
+            exec_pids: self.exec_pids.clone(),
+            mgmt_peers: self.mgmt_peers.clone(),
+            assertion_results: self.assertion_results.clone(),
+            baseline: std::sync::Mutex::new(
+                self.baseline
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .clone(),
+            ),
+        }
+    }
+}
+
 /// The persisted part of a [`RunningLab`], as of its last load or save.
 #[derive(Clone, Default)]
 struct Baseline {
@@ -753,6 +784,13 @@ impl RunningLab {
         self.runtime_binary.as_deref()
     }
 
+    /// The lab's container runtime: the one it was deployed with, else
+    /// docker. It was `runtime_binary().unwrap_or("docker")` in four
+    /// places (#234).
+    pub fn runtime(&self) -> crate::container::Runtime {
+        crate::container::Runtime::with_binary(self.runtime_binary().unwrap_or("docker"))
+    }
+
     /// Replace the topology (crate-internal, used after apply).
     pub(crate) fn set_topology(&mut self, topology: Topology) {
         self.topology = topology;
@@ -1173,7 +1211,11 @@ impl RunningLab {
             Some(dir) => std::path::absolute(dir)?,
             None => state::logs_dir(self.name()),
         };
-        std::fs::create_dir_all(&log_dir)?;
+        if opts.log_dir.is_some() {
+            std::fs::create_dir_all(&log_dir)?;
+        } else {
+            state::ensure_dir(&log_dir)?;
+        }
 
         let cmd_basename = std::path::Path::new(cmd[0])
             .file_name()
@@ -3456,6 +3498,13 @@ mod state_merge_tests {
         let mut tagged = spawn(Some(&tag));
         let mut other = spawn(None);
         let me = std::process::id();
+        // `spawn` returns while the child is still in execve (posix_spawn
+        // wakes the parent at the mm switch), when its environ may not be
+        // readable yet: it failed about one run in six under load
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while tagged_pids(me, &tag).is_empty() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         assert_eq!(tagged_pids(me, &tag), vec![tagged.id() as i32]);
         assert_eq!(stop_tagged(me, &tag), 1);
         assert!(

@@ -27,8 +27,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // #31); `reattach_node` re-creates them, its bridge-network ports and
     // its mgmt veth included, with its sysctls and `run` commands.
     let links = node_link_count(running.topology(), &node);
-    let rt =
-        nlink_lab::container::Runtime::with_binary(running.runtime_binary().unwrap_or("docker"));
+    let rt = running.runtime();
     if !ctx.quiet {
         eprint!("Restarting '{node}'...");
     }

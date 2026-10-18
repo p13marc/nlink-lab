@@ -3,7 +3,7 @@
 //! NLL syntax allows `subnet auto/24` (or `auto/30`, etc.) anywhere a
 //! literal CIDR is accepted. At deploy time the placeholder is
 //! replaced with a concrete /N drawn from the host-wide pool tracked
-//! at `$XDG_STATE_HOME/nlink-lab/subnet-pool.json`.
+//! at `<state root>/subnet-pool.json` (see `state::root_dir`).
 //!
 //! The pool is `10.0.0.0/8` (private RFC1918 — 65 536 /24 slots).
 //! Allocations are recorded against the requesting lab name and
@@ -48,7 +48,7 @@ fn lock() -> Result<std::fs::File> {
     use std::os::unix::io::AsRawFd;
     let path = lock_path();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        crate::state::ensure_dir(parent)?;
     }
     // neither truncated nor followed: `File::create` emptied whatever a
     // planted symlink pointed at (#221)
@@ -72,7 +72,11 @@ fn lock() -> Result<std::fs::File> {
 }
 
 fn load_pool() -> Result<Pool> {
-    let path = pool_path();
+    load_pool_at(&pool_path())
+}
+
+fn load_pool_at(path: &std::path::Path) -> Result<Pool> {
+    let path = path.to_path_buf();
     if !path.exists() {
         return Ok(Pool::default());
     }
@@ -88,13 +92,36 @@ fn load_pool() -> Result<Pool> {
 fn save_pool(pool: &Pool) -> Result<()> {
     let path = pool_path();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        crate::state::ensure_dir(parent)?;
     }
     let json = serde_json::to_string_pretty(pool)?;
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, json)?;
-    std::fs::rename(&tmp, &path)?;
-    Ok(())
+    crate::state::atomic_write_mode(&path, &json, 0o640)
+}
+
+/// Take over the subnets lab `lab_name` holds in the pool of an older
+/// per-user state root (#234), when its state moves into the state root.
+/// A subnet another lab holds here already stays that lab's, with a
+/// warning: two labs had been handed it from separate pools.
+pub fn adopt_from(from_root: &std::path::Path, lab_name: &str) -> Result<Vec<String>> {
+    let theirs = load_pool_at(&from_root.join("subnet-pool.json"))?;
+    let _lock = lock()?;
+    let mut pool = load_pool()?;
+    let mut adopted = Vec::new();
+    for (cidr, owner) in theirs.in_use.iter().filter(|(_, o)| *o == lab_name) {
+        match pool.in_use.get(cidr) {
+            Some(other) if other != owner => {
+                tracing::warn!("subnet {cidr} of lab '{lab_name}' is also lab '{other}''s");
+            }
+            _ => {
+                pool.in_use.insert(cidr.clone(), owner.clone());
+                adopted.push(cidr.clone());
+            }
+        }
+    }
+    if !adopted.is_empty() {
+        save_pool(&pool)?;
+    }
+    Ok(adopted)
 }
 
 /// Allocate a fresh /`prefix` subnet for `lab_name`.

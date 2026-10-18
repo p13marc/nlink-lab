@@ -147,11 +147,23 @@ pub async fn find_orphans(known: &[nlink_lab::state::LabInfo]) -> Orphans {
         .chain(nlink_lab::state::labs_with_pending_journal());
     let mut known_plus = known.to_vec();
     let protected = protected_labs(known, candidates, nlink_lab::state::exists, lab_busy);
-    known_plus.extend(protected.into_iter().map(|name| nlink_lab::state::LabInfo {
-        name,
-        node_count: 0,
-        created_at: String::new(),
-    }));
+    // A lab still in a per-user root of an older nlink-lab is live, not
+    // debris: before one state root, `sudo destroy --orphans` reaped the
+    // labs another identity had deployed (#234).
+    let legacy = nlink_lab::state::legacy_labs()
+        .into_iter()
+        .map(|(_, name)| name)
+        .filter(|name| !known.iter().any(|k| &k.name == name));
+    known_plus.extend(
+        protected
+            .into_iter()
+            .chain(legacy)
+            .map(|name| nlink_lab::state::LabInfo {
+                name,
+                node_count: 0,
+                created_at: String::new(),
+            }),
+    );
     let mut orphans = classify_orphans(&ifnames, &tagged, &known_plus, &lab_namespaces);
     orphans.stale = classify_stale(&lab_namespaces, &netns);
     orphans

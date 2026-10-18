@@ -79,19 +79,17 @@ Now validate, deploy, smoke-test, and tear down:
 
 ```bash
 nlink-lab validate wan.nll        # syntax + validator rules
-sudo nlink-lab deploy wan.nll     # ~200ms; state in root's ~/.local/state/nlink-lab/labs/wan/
+sudo nlink-lab deploy wan.nll     # ~200ms; state in /var/lib/nlink-lab/labs/wan/
 sudo nlink-lab exec wan site-a-client -- ping -c 3 10.0.1.1
 sudo nlink-lab destroy wan
 ```
 
-A lab's state lives in the state directory of the user who deployed
-it: `$XDG_STATE_HOME/nlink-lab/labs/`, else `~/.local/state/nlink-lab/labs/`
-(`/var/lib/nlink-lab/labs/` for root without a `HOME`). sudo runs as
-root with root's `HOME`, so a lab deployed with `sudo` is seen by
-`sudo nlink-lab status`, `ip`, `snapshot --list` and the other commands,
-and not by the same commands run without it. A binary with file
-capabilities (`just install-caps`) runs as you, with your state
-directory.
+Every lab's state lives in one directory for the whole host,
+`/var/lib/nlink-lab/labs/` (`$NLINK_LAB_STATE_DIR` moves it), whoever
+deployed it. Writing it takes root (sudo, or the capability-installed
+binary from `just install-caps`). Reading it takes membership in the
+`nlink-lab` group, so `status`, `ip`, `logs` and `snapshot --list` work
+without sudo for its members (see [INSTALL.md](INSTALL.md)).
 
 The ping succeeds because the deploy planned the veth pair, the
 addresses and the route, then executed those stages in order —
@@ -1270,7 +1268,7 @@ container nodes alike.
 > `nlink-lab logs <lab> --pid <pid>`, which `nlink-lab ps <lab>` and the footer
 > printed by `logs <lab> <node>` both point you at.
 
-**Default log location:** `~/.local/state/nlink-lab/labs/{lab}/logs/`
+**Default log location:** `/var/lib/nlink-lab/labs/{lab}/logs/`
 **File naming:** `{node}-{command}-{pid}.stdout` and `.stderr`
 
 Use `--log-dir` to override the default location:

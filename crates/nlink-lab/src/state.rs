@@ -1,9 +1,10 @@
 //! State persistence for running labs.
 //!
-//! Tracks deployed labs in `$XDG_STATE_HOME/nlink-lab/labs/` (or `~/.local/state/nlink-lab/labs/`).
-//! Each lab gets a directory with `state.json` and `topology.toml`.
+//! Tracks deployed labs under one root for the whole host,
+//! `/var/lib/nlink-lab` (or `$NLINK_LAB_STATE_DIR`): `labs/<lab>/` holds
+//! `state.json` and `topology.toml`. See [`root_dir`].
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -92,6 +93,26 @@ pub struct LabState {
     /// is what finds the process inside the container (#215).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub process_tags: std::collections::BTreeMap<u32, String>,
+    /// What the lab was deployed from, so a later `apply` can default to
+    /// the same file, parameters and suffix (#234). `None` for a lab
+    /// deployed through the library or before 0.14.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<LabSource>,
+}
+
+/// Where a lab came from: the topology file, its `--set` parameters and
+/// the suffix `deploy --suffix`/`--unique` added to its name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct LabSource {
+    /// Absolute path of the topology file, when it came from one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// `--set KEY=VALUE` parameters, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<(String, String)>,
+    /// The suffix added to the topology's lab name (and prefix).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<String>,
 }
 
 fn schema_v1() -> u32 {
@@ -120,11 +141,12 @@ impl LabState {
             process_logs: Default::default(),
             exec_pids: Default::default(),
             process_tags: Default::default(),
+            source: None,
         }
     }
 }
 
-/// Process-wide lock serializing every test that mutates `XDG_STATE_HOME`
+/// Process-wide lock serializing every test that mutates `NLINK_LAB_STATE_DIR`
 /// (this module's tests and `events::tests`). Poisoning is fine — the
 /// panic that poisoned the lock is already reported by the test runner.
 #[cfg(test)]
@@ -219,7 +241,7 @@ pub fn snapshot_save(
     validate_lab_name(lab)?;
     validate_snapshot_name(name)?;
     let dir = snapshots_dir(lab).join(name);
-    std::fs::create_dir_all(&dir)?;
+    ensure_dir(&dir)?;
     let meta = SnapshotInfo {
         name: name.to_string(),
         created_at: crate::deploy::now_iso8601(),
@@ -361,38 +383,394 @@ pub struct LabInfo {
     pub created_at: String,
 }
 
-/// nlink-lab's state root: `$XDG_STATE_HOME/nlink-lab`, else
-/// `$HOME/.local/state/nlink-lab`, else — no `HOME` at all, e.g. a systemd
-/// unit — `/var/lib/nlink-lab` for root and a per-uid directory under the
-/// system temp dir otherwise. It is never the world-writable, predictable
-/// `/tmp/nlink-lab` a root process used to fall back to (issue #38).
-///
-/// An empty or relative `XDG_STATE_HOME` or `HOME` is ignored, as the XDG
-/// spec says: it put the state under the current directory, so a lab
-/// deployed from one directory was not found from another (#221).
-pub(crate) fn root_dir() -> PathBuf {
-    root_dir_from(
-        std::env::var_os("XDG_STATE_HOME"),
-        std::env::var_os("HOME"),
-        unsafe { libc::geteuid() } == 0,
-    )
+/// The environment variable that moves the state root (an absolute path).
+pub const STATE_DIR_ENV: &str = "NLINK_LAB_STATE_DIR";
+
+/// The state root when [`STATE_DIR_ENV`] is not set.
+pub const DEFAULT_ROOT: &str = "/var/lib/nlink-lab";
+
+/// The group whose members may read the state root (#234).
+pub const GROUP: &str = "nlink-lab";
+
+/// nlink-lab's state root: `$NLINK_LAB_STATE_DIR` when it is an absolute
+/// path, else `/var/lib/nlink-lab`. One root for the whole host, whoever
+/// deploys (#234): it was the deploying user's `$XDG_STATE_HOME` (or
+/// `~/.local/state`), so a lab deployed with sudo was invisible without
+/// it, the orphan reaper could reap another identity's live lab, and two
+/// identities could be handed the same subnet from their own pools.
+pub fn root_dir() -> PathBuf {
+    root_dir_from(std::env::var_os(STATE_DIR_ENV))
 }
 
-fn root_dir_from(
-    state_home: Option<std::ffi::OsString>,
-    home: Option<std::ffi::OsString>,
-    root: bool,
-) -> PathBuf {
-    let absolute = |v: Option<std::ffi::OsString>| v.map(PathBuf::from).filter(|p| p.is_absolute());
-    if let Some(state_home) = absolute(state_home) {
-        state_home.join("nlink-lab")
-    } else if let Some(home) = absolute(home) {
-        home.join(".local").join("state").join("nlink-lab")
-    } else if root {
-        PathBuf::from("/var/lib/nlink-lab")
-    } else {
-        std::env::temp_dir().join(format!("nlink-lab-{}", unsafe { libc::getuid() }))
+fn root_dir_from(env: Option<std::ffi::OsString>) -> PathBuf {
+    env.map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_ROOT))
+}
+
+/// The gid of the [`GROUP`] group, when the host has one.
+pub fn group_gid() -> Option<u32> {
+    let name = std::ffi::CString::new(GROUP).ok()?;
+    let mut grp: libc::group = unsafe { std::mem::zeroed() };
+    let mut buf = vec![0 as libc::c_char; 16 * 1024];
+    let mut out: *mut libc::group = std::ptr::null_mut();
+    // SAFETY: getgrnam_r writes into `grp` and `buf`, both owned here and
+    // large enough for an ordinary group entry; `out` is null on miss.
+    let rc = unsafe {
+        libc::getgrnam_r(
+            name.as_ptr(),
+            &mut grp,
+            buf.as_mut_ptr(),
+            buf.len(),
+            &mut out,
+        )
+    };
+    (rc == 0 && !out.is_null()).then_some(grp.gr_gid)
+}
+
+/// Create the state root if it is missing: setgid `2750 root:nlink-lab`
+/// when that group exists, so group members can read every lab and new
+/// directories inherit the group; `0700` otherwise. An existing root is
+/// left as the administrator made it.
+fn ensure_root(root: &Path) -> Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    if root.is_dir() {
+        return Ok(());
     }
+    if let Some(parent) = root.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| privileges(e, parent))?;
+    }
+    let gid = group_gid();
+    let mode = if gid.is_some() { 0o2750 } else { 0o700 };
+    match std::fs::DirBuilder::new().mode(mode).create(root) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(()),
+        Err(e) => return Err(privileges(e, root)),
+    }
+    // the umask may have taken bits off
+    std::fs::set_permissions(root, std::fs::Permissions::from_mode(mode))?;
+    if let Some(gid) = gid {
+        // best effort: a capability-installed binary may lack CAP_CHOWN
+        let _ = std::os::unix::fs::chown(root, None, Some(gid));
+    }
+    Ok(())
+}
+
+/// Create the state root if it is missing (see [`root_dir`]), with its
+/// modes and group, and return it.
+pub fn ensure_state_root() -> Result<PathBuf> {
+    let root = root_dir();
+    ensure_root(&root)?;
+    Ok(root)
+}
+
+/// Create a directory under the state root (and the root itself), setgid
+/// `2750`, so it inherits the root's group.
+pub(crate) fn ensure_dir(dir: &Path) -> Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    if dir.is_dir() {
+        return Ok(());
+    }
+    ensure_root(&root_dir())?;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o2750)
+        .create(dir)
+        .map_err(|e| privileges(e, dir))
+}
+
+/// An I/O error on the state root, said as what to do about it when it
+/// is a permission problem.
+fn privileges(e: std::io::Error, path: &Path) -> Error {
+    if e.kind() == std::io::ErrorKind::PermissionDenied {
+        Error::PermissionDenied {
+            path: path.to_path_buf(),
+            hint: format!(
+                "the state root needs root to write; reading it needs membership in the `{GROUP}` group"
+            ),
+        }
+    } else {
+        Error::Io(e)
+    }
+}
+
+// ─── State from before 0.14 (#234) ──────────────────────────
+
+/// The per-user state roots nlink-lab used before 0.14, where any exist on
+/// this host: root's and every `/home/*` user's `~/.local/state/nlink-lab`,
+/// the caller's `$XDG_STATE_HOME/nlink-lab`, and the per-uid temp-dir
+/// fallback. Their labs are read only: the orphan reaper protects them,
+/// and [`migrate_lab`] moves them into [`root_dir`].
+pub fn legacy_roots() -> Vec<PathBuf> {
+    let current = root_dir();
+    let mut candidates = vec![PathBuf::from("/root/.local/state/nlink-lab")];
+    if let Ok(homes) = std::fs::read_dir("/home") {
+        candidates.extend(
+            homes
+                .flatten()
+                .map(|h| h.path().join(".local").join("state").join("nlink-lab")),
+        );
+    }
+    for var in ["XDG_STATE_HOME", "HOME"] {
+        if let Some(dir) = std::env::var_os(var)
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+        {
+            candidates.push(if var == "HOME" {
+                dir.join(".local").join("state").join("nlink-lab")
+            } else {
+                dir.join("nlink-lab")
+            });
+        }
+    }
+    if let Ok(tmp) = std::fs::read_dir(std::env::temp_dir()) {
+        candidates.extend(tmp.flatten().map(|e| e.path()).filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_prefix("nlink-lab-"))
+                .is_some_and(|uid| !uid.is_empty() && uid.bytes().all(|b| b.is_ascii_digit()))
+        }));
+    }
+    let mut out: Vec<PathBuf> = Vec::new();
+    for c in candidates {
+        if c != current && c.join("labs").is_dir() && !out.contains(&c) {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The labs in [`legacy_roots`]: `(root, lab)` for every `labs/<lab>/state.json`.
+pub fn legacy_labs() -> Vec<(PathBuf, String)> {
+    let mut out = Vec::new();
+    for root in legacy_roots() {
+        let Ok(entries) = std::fs::read_dir(root.join("labs")) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if validate_lab_name(&name).is_ok() && e.path().join("state.json").is_file() {
+                out.push((root.clone(), name));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// The legacy root holding lab `name`, if one does.
+fn legacy_lab_root(name: &str) -> Option<PathBuf> {
+    legacy_roots()
+        .into_iter()
+        .find(|r| r.join("labs").join(name).join("state.json").is_file())
+}
+
+/// Move lab `name` from a legacy root into [`root_dir`] (#234). Refused
+/// while a process holds the lab's lock in its old root (a deploy, apply
+/// or destroy run by an older nlink-lab), or when the state root already
+/// has a lab of that name. Log paths in the state are rewritten to the new
+/// place; on another filesystem the directory is copied, and a process
+/// still writing its log goes on writing the old (deleted) file.
+pub fn migrate_lab(from_root: &Path, name: &str) -> Result<PathBuf> {
+    use std::os::unix::io::AsRawFd;
+    validate_lab_name(name)?;
+    let src = from_root.join("labs").join(name);
+    if !src.join("state.json").is_file() {
+        return Err(Error::NotFound {
+            name: name.to_string(),
+        });
+    }
+    let dst = state_dir(name);
+    if dst.exists() {
+        return Err(Error::AlreadyExists {
+            name: name.to_string(),
+        });
+    }
+    let old_lock_path = from_root
+        .join("labs")
+        .join(".locks")
+        .join(format!("{name}.lock"));
+    if let Some(dir) = old_lock_path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let old_lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&old_lock_path)?;
+    // SAFETY: flock on a descriptor this function owns.
+    if unsafe { libc::flock(old_lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return Err(Error::Locked {
+            name: name.to_string(),
+        });
+    }
+    let _new_lock = lock(name)?;
+    ensure_dir(&base_dir())?;
+    match std::fs::rename(&src, &dst) {
+        Ok(()) => {}
+        Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {
+            copy_tree(&src, &dst)?;
+            std::fs::remove_dir_all(&src)?;
+        }
+        Err(e) => return Err(privileges(e, &src)),
+    }
+    adopt_tree(&dst)?;
+    // log paths point into the old root
+    let state_path = dst.join("state.json");
+    let mut state: LabState = serde_json::from_str(&std::fs::read_to_string(&state_path)?)?;
+    let (old, new) = (
+        src.to_string_lossy().into_owned(),
+        dst.to_string_lossy().into_owned(),
+    );
+    for (out, err) in state.process_logs.values_mut() {
+        for p in [out, err] {
+            if let Some(rest) = p.strip_prefix(&old) {
+                *p = format!("{new}{rest}");
+            }
+        }
+    }
+    atomic_write(&state_path, &serde_json::to_string_pretty(&state)?)?;
+    crate::subnet_pool::adopt_from(from_root, name)?;
+    let _ = std::fs::remove_file(&old_lock_path);
+    Ok(dst)
+}
+
+/// Copy a directory tree (files and directories; symlinks as links).
+fn copy_tree(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for e in std::fs::read_dir(src)? {
+        let e = e?;
+        let (from, to) = (e.path(), dst.join(e.file_name()));
+        let ty = e.file_type()?;
+        if ty.is_dir() {
+            copy_tree(&from, &to)?;
+        } else if ty.is_symlink() {
+            std::os::unix::fs::symlink(std::fs::read_link(&from)?, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Give a moved lab directory the state root's ownership and modes:
+/// `root:nlink-lab`, directories `2750`, files `0640`, the secrets and the
+/// journal `0600`. As another user than root, only the modes change.
+fn adopt_tree(dir: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let root = unsafe { libc::geteuid() } == 0;
+    let gid = group_gid();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        if root {
+            let _ = std::os::unix::fs::chown(&d, Some(0), gid);
+        }
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o2750))?;
+        for e in std::fs::read_dir(&d)? {
+            let e = e?;
+            let ty = e.file_type()?;
+            if ty.is_dir() {
+                stack.push(e.path());
+            } else if ty.is_file() {
+                if root {
+                    let _ = std::os::unix::fs::chown(e.path(), Some(0), gid);
+                }
+                let secret = matches!(
+                    e.file_name().to_str(),
+                    Some("secrets.json" | "journal.json")
+                );
+                let mode = if secret { 0o600 } else { 0o640 };
+                std::fs::set_permissions(e.path(), std::fs::Permissions::from_mode(mode))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+// ─── The current lab (#234) ─────────────────────────────────
+
+/// Directory of the per-user current-lab files: sticky `1770` and owned by
+/// the `nlink-lab` group, so a member can set their own and nobody else's.
+fn context_dir() -> PathBuf {
+    root_dir().join("context")
+}
+
+/// The current lab of user `uid`, as `context_set` recorded it. A file
+/// owned by another user than `uid` or root is ignored, and so is a name
+/// that is not a lab name.
+pub fn context_get(uid: u32) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let path = context_dir().join(uid.to_string());
+    let meta = std::fs::symlink_metadata(&path).ok()?;
+    if !meta.is_file() || (meta.uid() != uid && meta.uid() != 0) {
+        return None;
+    }
+    let name = std::fs::read_to_string(&path).ok()?.trim().to_string();
+    validate_lab_name(&name).ok()?;
+    Some(name)
+}
+
+/// Record (`Some`) or clear (`None`) the current lab of user `uid`.
+pub fn context_set(uid: u32, lab: Option<&str>) -> Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+    let dir = context_dir();
+    if !dir.is_dir() {
+        ensure_root(&root_dir())?;
+        match std::fs::DirBuilder::new().mode(0o1770).create(&dir) {
+            Ok(()) => {
+                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o1770))?;
+                if let Some(gid) = group_gid() {
+                    let _ = std::os::unix::fs::chown(&dir, None, Some(gid));
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(privileges(e, &dir)),
+        }
+    }
+    let path = dir.join(uid.to_string());
+    let Some(name) = lab else {
+        return match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(privileges(e, &path)),
+            _ => Ok(()),
+        };
+    };
+    validate_lab_name(name)?;
+    // a fresh file, never one another user planted (the directory is
+    // shared): created exclusively, no symlink followed
+    let tmp = dir.join(format!("{uid}.{}.tmp", std::process::id()));
+    let _ = std::fs::remove_file(&tmp);
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o640)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&tmp)
+        .map_err(|e| privileges(e, &tmp))?;
+    f.write_all(name.as_bytes())?;
+    drop(f);
+    std::fs::rename(&tmp, &path).map_err(|e| privileges(e, &path))?;
+    Ok(())
+}
+
+/// Record what lab `name` was deployed from (see [`LabSource`]).
+pub fn set_source(name: &str, source: &LabSource) -> Result<()> {
+    let _lock = lock_blocking(name)?;
+    let path = state_dir(name).join("state.json");
+    let mut state: LabState =
+        serde_json::from_str(&std::fs::read_to_string(&path).map_err(|e| privileges(e, &path))?)
+            .map_err(|e| Error::State {
+                op: "parse",
+                detail: format!("failed to parse state: {e}"),
+                path: path.clone(),
+            })?;
+    state.source = Some(source.clone());
+    atomic_write(&path, &serde_json::to_string_pretty(&state)?)
+}
+
+/// What lab `name` was deployed from, when that was recorded.
+pub fn source_of(name: &str) -> Option<LabSource> {
+    load(name).ok()?.0.source
 }
 
 /// Get the base state directory: `labs/` under [`root_dir`].
@@ -474,9 +852,9 @@ fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
                     std::io::Error::last_os_error()
                 )));
             }
-            return Err(Error::deploy_failed(format!(
-                "lab '{name}' is locked by another process"
-            )));
+            return Err(Error::Locked {
+                name: name.to_string(),
+            });
         }
         if same_file(&file, &path) {
             return Ok(LabLock { _file: file, path });
@@ -506,13 +884,16 @@ fn lock_path(name: &str) -> PathBuf {
 }
 
 fn open_lock_file(name: &str) -> Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
     let dir = locks_dir();
-    std::fs::create_dir_all(&dir)?;
-    Ok(std::fs::OpenOptions::new()
+    ensure_dir(&dir)?;
+    std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
-        .open(lock_path(name))?)
+        .mode(0o640)
+        .open(lock_path(name))
+        .map_err(|e| privileges(e, &lock_path(name)))
 }
 
 /// Guard that holds a file lock on a lab's state directory.
@@ -560,9 +941,9 @@ use std::os::unix::io::AsRawFd;
 pub fn hosts_lock() -> Result<LabLock> {
     let lock_path = base_dir().join(".hosts.lock");
     if let Some(parent) = lock_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        ensure_dir(parent)?;
     }
-    let file = std::fs::File::create(&lock_path)?;
+    let file = std::fs::File::create(&lock_path).map_err(|e| privileges(e, &lock_path))?;
     // Blocking lock — concurrent deploys serialise here.
     let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
     if ret != 0 {
@@ -583,7 +964,7 @@ pub fn hosts_lock() -> Result<LabLock> {
 pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
     validate_lab_name(&state.name)?;
     let dir = state_dir(&state.name);
-    std::fs::create_dir_all(&dir)?;
+    ensure_dir(&dir)?;
 
     // Atomic write: write to temp file then rename to prevent corruption on crash
     let state_json = serde_json::to_string_pretty(state)?;
@@ -603,10 +984,25 @@ pub fn save(state: &LabState, topology: &Topology) -> Result<()> {
 /// directory fsync. A crash leaves either the old or the new file, never
 /// a torn one, and the rename is durable rather than merely visible.
 fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
+    atomic_write_mode(path, content, 0o640)
+}
+
+/// [`atomic_write`] with the file's mode: `0o640` (group-readable) for
+/// state, `0o600` for what holds secrets (#234).
+pub(crate) fn atomic_write_mode(path: &std::path::Path, content: &str, mode: u32) -> Result<()> {
     use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     let tmp = path.with_extension("tmp");
     {
-        let mut f = std::fs::File::create(&tmp)?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(mode)
+            .open(&tmp)
+            .map_err(|e| privileges(e, &tmp))?;
+        // an existing tmp file keeps its old mode
+        f.set_permissions(std::fs::Permissions::from_mode(mode))?;
         f.write_all(content.as_bytes())?;
         f.sync_all()?;
     }
@@ -626,13 +1022,22 @@ pub fn load(name: &str) -> Result<(LabState, Topology)> {
     let dir = state_dir(name);
 
     let state_path = dir.join("state.json");
-    if !state_path.exists() {
-        return Err(Error::NotFound {
-            name: name.to_string(),
-        });
-    }
-
-    let state_json = std::fs::read_to_string(&state_path)?;
+    let state_json = match std::fs::read_to_string(&state_path) {
+        Ok(json) => json,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // still in a per-user root an older nlink-lab used (#234)
+            if let Some(old) = legacy_lab_root(name) {
+                return Err(Error::MovedState {
+                    name: name.to_string(),
+                    path: old,
+                });
+            }
+            return Err(Error::NotFound {
+                name: name.to_string(),
+            });
+        }
+        Err(e) => return Err(privileges(e, &state_path)),
+    };
     let state: LabState = serde_json::from_str(&state_json).map_err(|e| Error::State {
         op: "parse",
         detail: format!("failed to parse state: {e}"),
@@ -653,12 +1058,15 @@ pub fn load(name: &str) -> Result<(LabState, Topology)> {
 /// List all saved labs.
 pub fn list() -> Result<Vec<LabInfo>> {
     let base = base_dir();
-    if !base.exists() {
-        return Ok(Vec::new());
-    }
+    // "no labs" and "not allowed to look" are different answers (#234)
+    let entries = match std::fs::read_dir(&base) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(privileges(e, &base)),
+    };
 
     let mut labs = Vec::new();
-    for entry in std::fs::read_dir(&base)? {
+    for entry in entries {
         let entry = entry?;
         if entry.file_type()?.is_dir() {
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -794,7 +1202,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     /// Process-wide lock serializing the tests that mutate
-    /// `XDG_STATE_HOME`. Without this, `cargo test`'s default
+    /// `NLINK_LAB_STATE_DIR`. Without this, `cargo test`'s default
     /// multi-thread runner would let two parallel tests overwrite
     /// the env var mid-run — tests A and B both set their own
     /// tempdir; B's setter wins; A's `save("test-lab")` then
@@ -824,15 +1232,209 @@ mod tests {
         let guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
         // SAFETY: `xdg_state_lock` above serializes every test in
-        // this module that touches `XDG_STATE_HOME`. Only one
+        // this module that touches `NLINK_LAB_STATE_DIR`. Only one
         // such test can be inside this critical section at a
         // time, so no other thread is concurrently reading the
         // env var.
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
         StateTestEnv {
             _dir: dir,
             _guard: guard,
         }
+    }
+
+    /// The state root in a directory that does not exist yet, so the
+    /// test sees what creating it does.
+    fn fresh_root_env() -> (StateTestEnv, PathBuf) {
+        let env = temp_state_env();
+        let root = env._dir.path().join("root");
+        // SAFETY: as in `temp_state_env`, under its lock.
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", &root) };
+        (env, root)
+    }
+
+    fn mode(p: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(p).unwrap().permissions().mode() & 0o7777
+    }
+
+    #[test]
+    fn the_state_root_and_its_files_get_their_modes() {
+        // #234: group-readable state when the group exists, private
+        // otherwise; secrets never readable by the group
+        let (_env, root) = fresh_root_env();
+        let state = LabState::new("modes", "2026-10-17T00:00:00Z");
+        save(&state, &Topology::default()).unwrap();
+        let group = group_gid().is_some();
+        assert_eq!(mode(&root), if group { 0o2750 } else { 0o700 });
+        // setgid comes from the root: mkdir takes no S_ISGID
+        assert_eq!(
+            mode(&state_dir("modes")),
+            if group { 0o2750 } else { 0o750 }
+        );
+        assert_eq!(mode(&state_dir("modes").join("state.json")), 0o640);
+        assert_eq!(mode(&state_dir("modes").join("topology.toml")), 0o640);
+        let _held = lock("modes").unwrap();
+        assert_eq!(mode(&lock_path("modes")), 0o640);
+    }
+
+    #[test]
+    fn an_unreadable_root_is_not_an_empty_one() {
+        use std::os::unix::fs::PermissionsExt;
+        if unsafe { libc::geteuid() } == 0 {
+            return; // root reads anything
+        }
+        let (_env, root) = fresh_root_env();
+        save(&LabState::new("hidden", "t"), &Topology::default()).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let listed = list();
+        let loaded = load("hidden");
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            matches!(listed, Err(Error::PermissionDenied { .. })),
+            "{listed:?}"
+        );
+        assert!(
+            matches!(loaded, Err(Error::PermissionDenied { .. })),
+            "{:?}",
+            loaded.err()
+        );
+    }
+
+    #[test]
+    fn the_current_lab_is_per_user_and_validated() {
+        let (_env, root) = fresh_root_env();
+        let me = unsafe { libc::getuid() };
+        assert_eq!(context_get(me), None);
+        context_set(me, Some("lab-a")).unwrap();
+        assert_eq!(context_get(me).as_deref(), Some("lab-a"));
+        assert_eq!(context_get(me + 1), None, "another user's is separate");
+        assert_eq!(mode(&root.join("context")), 0o1770);
+        // a file that is not a lab name, or a symlink, is not trusted
+        let path = root.join("context").join(me.to_string());
+        std::fs::write(&path, "../etc").unwrap();
+        assert_eq!(context_get(me), None);
+        std::fs::remove_file(&path).unwrap();
+        std::os::unix::fs::symlink("/etc/hostname", &path).unwrap();
+        assert_eq!(context_get(me), None);
+        std::fs::remove_file(&path).unwrap();
+        context_set(me, Some("lab-b")).unwrap();
+        context_set(me, None).unwrap();
+        assert_eq!(context_get(me), None);
+        context_set(me, None).unwrap(); // clearing twice is fine
+        assert!(context_set(me, Some("a/b")).is_err());
+    }
+
+    #[test]
+    fn the_source_of_a_deploy_is_kept() {
+        let _env = temp_state_env();
+        save(&LabState::new("src", "t"), &Topology::default()).unwrap();
+        assert_eq!(source_of("src"), None);
+        let source = LabSource {
+            path: Some("/labs/wan.nll".into()),
+            params: vec![("delay".into(), "50ms".into())],
+            suffix: Some("ci".into()),
+        };
+        set_source("src", &source).unwrap();
+        assert_eq!(source_of("src"), Some(source));
+    }
+
+    /// An old per-user root (the caller's `$XDG_STATE_HOME/nlink-lab`) with
+    /// lab `name` in it: a state file with a process log, and its subnet.
+    fn legacy_root_with(env: &StateTestEnv, name: &str) -> PathBuf {
+        let xdg = env._dir.path().join("xdg");
+        let old = xdg.join("nlink-lab");
+        let lab = old.join("labs").join(name);
+        std::fs::create_dir_all(lab.join("logs")).unwrap();
+        let mut st = LabState::new(name, "t");
+        let log = lab.join("logs").join("a.stdout");
+        std::fs::write(&log, "hello").unwrap();
+        st.process_logs.insert(
+            7,
+            (
+                log.to_string_lossy().into_owned(),
+                log.to_string_lossy().into_owned(),
+            ),
+        );
+        std::fs::write(lab.join("state.json"), serde_json::to_string(&st).unwrap()).unwrap();
+        std::fs::write(
+            lab.join("topology.toml"),
+            toml::to_string(&Topology::default()).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            old.join("subnet-pool.json"),
+            format!(
+                r#"{{"in_use":{{"10.42.7.0/24":"{name}","10.42.8.0/24":"other"}},"next_offset":0}}"#
+            ),
+        )
+        .unwrap();
+        // SAFETY: under the env lock `env` holds.
+        unsafe { std::env::set_var("XDG_STATE_HOME", &xdg) };
+        old
+    }
+
+    #[test]
+    fn a_lab_in_an_old_root_is_found_and_moved() {
+        // #234: labs deployed by 0.13 under a user's own state directory
+        let (env, root) = fresh_root_env();
+        let old = legacy_root_with(&env, "old-lab");
+        let found = legacy_labs();
+        assert!(
+            found.contains(&(old.clone(), "old-lab".to_string())),
+            "{found:?}"
+        );
+        // still there: loading it says where it is and what to do
+        assert!(matches!(load("old-lab"), Err(Error::MovedState { .. })));
+
+        let moved = migrate_lab(&old, "old-lab").unwrap();
+        assert_eq!(moved, root.join("labs").join("old-lab"));
+        assert!(!old.join("labs").join("old-lab").exists());
+        let (st, _) = load("old-lab").unwrap();
+        let (out, _) = &st.process_logs[&7];
+        assert!(
+            out.starts_with(&moved.to_string_lossy().into_owned()),
+            "{out}"
+        );
+        assert_eq!(std::fs::read_to_string(out).unwrap(), "hello");
+        assert_eq!(mode(&moved.join("state.json")), 0o640);
+        // its subnet came along, the other lab's did not
+        let pool = std::fs::read_to_string(root.join("subnet-pool.json")).unwrap();
+        assert!(
+            pool.contains("10.42.7.0/24") && !pool.contains("10.42.8.0/24"),
+            "{pool}"
+        );
+        // nothing left to move
+        assert!(matches!(
+            migrate_lab(&old, "old-lab"),
+            Err(Error::NotFound { .. })
+        ));
+        unsafe { std::env::remove_var("XDG_STATE_HOME") };
+    }
+
+    #[test]
+    fn a_busy_or_clashing_old_lab_is_not_moved() {
+        use std::os::unix::io::AsRawFd;
+        let (env, _root) = fresh_root_env();
+        let old = legacy_root_with(&env, "busy");
+        // an older nlink-lab holds the lab's lock in its old root
+        let lock_dir = old.join("labs").join(".locks");
+        std::fs::create_dir_all(&lock_dir).unwrap();
+        let held = std::fs::File::create(lock_dir.join("busy.lock")).unwrap();
+        assert_eq!(unsafe { libc::flock(held.as_raw_fd(), libc::LOCK_EX) }, 0);
+        assert!(matches!(
+            migrate_lab(&old, "busy"),
+            Err(Error::Locked { .. })
+        ));
+        drop(held);
+        // a lab of that name in the state root already
+        save(&LabState::new("busy", "t"), &Topology::default()).unwrap();
+        assert!(matches!(
+            migrate_lab(&old, "busy"),
+            Err(Error::AlreadyExists { .. })
+        ));
+        assert!(old.join("labs").join("busy").join("state.json").exists());
+        unsafe { std::env::remove_var("XDG_STATE_HOME") };
     }
 
     #[test]
@@ -858,27 +1460,19 @@ mod tests {
     }
 
     #[test]
-    fn the_state_root_ignores_empty_and_relative_directories() {
-        let at = |xdg: &str, home: &str, root: bool| {
-            root_dir_from(Some(xdg.into()), Some(home.into()), root)
-        };
+    fn the_state_root_is_one_place_unless_moved() {
+        // #234: it was the deploying user's XDG/HOME directory
+        assert_eq!(root_dir_from(None), PathBuf::from("/var/lib/nlink-lab"));
         assert_eq!(
-            at("/s", "/h", false),
-            PathBuf::from("/s/nlink-lab"),
-            "XDG_STATE_HOME first"
+            root_dir_from(Some("/srv/state".into())),
+            PathBuf::from("/srv/state")
         );
-        // empty or relative XDG_STATE_HOME: HOME's
+        // an empty or relative value would follow the current directory
+        assert_eq!(root_dir_from(Some("".into())), PathBuf::from(DEFAULT_ROOT));
         assert_eq!(
-            at("", "/h", false),
-            PathBuf::from("/h/.local/state/nlink-lab")
+            root_dir_from(Some("rel".into())),
+            PathBuf::from(DEFAULT_ROOT)
         );
-        assert_eq!(
-            at("rel", "/h", false),
-            PathBuf::from("/h/.local/state/nlink-lab")
-        );
-        // neither usable: root's system directory
-        assert_eq!(at("", "", true), PathBuf::from("/var/lib/nlink-lab"));
-        assert!(at("x", "y", false).is_absolute());
     }
 
     #[test]
@@ -933,7 +1527,7 @@ link r1:eth0 -- h1:eth0
     fn lock_lives_outside_the_lab_dir_and_survives_remove() {
         let _guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
 
         let held = lock("locked-lab").expect("first lock");
         assert!(
@@ -960,7 +1554,7 @@ link r1:eth0 -- h1:eth0
     fn destroy_style_removal_frees_the_lock_and_deletes_its_file() {
         let _guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
 
         let held = lock("doomed").expect("first lock");
         let path = lock_path("doomed");
@@ -981,7 +1575,7 @@ link r1:eth0 -- h1:eth0
     fn stale_locks_finds_only_locks_without_a_lab() {
         let _guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
 
         // A live lab: state.json present.
         drop(lock("live"));
@@ -1008,7 +1602,7 @@ link r1:eth0 -- h1:eth0
     fn sweep_removes_stale_locks_but_never_a_held_one() {
         let _guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
 
         drop(lock("stale-a"));
         drop(lock("stale-b"));
@@ -1032,7 +1626,7 @@ link r1:eth0 -- h1:eth0
     fn a_waiter_revalidates_instead_of_inheriting_a_deleted_lock() {
         let _guard = xdg_state_lock();
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_STATE_HOME", dir.path()) };
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
 
         let held = lock("raced").expect("first lock");
         let (tx, rx) = std::sync::mpsc::channel();

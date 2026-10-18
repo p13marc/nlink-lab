@@ -137,8 +137,8 @@ network namespace. Do not override the network mode.
 
 ## State Corruption
 
-Lab state is stored in `$XDG_STATE_HOME/nlink-lab/labs/` (usually
-`~/.local/state/nlink-lab/labs/`). Each lab directory holds
+Lab state is stored in `/var/lib/nlink-lab/labs/` (or under
+`$NLINK_LAB_STATE_DIR`). Each lab directory holds
 `state.json` — namespaces, container ids, spawned PIDs and their
 start times, live impairments — alongside the rendered
 `topology.toml`, `meta.json`, `logs/`, `snapshots/` and, after a
@@ -151,7 +151,7 @@ If state becomes inconsistent (e.g., after a system crash):
 sudo nlink-lab destroy --force <name>
 
 # Remove the corrupted state file
-rm -rf ~/.local/state/nlink-lab/labs/<name>
+sudo rm -rf /var/lib/nlink-lab/labs/<name>
 ```
 
 Then reap whatever the removed state file was tracking:

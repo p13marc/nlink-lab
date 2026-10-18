@@ -107,9 +107,9 @@ Spawn a background process in a lab node.
 
 Stdout/stderr are captured to per-process log files at:
 
-`$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
+`/var/lib/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
 
-(defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The path is stable; consumers can read it directly, or use `nlink-lab logs <lab> --pid <pid>`.
+(under `$NLINK_LAB_STATE_DIR` when it is set). The path is stable; consumers can read it directly, or use `nlink-lab logs <lab> --pid <pid>`.
 
 JSON OUTPUT (with `--json`): { "command": str, "node": str, "pid": int, "host_pid": int } Schema: docs/json-schemas/spawn.schema.json
 

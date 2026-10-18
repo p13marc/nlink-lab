@@ -143,11 +143,22 @@ impl Journal {
     fn persist(&self) {
         if let Some(path) = &self.path
             && let Some(dir) = path.parent()
-            && std::fs::create_dir_all(dir).is_ok()
+            && crate::state::ensure_dir(dir).is_ok()
             && let Ok(json) = serde_json::to_string(&self.entries)
         {
+            // 0600: the journal holds what a rollback needs, keys included.
+            // Rewritten after every op, so not fsynced.
+            use std::io::Write as _;
+            use std::os::unix::fs::OpenOptionsExt as _;
             let tmp = path.with_extension("json.tmp");
-            if std::fs::write(&tmp, json).is_ok() {
+            let written = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .mode(0o600)
+                .open(&tmp)
+                .and_then(|mut f| f.write_all(json.as_bytes()));
+            if written.is_ok() {
                 let _ = std::fs::rename(&tmp, path);
             }
         }

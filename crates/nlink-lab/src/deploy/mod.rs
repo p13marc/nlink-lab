@@ -686,7 +686,7 @@ mod wireguard_secrets {
         }
         let p = path(lab);
         if let Some(dir) = p.parent() {
-            std::fs::create_dir_all(dir)?;
+            crate::state::ensure_dir(dir)?;
         }
         let _ = std::fs::remove_file(&p);
         let mut f = std::fs::OpenOptions::new()

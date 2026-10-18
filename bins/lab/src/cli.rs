@@ -57,9 +57,9 @@ pub enum Commands {
     ///
     /// Stdout/stderr are captured to per-process log files at:
     ///
-    ///   `$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
+    ///   `/var/lib/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
     ///
-    /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
+    /// (under `$NLINK_LAB_STATE_DIR` when it is set). The
     /// path is stable; consumers can read it directly, or use
     /// `nlink-lab logs <lab> --pid <pid>`.
     ///
@@ -357,9 +357,9 @@ pub enum Commands {
     /// a container).  With `--pid`: shows the per-process log file written
     /// by `spawn`. Per-process log files live at:
     ///
-    ///   `$XDG_STATE_HOME/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
+    ///   `/var/lib/nlink-lab/labs/<lab>/logs/<node>-<basename>-<pid>.{stdout,stderr}`
     ///
-    /// (defaults to `~/.local/state` if `XDG_STATE_HOME` is unset). The
+    /// (under `$NLINK_LAB_STATE_DIR` when it is set). The
     /// path is stable; consumers can read it directly.
     Logs(cmd::logs::Args),
 

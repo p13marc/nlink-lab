@@ -248,6 +248,13 @@
       "description": "Where a lab came from: the topology file, its `--set` parameters and\nthe suffix `deploy --suffix`/`--unique` added to its name.",
       "type": "object",
       "properties": {
+        "dir": {
+          "description": "What the containers' relative host paths are relative to, when not\n`path`'s directory: a deploy through the daemon stages the file\nunder the lab's state, and they stay the client's (#285).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "params": {
           "description": "`--set KEY=VALUE` parameters, in order.",
           "type": "array",

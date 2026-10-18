@@ -113,6 +113,11 @@ pub struct LabSource {
     /// The suffix added to the topology's lab name (and prefix).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
+    /// What the containers' relative host paths are relative to, when not
+    /// `path`'s directory: a deploy through the daemon stages the file
+    /// under the lab's state, and they stay the client's (#285).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
 }
 
 fn schema_v1() -> u32 {
@@ -1369,6 +1374,7 @@ mod tests {
             path: Some("/labs/wan.nll".into()),
             params: vec![("delay".into(), "50ms".into())],
             suffix: Some("ci".into()),
+            dir: Some("/home/me/labs".into()),
         };
         set_source("src", &source).unwrap();
         assert_eq!(source_of("src"), Some(source));

@@ -8022,6 +8022,74 @@ async fn an_auto_network_subnet_deploys_and_applies_as_nothing() {
     lab.destroy().await.expect("destroy failed");
 }
 
+/// #285: a container's relative `env-file` and `config` are its topology
+/// file's, wherever the deploy runs; an `apply` of the same file leaves
+/// the container alone; a missing one is said by name.
+#[tokio::test]
+async fn container_host_files_are_the_topology_files() {
+    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
+        eprintln!("skipping: needs root and alpine:latest in the podman store");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("lab")).unwrap();
+    std::fs::write(dir.path().join("lab/app.env"), "LAB_GREETING=hello-285\n").unwrap();
+    std::fs::write(dir.path().join("lab/motd"), "from-the-file\n").unwrap();
+    let lab_name = format!("khf-{}", std::process::id());
+    let file = dir.path().join("lab/lab.nll");
+    std::fs::write(
+        &file,
+        format!(
+            r#"lab "{lab_name}" {{ runtime "podman" }}
+node c image "alpine:latest" cmd ["sleep", "infinity"] {{
+  env-file "app.env"
+  config "motd" "/etc/motd-lab"
+}}
+node h
+link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+        ),
+    )
+    .unwrap();
+    // the test runs in the crate's directory, not the file's
+    let topo = nlink_lab::parser::parse_file(&file).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let out = |lab: &RunningLab, cmd: &str, args: &[&str]| lab.exec("c", cmd, args).unwrap().stdout;
+    assert_eq!(out(&lab, "printenv", &["LAB_GREETING"]).trim(), "hello-285");
+    assert_eq!(out(&lab, "cat", &["/etc/motd-lab"]).trim(), "from-the-file");
+    // the same file applied: the container is the one that was
+    lab.exec("c", "touch", &["/tmp/still-here"]).unwrap();
+    nlink_lab::apply(&mut lab, &nlink_lab::parser::parse_file(&file).unwrap())
+        .await
+        .expect("apply failed");
+    assert!(
+        lab.exec("c", "test", &["-e", "/tmp/still-here"])
+            .unwrap()
+            .exit_code
+            == 0,
+        "the container was re-created"
+    );
+    lab.destroy().await.expect("destroy failed");
+    std::mem::forget(_guard);
+
+    // a missing one, named
+    std::fs::remove_file(dir.path().join("lab/app.env")).unwrap();
+    let err = nlink_lab::parser::parse_file(&file)
+        .unwrap()
+        .deploy()
+        .await
+        .err()
+        .expect("deploying without the env file");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("env-file ") && msg.contains("lab/app.env does not exist"),
+        "{msg}"
+    );
+}
+
 /// #215: a process on a container node is `podman exec … CMD`, and the
 /// tracked PID is the exec client's, which forwards no signal. `kill`
 /// stopped the client and left CMD running in the container; an `apply`

@@ -123,6 +123,24 @@ fn abs_host_path(p: &str) -> String {
 /// Each top-level entry of `dir` is mounted at `/<entry>`, so `overlay "cfg"`
 /// containing `etc/` yields `cfg/etc:/etc`. A missing directory is an error
 /// rather than a silent no-op -- the key used to be ignored entirely (#111).
+/// `p` made absolute, when it is there: a missing host file said so
+/// before the runtime fails on it less clearly (#285).
+fn existing(p: &str, what: &str) -> Result<String> {
+    let abs = abs_host_path(p);
+    if std::path::Path::new(&abs).exists() {
+        return Ok(abs);
+    }
+    // the planner made it absolute already when the topology has a file
+    let looked = if abs == p {
+        String::new()
+    } else {
+        format!(" (looked for {abs})")
+    };
+    Err(Error::invalid_topology(format!(
+        "{what} {p} does not exist{looked}: a relative path is from the topology file's directory"
+    )))
+}
+
 fn overlay_mounts(dir: &str) -> Result<Vec<String>> {
     let path = std::path::Path::new(dir);
     let entries = std::fs::read_dir(path)
@@ -327,15 +345,16 @@ impl Runtime {
 
         // `config HOST CONTAINER` is a read-only bind mount (#111).
         for (host, container) in &opts.configs {
+            let host = existing(host, "config")?;
             args.push("--volume".to_string());
-            args.push(format!("{}:{container}:ro", abs_host_path(host)));
+            args.push(format!("{host}:{container}:ro"));
         }
 
         // `env-file` maps onto the runtime's own flag, so docker/podman reads
         // the file rather than us (#111).
         if let Some(env_file) = &opts.env_file {
             args.push("--env-file".to_string());
-            args.push(abs_host_path(env_file));
+            args.push(existing(env_file, "env-file")?);
         }
 
         // `overlay DIR` mirrors DIR's contents onto the container root, so each
@@ -556,6 +575,20 @@ mod tests {
         );
         assert!(abs.ends_with("configs/web.env"), "{abs}");
         assert_eq!(super::abs_host_path("/etc/hosts"), "/etc/hosts");
+    }
+
+    #[test]
+    fn a_missing_host_file_is_said_before_the_runtime_runs() {
+        assert_eq!(
+            super::existing("/etc/hosts", "config").unwrap(),
+            "/etc/hosts"
+        );
+        let err = super::existing("/no/such/web.env", "env-file").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("env-file /no/such/web.env does not exist:"),
+            "{msg}"
+        );
     }
     use super::*;
 

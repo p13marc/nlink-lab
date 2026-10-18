@@ -98,6 +98,14 @@ pub struct Topology {
     /// views that draw it. `render` writes the flat topology without it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub sites: BTreeMap<String, Vec<String>>,
+
+    /// The directory a container's relative host paths (`config`
+    /// sources, `overlay`, `env-file`) are relative to: the topology
+    /// file's, set when it is parsed from one (#285); a daemon deploy
+    /// sets the client's. `None` (parsed from text): relative to the
+    /// directory the deploy runs in. `render` leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_dir: Option<String>,
 }
 
 /// A performance benchmark definition.
@@ -2220,11 +2228,12 @@ impl Topology {
         t
     }
 
-    /// Make the containers' host paths absolute against `base` (#234):
-    /// `config` sources, `overlay` and `env-file`. A relative one meant the
-    /// directory `nlink-lab` ran in, which a daemon does not share.
+    /// Put the containers' relative host paths under `base` (#285):
+    /// `config` sources, `overlay` and `env-file`; absolute ones stay.
+    /// An imported module's paths are its file's: lowering puts them
+    /// under the import's directory, so they stay right from the entry's.
     /// `volumes` stay as written: a bare name there is a named volume.
-    pub fn absolutize_host_paths(&mut self, base: &std::path::Path) {
+    pub fn rebase_host_paths(&mut self, base: &std::path::Path) {
         let abs = |p: &mut String| {
             if !std::path::Path::new(p.as_str()).is_absolute() {
                 *p = base.join(p.as_str()).to_string_lossy().into_owned();
@@ -2416,7 +2425,7 @@ node c image "alpine" { env ["TOKEN=s3cret"] }
     }
 
     #[test]
-    fn host_paths_become_absolute_but_volumes_stay() {
+    fn host_paths_go_under_a_base_but_volumes_stay() {
         let mut t = crate::parser::parse(
             r#"lab "p"
 node c image "alpine" {
@@ -2429,7 +2438,7 @@ node c image "alpine" {
 "#,
         )
         .unwrap();
-        t.absolutize_host_paths(std::path::Path::new("/work"));
+        t.rebase_host_paths(std::path::Path::new("/work"));
         let c = &t.nodes["c"];
         assert_eq!(c.configs[0].0, "/work/conf/a.conf");
         assert_eq!(c.configs[1].0, "/abs/b.conf");

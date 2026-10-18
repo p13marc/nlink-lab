@@ -5,14 +5,23 @@ use std::collections::BTreeMap;
 
 /// Build container CreateOpts from a Node's fields.
 ///
-/// `configs`, `env_file` and `overlay` are passed straight through for the
-/// runtime layer to expand: all three need host I/O (path absolutisation and, for
-/// `overlay`, a directory listing) and this planner is pure (#111).
+/// `configs`, `env_file` and `overlay` reach the runtime layer, which
+/// mounts them (and lists an `overlay` directory: host I/O this planner,
+/// pure, does not do; #111). A relative one is put under `base`, the
+/// topology's source directory (#285); without one, the runtime makes it
+/// absolute against the directory it runs in.
 pub(crate) fn build_create_opts(
     name: &str,
     node: &crate::types::Node,
     extra_hosts: &[String],
+    base: Option<&std::path::Path>,
 ) -> CreateOpts {
+    let host = |p: &String| match base {
+        Some(b) if std::path::Path::new(p).is_relative() => {
+            b.join(p).to_string_lossy().into_owned()
+        }
+        _ => p.clone(),
+    };
     CreateOpts {
         cmd: node.cmd.clone(),
         env: node.env.clone().unwrap_or_default(),
@@ -32,9 +41,13 @@ pub(crate) fn build_create_opts(
         workdir: node.workdir.clone(),
         labels: node.labels.clone(),
         extra_hosts: extra_hosts.to_vec(),
-        configs: node.configs.clone(),
-        env_file: node.env_file.clone(),
-        overlay: node.overlay.clone(),
+        configs: node
+            .configs
+            .iter()
+            .map(|(h, c)| (host(h), c.clone()))
+            .collect(),
+        env_file: node.env_file.as_ref().map(host),
+        overlay: node.overlay.as_ref().map(host),
     }
 }
 

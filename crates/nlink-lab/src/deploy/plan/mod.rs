@@ -374,16 +374,16 @@ node c image "alpine" {
 }
 "#,
         );
-        let opts = process::build_create_opts("c", &t.nodes["c"], &[]);
+        let opts = process::build_create_opts("c", &t.nodes["c"], &[], None);
         // the hostname defaults to the node name (#217)
         assert_eq!(opts.hostname.as_deref(), Some("c"));
         let named = crate::types::Node {
             hostname: Some("web".into()),
             ..t.nodes["c"].clone()
         };
-        let opts2 = process::build_create_opts("c", &named, &[]);
+        let opts2 = process::build_create_opts("c", &named, &[], None);
         assert_eq!(opts2.hostname.as_deref(), Some("web"));
-        let odd = process::build_create_opts("not_a_hostname", &t.nodes["c"], &[]);
+        let odd = process::build_create_opts("not_a_hostname", &t.nodes["c"], &[], None);
         assert_eq!(
             odd.hostname, None,
             "left to the runtime when not a hostname"
@@ -403,6 +403,63 @@ node c image "alpine" {
         );
         assert_eq!(opts.env_file.as_deref(), Some("/host/app.env"));
         assert_eq!(opts.overlay.as_deref(), Some("/host/overlay"));
+    }
+
+    /// A container's relative host files are its topology file's, from
+    /// wherever it is deployed (#285); absolute ones and volumes stay.
+    #[test]
+    fn relative_host_files_are_under_the_source_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        std::fs::write(
+            dir.path().join("sub/web.nll"),
+            "lab \"w\"\nnode web image \"nginx\" {\n  env-file \"web.env\"\n  config \"conf/a.conf\" \"/etc/a.conf\"\n}\n",
+        )
+        .unwrap();
+        let entry = dir.path().join("lab.nll");
+        std::fs::write(
+            &entry,
+            "import \"sub/web.nll\" as s\nlab \"t\"\nnode c image \"alpine\" {\n  overlay \"ov\"\n  config \"/abs/b.conf\" \"/etc/b.conf\"\n  volumes [\"data:/data\"]\n}\n",
+        )
+        .unwrap();
+        let t = crate::parser::parse_file(&entry).unwrap();
+        let root = std::path::absolute(dir.path()).unwrap();
+        assert_eq!(t.source_dir.as_deref(), Some(root.to_str().unwrap()));
+        // the import's, under its directory; still relative in the topology
+        assert_eq!(t.nodes["s-web"].env_file.as_deref(), Some("sub/web.env"));
+        let plan = crate::deploy::plan_for(&t).unwrap();
+        let opts = |node: &str| {
+            plan.ops
+                .iter()
+                .find_map(|o| match o {
+                    Op::CreateContainer { node: n, opts, .. } if n == node => Some(opts.clone()),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let web = opts("s-web");
+        assert_eq!(
+            web.env_file,
+            Some(root.join("sub/web.env").display().to_string())
+        );
+        assert_eq!(
+            web.configs[0].0,
+            root.join("sub/conf/a.conf").display().to_string()
+        );
+        let c = opts("c");
+        assert_eq!(c.overlay, Some(root.join("ov").display().to_string()));
+        assert_eq!(c.configs[0].0, "/abs/b.conf");
+        assert_eq!(c.volumes, vec!["data:/data".to_string()]);
+        // parsed from text: left to the runtime, as before
+        let text = crate::parser::parse(
+            &std::fs::read_to_string(&entry)
+                .unwrap()
+                .replace("import \"sub/web.nll\" as s\n", ""),
+        )
+        .unwrap();
+        assert_eq!(text.source_dir, None);
+        let plan = crate::deploy::plan_for(&text).unwrap();
+        assert!(plan.ops.iter().any(|o| matches!(o, Op::CreateContainer { opts, .. } if opts.overlay.as_deref() == Some("ov"))));
     }
 
     #[test]

@@ -313,10 +313,31 @@ pub fn topology_of(
     staging: &Path,
 ) -> Result<Topology> {
     match source {
-        Some(bundle) => parse_entry(&stage_source(bundle, staging)?, &bundle.params),
+        Some(bundle) => parse_bundle(&stage_source(bundle, staging)?, bundle),
         None => serde_json::from_value(topology)
             .map_err(|e| Error::invalid_argument(format!("not a topology: {e}"))),
     }
+}
+
+/// Where a bundle's containers' relative host files are: beside the
+/// client's file (its absolute `path`), not the copy staged here (#285).
+/// A bundle without one (an unsaved design) has them nowhere.
+pub fn origin(bundle: &SourceBundle) -> Option<String> {
+    let path = Path::new(&bundle.path);
+    path.is_absolute()
+        .then(|| path.parent())
+        .flatten()
+        .map(|d| d.to_string_lossy().into_owned())
+}
+
+/// The staged `entry` of `bundle`, parsed with its params, its host files
+/// the client's.
+fn parse_bundle(entry: &Path, bundle: &SourceBundle) -> Result<Topology> {
+    let mut topo = parse_entry(entry, &bundle.params)?;
+    if let Some(dir) = origin(bundle) {
+        topo.source_dir = Some(dir);
+    }
+    Ok(topo)
 }
 
 fn parse_entry(entry: &Path, params: &[(String, String)]) -> Result<Topology> {
@@ -693,7 +714,7 @@ async fn deploy(
     let entry = match &source {
         Some(bundle) => {
             let entry = stage_source(bundle, &state::state_dir(&name).join("source"))?;
-            topo = adjusted(parse_entry(&entry, &bundle.params)?, &options)?;
+            topo = adjusted(parse_bundle(&entry, bundle)?, &options)?;
             Some(entry)
         }
         None => None,
@@ -705,6 +726,7 @@ async fn deploy(
             path: Some(entry.to_string_lossy().into_owned()),
             params: bundle.params.clone(),
             suffix: options.suffix.clone(),
+            dir: origin(bundle),
         };
         if let Err(e) = state::set_source(&name, &recorded) {
             tracing::warn!("could not record the source of '{name}': {e}");
@@ -850,6 +872,49 @@ mod tests {
             "C"
         );
         assert!(base.join("../common.nll").starts_with(dir.path()));
+    }
+
+    /// A bundle's containers' host files are the client's, beside its
+    /// file, not the copy staged under the lab's state (#285).
+    #[test]
+    fn a_bundles_host_files_are_the_clients() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = SourceBundle {
+            path: "/home/u/labs/main.nll".into(),
+            text: "import \"sub/web.nll\" as s\nlab \"b\"\nnode c image \"alpine\" { env-file \"c.env\" }\n"
+                .into(),
+            imports: [(
+                "sub/web.nll".to_string(),
+                "lab \"w\"\nnode web image \"nginx\" { config \"a.conf\" \"/etc/a.conf\" }\n".to_string(),
+            )]
+            .into(),
+            params: vec![],
+        };
+        assert_eq!(origin(&bundle).as_deref(), Some("/home/u/labs"));
+        let topo = topology_of(serde_json::Value::Null, Some(&bundle), dir.path()).unwrap();
+        assert_eq!(topo.source_dir.as_deref(), Some("/home/u/labs"));
+        let plan = crate::plan_for(&topo).unwrap();
+        let opts: Vec<_> = plan
+            .ops
+            .iter()
+            .filter_map(|o| match o {
+                crate::deploy::op::Op::CreateContainer { opts, .. } => Some(opts.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            opts.iter()
+                .any(|o| o.env_file.as_deref() == Some("/home/u/labs/c.env"))
+        );
+        assert!(opts
+            .iter()
+            .any(|o| o.configs.first().map(|c| c.0.as_str()) == Some("/home/u/labs/sub/a.conf")));
+        // an unsaved design has no directory: its paths stay the staged copy's
+        let unsaved = SourceBundle {
+            path: "design.nll".into(),
+            ..bundle
+        };
+        assert_eq!(origin(&unsaved), None);
     }
 
     #[test]

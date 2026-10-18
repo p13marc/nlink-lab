@@ -16,6 +16,7 @@ use crate::backend::{Backend, Target};
 use crate::control::{Confirm, ImpairEditor, PairEditor, SnapshotForm, SpawnForm};
 use crate::doc::{Problem, Source};
 use crate::live::EventLine;
+use crate::session::{Session, TermInfo};
 use crate::settings::{Dirs, LayoutPref, Settings};
 
 pub type TabId = u64;
@@ -212,6 +213,8 @@ pub enum DockTab {
     Source,
     Events,
     Processes,
+    Console,
+    Terminal,
 }
 
 /// A topology on the canvas: from its source, or a running lab's.
@@ -278,7 +281,24 @@ pub struct Live {
     pub spawn_form: SpawnForm,
     /// Requests sent and not answered yet: their buttons wait.
     pub pending: usize,
+    /// Commands run, logs followed, captures: the console's.
+    pub sessions: Vec<Session>,
+    pub active_session: Option<u64>,
+    /// The console's command line.
+    pub console: ConsoleForm,
+    pub terminals: Vec<TermInfo>,
+    pub active_terminal: Option<u64>,
 }
+
+/// The console's command line: a node, a command.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConsoleForm {
+    pub node: Option<String>,
+    pub command: String,
+}
+
+/// Sessions a lab tab keeps; the oldest ended ones go first.
+pub const SESSIONS: usize = 12;
 
 /// The events a lab tab keeps.
 pub const EVENTS: usize = 500;
@@ -334,6 +354,11 @@ impl Tab {
                 snapshot_form: SnapshotForm::default(),
                 spawn_form: SpawnForm::default(),
                 pending: 0,
+                sessions: Vec::new(),
+                active_session: None,
+                console: ConsoleForm::default(),
+                terminals: Vec::new(),
+                active_terminal: None,
             })),
             topology: None,
             view,
@@ -416,7 +441,12 @@ impl Tab {
     pub fn dock_pages(&self) -> &'static [DockTab] {
         match self.kind {
             Kind::Design(_) => &[DockTab::Problems, DockTab::Source],
-            Kind::Live(_) => &[DockTab::Events, DockTab::Processes],
+            Kind::Live(_) => &[
+                DockTab::Events,
+                DockTab::Processes,
+                DockTab::Console,
+                DockTab::Terminal,
+            ],
         }
     }
 }

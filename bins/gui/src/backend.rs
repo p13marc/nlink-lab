@@ -6,9 +6,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use iced::futures::stream::{self, BoxStream, StreamExt};
+use nlink_lab::CancelToken;
 use nlink_lab_client::{CallEvent, Client, Endpoint};
 use nlink_lab_shared::api::{
-    ErrorCode, LabSummary, Notification, Request, Response, Role, StreamItem, Topic,
+    DataStream, ErrorCode, LabSummary, Notification, Request, Response, Role, StreamItem, Topic,
 };
 
 use crate::fake::Fake;
@@ -37,6 +38,14 @@ pub enum Feed {
     Note(Box<Notification>),
     /// Every lab there is: asked for where the daemon streams nothing.
     Labs(Vec<LabSummary>),
+}
+
+/// What a session (`exec`, `logs`, `capture`) brings.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SessionItem {
+    Data(DataStream, Vec<u8>),
+    /// The end: the answer, or why not.
+    End(Result<Response, String>),
 }
 
 impl Feed {
@@ -100,6 +109,15 @@ impl Backend {
         match self {
             Backend::Daemon(c) => c.call(request).await.map_err(|e| e.to_string()),
             Backend::Fake(f) => f.call(request),
+        }
+    }
+
+    /// A session's data until it ends. `cancel` stops it: a command is
+    /// sent `SIGINT`, anything else is cancelled.
+    pub fn session(self, request: Request, cancel: CancelToken) -> BoxStream<'static, SessionItem> {
+        match self {
+            Backend::Fake(f) => f.session(request, cancel),
+            Backend::Daemon(client) => daemon_session(client, request, cancel),
         }
     }
 
@@ -183,6 +201,72 @@ fn daemon_stream(
                     };
                     Some((Some(polled), next))
                 }
+            }
+        }
+    })
+    .filter_map(|item| async move { item })
+    .boxed()
+}
+
+fn daemon_session(
+    client: Client,
+    request: Request,
+    cancel: CancelToken,
+) -> BoxStream<'static, SessionItem> {
+    enum State {
+        Start(Box<Request>),
+        Running {
+            call: nlink_lab_client::Call,
+            stopping: bool,
+        },
+        Done,
+    }
+    let signal = matches!(request, Request::Exec { .. });
+    stream::unfold(State::Start(Box::new(request)), move |state| {
+        let (client, cancel) = (client.clone(), cancel.clone());
+        async move {
+            match state {
+                State::Done => None,
+                State::Start(request) => match client.start(*request).await {
+                    Ok(call) => Some((
+                        None,
+                        State::Running {
+                            call,
+                            stopping: false,
+                        },
+                    )),
+                    Err(e) => Some((Some(SessionItem::End(Err(e.to_string()))), State::Done)),
+                },
+                State::Running { mut call, stopping } => loop {
+                    let event = tokio::select! {
+                        () = cancel.cancelled(), if !stopping => {
+                            let sent = if signal { call.signal("INT") } else { call.cancel() };
+                            if sent.is_err() {
+                                return Some((Some(SessionItem::End(Err("stopped".into()))), State::Done));
+                            }
+                            return Some((None, State::Running { call, stopping: true }));
+                        }
+                        event = call.next() => event,
+                    };
+                    match event {
+                        Some(CallEvent::Data(stream, bytes)) => {
+                            return Some((
+                                Some(SessionItem::Data(stream, bytes)),
+                                State::Running { call, stopping },
+                            ));
+                        }
+                        Some(CallEvent::End(r)) => {
+                            return Some((Some(SessionItem::End(r.map_err(|e| e.message))), State::Done));
+                        }
+                        Some(CallEvent::Item(_)) => continue,
+                        None => {
+                            return Some((
+                                Some(SessionItem::End(Err("the connection to the daemon closed".into()))),
+                                State::Done,
+                            ));
+                        }
+                    }
+                },
             }
         }
     })

@@ -90,6 +90,30 @@ pub enum Message {
         request: Box<Request>,
         action: Action,
     },
+    /// The console, logs, captures, terminals.
+    Session(SessionMsg),
+    /// A session's output.
+    SessionData {
+        lab: String,
+        id: u64,
+        stream: crate::session::Stream,
+        text: String,
+    },
+    /// A capture's bytes written so far.
+    SessionBytes {
+        lab: String,
+        id: u64,
+        total: u64,
+    },
+    SessionEnded {
+        lab: String,
+        id: u64,
+        how: String,
+        ok: bool,
+    },
+    /// A terminal widget's event (the host handles it).
+    #[cfg_attr(not(feature = "embedded-terminal"), allow(dead_code))]
+    Term(crate::term::TermEvent),
     /// The answer to a change: with what undoes it.
     Called {
         lab: String,
@@ -157,6 +181,36 @@ pub enum Fetched {
     Events(Vec<serde_json::Value>),
     Snapshots(Vec<SnapshotDto>),
     Failed(String),
+}
+
+/// The sessions of a lab's tab.
+#[derive(Debug, Clone)]
+pub enum SessionMsg {
+    ConsoleNode(String),
+    ConsoleCommand(String),
+    /// The console, on this node.
+    ConsoleOn(String),
+    /// Run the console's command.
+    Run,
+    /// Follow a tracked process's log.
+    Logs(u32),
+    /// Capture on an endpoint: ask where to first.
+    Capture(String),
+    CaptureTo {
+        endpoint: String,
+        path: Option<PathBuf>,
+    },
+    Stop(u64),
+    Close(u64),
+    Select(u64),
+    /// A shell on a node.
+    Terminal(String),
+    SelectTerminal(u64),
+    CloseTerminal(u64),
+    /// The terminal's shell ended, or set a title.
+    TerminalEnded(u64),
+    #[cfg_attr(not(feature = "embedded-terminal"), allow(dead_code))]
+    TerminalTitle(u64, String),
 }
 
 /// What the controls of a lab's tab do.

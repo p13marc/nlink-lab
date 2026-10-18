@@ -53,7 +53,7 @@ fn app_with(text: &str) -> App {
 }
 
 fn simulator(app: &App) -> Simulator<'_, Message> {
-    Simulator::with_size(Settings::default(), SIZE, crate::view::view(app))
+    Simulator::with_size(Settings::default(), SIZE, crate::view::view(app, None))
 }
 
 /// Draw `app`, and keep the frame when asked to.
@@ -313,4 +313,21 @@ fn the_controls_render() {
         Message::Canvas(CanvasMsg::Select(Some(Hit::Node(net)))),
     );
     snapshot(&app, &Theme::Light, "control-pairs");
+}
+
+#[test]
+fn the_console_renders() {
+    use crate::message::SessionMsg;
+    let mut app = App::new(crate::settings::Settings::default(), None);
+    let (_, _lab) = demo_lab(&mut app);
+    let pid = app.current().unwrap().live().unwrap().processes[0].pid;
+    for m in [
+        SessionMsg::ConsoleCommand("ip -br addr".into()),
+        SessionMsg::Run,
+        SessionMsg::Logs(pid),
+    ] {
+        let e = reduce(&mut app, Message::Session(m));
+        settle(&mut app, e);
+    }
+    snapshot(&app, &Theme::Dark, "session-console");
 }

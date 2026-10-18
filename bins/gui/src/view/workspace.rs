@@ -12,12 +12,16 @@ use crate::message::{Message, Shortcut};
 use crate::model::{App, DockTab, Pane, Tab};
 use crate::settings::LayoutPref;
 
-pub fn view<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
+pub fn view<'a>(
+    app: &'a App,
+    tab: &'a Tab,
+    terminals: Option<&'a crate::term::Terminals>,
+) -> Element<'a, Message> {
     let grid = pane_grid(&tab.panes, |_, pane, _| {
         let (title, body): (Element<'a, Message>, Element<'a, Message>) = match pane {
             Pane::Canvas => (canvas_title(tab), canvas(tab)),
             Pane::Inspector => (text("Inspector").size(13).into(), inspector::view(app, tab)),
-            Pane::Dock => (dock_title(tab), dock::view(app, tab)),
+            Pane::Dock => (dock_title(tab), dock::view(app, tab, terminals)),
         };
         pane_grid::Content::new(container(body).width(Length::Fill).height(Length::Fill))
             .title_bar(
@@ -181,6 +185,19 @@ fn dock_title(tab: &Tab) -> Element<'_, Message> {
                 "Processes ({})",
                 tab.live().map_or(0, |l| l.processes.len())
             ),
+            DockTab::Console => {
+                let running = tab
+                    .live()
+                    .map_or(0, |l| l.sessions.iter().filter(|s| s.running()).count());
+                if running > 0 {
+                    format!("Console ({running})")
+                } else {
+                    "Console".into()
+                }
+            }
+            DockTab::Terminal => {
+                format!("Terminal ({})", tab.live().map_or(0, |l| l.terminals.len()))
+            }
         };
         button(text(label).size(13))
             .style(if tab.dock == page {

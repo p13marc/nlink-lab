@@ -15,7 +15,7 @@ use nlink_lab_shared::api::{
 };
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics};
 
-use crate::backend::Feed;
+use crate::backend::{Feed, SessionItem};
 use crate::model::Who;
 
 #[derive(Clone)]
@@ -382,6 +382,60 @@ impl Fake {
             timestamp: t as u64,
             nodes,
         })
+    }
+
+    /// A session in the demo: a command says what it would print, a log
+    /// grows until stopped, a capture is refused.
+    pub fn session(
+        self: &std::sync::Arc<Self>,
+        request: Request,
+        cancel: nlink_lab::CancelToken,
+    ) -> BoxStream<'static, SessionItem> {
+        use nlink_lab_shared::api::DataStream;
+        match request {
+            Request::Exec { node, argv, .. } => {
+                let text = format!(
+                    "the demo runs nothing: `{}` on {node} would print here\n",
+                    argv.join(" ")
+                );
+                stream::iter([
+                    SessionItem::Data(DataStream::Stdout, text.into_bytes()),
+                    SessionItem::End(Ok(Response::Exited {
+                        code: Some(0),
+                        signal: None,
+                        duration_ms: 1,
+                        timed_out: false,
+                    })),
+                ])
+                .boxed()
+            }
+            Request::Logs { pid, .. } => stream::unfold(0u32, move |i| {
+                let cancel = cancel.clone();
+                async move {
+                    if i > 0 {
+                        tokio::select! {
+                            () = cancel.cancelled() => {
+                                return (i < u32::MAX).then_some((
+                                    SessionItem::End(Err("stopped".into())),
+                                    u32::MAX,
+                                ));
+                            }
+                            () = tokio::time::sleep(Duration::from_millis(700)) => {}
+                        }
+                    }
+                    if i == u32::MAX {
+                        return None;
+                    }
+                    let line = format!("[demo {pid}] line {i}: all is well\n");
+                    Some((
+                        SessionItem::Data(DataStream::Stdout, line.into_bytes()),
+                        i + 1,
+                    ))
+                }
+            })
+            .boxed(),
+            _ => stream::iter([SessionItem::End(Err("the demo captures nothing".into()))]).boxed(),
+        }
     }
 
     pub fn subscribe(

@@ -17,6 +17,7 @@ use nlink_lab_client::Endpoint;
 use nlink_lab_shared::api::Topic;
 
 mod backend;
+mod bridge;
 mod canvas;
 mod control;
 mod doc;
@@ -29,8 +30,10 @@ mod message;
 mod model;
 mod palette;
 mod reduce;
+mod session;
 mod settings;
 mod spark;
+mod term;
 mod view;
 
 #[cfg(test)]
@@ -88,7 +91,14 @@ fn parse_param(s: &str) -> Result<(String, String), String> {
     }
 }
 
-fn boot(cli: &Cli) -> (App, Task<Message>) {
+/// The app's state and the terminal widgets, which are resources (a pty
+/// and a process each) rather than state, so `reduce` never makes them.
+struct Gui {
+    app: App,
+    terminals: term::Terminals,
+}
+
+fn boot(cli: &Cli) -> (Gui, Task<Message>) {
     let dirs = Dirs::from_env();
     let (settings, warning) = match &dirs {
         Some(d) => Settings::load(&d.settings()),
@@ -125,11 +135,52 @@ fn boot(cli: &Cli) -> (App, Task<Message>) {
         effects.extend(reduce::reduce(&mut app, Message::OpenLab(lab.clone())));
     }
     effects.extend(reduce::connect(&mut app));
-    (app, effect::run_all(effects))
+    (
+        Gui {
+            app,
+            terminals: term::Terminals::default(),
+        },
+        effect::run_all(effects),
+    )
 }
 
-fn update(app: &mut App, msg: Message) -> Task<Message> {
-    effect::run_all(reduce::reduce(app, msg))
+fn update(gui: &mut Gui, msg: Message) -> Task<Message> {
+    if let Message::Term(event) = msg {
+        return match gui.terminals.handle(event) {
+            Some(next) => update(gui, next),
+            None => Task::none(),
+        };
+    }
+    let mut tasks = Vec::new();
+    for e in reduce::reduce(&mut gui.app, msg) {
+        match e {
+            effect::Effect::OpenTerminal {
+                id,
+                lab,
+                node,
+                target,
+            } => match gui.terminals.open(id, &lab, &node, &target) {
+                Ok(focus) => tasks.push(focus),
+                Err(err) => {
+                    tasks.push(Task::done(Message::Session(
+                        message::SessionMsg::TerminalEnded(id),
+                    )));
+                    tasks.push(Task::done(Message::Done(Err(err))));
+                }
+            },
+            effect::Effect::CloseTerminal(id) => gui.terminals.close(id),
+            other => tasks.push(effect::run(other)),
+        }
+    }
+    Task::batch(tasks)
+}
+
+fn view(gui: &Gui) -> iced::Element<'_, Message> {
+    view::view(&gui.app, Some(&gui.terminals))
+}
+
+fn gui_subscription(gui: &Gui) -> Subscription<Message> {
+    Subscription::batch([subscription(&gui.app), gui.terminals.subscription()])
 }
 
 fn subscription(app: &App) -> Subscription<Message> {
@@ -255,27 +306,33 @@ fn lab_feed(key: &LabFeed) -> impl iced::futures::Stream<Item = Message> + use<>
 }
 
 /// `None` follows the desktop's light or dark preference.
-fn theme(app: &App) -> Option<Theme> {
-    match app.settings.theme {
+fn theme(gui: &Gui) -> Option<Theme> {
+    match gui.app.settings.theme {
         ThemePref::System => None,
         ThemePref::Light => Some(Theme::Light),
         ThemePref::Dark => Some(Theme::Dark),
     }
 }
 
-fn title(app: &App) -> String {
+fn title(gui: &Gui) -> String {
+    let app = &gui.app;
     match app.current() {
         Some(t) if app.route == model::Route::Workspace => format!("{} — nlink-lab", t.title()),
         _ => "nlink-lab".into(),
     }
 }
 
-fn main() -> iced::Result {
+fn main() -> std::process::ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    // the app's terminals run this binary as their bridge
+    if args.get(1).map(String::as_str) == Some("pty-bridge") {
+        return bridge::main(args[..1].iter().chain(&args[2..]).cloned());
+    }
     BOOT.get_or_init(Instant::now);
     let cli = Cli::parse();
-    iced::application(move || boot(&cli), update, view::view)
+    let run = iced::application(move || boot(&cli), update, view)
         .title(title)
-        .subscription(subscription)
+        .subscription(gui_subscription)
         .theme(theme)
         .window(iced::window::Settings {
             size: iced::Size::new(1280.0, 820.0),
@@ -288,7 +345,14 @@ fn main() -> iced::Result {
             },
             ..Default::default()
         })
-        .run()
+        .run();
+    match run {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("nlink-lab-gui: {e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
 }
 
 #[cfg(test)]

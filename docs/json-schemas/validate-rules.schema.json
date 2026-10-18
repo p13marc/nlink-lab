@@ -1,10 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Array_of_RuleInfo",
-  "type": "array",
-  "items": {
-    "$ref": "#/$defs/RuleInfo"
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RuleInfo"
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
   },
+  "required": [
+    "schema_version",
+    "rules"
+  ],
   "$defs": {
     "RuleInfo": {
       "title": "nlink-lab validate --list-rules --json (array element)",

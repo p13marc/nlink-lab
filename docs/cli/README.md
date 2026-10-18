@@ -46,8 +46,7 @@ What's actually running.
 | Command | What |
 |---------|------|
 | [`ip`](ip.md) | Show node IP addresses |
-| [`render`](render.md) | Lower an NLL to flat NLL / JSON / Dot / ASCII |
-| [`graph`](graph.md) | Topology graph (Dot) |
+| [`render`](render.md) | Lower an NLL to flat NLL / JSON, or a diagram (`--diagram dot\|mermaid\|ascii`) |
 | [`diff`](diff.md) | Diff two NLL topologies |
 | [`diagnose`](diagnose.md) | Per-lab health checks |
 | [`verify`](verify.md) | Check a running lab for drift against its topology |
@@ -100,7 +99,7 @@ that lab's nodes and endpoints.
 
 `--skip-validate` belongs to `deploy` only (it drops the `validate {}`
 assertions); `--set KEY=VALUE` is accepted by every command that reads a
-topology (`deploy`, `apply`, `validate`, `render`, `graph`, `diff`,
+topology (`deploy`, `apply`, `validate`, `render`, `diff`,
 `pull`, `test`, `verify --file`, `archive create`).
 
 Under `--json`, a failure is printed on stderr as the daemon API's error

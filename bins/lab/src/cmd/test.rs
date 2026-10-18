@@ -26,6 +26,20 @@ pub struct Args {
     /// Stop on first failure.
     #[arg(long)]
     pub fail_fast: bool,
+
+    /// Also run every `scenario` block of each topology after its
+    /// `validate` assertions: each action is one more result.
+    #[arg(long, alias = "scenario")]
+    pub scenarios: bool,
+
+    /// Also run every `benchmark` block: each test is one more result.
+    #[arg(long, alias = "benchmark")]
+    pub benchmarks: bool,
+
+    /// Leave a lab whose test failed deployed, for inspection (destroy it
+    /// with `nlink-lab destroy LAB`).
+    #[arg(long)]
+    pub keep: bool,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -35,7 +49,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         junit,
         tap,
         fail_fast,
+        scenarios,
+        benchmarks,
+        keep,
     } = args;
+    let opts = nlink_lab::test_runner::TestOptions {
+        scenarios,
+        benchmarks,
+        keep_failed: keep,
+    };
     require_root()?;
     let cli_params = params;
 
@@ -55,7 +77,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         // the deploy's stages and waits, then the destroy's, live
         let progress = crate::progress::Progress::new(ctx);
         let op = progress.op("test", "");
-        let ran = nlink_lab::test_runner::run_test_with(file, &cli_params, &op).await;
+        let ran = nlink_lab::test_runner::run_test_opts(file, &cli_params, opts, &op).await;
         progress.finish();
         match ran {
             Ok(result) => {
@@ -92,6 +114,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 }
                 if let Some(err) = &result.error {
                     eprintln!("  {} {err}", red("ERROR"));
+                }
+                if let Some(lab) = &result.kept {
+                    eprintln!(
+                        "  kept lab '{lab}' for inspection: `nlink-lab destroy {lab}` when done"
+                    );
                 }
                 all_results.push(result);
             }

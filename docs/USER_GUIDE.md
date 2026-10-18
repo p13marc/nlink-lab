@@ -873,8 +873,8 @@ for i in 1..4 {
 ```bash
 nlink-lab render topology.nll          # expanded flat NLL (default)
 nlink-lab render --json topology.nll   # JSON
-nlink-lab render --dot topology.nll    # Graphviz DOT graph
-nlink-lab render --ascii topology.nll  # text summary
+nlink-lab render --diagram dot topology.nll    # Graphviz DOT graph
+nlink-lab render --diagram ascii topology.nll  # text drawing
 ```
 
 ### 17. Management Network
@@ -1089,7 +1089,6 @@ lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
 | `daemon` | Start the Zenoh backend daemon for a running lab |
 | `top` | Live view of a lab: nodes, interfaces, flows (`--once --json`: one metrics snapshot) |
 | `init` | Create a topology file from a built-in template |
-| `graph` | Print topology as DOT graph |
 | `render` | Expand loops/variables/imports and print flat NLL (`--json`, `--dot`, `--ascii`) |
 | `ps` | List processes running in a lab |
 | `kill` | Kill a tracked background process |

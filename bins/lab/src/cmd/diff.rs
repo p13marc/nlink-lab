@@ -23,11 +23,12 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let topo_b = parse_topology(&b, &params)?;
     let diff = nlink_lab::diff_topologies(&topo_a, &topo_b);
     if ctx.json {
-        // The whole diff, as `apply --check --json` has it under
+        // The whole diff, as `verify --json` has it under
         // `topology`: the summary left routes, sysctls and the rest out,
         // and gave the links as counts (#210).
         let mut doc = serde_json::to_value(&diff)?;
         doc["total_changes"] = diff.change_count().into();
+        doc["schema_version"] = 1.into();
         println!("{doc}");
     } else if diff.is_empty() {
         println!("No differences.");

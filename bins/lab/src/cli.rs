@@ -224,10 +224,9 @@ pub enum Commands {
     #[command(hide = true)]
     DocsGen(cmd::docs_gen::Args),
 
-    /// Print topology as DOT graph.
-    Graph(cmd::graph::Args),
-
-    /// Render a topology file with all loops, variables, and imports expanded.
+    /// A topology file with every loop, variable and import expanded: flat
+    /// NLL, the topology as JSON (`--format json`), or a diagram
+    /// (`--diagram dot|mermaid|ascii`).
     Render(cmd::render::Args),
 
     /// Open an interactive shell in a lab node.
@@ -368,9 +367,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("Test", &["test", "scenario", "benchmark"]),
     (
         "Author",
-        &[
-            "validate", "lint", "fmt", "render", "graph", "diff", "init", "pull",
-        ],
+        &["validate", "lint", "fmt", "render", "diff", "init", "pull"],
     ),
     ("Host", &["doctor", "completions", "lsp"]),
 ];

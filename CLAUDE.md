@@ -265,10 +265,10 @@ impairments, partitions, processes, counters),
 `exec` (`--json`, `--env`, `--workdir`),
 `spawn` (`--log-dir`, `--env`, `--workdir`, `--wait-tcp`),
 `shell` (interactive TTY), `validate` (with `--set`, `--show-ips`), `test`
-(`--junit`, `--tap`, `--fail-fast`), `render`
-(`--json`, `--dot`, `--ascii`, `--set`),
+(`--scenarios`, `--benchmarks`, `--keep`, `--junit`, `--tap`, `--fail-fast`), `render`
+(`--diagram dot|mermaid|ascii`, `--set`),
 `impair EP SPEC…` (`--dir out|in|both`, `--clear`, `--partition`/`--heal`, `--pair SRC DST`, `--show`),
-`graph`, `diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
+`diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
 `wait [NODE]` (`--tcp`, `--exec`, `--file`, `--listening`, `--log`, `--fd-stable`),
 `ip` (`--iface`, `--cidr`),
 `ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`, `daemon`,

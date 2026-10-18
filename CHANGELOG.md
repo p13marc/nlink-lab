@@ -79,6 +79,12 @@ under both (#233). Its waves land one by one below.
   `schema_version`. `snapshot ls --json` is `{schema_version, lab,
   snapshots}`. `destroy` without a name no longer picks the only lab:
   name it, or `-L`/`NLINK_LAB`/`use`.
+- **Authoring and testing** (#255): `graph FILE` and `render --dot`/
+  `--mermaid`/`--ascii` are `render --diagram dot|mermaid|ascii FILE`.
+  `validate --json`, `lint --json`, `fmt --check --json` and `diff
+  --json` carry a `schema_version`; `validate --list-rules --json` and
+  `lint --list-rules --json` are `{"rules": […]}`, `fmt --check --json`
+  is `{"changed": […]}`.
 - **Network and observe** (#251):
 
   | Was | Now |
@@ -635,6 +641,10 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`test --scenarios --benchmarks --keep`** (#255): every scenario
+  action and benchmark test of a topology is one more test result, in
+  JUnit and TAP too, and `--keep` leaves a failed lab deployed for
+  inspection (`test_runner::TestOptions`, `run_test_opts`).
 - **`ps NODE`, `kill PID…`** (#250): one node's processes, several PIDs
   at once. `node` and `link` edit a running lab with live progress.
 - **Live progress** (#249) for `deploy`, `apply`, `destroy`, `snapshot

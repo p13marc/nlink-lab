@@ -27,6 +27,21 @@ pub struct TestResult {
     /// error has not passed; JUnit and TAP report it as an error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The lab left deployed for inspection (`keep_failed`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kept: Option<String>,
+}
+
+/// What a test runs besides deploy, `validate` and destroy.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TestOptions {
+    /// Every `scenario` block, in order: each action is a result.
+    pub scenarios: bool,
+    /// Every `benchmark` block: each test is a result.
+    pub benchmarks: bool,
+    /// Leave a failed lab deployed, for inspection, instead of destroying
+    /// it.
+    pub keep_failed: bool,
 }
 
 impl TestResult {
@@ -39,6 +54,7 @@ impl TestResult {
             total_ms,
             passed: false,
             error: Some(error.to_string()),
+            kept: None,
         }
     }
 }
@@ -74,8 +90,20 @@ pub async fn run_test_with(
     params: &[(String, String)],
     ctx: &crate::ops::OpCtx,
 ) -> Result<TestResult> {
+    run_test_opts(path, params, TestOptions::default(), ctx).await
+}
+
+/// [`run_test_with`], also running the topology's scenarios and
+/// benchmarks as `opts` says: each scenario action and benchmark test is
+/// one more result, in JUnit and TAP too.
+pub async fn run_test_opts(
+    path: &Path,
+    params: &[(String, String)],
+    opts: TestOptions,
+    ctx: &crate::ops::OpCtx,
+) -> Result<TestResult> {
     ctx.started();
-    let result = test_ctx(path, params, ctx).await;
+    let result = test_ctx(path, params, opts, ctx).await;
     ctx.finished(&result, false);
     result
 }
@@ -83,6 +111,7 @@ pub async fn run_test_with(
 async fn test_ctx(
     path: &Path,
     params: &[(String, String)],
+    opts: TestOptions,
     ctx: &crate::ops::OpCtx,
 ) -> Result<TestResult> {
     let file = path.display().to_string();
@@ -104,16 +133,82 @@ async fn test_ctx(
     // `deploy()` ran the assertions once already and kept the outcome.
     // Running them again doubled a failing lab's retry budget, and a
     // stateful assertion (`counter`) saw the first pass's packets.
-    let assertions = lab.assertion_results().to_vec();
+    let mut assertions = lab.assertion_results().to_vec();
+    let mut lab = lab;
+    let row = |description: String, passed: bool, detail: Option<String>| AssertionResult {
+        description,
+        passed,
+        detail,
+        duration_ms: 0,
+    };
+    if opts.scenarios {
+        for sc in lab.topology().scenarios.clone() {
+            match crate::scenario::run_scenario_with(&mut lab, &sc, ctx).await {
+                Ok(r) => {
+                    for step in r.steps {
+                        for a in step.actions {
+                            assertions.push(row(
+                                format!(
+                                    "scenario {}: {} (at {}ms)",
+                                    r.name, a.description, step.time_ms
+                                ),
+                                a.ok,
+                                a.detail,
+                            ));
+                        }
+                    }
+                }
+                Err(e) => assertions.push(row(
+                    format!("scenario {}", sc.name),
+                    false,
+                    Some(e.to_string()),
+                )),
+            }
+        }
+    }
+    if opts.benchmarks {
+        for b in lab.topology().benchmarks.clone() {
+            // blocking (ping, iperf3): off the runtime's threads
+            let (l, bench, c) = (lab.clone(), b.clone(), ctx.clone());
+            let ran = tokio::task::spawn_blocking(move || {
+                crate::benchmark::run_benchmark_with(&l, &bench, &c)
+            })
+            .await
+            .map_err(|e| crate::Error::Runtime(format!("benchmark {}: {e}", b.name)))
+            .and_then(|r| r);
+            match ran {
+                Ok(r) => {
+                    for t in r.tests {
+                        assertions.push(row(
+                            format!("benchmark {}: {}", r.name, t.description),
+                            t.passed,
+                            t.detail,
+                        ));
+                    }
+                }
+                Err(e) => assertions.push(row(
+                    format!("benchmark {}", b.name),
+                    false,
+                    Some(e.to_string()),
+                )),
+            }
+        }
+    }
 
-    // A lab that does not destroy is an error of the test, but its
-    // assertion results still stand.
-    let error = lab
-        .destroy_with(ctx)
-        .await
-        .err()
-        .map(|e| format!("destroy failed: {e}"));
-    let passed = error.is_none() && assertions.iter().all(|a| a.passed);
+    let failed = assertions.iter().any(|a| !a.passed);
+    let (error, kept) = if failed && opts.keep_failed {
+        (None, Some(lab.name().to_string()))
+    } else {
+        // A lab that does not destroy is an error of the test, but its
+        // assertion results still stand.
+        let error = lab
+            .destroy_with(ctx)
+            .await
+            .err()
+            .map(|e| format!("destroy failed: {e}"));
+        (error, None)
+    };
+    let passed = error.is_none() && !failed;
 
     let total_ms = total_start.elapsed().as_millis() as u64;
 
@@ -124,6 +219,7 @@ async fn test_ctx(
         total_ms,
         passed,
         error,
+        kept,
     })
 }
 
@@ -649,6 +745,7 @@ mod tests {
                 total_ms: 9,
                 passed: false,
                 error: None,
+                kept: None,
             },
         ];
         let tap = format_tap(&results);
@@ -696,6 +793,7 @@ mod tests {
             total_ms: 700,
             passed: true,
             error: None,
+            kept: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("<testsuite name=\"test.nll\" tests=\"1\" failures=\"0\""));
@@ -717,6 +815,7 @@ mod tests {
             total_ms: 400,
             passed: false,
             error: None,
+            kept: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("failures=\"1\""));
@@ -745,6 +844,7 @@ mod tests {
             total_ms: 900,
             passed: false,
             error: None,
+            kept: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.starts_with("TAP version 13\n1..2\n"));
@@ -897,6 +997,7 @@ validate {
             total_ms: 50,
             passed: true,
             error: None,
+            kept: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.contains("1..0"));

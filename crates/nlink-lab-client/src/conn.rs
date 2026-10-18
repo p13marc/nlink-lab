@@ -79,6 +79,14 @@ impl Client {
                 };
                 Self::over(r, w, Some(child), client).await
             }
+            #[cfg(feature = "zenoh")]
+            Endpoint::Zenoh { endpoint, tls } => {
+                crate::zenoh_bridge::connect(endpoint, tls.as_ref(), client).await
+            }
+            #[cfg(not(feature = "zenoh"))]
+            Endpoint::Zenoh { .. } => Err(ClientError::Protocol(
+                "this client is built without Zenoh (the `zenoh` feature)".into(),
+            )),
         }
     }
 

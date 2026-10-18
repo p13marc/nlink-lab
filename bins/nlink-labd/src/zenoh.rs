@@ -23,14 +23,85 @@ use nlink_lab_shared::api::{LabSummary, Notification};
 use nlink_lab_shared::messages::{HealthStatus, TopologyUpdate};
 use nlink_lab_shared::topics;
 
+use nlink_lab_shared::api::{ApiError, ErrorCode, Frame, Request, Role, ServerMsg};
+
+use crate::authz::Peer;
 use crate::config::ZenohConfig;
-use crate::hub::Hub;
+use crate::server::{CallCtx, Shared};
 
 /// How often each lab's `health` goes out.
 const HEALTH_EVERY: Duration = Duration::from_secs(10);
 
+/// The key of the API's requests for `role` on `host`.
+pub fn rpc_key(host: &str, role: nlink_lab_shared::api::Role) -> String {
+    match role {
+        nlink_lab_shared::api::Role::Viewer => format!("nlink-lab/@rpc/{host}/viewer"),
+        nlink_lab_shared::api::Role::Operator => format!("nlink-lab/@rpc/{host}/operator"),
+    }
+}
+
+/// The access control a daemon with TLS runs (deny by default): its
+/// unix socket's clients and the `viewers` certificates read the
+/// telemetry and use the viewer key; the `operators` certificates the
+/// operator key too.
+pub fn access_control(config: &ZenohConfig) -> serde_json::Value {
+    use serde_json::json;
+    let out = [
+        "put",
+        "delete",
+        "reply",
+        "liveliness_token",
+        "declare_queryable",
+    ];
+    let mut rules = vec![
+        json!({ "id": "telemetry-in", "flows": ["ingress"],
+            "messages": ["declare_subscriber", "declare_liveliness_subscriber", "liveliness_query", "query"],
+            "permission": "allow", "key_exprs": ["nlink-lab/*/**"] }),
+        json!({ "id": "telemetry-out", "flows": ["egress"], "messages": out,
+            "permission": "allow", "key_exprs": ["nlink-lab/*/**"] }),
+        json!({ "id": "viewer-in", "flows": ["ingress"], "messages": ["query"],
+            "permission": "allow", "key_exprs": ["nlink-lab/@rpc/*/viewer"] }),
+        json!({ "id": "viewer-out", "flows": ["egress"], "messages": out,
+            "permission": "allow", "key_exprs": ["nlink-lab/@rpc/*/viewer"] }),
+    ];
+    let mut subjects = vec![json!({ "id": "local", "link_protocols": ["unixsock-stream"] })];
+    let mut readers = vec!["local"];
+    if !config.viewers.is_empty() {
+        subjects.push(json!({ "id": "viewers", "cert_common_names": config.viewers }));
+        readers.push("viewers");
+    }
+    let mut policies = Vec::new();
+    if !config.operators.is_empty() {
+        subjects.push(json!({ "id": "operators", "cert_common_names": config.operators }));
+        readers.push("operators");
+        rules.push(
+            json!({ "id": "operator-in", "flows": ["ingress"], "messages": ["query"],
+            "permission": "allow", "key_exprs": ["nlink-lab/@rpc/*/operator"] }),
+        );
+        rules.push(
+            json!({ "id": "operator-out", "flows": ["egress"], "messages": out,
+            "permission": "allow", "key_exprs": ["nlink-lab/@rpc/*/operator"] }),
+        );
+        policies
+            .push(json!({ "rules": ["operator-in", "operator-out"], "subjects": ["operators"] }));
+    }
+    policies.insert(
+        0,
+        json!({ "rules": ["telemetry-in", "telemetry-out", "viewer-in", "viewer-out"],
+            "subjects": readers }),
+    );
+    json!({
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": rules,
+        "subjects": subjects,
+        "policies": policies,
+    })
+}
+
 /// The Zenoh configuration of `config`: its mode and endpoints, multicast
-/// scouting off. Pure: every endpoint is checked, nothing is opened.
+/// scouting off; with TLS, mutual TLS and [`access_control`]. Pure: every
+/// endpoint is checked, nothing is opened.
 pub fn zenoh_config(config: &ZenohConfig) -> Result<zenoh::Config, String> {
     let mut z = zenoh::Config::default();
     let set = |z: &mut zenoh::Config, key: &str, json: String| {
@@ -43,6 +114,22 @@ pub fn zenoh_config(config: &ZenohConfig) -> Result<zenoh::Config, String> {
         serde_json::to_string(&config.mode).unwrap_or_default(),
     )?;
     set(&mut z, "scouting/multicast/enabled", "false".into())?;
+    if let Some(tls) = &config.tls {
+        let path = |p: &std::path::Path| {
+            serde_json::to_string(&p.display().to_string()).unwrap_or_default()
+        };
+        for (key, file) in [
+            ("transport/link/tls/root_ca_certificate", &tls.ca),
+            ("transport/link/tls/listen_certificate", &tls.cert),
+            ("transport/link/tls/listen_private_key", &tls.key),
+            ("transport/link/tls/connect_certificate", &tls.cert),
+            ("transport/link/tls/connect_private_key", &tls.key),
+        ] {
+            set(&mut z, key, path(file))?;
+        }
+        set(&mut z, "transport/link/tls/enable_mtls", "true".into())?;
+        set(&mut z, "access_control", access_control(config).to_string())?;
+    }
     for (key, endpoints) in [
         ("listen/endpoints", &config.listen),
         ("connect/endpoints", &config.connect),
@@ -71,13 +158,15 @@ fn unix_sockets(endpoints: &[String]) -> Vec<std::path::PathBuf> {
         .collect()
 }
 
-/// Publish every lab's telemetry until `shutdown`.
+/// Publish every lab's telemetry, and answer the API's requests, until
+/// `shutdown`.
 pub(crate) async fn run(
     config: ZenohConfig,
-    hub: Arc<Hub>,
-    viewer_gid: Option<u32>,
+    shared: Arc<Shared>,
     shutdown: CancelToken,
 ) -> Result<(), String> {
+    let hub = shared.hub.clone();
+    let viewer_gid = shared.groups.viewer;
     let sockets = unix_sockets(&config.listen);
     for socket in &sockets {
         // its directory is the viewer group's (0750) before zenoh binds:
@@ -102,6 +191,31 @@ pub(crate) async fn run(
         .declare_queryable("nlink-lab/*/topology")
         .await
         .map_err(|e| format!("declaring the topology queryable: {e}"))?;
+    // the API by role: the operator key only behind mutual TLS, for the
+    // certificates `operators` names
+    let host = if shared.host.is_empty() {
+        "localhost".to_string()
+    } else {
+        shared.host.clone()
+    };
+    let viewer_calls = session
+        .declare_queryable(rpc_key(&host, Role::Viewer))
+        .await
+        .map_err(|e| format!("declaring the viewer key: {e}"))?;
+    let operator_calls = if config.tls.is_some() && !config.operators.is_empty() {
+        Some(
+            session
+                .declare_queryable(rpc_key(&host, Role::Operator))
+                .await
+                .map_err(|e| format!("declaring the operator key: {e}"))?,
+        )
+    } else {
+        None
+    };
+    let operator_query = async || match &operator_calls {
+        Some(q) => q.recv_async().await.ok(),
+        None => std::future::pending().await,
+    };
     let mut notes = hub.subscribe_all();
     let mut tokens: HashMap<String, zenoh::liveliness::LivelinessToken> = HashMap::new();
     let mut health = tokio::time::interval(HEALTH_EVERY);
@@ -159,6 +273,13 @@ pub(crate) async fn run(
                     _ => {}
                 }
             }
+            query = viewer_calls.recv_async() => {
+                let Ok(query) = query else { break };
+                tokio::spawn(rpc(shared.clone(), Role::Viewer, query));
+            }
+            Some(query) = operator_query() => {
+                tokio::spawn(rpc(shared.clone(), Role::Operator, query));
+            }
             query = topology_queries.recv_async() => {
                 let Ok(query) = query else { break };
                 let key = query.key_expr().as_str().to_string();
@@ -198,6 +319,109 @@ fn restrict(path: &std::path::Path, gid: Option<u32>, mode: u32) {
         unsafe { libc::chown(cpath.as_ptr(), 0, gid) };
     }
     let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+}
+
+/// Whether `request` streams bytes or takes input: a session, which stays
+/// on the unix socket and ssh.
+fn is_session(request: &Request) -> bool {
+    matches!(
+        request,
+        Request::Exec { .. }
+            | Request::Shell { .. }
+            | Request::Logs { .. }
+            | Request::Capture { .. }
+            | Request::Export { .. }
+            | Request::Subscribe { .. }
+    )
+}
+
+/// One request over Zenoh, by `role`: the call's messages are the query's
+/// replies, its end the last one.
+async fn rpc(shared: Arc<Shared>, role: Role, query: zenoh::query::Query) {
+    let key = query.key_expr().as_str().to_string();
+    let reply = async |msg: &ServerMsg| {
+        if let Ok(json) = serde_json::to_vec(msg)
+            && let Err(e) = query.reply(&key, json).await
+        {
+            tracing::debug!("zenoh reply on {key}: {e}");
+        }
+    };
+    let refuse = |code: ErrorCode, message: String| ServerMsg::End {
+        ok: None,
+        err: Some(ApiError::new(code, message)),
+    };
+    let request: Request = match query
+        .payload()
+        .map(|p| serde_json::from_slice(&p.to_bytes()))
+    {
+        Some(Ok(request)) => request,
+        Some(Err(e)) => {
+            reply(&refuse(
+                ErrorCode::InvalidArgument,
+                format!("not a request: {e}"),
+            ))
+            .await;
+            return;
+        }
+        None => {
+            reply(&refuse(
+                ErrorCode::InvalidArgument,
+                "a query carries a request".into(),
+            ))
+            .await;
+            return;
+        }
+    };
+    let meta = request.meta();
+    if meta.role > role {
+        let msg = format!(
+            "`{}` is for operators: query the operator key, with an operator's certificate",
+            request.method()
+        );
+        reply(&refuse(ErrorCode::PermissionDenied, msg)).await;
+        return;
+    }
+    if is_session(&request) {
+        let msg = format!(
+            "`{}` streams bytes or takes input: over the unix socket or ssh, not Zenoh \
+             (the telemetry topics replace a subscription)",
+            request.method()
+        );
+        reply(&refuse(ErrorCode::Unsupported, msg)).await;
+        return;
+    }
+    let peer = Arc::new(Peer {
+        uid: u32::MAX,
+        gid: u32::MAX,
+        pid: None,
+        user: format!(
+            "zenoh-{}",
+            if role == Role::Operator {
+                "operator"
+            } else {
+                "viewer"
+            }
+        ),
+        groups: Vec::new(),
+    });
+    let audit = (meta.role == Role::Operator).then(|| shared.audit.entry(&peer, &request));
+    let (mut ctx, mut frames) = CallCtx::standalone(shared, peer, role);
+    let call = tokio::spawn(async move {
+        let result = crate::calls::dispatch(&mut ctx, request).await;
+        if let Some(entry) = audit {
+            ctx.shared.audit.record(entry, &result);
+        }
+        ctx.end(result).await;
+    });
+    // its frames until it drops its context, the end included
+    while let Some(frame) = frames.recv().await {
+        if let Frame::Message { json, .. } = frame
+            && let Ok(msg) = serde_json::from_slice::<ServerMsg>(&json)
+        {
+            reply(&msg).await;
+        }
+    }
+    let _ = call.await;
 }
 
 /// A lab appeared: its topology goes out, its liveliness token comes.

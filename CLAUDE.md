@@ -138,7 +138,8 @@ crates/nlink-lab/src/
   wait.rs           # WaitCondition + RunningLab::wait_all (one deadline, progress, cancel)
   pty.rs            # pseudo-terminals: Pty::open/attach (setsid + controlling tty), resize
 crates/nlink-lab-client/src/   # client of the daemon API: Endpoint (unix, ssh dial-stdio,
-                               #   cmd), Client (handshake, multiplexed calls), Call
+                               #   cmd, zenoh — a bridge to the frame protocol, feature
+                               #   `zenoh`), Client (handshake, multiplexed calls), Call
 bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.toml),
                                #   listen (socket activation, bind 0666, sd_notify),
                                #   authz (SO_PEERCRED/SO_PEERGROUPS -> Operator/Viewer),
@@ -146,8 +147,10 @@ bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.
                                #   (dispatch), hub (state-root scan, events tail,
                                #   subscriptions, per-lab metrics threads; collect_all for
                                #   telemetry), zenoh (every lab's topics on the old layout,
-                               #   unixsock 0660 viewer group, scouting off; feature
-                               #   `zenoh`), http (/metrics, /api/v2), jobs (one
+                               #   unixsock 0660 viewer group, scouting off; requests on
+                               #   nlink-lab/@rpc/<host>/{viewer,operator}; [zenoh.tls]
+                               #   = mTLS + generated access_control; feature `zenoh`),
+                               #   http (/metrics, /api/v2), jobs (one
                                #   queue per lab on its own thread, detachable jobs:
                                #   attach_op/list_ops/cancel_op), exec (pipes or a pty,
                                #   shell), sessions (logs, capture, wait_for, export),

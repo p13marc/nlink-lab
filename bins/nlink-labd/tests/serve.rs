@@ -538,3 +538,211 @@ async fn zenoh_listens_on_its_socket_only() {
     assert_eq!(answers, 0);
     session.close().await.unwrap();
 }
+
+/// A free port on loopback, given back for the daemon to take.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+/// Wait for a path to exist.
+async fn exists(path: &std::path::Path) {
+    for _ in 0..100 {
+        if path.exists() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("{} never appeared", path.display());
+}
+
+// zenoh refuses tokio's current-thread scheduler
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_api_over_zenohs_unix_socket_is_a_viewers() {
+    let zsock = std::sync::Arc::new(std::sync::Mutex::new(std::path::PathBuf::new()));
+    let seen = zsock.clone();
+    let _d = daemon_with(&my_group(), "no-such-group-nlink", move |c, dir| {
+        let path = dir.join("zenoh/zenoh.sock");
+        c.zenoh.enabled = true;
+        c.zenoh.listen = vec![format!("unixsock-stream/{}", path.display())];
+        *seen.lock().unwrap() = path;
+    })
+    .await;
+    let path = zsock.lock().unwrap().clone();
+    exists(&path).await;
+    let endpoint = Endpoint::Zenoh {
+        endpoint: format!("unixsock-stream/{}", path.display()),
+        tls: None,
+    };
+    let client = Client::connect(&endpoint, "test/0").await.unwrap();
+    // no TLS: no operator key, whoever connects
+    assert_eq!(client.welcome().role, Role::Viewer);
+    assert!(client.list_labs().await.unwrap().is_empty());
+    match client.call(Request::ListOps).await.unwrap() {
+        Response::Ops { ops } => assert!(ops.is_empty()),
+        other => panic!("{other:?}"),
+    }
+    match client
+        .call(Request::Destroy { lab: "x".into() })
+        .await
+        .unwrap_err()
+    {
+        ClientError::Api(e) => assert_eq!(e.code, ErrorCode::PermissionDenied),
+        other => panic!("{other:?}"),
+    }
+    // a viewer's session stays on the unix socket
+    let err = client
+        .call(Request::Logs {
+            lab: "x".into(),
+            pid: 1,
+            stream: Default::default(),
+            tail: None,
+            follow: false,
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, ClientError::Api(e) if e.code == ErrorCode::Unsupported),
+        "{err:?}"
+    );
+}
+
+/// A CA and the certificates it signs, written as PEM files under `dir`:
+/// `ca.pem`, and `<name>.pem` + `<name>.key` for each name.
+fn certificates(dir: &std::path::Path, names: &[&str]) {
+    use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, DnType, IsCa, KeyPair};
+    let mut ca = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    ca.distinguished_name
+        .push(DnType::CommonName, "nlink-lab test CA");
+    let ca = CertifiedIssuer::self_signed(ca, KeyPair::generate().unwrap()).unwrap();
+    std::fs::write(dir.join("ca.pem"), ca.pem()).unwrap();
+    for name in names {
+        let key = KeyPair::generate().unwrap();
+        let mut leaf = CertificateParams::new(vec!["localhost".to_string()]).unwrap();
+        leaf.distinguished_name.push(DnType::CommonName, *name);
+        let cert = leaf.signed_by(&key, &ca).unwrap();
+        std::fs::write(dir.join(format!("{name}.pem")), cert.pem()).unwrap();
+        std::fs::write(dir.join(format!("{name}.key")), key.serialize_pem()).unwrap();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mutual_tls_and_the_access_control_decide_the_role() {
+    let pki = tempfile::tempdir().unwrap();
+    certificates(pki.path(), &["daemon", "op", "view", "stranger"]);
+    let port = free_port();
+    let p = pki.path().to_path_buf();
+    let _d = daemon_with(&my_group(), "no-such-group-nlink", move |c, dir| {
+        c.zenoh.enabled = true;
+        c.zenoh.listen = vec![
+            format!("unixsock-stream/{}", dir.join("zenoh.sock").display()),
+            format!("tls/localhost:{port}"),
+        ];
+        c.zenoh.tls = Some(nlink_labd::config::TlsConfig {
+            ca: p.join("ca.pem"),
+            cert: p.join("daemon.pem"),
+            key: p.join("daemon.key"),
+        });
+        c.zenoh.operators = vec!["op".into()];
+        c.zenoh.viewers = vec!["view".into()];
+    })
+    .await;
+    // it listens once its session is open
+    for _ in 0..100 {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let as_ = |name: &str| Endpoint::Zenoh {
+        endpoint: format!("tls/localhost:{port}"),
+        tls: Some(nlink_lab_client::TlsFiles {
+            ca: pki.path().join("ca.pem"),
+            cert: pki.path().join(format!("{name}.pem")),
+            key: pki.path().join(format!("{name}.key")),
+        }),
+    };
+
+    // an operator's certificate reaches the operator key
+    let op = Client::connect(&as_("op"), "test/op").await.unwrap();
+    assert_eq!(op.welcome().role, Role::Operator);
+    let err = op
+        .call(Request::DeleteSnapshot {
+            lab: "nope".into(),
+            name: "s".into(),
+        })
+        .await
+        .unwrap_err();
+    // the operation ran: the lab is not there
+    assert!(
+        matches!(&err, ClientError::Api(e) if e.code == ErrorCode::NotFound),
+        "{err:?}"
+    );
+
+    // a viewer's reads, and nothing more
+    let viewer = Client::connect(&as_("view"), "test/view").await.unwrap();
+    assert_eq!(viewer.welcome().role, Role::Viewer);
+    assert!(viewer.list_labs().await.unwrap().is_empty());
+
+    // the access control refuses it the operator key, the bridge aside
+    let mut config = zenoh::Config::default();
+    config.insert_json5("mode", "\"client\"").unwrap();
+    config
+        .insert_json5("scouting/multicast/enabled", "false")
+        .unwrap();
+    config
+        .insert_json5(
+            "connect/endpoints",
+            &serde_json::to_string(&[format!("tls/localhost:{port}")]).unwrap(),
+        )
+        .unwrap();
+    let path = |f: &str| serde_json::to_string(&pki.path().join(f).display().to_string()).unwrap();
+    config
+        .insert_json5("transport/link/tls/root_ca_certificate", &path("ca.pem"))
+        .unwrap();
+    config
+        .insert_json5("transport/link/tls/connect_certificate", &path("view.pem"))
+        .unwrap();
+    config
+        .insert_json5("transport/link/tls/connect_private_key", &path("view.key"))
+        .unwrap();
+    config
+        .insert_json5("transport/link/tls/enable_mtls", "true")
+        .unwrap();
+    let raw = zenoh::open(config).await.unwrap();
+    let replies = raw
+        .get("nlink-lab/@rpc/*/operator")
+        .payload(serde_json::to_vec(&Request::Ping).unwrap())
+        .timeout(std::time::Duration::from_secs(2))
+        .await
+        .unwrap();
+    let mut answered = false;
+    while let Ok(reply) = replies.recv_async().await {
+        answered |= reply.result().is_ok();
+    }
+    assert!(!answered, "a viewer's certificate reached the operator key");
+    raw.close().await.unwrap();
+
+    // a certificate the CA signed but no list names: no reads at all
+    let err = Client::connect(&as_("stranger"), "test/x")
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("no nlink-lab daemon answers"),
+        "{err}"
+    );
+
+    // and without a certificate, no session
+    let bare = Endpoint::Zenoh {
+        endpoint: format!("tls/localhost:{port}"),
+        tls: None,
+    };
+    assert!(Client::connect(&bare, "test/bare").await.is_err());
+}

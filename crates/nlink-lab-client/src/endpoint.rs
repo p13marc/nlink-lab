@@ -12,12 +12,56 @@ pub enum Endpoint {
     /// A command whose stdin and stdout are the connection: `ssh HOST
     /// nlink-labd dial-stdio` reaches a remote daemon over ssh.
     Command { program: String, args: Vec<String> },
+    /// The daemon's API over Zenoh (a client built with the `zenoh`
+    /// feature): the requests and their answers, not the sessions that
+    /// stream bytes. `tls` for an endpoint that needs mutual TLS.
+    Zenoh {
+        endpoint: String,
+        tls: Option<TlsFiles>,
+    },
+}
+
+/// A client's TLS material, PEM files: the CA the daemon's certificate is
+/// signed by, the client's certificate and key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TlsFiles {
+    pub ca: PathBuf,
+    pub cert: PathBuf,
+    pub key: PathBuf,
+}
+
+impl TlsFiles {
+    /// `NLINK_LAB_TLS_CA`, `NLINK_LAB_TLS_CERT`, `NLINK_LAB_TLS_KEY`, when
+    /// all three are set.
+    pub fn from_env() -> Option<Self> {
+        let var = |name: &str| {
+            std::env::var_os(name)
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+        };
+        Some(Self {
+            ca: var("NLINK_LAB_TLS_CA")?,
+            cert: var("NLINK_LAB_TLS_CERT")?,
+            key: var("NLINK_LAB_TLS_KEY")?,
+        })
+    }
 }
 
 impl Endpoint {
     /// `unix:PATH` or an absolute path; `ssh://[USER@]HOST[:PORT]`; `cmd:`
-    /// followed by a command line split on spaces.
+    /// followed by a command line split on spaces; `zenoh:ENDPOINT` (a
+    /// Zenoh endpoint, `unixsock-stream/PATH`, `tls/HOST:PORT`…; TLS files
+    /// from `NLINK_LAB_TLS_CA`/`_CERT`/`_KEY`).
     pub fn parse(s: &str) -> Result<Self, String> {
+        if let Some(endpoint) = s.strip_prefix("zenoh:") {
+            if endpoint.is_empty() {
+                return Err(format!("`{s}` names no Zenoh endpoint"));
+            }
+            return Ok(Endpoint::Zenoh {
+                endpoint: endpoint.to_string(),
+                tls: TlsFiles::from_env(),
+            });
+        }
         if let Some(path) = s.strip_prefix("unix:") {
             return Ok(Endpoint::Unix(path.into()));
         }
@@ -58,7 +102,8 @@ impl Endpoint {
             });
         }
         Err(format!(
-            "`{s}` is not an endpoint: unix:PATH, an absolute path, ssh://HOST, cmd:COMMAND"
+            "`{s}` is not an endpoint: unix:PATH, an absolute path, ssh://HOST, cmd:COMMAND, \
+             zenoh:ENDPOINT"
         ))
     }
 
@@ -78,6 +123,7 @@ impl std::fmt::Display for Endpoint {
         match self {
             Endpoint::Unix(p) => write!(f, "unix:{}", p.display()),
             Endpoint::Command { program, args } => write!(f, "cmd:{program} {}", args.join(" ")),
+            Endpoint::Zenoh { endpoint, .. } => write!(f, "zenoh:{endpoint}"),
         }
     }
 }
@@ -112,6 +158,11 @@ mod tests {
                 args: vec!["dial-stdio".into()],
             }
         );
+        assert!(matches!(
+            Endpoint::parse("zenoh:tls/lab1:7447").unwrap(),
+            Endpoint::Zenoh { endpoint, .. } if endpoint == "tls/lab1:7447"
+        ));
+        assert!(Endpoint::parse("zenoh:").is_err());
         assert!(Endpoint::parse("ssh://").is_err());
         assert!(Endpoint::parse("lab1").is_err());
     }

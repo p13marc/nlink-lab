@@ -40,7 +40,7 @@ fn top_bar(app: &App) -> Element<'_, Message> {
     let mut tabs = row![].spacing(2).align_y(Alignment::Center);
     for t in &app.tabs {
         let active = app.route == Route::Workspace && app.active == Some(t.id);
-        let mut label = t.source.title();
+        let mut label = t.label();
         if t.errors() > 0 {
             label.push_str(" ●");
         }
@@ -65,6 +65,7 @@ fn top_bar(app: &App) -> Element<'_, Message> {
             home,
             tabs,
             space::horizontal(),
+            connection(app),
             button(text("Open…").size(13))
                 .style(button::secondary)
                 .on_press(Message::OpenDialog),
@@ -79,6 +80,29 @@ fn top_bar(app: &App) -> Element<'_, Message> {
     .width(Length::Fill)
     .style(bar)
     .into()
+}
+
+/// The connection to the daemon, in a word and a colour.
+fn connection(app: &App) -> Element<'_, Message> {
+    use crate::model::Conn;
+    use nlink_lab_view::scene::Tone;
+    let (word, tone) = match &app.conn {
+        Conn::Off => return space().width(Length::Fixed(0.0)).into(),
+        Conn::Connecting { .. } => ("connecting…".to_string(), Tone::Warn),
+        Conn::Up { who, backend, .. } => (
+            if backend.is_demo() {
+                "demo".to_string()
+            } else {
+                format!("{}@{}", who.user, who.host)
+            },
+            Tone::Good,
+        ),
+        Conn::Down { .. } => ("no daemon".to_string(), Tone::Bad),
+    };
+    row![text("●").size(12).style(tone_text(tone)), muted(word)]
+        .spacing(4)
+        .align_y(Alignment::Center)
+        .into()
 }
 
 pub fn bar(theme: &Theme) -> container::Style {
@@ -165,6 +189,14 @@ fn help<'a>() -> Element<'a, Message> {
         }))
         .on_press(Message::Shortcut(Shortcut::Help)),
     )
+}
+
+/// Text in a status tone, readable on either theme (the canvas's
+/// colours: iced's own greens are too dark for text on a dark theme).
+pub fn tone_text(tone: nlink_lab_view::scene::Tone) -> impl Fn(&Theme) -> text::Style {
+    move |theme: &Theme| text::Style {
+        color: Some(crate::palette::Palette::of(theme).tone(tone)),
+    }
 }
 
 /// A section's heading.

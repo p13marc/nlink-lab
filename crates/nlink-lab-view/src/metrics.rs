@@ -85,6 +85,17 @@ impl MetricsStore {
         self.series(node, iface).map(IfaceSeries::rate)
     }
 
+    /// A node's interfaces and their series, by name.
+    pub fn interfaces<'a>(
+        &'a self,
+        node: &'a str,
+    ) -> impl Iterator<Item = (&'a str, &'a IfaceSeries)> + 'a {
+        self.series
+            .iter()
+            .filter(move |((n, _), _)| n == node)
+            .map(|((_, i), s)| (i.as_str(), s))
+    }
+
     /// The summed rates of a node's interfaces.
     pub fn node_rate(&self, node: &str) -> (u64, u64) {
         self.series
@@ -165,6 +176,11 @@ mod tests {
         assert_eq!(m.rate("a", "eth0"), Some((2000, 1000)));
         assert_eq!(m.series("a", "eth0").unwrap().rx_bps.len(), 2);
         assert_eq!(m.node_rate("a"), (2000, 1000));
+        assert_eq!(
+            m.interfaces("a").map(|(i, _)| i).collect::<Vec<_>>(),
+            ["eth0"]
+        );
+        assert_eq!(m.interfaces("b").count(), 0);
         // errors grow: hot; then they stop: it fades away
         m.ingest(&snap(2000, 5), 2000);
         assert_eq!(m.node_heat("a"), 1.0);

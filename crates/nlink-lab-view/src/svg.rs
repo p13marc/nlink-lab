@@ -122,12 +122,11 @@ pub fn to_svg(scene: &Scene) -> String {
             }
         }
         if let Some(rate) = &e.rate {
-            let mid = crate::scene::point_at(e, 0.5);
             let _ = writeln!(
                 out,
                 r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#4c566a" text-anchor="middle">{}</text>"##,
-                mid.x,
-                mid.y - 6.0,
+                e.rate_at.x,
+                e.rate_at.y + 3.5,
                 esc(rate)
             );
         }

@@ -201,12 +201,18 @@ bins/lab/src/
   util.rs           # env pairs, byte sizes, BPF glue, impair --show lines
 
 bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
-  model.rs          #   App (route, tabs, toasts), Tab (source, params, problems),
-                    #   TopoView (graph, positions, pins, camera, selection, scene)
+  model.rs          #   App (route, tabs, toasts, conn, labs), Tab (Design: source,
+                    #   params, problems | Live: lab, revision, impairments, events),
+                    #   TopoView (graph, positions, pins, camera, selection, metrics, scene)
+  backend.rs        #   Backend: the daemon's client or the demo; subscribe -> Feed
+                    #   (polls where the daemon streams nothing: Zenoh)
+  fake.rs           #   --demo: made-up labs, metrics, impairments, events
+  live.rs           #   lifecycle/runtime events -> timeline lines (+ what to refetch)
+  spark.rs          #   sparkline canvas
   message.rs        #   Message, CanvasMsg, Shortcut
   reduce.rs         #   reduce(app, msg) -> Vec<Effect>: every behaviour, pure, tested
   effect.rs         #   Effect + run: loads, layouts (off the UI thread), rfd dialogs,
-                    #   exports, settings/pins writes
+                    #   exports, settings/pins writes, connect, fetches
   doc.rs            #   Source (file | unsaved template), load: parse + validate -> problems
   canvas.rs         #   canvas::Program painting the Scene in 3 caches; no keys
   keys.rs           #   shortcuts from keyboard::listen() (never while typing)

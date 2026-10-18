@@ -9,9 +9,10 @@ deploy or test a lab.
 |---------|------------|--------|
 | `nlink-labd` | The host daemon: every lab behind one authenticated API, its telemetry over Zenoh, HTTP | supported |
 | `nlink-lab top` | Terminal dashboard (ratatui) over a running lab | supported |
-| `nlink-lab-gui` | Desktop app (iced): topologies drawn from their files | **experimental** |
+| `nlink-lab-gui` | Desktop app (iced): topologies from their files, running labs through the daemon | **experimental** |
 
-`top` without root reads the daemon's metrics.
+`top` without root reads the daemon's metrics, and the desktop app
+follows running labs through it.
 
 ---
 
@@ -88,22 +89,27 @@ the full key map.
 
 ## The desktop app (experimental)
 
-`nlink-lab-gui` draws a topology from its file and keeps up with it:
-save the file in your editor and the drawing follows. Install it from
+`nlink-lab-gui` draws a topology from its file and keeps up with it —
+save the file in your editor and the drawing follows — and follows the
+labs running on the host through the daemon. Install it from
 [INSTALL.md](INSTALL.md#option-c--the-desktop-app-flatpak) — it ships
 as a flatpak bundle, or builds with
 `cargo build --release -p nlink-lab-gui`.
 
 ```bash
-nlink-lab-gui                                  # Home: open a file, a recent one, a template
+nlink-lab-gui                                  # Home: the running labs, a file, a recent one, a template
 nlink-lab-gui spine-leaf.nll wan.nll           # one tab each
 nlink-lab-gui wan.nll --set wan_delay=80ms     # params, as `deploy --set`
+nlink-lab-gui -L dc                            # follow the running lab `dc`
+nlink-lab-gui --daemon ssh://lab-host          # another host's labs
+nlink-lab-gui --demo                           # made-up labs: the live app with nothing installed
 ```
 
 ### The window
 
-Home lists the recent files and the built-in templates (`nlink-lab
-init`'s); a template opens unsaved, and **Save as…** makes it a file.
+Home lists the running labs, the recent files and the built-in
+templates (`nlink-lab init`'s); a template opens unsaved, and **Save
+as…** makes it a file.
 Each topology is a tab: the canvas, the inspector on the right, and
 the dock under the canvas with the topology's **Problems** and its
 **Source**. The panes resize by their borders.
@@ -135,6 +141,33 @@ the dock under the canvas with the topology's **Problems** and its
   window), the topology as Graphviz DOT or Mermaid (what `nlink-lab
   render --diagram` prints).
 
+### Running labs
+
+The app connects to the daemon — `--daemon`, else `$NLINK_LAB_DAEMON`,
+else its socket — as the reader or operator the daemon says you are
+(the `nlink-lab-viewer` group reads). The bar says where it is
+connected; without a daemon Home says why and tries again every few
+seconds. Over Zenoh (`zenoh:ENDPOINT`) the daemon streams nothing, so
+the labs and the metrics are asked for every second.
+
+A lab's tab draws its topology as the daemon has it, a new revision
+after an `apply` or a restore, and on top of it:
+
+- each link's rates, its colour from how busy it is, a node going red
+  while its interfaces' errors grow and back once they stop; when the
+  metrics stop coming, the rates go and the title says so;
+- the impairment in effect at each interface — declared, set with
+  `nlink-lab impair` (live), or a partition, which also breaks the
+  line;
+- in the inspector, a node's interfaces now (rates, state, the last
+  minute as a sparkline) and its tracked processes; an interface's rates
+  and where its impairment comes from;
+- in the dock, the lab's **Events** (deploys, applies, impairments,
+  partitions, processes, interfaces going down) and its **Processes**.
+
+A lab that is destroyed stays on screen, said so, and comes back to
+life if it is deployed again.
+
 ### Keys
 
 `F1` (or `?`) shows them. They never fire while you type in a field.
@@ -158,7 +191,8 @@ the dock under the canvas with the topology's **Problems** and its
 
 The theme (system, light or dark), the layout, the toggles and the
 recent files are in `$XDG_CONFIG_HOME/nlink-lab/gui.toml`; where you
-put nodes, per file, under `$XDG_STATE_HOME/nlink-lab/gui/pins/`.
+put nodes, per file and per lab, under
+`$XDG_STATE_HOME/nlink-lab/gui/pins/`.
 
 ### Flatpak sandbox limits
 
@@ -176,8 +210,8 @@ The bundle is confined:
 
 ### Why "experimental"
 
-- It draws topologies from their files; it does not deploy or change
-  labs.
+- It shows topologies and running labs; it does not deploy or change
+  them.
 - It is the only artifact with no plain-binary release; you get a
   flatpak bundle or you build it.
 - Its looks and keys are free to change between releases without a

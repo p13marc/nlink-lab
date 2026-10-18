@@ -11,7 +11,10 @@ use nlink_lab_view::Hit;
 use crate::doc::Source;
 use crate::message::{CanvasMsg, Message};
 use crate::model::App;
-use crate::reduce::{reduce, testing::settle};
+use crate::reduce::{
+    reduce,
+    testing::{demo, demo_lab, settle},
+};
 
 const SIZE: (f32, f32) = (1280.0, 820.0);
 
@@ -71,8 +74,8 @@ fn snapshot(app: &App, theme: &Theme, name: &str) {
 fn the_showcase_parses_cleanly() {
     let app = app_with(LAB);
     let t = app.current().unwrap();
-    assert!(t.topology.is_some(), "{:?}", t.problems);
-    assert_eq!(t.errors(), 0, "{:?}", t.problems);
+    assert!(t.topology.is_some(), "{:?}", t.design().unwrap().problems);
+    assert_eq!(t.errors(), 0, "{:?}", t.design().unwrap().problems);
     assert_eq!(t.view.graph.regions.len(), 2);
 }
 
@@ -107,7 +110,10 @@ fn a_workspace_renders_in_both_themes() {
 #[test]
 fn a_broken_topology_shows_its_problem() {
     let mut app = app_with("lab \"b\"\nnode r1 {\n  bogus\n}\n");
-    assert_eq!(app.current().unwrap().problems[0].rule, "parse");
+    assert_eq!(
+        app.current().unwrap().design().unwrap().problems[0].rule,
+        "parse"
+    );
     snapshot(&app, &Theme::Light, "workspace-broken");
     // the problem leads to its line
     reduce(&mut app, Message::ProblemClicked(0));
@@ -205,4 +211,54 @@ fn every_example_opens_and_draws() {
         "only {drawn} of {} examples parsed",
         files.len()
     );
+}
+
+#[test]
+fn home_lists_the_running_labs() {
+    let mut app = App::new(crate::settings::Settings::default(), None);
+    demo(&mut app);
+    snapshot(&app, &Theme::Light, "home-labs");
+    // and says so when no daemon answers
+    let mut app = App::new(crate::settings::Settings::default(), None);
+    app.target = Some(crate::backend::Target::Daemon(
+        nlink_lab_client::Endpoint::Unix("/run/nlink-lab/api/api.sock".into()),
+    ));
+    reduce(
+        &mut app,
+        Message::Connected(Err("No such file or directory".into())),
+    );
+    snapshot(&app, &Theme::Dark, "home-no-daemon");
+}
+
+#[test]
+fn a_running_lab_renders_live() {
+    let mut app = App::new(crate::settings::Settings::default(), None);
+    let (fake, lab) = demo_lab(&mut app);
+    // a minute of samples, for the sparklines
+    for t in 6..66 {
+        let snapshot = fake.metrics(&lab, t as f64).unwrap();
+        let epoch = app.epoch;
+        reduce(
+            &mut app,
+            Message::Feed {
+                epoch,
+                lab: Some(lab.clone()),
+                feed: crate::backend::Feed::note(nlink_lab_shared::api::Notification::Metrics {
+                    lab: lab.clone(),
+                    snapshot,
+                }),
+            },
+        );
+    }
+    let node = app.current().unwrap().view.graph.nodes[0].id.clone();
+    reduce(
+        &mut app,
+        Message::Canvas(CanvasMsg::Select(Some(Hit::Node(node)))),
+    );
+    snapshot(&app, &Theme::Light, "live-light");
+    snapshot(&app, &Theme::Dark, "live-dark");
+    reduce(&mut app, Message::Dock(crate::model::DockTab::Processes));
+    reduce(&mut app, Message::Canvas(CanvasMsg::Select(None)));
+    snapshot(&app, &Theme::Light, "live-lab");
+    assert!(app.current().unwrap().live().is_some_and(|l| l.lab == lab));
 }

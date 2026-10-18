@@ -5,17 +5,21 @@ use iced::{Alignment, Element, Font, Length, Theme};
 
 use super::muted;
 use crate::doc::Severity;
+use crate::live::Tone;
 use crate::message::Message;
-use crate::model::{DockTab, Tab};
+use crate::model::{Design, DockTab, Live, Tab};
 
 pub fn view(tab: &Tab) -> Element<'_, Message> {
-    match tab.dock {
-        DockTab::Problems => problems(tab),
-        DockTab::Source => source(tab),
+    match (tab.dock, tab.design(), tab.live()) {
+        (DockTab::Problems, Some(d), _) => problems(d),
+        (DockTab::Source, Some(d), _) => source(d),
+        (DockTab::Processes, _, Some(l)) => processes(l),
+        (_, _, Some(l)) => events(l),
+        _ => container(muted("Nothing here.")).padding(10).into(),
     }
 }
 
-fn problems(tab: &Tab) -> Element<'_, Message> {
+fn problems(tab: &Design) -> Element<'_, Message> {
     if tab.problems.is_empty() {
         return container(muted(if tab.loading {
             "Checking…"
@@ -31,15 +35,10 @@ fn problems(tab: &Tab) -> Element<'_, Message> {
         .enumerate()
         .fold(column![].spacing(2), |col, (i, p)| {
             let severity = p.severity;
-            let mark = text("●").size(12).style(move |theme: &Theme| {
-                let ext = theme.extended_palette();
-                text::Style {
-                    color: Some(match severity {
-                        Severity::Error => ext.danger.base.color,
-                        Severity::Warning => ext.warning.base.color,
-                    }),
-                }
-            });
+            let mark = text("●").size(12).style(super::tone_text(match severity {
+                Severity::Error => nlink_lab_view::scene::Tone::Bad,
+                Severity::Warning => nlink_lab_view::scene::Tone::Warn,
+            }));
             let mut detail = vec![format!("[{}]", p.rule)];
             if let Some(loc) = &p.location {
                 detail.push(loc.clone());
@@ -65,7 +64,7 @@ fn problems(tab: &Tab) -> Element<'_, Message> {
     scrollable(container(list).padding(6)).into()
 }
 
-fn source(tab: &Tab) -> Element<'_, Message> {
+fn source(tab: &Design) -> Element<'_, Message> {
     if tab.text.is_empty() {
         return container(muted("Nothing read yet.")).padding(10).into();
     }
@@ -100,4 +99,74 @@ fn source(tab: &Tab) -> Element<'_, Message> {
     .width(Length::Fill)
     .height(Length::Fill)
     .into()
+}
+
+/// The lab's events, newest first.
+fn events(l: &Live) -> Element<'_, Message> {
+    if l.events.is_empty() {
+        return container(muted("No event yet.")).padding(10).into();
+    }
+    let list = l.events.iter().rev().fold(column![].spacing(2), |col, e| {
+        let tone = e.tone;
+        col.push(
+            row![
+                muted(e.time.as_str())
+                    .font(Font::MONOSPACE)
+                    .width(Length::Fixed(64.0)),
+                text(e.kind.as_str())
+                    .size(13)
+                    .width(Length::Fixed(130.0))
+                    .style(move |theme: &Theme| {
+                        use nlink_lab_view::scene::Tone as T;
+                        let p = crate::palette::Palette::of(theme);
+                        text::Style {
+                            color: match tone {
+                                Tone::Info => None,
+                                Tone::Good => Some(p.tone(T::Good)),
+                                Tone::Warn => Some(p.tone(T::Warn)),
+                                Tone::Bad => Some(p.tone(T::Bad)),
+                            },
+                        }
+                    }),
+                text(e.text.as_str()).size(13),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        )
+    });
+    scrollable(container(list).padding(8)).into()
+}
+
+/// The lab's tracked processes.
+fn processes(l: &Live) -> Element<'_, Message> {
+    if l.processes.is_empty() {
+        return container(muted("No tracked process: `nlink-lab spawn` starts one."))
+            .padding(10)
+            .into();
+    }
+    let head = row![
+        muted("Node").width(Length::Fixed(160.0)),
+        muted("PID").width(Length::Fixed(80.0)),
+        muted("Status"),
+    ]
+    .spacing(8);
+    let list = l.processes.iter().fold(column![head].spacing(4), |col, p| {
+        let status = match (p.alive, p.exit_code) {
+            (true, _) => "running".to_string(),
+            (false, Some(c)) => format!("exited, status {c}"),
+            (false, None) => "exited".to_string(),
+        };
+        col.push(
+            row![
+                text(p.node.as_str()).size(13).width(Length::Fixed(160.0)),
+                text(p.pid.to_string())
+                    .size(13)
+                    .font(Font::MONOSPACE)
+                    .width(Length::Fixed(80.0)),
+                text(status).size(13),
+            ]
+            .spacing(8),
+        )
+    });
+    scrollable(container(list).padding(8)).into()
 }

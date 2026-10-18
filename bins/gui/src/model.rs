@@ -1,16 +1,20 @@
 //! The app's state: data only, changed by `reduce` and drawn by `view`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
+use std::path::PathBuf;
 use std::time::SystemTime;
 
 use iced::widget::pane_grid;
 use nlink_lab::Topology;
+use nlink_lab_shared::api::{EndpointImpairment, LabSummary, ProcessDto, Role};
 use nlink_lab_view::graph::GraphOptions;
 use nlink_lab_view::impair::{Impair, effective_impairments};
 use nlink_lab_view::scene::{self, Overlays};
-use nlink_lab_view::{Hit, Positions, Scene, TopoGraph};
+use nlink_lab_view::{Hit, MetricsStore, Positions, Scene, TopoGraph};
 
+use crate::backend::{Backend, Target};
 use crate::doc::{Problem, Source};
+use crate::live::EventLine;
 use crate::settings::{Dirs, LayoutPref, Settings};
 
 pub type TabId = u64;
@@ -31,6 +35,16 @@ pub struct App {
     pub toasts: Vec<Toast>,
     /// The shortcuts sheet.
     pub help: bool,
+    /// What to connect to; `None`: nothing.
+    pub target: Option<Target>,
+    /// The daemon, or the demo's stand-in.
+    pub conn: Conn,
+    /// The last connection's number.
+    pub epoch: u64,
+    /// What it serves, by name.
+    pub labs: Vec<LabSummary>,
+    /// Milliseconds since the app started, from the clock's ticks.
+    pub clock_ms: u64,
     next_id: u64,
 }
 
@@ -44,6 +58,11 @@ impl App {
             active: None,
             toasts: Vec::new(),
             help: false,
+            target: None,
+            conn: Conn::Off,
+            epoch: 0,
+            labs: Vec::new(),
+            clock_ms: 0,
             next_id: 1,
         }
     }
@@ -71,6 +90,13 @@ impl App {
         self.tab_mut(id)
     }
 
+    /// The tab following `lab`.
+    pub fn lab_tab_mut(&mut self, lab: &str) -> Option<&mut Tab> {
+        self.tabs
+            .iter_mut()
+            .find(|t| t.live().is_some_and(|l| l.lab == lab))
+    }
+
     pub fn toast(&mut self, level: Level, text: impl Into<String>) {
         let id = self.next_id();
         self.toasts.push(Toast {
@@ -84,6 +110,45 @@ impl App {
             self.toasts.remove(0);
         }
     }
+
+    /// The backend, when connected.
+    pub fn backend(&self) -> Option<&Backend> {
+        match &self.conn {
+            Conn::Up { backend, .. } => Some(backend),
+            _ => None,
+        }
+    }
+}
+
+/// Who the daemon says we are.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Who {
+    pub server: String,
+    pub host: String,
+    pub user: String,
+    pub role: Role,
+}
+
+/// The connection to the daemon.
+#[derive(Debug, Clone)]
+pub enum Conn {
+    /// None asked for.
+    Off,
+    Connecting {
+        attempt: u32,
+    },
+    Up {
+        backend: Backend,
+        who: Who,
+        /// Bumped with every connection: subscriptions are keyed by it,
+        /// so a reconnection starts them afresh.
+        epoch: u64,
+    },
+    /// Lost, or never made; tried again after a while.
+    Down {
+        reason: String,
+        attempt: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,17 +179,33 @@ pub enum Pane {
     Dock,
 }
 
-/// The dock's pages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// The dock's pages: a design tab has the first two, a lab's the others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockTab {
-    #[default]
     Problems,
     Source,
+    Events,
+    Processes,
 }
 
-/// A topology from its source, in design mode.
+/// A topology on the canvas: from its source, or a running lab's.
 pub struct Tab {
     pub id: TabId,
+    pub kind: Kind,
+    /// The topology shown: the last one that parsed, or the lab's.
+    pub topology: Option<Topology>,
+    pub view: TopoView,
+    pub panes: pane_grid::State<Pane>,
+    pub dock: DockTab,
+}
+
+pub enum Kind {
+    Design(Design),
+    Live(Live),
+}
+
+/// A topology from its source.
+pub struct Design {
     pub source: Source,
     /// `--set` values, by name.
     pub params: BTreeMap<String, String>,
@@ -134,63 +215,177 @@ pub struct Tab {
     pub param_edits: BTreeMap<String, String>,
     pub text: String,
     pub modified: Option<SystemTime>,
-    /// The last topology that parsed: kept while the file does not.
-    pub topology: Option<Topology>,
     /// The topology shown is older than the source, which does not parse.
     pub stale: bool,
     pub problems: Vec<Problem>,
     pub loading: bool,
     /// The last load's generation: older results are dropped.
     pub load_gen: u64,
-    pub view: TopoView,
-    pub panes: pane_grid::State<Pane>,
-    pub dock: DockTab,
 }
 
+/// A running lab, followed through the daemon.
+pub struct Live {
+    pub lab: String,
+    /// The topology's revision: a new one comes with `topology_changed`.
+    pub revision: String,
+    pub summary: Option<LabSummary>,
+    /// The impairments per endpoint: declared, set live, partitioned.
+    pub endpoints: Vec<EndpointImpairment>,
+    pub processes: Vec<ProcessDto>,
+    /// Newest last.
+    pub events: VecDeque<EventLine>,
+    /// When the last metrics came, on the app's clock.
+    pub metrics_at: Option<u64>,
+    pub interval_ms: u64,
+    /// The lab was destroyed: what is shown is what it was.
+    pub gone: bool,
+    /// Bumped to subscribe again after the subscription ended.
+    pub feed_gen: u64,
+    /// Why the lab's data does not come, when it does not.
+    pub error: Option<String>,
+}
+
+/// The events a lab tab keeps.
+pub const EVENTS: usize = 500;
+
 impl Tab {
-    pub fn new(id: TabId, source: Source, params: BTreeMap<String, String>, s: &Settings) -> Self {
+    pub fn design_tab(
+        id: TabId,
+        source: Source,
+        params: BTreeMap<String, String>,
+        s: &Settings,
+    ) -> Self {
         Self {
             id,
-            source,
-            params,
-            declared: Vec::new(),
-            param_edits: BTreeMap::new(),
-            text: String::new(),
-            modified: None,
+            kind: Kind::Design(Design {
+                source,
+                params,
+                declared: Vec::new(),
+                param_edits: BTreeMap::new(),
+                text: String::new(),
+                modified: None,
+                stale: false,
+                problems: Vec::new(),
+                loading: true,
+                load_gen: 0,
+            }),
             topology: None,
-            stale: false,
-            problems: Vec::new(),
-            loading: true,
-            load_gen: 0,
             view: TopoView::new(s),
             panes: panes(),
-            dock: DockTab::default(),
+            dock: DockTab::Problems,
+        }
+    }
+
+    pub fn live_tab(id: TabId, lab: String, s: &Settings) -> Self {
+        let mut view = TopoView::new(s);
+        view.metrics = Some(MetricsStore::default());
+        Self {
+            id,
+            kind: Kind::Live(Live {
+                lab,
+                revision: String::new(),
+                summary: None,
+                endpoints: Vec::new(),
+                processes: Vec::new(),
+                events: VecDeque::new(),
+                metrics_at: None,
+                interval_ms: 1000,
+                gone: false,
+                feed_gen: 0,
+                error: None,
+            }),
+            topology: None,
+            view,
+            panes: panes(),
+            dock: DockTab::Events,
+        }
+    }
+
+    pub fn design(&self) -> Option<&Design> {
+        match &self.kind {
+            Kind::Design(d) => Some(d),
+            Kind::Live(_) => None,
+        }
+    }
+
+    pub fn design_mut(&mut self) -> Option<&mut Design> {
+        match &mut self.kind {
+            Kind::Design(d) => Some(d),
+            Kind::Live(_) => None,
+        }
+    }
+
+    pub fn live(&self) -> Option<&Live> {
+        match &self.kind {
+            Kind::Live(l) => Some(l),
+            Kind::Design(_) => None,
+        }
+    }
+
+    pub fn live_mut(&mut self) -> Option<&mut Live> {
+        match &mut self.kind {
+            Kind::Live(l) => Some(l),
+            Kind::Design(_) => None,
+        }
+    }
+
+    /// What the tab bar says.
+    pub fn label(&self) -> String {
+        match &self.kind {
+            Kind::Design(d) => d.source.title(),
+            Kind::Live(l) => format!("● {}", l.lab),
         }
     }
 
     /// The lab's name and where it comes from, once each.
     pub fn title(&self) -> String {
-        let source = self.source.title();
-        match &self.topology {
-            Some(t) if !t.lab.name.is_empty() && !source.starts_with(&t.lab.name) => {
-                format!("{} — {source}", t.lab.name)
+        match &self.kind {
+            Kind::Design(d) => {
+                let source = d.source.title();
+                match &self.topology {
+                    Some(t) if !t.lab.name.is_empty() && !source.starts_with(&t.lab.name) => {
+                        format!("{} — {source}", t.lab.name)
+                    }
+                    _ => source,
+                }
             }
-            _ => source,
+            Kind::Live(l) => format!("{} (running)", l.lab),
         }
     }
 
+    /// Where the user's placements of this tab's nodes are kept: per file,
+    /// or per lab.
+    pub fn pins_key(&self) -> Option<PathBuf> {
+        match &self.kind {
+            Kind::Design(d) => d.source.path().map(PathBuf::from),
+            Kind::Live(l) => Some(PathBuf::from(format!("lab:{}", l.lab))),
+        }
+    }
+
+    pub fn errors(&self) -> usize {
+        self.design().map_or(0, |d| {
+            d.problems
+                .iter()
+                .filter(|p| p.severity == crate::doc::Severity::Error)
+                .count()
+        })
+    }
+
+    /// The dock pages of this kind of tab.
+    pub fn dock_pages(&self) -> &'static [DockTab] {
+        match self.kind {
+            Kind::Design(_) => &[DockTab::Problems, DockTab::Source],
+            Kind::Live(_) => &[DockTab::Events, DockTab::Processes],
+        }
+    }
+}
+
+impl Design {
     pub fn params_vec(&self) -> Vec<(String, String)> {
         self.params
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
-    }
-
-    pub fn errors(&self) -> usize {
-        self.problems
-            .iter()
-            .filter(|p| p.severity == crate::doc::Severity::Error)
-            .count()
     }
 }
 
@@ -266,6 +461,10 @@ pub struct TopoView {
     pub show_addresses: bool,
     pub show_mgmt: bool,
     pub impairments: BTreeMap<String, Impair>,
+    /// A lab's metrics; `None` in design mode.
+    pub metrics: Option<MetricsStore>,
+    /// The metrics stopped coming: not drawn.
+    pub stale: bool,
     pub scene: Scene,
     /// Bumped with every change of the scene: the canvas redraws on it.
     pub revision: u64,
@@ -286,23 +485,27 @@ impl TopoView {
             show_addresses: s.show_addresses,
             show_mgmt: s.show_mgmt,
             impairments: BTreeMap::new(),
+            metrics: None,
+            stale: false,
             scene: Scene::default(),
             revision: 0,
         }
     }
 
-    /// Show `t`: a new graph, its declared impairments; the nodes that
-    /// remain keep their places. True when nodes appeared, which needs a
-    /// layout.
-    pub fn set_topology(&mut self, t: &Topology) -> bool {
+    /// Show `t`: a new graph; the nodes that remain keep their places.
+    /// The impairments shown are what `t` declares unless the daemon's
+    /// are given. True when nodes appeared, which need places.
+    pub fn set_topology(&mut self, t: &Topology, live: Option<&[EndpointImpairment]>) -> bool {
         self.graph = TopoGraph::from_topology(
             t,
             &GraphOptions {
                 show_mgmt: self.show_mgmt,
             },
         );
-        self.impairments =
-            effective_impairments(&t.impairments, &BTreeMap::new(), &BTreeMap::new());
+        self.impairments = match live {
+            Some(endpoints) => nlink_lab_view::impair::from_endpoints(endpoints),
+            None => effective_impairments(&t.impairments, &BTreeMap::new(), &BTreeMap::new()),
+        };
         let ids: std::collections::BTreeSet<&str> =
             self.graph.nodes.iter().map(|n| n.id.as_str()).collect();
         self.positions.retain(|k, _| ids.contains(k.as_str()));
@@ -338,15 +541,19 @@ impl TopoView {
     }
 
     fn build(&self, selected: Option<&str>) -> Scene {
+        let metrics = self
+            .metrics
+            .as_ref()
+            .filter(|m| m.has_data() && !self.stale);
         scene::build(
             &self.graph,
             &self.positions,
             &Overlays {
-                metrics: None,
+                metrics,
                 impairments: &self.impairments,
                 selected,
                 addresses: self.show_addresses,
-                rates: false,
+                rates: metrics.is_some(),
             },
         )
     }

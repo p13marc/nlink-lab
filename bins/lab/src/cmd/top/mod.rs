@@ -559,8 +559,7 @@ async fn act_on_daemon(
 
 fn refresh_impairments(app: &mut App, source: &Source) {
     if let Source::Daemon { impairments, .. } = source {
-        let (mut declared, mut live, mut partitioned) = Default::default();
-        daemon_impairments(impairments, &mut declared, &mut live, &mut partitioned);
+        let (declared, live, partitioned) = nlink_lab_view::impair::split(impairments);
         app.set_impairments(&declared, &live, &partitioned);
         return;
     }
@@ -573,29 +572,6 @@ fn refresh_impairments(app: &mut App, source: &Source) {
         lab.live_impairments(),
         lab.partitions(),
     );
-}
-
-type Impairments = std::collections::BTreeMap<String, nlink_lab::Impairment>;
-
-/// The daemon's view of the impairments as the maps `App` reads: what the
-/// topology declares, what `impair` set, what is partitioned.
-fn daemon_impairments(
-    endpoints: &[nlink_lab_shared::api::EndpointImpairment],
-    declared: &mut Impairments,
-    live: &mut Impairments,
-    partitioned: &mut Impairments,
-) {
-    for e in endpoints {
-        if let Some(d) = &e.declared {
-            declared.insert(e.endpoint.clone(), d.into());
-        }
-        if let Some(l) = &e.live {
-            live.insert(e.endpoint.clone(), l.into());
-        }
-        if e.partitioned {
-            partitioned.insert(e.endpoint.clone(), nlink_lab::Impairment::default());
-        }
-    }
 }
 
 /// The lab's `created_at` as unix seconds, for the header uptime; `0`
@@ -700,8 +676,7 @@ mod tests {
                 partitioned: true,
             },
         ];
-        let (mut declared, mut live, mut partitioned) = Default::default();
-        daemon_impairments(&endpoints, &mut declared, &mut live, &mut partitioned);
+        let (declared, live, partitioned) = nlink_lab_view::impair::split(&endpoints);
         let shown = app::effective_impairments(&declared, &live, &partitioned);
         assert_eq!(shown["a:eth0"].origin, "live");
         assert!(shown["a:eth0"].summary.contains("50ms"));

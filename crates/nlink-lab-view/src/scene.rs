@@ -121,6 +121,8 @@ pub struct SceneEdge {
     pub partitioned: bool,
     /// The rates across it, `rx` and `tx` of its first end, with `rates`.
     pub rate: Option<String>,
+    /// Where the rates are written: on the edge, where they fit.
+    pub rate_at: Pos,
     pub ends: [EdgeEnd; 2],
 }
 
@@ -272,16 +274,19 @@ fn untangle(scene: &mut Scene, selected: Option<&str>) {
                 let clear = boxes
                     .iter()
                     .all(|b| !placed.iter().chain(&nodes).any(|o| overlap(b, o)));
-                if clear || keep_all {
+                if clear {
                     placed.extend(boxes);
                     break;
                 }
                 if moved + STEP > room {
                     // no room: back where it was, without what does not fit
+                    // (the selection's keep everything)
                     end.at = start;
-                    end.label = None;
-                    if end.badge.as_ref().is_some_and(|b| b.tone == Tone::Muted) {
-                        end.badge = None;
+                    if !keep_all {
+                        end.label = None;
+                        if end.badge.as_ref().is_some_and(|b| b.tone == Tone::Muted) {
+                            end.badge = None;
+                        }
                     }
                     place(end, dx, dy, second);
                     placed.extend(end_boxes(end));
@@ -291,6 +296,34 @@ fn untangle(scene: &mut Scene, selected: Option<&str>) {
                 moved += STEP;
                 place(end, dx, dy, second);
             }
+        }
+    }
+    // the rates, along their edge where they fit, else left out (the
+    // selection's too: its addresses come first, and the nodes and the
+    // inspector have the rates)
+    let mut order: Vec<usize> = (0..scene.edges.len()).collect();
+    order.sort_by_key(|i| !mine(&scene.edges[*i]));
+    for i in order {
+        let e = &mut scene.edges[i];
+        let Some(rate) = &e.rate else {
+            continue;
+        };
+        let chars = rate.chars().count();
+        let spot_at = |t: f32| {
+            let p = point_at_parts(e.from, e.control, e.to, t);
+            let at = Pos::new(p.x, p.y - 8.0);
+            (at, text_box(at, chars, Anchor::Middle))
+        };
+        let spot = [0.5, 0.38, 0.62, 0.26, 0.74]
+            .into_iter()
+            .map(spot_at)
+            .find(|(_, b)| !placed.iter().chain(&nodes).any(|o| overlap(b, o)));
+        match spot {
+            Some((at, b)) => {
+                e.rate_at = at;
+                placed.push(b);
+            }
+            None => e.rate = None,
         }
     }
 }
@@ -480,18 +513,14 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
             .filter(|_| o.rates)
             .and_then(|m| m.rate(&e.a.node, e.a.iface.as_deref()?));
         let busy = rates.map_or(0.0, |(rx, tx)| utilisation(rx.max(tx), None));
+        // the width says how busy; without a capacity to measure against,
+        // traffic is not a warning
         let tone = if partitioned {
             Tone::Bad
         } else if matches!(e.kind, EdgeKind::Mgmt) {
             Tone::Muted
         } else if rates.is_some() && busy > 0.0 {
-            if busy > 0.85 {
-                Tone::Bad
-            } else if busy > 0.5 {
-                Tone::Warn
-            } else {
-                Tone::Good
-            }
+            Tone::Good
         } else {
             Tone::Normal
         };
@@ -507,13 +536,8 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
             tone,
             selected,
             partitioned,
-            rate: rates.map(|(rx, tx)| {
-                format!(
-                    "↓{} ↑{}",
-                    nlink_lab_shared::metrics::format_rate(rx),
-                    nlink_lab_shared::metrics::format_rate(tx)
-                )
-            }),
+            rate: rates.map(|(rx, tx)| rate_text(rx, tx)),
+            rate_at: point_at_parts(from, control, to, 0.5),
             ends,
         });
     }
@@ -525,11 +549,7 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
         let sublabel = match (&n.image, o.metrics.filter(|_| o.rates)) {
             (_, Some(m)) if !matches!(n.kind, NodeKind::Bridge | NodeKind::External) => {
                 let (rx, tx) = m.node_rate(&n.id);
-                Some(format!(
-                    "↓{} ↑{}",
-                    nlink_lab_shared::metrics::format_rate(rx),
-                    nlink_lab_shared::metrics::format_rate(tx)
-                ))
+                Some(rate_text(rx, tx))
             }
             (Some(image), _) => Some(image.clone()),
             _ => None,
@@ -569,19 +589,39 @@ pub fn build(g: &TopoGraph, pos: &Positions, o: &Overlays) -> Scene {
 
 /// The point at `t` of the edge's line or curve.
 pub fn point_at(e: &SceneEdge, t: f32) -> Pos {
-    match e.control {
-        None => Pos::new(
-            e.from.x + (e.to.x - e.from.x) * t,
-            e.from.y + (e.to.y - e.from.y) * t,
-        ),
+    point_at_parts(e.from, e.control, e.to, t)
+}
+
+fn point_at_parts(from: Pos, control: Option<Pos>, to: Pos, t: f32) -> Pos {
+    match control {
+        None => Pos::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t),
         Some(c) => {
             let u = 1.0 - t;
             Pos::new(
-                u * u * e.from.x + 2.0 * u * t * c.x + t * t * e.to.x,
-                u * u * e.from.y + 2.0 * u * t * c.y + t * t * e.to.y,
+                u * u * from.x + 2.0 * u * t * c.x + t * t * to.x,
+                u * u * from.y + 2.0 * u * t * c.y + t * t * to.y,
             )
         }
     }
+}
+
+/// A rate in a few characters: `939`, `12.4k`, `3.1M`, `1.2G` (bits per
+/// second).
+pub fn short_rate(bps: u64) -> String {
+    let b = bps as f64;
+    if b < 1e3 {
+        format!("{bps}")
+    } else if b < 1e6 {
+        format!("{:.0}k", b / 1e3)
+    } else if b < 1e9 {
+        format!("{:.1}M", b / 1e6)
+    } else {
+        format!("{:.1}G", b / 1e9)
+    }
+}
+
+fn rate_text(rx: u64, tx: u64) -> String {
+    format!("↓{} ↑{}", short_rate(rx), short_rate(tx))
 }
 
 fn distance_to_segment(p: Pos, a: Pos, b: Pos) -> f32 {

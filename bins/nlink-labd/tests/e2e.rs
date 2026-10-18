@@ -151,6 +151,10 @@ async fn the_daemon_serves_real_labs() {
         socket: socket.clone(),
         rescan_ms: 200,
         metrics_interval_ms: 500,
+        zenoh: nlink_labd::config::ZenohConfig {
+            enabled: false,
+            ..Default::default()
+        },
         ..Config::default()
     };
     let listener = nlink_labd::listen::bind(&socket).unwrap();
@@ -479,17 +483,36 @@ async fn start_daemon() -> (
     Endpoint,
     Client,
 ) {
+    start_daemon_with(|_, _| {}).await
+}
+
+/// [`start_daemon`], its configuration changed by `tweak` (given the
+/// socket's directory) first.
+async fn start_daemon_with(
+    tweak: impl FnOnce(&mut Config, &std::path::Path),
+) -> (
+    tempfile::TempDir,
+    tempfile::TempDir,
+    CancelToken,
+    Endpoint,
+    Client,
+) {
     let root = tempfile::tempdir().unwrap();
     // SAFETY: set before the daemon, the deploys and their threads run.
     unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", root.path()) };
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("api.sock");
-    let config = Config {
+    let mut config = Config {
         socket: socket.clone(),
         rescan_ms: 200,
         metrics_interval_ms: 500,
+        zenoh: nlink_labd::config::ZenohConfig {
+            enabled: false,
+            ..Default::default()
+        },
         ..Config::default()
     };
+    tweak(&mut config, dir.path());
     let listener = nlink_labd::listen::bind(&socket).unwrap();
     let shutdown = CancelToken::new();
     tokio::spawn(nlink_labd::serve(config, listener, shutdown.clone()));
@@ -1227,6 +1250,117 @@ async fn the_daemon_runs_sessions() {
         other => panic!("{other:?}"),
     }
     drop(drift);
+
+    shutdown.cancel();
+    running.destroy().await.unwrap();
+    unsafe { std::env::remove_var("NLINK_LAB_STATE_DIR") };
+}
+
+const TELEMETRY: &str = "labd-e2e-telemetry";
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_daemon_publishes_telemetry() {
+    // `just ci` runs it rootless; the privileged CI lane runs it as root
+    if !nlink_lab::privileges::has_privileges() {
+        eprintln!("skipping the_daemon_publishes_telemetry: requires root");
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let http = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let zsock = std::sync::Arc::new(std::sync::Mutex::new(std::path::PathBuf::new()));
+    let seen = zsock.clone();
+    let (_root, _dir, shutdown, _endpoint, _client) = start_daemon_with(move |c, dir| {
+        let path = dir.join("zenoh/zenoh.sock");
+        c.zenoh = nlink_labd::config::ZenohConfig {
+            enabled: true,
+            listen: vec![format!("unixsock-stream/{}", path.display())],
+            ..Default::default()
+        };
+        c.http.listen = Some(http);
+        *seen.lock().unwrap() = path;
+    })
+    .await;
+    let _cleanup = Cleanup(&[TELEMETRY]);
+    // deployed behind the daemon's back: adopted, and collected
+    let running = topology(TELEMETRY, 236).deploy().await.expect("deploy");
+    let path = zsock.lock().unwrap().clone();
+    for _ in 0..100 {
+        if path.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    // ── zenoh: the lab's metrics, and its topology to a query ──
+    let mut config = zenoh::Config::default();
+    config.insert_json5("mode", "\"client\"").unwrap();
+    config
+        .insert_json5(
+            "connect/endpoints",
+            &serde_json::to_string(&[format!("unixsock-stream/{}", path.display())]).unwrap(),
+        )
+        .unwrap();
+    config
+        .insert_json5("scouting/multicast/enabled", "false")
+        .unwrap();
+    let session = zenoh::open(config).await.unwrap();
+    let metrics = session
+        .declare_subscriber(nlink_lab_shared::topics::metrics_snapshot(TELEMETRY))
+        .await
+        .unwrap();
+    let sample = tokio::time::timeout(Duration::from_secs(10), metrics.recv_async())
+        .await
+        .expect("a metrics snapshot within 10 s")
+        .unwrap();
+    let snapshot: nlink_lab_shared::metrics::MetricsSnapshot =
+        serde_json::from_slice(&sample.payload().to_bytes()).unwrap();
+    assert_eq!(snapshot.lab_name, TELEMETRY);
+    let replies = session
+        .get(nlink_lab_shared::topics::topology(TELEMETRY))
+        .await
+        .unwrap();
+    let reply = replies.recv_async().await.unwrap();
+    let update: nlink_lab_shared::messages::TopologyUpdate =
+        serde_json::from_slice(&reply.result().unwrap().payload().to_bytes()).unwrap();
+    assert_eq!(
+        (update.lab_name.as_str(), update.node_count),
+        (TELEMETRY, 2)
+    );
+    session.close().await.unwrap();
+
+    // ── HTTP ──
+    let get = async |path: &str| -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = tokio::net::TcpStream::connect(http).await.unwrap();
+        stream
+            .write_all(format!("GET {path} HTTP/1.1\r\n\r\n").as_bytes())
+            .await
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        response
+    };
+    assert!(get("/api/v2/labs").await.contains(TELEMETRY));
+    let metrics = get("/metrics").await;
+    assert!(
+        metrics.contains(&format!(
+            "nlink_lab_iface_rx_bytes_total{{lab=\"{TELEMETRY}\""
+        )),
+        "{metrics}"
+    );
+    assert!(
+        get(&format!("/api/v2/labs/{TELEMETRY}/topology"))
+            .await
+            .contains("\"nodes\"")
+    );
+    assert!(
+        get(&format!("/api/v2/labs/{TELEMETRY}/metrics"))
+            .await
+            .contains(TELEMETRY)
+    );
 
     shutdown.cancel();
     running.destroy().await.unwrap();

@@ -33,11 +33,6 @@ pub fn lifecycle(lab: &str) -> String {
     format!("nlink-lab/{lab}/lifecycle")
 }
 
-/// RPC: get lab status summary.
-pub fn rpc_status(lab: &str) -> String {
-    format!("nlink-lab/{lab}/rpc/status")
-}
-
 /// Wildcard: subscribe to all labs' topology updates.
 pub fn all_topologies() -> &'static str {
     "nlink-lab/*/topology"
@@ -67,7 +62,7 @@ mod tests {
             metrics_iface("dc", "spine1", "eth0"),
             "nlink-lab/dc/metrics/spine1/eth0"
         );
-        assert_eq!(rpc_status("dc"), "nlink-lab/dc/rpc/status");
+        assert_eq!(events("dc"), "nlink-lab/dc/events");
     }
 
     #[test]

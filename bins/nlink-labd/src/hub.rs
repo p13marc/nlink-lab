@@ -72,6 +72,9 @@ pub(crate) struct Hub {
     latest: Arc<Mutex<HashMap<String, MetricsSnapshot>>>,
     collectors: Mutex<HashMap<String, Collector>>,
     drift: Mutex<HashMap<String, DriftWatch>>,
+    /// Collect every lab's metrics, for the telemetry (Zenoh, HTTP).
+    collect_all: AtomicBool,
+    telemetry: Mutex<HashMap<String, Want>>,
     next_want: AtomicU64,
     metrics_interval: Duration,
     rescan: Duration,
@@ -85,6 +88,8 @@ impl Hub {
             latest: Arc::default(),
             collectors: Mutex::default(),
             drift: Mutex::default(),
+            collect_all: AtomicBool::new(false),
+            telemetry: Mutex::default(),
             next_want: AtomicU64::new(1),
             metrics_interval: config.metrics_interval(),
             rescan: config.rescan(),
@@ -93,6 +98,22 @@ impl Hub {
 
     pub fn lab_count(&self) -> usize {
         self.labs.lock().unwrap().len()
+    }
+
+    /// Every lab as the last scan saw it.
+    pub fn labs(&self) -> Vec<LabSummary> {
+        self.labs.lock().unwrap().values().cloned().collect()
+    }
+
+    /// Every notification from now on, of every lab and topic.
+    pub fn subscribe_all(&self) -> broadcast::Receiver<Arc<Note>> {
+        self.tx.subscribe()
+    }
+
+    /// Keep every lab's metrics collected, for the telemetry: from the
+    /// next scan on, each lab has a collector while it exists.
+    pub fn collect_all(&self) {
+        self.collect_all.store(true, Ordering::Relaxed);
     }
 
     /// The latest metrics of the lab, when a subscriber's collector runs.
@@ -148,7 +169,11 @@ impl Hub {
     }
 
     /// Take a scan in: announce what changed.
-    fn update(&self, summaries: Vec<LabSummary>, events: Vec<(String, Vec<serde_json::Value>)>) {
+    fn update(
+        self: &Arc<Self>,
+        summaries: Vec<LabSummary>,
+        events: Vec<(String, Vec<serde_json::Value>)>,
+    ) {
         let new: BTreeMap<String, LabSummary> =
             summaries.into_iter().map(|s| (s.lab.clone(), s)).collect();
         let (added, updated, removed, moved) = {
@@ -181,6 +206,16 @@ impl Hub {
         };
         for lab in &removed {
             self.latest.lock().unwrap().remove(lab);
+            self.telemetry.lock().unwrap().remove(lab);
+        }
+        if self.collect_all.load(Ordering::Relaxed) {
+            let names: Vec<String> = self.labs.lock().unwrap().keys().cloned().collect();
+            for lab in names {
+                if !self.telemetry.lock().unwrap().contains_key(&lab) {
+                    let want = self.want_metrics(&lab, self.metrics_interval);
+                    self.telemetry.lock().unwrap().insert(lab, want);
+                }
+            }
         }
         if !(added.is_empty() && updated.is_empty() && removed.is_empty()) {
             self.publish(

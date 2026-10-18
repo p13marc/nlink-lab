@@ -1,13 +1,12 @@
 # Installing nlink-lab
 
-Four separate artifacts ship from this repo. Most people only need
+Three separate artifacts ship from this repo. Most people only need
 the first.
 
 | Artifact | What it is | How it ships |
 |----------|------------|--------------|
 | `nlink-lab` | The CLI — deploy, exec, impair, capture, everything | release tarball, or `cargo build` |
-| `nlink-labd` | The host daemon: every lab behind one authenticated API (`top` without root, the viewer, remote clients) | same release tarball, with its systemd units, or `just install-daemon` |
-| `nlink-lab-backend` | Zenoh publisher of one lab's live metrics and topology (the viewer's live mode, OpenMetrics) | same release tarball, or `cargo build` |
+| `nlink-labd` | The host daemon: every lab behind one authenticated API (`top` without root, the viewer, remote clients), their telemetry over Zenoh, OpenMetrics | same release tarball, with its systemd units, or `just install-daemon` |
 | `nlink-lab-topoviewer` | Experimental desktop topology viewer (iced) | flatpak bundle only |
 
 Releases live at
@@ -53,8 +52,8 @@ wireguard-tools` for the optional surface.
 ## Option A — prebuilt binaries (fastest)
 
 Each release attaches `nlink-lab-<version>-x86_64-linux-gnu.tar.gz`
-containing the CLI, the daemon and its systemd units, the backend,
-shell completions and the licence/changelog. It does **not** contain the GUI.
+containing the CLI, the daemon and its systemd units, shell
+completions and the licence/changelog. It does **not** contain the GUI.
 
 ```bash
 VER=0.13.0   # check the releases page for the newest
@@ -66,7 +65,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 tar xzf nlink-lab-$VER-x86_64-linux-gnu.tar.gz
 cd nlink-lab-$VER-x86_64-linux-gnu
-sudo install -m 755 nlink-lab nlink-labd nlink-lab-backend /usr/local/bin/
+sudo install -m 755 nlink-lab nlink-labd /usr/local/bin/
 ```
 
 That gives you a plain install you run under `sudo`. To run it as an
@@ -91,9 +90,6 @@ just install          # the CLI in /usr/local/bin, run with sudo
 # or
 just install-caps     # the CLI with file capabilities instead
 just install-daemon   # the daemon, its systemd units and groups
-# the Zenoh backend, for the viewer's live mode:
-cargo build --release -p nlink-lab-backend
-sudo install -m 755 target/release/nlink-lab-backend /usr/local/bin/
 ```
 
 The recipes run `sudo` themselves: run them as yourself.
@@ -243,27 +239,31 @@ sudo systemctl enable --now nlink-labd.socket
 sudo usermod -aG nlink-lab-viewer "$USER"   # read; nlink-lab to operate
 ```
 
-It reads `/etc/nlink-lab/daemon.toml` when it exists (every key is
-optional: `socket`, `operator_group`, `viewer_group`, `rescan_ms`,
-`metrics_interval_ms`, `audit_log`), and records every call an
-operator makes in `/var/lib/nlink-lab/audit.ndjson`.
+It records every call an operator makes in
+`/var/lib/nlink-lab/audit.ndjson`, publishes every lab's telemetry over
+Zenoh (what the viewer's live mode follows), and reads
+`/etc/nlink-lab/daemon.toml` when it exists — every key is optional:
 
-The viewer's live mode and the OpenMetrics endpoint are fed by the
-Zenoh backend, which attaches to one already-deployed lab and needs
-root:
+```toml
+socket = "/run/nlink-lab/api/api.sock"
+operator_group = "nlink-lab"
+viewer_group = "nlink-lab-viewer"
+rescan_ms = 1000             # how often it looks for labs
+metrics_interval_ms = 2000
+audit_log = "/var/lib/nlink-lab/audit.ndjson"
 
-```bash
-sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab-backend simple --interval 2 --http 127.0.0.1:9464
+[zenoh]
+enabled = true
+mode = "router"
+# this host's only: a unix socket (the viewer group's) or loopback
+listen = ["unixsock-stream//run/nlink-lab/zenoh/zenoh.sock"]
+
+[http]
+listen = "127.0.0.1:9464"    # /metrics and /api/v2; off without it
 ```
 
-- `--http ADDR` serves `/metrics` (OpenMetrics) and
-  `/api/v1/{snapshot,health,topology}`.
-- Same-host viewers find the lab through zenoh peer scouting, no
-  flags needed.
-- Across machines, listen on one side and connect from the other:
-  `--zenoh-listen tcp/0.0.0.0:7447` on the backend,
-  `--zenoh-connect tcp/<host>:7447` on the viewer.
+The Zenoh socket is the viewer group's: an operator who runs the viewer
+joins `nlink-lab-viewer` too.
 
 ---
 
@@ -284,14 +284,13 @@ breaking changes always carry a Migration note.
 ```bash
 sudo nlink-lab destroy --all          # tear down running labs first
 just uninstall                        # the CLI, the daemon and its units
-sudo rm -f /usr/local/bin/nlink-lab-backend
 sudo rm -f /usr/local/share/man/man1/nlink-lab.1
 sudo rm -rf /var/lib/nlink-lab        # state, logs, snapshots, events
 flatpak uninstall --user com.github.p13marc.NlinkLab
 ```
 
-`just uninstall` only removes the CLI; the backend, man page and
-state directory are the three lines after it.
+`just uninstall` removes the binaries and the units; the man page and
+the state directory are the two lines after it.
 
 ---
 

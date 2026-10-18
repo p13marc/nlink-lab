@@ -54,17 +54,32 @@ impl Drop for Daemon {
 
 /// A daemon whose operators and viewers are these groups.
 async fn daemon(operator_group: &str, viewer_group: &str) -> Daemon {
+    daemon_with(operator_group, viewer_group, |_, _| {}).await
+}
+
+/// [`daemon`], its configuration changed by `tweak` (given the daemon's
+/// directory) first.
+async fn daemon_with(
+    operator_group: &str,
+    viewer_group: &str,
+    tweak: impl FnOnce(&mut Config, &std::path::Path),
+) -> Daemon {
     let root = state_root();
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("api.sock");
-    let config = Config {
+    let mut config = Config {
         socket: socket.clone(),
         operator_group: operator_group.into(),
         viewer_group: viewer_group.into(),
         rescan_ms: 100,
         audit_log: Some(root.join("audit.ndjson")),
+        zenoh: nlink_labd::config::ZenohConfig {
+            enabled: false,
+            ..Default::default()
+        },
         ..Config::default()
     };
+    tweak(&mut config, dir.path());
     let listener = nlink_labd::listen::bind(&socket).unwrap();
     let shutdown = CancelToken::new();
     tokio::spawn(nlink_labd::serve(config, listener, shutdown.clone()));
@@ -425,4 +440,101 @@ async fn sessions_say_what_is_wrong() {
             other => panic!("{request:?}: {other:?}"),
         }
     }
+}
+
+/// `GET path` on `addr`: the status line and the body.
+async fn http_get(addr: std::net::SocketAddr, path: &str) -> (String, String) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    stream
+        .write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())
+        .await
+        .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).await.unwrap();
+    let (head, body) = response.split_once("\r\n\r\n").unwrap();
+    (head.lines().next().unwrap().to_string(), body.to_string())
+}
+
+#[tokio::test]
+async fn http_serves_the_labs_and_their_metrics() {
+    // a free port, taken back by the daemon
+    let addr = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let _d = daemon_with(&my_group(), "no-such-group-nlink", |c, _| {
+        c.http.listen = Some(addr);
+    })
+    .await;
+    // it binds as the daemon starts
+    for _ in 0..50 {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let (status, body) = http_get(addr, "/api/v2/labs").await;
+    assert!(status.contains("200"), "{status}");
+    let labs: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(labs["labs"], serde_json::json!([]));
+    let (status, body) = http_get(addr, "/metrics").await;
+    assert!(status.contains("200"), "{status}");
+    assert!(body.ends_with("# EOF\n"), "{body}");
+    let (status, _) = http_get(addr, "/api/v2/labs/nope").await;
+    assert!(status.contains("404"), "{status}");
+    let (status, _) = http_get(addr, "/nothing").await;
+    assert!(status.contains("404"), "{status}");
+}
+
+// zenoh refuses tokio's current-thread scheduler
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn zenoh_listens_on_its_socket_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let zsock = std::sync::Arc::new(std::sync::Mutex::new(std::path::PathBuf::new()));
+    let seen = zsock.clone();
+    let _d = daemon_with(&my_group(), "no-such-group-nlink", move |c, dir| {
+        let path = dir.join("zenoh/zenoh.sock");
+        c.zenoh = nlink_labd::config::ZenohConfig {
+            enabled: true,
+            listen: vec![format!("unixsock-stream/{}", path.display())],
+            ..Default::default()
+        };
+        *seen.lock().unwrap() = path;
+    })
+    .await;
+    let path = zsock.lock().unwrap().clone();
+    let mode =
+        |p: &std::path::Path| std::fs::metadata(p).map_or(0, |m| m.permissions().mode() & 0o777);
+    for _ in 0..100 {
+        if mode(&path) == 0o660 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(mode(&path), 0o660);
+    // closed to others before the socket existed
+    assert_eq!(mode(path.parent().unwrap()), 0o750);
+    // a client of the socket: no lab, so no topology answers
+    let mut config = zenoh::Config::default();
+    config.insert_json5("mode", "\"client\"").unwrap();
+    config
+        .insert_json5(
+            "connect/endpoints",
+            &serde_json::to_string(&[format!("unixsock-stream/{}", path.display())]).unwrap(),
+        )
+        .unwrap();
+    config
+        .insert_json5("scouting/multicast/enabled", "false")
+        .unwrap();
+    let session = zenoh::open(config).await.unwrap();
+    let replies = session.get("nlink-lab/*/topology").await.unwrap();
+    let mut answers = 0;
+    while let Ok(reply) = replies.recv_async().await {
+        if reply.result().is_ok() {
+            answers += 1;
+        }
+    }
+    assert_eq!(answers, 0);
+    session.close().await.unwrap();
 }

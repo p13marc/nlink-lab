@@ -27,10 +27,13 @@ pub mod listen;
 mod audit;
 mod calls;
 mod exec;
+mod http;
 mod hub;
 mod jobs;
 mod server;
 mod sessions;
+#[cfg(feature = "zenoh")]
+mod zenoh;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -64,9 +67,39 @@ pub async fn serve(
         clients: AtomicUsize::new(0),
         host: hostname(),
     });
+    if config.zenoh.enabled || config.http.listen.is_some() {
+        // the telemetry has every lab's metrics, not only those subscribed to
+        hub.collect_all();
+    }
+    if let Some(addr) = config.http.listen {
+        let http = tokio::net::TcpListener::bind(addr).await?;
+        tracing::info!("serving HTTP on {addr} (/metrics, /api/v2)");
+        tokio::spawn(http::serve(http, hub.clone(), shutdown.clone()));
+    }
+    if config.zenoh.enabled {
+        #[cfg(feature = "zenoh")]
+        {
+            let (zconfig, hub, stop) = (config.zenoh.clone(), hub.clone(), shutdown.clone());
+            let viewer = shared.groups.viewer;
+            tokio::spawn(async move {
+                if let Err(e) = zenoh::run(zconfig, hub, viewer, stop).await {
+                    tracing::warn!("zenoh telemetry: {e}");
+                }
+            });
+        }
+        #[cfg(not(feature = "zenoh"))]
+        tracing::warn!("built without zenoh: [zenoh] is ignored");
+    }
     tokio::spawn(hub.run(shutdown.clone()));
     server::serve(listener, shared, shutdown).await;
     Ok(())
+}
+
+/// Seconds since an RFC 3339 time; 0 when it does not parse.
+pub(crate) fn uptime(created_at: &str) -> u64 {
+    time::OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339)
+        .map(|t| (time::OffsetDateTime::now_utc() - t).whole_seconds().max(0) as u64)
+        .unwrap_or(0)
 }
 
 /// The host's name, as the handshake says it.

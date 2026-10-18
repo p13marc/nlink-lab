@@ -1087,7 +1087,6 @@ lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
 | `impair` | Modify link impairment at runtime |
 | `capture` | Capture packets on an interface (tcpdump) |
 | `diagnose` | Run diagnostics on a lab |
-| `daemon` | Start the Zenoh backend daemon for a running lab |
 | `top` | Live view of a lab: nodes, interfaces, flows (`--once --json`: one metrics snapshot) |
 | `init` | Create a topology file from a built-in template |
 | `render` | Expand loops/variables/imports and print flat NLL (`--json`, `--dot`, `--ascii`) |
@@ -1326,7 +1325,7 @@ nlink-lab events -L mylab                     # deployed, spawned, impaired, …
 nlink-lab events -L mylab --since 10m --kind impaired --kind partitioned
 sudo nlink-lab events -L mylab --follow       # + drift (RTNETLINK/nftables) + runtime
 sudo nlink-lab events -L mylab --follow --json --socket /run/mylab-events.sock
-sudo nlink-lab-backend mylab --http 127.0.0.1:9100  # then GET /api/v1/events, /api/v1/events/stream (SSE)
+curl http://127.0.0.1:9464/api/v2/labs/mylab/events/stream   # the daemon's SSE, with [http] set
 ```
 
 Lifecycle lines live in `<state>/<lab>/events.ndjson` (rotated at 10 MB);
@@ -1457,31 +1456,25 @@ it with `sudo systemctl enable --now nlink-labd.socket` (see
 commands through it, and `ssh HOST nlink-labd dial-stdio` carries it to
 a client on another machine.
 
-### Zenoh backend
+### Telemetry: Zenoh and HTTP
 
-The backend collects one lab's per-interface metrics (rx/tx bytes,
-packets, errors, drops, bitrates) and publishes them over Zenoh, for the
-viewer's live mode and Prometheus. Attach it to a running lab:
-
-```bash
-sudo nlink-lab-backend mylab --interval 2
-sudo nlink-lab-backend mylab --http 127.0.0.1:9464   # + OpenMetrics/JSON over HTTP
-```
-
-It publishes under `nlink-lab/<lab>/`:
+The daemon publishes every lab's per-interface metrics (rx/tx bytes,
+packets, errors, drops, bitrates) over Zenoh, for the viewer's live
+mode and other subscribers, under `nlink-lab/<lab>/`:
 
 - `metrics/snapshot` -- full metrics snapshot (all nodes, all interfaces)
 - `metrics/<node>/<iface>` -- per-interface metrics
-- `topology`, `health` -- the resolved topology without its secrets (also a queryable, so late subscribers get it) and the health summary discovery uses
-- `events`, `lifecycle` -- the lifecycle event log
-- `rpc/status` -- a lab summary, on request
+- `topology`, `health` -- the resolved topology without its secrets (also answered to a query, so late subscribers get it) and the health summary discovery uses
+- `events`, `lifecycle` -- interfaces and processes; the lifecycle event log
 
-It runs nothing and changes nothing: the daemon does, for callers it
-knows.
+It listens on its unix socket `/run/nlink-lab/zenoh/zenoh.sock`, the
+`nlink-lab-viewer` group's, and nowhere else unless `[zenoh]` in
+`/etc/nlink-lab/daemon.toml` says so (this host only).
 
-With `--http`, the same snapshot is available at `/metrics`
-(OpenMetrics) and `/api/v1/{snapshot,health,topology}` — which is
-what to point Prometheus at.
+With `[http] listen = "127.0.0.1:9464"`, every lab's metrics are at
+`/metrics` (OpenMetrics) — which is what to point Prometheus at — and
+the labs, their status, topology, metrics and events at `/api/v2/labs/…`
+as JSON.
 
 Each interface carries both the cumulative counters
 (`nlink_lab_iface_{rx,tx}_{bytes,packets}_total`, straight off

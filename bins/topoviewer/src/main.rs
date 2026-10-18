@@ -24,26 +24,36 @@ struct Cli {
     #[arg(short, long)]
     lab: Option<String>,
 
-    /// Zenoh connect endpoint.
+    /// Zenoh connect endpoint (default: the nlink-lab daemon's socket,
+    /// `unixsock-stream//run/nlink-lab/zenoh/zenoh.sock`).
     #[arg(long)]
     zenoh_connect: Option<String>,
 }
 
-/// Build the Zenoh configuration, reporting a bad `--zenoh-connect`
-/// instead of panicking on it (issue #48).
+/// Where the daemon publishes the labs' telemetry.
+const DAEMON_ZENOH: &str = "unixsock-stream//run/nlink-lab/zenoh/zenoh.sock";
+
+/// Build the Zenoh configuration: a client of `connect`, else of the
+/// daemon's socket, without multicast scouting; a bad `--zenoh-connect`
+/// is reported instead of panicking (issue #48).
 fn build_zenoh_config(connect: Option<&str>) -> Result<zenoh::Config, String> {
     let mut config = zenoh::Config::default();
-    if let Some(endpoint) = connect {
-        let parsed = endpoint
-            .parse()
-            .map_err(|e| format!("bad --zenoh-connect {endpoint:?}: {e}"))?;
-        // `set` returns the previous value on rejection, not an error type.
-        config
-            .connect
-            .endpoints
-            .set(vec![parsed])
-            .map_err(|_| format!("--zenoh-connect {endpoint:?} was rejected by zenoh"))?;
-    }
+    let endpoint = connect.unwrap_or(DAEMON_ZENOH);
+    let parsed = endpoint
+        .parse()
+        .map_err(|e| format!("bad --zenoh-connect {endpoint:?}: {e}"))?;
+    // `set` returns the previous value on rejection, not an error type.
+    config
+        .connect
+        .endpoints
+        .set(vec![parsed])
+        .map_err(|_| format!("--zenoh-connect {endpoint:?} was rejected by zenoh"))?;
+    config
+        .insert_json5("mode", "\"client\"")
+        .map_err(|e| format!("zenoh mode: {e}"))?;
+    config
+        .insert_json5("scouting/multicast/enabled", "false")
+        .map_err(|e| format!("zenoh scouting: {e}"))?;
     Ok(config)
 }
 
@@ -110,9 +120,9 @@ mod tests {
     }
 
     #[test]
-    fn build_zenoh_config_without_an_endpoint_is_the_default() {
+    fn build_zenoh_config_without_an_endpoint_is_the_daemons_socket() {
         let config = build_zenoh_config(None).expect("the default config");
         let json = serde_json::to_string(&config.connect.endpoints).unwrap();
-        assert!(!json.contains("127.0.0.1:7447"), "{json}");
+        assert!(json.contains("/run/nlink-lab/zenoh/zenoh.sock"), "{json}");
     }
 }

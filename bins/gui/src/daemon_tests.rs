@@ -384,3 +384,198 @@ async fn sessions_reach_a_real_lab() {
         String::from_utf8_lossy(&seen)
     );
 }
+
+/// A design deployed, changed and applied as the app does it: the plan
+/// first, the file sent with its imports, the progress as it comes, the
+/// diff before the apply, the assertions run. Root: it deploys a lab.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn workflows_reach_a_real_daemon() {
+    use crate::backend::SessionItem;
+    use nlink_lab_shared::api::{OpOutcome, OpPhase};
+    if !nlink_lab::privileges::has_privileges() {
+        eprintln!("skipping workflows_reach_a_real_daemon: requires root");
+        return;
+    }
+    state_root();
+    let lab = format!("gui-wf-{}", std::process::id());
+    struct Destroy(String);
+    impl Drop for Destroy {
+        fn drop(&mut self) {
+            let lab = self.0.clone();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                if let Ok(running) = nlink_lab::RunningLab::load(&lab) {
+                    let _ = rt.block_on(running.destroy());
+                }
+            })
+            .join()
+            .unwrap();
+        }
+    }
+    let _destroy = Destroy(lab.clone());
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("pair.nll"),
+        "lab \"pair\"\nnode r1\nnode r2\nlink r1:eth0 -- r2:eth0 { 10.238.0.1/24 -- 10.238.0.2/24 }\n",
+    )
+    .unwrap();
+    let main = dir.path().join("main.nll");
+    let design = |extra: &str| {
+        format!("import \"pair.nll\" as p\nlab \"{lab}\"\nvalidate {{ reach p-r1 p-r2 }}\n{extra}")
+    };
+    std::fs::write(&main, design("")).unwrap();
+    let d = daemon(false).await;
+    let (backend, _) = Backend::connect(Target::Daemon(d.unix.clone()))
+        .await
+        .unwrap();
+    let topology =
+        |path: &Path| serde_json::to_value(nlink_lab::parser::parse_file(path).unwrap()).unwrap();
+    let ends = |items: &[SessionItem]| -> Option<OpOutcome> {
+        items.iter().find_map(|i| match i {
+            SessionItem::Op(e) => match &e.phase {
+                OpPhase::Finished { outcome, .. } => Some(outcome.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+    };
+
+    // the plan, before anything runs
+    let Response::Report { report, .. } = backend
+        .call(Request::PlanDeploy {
+            topology: topology(&main),
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("a report")
+    };
+    let plan = crate::control::describe_plan(&report);
+    assert!(plan.contains("step(s)") && plan.contains("p-r1"), "{plan}");
+
+    // the deploy: the file and its import, its progress, its end
+    let source =
+        crate::effect::bundle(&crate::doc::Source::File(main.clone()), Vec::new()).unwrap();
+    assert_eq!(source.imports.keys().collect::<Vec<_>>(), ["pair.nll"]);
+    let items: Vec<SessionItem> = backend
+        .clone()
+        .session(
+            Request::Deploy {
+                topology: topology(&main),
+                options: Default::default(),
+                source: Some(source),
+            },
+            CancelToken::new(),
+        )
+        .collect()
+        .await;
+    assert!(
+        items
+            .iter()
+            .any(|i| matches!(i, SessionItem::Op(e) if matches!(e.phase, OpPhase::Stage { .. }))),
+        "{items:?}"
+    );
+    assert!(
+        matches!(ends(&items), Some(OpOutcome::Succeeded)),
+        "{items:?}"
+    );
+    assert!(
+        matches!(items.last(), Some(SessionItem::End(Ok(Response::Done { lab: l, .. }))) if *l == lab),
+        "{items:?}"
+    );
+    // the job's view of it
+    let mut job = crate::job::Job::new(1, &lab, crate::job::JobKind::Deploy);
+    for i in &items {
+        if let SessionItem::Op(e) = i {
+            job.event(e);
+        }
+    }
+    assert!(
+        matches!(job.state, crate::job::JobState::Done { ok: true, .. }),
+        "{job:?}"
+    );
+    assert!(job.op.is_some());
+
+    // a change: the diff first, then the apply
+    std::fs::write(
+        &main,
+        design("node c\nlink c:eth0 -- p-r1:eth1 { 10.237.0.2/24 -- 10.237.0.1/24 }\n"),
+    )
+    .unwrap();
+    let Response::Report { report, .. } = backend
+        .call(Request::CheckApply {
+            lab: lab.clone(),
+            topology: topology(&main),
+            options: Default::default(),
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("a report")
+    };
+    let diff = crate::control::describe_plan(&report);
+    assert!(diff.contains("+ node: c"), "{diff}");
+    let items: Vec<SessionItem> = backend
+        .clone()
+        .session(
+            Request::Apply {
+                lab: lab.clone(),
+                topology: topology(&main),
+                options: Default::default(),
+            },
+            CancelToken::new(),
+        )
+        .collect()
+        .await;
+    assert!(
+        matches!(items.last(), Some(SessionItem::End(Ok(_)))),
+        "{items:?}"
+    );
+    let Response::Topology { topology: now, .. } = backend
+        .call(Request::GetTopology {
+            lab: lab.clone(),
+            redact: true,
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("a topology")
+    };
+    assert!(now["nodes"].get("c").is_some());
+
+    // the assertions, each said
+    let items: Vec<SessionItem> = backend
+        .clone()
+        .session(
+            Request::RunAssertions { lab: lab.clone() },
+            CancelToken::new(),
+        )
+        .collect()
+        .await;
+    assert!(
+        items.iter().any(|i| matches!(
+            i,
+            SessionItem::Op(e) if matches!(&e.phase, OpPhase::Assertion { passed: true, .. })
+        )),
+        "{items:?}"
+    );
+    assert!(
+        matches!(items.last(), Some(SessionItem::End(Ok(_)))),
+        "{items:?}"
+    );
+
+    // and the lab goes
+    let items: Vec<SessionItem> = backend
+        .clone()
+        .session(Request::Destroy { lab: lab.clone() }, CancelToken::new())
+        .collect()
+        .await;
+    assert!(
+        matches!(items.last(), Some(SessionItem::End(Ok(_)))),
+        "{items:?}"
+    );
+    assert!(nlink_lab::RunningLab::load(&lab).is_err());
+}

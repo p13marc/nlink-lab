@@ -24,6 +24,7 @@ mod doc;
 mod effect;
 mod export;
 mod fake;
+mod job;
 mod keys;
 mod live;
 mod message;

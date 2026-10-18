@@ -483,24 +483,137 @@ pub fn split_command(input: &str) -> Vec<String> {
     words
 }
 
-/// A restore's dry run, said briefly: how many changes, and which.
+/// What the daemon says would happen, for people: a deploy's plan
+/// (`plan_deploy`: its steps, by stage) or a dry run (`check_apply`, a
+/// restore's: what would change, by kind of thing).
 pub fn describe_plan(report: &serde_json::Value) -> String {
-    if report.get("no_op").and_then(|v| v.as_bool()) == Some(true) {
-        return "Nothing would change: the lab is as the snapshot has it.".into();
+    use serde_json::Value;
+    if let Value::Array(ops) = report {
+        let mut out = format!("{} step(s)\n", ops.len());
+        let mut stage = "";
+        for op in ops {
+            let s = op.get("stage").and_then(Value::as_str).unwrap_or("");
+            if s != stage {
+                stage = s;
+                out.push_str(&format!("{stage}\n"));
+            }
+            out.push_str(&format!("  {}\n", label(op.get("op").unwrap_or(op))));
+        }
+        return out;
+    }
+    if report.get("no_op").and_then(Value::as_bool) == Some(true) {
+        return "Nothing would change.".into();
     }
     let count = report
         .get("change_count")
-        .and_then(|v| v.as_u64())
+        .and_then(Value::as_u64)
         .unwrap_or(0);
-    let mut out = format!("{count} change(s):\n");
-    let mut rest = report.clone();
-    if let Some(o) = rest.as_object_mut() {
-        for k in ["schema_version", "lab", "no_op", "change_count"] {
-            o.remove(k);
+    let mut out = format!("{count} change(s)\n");
+    if let Some(Value::Object(topo)) = report.get("topology") {
+        // nodes, networks, links first; what is added before what goes
+        const FIRST: [&str; 3] = ["nodes", "networks", "links"];
+        let mut keys: Vec<(&String, &Value)> = topo.iter().collect();
+        keys.sort_by_key(|(k, _)| {
+            let (what, how) = k.rsplit_once('_').unwrap_or((k.as_str(), ""));
+            let rank = FIRST.iter().position(|f| *f == what).unwrap_or(FIRST.len());
+            let how = ["added", "removed", "changed"]
+                .iter()
+                .position(|h| *h == how);
+            (rank, if rank < FIRST.len() { "" } else { what }, how)
+        });
+        for (key, items) in keys {
+            let (sign, what) = match key.rsplit_once('_') {
+                Some((what, "added")) => ("+", what),
+                Some((what, "removed")) => ("-", what),
+                Some((what, "changed")) => ("~", what),
+                _ => ("~", key.as_str()),
+            };
+            let what = what.trim_end_matches('s').replace('_', " ");
+            for item in items.as_array().into_iter().flatten() {
+                out.push_str(&format!("  {sign} {what}: {}\n", label(item)));
+            }
         }
     }
-    out.push_str(&serde_json::to_string_pretty(&rest).unwrap_or_default());
+    // the kernel's side, per node: what each layer would change
+    for layer in ["network", "nftables", "wireguard"] {
+        let Some(Value::Object(nodes)) = report.get(layer) else {
+            continue;
+        };
+        for (node, diff) in nodes {
+            let parts: Vec<String> = diff
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter_map(|(k, v)| match v {
+                    Value::Array(a) if !a.is_empty() => {
+                        Some(format!("{} {}", a.len(), k.replace('_', " ")))
+                    }
+                    Value::Object(o) if !o.is_empty() => Some(k.replace('_', " ")),
+                    Value::Bool(true) => Some(k.replace('_', " ")),
+                    _ => None,
+                })
+                .collect();
+            if !parts.is_empty() {
+                out.push_str(&format!("  ~ {layer} on {node}: {}\n", parts.join(", ")));
+            }
+        }
+    }
+    for r in report
+        .get("removals")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        out.push_str(&format!("  - {}\n", label(r)));
+    }
+    for op in report
+        .get("ops")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        out.push_str(&format!("  + {}\n", label(op)));
+    }
     out
+}
+
+/// One thing of a report, named: a string as it is, a link by its
+/// ends, else by the first field that names it.
+fn label(v: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match v {
+        Value::String(s) => s.clone(),
+        // `(endpoint, impairment)` pairs
+        Value::Array(a) if a.first().is_some_and(Value::is_string) => label(&a[0]),
+        Value::Object(o) => {
+            if let Some([a, b]) = o
+                .get("endpoints")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+            {
+                return format!("{} -- {}", label(a), label(b));
+            }
+            let name = ["name", "endpoint", "network", "node"]
+                .iter()
+                .find_map(|k| o.get(*k).and_then(Value::as_str));
+            let detail = ["dest", "key", "src_node"]
+                .iter()
+                .find_map(|k| o.get(*k).and_then(Value::as_str));
+            match (name, detail) {
+                (Some(n), Some(d)) => format!("{n} {d}"),
+                (Some(n), None) => n.to_string(),
+                _ => {
+                    let s = v.to_string();
+                    if s.len() > 80 {
+                        format!("{}…", &s[..s.floor_char_boundary(79)])
+                    } else {
+                        s
+                    }
+                }
+            }
+        }
+        other => other.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -610,11 +723,30 @@ mod tests {
         assert_eq!(p.rate_cap().as_deref(), Some("10mbit"));
         assert!(describe_plan(&serde_json::json!({"no_op": true})).starts_with("Nothing"));
         let plan = describe_plan(&serde_json::json!({
-            "schema_version": 3, "lab": "x", "no_op": false, "change_count": 2,
-            "topology": {"impairments": ["a:eth0"]}
+            "schema_version": 3, "lab": "x", "no_op": false, "change_count": 4,
+            "topology": {
+                "nodes_added": ["c"],
+                "links_removed": [{"endpoints": ["a:eth0", "b:eth0"], "addresses": null}],
+                "impairments_added": [["a:eth1", {"delay": "10ms"}]],
+                "routes_changed": [{"node": "a", "dest": "default"}],
+            },
+            "network": {"a": {"links_to_add": [{}], "links_to_remove": [], "purge": false}},
+            "removals": ["delete veth b:eth0"],
         }));
-        assert!(
-            plan.starts_with("2 change(s)") && plan.contains("a:eth0") && !plan.contains("schema")
+        assert_eq!(
+            plan,
+            "4 change(s)\n  + node: c\n  - link: a:eth0 -- b:eth0\n  + impairment: a:eth1\n  \
+             ~ route: a default\n  ~ network on a: 1 links to add\n  - delete veth b:eth0\n"
+        );
+        // a deploy's plan, by stage
+        let plan = describe_plan(&serde_json::json!([
+            {"stage": "namespaces", "op": "create netns a"},
+            {"stage": "namespaces", "op": "create netns b"},
+            {"stage": "links", "op": "veth a:eth0 -- b:eth0"},
+        ]));
+        assert_eq!(
+            plan,
+            "3 step(s)\nnamespaces\n  create netns a\n  create netns b\nlinks\n  veth a:eth0 -- b:eth0\n"
         );
     }
 }

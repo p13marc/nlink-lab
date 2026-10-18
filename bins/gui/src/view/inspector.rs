@@ -174,6 +174,7 @@ fn lab<'a>(tab: &'a Tab, topo: &'a Topology, op: bool) -> Column<'a, Message> {
     }
     c = c.push(muted("Click a node, a link or an interface to inspect it."));
     if let Some(l) = tab.live() {
+        c = c.push(controls::runs(l, topo, op));
         c = c.push(controls::snapshots(l, op));
         c = c.push(controls::destroy(l, op));
     }

@@ -23,6 +23,7 @@ pub fn view<'a>(
         (DockTab::Processes, _, Some(l)) => processes(tab, l, app.operator()),
         (DockTab::Console, _, Some(l)) => console(tab, l, app.operator()),
         (DockTab::Terminal, _, Some(l)) => terminal(l, app.operator(), terminals),
+        (DockTab::Jobs, _, _) => jobs(app),
         (_, _, Some(l)) => events(l),
         _ => container(muted("Nothing here.")).padding(10).into(),
     }
@@ -390,4 +391,113 @@ fn terminal<'a>(
         _ => muted("The shell opened in the desktop's terminal.").into(),
     };
     column![chips, widget].spacing(6).padding(6).into()
+}
+
+/// The long operations: each one's progress, the chosen one's account,
+/// and the daemon's other operations to follow.
+fn jobs(app: &App) -> Element<'_, Message> {
+    use crate::job::JobState;
+    use crate::message::WorkflowMsg as W;
+    let w = Message::Workflow;
+    let mut col = column![].spacing(6).padding(8);
+    if app.jobs.is_empty() && app.others.is_empty() {
+        return col
+            .push(muted(
+                "Deploys, applies, scenarios, benchmarks and assertions run here.",
+            ))
+            .into();
+    }
+    for j in app.jobs.iter().rev() {
+        let active = app.active_job == Some(j.id);
+        let status = match &j.state {
+            JobState::Running => {
+                let mut s = j
+                    .stage
+                    .as_ref()
+                    .map(|(name, i, of)| format!("{name} ({}/{of})", i + 1))
+                    .unwrap_or_else(|| "starting".into());
+                if let Some(wait) = &j.waiting {
+                    s = format!("{s} · {wait}");
+                }
+                s
+            }
+            JobState::Done { text, .. } => text.clone(),
+        };
+        col = col.push(
+            row![
+                button(text(j.title()).size(13))
+                    .style(if active {
+                        button::secondary
+                    } else {
+                        button::text
+                    })
+                    .padding([2, 8])
+                    .width(Length::Fixed(220.0))
+                    .on_press(w(W::Select(j.id))),
+                iced::widget::progress_bar(0.0..=1.0, j.progress())
+                    .girth(8)
+                    .length(Length::Fixed(160.0)),
+                text(status).size(12).width(Length::Fill),
+                if j.running() {
+                    button(text("Cancel").size(12))
+                        .style(button::secondary)
+                        .padding([2, 8])
+                        .on_press(w(W::Cancel(j.id)))
+                } else {
+                    button(text("×").size(12))
+                        .style(button::text)
+                        .padding([2, 6])
+                        .on_press(w(W::Forget(j.id)))
+                },
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
+        );
+    }
+    for o in &app.others {
+        col = col.push(
+            row![
+                text(format!("{} of {} (by {})", o.kind, o.lab, o.actor))
+                    .size(13)
+                    .width(Length::Fill),
+                button(text("Follow").size(12))
+                    .style(button::secondary)
+                    .padding([2, 8])
+                    .on_press(w(W::Follow(o.op.clone()))),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
+        );
+    }
+    if let Some(j) = app
+        .active_job
+        .and_then(|id| app.jobs.iter().find(|j| j.id == id))
+    {
+        let lines = j.lines.iter().fold(
+            column![].spacing(2).width(Length::Fill),
+            |c, (tone, line)| {
+                use crate::live::Tone as T;
+                use nlink_lab_view::scene::Tone;
+                let tone = match tone {
+                    T::Info => Tone::Normal,
+                    T::Good => Tone::Good,
+                    T::Warn => Tone::Warn,
+                    T::Bad => Tone::Bad,
+                };
+                c.push(
+                    text(line.as_str())
+                        .size(12)
+                        .font(Font::MONOSPACE)
+                        .style(super::tone_text(tone)),
+                )
+            },
+        );
+        col = col.push(iced::widget::rule::horizontal(1)).push(
+            scrollable(lines)
+                .anchor_bottom()
+                .width(Length::Fill)
+                .height(Length::Fill),
+        );
+    }
+    col.into()
 }

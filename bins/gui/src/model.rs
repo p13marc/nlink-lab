@@ -15,6 +15,7 @@ use nlink_lab_view::{Hit, MetricsStore, Positions, Scene, TopoGraph};
 use crate::backend::{Backend, Target};
 use crate::control::{Confirm, ImpairEditor, PairEditor, SnapshotForm, SpawnForm};
 use crate::doc::{Problem, Source};
+use crate::job::Job;
 use crate::live::EventLine;
 use crate::session::{Session, TermInfo};
 use crate::settings::{Dirs, LayoutPref, Settings};
@@ -39,6 +40,13 @@ pub struct App {
     pub help: bool,
     /// A change waiting for the user's yes.
     pub confirm: Option<Confirm>,
+    /// A deploy or an apply being prepared.
+    pub panel: Option<Panel>,
+    /// Long operations, newest last.
+    pub jobs: Vec<Job>,
+    pub active_job: Option<u64>,
+    /// Operations the daemon runs that no job here follows.
+    pub others: Vec<nlink_lab_shared::api::OpInfo>,
     /// What to connect to; `None`: nothing.
     pub target: Option<Target>,
     /// The daemon, or the demo's stand-in.
@@ -63,6 +71,10 @@ impl App {
             toasts: Vec::new(),
             help: false,
             confirm: None,
+            panel: None,
+            jobs: Vec::new(),
+            active_job: None,
+            others: Vec::new(),
             target: None,
             conn: Conn::Off,
             epoch: 0,
@@ -215,7 +227,59 @@ pub enum DockTab {
     Processes,
     Console,
     Terminal,
+    Jobs,
 }
+
+/// A deploy or an apply being prepared: its options, its preview.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Panel {
+    Deploy {
+        tab: TabId,
+        options: nlink_lab_shared::api::DeployOptions,
+        preview: Preview,
+    },
+    Apply {
+        tab: TabId,
+        lab: String,
+        options: nlink_lab_shared::api::ApplyOptions,
+        preview: Preview,
+    },
+}
+
+/// The lab a deploy of `name` makes: with its suffix, as `--suffix`
+/// joins it (`Lab::add_suffix`).
+pub fn deployed_name(name: &str, suffix: Option<&str>) -> String {
+    match suffix {
+        Some(s) => format!("{name}-{s}"),
+        None => name.to_string(),
+    }
+}
+
+/// A plan or a diff, asked for.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum Preview {
+    #[default]
+    None,
+    Asked,
+    Got(Result<String, String>),
+}
+
+impl Panel {
+    pub fn tab(&self) -> TabId {
+        match self {
+            Panel::Deploy { tab, .. } | Panel::Apply { tab, .. } => *tab,
+        }
+    }
+
+    pub fn preview_mut(&mut self) -> &mut Preview {
+        match self {
+            Panel::Deploy { preview, .. } | Panel::Apply { preview, .. } => preview,
+        }
+    }
+}
+
+/// Jobs kept; the oldest ended ones go first.
+pub const JOBS: usize = 20;
 
 /// A topology on the canvas: from its source, or a running lab's.
 pub struct Tab {
@@ -440,12 +504,13 @@ impl Tab {
     /// The dock pages of this kind of tab.
     pub fn dock_pages(&self) -> &'static [DockTab] {
         match self.kind {
-            Kind::Design(_) => &[DockTab::Problems, DockTab::Source],
+            Kind::Design(_) => &[DockTab::Problems, DockTab::Source, DockTab::Jobs],
             Kind::Live(_) => &[
                 DockTab::Events,
                 DockTab::Processes,
                 DockTab::Console,
                 DockTab::Terminal,
+                DockTab::Jobs,
             ],
         }
     }

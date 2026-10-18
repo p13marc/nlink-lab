@@ -84,6 +84,33 @@ fn toolbar<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
     ]
     .spacing(8)
     .align_y(Alignment::Center);
+    // deploy and apply, for an operator connected to a daemon
+    if app.operator() {
+        use crate::message::WorkflowMsg;
+        let wf = |label: &'a str, m: WorkflowMsg, primary: bool| {
+            button(text(label).size(13))
+                .style(if primary {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .on_press(Message::Workflow(m))
+        };
+        if tab.design().is_some() && tab.topology.is_some() {
+            let lab = tab
+                .topology
+                .as_ref()
+                .map(|t| t.lab.name.as_str())
+                .unwrap_or("");
+            if app.labs.iter().any(|l| l.lab == lab) {
+                bar = bar.push(wf("Apply…", WorkflowMsg::AskApply, false));
+            }
+            bar = bar.push(wf("Deploy…", WorkflowMsg::AskDeploy, true));
+        }
+        if tab.live().is_some_and(|l| !l.gone) {
+            bar = bar.push(wf("Apply a file…", WorkflowMsg::ApplyFile, false));
+        }
+    }
     if matches!(
         tab.design().map(|d| &d.source),
         Some(Source::Untitled { .. })
@@ -198,6 +225,7 @@ fn dock_title(tab: &Tab) -> Element<'_, Message> {
             DockTab::Terminal => {
                 format!("Terminal ({})", tab.live().map_or(0, |l| l.terminals.len()))
             }
+            DockTab::Jobs => "Jobs".into(),
         };
         button(text(label).size(13))
             .style(if tab.dock == page {

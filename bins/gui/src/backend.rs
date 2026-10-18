@@ -9,7 +9,8 @@ use iced::futures::stream::{self, BoxStream, StreamExt};
 use nlink_lab::CancelToken;
 use nlink_lab_client::{CallEvent, Client, Endpoint};
 use nlink_lab_shared::api::{
-    DataStream, ErrorCode, LabSummary, Notification, Request, Response, Role, StreamItem, Topic,
+    DataStream, ErrorCode, LabSummary, Notification, OpEvent, Request, Response, Role, StreamItem,
+    Topic,
 };
 
 use crate::fake::Fake;
@@ -44,6 +45,8 @@ pub enum Feed {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionItem {
     Data(DataStream, Vec<u8>),
+    /// A long operation's progress.
+    Op(OpEvent),
     /// The end: the answer, or why not.
     End(Result<Response, String>),
 }
@@ -112,8 +115,9 @@ impl Backend {
         }
     }
 
-    /// A session's data until it ends. `cancel` stops it: a command is
-    /// sent `SIGINT`, anything else is cancelled.
+    /// A session's data — or a long operation's progress — until it ends.
+    /// `cancel` stops it: a command is sent `SIGINT`, anything else is
+    /// cancelled (an operation rolls back).
     pub fn session(self, request: Request, cancel: CancelToken) -> BoxStream<'static, SessionItem> {
         match self {
             Backend::Fake(f) => f.session(request, cancel),
@@ -257,6 +261,9 @@ fn daemon_session(
                         }
                         Some(CallEvent::End(r)) => {
                             return Some((Some(SessionItem::End(r.map_err(|e| e.message))), State::Done));
+                        }
+                        Some(CallEvent::Item(StreamItem::Op { event })) => {
+                            return Some((Some(SessionItem::Op(event)), State::Running { call, stopping }));
                         }
                         Some(CallEvent::Item(_)) => continue,
                         None => {

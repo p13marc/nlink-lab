@@ -70,7 +70,7 @@ jobs:
         run: |
           bin=$(cargo test -p nlink-lab-gui --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/nlink_lab_gui-[^"]+' | head -1)
           test -n "$bin" || { echo "::error::desktop app test binary not found"; exit 1; }
-          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --exact daemon_tests::sessions_reach_a_real_lab
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --exact daemon_tests::sessions_reach_a_real_lab daemon_tests::workflows_reach_a_real_daemon
       - name: No lab debris left behind
         if: always()
         run: |

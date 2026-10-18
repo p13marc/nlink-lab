@@ -331,3 +331,97 @@ fn the_console_renders() {
     }
     snapshot(&app, &Theme::Dark, "session-console");
 }
+
+#[test]
+fn the_workflows_render() {
+    use crate::backend::SessionItem;
+    use crate::message::WorkflowMsg as W;
+    use nlink_lab_shared::api::{OpEvent, OpPhase, WaitKind};
+    let mut app = App::new(crate::settings::Settings::default(), None);
+    crate::reduce::testing::demo(&mut app);
+    let e = crate::reduce::open(
+        &mut app,
+        Source::Untitled {
+            name: "showcase".into(),
+            text: LAB.into(),
+        },
+        Default::default(),
+    );
+    settle(&mut app, e);
+    for m in [W::AskDeploy, W::Suffix("blue".into()), W::Preview] {
+        let e = reduce(&mut app, Message::Workflow(m));
+        settle(&mut app, e);
+    }
+    snapshot(&app, &Theme::Light, "workflow-deploy");
+    assert!(matches!(
+        &app.panel,
+        Some(crate::model::Panel::Deploy { options, .. }) if options.suffix.as_deref() == Some("blue")
+    ));
+    // a deploy under way: its stage, steps, what it waits for
+    let _running = reduce(&mut app, Message::Workflow(W::Go));
+    let job = app.jobs.last().unwrap().id;
+    let ev = |phase| OpEvent {
+        op: "op-7".into(),
+        lab: "showcase-blue".into(),
+        seq: 0,
+        ts_ms: 0,
+        phase,
+    };
+    for phase in [
+        OpPhase::Started {
+            kind: "deploy".into(),
+            actor: None,
+        },
+        OpPhase::Planned {
+            ops: 31,
+            removals: 0,
+            stages: vec![],
+        },
+        OpPhase::Stage {
+            stage: "processes".into(),
+            index: 12,
+            of: 13,
+            ops: 2,
+        },
+        OpPhase::Step {
+            done: 29,
+            total: 31,
+            describe: "start db".into(),
+        },
+        OpPhase::Waiting {
+            what: WaitKind::Healthcheck {
+                node: "east-db".into(),
+            },
+            detail: None,
+            deadline_ms: None,
+        },
+    ] {
+        reduce(
+            &mut app,
+            Message::JobItem {
+                job,
+                item: SessionItem::Op(ev(phase)),
+            },
+        );
+    }
+    assert_eq!(app.jobs.last().unwrap().title(), "deploy showcase-blue");
+    reduce(&mut app, Message::Dock(crate::model::DockTab::Jobs));
+    snapshot(&app, &Theme::Dark, "workflow-jobs");
+    // a lab's runs, and a scenario's actions as they happen
+    let e = reduce(&mut app, Message::OpenLab("demo-wan".into()));
+    settle(&mut app, e);
+    let e = reduce(
+        &mut app,
+        Message::Workflow(W::RunScenario("wan-flap".into())),
+    );
+    settle(&mut app, e);
+    let j = app.jobs.last().unwrap();
+    assert!(
+        j.lines
+            .iter()
+            .any(|(_, l)| l.contains("down router-a:wan0")),
+        "{:?}",
+        j.lines
+    );
+    snapshot(&app, &Theme::Light, "workflow-runs");
+}

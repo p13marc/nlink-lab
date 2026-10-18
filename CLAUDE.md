@@ -215,6 +215,8 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
   term.rs           #   terminal host: iced_term widgets (feature embedded-terminal)
                     #   or an external emulator, both running `pty-bridge`
   bridge.rs         #   `nlink-lab-gui pty-bridge`: raw pty <-> the daemon's `shell`
+  job.rs            #   long operations (deploy/apply/scenario/…) from OpEvents:
+                    #   stage, plan-wide steps, waits, lines, outcome, cancel
   message.rs        #   Message, CanvasMsg, Shortcut
   reduce.rs         #   reduce(app, msg) -> Vec<Effect>: every behaviour, pure, tested
   effect.rs         #   Effect + run: loads, layouts (off the UI thread), rfd dialogs,

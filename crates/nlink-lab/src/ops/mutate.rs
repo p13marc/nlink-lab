@@ -514,6 +514,14 @@ pub async fn handle(req: Request, ctx: &OpCtx) -> Option<Result<Response>> {
             ctx.set_lab(&lab);
             ctx.started();
             let results = crate::deploy::run_assertions(&running, running.topology());
+            // each said, as after a deploy or an apply
+            for r in &results {
+                ctx.emit(api::OpPhase::Assertion {
+                    description: r.description.clone(),
+                    passed: r.passed,
+                    detail: r.detail.clone(),
+                });
+            }
             let outcome = Ok(());
             ctx.finished(&outcome, false);
             Ok(done(ctx, &lab, serde_json::to_value(results)?))

@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use iced::futures::stream::{self, BoxStream, StreamExt};
 use nlink_lab::Topology;
 use nlink_lab_shared::api::{
-    EndpointImpairment, ImpairmentSpec, LabSummary, Notification, ProcessDto, Request, Response,
-    Role, SnapshotDto, Topic,
+    EndpointImpairment, ImpairmentSpec, LabSummary, Notification, OpPhase, ProcessDto, Request,
+    Response, Role, SnapshotDto, Topic,
 };
 use nlink_lab_shared::metrics::{InterfaceMetrics, MetricsSnapshot, NodeMetrics};
 
@@ -41,6 +41,43 @@ pub const LABS: &[(&str, &str)] = &[
     ("demo-campus", "vlan-trunk"),
 ];
 
+/// An assertion, said as in a `validate` block.
+fn assertion_text(a: &nlink_lab::types::Assertion) -> String {
+    use nlink_lab::types::Assertion;
+    match a {
+        Assertion::Reach { from, to } => format!("reach {from} {to}"),
+        Assertion::NoReach { from, to } => format!("no-reach {from} {to}"),
+        other => format!("{other:?}"),
+    }
+}
+
+/// A scenario's action, said as in its `at` block.
+fn action_text(a: &nlink_lab::types::ScenarioAction) -> String {
+    use nlink_lab::types::ScenarioAction;
+    match a {
+        ScenarioAction::Down(ep) => format!("down {ep}"),
+        ScenarioAction::Up(ep) => format!("up {ep}"),
+        ScenarioAction::Clear(ep) => format!("clear {ep}"),
+        ScenarioAction::Validate(v) => format!(
+            "validate {}",
+            v.iter().map(assertion_text).collect::<Vec<_>>().join(", ")
+        ),
+        ScenarioAction::Exec { node, cmd } => format!("exec {node} {}", cmd.join(" ")),
+        ScenarioAction::Log(m) => format!("log {m}"),
+    }
+}
+
+/// What the WAN demo can run: an assertion, a scenario.
+const WAN_RUNS: &str = r#"
+validate { reach host-a host-b }
+scenario "wan-flap" {
+  at 0s { validate { reach host-a host-b } }
+  at 2s { down router-a:wan0 }
+  at 4s { validate { no-reach host-a host-b } }
+  at 6s { up router-a:wan0 }
+}
+"#;
+
 impl Default for Fake {
     fn default() -> Self {
         Self::new()
@@ -53,8 +90,11 @@ impl Fake {
             .iter()
             .filter_map(|(name, template)| {
                 let t = nlink_lab::templates::get(template)?;
-                let topology =
-                    nlink_lab::parser::parse(&nlink_lab::templates::render(t, Some(name))).ok()?;
+                let mut text = nlink_lab::templates::render(t, Some(name));
+                if *template == "wan" {
+                    text.push_str(WAN_RUNS);
+                }
+                let topology = nlink_lab::parser::parse(&text).ok()?;
                 Some(new_lab(name, topology))
             })
             .collect();
@@ -178,6 +218,46 @@ impl Fake {
             Request::GetMetrics { lab } => Response::Metrics {
                 snapshot: self.metrics(&lab, self.start.elapsed().as_secs_f64())?,
             },
+            Request::ListOps => Response::Ops { ops: Vec::new() },
+            Request::PlanDeploy { topology } => {
+                let t: Topology = serde_json::from_value(topology).map_err(|e| e.to_string())?;
+                // as the daemon says it: the plan's ops, with their stage
+                let mut ops: Vec<serde_json::Value> = t
+                    .nodes
+                    .keys()
+                    .map(|n| serde_json::json!({"stage": "namespaces", "op": format!("create namespace {n}")}))
+                    .collect();
+                ops.extend(t.links.iter().map(|l| {
+                    serde_json::json!({"stage": "links",
+                        "op": format!("create veth {} -- {}", l.endpoints[0], l.endpoints[1])})
+                }));
+                Response::Report {
+                    kind: "plan".into(),
+                    report: serde_json::Value::Array(ops),
+                }
+            }
+            Request::CheckApply { lab, topology, .. } => {
+                let now = self.lab(&lab)?.topology;
+                let t: Topology = serde_json::from_value(topology).map_err(|e| e.to_string())?;
+                let added: Vec<&String> = t
+                    .nodes
+                    .keys()
+                    .filter(|n| !now.nodes.contains_key(*n))
+                    .collect();
+                let removed: Vec<&String> = now
+                    .nodes
+                    .keys()
+                    .filter(|n| !t.nodes.contains_key(*n))
+                    .collect();
+                Response::Report {
+                    kind: "dry_run".into(),
+                    report: serde_json::json!({
+                        "lab": lab, "no_op": added.is_empty() && removed.is_empty(),
+                        "change_count": added.len() + removed.len(),
+                        "topology": {"nodes_added": added, "nodes_removed": removed},
+                    }),
+                }
+            }
             Request::ListSnapshots { lab } => Response::Snapshots {
                 snapshots: self.lab(&lab)?.snapshots,
             },
@@ -434,8 +514,224 @@ impl Fake {
                 }
             })
             .boxed(),
-            _ => stream::iter([SessionItem::End(Err("the demo captures nothing".into()))]).boxed(),
+            Request::Deploy {
+                topology, options, ..
+            } => {
+                let t: Topology = match serde_json::from_value(topology) {
+                    Ok(t) => t,
+                    Err(e) => return stream::iter([SessionItem::End(Err(e.to_string()))]).boxed(),
+                };
+                let name = crate::model::deployed_name(&t.lab.name, options.suffix.as_deref());
+                if self.lab(&name).is_ok() && !options.force {
+                    return stream::iter([SessionItem::End(Err(format!(
+                        "lab '{name}' already exists"
+                    )))])
+                    .boxed();
+                }
+                let stages = ["namespaces", "links", "addresses", "processes"];
+                let fake = self.clone();
+                let lab = name.clone();
+                self.op(&name, "deploy", &stages, vec![], cancel, move || {
+                    let mut labs = fake.labs();
+                    labs.retain(|l| l.name != lab);
+                    labs.push(new_lab(&lab, t));
+                    Ok(Response::Done {
+                        op: "demo-op".into(),
+                        lab,
+                        report: serde_json::Value::Null,
+                    })
+                })
+            }
+            Request::Apply { lab, topology, .. } => {
+                let t: Topology = match serde_json::from_value(topology) {
+                    Ok(t) => t,
+                    Err(e) => return stream::iter([SessionItem::End(Err(e.to_string()))]).boxed(),
+                };
+                let fake = self.clone();
+                let name = lab.clone();
+                self.op(
+                    &lab,
+                    "apply",
+                    &["links", "addresses"],
+                    vec![],
+                    cancel,
+                    move || {
+                        let mut labs = fake.labs();
+                        let l = labs
+                            .iter_mut()
+                            .find(|l| l.name == name)
+                            .ok_or_else(|| format!("lab '{name}' not found"))?;
+                        l.topology = t;
+                        Ok(Response::Done {
+                            op: "demo-op".into(),
+                            lab: name,
+                            report: serde_json::Value::Null,
+                        })
+                    },
+                )
+            }
+            Request::RunScenario { lab, name } | Request::RunBenchmark { lab, name } => {
+                // a scenario's actions, each said when it happens
+                let lines = self
+                    .lab(&lab)
+                    .ok()
+                    .and_then(|l| l.topology.scenarios.into_iter().find(|s| s.name == name))
+                    .map(|s| {
+                        s.steps
+                            .iter()
+                            .flat_map(|step| {
+                                step.actions.iter().map(|a| OpPhase::ScenarioAction {
+                                    time_ms: step.time_ms,
+                                    description: action_text(a),
+                                    ok: true,
+                                    detail: None,
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let what = name.clone();
+                self.op(&lab, "scenario", &["steps"], lines, cancel, move || {
+                    Ok(Response::Report {
+                        kind: "scenario".into(),
+                        report: serde_json::json!({"name": what, "passed": true}),
+                    })
+                })
+            }
+            Request::RunAssertions { lab } => {
+                let assertions = self
+                    .lab(&lab)
+                    .map(|l| l.topology.assertions)
+                    .unwrap_or_default();
+                let lines = assertions
+                    .iter()
+                    .map(|a| OpPhase::Assertion {
+                        description: assertion_text(a),
+                        passed: true,
+                        detail: None,
+                    })
+                    .collect();
+                let n = assertions.len();
+                self.op(
+                    &lab,
+                    "assertions",
+                    &["assertions"],
+                    lines,
+                    cancel,
+                    move || {
+                        Ok(Response::Report {
+                            kind: "assertions".into(),
+                            report: serde_json::json!({"passed": n, "failed": 0}),
+                        })
+                    },
+                )
+            }
+            _ => stream::iter([SessionItem::End(Err("the demo does not do that".into()))]).boxed(),
         }
+    }
+
+    /// A made-up operation: its stages, a step each, a pause between them,
+    /// then `done`; cancelled, it says so and does nothing.
+    fn op(
+        self: &std::sync::Arc<Self>,
+        lab: &str,
+        kind: &str,
+        stages: &[&str],
+        lines: Vec<nlink_lab_shared::api::OpPhase>,
+        cancel: nlink_lab::CancelToken,
+        done: impl FnOnce() -> Result<Response, String> + Send + 'static,
+    ) -> BoxStream<'static, SessionItem> {
+        use nlink_lab_shared::api::{OpEvent, OpOutcome};
+        let ev = |seq: u64, phase: OpPhase| {
+            SessionItem::Op(OpEvent {
+                op: "demo-op".into(),
+                lab: lab.to_string(),
+                seq,
+                ts_ms: 0,
+                phase,
+            })
+        };
+        let n = stages.len();
+        let mut items = vec![ev(
+            0,
+            OpPhase::Started {
+                kind: kind.to_string(),
+                actor: Some("you".into()),
+            },
+        )];
+        for (i, stage) in stages.iter().enumerate() {
+            items.push(ev(
+                1 + 2 * i as u64,
+                OpPhase::Stage {
+                    stage: stage.to_string(),
+                    index: i + 1,
+                    of: n,
+                    ops: 1,
+                },
+            ));
+            items.push(ev(
+                2 + 2 * i as u64,
+                OpPhase::Step {
+                    done: i + 1,
+                    total: n,
+                    describe: format!("{stage} done"),
+                },
+            ));
+        }
+        for (i, phase) in lines.into_iter().enumerate() {
+            items.push(ev(50 + i as u64, phase));
+        }
+        let finished = ev(
+            99,
+            OpPhase::Finished {
+                outcome: OpOutcome::Succeeded,
+                elapsed_ms: 150 * n as u64,
+            },
+        );
+        let cancelled = ev(
+            99,
+            OpPhase::Finished {
+                outcome: OpOutcome::Cancelled,
+                elapsed_ms: 0,
+            },
+        );
+        let state = (
+            items.into_iter(),
+            Some(done),
+            Some(finished),
+            cancelled,
+            false,
+        );
+        stream::unfold(
+            state,
+            move |(mut items, mut done, mut finished, cancelled, over)| {
+                let cancel = cancel.clone();
+                async move {
+                    if over {
+                        return None;
+                    }
+                    if cancel.is_cancelled() {
+                        return Some((
+                            vec![cancelled.clone(), SessionItem::End(Err("cancelled".into()))],
+                            (items, None, None, cancelled, true),
+                        ));
+                    }
+                    if let Some(item) = items.next() {
+                        tokio::time::sleep(Duration::from_millis(150)).await;
+                        return Some((vec![item], (items, done, finished, cancelled, false)));
+                    }
+                    let end = done.take().map(|f| f()).unwrap_or(Ok(Response::Ok));
+                    let mut out = Vec::new();
+                    if end.is_ok() {
+                        out.extend(finished.take());
+                    }
+                    out.push(SessionItem::End(end));
+                    Some((out, (items, None, None, cancelled, true)))
+                }
+            },
+        )
+        .flat_map(stream::iter)
+        .boxed()
     }
 
     pub fn subscribe(
@@ -642,6 +938,6 @@ mod tests {
                 .iter()
                 .all(|e| crate::live::lifecycle(e).time.len() == 8)
         );
-        assert!(f.call(Request::ListOps).is_err());
+        assert!(f.call(Request::ScanHost).is_err());
     }
 }

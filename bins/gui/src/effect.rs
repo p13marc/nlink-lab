@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use iced::Task;
+use iced::futures::StreamExt as _;
 use nlink_lab::Topology;
 use nlink_lab_view::{Positions, Scene, TopoGraph, layout};
 
@@ -89,6 +90,27 @@ pub enum Effect {
     /// Ask where a capture goes.
     PickCapture {
         endpoint: String,
+        lab: String,
+    },
+    /// A plan or a diff (`plan_deploy`, `check_apply`).
+    Preview {
+        backend: Backend,
+        request: Box<nlink_lab_shared::api::Request>,
+    },
+    /// A long operation, its progress streamed into job `job`. A deploy
+    /// carries its source: the bundle (the file and its imports) is made
+    /// off the UI thread first.
+    Job {
+        backend: Backend,
+        job: u64,
+        request: Box<nlink_lab_shared::api::Request>,
+        source: Option<(Source, Vec<(String, String)>)>,
+        cancel: nlink_lab::CancelToken,
+    },
+    /// The operations the daemon runs.
+    ListOps(Backend),
+    /// Ask which file to apply to `lab`.
+    PickApplyFile {
         lab: String,
     },
     /// A terminal widget running a shell on `node` (the host makes it).
@@ -326,6 +348,70 @@ pub fn run(effect: Effect) -> Task<Message> {
                 Message::Session(crate::message::SessionMsg::CaptureTo { endpoint, path })
             },
         ),
+        Effect::Preview { backend, request } => {
+            Task::perform(async move { backend.call(*request).await }, |r| {
+                use nlink_lab_shared::api::Response;
+                Message::Previewed(match r {
+                    Ok(Response::Report { report, .. }) => {
+                        Ok(crate::control::describe_plan(&report))
+                    }
+                    Ok(other) => Err(format!("unexpected answer {other:?}")),
+                    Err(e) => Err(e),
+                })
+            })
+        }
+        Effect::Job {
+            backend,
+            job,
+            request,
+            source,
+            cancel,
+        } => {
+            let stream = iced::futures::stream::once(async move {
+                let mut request = *request;
+                if let (
+                    Some((src, params)),
+                    nlink_lab_shared::api::Request::Deploy { source, .. },
+                ) = (source, &mut request)
+                {
+                    let made = tokio::task::spawn_blocking(move || bundle(&src, params))
+                        .await
+                        .map_err(|e| e.to_string())
+                        .and_then(|r| r);
+                    match made {
+                        Ok(b) => *source = Some(b),
+                        Err(e) => {
+                            return iced::futures::stream::iter([
+                                crate::backend::SessionItem::End(Err(e)),
+                            ])
+                            .boxed();
+                        }
+                    }
+                }
+                backend.session(request, cancel)
+            })
+            .flatten();
+            Task::run(stream, move |item| Message::JobItem { job, item })
+        }
+        Effect::ListOps(backend) => Task::perform(
+            async move { backend.call(nlink_lab_shared::api::Request::ListOps).await },
+            |r| match r {
+                Ok(nlink_lab_shared::api::Response::Ops { ops }) => Message::Ops(ops),
+                _ => Message::Done(Ok(())),
+            },
+        ),
+        Effect::PickApplyFile { lab } => Task::perform(
+            async move {
+                let path = rfd::AsyncFileDialog::new()
+                    .set_title(format!("A topology to apply to {lab}"))
+                    .add_filter("NLL topology", &["nll"])
+                    .pick_file()
+                    .await
+                    .map(|f| f.path().to_path_buf());
+                (lab, path)
+            },
+            |(lab, path)| Message::Workflow(crate::message::WorkflowMsg::ApplyFileTo { lab, path }),
+        ),
         // the host's: `main::update` takes them before they get here
         Effect::OpenTerminal { .. } | Effect::CloseTerminal(_) => Task::none(),
         Effect::Fetch { backend, lab, what } => {
@@ -396,11 +482,35 @@ async fn fetch(backend: Backend, lab: String, what: Fetch) -> Fetched {
     fetched(answer, pins)
 }
 
+/// A deploy's source: the entry's text, the files it imports (keyed from
+/// its directory), the params.
+pub(crate) fn bundle(
+    source: &Source,
+    params: Vec<(String, String)>,
+) -> Result<nlink_lab_shared::api::SourceBundle, String> {
+    Ok(match source {
+        Source::File(path) => nlink_lab_shared::api::SourceBundle {
+            path: path.display().to_string(),
+            text: std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?,
+            imports: nlink_lab::parser::nll::import_closure(path).map_err(|e| e.to_string())?,
+            params,
+        },
+        Source::Untitled { name, text } => nlink_lab_shared::api::SourceBundle {
+            path: format!("{name}.nll"),
+            text: text.clone(),
+            imports: Default::default(),
+            params,
+        },
+    })
+}
+
 /// A session's item as a message.
 pub fn session_message(lab: &str, id: u64, item: crate::backend::SessionItem) -> Message {
     use crate::backend::SessionItem;
     use nlink_lab_shared::api::{DataStream, Response};
     match item {
+        // a session has no progress
+        SessionItem::Op(_) => Message::Done(Ok(())),
         SessionItem::Data(stream, bytes) => Message::SessionData {
             lab: lab.to_string(),
             id,
@@ -510,6 +620,7 @@ fn capture_stream(
                             return Some((Captured::Bytes(s.total), s));
                         }
                     }
+                    Some(SessionItem::Op(_)) => {}
                     Some(SessionItem::End(r)) => {
                         if let Some(f) = s.file.as_mut() {
                             let _ = f.flush().await;

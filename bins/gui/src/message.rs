@@ -114,6 +114,17 @@ pub enum Message {
     /// A terminal widget's event (the host handles it).
     #[cfg_attr(not(feature = "embedded-terminal"), allow(dead_code))]
     Term(crate::term::TermEvent),
+    /// Deploys, applies, scenarios: the panel and the jobs.
+    Workflow(WorkflowMsg),
+    /// A plan or a diff came.
+    Previewed(Result<String, String>),
+    /// What a job's operation brought.
+    JobItem {
+        job: u64,
+        item: crate::backend::SessionItem,
+    },
+    /// The operations the daemon runs (`list_ops`).
+    Ops(Vec<nlink_lab_shared::api::OpInfo>),
     /// The answer to a change: with what undoes it.
     Called {
         lab: String,
@@ -211,6 +222,39 @@ pub enum SessionMsg {
     TerminalEnded(u64),
     #[cfg_attr(not(feature = "embedded-terminal"), allow(dead_code))]
     TerminalTitle(u64, String),
+}
+
+/// Deploying, applying, running a lab's scenarios; the jobs.
+#[derive(Debug, Clone)]
+pub enum WorkflowMsg {
+    /// The deploy panel of the design tab in front.
+    AskDeploy,
+    /// The apply panel: the design tab's topology onto its running lab.
+    AskApply,
+    /// A file to apply to the lab in front: opened, then its panel.
+    ApplyFile,
+    ApplyFileTo {
+        lab: String,
+        path: Option<PathBuf>,
+    },
+    Suffix(String),
+    Force(bool),
+    SkipAssertions(bool),
+    Strict(bool),
+    ResetImpairments(bool),
+    /// The plan of a deploy, the diff of an apply.
+    Preview,
+    /// Deploy, or apply.
+    Go,
+    ClosePanel,
+    RunScenario(String),
+    RunBenchmark(String),
+    RunAssertions,
+    Cancel(u64),
+    Select(u64),
+    Forget(u64),
+    /// Follow an operation started elsewhere.
+    Follow(String),
 }
 
 /// What the controls of a lab's tab do.

@@ -265,3 +265,53 @@ pub fn destroy<'a>(l: &'a Live, operator: bool) -> Element<'a, Message> {
     .spacing(6)
     .into()
 }
+
+/// `n` of a thing, in words: "1 step", "4 steps".
+fn count(n: usize, thing: &str) -> String {
+    if n == 1 {
+        format!("1 {thing}")
+    } else {
+        format!("{n} {thing}s")
+    }
+}
+
+/// What the lab can run: its scenarios, benchmarks, assertions.
+pub fn runs<'a>(l: &'a Live, topo: &'a Topology, operator: bool) -> Column<'a, Message> {
+    use crate::message::WorkflowMsg as W;
+    let mut col = column![].spacing(6);
+    if topo.scenarios.is_empty() && topo.benchmarks.is_empty() && topo.assertions.is_empty() {
+        return col;
+    }
+    let ok = operator && !l.gone;
+    col = col.push(rule::horizontal(1)).push(heading("Run"));
+    let run = |label: String, m: W| {
+        row![
+            text(label).size(13).width(Length::Fill),
+            button(text("Run").size(12))
+                .style(button::secondary)
+                .padding([2, 8])
+                .on_press_maybe(ok.then_some(Message::Workflow(m))),
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center)
+    };
+    for s in &topo.scenarios {
+        col = col.push(run(
+            format!("scenario {} · {}", s.name, count(s.steps.len(), "step")),
+            W::RunScenario(s.name.clone()),
+        ));
+    }
+    for b in &topo.benchmarks {
+        col = col.push(run(
+            format!("benchmark {} · {}", b.name, count(b.tests.len(), "test")),
+            W::RunBenchmark(b.name.clone()),
+        ));
+    }
+    if !topo.assertions.is_empty() {
+        col = col.push(run(
+            format!("the assertions · {}", count(topo.assertions.len(), "check")),
+            W::RunAssertions,
+        ));
+    }
+    col
+}

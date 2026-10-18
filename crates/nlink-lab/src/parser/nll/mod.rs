@@ -90,6 +90,65 @@ pub fn declared_param_defs(input: &str) -> Result<Vec<(String, Option<String>)>>
         .collect())
 }
 
+/// The files an NLL file imports, all the way down: each one's text,
+/// keyed by its path from the entry's directory (`sub/site.nll`,
+/// `../common.nll`) — what a deploy through the daemon carries along with
+/// the entry (`SourceBundle::imports`), so the daemon never reads a
+/// client's files.
+pub fn import_closure(entry: &Path) -> Result<std::collections::BTreeMap<String, String>> {
+    let base = entry.parent().unwrap_or(Path::new("."));
+    let mut out = std::collections::BTreeMap::new();
+    // (the importing file's directory as a key prefix, its text)
+    let mut queue = vec![(String::new(), std::fs::read_to_string(entry)?)];
+    while let Some((dir, text)) = queue.pop() {
+        let tokens = lexer::lex(&text)?;
+        let ast = parser::parse_tokens(&tokens, &text)?;
+        for imp in &ast.imports {
+            let key = lexical_join(&dir, &imp.path).ok_or_else(|| {
+                crate::Error::NllParse(format!(
+                    "import path {:?} is not a relative file path",
+                    imp.path
+                ))
+            })?;
+            if out.contains_key(&key) {
+                continue;
+            }
+            let text = std::fs::read_to_string(base.join(&key)).map_err(|e| {
+                crate::Error::NllParse(format!("cannot read import '{}': {e}", imp.path))
+            })?;
+            let key_dir = match key.rsplit_once('/') {
+                Some((d, _)) => d.to_string(),
+                None => String::new(),
+            };
+            out.insert(key, text.clone());
+            queue.push((key_dir, text));
+        }
+    }
+    Ok(out)
+}
+
+/// `rel` from `dir`, both relative and `/`-separated, without touching the
+/// filesystem: `("sub", "../a.nll")` is `a.nll`, `("", "../a.nll")` stays.
+fn lexical_join(dir: &str, rel: &str) -> Option<String> {
+    if rel.starts_with('/') || rel.is_empty() {
+        return None;
+    }
+    let mut parts: Vec<&str> = dir.split('/').filter(|p| !p.is_empty()).collect();
+    for c in rel.split('/') {
+        match c {
+            "" | "." => {}
+            ".." => match parts.last() {
+                Some(&"..") | None => parts.push(".."),
+                Some(_) => {
+                    parts.pop();
+                }
+            },
+            c => parts.push(c),
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
 /// Parse an NLL string, producing rich diagnostics with source context on error.
 pub fn parse_with_source(input: &str, filename: &str) -> Result<Topology> {
     parse(input).map_err(|e| attach_source(e, input, filename))
@@ -136,4 +195,51 @@ pub(crate) fn attach_source(err: crate::Error, input: &str, filename: &str) -> c
         label: "here".to_string(),
         help: None,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_import_closure_is_keyed_from_the_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("lab/sub")).unwrap();
+        std::fs::write(root.join("common.nll"), "lab \"common\"\nnode c\n").unwrap();
+        std::fs::write(
+            root.join("lab/sub/site.nll"),
+            "import \"../../common.nll\" as c\nlab \"site\"\nnode s\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("lab/main.nll"),
+            "import \"sub/site.nll\" as s\nimport \"../common.nll\" as c2\nlab \"main\"\nnode m\n",
+        )
+        .unwrap();
+        let got = import_closure(&root.join("lab/main.nll")).unwrap();
+        assert_eq!(
+            got.keys().cloned().collect::<Vec<_>>(),
+            ["../common.nll", "sub/site.nll"]
+        );
+        assert!(got["sub/site.nll"].contains("node s"));
+        assert_eq!(lexical_join("sub", "../a.nll").as_deref(), Some("a.nll"));
+        assert_eq!(lexical_join("", "../a.nll").as_deref(), Some("../a.nll"));
+        assert_eq!(lexical_join("", "/etc/x"), None);
+        // and a bundle staged from it parses as the files do
+        let bundle = crate::api::SourceBundle {
+            path: root.join("lab/main.nll").display().to_string(),
+            text: std::fs::read_to_string(root.join("lab/main.nll")).unwrap(),
+            imports: got,
+            params: Vec::new(),
+        };
+        let staged = tempfile::tempdir().unwrap();
+        let entry = crate::ops::mutate::stage_source(&bundle, staged.path()).unwrap();
+        let t = crate::parser::parse_file(&entry).unwrap();
+        assert!(
+            t.nodes.contains_key("m"),
+            "{:?}",
+            t.nodes.keys().collect::<Vec<_>>()
+        );
+    }
 }

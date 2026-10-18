@@ -213,6 +213,31 @@ ssh. Closing a lab's tab stops its sessions and closes its terminals.
 
 
 
+### Deploying and applying
+
+Also an operator's:
+
+- **Deploy…** in a design tab's toolbar: the options (a suffix for the
+  lab's name, replace a lab of that name, skip or enforce the `validate`
+  assertions), **Plan** to see what it would do, then **Deploy**. The
+  daemon gets the file, every file it imports and the params, so it
+  never reads yours; the lab opens in its tab once deployed. A
+  container's host files (`config`, `overlay`, `env-file`) are the
+  exception: the daemon reads them where it runs, so give them absolute
+  paths for now (#285).
+- **Apply…** in a design tab whose lab runs (the topology onto it), or
+  **Apply a file…** in a lab's tab: the options (drop the live
+  impairments, enforce the assertions), **Show the changes**, then
+  **Apply**.
+- The lab's **Run** section in the inspector: its scenarios, benchmarks
+  and assertions.
+
+Each runs as a job, in the dock's **Jobs**: its stage, its steps, what
+it waits for (an image, a healthcheck, FRR), the assertions and scenario
+actions as they come, and how it ended. **Cancel** stops one — a deploy
+or an apply rolls back. Operations started elsewhere (the CLI does its
+own; another app through the daemon) are listed there to **Follow**.
+
 ### Keys
 
 `F1` (or `?`) shows them. They never fire while you type in a field.
@@ -255,8 +280,7 @@ The bundle is confined:
 
 ### Why "experimental"
 
-- It shows topologies and changes running labs; it does not deploy
-  them.
+- Its looks are still settling, and it has no source editor yet.
 - It is the only artifact with no plain-binary release; you get a
   flatpak bundle or you build it.
 - Its looks and keys are free to change between releases without a

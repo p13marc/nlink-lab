@@ -29,6 +29,9 @@ pub fn view<'a>(
     if !app.toasts.is_empty() {
         layers = layers.push(toasts(app));
     }
+    if let Some(p) = &app.panel {
+        layers = layers.push(panel(app, p));
+    }
     if let Some(c) = &app.confirm {
         layers = layers.push(confirm(c));
     }
@@ -235,6 +238,134 @@ fn confirm(c: &crate::control::Confirm) -> Element<'_, Message> {
         }))
         .on_press(Message::Control(Control::Cancel)),
     )
+}
+
+/// A deploy or an apply being prepared: its options, its plan or diff,
+/// and the button that runs it.
+fn panel<'a>(app: &'a App, p: &'a crate::model::Panel) -> Element<'a, Message> {
+    use crate::message::WorkflowMsg as W;
+    use crate::model::{Panel, Preview};
+    let w = Message::Workflow;
+    let tab = app.tab(p.tab());
+    let file = tab
+        .and_then(|t| t.design())
+        .map(|d| d.source.title())
+        .unwrap_or_default();
+    let loaded = tab.is_some_and(|t| t.topology.is_some());
+    let (title, options, preview_label, go_label): (String, Element<'a, Message>, &str, &str) =
+        match p {
+            Panel::Deploy { options, .. } => {
+                let lab = tab
+                    .and_then(|t| t.topology.as_ref())
+                    .map(|t| t.lab.name.clone())
+                    .unwrap_or_default();
+                (
+                    format!(
+                        "Deploy {}",
+                        crate::model::deployed_name(&lab, options.suffix.as_deref())
+                    ),
+                    column![
+                        row![
+                            muted("suffix").width(Length::Fixed(96.0)),
+                            text_input(
+                                "none: the lab's own name",
+                                options.suffix.as_deref().unwrap_or("")
+                            )
+                            .size(13)
+                            .on_input(move |v| w(W::Suffix(v))),
+                        ]
+                        .spacing(8)
+                        .align_y(Alignment::Center),
+                        iced::widget::checkbox(options.force)
+                            .label("Replace a lab of that name")
+                            .text_size(13)
+                            .on_toggle(move |v| w(W::Force(v))),
+                        iced::widget::checkbox(options.skip_assertions)
+                            .label("Skip the validate assertions")
+                            .text_size(13)
+                            .on_toggle(move |v| w(W::SkipAssertions(v))),
+                        iced::widget::checkbox(options.strict)
+                            .label("A failed assertion fails the deploy")
+                            .text_size(13)
+                            .on_toggle(move |v| w(W::Strict(v))),
+                    ]
+                    .spacing(8)
+                    .into(),
+                    "Plan",
+                    "Deploy",
+                )
+            }
+            Panel::Apply { lab, options, .. } => (
+                format!("Apply {file} to {lab}"),
+                column![
+                    iced::widget::checkbox(options.reset_impairments)
+                        .label("Drop the impairments and partitions set live")
+                        .text_size(13)
+                        .on_toggle(move |v| w(W::ResetImpairments(v))),
+                    iced::widget::checkbox(options.strict)
+                        .label("A failed assertion fails the apply")
+                        .text_size(13)
+                        .on_toggle(move |v| w(W::Strict(v))),
+                ]
+                .spacing(8)
+                .into(),
+                "Show the changes",
+                "Apply",
+            ),
+        };
+    let preview: Element<'a, Message> = match match p {
+        Panel::Deploy { preview, .. } | Panel::Apply { preview, .. } => preview,
+    } {
+        Preview::None => muted("Look before you leap: the plan, or what would change.").into(),
+        Preview::Asked => muted("Asking the daemon…").into(),
+        Preview::Got(Ok(text)) => scrollable(text_mono(text))
+            .height(Length::Fixed(220.0))
+            .into(),
+        Preview::Got(Err(e)) => text(e.as_str())
+            .size(13)
+            .style(tone_text(nlink_lab_view::scene::Tone::Bad))
+            .into(),
+    };
+    let card = container(
+        column![
+            text(title).size(18),
+            options,
+            preview,
+            row![
+                space::horizontal(),
+                button(text("Cancel").size(13))
+                    .style(button::secondary)
+                    .on_press(w(W::ClosePanel)),
+                button(text(preview_label).size(13))
+                    .style(button::secondary)
+                    .on_press_maybe(loaded.then_some(w(W::Preview))),
+                button(text(go_label).size(13))
+                    .style(button::primary)
+                    .on_press_maybe(loaded.then_some(w(W::Go))),
+            ]
+            .spacing(8),
+        ]
+        .spacing(14),
+    )
+    .padding(20)
+    .style(container::bordered_box)
+    .max_width(620);
+    opaque(container(opaque(card)).center(Length::Fill).style(|_| {
+        container::Style {
+            background: Some(
+                Color {
+                    a: 0.45,
+                    ..Color::BLACK
+                }
+                .into(),
+            ),
+            ..container::Style::default()
+        }
+    }))
+}
+
+fn text_mono(s: &str) -> iced::widget::Text<'_> {
+    text(s).size(12).font(iced::Font::MONOSPACE)
 }
 
 fn help<'a>() -> Element<'a, Message> {

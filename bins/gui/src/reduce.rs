@@ -11,8 +11,10 @@ use crate::backend::Feed;
 use crate::control::{Action, Confirm, ConfirmWhat, ImpairEditor, PairEditor};
 use crate::doc::{Source, Target};
 use crate::effect::{Effect, Fetch};
-use crate::message::{CanvasMsg, Control, Fetched, Message, SessionMsg, Shortcut};
-use crate::model::{App, Camera, Conn, DockTab, EVENTS, Kind, Level, Route, Tab, TabId};
+use crate::message::{CanvasMsg, Control, Fetched, Message, SessionMsg, Shortcut, WorkflowMsg};
+use crate::model::{
+    App, Camera, Conn, DockTab, EVENTS, Kind, Level, Panel, Preview, Route, Tab, TabId,
+};
 
 /// A zoom step, for the keys and buttons.
 const ZOOM: f32 = 1.2;
@@ -242,6 +244,28 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
         }
         Message::Fetched { lab, fetched } => fetched_into(app, &lab, *fetched),
         Message::Control(c) => control(app, c),
+        Message::Workflow(w) => workflow(app, w),
+        Message::Previewed(r) => {
+            if let Some(p) = app.panel.as_mut() {
+                *p.preview_mut() = Preview::Got(r);
+            }
+            vec![]
+        }
+        Message::JobItem { job, item } => job_item(app, job, item),
+        Message::Ops(ops) => {
+            let followed: Vec<String> = app.jobs.iter().filter_map(|j| j.op.clone()).collect();
+            app.others = ops
+                .into_iter()
+                .filter(|o| {
+                    matches!(
+                        o.state,
+                        nlink_lab_shared::api::OpState::Running
+                            | nlink_lab_shared::api::OpState::Queued
+                    ) && !followed.contains(&o.op)
+                })
+                .collect();
+            vec![]
+        }
         Message::Session(m) => session(app, m),
         Message::SessionData {
             lab,
@@ -653,7 +677,7 @@ fn connected(
                 who,
                 epoch: app.epoch,
             };
-            let mut effects = vec![Effect::ListLabs(backend)];
+            let mut effects = vec![Effect::ListLabs(backend.clone()), Effect::ListOps(backend)];
             let labs: Vec<String> = app
                 .tabs
                 .iter()
@@ -1325,6 +1349,355 @@ fn called(
     effects
 }
 
+/// Keep the jobs few: the oldest ended ones go.
+fn prune_jobs(app: &mut App) {
+    while app.jobs.len() > crate::model::JOBS {
+        match app.jobs.iter().position(|j| !j.running()) {
+            Some(i) => {
+                app.jobs.remove(i);
+            }
+            None => break,
+        }
+    }
+}
+
+/// Start job `kind` on `lab` with `request`.
+fn start_job(
+    app: &mut App,
+    lab: &str,
+    kind: crate::job::JobKind,
+    request: nlink_lab_shared::api::Request,
+    source: Option<(Source, Vec<(String, String)>)>,
+) -> Vec<Effect> {
+    let Some(backend) = app.backend().cloned() else {
+        app.toast(Level::Error, "Not connected to the daemon");
+        return vec![];
+    };
+    let id = app.next_id();
+    let job = crate::job::Job::new(id, lab, kind);
+    let cancel = job.cancel.clone();
+    app.jobs.push(job);
+    prune_jobs(app);
+    app.active_job = Some(id);
+    if let Some(t) = app.current_mut() {
+        t.dock = DockTab::Jobs;
+    }
+    vec![Effect::Job {
+        backend,
+        job: id,
+        request: Box::new(request),
+        source,
+        cancel,
+    }]
+}
+
+fn workflow(app: &mut App, w: WorkflowMsg) -> Vec<Effect> {
+    use nlink_lab_shared::api::Request;
+    // the panel's options change as the user picks them
+    if let Some(p) = app.panel.as_mut() {
+        match (&w, p) {
+            (WorkflowMsg::Suffix(v), Panel::Deploy { options, .. }) => {
+                options.suffix = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                return vec![];
+            }
+            (WorkflowMsg::Force(v), Panel::Deploy { options, .. }) => {
+                options.force = *v;
+                return vec![];
+            }
+            (WorkflowMsg::SkipAssertions(v), Panel::Deploy { options, .. }) => {
+                options.skip_assertions = *v;
+                return vec![];
+            }
+            (WorkflowMsg::Strict(v), Panel::Deploy { options, .. }) => {
+                options.strict = *v;
+                return vec![];
+            }
+            (WorkflowMsg::Strict(v), Panel::Apply { options, .. }) => {
+                options.strict = *v;
+                return vec![];
+            }
+            (WorkflowMsg::ResetImpairments(v), Panel::Apply { options, .. }) => {
+                options.reset_impairments = *v;
+                return vec![];
+            }
+            _ => {}
+        }
+    }
+    match w {
+        WorkflowMsg::ClosePanel => {
+            app.panel = None;
+            return vec![];
+        }
+        WorkflowMsg::Select(id) => {
+            app.active_job = Some(id);
+            return vec![];
+        }
+        WorkflowMsg::Cancel(id) => {
+            if let Some(j) = app.jobs.iter_mut().find(|j| j.id == id && j.running()) {
+                j.cancel.cancel();
+            }
+            return vec![];
+        }
+        WorkflowMsg::Forget(id) => {
+            app.jobs.retain(|j| j.id != id || j.running());
+            if app.active_job == Some(id) {
+                app.active_job = app.jobs.last().map(|j| j.id);
+            }
+            return vec![];
+        }
+        _ => {}
+    }
+    if !app.operator() {
+        app.toast(
+            Level::Error,
+            "Read-only: deploys, applies and scenarios are an operator's",
+        );
+        return vec![];
+    }
+    if app.backend().is_none() {
+        app.toast(Level::Error, "Not connected to the daemon");
+        return vec![];
+    }
+    let running = |app: &App, lab: &str| app.labs.iter().any(|l| l.lab == lab);
+    match w {
+        WorkflowMsg::AskDeploy => {
+            let Some(t) = app.current().filter(|t| t.design().is_some()) else {
+                return vec![];
+            };
+            if t.topology.is_none() || t.errors() > 0 {
+                app.toast(Level::Error, "Fix the topology's problems first");
+                return vec![];
+            }
+            app.panel = Some(Panel::Deploy {
+                tab: t.id,
+                options: Default::default(),
+                preview: Preview::None,
+            });
+            vec![]
+        }
+        WorkflowMsg::AskApply => {
+            let Some(t) = app.current().filter(|t| t.design().is_some()) else {
+                return vec![];
+            };
+            let Some(lab) = t.topology.as_ref().map(|t| t.lab.name.clone()) else {
+                return vec![];
+            };
+            if !running(app, &lab) {
+                app.toast(
+                    Level::Error,
+                    format!("{lab} is not running: deploy it first"),
+                );
+                return vec![];
+            }
+            app.panel = Some(Panel::Apply {
+                tab: t.id,
+                lab,
+                options: Default::default(),
+                preview: Preview::None,
+            });
+            vec![]
+        }
+        WorkflowMsg::ApplyFile => match app.current().and_then(|t| t.live()) {
+            Some(l) => vec![Effect::PickApplyFile { lab: l.lab.clone() }],
+            None => vec![],
+        },
+        WorkflowMsg::ApplyFileTo {
+            lab,
+            path: Some(path),
+        } => {
+            let mut effects = open(app, Source::File(path), BTreeMap::new());
+            if let Some(tab) = app.active {
+                app.panel = Some(Panel::Apply {
+                    tab,
+                    lab,
+                    options: Default::default(),
+                    preview: Preview::None,
+                });
+            }
+            effects.extend(save_settings(app));
+            effects
+        }
+        WorkflowMsg::Preview | WorkflowMsg::Go => {
+            let go = matches!(w, WorkflowMsg::Go);
+            let Some(panel) = app.panel.clone() else {
+                return vec![];
+            };
+            let Some(t) = app.tab(panel.tab()) else {
+                app.panel = None;
+                return vec![];
+            };
+            let Some(topo) = t.topology.as_ref() else {
+                app.toast(Level::Error, "The topology has not loaded yet");
+                return vec![];
+            };
+            let Ok(json) = serde_json::to_value(topo) else {
+                return vec![];
+            };
+            let name = topo.lab.name.clone();
+            let source = t.design().map(|d| (d.source.clone(), d.params_vec()));
+            let backend = app.backend().cloned().expect("checked");
+            match (panel, go) {
+                (Panel::Deploy { .. }, false) => {
+                    if let Some(p) = app.panel.as_mut() {
+                        *p.preview_mut() = Preview::Asked;
+                    }
+                    vec![Effect::Preview {
+                        backend,
+                        request: Box::new(Request::PlanDeploy { topology: json }),
+                    }]
+                }
+                (Panel::Apply { lab, options, .. }, false) => {
+                    if let Some(p) = app.panel.as_mut() {
+                        *p.preview_mut() = Preview::Asked;
+                    }
+                    vec![Effect::Preview {
+                        backend,
+                        request: Box::new(Request::CheckApply {
+                            lab,
+                            topology: json,
+                            options,
+                        }),
+                    }]
+                }
+                (Panel::Deploy { options, .. }, true) => {
+                    app.panel = None;
+                    let lab = crate::model::deployed_name(&name, options.suffix.as_deref());
+                    let request = Request::Deploy {
+                        topology: json,
+                        options,
+                        source: None,
+                    };
+                    start_job(app, &lab, crate::job::JobKind::Deploy, request, source)
+                }
+                (Panel::Apply { lab, options, .. }, true) => {
+                    app.panel = None;
+                    let request = Request::Apply {
+                        lab: lab.clone(),
+                        topology: json,
+                        options,
+                    };
+                    start_job(app, &lab, crate::job::JobKind::Apply, request, None)
+                }
+            }
+        }
+        WorkflowMsg::RunScenario(ref name) | WorkflowMsg::RunBenchmark(ref name) => {
+            let bench = matches!(w, WorkflowMsg::RunBenchmark(_));
+            let name = name.clone();
+            let Some(lab) = app.current().and_then(|t| t.live()).map(|l| l.lab.clone()) else {
+                return vec![];
+            };
+            let (kind, request) = if bench {
+                (
+                    crate::job::JobKind::Benchmark(name.clone()),
+                    Request::RunBenchmark {
+                        lab: lab.clone(),
+                        name,
+                    },
+                )
+            } else {
+                (
+                    crate::job::JobKind::Scenario(name.clone()),
+                    Request::RunScenario {
+                        lab: lab.clone(),
+                        name,
+                    },
+                )
+            };
+            start_job(app, &lab, kind, request, None)
+        }
+        WorkflowMsg::RunAssertions => {
+            let Some(lab) = app.current().and_then(|t| t.live()).map(|l| l.lab.clone()) else {
+                return vec![];
+            };
+            let request = Request::RunAssertions { lab: lab.clone() };
+            start_job(app, &lab, crate::job::JobKind::Assertions, request, None)
+        }
+        WorkflowMsg::Follow(op) => {
+            let Some(info) = app.others.iter().find(|o| o.op == op).cloned() else {
+                return vec![];
+            };
+            app.others.retain(|o| o.op != op);
+            let request = Request::AttachOp { op: op.clone() };
+            let effects = start_job(
+                app,
+                &info.lab,
+                crate::job::JobKind::Attached(info.kind),
+                request,
+                None,
+            );
+            if let Some(j) = app.jobs.last_mut() {
+                j.op = Some(op);
+            }
+            effects
+        }
+        _ => vec![],
+    }
+}
+
+/// What a job's operation brought.
+fn job_item(app: &mut App, id: u64, item: crate::backend::SessionItem) -> Vec<Effect> {
+    use crate::backend::SessionItem;
+    use nlink_lab_shared::api::Response;
+    let Some(j) = app.jobs.iter_mut().find(|j| j.id == id) else {
+        return vec![];
+    };
+    match item {
+        SessionItem::Op(e) => {
+            j.event(&e);
+            vec![]
+        }
+        SessionItem::Data(..) => vec![],
+        SessionItem::End(r) => {
+            let kind = j.kind.clone();
+            let lab = j.lab.clone();
+            match r {
+                Ok(response) => {
+                    j.finish(true, "done".into());
+                    let ok = matches!(j.state, crate::job::JobState::Done { ok: true, .. });
+                    let title = j.title();
+                    // a deploy's lab: the daemon says which (with a suffix)
+                    let lab = match &response {
+                        Response::Done { lab, .. } if !lab.is_empty() => lab.clone(),
+                        _ => lab,
+                    };
+                    if !ok {
+                        app.toast(Level::Error, format!("{title}: not done"));
+                        return vec![];
+                    }
+                    app.toast(Level::Info, format!("{title}: done"));
+                    match kind {
+                        // the new lab, followed
+                        crate::job::JobKind::Deploy => reduce(app, Message::OpenLab(lab)),
+                        crate::job::JobKind::Apply => fetch_all(app, &lab),
+                        _ => vec![],
+                    }
+                }
+                Err(e) => {
+                    let cancelled = j.cancel.is_cancelled();
+                    j.finish(
+                        false,
+                        if cancelled {
+                            "cancelled".into()
+                        } else {
+                            e.clone()
+                        },
+                    );
+                    let title = j.title();
+                    app.toast(
+                        if cancelled { Level::Info } else { Level::Error },
+                        if cancelled {
+                            format!("{title}: cancelled")
+                        } else {
+                            format!("{title} failed: {e}")
+                        },
+                    );
+                    vec![]
+                }
+            }
+        }
+    }
+}
+
 fn find_session<'a>(
     app: &'a mut App,
     lab: &str,
@@ -1803,6 +2176,41 @@ pub(crate) mod testing {
                     });
                     for item in items {
                         effects.extend(reduce(app, crate::effect::session_message(&lab, id, item)));
+                    }
+                    continue;
+                }
+                Effect::Preview {
+                    backend: crate::backend::Backend::Fake(fake),
+                    request,
+                } => Message::Previewed(match fake.call(*request) {
+                    Ok(nlink_lab_shared::api::Response::Report { report, .. }) => {
+                        Ok(crate::control::describe_plan(&report))
+                    }
+                    Ok(other) => Err(format!("{other:?}")),
+                    Err(e) => Err(e),
+                }),
+                Effect::ListOps(crate::backend::Backend::Fake(_)) => Message::Ops(Vec::new()),
+                // a demo job: its progress, at once
+                Effect::Job {
+                    backend: crate::backend::Backend::Fake(fake),
+                    job,
+                    request,
+                    source,
+                    cancel,
+                } => {
+                    use iced::futures::StreamExt;
+                    let mut request = *request;
+                    if let (
+                        Some((src, params)),
+                        nlink_lab_shared::api::Request::Deploy { source, .. },
+                    ) = (source, &mut request)
+                    {
+                        *source = Some(crate::effect::bundle(&src, params).unwrap());
+                    }
+                    let stream = fake.session(request, cancel);
+                    let items: Vec<_> = futures_lite_block(stream.collect::<Vec<_>>());
+                    for item in items {
+                        effects.extend(reduce(app, Message::JobItem { job, item }));
                     }
                     continue;
                 }
@@ -2971,5 +3379,176 @@ mod tests {
         sess(&mut app, S::ConsoleCommand("ls".into()));
         assert!(reduce(&mut app, Message::Session(S::Run)).is_empty());
         assert!(app.toasts.last().unwrap().text.starts_with("Read-only"));
+    }
+
+    // ── deploys, applies, runs ──
+
+    use crate::message::WorkflowMsg as W;
+
+    fn wf(app: &mut App, m: W) -> Vec<Effect> {
+        let e = reduce(app, Message::Workflow(m));
+        settle(app, e)
+    }
+
+    const NEW: &str =
+        "lab \"fresh\"\nnode x\nnode y\nlink x:eth0 -- y:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n";
+
+    #[test]
+    fn a_design_is_planned_deployed_and_followed() {
+        let mut app = app();
+        demo(&mut app);
+        open_text(&mut app, NEW);
+        wf(&mut app, W::AskDeploy);
+        assert!(matches!(app.panel, Some(Panel::Deploy { .. })));
+        wf(&mut app, W::Preview);
+        let Some(Panel::Deploy {
+            preview: Preview::Got(Ok(plan)),
+            ..
+        }) = &app.panel
+        else {
+            panic!("{:?}", app.panel)
+        };
+        assert!(
+            plan.starts_with("3 step(s)") && plan.contains("create namespace x"),
+            "{plan}"
+        );
+        wf(&mut app, W::Go);
+        assert!(app.panel.is_none());
+        let j = app.jobs.last().unwrap();
+        assert!(
+            matches!(&j.state, crate::job::JobState::Done { ok: true, .. }),
+            "{j:?}"
+        );
+        assert_eq!(j.op.as_deref(), Some("demo-op"));
+        assert_eq!(j.progress(), 1.0);
+        // the new lab, followed in its tab
+        let t = live_tab(&app, "fresh");
+        assert!(t.topology.is_some());
+        assert!(
+            app.toasts
+                .iter()
+                .any(|t| t.text.contains("deploy fresh: done"))
+        );
+    }
+
+    #[test]
+    fn a_name_taken_fails_and_a_cancel_is_a_cancel() {
+        let mut app = app();
+        demo(&mut app);
+        open_text(&mut app, NEW);
+        wf(&mut app, W::AskDeploy);
+        wf(&mut app, W::Go);
+        // again, from the design: the name is taken now
+        let first = app.tabs[0].id;
+        reduce(&mut app, Message::SelectTab(first));
+        wf(&mut app, W::AskDeploy);
+        wf(&mut app, W::Go);
+        let j = app.jobs.last().unwrap();
+        assert!(
+            matches!(&j.state, crate::job::JobState::Done { ok: false, text } if text.contains("already exists"))
+        );
+        // with force, and cancelled before it starts
+        let first = app.tabs[0].id;
+        reduce(&mut app, Message::SelectTab(first));
+        wf(&mut app, W::AskDeploy);
+        wf(&mut app, W::Force(true));
+        let e = reduce(&mut app, Message::Workflow(W::Go));
+        let id = app.jobs.last().unwrap().id;
+        reduce(&mut app, Message::Workflow(W::Cancel(id)));
+        settle(&mut app, e);
+        let j = app.jobs.iter().find(|j| j.id == id).unwrap();
+        assert!(
+            matches!(&j.state, crate::job::JobState::Done { ok: false, text } if text == "cancelled"),
+            "{j:?}"
+        );
+        assert!(app.toasts.iter().any(|t| t.text.ends_with("cancelled")));
+    }
+
+    #[test]
+    fn a_design_is_applied_to_its_running_lab() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        let before = live_tab(&app, &lab).view.graph.nodes.len();
+        open_text(
+            &mut app,
+            &format!(
+                "lab \"{lab}\"\nnode a\nnode b\nnode c\nlink a:eth0 -- b:eth0 {{ 10.9.0.1/24 -- 10.9.0.2/24 }}\n"
+            ),
+        );
+        wf(&mut app, W::AskApply);
+        assert!(matches!(&app.panel, Some(Panel::Apply { lab: l, .. }) if *l == lab));
+        wf(&mut app, W::Preview);
+        let Some(Panel::Apply {
+            preview: Preview::Got(Ok(diff)),
+            ..
+        }) = &app.panel
+        else {
+            panic!("{:?}", app.panel)
+        };
+        assert!(diff.contains("+ node: c"), "{diff}");
+        wf(&mut app, W::ResetImpairments(true));
+        wf(&mut app, W::Go);
+        assert!(matches!(
+            &app.jobs.last().unwrap().state,
+            crate::job::JobState::Done { ok: true, .. }
+        ));
+        // the lab's tab has the new topology
+        let after = live_tab(&app, &lab).view.graph.nodes.len();
+        assert_ne!(before, after);
+        assert_eq!(after, 3);
+    }
+
+    #[test]
+    fn an_apply_needs_the_lab_running_and_a_viewer_gets_nothing() {
+        let mut app = app();
+        demo(&mut app);
+        open_text(&mut app, NEW);
+        assert!(wf(&mut app, W::AskApply).is_empty());
+        assert!(app.panel.is_none());
+        assert!(app.toasts.last().unwrap().text.contains("not running"));
+        if let Conn::Up { who, .. } = &mut app.conn {
+            who.role = nlink_lab_shared::api::Role::Viewer;
+        }
+        assert!(wf(&mut app, W::AskDeploy).is_empty());
+        assert!(app.panel.is_none());
+    }
+
+    #[test]
+    fn assertions_run_as_a_job_and_others_ops_can_be_followed() {
+        let mut app = app();
+        let (_, lab) = demo_lab(&mut app);
+        wf(&mut app, W::RunAssertions);
+        let j = app.jobs.last().unwrap();
+        assert_eq!(j.kind, crate::job::JobKind::Assertions);
+        assert!(matches!(
+            &j.state,
+            crate::job::JobState::Done { ok: true, .. }
+        ));
+        assert_eq!(live_tab(&app, &lab).dock, DockTab::Jobs);
+        // an operation started elsewhere: listed, followed
+        reduce(
+            &mut app,
+            Message::Ops(vec![nlink_lab_shared::api::OpInfo {
+                op: "op-9".into(),
+                kind: "deploy".into(),
+                lab: "other".into(),
+                actor: "root (0)".into(),
+                state: nlink_lab_shared::api::OpState::Running,
+                queued_at: String::new(),
+                finished_at: None,
+                error: None,
+            }]),
+        );
+        assert_eq!(app.others.len(), 1);
+        wf(&mut app, W::Follow("op-9".into()));
+        assert!(app.others.is_empty());
+        let j = app.jobs.last().unwrap();
+        assert_eq!(
+            (j.op.as_deref(), &j.kind),
+            (
+                Some("op-9"),
+                &crate::job::JobKind::Attached("deploy".into())
+            )
+        );
     }
 }

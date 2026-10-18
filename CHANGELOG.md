@@ -688,6 +688,16 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **Deploying and applying from the desktop app** (#283): a design
+  tab's **Deploy…** (options, the plan first) sends the daemon the file,
+  its imports and params; **Apply…** a topology onto its running lab
+  (options, the changes first); a lab's scenarios, benchmarks and
+  assertions run from the inspector. Each is a job with its progress
+  (stages, steps, waits, assertions, rollback), cancellable; operations
+  started elsewhere can be followed.
+- **`nlink_lab::parser::nll::import_closure`** (#283): the files an NLL
+  file imports, all the way down, keyed from its directory — a deploy's
+  `SourceBundle::imports`.
 - **Sessions in the desktop app** (#281), an operator's: a console
   that runs a command on a node and streams its output (Stop sends
   `SIGINT`), a tracked process's log followed, packets captured into a
@@ -1039,6 +1049,10 @@ under both (#233). Its waves land one by one below.
 
 ### Fixed
 
+- **The daemon's `run_assertions` says each assertion** (#283): an
+  `Assertion` progress event per result, as a deploy and an apply send
+  them; the results came only in the final report, so a client following
+  the operation saw it start and finish with nothing between.
 - **`destroy` stops what a lab's commands left running** (#263): a
   daemon an `exec` started (`iperf3 -s -D`), a shell's `&`, a child a
   spawned process forked. They are not tracked, so they ran on in the

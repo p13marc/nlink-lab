@@ -128,7 +128,9 @@ crates/nlink-lab/src/
   ops/              # OpCtx: progress (OpEvent) + cancellation of deploy/apply/destroy/…;
                     #   view (LabStatus, LabSummary, impairments, processes, events with
                     #   a cursor — what status/ps/stats and the daemon share), read (the
-                    #   API's read calls)
+                    #   API's read calls), mutate (every change: deploy from a source
+                    #   bundle, apply, check, restore, impair, spawn, restart, … —
+                    #   what the daemon's jobs run and the CLI shares)
   host.rs           # orphan/stale detection + reaper (tag-gated), reported as Cleanups
   metrics.rs        # MetricsCollector: interface rates/states, top TCP flows, process exits
   logs.rs           # process log tail / cat / follow
@@ -141,7 +143,9 @@ bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.
                                #   authz (SO_PEERCRED/SO_PEERGROUPS -> Operator/Viewer),
                                #   server (handshake, per-call tasks, cancel), calls
                                #   (dispatch), hub (state-root scan, events tail,
-                               #   subscriptions, per-lab metrics threads), exec, audit
+                               #   subscriptions, per-lab metrics threads), jobs (one
+                               #   queue per lab on its own thread, detachable jobs:
+                               #   attach_op/list_ops/cancel_op), exec, audit
 dist/                          # systemd units (socket-activated nlink-labd), sysusers,
                                #   tmpfiles — `just install-daemon`
 crates/nlink-lab-shared/src/

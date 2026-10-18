@@ -150,14 +150,13 @@ pub struct App {
     /// delta to report.
     pub flows_baseline: bool,
     pub impairments: BTreeMap<String, Impair>,
-    /// False for the read-only daemon source.
+    /// False without root, unless the daemon says the caller operates.
     pub can_mutate: bool,
     pub should_quit: bool,
 }
 
 /// Shown when a write key is pressed on a read-only source.
-const READONLY_HINT: &str =
-    "impair/partition need the local source (root): the daemon's is read-only";
+const READONLY_HINT: &str = "impair/partition need root, or the nlink-lab group through the daemon";
 
 impl App {
     pub fn new(lab: &str, interval: Duration, deployed_at: u64, can_mutate: bool) -> Self {
@@ -914,7 +913,7 @@ mod tests {
             assert_eq!(a.on_key(key(k)), None, "key {k} must not act");
             let (msg, is_err) = a.status.clone().expect("a status line");
             assert!(is_err);
-            assert!(msg.contains("read-only"), "{msg}");
+            assert!(msg.contains("need root"), "{msg}");
             assert_eq!(a.mode, Mode::Normal, "no prompt opens");
         }
     }

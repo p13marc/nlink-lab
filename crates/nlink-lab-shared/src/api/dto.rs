@@ -205,3 +205,45 @@ pub enum Topic {
     /// Changes nobody made through nlink-lab (hand edits).
     Drift,
 }
+
+/// An operation the daemon runs or ran (`list_ops`): a deploy, an apply,
+/// a scenario…
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct OpInfo {
+    pub op: String,
+    /// `deploy`, `apply`, `destroy`, …
+    pub kind: String,
+    /// The lab it is about; empty for the host's (`reap_orphans`).
+    pub lab: String,
+    /// Who asked: `user (uid)`.
+    pub actor: String,
+    pub state: OpState,
+    /// RFC 3339.
+    pub queued_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    /// Why it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Where an operation is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OpState {
+    /// Behind others on its lab.
+    Queued,
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+    /// It failed and what it had done was undone.
+    RolledBack,
+}
+
+impl OpState {
+    /// Whether it has ended.
+    pub fn is_final(self) -> bool {
+        !matches!(self, OpState::Queued | OpState::Running)
+    }
+}

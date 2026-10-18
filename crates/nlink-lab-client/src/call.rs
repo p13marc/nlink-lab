@@ -26,8 +26,9 @@ pub enum CallEvent {
     End(Result<Response, ApiError>),
 }
 
-/// A running call. Dropping it stops following it (the daemon cancels or
-/// detaches it, as the method says); [`Call::detach`] says so first.
+/// A running call. Dropping it before its end detaches it: the daemon
+/// cancels an interactive call (`exec`, a subscription) and leaves a long
+/// operation running (`attach_op` finds it again).
 pub struct Call {
     id: u32,
     rx: mpsc::UnboundedReceiver<Incoming>,
@@ -134,6 +135,9 @@ impl Call {
 impl Drop for Call {
     fn drop(&mut self) {
         if !self.ended {
+            // the daemon cancels an interactive call and leaves a long
+            // operation running, as the method says
+            let _ = self.control(ClientMsg::Detach);
             self.client.forget(self.id);
         }
     }

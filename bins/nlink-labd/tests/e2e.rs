@@ -17,6 +17,11 @@ use nlink_labd::Config;
 
 const LAB: &str = "labd-e2e";
 const LATE: &str = "labd-e2e-late";
+const MADE: &str = "labd-e2e-made";
+const MADE2: &str = "labd-e2e-made2";
+
+/// The tests share the process's state root variable: one at a time.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn topology(name: &str, subnet: u8) -> nlink_lab::Topology {
     nlink_lab::parser::parse(&format!(
@@ -131,6 +136,7 @@ async fn the_daemon_serves_real_labs() {
         eprintln!("skipping the_daemon_serves_real_labs: requires root");
         return;
     }
+    let _serial = SERIAL.lock().await;
     let root = tempfile::tempdir().unwrap();
     // SAFETY: set before the daemon, the deploys and their threads run.
     unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", root.path()) };
@@ -462,5 +468,504 @@ async fn the_daemon_serves_real_labs() {
 
     shutdown.cancel();
     running.destroy().await.unwrap();
+    unsafe { std::env::remove_var("NLINK_LAB_STATE_DIR") };
+}
+
+/// A daemon on a fresh state root and socket, and an operator's client.
+async fn start_daemon() -> (
+    tempfile::TempDir,
+    tempfile::TempDir,
+    CancelToken,
+    Endpoint,
+    Client,
+) {
+    let root = tempfile::tempdir().unwrap();
+    // SAFETY: set before the daemon, the deploys and their threads run.
+    unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", root.path()) };
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("api.sock");
+    let config = Config {
+        socket: socket.clone(),
+        rescan_ms: 200,
+        metrics_interval_ms: 500,
+        ..Config::default()
+    };
+    let listener = nlink_labd::listen::bind(&socket).unwrap();
+    let shutdown = CancelToken::new();
+    tokio::spawn(nlink_labd::serve(config, listener, shutdown.clone()));
+    let endpoint = Endpoint::Unix(socket);
+    let client = Client::connect(&endpoint, "e2e/0").await.unwrap();
+    (root, dir, shutdown, endpoint, client)
+}
+
+/// A call to its end, with the progress events it streamed.
+async fn finish(
+    call: &mut nlink_lab_client::Call,
+) -> (
+    Vec<nlink_lab_shared::api::OpEvent>,
+    Option<String>,
+    Result<Response, ClientError>,
+) {
+    let (mut events, mut op) = (Vec::new(), None);
+    while let Some(event) = call.next().await {
+        match event {
+            CallEvent::Item(StreamItem::Op { event }) => events.push(event),
+            CallEvent::Item(StreamItem::Started { op: Some(id), .. }) => op = Some(id),
+            CallEvent::End(r) => {
+                return (events, op, r.map_err(|e| ClientError::Api(Box::new(e))));
+            }
+            _ => {}
+        }
+    }
+    panic!("no end")
+}
+
+fn impairments(
+    endpoints: &[nlink_lab_shared::api::EndpointImpairment],
+    ep: &str,
+) -> (bool, Option<String>) {
+    let e = endpoints.iter().find(|e| e.endpoint == ep);
+    (
+        e.is_some_and(|e| e.partitioned),
+        e.and_then(|e| e.live.as_ref())
+            .and_then(|l| l.delay.clone()),
+    )
+}
+
+async fn get_impairments(
+    client: &Client,
+    lab: &str,
+) -> Vec<nlink_lab_shared::api::EndpointImpairment> {
+    match client
+        .call(Request::GetImpairments { lab: lab.into() })
+        .await
+        .unwrap()
+    {
+        Response::Impairments { endpoints } => endpoints,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_daemon_changes_labs() {
+    // `just ci` runs it rootless; the privileged CI lane runs it as root
+    if !nlink_lab::privileges::has_privileges() {
+        eprintln!("skipping the_daemon_changes_labs: requires root");
+        return;
+    }
+    use nlink_lab_shared::api::{
+        DeployOptions, Direction, ImpairmentSpec, OpPhase, OpState, SourceBundle, WaitSpec,
+    };
+    let _serial = SERIAL.lock().await;
+    let (root, _dir, shutdown, endpoint, client) = start_daemon().await;
+    let _cleanup = Cleanup(&[MADE, MADE2]);
+    let mut ops = client
+        .start(Request::Subscribe {
+            lab: None,
+            topics: vec![Topic::Ops],
+            interval_ms: None,
+        })
+        .await
+        .unwrap();
+
+    // ── a deploy from a source bundle, with a param ──
+    let text = format!(
+        r#"param delay default 5ms
+lab "{MADE}"
+node a
+node b
+link a:eth0 -- b:eth0 {{
+  10.233.0.1/24 -- 10.233.0.2/24
+  delay ${{delay}}
+}}
+scenario "slow" {{
+  at 0s {{ log "begins" }}
+  at 10s {{ log "ends" }}
+}}
+"#
+    );
+    let bundle = SourceBundle {
+        path: "/somewhere/on/the/client/made.nll".into(),
+        text,
+        imports: Default::default(),
+        params: vec![("delay".into(), "20ms".into())],
+    };
+    let mut call = client
+        .start(Request::Deploy {
+            topology: serde_json::Value::Null,
+            options: DeployOptions::default(),
+            source: Some(bundle),
+        })
+        .await
+        .unwrap();
+    let (events, op, end) = finish(&mut call).await;
+    let op = op.expect("a deploy is a job");
+    match end.unwrap() {
+        Response::Done {
+            op: done,
+            lab,
+            report,
+        } => {
+            assert_eq!((done.as_str(), lab.as_str()), (op.as_str(), MADE));
+            assert_eq!(report["nodes"], 2);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.phase, OpPhase::Planned { .. }))
+    );
+    assert!(matches!(
+        events.last().map(|e| &e.phase),
+        Some(OpPhase::Finished { .. })
+    ));
+    // the progress went to the ops topic too
+    match next_notification(&mut ops, Duration::from_secs(5)).await {
+        Notification::OpProgress { event } => assert_eq!(event.op, op),
+        other => panic!("{other:?}"),
+    }
+    // its source is kept with the lab, the param applied
+    let source = nlink_lab::state::source_of(MADE).expect("a recorded source");
+    let path = std::path::PathBuf::from(source.path.unwrap());
+    assert!(path.starts_with(root.path()), "{path:?}");
+    assert!(path.exists());
+    assert_eq!(
+        source.params,
+        vec![("delay".to_string(), "20ms".to_string())]
+    );
+    let imp = get_impairments(&client, MADE).await;
+    assert_eq!(
+        imp[0].declared.as_ref().unwrap().delay.as_deref(),
+        Some("20ms")
+    );
+
+    // listed, and attachable after its end: the same events, the same end
+    match client.call(Request::ListOps).await.unwrap() {
+        Response::Ops { ops } => {
+            let info = ops.iter().find(|o| o.op == op).expect("listed");
+            assert_eq!(
+                (info.kind.as_str(), info.state),
+                ("deploy", OpState::Succeeded)
+            );
+            assert_eq!(info.lab, MADE);
+        }
+        other => panic!("{other:?}"),
+    }
+    let mut again = client
+        .start(Request::AttachOp { op: op.clone() })
+        .await
+        .unwrap();
+    let (replayed, _, end) = finish(&mut again).await;
+    assert_eq!(replayed.len(), events.len());
+    assert!(matches!(end.unwrap(), Response::Done { .. }));
+
+    // ── impairments, both ways; a partition and a heal ──
+    match client
+        .call(Request::Impair {
+            lab: MADE.into(),
+            endpoint: "a:eth0".into(),
+            direction: Direction::Both,
+            spec: ImpairmentSpec {
+                delay: Some("30ms".into()),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap()
+    {
+        Response::Report { report, .. } => assert_eq!(report["peer"], "b:eth0"),
+        other => panic!("{other:?}"),
+    }
+    let imp = get_impairments(&client, MADE).await;
+    assert_eq!(impairments(&imp, "a:eth0"), (false, Some("30ms".into())));
+    assert_eq!(impairments(&imp, "b:eth0"), (false, Some("30ms".into())));
+    // a bad value is refused before the kernel sees it
+    let bad = client
+        .call(Request::Impair {
+            lab: MADE.into(),
+            endpoint: "a:eth0".into(),
+            direction: Direction::Out,
+            spec: ImpairmentSpec {
+                delay: Some("30".into()),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(bad, ClientError::Api(e) if e.code == ErrorCode::InvalidArgument));
+    client
+        .call(Request::Partition {
+            lab: MADE.into(),
+            endpoint: "a:eth0".into(),
+        })
+        .await
+        .unwrap();
+    assert!(impairments(&get_impairments(&client, MADE).await, "a:eth0").0);
+    client
+        .call(Request::Heal {
+            lab: MADE.into(),
+            endpoint: "a:eth0".into(),
+        })
+        .await
+        .unwrap();
+    assert!(!impairments(&get_impairments(&client, MADE).await, "a:eth0").0);
+
+    // ── a snapshot, a change, a restore ──
+    client
+        .call(Request::Snapshot {
+            lab: MADE.into(),
+            name: "s1".into(),
+            description: None,
+        })
+        .await
+        .unwrap();
+    client
+        .call(Request::Impair {
+            lab: MADE.into(),
+            endpoint: "a:eth0".into(),
+            direction: Direction::Out,
+            spec: ImpairmentSpec {
+                delay: Some("80ms".into()),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+    match client
+        .call(Request::Restore {
+            lab: MADE.into(),
+            name: "s1".into(),
+            dry_run: true,
+        })
+        .await
+        .unwrap()
+    {
+        Response::Report { kind, report } => {
+            assert_eq!(kind, "dry_run");
+            assert_eq!(report["no_op"], false, "{report}");
+        }
+        other => panic!("{other:?}"),
+    }
+    let mut restore = client
+        .start(Request::Restore {
+            lab: MADE.into(),
+            name: "s1".into(),
+            dry_run: false,
+        })
+        .await
+        .unwrap();
+    let (_, _, end) = finish(&mut restore).await;
+    assert!(matches!(end.unwrap(), Response::Done { .. }));
+    let imp = get_impairments(&client, MADE).await;
+    assert_eq!(impairments(&imp, "a:eth0").1.as_deref(), Some("30ms"));
+
+    // ── a spawned process, waited for, then killed ──
+    let pid = match client
+        .call(Request::Spawn {
+            lab: MADE.into(),
+            node: "a".into(),
+            argv: vec!["sleep".into(), "300".into()],
+            env: vec![],
+            workdir: None,
+            wait: Some(WaitSpec {
+                exec: Some("true".into()),
+                timeout_ms: 5000,
+                ..Default::default()
+            }),
+        })
+        .await
+        .unwrap()
+    {
+        Response::Spawned { pid, stdout, .. } => {
+            assert!(stdout.is_some());
+            pid
+        }
+        other => panic!("{other:?}"),
+    };
+    match client
+        .call(Request::ListProcesses { lab: MADE.into() })
+        .await
+        .unwrap()
+    {
+        Response::Processes { processes } => {
+            assert!(processes.iter().any(|p| p.pid == pid && p.alive));
+        }
+        other => panic!("{other:?}"),
+    }
+    client
+        .call(Request::Kill {
+            lab: MADE.into(),
+            pid,
+            signal: None,
+        })
+        .await
+        .unwrap();
+    assert!(gone_within(pid, Duration::from_secs(3)).await);
+
+    // ── an apply that changes the topology is announced ──
+    let mut topo_sub = client
+        .start(Request::Subscribe {
+            lab: Some(MADE.into()),
+            topics: vec![Topic::Topology],
+            interval_ms: None,
+        })
+        .await
+        .unwrap();
+    let changed = nlink_lab::parser::parse(&format!(
+        "lab \"{MADE}\"\nnode a\nnode b\nnode c\nlink a:eth0 -- b:eth0 {{ 10.233.0.1/24 -- 10.233.0.2/24 delay 20ms }}\nlink a:eth1 -- c:eth0 {{ 10.233.1.1/24 -- 10.233.1.2/24 }}\nscenario \"slow\" {{ at 0s {{ log \"begins\" }} at 10s {{ log \"ends\" }} }}\n"
+    ))
+    .unwrap();
+    let changed = serde_json::to_value(&changed).unwrap();
+    match client
+        .call(Request::CheckApply {
+            lab: MADE.into(),
+            topology: changed.clone(),
+            options: Default::default(),
+        })
+        .await
+        .unwrap()
+    {
+        Response::Report { report, .. } => assert_eq!(report["no_op"], false),
+        other => panic!("{other:?}"),
+    }
+    let mut apply = client
+        .start(Request::Apply {
+            lab: MADE.into(),
+            topology: changed.clone(),
+            options: Default::default(),
+        })
+        .await
+        .unwrap();
+    let (_, _, end) = finish(&mut apply).await;
+    match end.unwrap() {
+        Response::Done { report, .. } => assert!(report["ops"].as_u64().unwrap() > 0),
+        other => panic!("{other:?}"),
+    }
+    match next_notification(&mut topo_sub, Duration::from_secs(5)).await {
+        Notification::TopologyChanged { lab, .. } => assert_eq!(lab, MADE),
+        other => panic!("{other:?}"),
+    }
+    match client
+        .call(Request::Verify { lab: MADE.into() })
+        .await
+        .unwrap()
+    {
+        Response::Report { report, .. } => assert_eq!(report["no_op"], true, "{report}"),
+        other => panic!("{other:?}"),
+    }
+
+    // ── a job left and found again: a deploy detached at once ──
+    let second = nlink_lab::parser::parse(&format!(
+        "lab \"{MADE2}\"\nnode x\nnode y\nlink x:eth0 -- y:eth0 {{ 10.234.0.1/24 -- 10.234.0.2/24 }}\n"
+    ))
+    .unwrap();
+    let mut deploy2 = client
+        .start(Request::Deploy {
+            topology: serde_json::to_value(&second).unwrap(),
+            options: DeployOptions::default(),
+            source: None,
+        })
+        .await
+        .unwrap();
+    let op2 = loop {
+        match deploy2.next().await.unwrap() {
+            CallEvent::Item(StreamItem::Started { op: Some(op), .. }) => break op,
+            CallEvent::End(r) => panic!("{r:?}"),
+            _ => {}
+        }
+    };
+    deploy2.detach().unwrap();
+    let (_, _, end) = finish(&mut deploy2).await;
+    // it may have ended first; detached or done, it went on
+    assert!(
+        matches!(&end, Ok(Response::Detached { op }) if *op == op2)
+            || matches!(&end, Ok(Response::Done { .. })),
+        "{end:?}"
+    );
+    let mut follow = client
+        .start(Request::AttachOp { op: op2.clone() })
+        .await
+        .unwrap();
+    let (_, _, end) = finish(&mut follow).await;
+    assert!(matches!(end.unwrap(), Response::Done { .. }));
+    assert!(
+        client
+            .list_labs()
+            .await
+            .unwrap()
+            .iter()
+            .any(|l| l.lab == MADE2)
+            || {
+                // the registry sees it within a scan
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                client
+                    .list_labs()
+                    .await
+                    .unwrap()
+                    .iter()
+                    .any(|l| l.lab == MADE2)
+            }
+    );
+
+    // ── a dropped call: an exec stops ──
+    let mut exec_call = client
+        .start(Request::Exec {
+            lab: MADE.into(),
+            node: "a".into(),
+            argv: vec!["sleep".into(), "30".into()],
+            env: vec![],
+            workdir: None,
+            stdin: false,
+            tty: false,
+            timeout_ms: None,
+        })
+        .await
+        .unwrap();
+    let pid = match exec_call.next().await.unwrap() {
+        CallEvent::Item(StreamItem::Started { pid: Some(pid), .. }) => pid,
+        other => panic!("{other:?}"),
+    };
+    drop(exec_call);
+    assert!(
+        gone_within(pid, Duration::from_secs(3)).await,
+        "{pid} still runs"
+    );
+
+    // ── a running scenario cancelled with cancel_op ──
+    let mut scenario = client
+        .start(Request::RunScenario {
+            lab: MADE.into(),
+            name: "slow".into(),
+        })
+        .await
+        .unwrap();
+    let first = scenario.next().await.unwrap();
+    if let CallEvent::Item(StreamItem::Started { op: Some(sop), .. }) = first {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        client.call(Request::CancelOp { op: sop }).await.unwrap();
+        let started = Instant::now();
+        let (_, _, end) = finish(&mut scenario).await;
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(
+            matches!(&end, Err(ClientError::Api(e)) if e.code == ErrorCode::Cancelled),
+            "{end:?}"
+        );
+    } else {
+        panic!("{first:?}");
+    }
+
+    // ── destroy, through the daemon ──
+    for lab in [MADE, MADE2] {
+        let mut destroy = client
+            .start(Request::Destroy { lab: lab.into() })
+            .await
+            .unwrap();
+        let (_, _, end) = finish(&mut destroy).await;
+        assert!(matches!(end.unwrap(), Response::Done { .. }), "{lab}");
+    }
+    assert!(!nlink_lab::state::exists(MADE));
+    drop(endpoint);
+    shutdown.cancel();
     unsafe { std::env::remove_var("NLINK_LAB_STATE_DIR") };
 }

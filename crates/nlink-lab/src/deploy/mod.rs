@@ -1177,7 +1177,7 @@ async fn preflight_recreates(running: &RunningLab, desired: &Topology) -> Result
 /// [`RunningLab::assertion_results`] / [`RunningLab::assertions_failed`])
 /// so the CLI can implement `deploy --strict` without changing this
 /// function's signature.
-fn run_assertions(
+pub(crate) fn run_assertions(
     running: &RunningLab,
     topology: &Topology,
 ) -> Vec<crate::test_runner::AssertionResult> {

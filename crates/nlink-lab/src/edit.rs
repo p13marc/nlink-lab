@@ -166,13 +166,29 @@ pub async fn apply_edited(
     running: &mut crate::RunningLab,
     edited: &Edited,
 ) -> Result<Option<crate::ApplyReport>> {
+    apply_edited_with(running, edited, &crate::ops::OpCtx::default()).await
+}
+
+/// [`apply_edited`], the apply reporting its progress to `ctx`.
+pub async fn apply_edited_with(
+    running: &mut crate::RunningLab,
+    edited: &Edited,
+    ctx: &crate::ops::OpCtx,
+) -> Result<Option<crate::ApplyReport>> {
     for (ep, _, mtu) in &edited.mtus {
         running.set_link_mtu(ep, *mtu).await?;
     }
     if !edited.structural {
         return Ok(None);
     }
-    crate::apply(running, &edited.topology).await.map(Some)
+    crate::apply_with_ctx(
+        running,
+        &edited.topology,
+        &crate::ApplyOptions::default(),
+        ctx,
+    )
+    .await
+    .map(Some)
 }
 
 /// Apply `edits` to `topology` in place, without validating it, and

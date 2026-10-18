@@ -65,11 +65,11 @@ root. Every key works.
 `nlink-labd`, the host daemon: its socket
 `/run/nlink-lab/api/api.sock`, or the endpoint `NLINK_LAB_DAEMON`
 names (`ssh://HOST` reaches another host's daemon over ssh). It needs
-the `nlink-lab-viewer` group, or `nlink-lab`, not root. It is
-read-only for now: `i`/`c`/`p`/`h` are disabled and say so. The
-impairment column still works when the lab's state is readable
-locally. Without root and without a daemon, `top` says how to get
-either.
+the `nlink-lab-viewer` group, or `nlink-lab`, not root. The impairment
+column is the daemon's. A member of `nlink-lab` (an operator) changes
+impairments through the daemon with `i`/`c`/`p`/`h`; for a viewer they
+are disabled and say so. Without root and without a daemon, `top` says
+how to get either.
 
 ## `--once`
 
@@ -87,7 +87,7 @@ without a terminal and tells you to use `--once`.
 ```text
 Live terminal UI for a running lab (nodes, interfaces, flows).
 
-As root, collects a metrics snapshot every `--interval` itself, like `diagnose`. Without root (or with `--daemon`, or `NLINK_LAB_DAEMON` set) it reads them from the nlink-lab daemon, `nlink-labd`: no root needed, and no write actions.
+As root, collects a metrics snapshot every `--interval` itself, like `diagnose`. Without root (or with `--daemon`, or `NLINK_LAB_DAEMON` set) it reads them from the nlink-lab daemon, `nlink-labd`: no root needed. The write keys then need the `nlink-lab` group (an operator); a viewer only watches.
 
 KEYS up/down or j/k  select        Tab  next pane      s  cycle sort i  impair prompt (`delay 50ms loss 1%`)           c  clear p  partition    h  heal       /  filter    ?  help    q  quit
 
@@ -113,7 +113,7 @@ Options:
           Start with the node/interface filter set to this substring
 
       --daemon
-          Read metrics from the nlink-lab daemon (`nlink-labd`) instead of collecting them: no root needed, read-only. What `top` does without root, or with `NLINK_LAB_DAEMON` set (`ssh://HOST` for another host's labs)
+          Read metrics from the nlink-lab daemon (`nlink-labd`) instead of collecting them: no root needed, and the write keys work for an operator. What `top` does without root, or with `NLINK_LAB_DAEMON` set (`ssh://HOST` for another host's labs)
 
   -h, --help
           Print help (see a summary with '-h')

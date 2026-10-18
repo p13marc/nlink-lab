@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, parse_topology, require_root};
-use crate::output::{DryRunReport, EXIT_VALIDATION, set_exit_code};
+use crate::output::{EXIT_VALIDATION, set_exit_code};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -46,30 +46,20 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         None => running.topology().clone(),
     };
     // a lab deployed with `--suffix`/`--unique`: its file's name plus that
-    if desired.lab.name != lab
-        && let Some(sfx) = nlink_lab::state::source_of(&lab).and_then(|s| s.suffix)
-        && format!("{}-{sfx}", desired.lab.name) == lab
-    {
-        desired.lab.add_suffix(&sfx);
-    }
-    if desired.lab.name != lab {
-        return Err(nlink_lab::Error::invalid_argument(format!(
-            "topology is for lab {:?}, not {lab:?}",
-            desired.lab.name
-        )));
-    }
-    let layered = nlink_lab::compute_layered_diff(&running, &desired).await?;
-    let plan = nlink_lab::apply_plan(&running, &desired)?;
-    // and the plan's other work, as `apply` would do it: a change
-    // that only re-creates a container verified clean (#209)
-    let (removals, plan_ops) = crate::cmd::common::plan_lists(&plan);
-    let report = DryRunReport::new(&lab, &layered, &removals).with_ops(&plan_ops);
+    nlink_lab::ops::mutate::target_lab(&mut desired, &lab)?;
+    // the plan's other work too, as `apply` would do it: a change that
+    // only re-creates a container verified clean (#209)
+    let check =
+        nlink_lab::ops::mutate::check(&running, &desired, &nlink_lab::ApplyOptions::default())
+            .await?;
+    let (layered, removals, plan_ops) = (&check.layered, &check.removals, &check.ops);
+    let report = check.report(&lab);
     let drift = !report.no_op;
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if drift {
         println!("Drift detected for lab {lab:?}:");
-        crate::cmd::common::print_drift(&layered, &removals, &plan_ops);
+        crate::cmd::common::print_drift(layered, removals, plan_ops);
         println!("{} change(s) needed to converge", report.change_count);
     } else if !ctx.quiet {
         println!("Lab {lab:?} matches its topology (no drift).");

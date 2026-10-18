@@ -69,18 +69,9 @@ pub async fn run_edits(
     }
     let progress = crate::progress::Progress::new(ctx);
     let op = progress.op("apply", &lab);
-    for (ep, _, mtu) in &ed.mtus {
-        running.set_link_mtu(ep, *mtu).await?;
-    }
-    let applied = nlink_lab::apply_with_ctx(
-        &mut running,
-        &ed.topology,
-        &nlink_lab::ApplyOptions::default(),
-        &op,
-    )
-    .await;
+    let applied = nlink_lab::edit::apply_edited_with(&mut running, &ed, &op).await;
     progress.finish();
-    let report = applied?;
+    let report = applied?.expect("a structural edit applies");
     if ctx.json {
         println!(
             "{}",

@@ -28,6 +28,7 @@ mod audit;
 mod calls;
 mod exec;
 mod hub;
+mod jobs;
 mod server;
 
 use std::sync::Arc;
@@ -56,6 +57,7 @@ pub async fn serve(
     let shared = Arc::new(server::Shared {
         audit: audit::Audit::new(config.audit_path()),
         groups,
+        jobs: jobs::Jobs::new(hub.clone()),
         hub: hub.clone(),
         started: Instant::now(),
         clients: AtomicUsize::new(0),

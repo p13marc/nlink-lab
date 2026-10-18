@@ -63,15 +63,17 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             "one of --tcp, --exec, or --file is required".to_string(),
         ));
     }
+    let progress = crate::progress::Progress::new(ctx);
     let result = running
         .wait_all(
             &node,
             &conditions,
             timeout,
             interval,
-            &nlink_lab::OpCtx::default(),
+            &progress.op("wait", &lab),
         )
         .await;
+    progress.finish();
 
     match result {
         Ok(()) => {

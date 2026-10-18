@@ -156,7 +156,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     let start = Instant::now();
-    let lab = topo.deploy().await?;
+    let progress = crate::progress::Progress::new(ctx);
+    let op = progress.op("deploy", &topo.lab.name);
+    let deployed = topo.deploy_with(&op).await;
+    progress.finish();
+    let lab = deployed?;
     let elapsed = start.elapsed();
     // what it came from, for a later `apply` (#234)
     let source = nlink_lab::state::LabSource {

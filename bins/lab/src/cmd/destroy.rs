@@ -33,7 +33,8 @@ pub struct Args {
 
 /// Destroy one lab, or clean up after it with `force`. A lab that does
 /// not exist is already destroyed.
-async fn destroy_one(name: &str, force: bool, quiet: bool) -> nlink_lab::Result<&'static str> {
+async fn destroy_one(ctx: &Ctx, name: &str, force: bool) -> nlink_lab::Result<&'static str> {
+    let quiet = ctx.quiet || ctx.json;
     // before `--force` can sweep with it: `""` or `..` named the state
     // directory itself (#221)
     nlink_lab::state::validate_lab_name(name)?;
@@ -48,7 +49,12 @@ async fn destroy_one(name: &str, force: bool, quiet: bool) -> nlink_lab::Result<
                     .count(),
                 lab.process_status().iter().filter(|p| p.alive).count(),
             );
-            lab.destroy().await?;
+            let progress = crate::progress::Progress::new(ctx);
+            let destroyed = lab
+                .destroy_with(&progress.op_uncancellable("destroy", name))
+                .await;
+            progress.finish();
+            destroyed?;
             if !quiet {
                 let (nodes, containers, processes) = summary;
                 let mut parts = vec![format!("{nodes} node(s)")];
@@ -112,7 +118,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut results = Vec::new();
     let mut failed = Vec::new();
     for name in &names {
-        match destroy_one(name, force, ctx.quiet || ctx.json).await {
+        match destroy_one(ctx, name, force).await {
             Ok(what) => {
                 // the caller's current lab is gone: forget it, not leave
                 // every next command failing on it

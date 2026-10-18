@@ -603,6 +603,14 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **Live progress** (#249) for `deploy`, `apply`, `destroy`, `snapshot
+  restore`, `test`, `scenario`, the waits of `spawn`/`wait-for` and
+  `pull`: one live line on a terminal (stage, op, wait, elapsed) with a
+  kept `✓` line per finished stage; on a pipe a line per stage, wait and
+  warning with a heartbeat every 10 s; with `--format ndjson` every event
+  as a JSON line. **Ctrl-C** cancels a deploy, apply or restore, which
+  rolls back and exits 130; a second Ctrl-C a moment later quits at
+  once. `test` prints `PASS FILE (…)` per file.
 - **`apply` without a file** (#246) re-reads the file the lab was
   deployed from (or last applied), with its `--set` params; `-L` applies
   a file to a lab deployed with `--suffix`/`--unique`. `deploy FILE.nlz`
@@ -789,6 +797,11 @@ under both (#233). Its waves land one by one below.
   now carry the set's name.
 
 ### Fixed
+
+- **A failed or cancelled deploy left `labs/<name>/` and its lock file**
+  (#249): the lab never existed, and now nothing of it stays. The
+  library logs the failure at info (the caller reports it), and log
+  colours follow the stream, as the rest of the output.
 
 - **The CI matrix cookbook's `test` sweep** (#241): it passed several
   `--set … FILE` pairs to one `test`, which never parsed; it is a loop

@@ -13,6 +13,7 @@ mod ctx;
 mod docs_gate;
 mod host_scan;
 mod output;
+mod progress;
 mod removed;
 mod render;
 mod util;
@@ -187,7 +188,8 @@ fn main() -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_writer(std::io::stderr)
-        .with_ansi(color != ColorWhen::Never)
+        // per stream, as the rest of the output
+        .with_ansi(anstream::stderr().current_choice() != anstream::ColorChoice::Never)
         .init();
 
     // Handle completions synchronously (no runtime needed)

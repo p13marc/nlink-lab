@@ -39,7 +39,7 @@ pub enum OpPhase {
         #[serde(default)]
         removals: usize,
     },
-    /// A stage begins (`index` of `of`), with its op count.
+    /// A stage begins (`index` of `of`, from 1), with its op count.
     Stage {
         stage: String,
         index: usize,

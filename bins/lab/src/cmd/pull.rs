@@ -14,7 +14,7 @@ pub struct Args {
     pub params: Vec<(String, String)>,
 }
 
-pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { topology, params } = args;
     let topo = parse_topology(&topology, &params)?;
     let images: std::collections::BTreeSet<&str> = topo
@@ -29,11 +29,37 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         // over a lab's `runtime "docker"`, and pulled into the wrong store
         // (#209)
         let rt = nlink_lab::container::Runtime::new(&topo.lab.runtime.clone().unwrap_or_default())?;
-        for image in &images {
-            eprint!("Pulling {image}...");
-            rt.pull_image(image)?;
-            eprintln!(" done");
+        let progress = crate::progress::Progress::new(ctx);
+        let op = progress.op("pull", &topo.lab.name);
+        op.started();
+        let mut pulled = Ok(());
+        for (i, image) in images.iter().enumerate() {
+            op.step(i + 1, images.len(), || image.to_string());
+            op.waiting(
+                nlink_lab::api::WaitKind::ImagePull {
+                    image: image.to_string(),
+                },
+                None,
+                None,
+            );
+            // blocking, as `podman pull` is: off the runtime's threads
+            let (rt2, image2) = (rt.clone(), image.to_string());
+            pulled = tokio::task::spawn_blocking(move || rt2.pull_image(&image2))
+                .await
+                .map_err(|e| nlink_lab::Error::Runtime(format!("pull: {e}")))
+                .and_then(|r| r);
+            if pulled.is_err() {
+                break;
+            }
+            op.log("info", format!("pulled {image}"));
+            if let Err(e) = op.check() {
+                pulled = Err(e);
+                break;
+            }
         }
+        op.finished(&pulled, false);
+        progress.finish();
+        pulled?;
         println!("{} image(s) pulled", images.len());
     }
     Ok(())

@@ -1,15 +1,18 @@
 //! A tab: the toolbar, then the canvas, the inspector and the dock in a
 //! pane grid.
 
-use iced::widget::{Canvas, button, checkbox, container, pane_grid, pick_list, row, space, text};
-use iced::{Alignment, Element, Length, Theme};
+use iced::widget::{
+    Canvas, button, checkbox, column, container, pane_grid, pick_list, row, space, text,
+    text_editor,
+};
+use iced::{Alignment, Element, Font, Length, Theme};
 
 use super::{dock, inspector, muted};
 use crate::canvas::TopoCanvas;
 use crate::doc::Source;
 use crate::export::Format;
 use crate::message::{Message, Shortcut};
-use crate::model::{App, DockTab, Pane, Tab};
+use crate::model::{App, Design, DockTab, Pane, Tab};
 use crate::settings::LayoutPref;
 
 pub fn view<'a>(
@@ -20,15 +23,21 @@ pub fn view<'a>(
     let grid = pane_grid(&tab.panes, |_, pane, _| {
         let (title, body): (Element<'a, Message>, Element<'a, Message>) = match pane {
             Pane::Canvas => (canvas_title(tab), canvas(tab)),
+            Pane::Source => match tab.design() {
+                Some(d) => (source_title(d), source(d)),
+                None => (text("Source").size(13).into(), column![].into()),
+            },
             Pane::Inspector => (text("Inspector").size(13).into(), inspector::view(app, tab)),
             Pane::Dock => (dock_title(tab), dock::view(app, tab, terminals)),
         };
+        let mut bar = pane_grid::TitleBar::new(title)
+            .padding([3, 8])
+            .style(super::bar);
+        if *pane == Pane::Source {
+            bar = bar.controls(pane_grid::Controls::new(source_controls(tab)));
+        }
         pane_grid::Content::new(container(body).width(Length::Fill).height(Length::Fill))
-            .title_bar(
-                pane_grid::TitleBar::new(title)
-                    .padding([3, 8])
-                    .style(super::bar),
-            )
+            .title_bar(bar)
             .style(pane_style)
     })
     .spacing(4)
@@ -64,26 +73,42 @@ fn toolbar<'a>(app: &'a App, tab: &'a Tab) -> Element<'a, Message> {
             )
         },
     );
-    let mut bar = row![
-        tool("Reload", Message::Reload),
-        muted("Layout"),
-        pick_list(LayoutPref::ALL, Some(tab.view.layout), Message::SetLayout).text_size(13),
-        tool("Fit", Message::Shortcut(Shortcut::Fit)),
-        tool("−", Message::Shortcut(Shortcut::ZoomOut)),
-        tool("+", Message::Shortcut(Shortcut::ZoomIn)),
+    let mut bar = row![tool("Reload", Message::Reload)]
+        .spacing(8)
+        .align_y(Alignment::Center);
+    if tab.design().is_some() {
+        let open = tab.panes.iter().any(|(_, p)| *p == Pane::Source);
+        bar = bar.push(
+            button(text("Source").size(13))
+                .style(if open {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .on_press(Message::ToggleSource),
+        );
+    }
+    let mut bar = bar.extend([
+        muted("Layout").into(),
+        pick_list(LayoutPref::ALL, Some(tab.view.layout), Message::SetLayout)
+            .text_size(13)
+            .into(),
+        tool("Fit", Message::Shortcut(Shortcut::Fit)).into(),
+        tool("−", Message::Shortcut(Shortcut::ZoomOut)).into(),
+        tool("+", Message::Shortcut(Shortcut::ZoomIn)).into(),
         checkbox(app.settings.show_addresses)
             .label("Addresses")
             .text_size(13)
-            .on_toggle(|_| Message::ToggleAddresses),
+            .on_toggle(|_| Message::ToggleAddresses)
+            .into(),
         checkbox(app.settings.show_mgmt)
             .label("Management")
             .text_size(13)
-            .on_toggle(|_| Message::ToggleMgmt),
-        space::horizontal(),
-        export,
-    ]
-    .spacing(8)
-    .align_y(Alignment::Center);
+            .on_toggle(|_| Message::ToggleMgmt)
+            .into(),
+        space::horizontal().into(),
+        export.into(),
+    ]);
     // deploy and apply, for an operator connected to a daemon
     if app.operator() {
         use crate::message::WorkflowMsg;
@@ -199,6 +224,86 @@ fn canvas(tab: &Tab) -> Element<'_, Message> {
     .into()
 }
 
+/// The source pane's title: where the cursor is, whether it is saved.
+fn source_title(d: &Design) -> Element<'_, Message> {
+    let at = d.editor.cursor().position;
+    let mut r = row![text("Source").size(13)]
+        .spacing(10)
+        .align_y(Alignment::Center);
+    if d.edited {
+        r = r.push(
+            text("edited")
+                .size(12)
+                .style(super::tone_text(nlink_lab_view::scene::Tone::Warn)),
+        );
+    }
+    r.push(muted(format!("Ln {}, Col {}", at.line + 1, at.column + 1)))
+        .into()
+}
+
+fn source_controls(tab: &Tab) -> Element<'_, Message> {
+    let edited = tab.design().is_some_and(|d| d.edited);
+    row![
+        button(text("Format").size(12))
+            .style(button::text)
+            .padding([1, 8])
+            .on_press(Message::Format),
+        button(text("Save").size(12))
+            .style(if edited {
+                button::primary
+            } else {
+                button::secondary
+            })
+            .padding([1, 8])
+            .on_press(Message::Save),
+    ]
+    .spacing(4)
+    .into()
+}
+
+/// The source, editable: coloured, the problems marked; a file changed
+/// on disk while edited asks what to keep.
+fn source(d: &Design) -> Element<'_, Message> {
+    let editor = text_editor(&d.editor)
+        .id(super::EDITOR)
+        .on_action(Message::Edit)
+        .highlight_with::<crate::highlight::Nll>(d.marks.clone(), crate::highlight::format)
+        .font(Font::MONOSPACE)
+        .size(13)
+        .padding(8)
+        .height(Length::Fill)
+        .style(|theme: &Theme, status| text_editor::Style {
+            border: iced::Border::default(),
+            ..text_editor::default(theme, status)
+        });
+    if !d.changed_on_disk {
+        return editor.into();
+    }
+    column![
+        container(
+            row![
+                text("The file changed on disk.")
+                    .size(13)
+                    .width(Length::Fill),
+                button(text("Reload it").size(12))
+                    .style(button::danger)
+                    .padding([2, 8])
+                    .on_press(Message::Reload),
+                button(text("Keep my edits").size(12))
+                    .style(button::secondary)
+                    .padding([2, 8])
+                    .on_press(Message::KeepMine),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        )
+        .padding([4, 8])
+        .style(super::bar),
+        editor,
+    ]
+    .into()
+}
+
 fn dock_title(tab: &Tab) -> Element<'_, Message> {
     let page = |page: DockTab| {
         let label = match page {
@@ -206,7 +311,6 @@ fn dock_title(tab: &Tab) -> Element<'_, Message> {
                 "Problems ({})",
                 tab.design().map_or(0, |d| d.problems.len())
             ),
-            DockTab::Source => "Source".into(),
             DockTab::Events => format!("Events ({})", tab.live().map_or(0, |l| l.events.len())),
             DockTab::Processes => format!(
                 "Processes ({})",

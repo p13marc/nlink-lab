@@ -11,8 +11,13 @@ use iced::widget::{
 };
 use iced::{Alignment, Color, Element, Length, Theme};
 
-use crate::message::{Message, Shortcut};
-use crate::model::{App, Level, Route};
+use crate::message::{Message, PaletteMsg, Shortcut};
+use crate::model::{App, Discard, Level, Route};
+
+/// The source editor's id, to give it the keyboard.
+pub const EDITOR: &str = "source-editor";
+/// The palette's field's.
+pub const PALETTE: &str = "palette";
 
 /// The app; `terminals` are the terminal widgets, where there are any.
 pub fn view<'a>(
@@ -35,10 +40,155 @@ pub fn view<'a>(
     if let Some(c) = &app.confirm {
         layers = layers.push(confirm(c));
     }
+    if let Some(d) = app.discard {
+        layers = layers.push(discard(app, d));
+    }
     if app.help {
         layers = layers.push(help());
     }
+    if let Some(p) = &app.palette {
+        layers = layers.push(palette(app, p));
+    }
     layers.into()
+}
+
+/// The rest of the app dimmed under `card`; a click beside it sends
+/// `outside`.
+fn modal<'a>(
+    card: impl Into<Element<'a, Message>>,
+    outside: Option<Message>,
+    top: bool,
+) -> Element<'a, Message> {
+    let mut place = container(opaque(card))
+        .width(Length::Fill)
+        .height(Length::Fill);
+    place = if top {
+        place.align_x(Alignment::Center).padding(iced::Padding {
+            top: 70.0,
+            ..iced::Padding::ZERO
+        })
+    } else {
+        place.center(Length::Fill)
+    };
+    let dim = place.style(|_| container::Style {
+        background: Some(
+            Color {
+                a: 0.45,
+                ..Color::BLACK
+            }
+            .into(),
+        ),
+        ..container::Style::default()
+    });
+    match outside {
+        Some(m) => opaque(mouse_area(dim).on_press(m)),
+        None => opaque(dim),
+    }
+}
+
+/// Every command by name (Ctrl+K), filtered by what is typed.
+fn palette<'a>(app: &'a App, p: &'a crate::model::Palette) -> Element<'a, Message> {
+    /// Entries shown at once.
+    const SHOWN: usize = 12;
+    let entries = crate::commands::entries(app);
+    let picked = crate::commands::filter(&entries, &p.query);
+    let first = p.selected.saturating_sub(SHOWN - 1);
+    let mut list = column![].spacing(1);
+    for (i, &e) in picked.iter().enumerate().skip(first).take(SHOWN) {
+        let entry = &entries[e];
+        list = list.push(
+            button(
+                row![
+                    text(entry.label.clone()).size(13).width(Length::Fill),
+                    muted(entry.keys.unwrap_or("")),
+                ]
+                .spacing(8),
+            )
+            .style(if i == p.selected {
+                button::primary
+            } else {
+                button::text
+            })
+            .width(Length::Fill)
+            .padding([4, 10])
+            .on_press(Message::Palette(PaletteMsg::Run(Some(i)))),
+        );
+    }
+    if picked.is_empty() {
+        list = list.push(container(muted("Nothing matches.")).padding([4, 10]));
+    } else if picked.len() > SHOWN {
+        list = list.push(
+            container(muted(format!(
+                "{} more: type to narrow",
+                picked.len() - SHOWN
+            )))
+            .padding([4, 10]),
+        );
+    }
+    let card = container(
+        column![
+            text_input("A command, a node, a file…", &p.query)
+                .id(PALETTE)
+                .on_input(|q| Message::Palette(PaletteMsg::Query(q)))
+                .on_submit(Message::Palette(PaletteMsg::Run(None)))
+                .size(15)
+                .padding(8),
+            list,
+        ]
+        .spacing(8),
+    )
+    .padding(10)
+    .style(container::bordered_box)
+    .max_width(620);
+    modal(card, Some(Message::Palette(PaletteMsg::Close)), true)
+}
+
+/// Unsaved edits about to be lost: closing their tab, or quitting.
+fn discard(app: &App, d: Discard) -> Element<'_, Message> {
+    let (title, body, go) = match d {
+        Discard::Tab(id) => (
+            format!(
+                "Close {} without saving?",
+                app.tab(id).map(|t| t.title()).unwrap_or_default()
+            ),
+            "Its edits are lost.".to_string(),
+            "Close without saving",
+        ),
+        Discard::Quit => {
+            let n = app
+                .tabs
+                .iter()
+                .filter_map(|t| t.design())
+                .filter(|d| d.edited)
+                .count();
+            (
+                "Quit without saving?".to_string(),
+                format!("{n} tab(s) have edits not saved; they are lost."),
+                "Quit without saving",
+            )
+        }
+    };
+    let card = container(
+        column![
+            text(title).size(18),
+            text(body).size(13),
+            row![
+                space::horizontal(),
+                button(text("Cancel").size(13))
+                    .style(button::secondary)
+                    .on_press(Message::Discard(false)),
+                button(text(go).size(13))
+                    .style(button::danger)
+                    .on_press(Message::Discard(true)),
+            ]
+            .spacing(8),
+        ]
+        .spacing(14),
+    )
+    .padding(20)
+    .style(container::bordered_box)
+    .max_width(520);
+    modal(card, Some(Message::Discard(false)), false)
 }
 
 /// The app's bar: Home, one button per tab, Open, Help.
@@ -54,6 +204,9 @@ fn top_bar(app: &App) -> Element<'_, Message> {
     for t in &app.tabs {
         let active = app.route == Route::Workspace && app.active == Some(t.id);
         let mut label = t.label();
+        if t.design().is_some_and(|d| d.edited) {
+            label.push_str(" *");
+        }
         if t.errors() > 0 {
             label.push_str(" ●");
         }

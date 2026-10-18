@@ -103,8 +103,10 @@ fn a_workspace_renders_in_both_themes() {
     );
     snapshot(&app, &Theme::Light, "workspace-endpoint");
     reduce(&mut app, Message::Canvas(CanvasMsg::Select(None)));
-    reduce(&mut app, Message::Dock(crate::model::DockTab::Source));
+    // the source beside the canvas, in both themes
+    reduce(&mut app, Message::ToggleSource);
     snapshot(&app, &Theme::Light, "workspace-lab");
+    snapshot(&app, &Theme::Dark, "workspace-source-dark");
 }
 
 #[test]
@@ -115,10 +117,63 @@ fn a_broken_topology_shows_its_problem() {
         "parse"
     );
     snapshot(&app, &Theme::Light, "workspace-broken");
-    // the problem leads to its line
+    // the problem leads to its place in the source
     reduce(&mut app, Message::ProblemClicked(0));
-    assert_eq!(app.current().unwrap().dock, crate::model::DockTab::Source);
+    let d = app.current().unwrap().design().unwrap();
+    assert_eq!(d.editor.cursor().position.line, 2);
     snapshot(&app, &Theme::Dark, "workspace-broken-source");
+}
+
+#[test]
+fn the_minimap_renders_when_zoomed_in() {
+    use crate::message::Shortcut;
+    let mut app = app_with(LAB);
+    // the canvas says its size when drawn; the simulator keeps no messages
+    reduce(
+        &mut app,
+        Message::Canvas(CanvasMsg::Resized {
+            width: 950.0,
+            height: 560.0,
+        }),
+    );
+    for _ in 0..5 {
+        reduce(&mut app, Message::Shortcut(Shortcut::ZoomIn));
+    }
+    snapshot(&app, &Theme::Dark, "minimap");
+}
+
+#[test]
+fn the_palette_renders() {
+    let mut app = app_with(LAB);
+    reduce(
+        &mut app,
+        Message::Shortcut(crate::message::Shortcut::Palette),
+    );
+    reduce(
+        &mut app,
+        Message::Palette(crate::message::PaletteMsg::Query("export".into())),
+    );
+    snapshot(&app, &Theme::Light, "palette");
+}
+
+#[test]
+fn typing_in_the_editor_is_taken_by_the_editor() {
+    let mut app = app_with(LAB);
+    reduce(&mut app, Message::ToggleSource);
+    let mut ui = simulator(&app);
+    // a click into the editor, then keys that are shortcuts elsewhere
+    ui.click(iced::widget::Id::new(crate::view::EDITOR))
+        .expect("the editor");
+    assert_eq!(ui.typewrite("fla"), event::Status::Captured);
+    let messages: Vec<Message> = ui.into_messages().collect();
+    assert!(
+        messages.iter().any(|m| matches!(m, Message::Edit(_))),
+        "{messages:?}"
+    );
+    assert!(
+        !messages.iter().any(|m| matches!(m, Message::Shortcut(_))),
+        "{messages:?}"
+    );
 }
 
 #[test]

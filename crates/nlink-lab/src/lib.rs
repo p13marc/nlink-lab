@@ -60,6 +60,7 @@
 //! └─────────────────────────────────┘
 //! ```
 
+pub mod analysis;
 pub mod benchmark;
 pub mod builder;
 pub mod capture;

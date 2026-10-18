@@ -136,6 +136,9 @@ crates/nlink-lab/src/
   metrics.rs        # MetricsCollector: interface rates/states, top TCP flows, process exits
   logs.rs           # process log tail / cat / follow
   edit.rs           # Edit model: live topology edits (nodes, links, impairments, qdiscs, pairs, MTU)
+  analysis/         # one pass over NLL text: lex, parse, validate, lint -> diagnostics
+                    #   as byte ranges (the LSP's and the app's editor's); locate
+                    #   (validator location -> span), symbols (token queries)
   wait.rs           # WaitCondition + RunningLab::wait_all (one deadline, progress, cancel)
   pty.rs            # pseudo-terminals: Pty::open/attach (setsid + controlling tty), resize
 crates/nlink-lab-client/src/   # client of the daemon API: Endpoint (unix, ssh dial-stdio,
@@ -191,9 +194,9 @@ bins/lab/src/
   docs_gate.rs      # test: every `nlink-lab …` line in the docs and example comments parses
   cmd/<name>.rs     # one handler per subcommand (Args + run); cmd/common.rs shared
                     #   printing/lookup, cmd/edit.rs the Edit executor for node/link
-  cmd/lsp/          # `lsp`: analyze (diagnostics), locate (validator
-                    #   location -> span), position (byte <-> UTF-16),
-                    #   symbols (token queries)
+  cmd/lsp/          # `lsp`: the protocol over nlink_lab::analysis —
+                    #   analyze (its diagnostics as LSP ranges), position
+                    #   (byte <-> UTF-16)
   cmd/top/          # `top`: app (pure state + keys), ui (widgets +
                     #   `--once` text frame), mod (source, event loop)
   render/           # validate/deploy summaries (diagrams: nlink_lab_view::diagram)
@@ -221,12 +224,19 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
   reduce.rs         #   reduce(app, msg) -> Vec<Effect>: every behaviour, pure, tested
   effect.rs         #   Effect + run: loads, layouts (off the UI thread), rfd dialogs,
                     #   exports, settings/pins writes, connect, fetches
-  doc.rs            #   Source (file | unsaved template), load: parse + validate -> problems
-  canvas.rs         #   canvas::Program painting the Scene in 3 caches; no keys
+  doc.rs            #   Source (file | unsaved template), load: nlink_lab::analysis ->
+                    #   problems with spans (the file, or the editor's text), marks
+  highlight.rs      #   the editor's NLL highlighter (line at a time, block comments
+                    #   carried over, problems marked)
+  commands.rs       #   the command palette: entries for the tab in front, filter
+  canvas.rs         #   canvas::Program painting the Scene in cached layers (+ a
+                    #   minimap when it does not fit); no keys
   keys.rs           #   shortcuts from keyboard::listen() (never while typing)
   settings.rs       #   gui.toml (theme, layout, toggles, recent), per-file pins
   export.rs         #   SVG / PNG (resvg) / DOT / Mermaid
-  view/             #   home, workspace (pane_grid), inspector, dock
+  palette.rs        #   the canvas's colours (tones, node kinds) per theme
+  view/             #   home, workspace (pane_grid: canvas, source editor, inspector,
+                    #   dock), inspector, dock, modals (panel, confirm, palette)
   ui_tests.rs       #   headless frames (iced_test), every example drawn;
                     #   NLINK_LAB_GUI_SNAPSHOTS=DIR keeps them as PNGs
 

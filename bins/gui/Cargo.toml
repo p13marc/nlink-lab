@@ -20,7 +20,7 @@ default = ["embedded-terminal"]
 embedded-terminal = ["dep:iced_term"]
 
 [dependencies]
-iced = { version = "0.14", features = ["canvas", "tokio"] }
+iced = { version = "0.14", features = ["advanced", "canvas", "tokio"] }
 # pinned: pre-1.0, its API moves between minors
 iced_term = { version = "=0.8.0", optional = true }
 libc = { workspace = true }

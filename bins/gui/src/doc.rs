@@ -1,13 +1,14 @@
 //! A topology shown from its source, in design mode: a file (watched for
-//! changes) or a template not saved yet. Loading parses it with its
-//! params and validates it; whatever goes wrong is a problem to list, not
-//! a message on stderr.
+//! changes) or a template not saved yet. Loading analyses it with its
+//! params (`nlink_lab::analysis`, the LSP's): whatever goes wrong is a
+//! problem to list, with its place in the text, not a message on stderr.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use nlink_lab::Topology;
-use nlink_lab::validator::Severity as VSeverity;
+use nlink_lab::analysis::{self, Severity as ASeverity};
 use nlink_lab_view::Positions;
 
 use crate::settings::Dirs;
@@ -46,19 +47,24 @@ impl Source {
 pub enum Severity {
     Error,
     Warning,
+    /// A lint's: worth a look, never wrong.
+    Hint,
 }
 
 /// Something wrong with a topology.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
     pub severity: Severity,
-    /// The validator's rule, `parse`, or `io`.
+    /// The validator's or the lint's rule, `parse`, or `io`.
     pub rule: String,
     pub message: String,
-    /// `file:line:column` for a parse error, the validator's path
-    /// (`nodes.r1.routes.default`) otherwise.
+    /// The validator's path (`nodes.r1.routes.default`).
     pub location: Option<String>,
     pub hint: Option<String>,
+    /// Its bytes in the text, when it has a place there.
+    pub span: Option<Range<usize>>,
+    /// Its line and column there, from 1.
+    pub place: Option<(usize, usize)>,
 }
 
 /// What a problem's location points at in the graph.
@@ -70,12 +76,10 @@ pub enum Target {
 }
 
 impl Problem {
-    /// The source line of a parse error (`file:line:column`).
+    /// Its line in the source, from 1.
+    #[cfg(test)]
     pub fn line(&self) -> Option<usize> {
-        let mut parts = self.location.as_deref()?.rsplitn(3, ':');
-        let (_col, line) = (parts.next()?.parse::<usize>().ok()?, parts.next()?);
-        parts.next()?;
-        line.parse().ok()
+        self.place.map(|(line, _)| line)
     }
 
     /// The node, link or endpoint the problem is about, from the
@@ -109,7 +113,8 @@ impl Problem {
 #[derive(Debug, Clone)]
 pub struct Loaded {
     pub text: String,
-    /// The file's modification time, to notice changes.
+    /// The file's modification time, to notice changes: `None` for text
+    /// that came from the editor.
     pub modified: Option<SystemTime>,
     /// The params it declares, with their defaults.
     pub declared: Vec<(String, Option<String>)>,
@@ -118,18 +123,24 @@ pub struct Loaded {
     pub problems: Vec<Problem>,
     /// Where the user put its nodes, last time.
     pub pins: Positions,
+    /// The text was the editor's, not the file's.
+    pub edited: bool,
 }
 
-/// Read, parse with `params` and validate `source`. Blocking: imports
-/// are read from disk.
-pub fn load(source: &Source, params: &[(String, String)], dirs: Option<&Dirs>) -> Loaded {
-    let (text, modified, parsed) = match source {
-        Source::File(path) => match std::fs::read_to_string(path) {
-            Ok(text) => {
-                let modified = modified(path);
-                let parsed = nlink_lab::parser::parse_file_with_params(path, params);
-                (text, modified, parsed)
-            }
+/// Analyse `source` with `params`: its file read, or `text` — what the
+/// editor holds — when given. Blocking: imports are read from disk.
+pub fn load(
+    source: &Source,
+    text: Option<String>,
+    params: &[(String, String)],
+    dirs: Option<&Dirs>,
+) -> Loaded {
+    let edited = text.is_some();
+    let (text, modified) = match (text, source) {
+        (Some(text), _) => (text, None),
+        (None, Source::Untitled { text, .. }) => (text.clone(), None),
+        (None, Source::File(path)) => match std::fs::read_to_string(path) {
+            Ok(text) => (text, modified(path)),
             Err(e) => {
                 return Loaded {
                     text: String::new(),
@@ -142,39 +153,36 @@ pub fn load(source: &Source, params: &[(String, String)], dirs: Option<&Dirs>) -
                         message: format!("{}: {e}", path.display()),
                         location: None,
                         hint: None,
+                        span: None,
+                        place: None,
                     }],
                     pins: Positions::new(),
+                    edited,
                 };
             }
         },
-        Source::Untitled { name, text } => (
-            text.clone(),
-            None,
-            nlink_lab::parser::nll::parse_named_with_params(text, name, params),
-        ),
     };
+    let a = analysis::analyze_with_params(&text, source.path(), params);
     let declared = nlink_lab::parser::nll::declared_param_defs(&text).unwrap_or_default();
-    let mut problems = Vec::new();
-    let topology = match parsed {
-        Ok(t) => {
-            problems.extend(t.validate().issues().iter().map(|i| Problem {
-                severity: match i.severity {
-                    VSeverity::Error => Severity::Error,
-                    VSeverity::Warning => Severity::Warning,
-                },
-                rule: i.rule.to_string(),
-                message: i.message.clone(),
-                location: i.location.clone(),
-                hint: None,
-            }));
-            Some(t)
-        }
-        Err(e) => {
-            problems.push(parse_problem(&e));
-            None
-        }
-    };
-    problems.sort_by_key(|p| p.severity);
+    let mut problems: Vec<Problem> = a
+        .diagnostics
+        .into_iter()
+        .map(|d| Problem {
+            severity: match d.severity {
+                ASeverity::Error => Severity::Error,
+                ASeverity::Warning => Severity::Warning,
+                ASeverity::Hint => Severity::Hint,
+            },
+            rule: d.code,
+            message: d.message,
+            location: d.location,
+            hint: d.hint,
+            place: Some(analysis::line_col(&text, d.range.start)),
+            span: Some(d.range),
+        })
+        .collect();
+    // errors first; in each, in the order of the text
+    problems.sort_by_key(|p| (p.severity, p.span.as_ref().map(|s| s.start)));
     let pins = match (source.path(), dirs) {
         (Some(path), Some(dirs)) => crate::settings::load_pins(dirs, path),
         _ => Positions::new(),
@@ -183,9 +191,10 @@ pub fn load(source: &Source, params: &[(String, String)], dirs: Option<&Dirs>) -
         text,
         modified,
         declared,
-        topology,
+        topology: a.topology,
         problems,
         pins,
+        edited,
     }
 }
 
@@ -193,24 +202,36 @@ pub fn modified(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-/// A parse error as a problem, located like `nlink-lab validate --json`
-/// locates it.
-fn parse_problem(e: &nlink_lab::Error) -> Problem {
-    let api = e.to_api();
-    let location = api
-        .issues
-        .as_ref()
-        .and_then(|v| v.get(0))
-        .and_then(|i| i.get("location"))
-        .and_then(|l| l.as_str())
-        .map(str::to_string);
-    Problem {
-        severity: Severity::Error,
-        rule: "parse".into(),
-        message: api.message,
-        location,
-        hint: api.hint,
+/// The problems' places, line by line, for the editor to mark: errors
+/// and warnings (a lint's hint is only listed).
+pub fn marks(text: &str, problems: &[Problem]) -> Vec<(usize, Range<usize>, bool)> {
+    let mut out = Vec::new();
+    for p in problems.iter().filter(|p| p.severity != Severity::Hint) {
+        let Some(span) = &p.span else { continue };
+        let span = span.start.min(text.len())..span.end.min(text.len());
+        if span.is_empty() {
+            continue;
+        }
+        // a span over lines: a mark on each
+        let mut line = text[..span.start].matches('\n').count();
+        let mut start = span.start;
+        loop {
+            let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
+            let line_end = text[start..].find('\n').map_or(text.len(), |i| start + i);
+            let end = span.end.min(line_end);
+            out.push((
+                line,
+                start - line_start..end - line_start,
+                p.severity == Severity::Error,
+            ));
+            if line_end >= span.end {
+                break;
+            }
+            start = line_end + 1;
+            line += 1;
+        }
     }
+    out
 }
 
 #[cfg(test)]
@@ -233,7 +254,7 @@ mod tests {
              link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 delay ${d} }\n",
         );
         let delay = |l: &Loaded| l.topology.as_ref().unwrap().impairments["a:eth0"].summary();
-        let l = load(&Source::File(p.clone()), &[], None);
+        let l = load(&Source::File(p.clone()), None, &[], None);
         assert!(
             l.problems.iter().all(|p| p.severity != Severity::Error),
             "{:?}",
@@ -245,7 +266,7 @@ mod tests {
             vec![("d".to_string(), Some("10ms".to_string()))]
         );
         assert!(l.modified.is_some());
-        let l = load(&Source::File(p), &[("d".into(), "50ms".into())], None);
+        let l = load(&Source::File(p), None, &[("d".into(), "50ms".into())], None);
         assert!(delay(&l).contains("50ms"), "{}", delay(&l));
     }
 
@@ -253,20 +274,15 @@ mod tests {
     fn a_parse_error_is_a_located_problem() {
         let dir = tempfile::tempdir().unwrap();
         let p = write(dir.path(), "bad.nll", "lab \"b\"\nnode r1 {\n  bogus\n}\n");
-        let l = load(&Source::File(p), &[], None);
+        let l = load(&Source::File(p), None, &[], None);
         assert!(l.topology.is_none());
         let first = &l.problems[0];
         assert_eq!(
             (first.severity, first.rule.as_str()),
             (Severity::Error, "parse")
         );
-        assert!(
-            first
-                .location
-                .as_deref()
-                .is_some_and(|l| l.contains("bad.nll:")),
-            "{first:?}"
-        );
+        assert_eq!(first.line(), Some(3), "{first:?}");
+        assert_eq!(&l.text[first.span.clone().unwrap()], "bogus");
         assert!(!l.text.is_empty());
     }
 
@@ -277,15 +293,75 @@ mod tests {
                 name: "t".into(),
                 text: "lab \"b\"\nnode r1 {\n  bogus\n}\n".into(),
             },
+            None,
             &[],
             None,
         );
         assert_eq!(l.problems[0].line(), Some(3), "{:?}", l.problems[0]);
+        assert!(!l.edited);
+    }
+
+    #[test]
+    fn the_editors_text_is_analysed_instead_of_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = write(dir.path(), "a.nll", "lab \"a\"\nnode a\n");
+        let l = load(
+            &Source::File(p),
+            Some("lab \"a\"\nnode a\nnode b\n".into()),
+            &[],
+            None,
+        );
+        assert!(l.edited && l.modified.is_none());
+        assert_eq!(l.topology.unwrap().nodes.len(), 2);
+    }
+
+    #[test]
+    fn lints_are_hints_after_the_rest() {
+        let l = load(
+            &Source::Untitled {
+                name: "t".into(),
+                text: "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.1/24 }\n"
+                    .into(),
+            },
+            None,
+            &[],
+            None,
+        );
+        assert_eq!(l.problems[0].severity, Severity::Warning);
+        assert!(l.problems.iter().any(|p| p.severity == Severity::Hint));
+        assert!(l.problems.is_sorted_by_key(|p| p.severity));
+    }
+
+    #[test]
+    fn marks_follow_the_problems_lines() {
+        let text = "lab \"t\"\n/* one\ntwo */\nnode a\n";
+        let p = |span: Range<usize>, severity| Problem {
+            severity,
+            rule: "r".into(),
+            message: String::new(),
+            location: None,
+            hint: None,
+            span: Some(span),
+            place: None,
+        };
+        let start = text.find("/*").unwrap();
+        let end = text.find("*/").unwrap() + 2;
+        assert_eq!(
+            marks(
+                text,
+                &[
+                    p(start..end, Severity::Error),
+                    p(0..3, Severity::Warning),
+                    p(0..3, Severity::Hint)
+                ]
+            ),
+            vec![(1, 0..6, true), (2, 0..6, true), (0, 0..3, false)]
+        );
     }
 
     #[test]
     fn a_missing_file_is_an_io_problem() {
-        let l = load(&Source::File("/nonexistent/x.nll".into()), &[], None);
+        let l = load(&Source::File("/nonexistent/x.nll".into()), None, &[], None);
         assert_eq!(l.problems[0].rule, "io");
         assert!(l.topology.is_none());
     }
@@ -298,6 +374,7 @@ mod tests {
                 text: "lab \"v\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.1/24 }\n"
                     .into(),
             },
+            None,
             &[],
             None,
         );
@@ -316,6 +393,8 @@ mod tests {
             message: String::new(),
             location: Some(loc.into()),
             hint: None,
+            span: None,
+            place: None,
         };
         assert_eq!(
             p("nodes.r1.routes.default").target(),
@@ -334,8 +413,5 @@ mod tests {
             Some(Target::Endpoint("a:eth0".into()))
         );
         assert_eq!(p("x.nll:3:4").target(), None);
-        assert_eq!(p("/a/x.nll:3:4").line(), Some(3));
-        assert_eq!(p("nodes.r1").line(), None);
-        assert_eq!(p("3:4").line(), None);
     }
 }

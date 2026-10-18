@@ -19,12 +19,16 @@ use crate::settings::{Dirs, LayoutPref, Settings};
 
 #[derive(Debug, Clone)]
 pub enum Effect {
+    /// Analyse a design: its file, or `text` (the editor's) when given,
+    /// after `delay_ms` (edits come fast; only the last one counts).
     Load {
         tab: TabId,
         generation: u64,
         source: Source,
+        text: Option<String>,
         params: Vec<(String, String)>,
         dirs: Option<Dirs>,
+        delay_ms: u64,
     },
     Layout {
         tab: TabId,
@@ -51,6 +55,14 @@ pub enum Effect {
         name: String,
         text: String,
     },
+    /// Write a design's source to its file.
+    Save {
+        tab: TabId,
+        path: PathBuf,
+        text: String,
+    },
+    /// Give the keyboard to a widget: the palette's field, the editor.
+    Focus(iced::widget::Id),
     SaveSettings {
         settings: Settings,
         path: PathBuf,
@@ -104,7 +116,7 @@ pub enum Effect {
         backend: Backend,
         job: u64,
         request: Box<nlink_lab_shared::api::Request>,
-        source: Option<(Source, Vec<(String, String)>)>,
+        source: Option<Bundling>,
         cancel: nlink_lab::CancelToken,
     },
     /// The operations the daemon runs.
@@ -158,8 +170,22 @@ fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> T + Send + 'static,
     done: impl FnOnce(T) -> Message + Send + 'static,
 ) -> Task<Message> {
+    blocking_after(0, f, done)
+}
+
+/// [`blocking`], `ms` from now.
+fn blocking_after<T: Send + 'static>(
+    ms: u64,
+    f: impl FnOnce() -> T + Send + 'static,
+    done: impl FnOnce(T) -> Message + Send + 'static,
+) -> Task<Message> {
     Task::perform(
-        async move { tokio::task::spawn_blocking(f).await },
+        async move {
+            if ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+            tokio::task::spawn_blocking(f).await
+        },
         move |r| match r {
             Ok(v) => done(v),
             // a panic in a layout or a parse: say so rather than hang
@@ -174,10 +200,13 @@ pub fn run(effect: Effect) -> Task<Message> {
             tab,
             generation,
             source,
+            text,
             params,
             dirs,
-        } => blocking(
-            move || doc::load(&source, &params, dirs.as_ref()),
+            delay_ms,
+        } => blocking_after(
+            delay_ms,
+            move || doc::load(&source, text, &params, dirs.as_ref()),
             move |loaded| Message::Loaded {
                 tab,
                 generation,
@@ -272,6 +301,15 @@ pub fn run(effect: Effect) -> Task<Message> {
             },
             Message::SavedAs,
         ),
+        Effect::Save { tab, path, text } => blocking(
+            move || {
+                std::fs::write(&path, text)
+                    .map(|()| doc::modified(&path))
+                    .map_err(|e| format!("{}: {e}", path.display()))
+            },
+            move |result| Message::Saved { tab, result },
+        ),
+        Effect::Focus(id) => iced::widget::operation::focus(id),
         Effect::SaveSettings { settings, path } => {
             blocking(move || settings.save(&path), Message::Done)
         }
@@ -370,11 +408,11 @@ pub fn run(effect: Effect) -> Task<Message> {
             let stream = iced::futures::stream::once(async move {
                 let mut request = *request;
                 if let (
-                    Some((src, params)),
+                    Some((src, text, params)),
                     nlink_lab_shared::api::Request::Deploy { source, .. },
                 ) = (source, &mut request)
                 {
-                    let made = tokio::task::spawn_blocking(move || bundle(&src, params))
+                    let made = tokio::task::spawn_blocking(move || bundle(&src, text, params))
                         .await
                         .map_err(|e| e.to_string())
                         .and_then(|r| r);
@@ -482,22 +520,28 @@ async fn fetch(backend: Backend, lab: String, what: Fetch) -> Fetched {
     fetched(answer, pins)
 }
 
-/// A deploy's source: the entry's text, the files it imports (keyed from
-/// its directory), the params.
+/// What a deploy sends the daemon of a design: its source, the text the
+/// editor holds (saved or not), its params.
+pub type Bundling = (Source, String, Vec<(String, String)>);
+
+/// A deploy's `SourceBundle`: `text` with every file a file source
+/// imports (read from beside it) and the params.
 pub(crate) fn bundle(
     source: &Source,
+    text: String,
     params: Vec<(String, String)>,
 ) -> Result<nlink_lab_shared::api::SourceBundle, String> {
     Ok(match source {
         Source::File(path) => nlink_lab_shared::api::SourceBundle {
             path: path.display().to_string(),
-            text: std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?,
-            imports: nlink_lab::parser::nll::import_closure(path).map_err(|e| e.to_string())?,
+            imports: nlink_lab::parser::nll::import_closure_of(&text, path)
+                .map_err(|e| e.to_string())?,
+            text,
             params,
         },
-        Source::Untitled { name, text } => nlink_lab_shared::api::SourceBundle {
+        Source::Untitled { name, .. } => nlink_lab_shared::api::SourceBundle {
             path: format!("{name}.nll"),
-            text: text.clone(),
+            text,
             imports: Default::default(),
             params,
         },

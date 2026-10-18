@@ -49,6 +49,26 @@ pub enum Message {
         modified: Option<SystemTime>,
     },
 
+    // the source
+    /// The current design's editor: typed, moved, clicked.
+    Edit(iced::widget::text_editor::Action),
+    /// Show or hide the current design's source.
+    ToggleSource,
+    /// Save the current design (as a file when it has none).
+    Save,
+    /// Saved: the file's new modification time, or why not.
+    Saved {
+        tab: TabId,
+        result: Result<Option<SystemTime>, String>,
+    },
+    /// Format the current design's source.
+    Format,
+    /// The file changed on disk while edited: keep the edits.
+    KeepMine,
+    /// A tab with unsaved edits asked to close: close it anyway, or not.
+    Discard(bool),
+    Palette(PaletteMsg),
+
     // the daemon
     /// Connected (with a new epoch), or why not.
     Connected(Result<(Backend, Who), String>),
@@ -309,6 +329,18 @@ pub enum CanvasMsg {
     Resized { width: f32, height: f32 },
 }
 
+/// The command palette.
+#[derive(Debug, Clone)]
+pub enum PaletteMsg {
+    Open,
+    Query(String),
+    /// The chosen entry, moved by this many.
+    Move(i32),
+    /// Run the chosen entry, or this one.
+    Run(Option<usize>),
+    Close,
+}
+
 /// What a key does, wherever focus is not taken by a text field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shortcut {
@@ -330,4 +362,11 @@ pub enum Shortcut {
     Escape,
     Help,
     Quit,
+    Save,
+    ToggleSource,
+    Palette,
+    Format,
+    /// Up and down, in the palette.
+    Up,
+    Down,
 }

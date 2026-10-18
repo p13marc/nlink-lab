@@ -8,7 +8,11 @@ use crate::message::{Message, Shortcut};
 
 /// The sheet `F1` shows: keys, then what they do.
 pub const SHEET: &[(&str, &str)] = &[
+    ("Ctrl+K, Ctrl+Shift+P", "Every command, by name"),
     ("Ctrl+O", "Open a topology"),
+    ("Ctrl+S", "Save the source"),
+    ("Ctrl+U", "The source beside the topology, or not"),
+    ("Ctrl+Shift+F", "Format the source"),
     ("Ctrl+R, F5", "Reload"),
     ("Ctrl+W", "Close the tab"),
     ("Ctrl+Tab, Ctrl+Shift+Tab", "Next, previous tab"),
@@ -37,8 +41,15 @@ pub fn shortcut(key: &Key, mods: Modifiers) -> Option<Shortcut> {
         Key::Named(Named::F5) => Some(Reload),
         Key::Named(Named::F1) => Some(Help),
         Key::Named(Named::Escape) => Some(Escape),
+        Key::Named(Named::ArrowUp) if !ctrl => Some(Up),
+        Key::Named(Named::ArrowDown) if !ctrl => Some(Down),
         Key::Character(c) if ctrl && !mods.alt() => match c.to_lowercase().as_str() {
             "o" => Some(Open),
+            "k" => Some(Palette),
+            "p" if mods.shift() => Some(Palette),
+            "s" => Some(Save),
+            "u" => Some(ToggleSource),
+            "f" if mods.shift() => Some(Format),
             "w" => Some(CloseTab),
             "h" => Some(Home),
             "r" => Some(Reload),
@@ -110,6 +121,18 @@ mod tests {
             Some(Shortcut::PrevTab)
         );
         assert_eq!(shortcut(&ch("x"), ctrl), None);
+        assert_eq!(shortcut(&ch("s"), ctrl), Some(Shortcut::Save));
+        assert_eq!(shortcut(&ch("k"), ctrl), Some(Shortcut::Palette));
+        assert_eq!(
+            shortcut(&ch("P"), ctrl | Modifiers::SHIFT),
+            Some(Shortcut::Palette)
+        );
+        assert_eq!(shortcut(&ch("p"), ctrl), None);
+        assert_eq!(
+            shortcut(&ch("F"), ctrl | Modifiers::SHIFT),
+            Some(Shortcut::Format)
+        );
+        assert_eq!(shortcut(&ch("f"), ctrl), None);
     }
 
     #[test]
@@ -146,7 +169,7 @@ mod tests {
 
     #[test]
     fn the_sheet_lists_every_shortcut_once() {
-        assert_eq!(SHEET.len(), 15);
+        assert_eq!(SHEET.len(), 19);
         let keys: std::collections::BTreeSet<_> = SHEET.iter().map(|(k, _)| k).collect();
         assert_eq!(keys.len(), SHEET.len());
     }

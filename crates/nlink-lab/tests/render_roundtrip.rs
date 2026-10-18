@@ -100,9 +100,11 @@ fn roundtrip_one(path: &Path) -> Result<(), String> {
         .map_err(|e| format!("re-parse failed: {e}\n--- rendered NLL ---\n{rendered}"))?;
 
     // `render` writes the flat topology: a `site` block's nodes come back
-    // with their prefixed names, and without the group (#234)
+    // with their prefixed names, and without the group (#234); text has
+    // no directory of its own (#285)
     let mut flat = topo.clone();
     flat.sites.clear();
+    flat.source_dir = None;
     let a = serde_json::to_value(&flat).unwrap();
     let b = serde_json::to_value(&topo2).unwrap();
     if a != b {

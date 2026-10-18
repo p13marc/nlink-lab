@@ -39,12 +39,27 @@ pub fn parse_file_with_imports(input: &str, file_path: &Path) -> Result<Topology
     let tokens = lexer::lex(input)?;
     let ast = parser::parse_tokens(&tokens, input)?;
 
-    if ast.imports.is_empty() {
+    let mut topo = if ast.imports.is_empty() {
         lower::lower(&ast)
     } else {
         let base_dir = file_path.parent().unwrap_or(Path::new("."));
         lower::lower_with_imports(&ast, base_dir)
-    }
+    }?;
+    topo.source_dir = Some(source_dir(file_path));
+    Ok(topo)
+}
+
+/// The directory of `file`, absolute: what its containers' relative host
+/// paths are relative to (#285).
+pub fn source_dir(file: &Path) -> String {
+    let dir = file
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    std::path::absolute(dir)
+        .unwrap_or_else(|_| dir.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Parse an NLL string from a file path, with import resolution and CLI parameters.
@@ -58,7 +73,9 @@ pub fn parse_file_with_params(
     let tokens = lexer::lex(input)?;
     let ast = parser::parse_tokens(&tokens, input)?;
     let base_dir = file_path.parent().unwrap_or(Path::new("."));
-    lower::lower_with_params(&ast, Some(base_dir), params)
+    let mut topo = lower::lower_with_params(&ast, Some(base_dir), params)?;
+    topo.source_dir = Some(source_dir(file_path));
+    Ok(topo)
 }
 
 /// The names of the `param`s an NLL source declares, in order.

@@ -164,6 +164,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .map(|p| p.to_string_lossy().into_owned()),
         params: params.clone(),
         suffix: suffix.clone(),
+        dir: None,
     };
     if let Err(e) = nlink_lab::state::set_source(lab.name(), &source) {
         tracing::warn!("could not record the source of '{}': {e}", lab.name());

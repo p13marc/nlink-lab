@@ -65,6 +65,13 @@ fn desired_topology(
         .as_deref()
         .and_then(nlink_lab::state::source_of)
         .unwrap_or_default();
+    // a file named here is its own; the recorded one may be a daemon's
+    // staged copy, its host files the client's (#285)
+    let dir = if file.is_none() {
+        recorded.dir.clone()
+    } else {
+        None
+    };
     let (path, params) = match file {
         Some(path) => (path, params),
         None => {
@@ -92,6 +99,9 @@ fn desired_topology(
     } else {
         parse_topology(&path, &params)?
     };
+    if let Some(dir) = &dir {
+        desired.source_dir = Some(dir.clone());
+    }
     // a lab deployed with `--suffix`/`--unique` is named after its file
     // plus that suffix
     if let Some(target) = &target
@@ -116,6 +126,7 @@ fn desired_topology(
             .map(|p| p.to_string_lossy().into_owned()),
         params,
         suffix: recorded.suffix,
+        dir,
     };
     Ok((desired, source))
 }

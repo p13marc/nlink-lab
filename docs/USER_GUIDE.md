@@ -778,11 +778,12 @@ node web image "nginx:alpine" {
 | `volumes [...]` | passed through verbatim as `--volume` |
 | `exec "CMD"` | runs once after the container starts (repeatable) |
 
-Relative paths in `config`, `overlay` and `env-file` resolve against the
-directory you ran `nlink-lab` from, and are made absolute before reaching the
-runtime -- a relative `--volume` source would otherwise be read as the name of a
-*named volume* rather than as a bind mount. A missing `overlay` directory is an
-error rather than a silent no-op.
+Relative paths in `config`, `overlay` and `env-file` are relative to the
+topology file's directory — an imported file's to its own — wherever you run
+`nlink-lab` from, and through the daemon too. They are made absolute before
+reaching the runtime: a relative `--volume` source would otherwise be read as
+the name of a *named volume* rather than as a bind mount. A missing file or
+`overlay` directory is an error that names it, rather than the runtime's.
 
 `volumes` is deliberately **not** rewritten, so a bare name there still selects a
 runtime-managed volume if that is what you want.

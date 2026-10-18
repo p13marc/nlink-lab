@@ -380,8 +380,12 @@ fn resolve_imports(
         }
 
         let import_base = import_path.parent().unwrap_or(base_dir);
-        let imported = lower_with_base_dir(&ast, Some(import_base), visited)
+        let mut imported = lower_with_base_dir(&ast, Some(import_base), visited)
             .map_err(|e| super::attach_source(e, &content, &import_name))?;
+        // its containers' host files are beside it, not beside the entry (#285)
+        if let Some(dir) = Path::new(&imp.path).parent() {
+            imported.rebase_host_paths(dir);
+        }
 
         // Merge imported topology with alias prefix
         merge_import(topology, &imp.alias, imported);

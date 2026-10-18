@@ -245,8 +245,9 @@ Also an operator's:
   daemon gets the file, every file it imports and the params, so it
   never reads yours; the lab opens in its tab once deployed. A
   container's host files (`config`, `overlay`, `env-file`) are the
-  exception: the daemon reads them where it runs, so give them absolute
-  paths for now (#285).
+  exception: the runtime reads them from beside your file, so the
+  daemon must run on the same host (an unsaved design's have no
+  directory: save it first).
 - **Apply…** in a design tab whose lab runs (the topology onto it), or
   **Apply a file…** in a lab's tab: the options (drop the live
   impairments, enforce the assertions), **Show the changes**, then

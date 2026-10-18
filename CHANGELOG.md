@@ -647,6 +647,19 @@ under both (#233). Its waves land one by one below.
   (#204). It re-creates the node's bridge-network ports, its mgmt veth
   and its sysctls, and starts its `run` commands again. It used to
   refuse a network member and put back only point-to-point links.
+- **A container's relative host files are its topology file's** (#285):
+  `config` sources, `overlay` and `env-file` are relative to the file's
+  directory — an imported file's to its own — not to the directory
+  `nlink-lab` runs in. `deploy examples/container-advanced.nll` from
+  the repository root finds `examples/configs/web.env` now; a script
+  that `cd`ed somewhere for its paths can stop. Through the daemon they
+  are the client's: a deploy from a file records its directory
+  (`Topology::source_dir`, `LabSource::dir`), and `apply` without a
+  file keeps it. A lab deployed before 0.14 with relative paths gets
+  its containers re-created by its first `apply`, its options now
+  naming absolute paths. A topology parsed from text, with no file,
+  still resolves them where it is deployed. `Topology::absolutize_host_paths`
+  is `rebase_host_paths`.
 
 ### Added
 
@@ -1074,6 +1087,10 @@ under both (#233). Its waves land one by one below.
 
 ### Fixed
 
+- **A missing container host file is said before the runtime runs**
+  (#285): `config FILE` or `env-file FILE` that does not exist fails
+  the deploy naming it and where it was looked for, rather than with
+  the runtime's message.
 - **The app's metainfo lists every release** (#288): 0.12.0 and 0.13.0
   were only ever added at build time, by the flatpak job; a test now
   fails when the CHANGELOG's newest release is not listed. Its summary

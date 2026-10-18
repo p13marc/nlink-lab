@@ -7,8 +7,8 @@
 # One root qdisc per interface: `qdisc` cannot be combined with
 # `impair` or `rate` on the same endpoint (validation error).
 #
-#   sudo nlink-lab exec qdisc-kinds hub -- tc qdisc show
-#   sudo nlink-lab impair qdisc-kinds --show
+#   sudo nlink-lab exec -L qdisc-kinds hub -- tc qdisc show
+#   sudo nlink-lab impair -L qdisc-kinds --show
 
 lab "qdisc-kinds" {
   description "tbf, fq_codel, sfq and prio root qdiscs"

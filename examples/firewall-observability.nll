@@ -6,8 +6,8 @@
 # SSH drop rule yet; the scenario probes SSH and checks that it did.
 #
 #   sudo nlink-lab deploy --strict examples/firewall-observability.nll
-#   sudo nlink-lab scenario firewall-observability probe
-#   sudo nlink-lab inspect firewall-observability      # FIREWALL COUNTERS
+#   sudo nlink-lab scenario -L firewall-observability probe
+#   sudo nlink-lab status firewall-observability      # FIREWALL COUNTERS
 #
 # Demonstrates: `limit`, `counter`, `counter name`, a rule with no verdict,
 # and `validate { counter NODE NAME OP N }`. A `log "prefix"` statement

@@ -5,8 +5,8 @@
 # on it.
 #
 # Usage after deploy:
-#   nlink-lab benchmark iperf-bench throughput
-#   nlink-lab exec iperf-bench client -- iperf3 -c 10.0.0.1 -t 5   # by hand
+#   nlink-lab benchmark -L iperf-bench throughput
+#   nlink-lab exec -L iperf-bench client -- iperf3 -c 10.0.0.1 -t 5   # by hand
 #
 # Needs iperf3 on the host; the benchmark engine starts the server side
 # for you.

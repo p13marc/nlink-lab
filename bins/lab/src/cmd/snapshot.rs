@@ -32,7 +32,7 @@ pub enum Action {
     Rm {
         #[command(flatten)]
         lab: LabArg,
-        #[arg(required = true)]
+        #[arg(required = true, add = crate::ctx::snapshot_completer())]
         names: Vec<String>,
     },
     /// Bring the lab back to a snapshot: `apply` its topology, then put

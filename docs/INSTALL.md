@@ -164,9 +164,13 @@ nlink-lab completions zsh  | sudo tee /usr/share/zsh/site-functions/_nlink-lab >
 nlink-lab completions fish > ~/.config/fish/completions/nlink-lab.fish
 ```
 
-Completion is dynamic: lab names complete from the state
-directory, so `nlink-lab destroy <TAB>` lists the labs you have
-running.
+Completion is dynamic: the script asks `nlink-lab` (on your PATH) what
+fits, so `nlink-lab destroy <TAB>` lists the labs running,
+`nlink-lab exec <TAB>` the nodes of the current lab (or of a `-L LAB`
+already typed), `impair <TAB>` its endpoints, `snapshot restore <TAB>`
+its snapshots, `kill <TAB>` its tracked PIDs, `deploy FILE --set <TAB>`
+the file's params. `nlink-lab completions SHELL --static` prints a
+script that knows only the commands and flags.
 
 ---
 

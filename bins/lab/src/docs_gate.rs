@@ -250,6 +250,44 @@ fn shell_lines_split_like_a_shell() {
     assert!(commands("echo nlink-lab deploy").is_empty());
 }
 
+/// The command lines in the comments of the example topologies: a
+/// comment line (`#` or `//`) that starts with the command, as their
+/// "run it" headers have them.
+fn example_commands(root: &Path) -> Vec<(PathBuf, usize, Vec<String>)> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "nll") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&root.join("examples"), &mut files);
+    files.sort();
+    let mut out = Vec::new();
+    for f in files {
+        let Ok(text) = std::fs::read_to_string(&f) else {
+            continue;
+        };
+        for (i, line) in text.lines().enumerate() {
+            let t = line.trim_start();
+            let Some(body) = t.strip_prefix('#').or_else(|| t.strip_prefix("//")) else {
+                continue;
+            };
+            let body = body.trim_start();
+            if body.starts_with("nlink-lab ") || body.starts_with("sudo nlink-lab ") {
+                for cmd in commands(body) {
+                    out.push((f.clone(), i + 1, cmd));
+                }
+            }
+        }
+    }
+    out
+}
+
 #[test]
 fn every_documented_command_line_parses() {
     use clap::error::ErrorKind;
@@ -298,6 +336,20 @@ fn every_documented_command_line_parses() {
                     argv.join(" ")
                 ));
             }
+        }
+    }
+    for (file, line, argv) in example_commands(&root) {
+        checked += 1;
+        if let Err(e) = cmd.clone().try_get_matches_from(&argv)
+            && !matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion)
+        {
+            let first = e.render().to_string();
+            failures.push(format!(
+                "{}:{line}: `{}`: {}",
+                file.strip_prefix(&root).unwrap_or(&file).display(),
+                argv.join(" "),
+                first.lines().next().unwrap_or_default()
+            ));
         }
     }
     assert!(checked > 100, "only {checked} command lines found");

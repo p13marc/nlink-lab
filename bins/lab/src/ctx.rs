@@ -204,6 +204,66 @@ pub fn endpoint_completer() -> clap_complete::ArgValueCompleter {
     })
 }
 
+/// Snapshots of the lab being worked on.
+pub fn snapshot_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        let names = completion_labs().into_iter().flat_map(|lab| {
+            nlink_lab::state::snapshot_list(&lab)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|s| s.name)
+        });
+        candidates(current, names)
+    })
+}
+
+/// Tracked processes of the lab being worked on (`kill`, `stats --pid`,
+/// `logs --pid`), alive ones.
+pub fn pid_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        let pids = completion_labs().into_iter().flat_map(|lab| {
+            nlink_lab::RunningLab::load(&lab)
+                .map(|l| {
+                    l.process_status_alive_only()
+                        .into_iter()
+                        .map(|p| p.pid.to_string())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        });
+        candidates(current, pids)
+    })
+}
+
+/// `KEY=` for every `param` the topology file on the line declares (with
+/// its default after the `=`).
+pub fn param_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        let file = std::env::args()
+            .skip(1)
+            .map(std::path::PathBuf::from)
+            .find(|p| p.extension().is_some_and(|e| e == "nll") && p.is_file());
+        let params = file
+            .and_then(|f| nlink_lab::parser::declared_param_defs(f).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, default)| format!("{k}={}", default.unwrap_or_default()));
+        candidates(current, params)
+    })
+}
+
+/// Built-in templates (`init`).
+pub fn template_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        candidates(
+            current,
+            nlink_lab::templates::list()
+                .iter()
+                .map(|t| t.name.to_string()),
+        )
+    })
+}
+
 /// Lint rule ids (for `lint --allow`).
 pub fn lint_rule_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {

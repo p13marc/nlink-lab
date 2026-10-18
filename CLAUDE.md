@@ -46,8 +46,12 @@ sudo nlink-lab destroy simple
 sudo nlink-lab destroy --orphans
 
 # List running labs; --scan also reports orphans detected on the host
-nlink-lab status
+nlink-lab ls
 nlink-lab ls --scan
+
+# Pick the lab later commands act on (or pass -L LAB to each)
+nlink-lab use simple
+nlink-lab status                  # nodes, addresses, impairments, processes
 
 # Execute in a lab node (stdio streams live — good for services, tail -f, ping)
 sudo nlink-lab exec -L simple router -- ip addr
@@ -62,14 +66,16 @@ sudo nlink-lab spawn -L simple server -- /usr/bin/my-service --port 8080
 sudo nlink-lab wait -L simple server --tcp 127.0.0.1:8080 --timeout 30s
 
 # Show node IP addresses (including mgmt0 for host-reachable labs)
-nlink-lab ip -L simple server --iface eth0
-nlink-lab ip -L simple server --iface mgmt0
+nlink-lab ip -L simple server:eth0
+nlink-lab ip -L simple server:mgmt0
 
-# Deploy with JSON output (machine-parseable)
+# Impair a link at runtime (one way, or --dir in|both); cut it off
+sudo nlink-lab impair -L simple router:eth0 delay 50ms loss 1%
+sudo nlink-lab impair -L simple router:eth0 --partition
+
+# Deploy with JSON output (machine-parseable); NDJSON progress events too
 sudo nlink-lab deploy --json examples/simple.nll
-
-# Show running labs
-nlink-lab status
+sudo nlink-lab --format ndjson deploy examples/simple.nll
 
 # Validate with resolved IP addresses
 nlink-lab validate --show-ips examples/multi-site.nll
@@ -133,11 +139,20 @@ crates/nlink-lab-shared/src/
   templates/        # Built-in topology templates for `nlink-lab init`
 
 bins/lab/src/
-  main.rs           # entry: Cli, tracing, runtime, exit-code mapping (~120 lines)
-  cli.rs            # Commands enum (help text lives here — docs/cli is generated from it)
-  ctx.rs            # Ctx {json, quiet, verbose}, parse_topology(--set), require_root
-  output.rs         # exit-code policy (0/1/2/124/child)
-  cmd/<name>.rs     # one handler per subcommand (Args + run)
+  main.rs           # entry: Cli (global --format/--json/--color/-v/-q), usage errors
+                    #   (exit 64, removed-command hints), tracing, runtime, completions
+  cli.rs            # Commands enum (help text lives here — docs/cli is generated
+                    #   from it), GROUPS for the grouped help, the short-flag policy test
+  ctx.rs            # Ctx, LabArg + resolve_lab (-L > NLINK_LAB > `use` > only lab),
+                    #   scoped completers, parse_topology(--set), require_root
+  args.rs           # clap value parsers (durations need units, KEY=VALUE, endpoints, …)
+  output/           # exit codes, the --json error document (ApiError), styles
+                    #   (per stream), tables, Report + emit, JSON schemas
+  progress.rs       # live progress of OpEvents (terminal / pipe / NDJSON), Ctrl-C cancel
+  removed.rs        # removed commands and flags -> what replaced them (exit 64)
+  docs_gate.rs      # test: every `nlink-lab …` line in the docs and example comments parses
+  cmd/<name>.rs     # one handler per subcommand (Args + run); cmd/common.rs shared
+                    #   printing/lookup, cmd/edit.rs the Edit executor for node/link
   cmd/lsp/          # `lsp`: analyze (diagnostics), locate (validator
                     #   location -> span), position (byte <-> UTF-16),
                     #   symbols (token queries)
@@ -255,7 +270,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+CLI commands (40, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
 `deploy` (`.nll` or `.nlz`, with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
 `destroy` (`LAB…`, `--all`, `--orphans`), `apply` (`[FILE]`, default the recorded source; `--reset-impairments`),
 `ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,
@@ -280,7 +295,10 @@ impairments, partitions, processes, counters),
 `top` (`--interval`, `--once`, `--zenoh`, `--zenoh-connect`; ratatui TUI,
 issue #63).
 
-Global flags: `--json`, `--verbose`, `--quiet`, `--skip-validate`.
+Global flags: `--format text|json|ndjson` (`--json`), `--color auto|always|never`,
+`-v`/`-vv`, `-q`. Lab-scoped commands take `-L LAB`. Durations need a unit
+(`30s`); short flags mean one thing (`-c -e -f -i -L -o -s -t -w`). Usage
+errors exit 64.
 
 See `docs/NLL_DSL_DESIGN.md` for the full language specification.
 

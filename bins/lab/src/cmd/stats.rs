@@ -20,7 +20,7 @@ pub struct Args {
     /// Sample this process of NODE, by the PID the node sees (the host's
     /// on a namespace node, the container's own on a container node;
     /// repeatable).
-    #[arg(long = "pid", value_name = "PID", requires = "node")]
+    #[arg(long = "pid", value_name = "PID", requires = "node", add = crate::ctx::pid_completer())]
     pub pids: Vec<u32>,
 
     /// Sample every process in NODE's network namespace.

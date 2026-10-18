@@ -8,7 +8,7 @@ pub struct Args {
     pub lab: crate::ctx::LabArg,
 
     /// The tracked processes to stop (PIDs `spawn` printed).
-    #[arg(required = true)]
+    #[arg(required = true, add = crate::ctx::pid_completer())]
     pub pids: Vec<u32>,
 
     /// Send this signal instead of the TERM-then-KILL sequence: TERM, KILL,

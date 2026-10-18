@@ -7,7 +7,7 @@
 # the rules stay where they are.
 #
 #   sudo nlink-lab deploy --strict examples/firewall-sets.nll
-#   sudo nlink-lab exec firewall-sets gw -- nft list set inet nlink-lab blocked
+#   sudo nlink-lab exec -L firewall-sets gw -- nft list set inet nlink-lab blocked
 #
 # Demonstrates: set declarations (key inferred or written, prefixes and
 # ranges), `src @set`, `dst . tcp dport @set`, `tcp dport @set`.

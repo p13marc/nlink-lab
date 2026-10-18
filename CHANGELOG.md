@@ -641,6 +641,11 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **Dynamic completion by default** (#256): `completions SHELL` prints
+  a script that asks `nlink-lab` what fits — labs, the nodes, endpoints,
+  snapshots and tracked PIDs of the lab on the line (or the current
+  one), a topology's `--set` params with their defaults, templates.
+  `--static` prints the old script (commands and flags only).
 - **`test --scenarios --benchmarks --keep`** (#255): every scenario
   action and benchmark test of a topology is one more test result, in
   JUnit and TAP too, and `--keep` leaves a failed lab deployed for

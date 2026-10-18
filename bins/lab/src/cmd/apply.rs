@@ -21,7 +21,7 @@ pub struct Args {
 
     /// Set a `param` value (repeatable): --set wan_delay=50ms. Default:
     /// the values the lab was deployed with, when the file is too.
-    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value)]
+    #[arg(long = "set", value_name = "KEY=VALUE", value_parser = crate::args::key_value, add = crate::ctx::param_completer())]
     pub params: Vec<(String, String)>,
 
     /// Show what would change without applying (`verify --file FILE`

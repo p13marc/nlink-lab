@@ -10,8 +10,8 @@
 # server's iperf3 on gw's port 80, for TCP only.
 #
 #   sudo nlink-lab deploy --strict examples/firewall-qos.nll
-#   sudo nlink-lab scenario firewall-qos bulk
-#   sudo nlink-lab exec firewall-qos gw -- tc -s class show dev wan0
+#   sudo nlink-lab scenario -L firewall-qos bulk
+#   sudo nlink-lab exec -L firewall-qos gw -- tc -s class show dev wan0
 #
 # Demonstrates: `clamp mss pmtu`, `ct mark restore`, `mark set V/M`,
 # `ct mark save`, `mark V/M` matches, `classify` into a `prio` qdisc,
